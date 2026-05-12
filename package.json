@@ -1,0 +1,28 @@
+{
+  "name": "tcm-prescription-system-pro",
+  "version": "2.0.0",
+  "description": "专业中医处方系统 - 无限制版本",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "engines": {
+    "node": ">=18.x"
+  },
+  "keywords": ["tcm", "prescription", "chinese-medicine"],
+  "author": "TCM System",
+  "license": "MIT",
+  "dependencies": {
+    "next": "14.2.35",
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "20.11.30",
+    "@types/react": "18.2.66",
+    "@types/react-dom": "18.2.22",
+    "typescript": "5.4.3"
+  }
+}

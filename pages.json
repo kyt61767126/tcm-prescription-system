@@ -1,0 +1,21 @@
+{
+  "build": {
+    "command": "npm run build",
+    "outputDirectory": "out",
+    "installCommand": "npm install"
+  },
+  "env": {
+    "NODE_VERSION": "20.15.0"
+  },
+  "headers": [
+    {
+      "source": "**/*",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "text/html; charset=UTF-8"
+        }
+      ]
+    }
+  ]
+}

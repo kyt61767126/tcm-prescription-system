@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.local
+.vscode/
+dist/
+*.log
+.next/
+out/
+.DS_Store
+*.swp
+*.swo
+Thumbs.db

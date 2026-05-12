@@ -1,0 +1,11 @@
+# 忽略依赖文件夹
+node_modules/
+# 忽略 Next.js 构建产物
+.next/
+# 忽略环境配置文件（包含敏感信息）
+.env
+.env.local
+# 忽略编辑器配置
+.vscode/
+# 忽略日志文件
+*.log
