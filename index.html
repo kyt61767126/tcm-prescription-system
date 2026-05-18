@@ -1,11 +1,2485 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>本能中医处方系统 - 云端版</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <title>本能中医处方系统 - 云端版</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        @page { size: A5; margin: 0; }
+        @media print {
+            body { background: white; }
+            .top-tabs, .left-panel, .right-panel, .bottom-bar, .tab-left-item, .action-buttons-section, .section-hint, .patient-section, .symptom-section, .diagnosis-section, .action-buttons-section { display: none !important; }
+            .main-container { display: block !important; height: auto !important; width: 100% !important; overflow: visible !important; }
+            .center-panel { background: white !important; padding: 0 !important; margin: 0 auto !important; width: 148mm !important; display: block !important; min-width: auto !important; }
+            .prescription-paper { width: 148mm !important; height: 210mm !important; padding: 15mm !important; margin: 0 auto !important; box-shadow: none !important; page-break-after: always !important; transform: none !important; }
+        }
+        body { font-family: 'Microsoft YaHei', 'SimSun', sans-serif; background: #f0f0f0; font-size: 13px; overflow: hidden; }
+        .top-tabs { background: #c0c0c0; border-bottom: 2px solid #808080; display: flex; padding: 3px 5px 0 5px; flex-wrap: wrap; align-items: center; }
+        .tab-item { background: #e0e0e0; padding: 4px 15px; cursor: pointer; border: 1px solid #808080; border-bottom: none; margin-right: 2px; border-radius: 3px 3px 0 0; font-weight: bold; font-size: 12px; white-space: nowrap; }
+        .tab-item:hover { background: #d0d0d0; }
+        .tab-hint { font-size: 10px; color: #555; padding-left: 10px; line-height: 26px; flex: 1; }
+        .tab-hint kbd { background: #444; color: white; padding: 1px 4px; border-radius: 2px; font-size: 10px; }
+        .main-container { display: flex; height: calc(100vh - 38px); width: 100vw; overflow: hidden; }
+        .left-panel { width: 40%; min-width: 340px; max-width: 440px; background: #e0e0e0; border-right: 2px solid #808080; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+        .top-tabs-left { background: #e0e0e0; display: flex; border-bottom: 2px solid #808080; }
+        .tab-left-item { background: #d0d0d0; padding: 3px 12px; cursor: pointer; border: 1px solid #808080; border-bottom: none; margin-right: 2px; font-size: 11px; }
+        .tab-left-item.active { background: white; }
+        .patient-section { background: white; padding: 5px; border-bottom: 2px solid #808080; flex-shrink: 0; }
+        .patient-row { display: flex; margin-bottom: 6px; align-items: center; gap: 5px; }
+        .patient-label { width: 50px; text-align: right; padding-right: 6px; font-size: 11px; flex-shrink: 0; }
+        .patient-input { flex: 1; padding: 4px 6px; border: 1px solid #808080; font-size: 12px; min-width: 30px; height: 22px; box-sizing: border-box; }
+        .patient-input.small { flex: 0 0 120px; }
+        .patient-input.x-small { flex: 0 0 50px; }
+        .patient-input.xx-small { flex: 0 0 80px; }
+        .patient-input.xxx-small { flex: 0 0 110px; }
+        .symptom-section { background: white; padding: 4px 8px; border-bottom: 2px solid #808080; flex-shrink: 0; }
+        .history-tabs { display: flex; margin-bottom: 2px; }
+        .history-tab { background: #d0d0d0; padding: 2px 10px; cursor: pointer; border: 1px solid #808080; border-bottom: none; margin-right: 2px; font-size: 10px; }
+        .history-tab.active { background: white; }
+        .symptom-textarea { width: 100%; height: 30px; border: 1px solid #808080; padding: 2px; resize: none; font-size: 10px; }
+        .diagnosis-section { background: white; padding: 2px 4px; border-bottom: 2px solid #808080; flex-shrink: 0; }
+        .action-buttons-section { background: white; padding: 4px 8px; border-bottom: 2px solid #808080; flex-shrink: 0; }
+        .small-btn { padding: 2px 8px; background: #e0e0e0; border: 1px solid #808080; cursor: pointer; font-size: 10px; }
+        .medicine-section { flex: 1; background: white; overflow: hidden; display: flex; flex-direction: column; min-height: 180px; }
+        .section-hint { background: #e0e0e0; padding: 3px 8px; font-size: 10px; border-top: 1px solid #808080; flex-shrink: 0; }
+        .medicine-table-container { flex: 1; overflow: auto; }
+        .medicine-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+        .medicine-table th { background: #e0e0e0; border: 1px solid #808080; padding: 3px; font-weight: normal; font-size: 10px; }
+        .medicine-table td { border: 1px solid #d0d0d0; padding: 1px; }
+        .medicine-table input { width: 100%; border: none; padding: 2px; text-align: center; font-size: 11px; }
+        .medicine-table input:focus { background: #e8f5e9; }
+        .medicine-search-dropdown { position: fixed; background: white; border: 1px solid #808080; max-height: 180px; overflow-y: auto; display: none; z-index: 1000; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); min-width: 150px; }
+        .search-item { padding: 5px 10px; cursor: pointer; font-size: 11px; }
+        .search-item:hover, .search-item.selected { background: #000080; color: white; }
+        .center-panel { flex: 1; background: #b0b0b0; padding: 10px; overflow: auto; display: flex; justify-content: center; align-items: flex-start; min-width: 350px; }
+        .prescription-paper { background: white; width: 148mm; height: 210mm; padding: 15mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', serif; box-sizing: border-box; position: relative; overflow: hidden; }
+        .clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
+        .prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
+        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 12px; }
+        .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 180px; }
+        .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+        .prescription-line { padding: 3px 0; font-size: 13px; text-align: center; justify-content: center; align-items: center; }
+        .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #8b0000; }
+        .dose-count { text-align: right; font-size: 13px; color: #000080; }
+        .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 12px; }
+        .usage-text { margin-bottom: 10px; }
+        .signature-row { display: flex; justify-content: space-between; }
+        .right-panel { width: 32%; min-width: 220px; max-width: 340px; background: white; border-left: 2px solid #808080; display: flex; flex-direction: column; height: 100%; }
+        .history-header { background: #000080; color: white; padding: 6px 8px; font-weight: bold; font-size: 12px; flex-shrink: 0; }
+        .history-list { flex: 1; overflow-y: auto; }
+        .history-item { padding: 6px 8px; border-bottom: 1px solid #d0d0d0; cursor: pointer; font-size: 11px; }
+        .history-item:hover { background: #e8f5e9; }
+        .history-name { font-weight: bold; }
+        .history-date { font-size: 10px; color: #666; }
+        .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #c0c0c0; border-top: 2px solid #808080; padding: 5px 10px; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
+        .price-summary { display: flex; gap: 10px; flex-wrap: wrap; }
+        .price-item { font-weight: bold; font-size: 11px; }
+        .price-item span { color: #8b0000; font-size: 13px; }
+        .action-buttons { display: flex; gap: 5px; }
+        .action-btn { padding: 4px 10px; background: #e0e0e0; border: 2px solid #808080; cursor: pointer; font-weight: bold; font-size: 11px; }
+        .action-btn:active { background: #d0d0d0; }
+        .action-btn.primary { background: #008000; color: white; border-color: #006000; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 2000; }
+        .modal-content { background: #e0e0e0; border: 3px solid #808080; width: 80%; max-width: 900px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
+        .modal-header { background: #000080; color: white; padding: 8px 15px; display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { flex: 1; overflow: auto; padding: 15px; background: white; }
+        .modal-footer { padding: 10px 15px; background: #e0e0e0; display: flex; justify-content: flex-end; gap: 10px; border-top: 2px solid #808080; }
+        .close-btn { font-size: 24px; cursor: pointer; line-height: 1; }
+        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 380px; text-align: center; }
+        .login-title { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 30px; }
+        .login-field { margin-bottom: 15px; text-align: left; }
+        .login-field label { display: inline-block; width: 70px; font-weight: bold; font-size: 14px; color: #333; vertical-align: middle; }
+        .login-field input { width: calc(100% - 80px); padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box; vertical-align: middle; }
+        .login-field input:focus { border-color: #667eea; outline: none; }
+        .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .login-btn:hover { opacity: 0.9; }
+        .login-error { color: #ff4444; font-size: 12px; margin-top: 10px; display: none; }
+        .login-links { margin-top: 15px; font-size: 12px; }
+        .login-links a { color: #667eea; text-decoration: none; cursor: pointer; }
+        .login-links a:hover { text-decoration: underline; }
+        .user-modal-content { width: 350px; }
+        .form-group { margin: 15px 0; text-align: left; }
+        .form-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 12px; color: #333; }
+        .form-group input { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+        .form-group input:focus { border-color: #667eea; outline: none; }
+        .user-list { max-height: 200px; overflow-y: auto; margin: 15px 0; border: 1px solid #ddd; border-radius: 6px; }
+        .user-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .user-item:last-child { border-bottom: none; }
+        .user-item-info { font-size: 13px; }
+        .user-item-name { font-weight: bold; color: #333; }
+        .user-item-role { font-size: 11px; color: #666; }
+        .user-item-actions { display: flex; gap: 5px; }
+        .user-item-btn { padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; }
+        .btn-danger { background: #ff4444; color: white; }
+        .btn-warning { background: #ff9800; color: white; }
+        .btn-primary { background: #667eea; color: white; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-  <script src="main.js"></script>
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-box">
+            <div class="login-title">🏥 本能中医处方系统</div>
+            <div style="text-align:center;margin-bottom:20px;color:#008000;font-weight:bold;">【云端版】</div>
+            <div class="login-field">
+                <label>用户名:</label>
+                <input type="text" id="loginUsername" placeholder="请输入用户名">
+            </div>
+            <div class="login-field">
+                <label>密码:</label>
+                <input type="password" id="loginPassword" placeholder="请输入密码" onkeypress="if(event.key==='Enter')handleLogin()">
+            </div>
+            <button class="login-btn" onclick="handleLogin()">登 录</button>
+            <div id="loginError" class="login-error"></div>
+        </div>
+    </div>
+
+    <div id="registerModal" class="modal">
+        <div class="modal-content user-modal-content">
+            <div class="modal-header">
+                <span>注册新账号</span>
+                <span class="close-btn" onclick="closeModal('registerModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>用户名</label>
+                    <input type="text" id="regUsername" placeholder="请输入用户名">
+                </div>
+                <div class="form-group">
+                    <label>密码</label>
+                    <input type="password" id="regPassword" placeholder="请输入密码">
+                </div>
+                <div class="form-group">
+                    <label>确认密码</label>
+                    <input type="password" id="regConfirmPwd" placeholder="请再次输入密码">
+                </div>
+                <div class="form-group">
+                    <label>姓名/昵称</label>
+                    <input type="text" id="regName" placeholder="请输入姓名或昵称">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('registerModal')">取消</button>
+                <button class="action-btn primary" onclick="handleRegister()">注册</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="changePwdModal" class="modal">
+        <div class="modal-content user-modal-content">
+            <div class="modal-header">
+                <span>修改密码</span>
+                <span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>原密码</label>
+                    <input type="password" id="oldPwd" placeholder="请输入原密码">
+                </div>
+                <div class="form-group">
+                    <label>新密码</label>
+                    <input type="password" id="newPwd" placeholder="请输入新密码">
+                </div>
+                <div class="form-group">
+                    <label>确认新密码</label>
+                    <input type="password" id="confirmNewPwd" placeholder="请再次输入新密码">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('changePwdModal')">取消</button>
+                <button class="action-btn primary" onclick="handleChangePassword()">修改</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="userManageModal" class="modal">
+        <div class="modal-content user-modal-content">
+            <div class="modal-header">
+                <span>用户管理</span>
+                <span class="close-btn" onclick="closeModal('userManageModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="userList" class="user-list"></div>
+                <div class="form-group" style="margin-top:15px;">
+                    <label>添加新用户</label>
+                    <input type="text" id="newUserUsername" placeholder="用户名">
+                    <input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;">
+                    <input type="text" id="newUserName" placeholder="姓名/昵称" style="margin-top:5px;">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('userManageModal')">关闭</button>
+                <button class="action-btn primary" onclick="handleAddUser()">添加用户</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="top-tabs">
+        <div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div>
+        <div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div>
+        <div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div>
+        <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
+        <div class="tab-item" onclick="showModal('statsModal')">【数据管理】</div>
+        <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【用户管理】</div>
+        <div class="tab-item" onclick="showHelp()">【系统帮助】</div>
+        <div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div>
+        <div class="tab-item" onclick="showChangePwdModal()">【修改密码】</div>
+        <div class="tab-hint">
+            当前用户: <span style="color:#008000;font-weight:bold;" id="userDisplayName"></span> | 
+            <span style="color:#008000;font-weight:bold;">【云端版】</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div class="left-panel">
+            <div class="top-tabs-left">
+                <div class="tab-left-item active">填资料</div>
+                <div class="tab-left-item" onclick="loadLastHistory()">调原方</div>
+                <div class="tab-left-item" onclick="loadLastHistory()">调病历</div>
+                <div class="tab-left-item">同病搜</div>
+            </div>
+            <div class="patient-section">
+                <div class="patient-row">
+                    <span class="patient-label" style="width: 45px;">处方<br/>编号</span>
+                    <input type="text" id="prescriptionNo" class="patient-input xxx-small" readonly>
+                    <span class="patient-label">性别</span>
+                    <select id="patientGender" class="patient-input.x-small" onchange="updatePrescriptionPaper()">
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                    </select>
+                    <span class="patient-label">日期</span>
+                    <input type="text" id="visitDate" class="patient-input.x-small" readonly style="width:90px;min-width:90px;">
+                </div>
+                <div class="patient-row">
+                    <span class="patient-label">姓名</span>
+                    <input type="text" id="patientName" class="patient-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper()" onfocus="showSideHistory()">
+                    <span class="patient-label">年龄</span>
+                    <input type="text" id="patientAge" class="patient-input xx-small" onkeyup="updatePrescriptionPaper()">
+                    <span class="patient-label">电话</span>
+                    <input type="text" id="patientPhone" class="patient-input small">
+                </div>
+                <div class="patient-row">
+                    <span class="patient-label">编号</span>
+                    <input type="text" id="clinicNo" class="patient-input xx-small" onkeyup="updatePrescriptionPaper()">
+                    <span class="patient-label">住址</span>
+                    <input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;">
+                </div>
+            </div>
+            <div class="symptom-section">
+                <div class="history-tabs">
+                    <div class="history-tab active">病史记录</div>
+                    <div class="history-tab">修改病史</div>
+                </div>
+                <textarea id="medicalHistory" class="symptom-textarea"></textarea>
+            </div>
+            <div class="diagnosis-section">
+                <div class="patient-row">
+                    <span class="patient-label">诊断</span>
+                    <input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()">
+                    <span class="patient-label">金额</span>
+                    <input type="text" class="patient-input.x-small" id="tempAmount" readonly style="width: 45px; min-width: 45px;">
+                    <span class="patient-label">医师</span>
+                    <input type="text" id="doctorName" class="patient-input.x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;">
+                </div>
+            </div>
+            <div class="action-buttons-section">
+                <div style="display:flex;justify-content:space-between;align-items:center;">
+                    <button class="small-btn" onclick="deleteCurrentCase()">删除处方病历</button>
+                    <span style="font-size:10px;">自动查找</span>
+                    <select class="small-btn" style="font-size:10px;">
+                        <option>姓名</option>
+                    </select>
+                    <button class="small-btn" onclick="clearAllMedicines()">一键删除所有药物</button>
+                </div>
+            </div>
+            <div class="medicine-section">
+                <div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">
+                    提示: 在简码栏输入简码，在药名栏输入药名
+                </div>
+                <div class="medicine-table-container">
+                    <table class="medicine-table" id="prescriptionTable">
+                        <thead>
+                            <tr>
+                                <th style="width:25px;">#</th>
+                                <th style="width:45px;">简码</th>
+                                <th style="width:90px;">药物</th>
+                                <th style="width:40px;">数量</th>
+                                <th style="width:30px;">单位</th>
+                                <th style="width:40px;">单价</th>
+                                <th style="width:45px;">合计</th>
+                                <th style="width:30px;">删</th>
+                            </tr>
+                        </thead>
+                        <tbody id="prescriptionBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="medicine-search-dropdown" id="medicineSearchDropdown"></div>
+            </div>
+        </div>
+
+        <div class="center-panel">
+            <div class="prescription-paper" id="prescriptionPaper">
+                <div class="clinic-name" id="clinicNameDisplay">惠康堂中医诊所</div>
+                <div class="prescription-title">处 方 笺</div>
+                <div class="prescription-info">
+                    <div>姓名: <span id="paperName"></span></div>
+                    <div>性别: <span id="paperGender"></span></div>
+                    <div>年龄: <span id="paperAge"></span>岁</div>
+                    <div>科别: 中医内科</div>
+                    <div>门诊号: <span id="paperClinicNo"></span></div>
+                    <div>日期: <span id="paperDate"></span></div>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <span>诊断: <span id="paperDiagnosis"></span></span>
+                </div>
+                <div class="prescription-grid">
+                    <div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;">
+                        <div class="rp-mark">RP</div>
+                        <div></div>
+                        <div class="dose-count"><span id="paperDoseCount">7</span>剂</div>
+                    </div>
+                    <div id="prescriptionLines"></div>
+                </div>
+                <div class="prescription-footer">
+                    <div class="usage-text">用法: 水煎服，日一剂，早晚分服</div>
+                    <div class="signature-row">
+                        <span>医师: <span id="paperDoctor"></span>（签字）</span>
+                        <span>配方: ________ 复核: ________</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="history-header">处方历史</div>
+            <div class="history-list" id="historyList">
+                <div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom-bar">
+        <div class="price-summary">
+            <div class="price-item">每剂: <span id="perDosePrice" style="color:red;font-weight:bold;">0.00</span>元</div>
+            <div class="price-item">药费: <span id="totalPrice">0.00</span>元</div>
+            <div class="price-item">剂数: <input type="number" id="doseCountInput" value="7" style="width:40px;padding:2px;font-weight:bold;" onchange="updateDoseCount()">剂</div>
+            <div class="price-item">诊疗费: <input type="number" id="registrationFee" value="0" style="width:40px;padding:2px;" onchange="calculateAmount()">元</div>
+            <div class="price-item">总计: <span id="grandTotal" style="color:red;font-weight:bold;">0.00</span>元</div>
+        </div>
+        <div class="action-buttons">
+            <button class="action-btn" onclick="clearPrescription()">重输</button>
+            <button class="action-btn" onclick="saveAsFormula()">存验方</button>
+            <button class="action-btn" onclick="printPrescription()">打印</button>
+            <button class="action-btn primary" onclick="savePrescription()">保存</button>
+        </div>
+    </div>
+
+    <div class="modal" id="settingsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>F1 基础设置</h3>
+                <span class="close-btn" onclick="closeModal('settingsModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:12px;">
+                    <label>诊所名称:</label>
+                    <input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>医师姓名:</label>
+                    <input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>默认挂号费:</label>
+                    <input type="number" id="defaultRegFee" style="width:100%;padding:6px;margin-top:4px;">
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label>默认剂数:</label>
+                    <input type="number" id="defaultDose" style="width:100%;padding:6px;margin-top:4px;">
+                </div>
+                <div id="autoStartSection" style="margin-bottom:12px;display:none;">
+                    <label style="display:flex;align-items:center;gap:8px;">
+                        <input type="checkbox" id="autoStart" style="width:18px;height:18px;">
+                        开机自动启动（仅管理员）
+                    </label>
+                    <div style="font-size:11px;color:#666;margin-top:4px;">勾选后，系统将在电脑开机时自动启动</div>
+                </div>
+                <hr style="margin:15px 0;">
+                <div style="text-align:center;">
+                    <button class="action-btn" onclick="backupData()">备份数据</button>
+                    <button class="action-btn" onclick="restoreData()">恢复数据</button>
+                    <button class="action-btn" onclick="clearAllData()" style="background:#ffdddd;">清空数据</button>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('settingsModal')">取消</button>
+                <button class="action-btn primary" onclick="saveSettings()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="syndromeModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Alt+1 中医辨证选方</h3>
+                <span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="medicineModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>F2 药品管理</h3>
+                <span class="close-btn" onclick="closeModal('medicineModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;">
+                    <button class="action-btn" onclick="showAddMedicineForm()">新增药品</button>
+                    <button class="action-btn" onclick="showBatchStockForm()">批量出入库</button>
+                    <button class="action-btn" onclick="exportMedicines()">导出药品</button>
+                    <button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button>
+                    <button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button>
+                    <input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)">
+                </div>
+                <div id="medicineList" style="overflow:auto;max-height:350px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('medicineModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="formulaModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>F3 验方设置</h3>
+                <span class="close-btn" onclick="closeModal('formulaModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:12px;display:flex;gap:8px;">
+                    <input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;">
+                    <button class="action-btn" onclick="showAddFormulaForm()">新增验方</button>
+                </div>
+                <div id="formulaList" style="overflow:auto;max-height:350px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('formulaModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="caseModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>病例管理</h3>
+                <span class="close-btn" onclick="closeModal('caseModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:12px;padding:10px;background:#f0f0f0;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                        <input type="text" id="caseNameSearch" placeholder="患者姓名">
+                        <input type="date" id="caseDateStart">
+                        <input type="date" id="caseDateEnd">
+                    </div>
+                    <div style="margin-top:8px;display:flex;gap:8px;">
+                        <button class="action-btn" onclick="searchCases()">搜索</button>
+                        <button class="action-btn" onclick="resetCaseSearch()">重置</button>
+                    </div>
+                </div>
+                <div id="caseList" style="overflow:auto;max-height:350px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('caseModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="statsModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>数据管理</h3>
+                <span class="close-btn" onclick="closeModal('statsModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:15px;">
+                    <label>统计范围:</label>
+                    <select id="statsRange" onchange="updateStats()">
+                        <option value="today">今日</option>
+                        <option value="week">本周</option>
+                        <option value="month" selected>本月</option>
+                        <option value="year">本年</option>
+                        <option value="all">全部</option>
+                    </select>
+                </div>
+                <div id="statsContent"></div>
+                <div style="margin-top:20px;padding-top:15px;border-top:1px solid #ccc;">
+                    <h4 style="margin-bottom:10px;">数据备份与恢复</h4>
+                    <div style="display:flex;gap:10px;">
+                        <button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">📥 下载数据文件</button>
+                        <button class="action-btn" onclick="copyData()" style="background:#FF9800;color:white;">📋 复制数据</button>
+                        <button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📤 导入数据</button>
+                        <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button>
+                    </div>
+                    <p style="font-size:12px;color:#666;margin-top:10px;">提示：复制数据后，打开记事本粘贴并保存为 prescription-data.json 文件</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('statsModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+
+        function hashPassword(password) {
+            let hash = 0;
+            for (let i = 0; i < password.length; i++) {
+                const char = password.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(16);
+        }
+
+        function getDefaultUsers() {
+            return [
+                {username: 'admin', password: hashPassword('admin123'), name: '管理员', role: 'admin'},
+                {username: 'doctor1', password: hashPassword('doctor123'), name: '张医生', role: 'user'},
+                {username: 'doctor2', password: hashPassword('doctor123'), name: '李医生', role: 'user'}
+            ];
+        }
+
+        function getUsers() {
+            const saved = localStorage.getItem('systemUsers');
+            return saved ? JSON.parse(saved) : getDefaultUsers();
+        }
+
+        function saveUsers(users) {
+            localStorage.setItem('systemUsers', JSON.stringify(users));
+        }
+
+        function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorDiv = document.getElementById('loginError');
+            
+            if (!username || !password) {
+                errorDiv.textContent = '请输入用户名和密码';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            const users = getUsers();
+            const hashedPassword = hashPassword(password);
+            const user = users.find(u => u.username === username && u.password === hashedPassword);
+            
+            if (user) {
+                currentUser = user;
+                localStorage.setItem('currentUser', JSON.stringify(user));
+                document.getElementById('loginOverlay').style.display = 'none';
+                updateUserDisplay();
+                errorDiv.style.display = 'none';
+            } else {
+                errorDiv.textContent = '用户名或密码错误';
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        function handleLogout() {
+            currentUser = null;
+            localStorage.removeItem('currentUser');
+            sessionStorage.removeItem('currentUser');
+            document.getElementById('loginUsername').value = '';
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('loginOverlay').style.display = 'flex';
+            window.location.reload();
+        }
+
+        function showRegisterModal() {
+            document.getElementById('regUsername').value = '';
+            document.getElementById('regPassword').value = '';
+            document.getElementById('regConfirmPwd').value = '';
+            document.getElementById('regName').value = '';
+            document.getElementById('registerModal').style.display = 'flex';
+        }
+
+        function handleRegister() {
+            const username = document.getElementById('regUsername').value.trim();
+            const password = document.getElementById('regPassword').value;
+            const confirmPwd = document.getElementById('regConfirmPwd').value;
+            const name = document.getElementById('regName').value.trim();
+            
+            if (!username || !password || !name) {
+                alert('请填写完整信息');
+                return;
+            }
+            
+            if (password !== confirmPwd) {
+                alert('两次输入的密码不一致');
+                return;
+            }
+            
+            const users = getUsers();
+            if (users.find(u => u.username === username)) {
+                alert('用户名已存在');
+                return;
+            }
+            
+            users.push({
+                username: username,
+                password: hashPassword(password),
+                name: name,
+                role: 'user'
+            });
+            
+            saveUsers(users);
+            alert('注册成功！');
+            closeModal('registerModal');
+        }
+
+        function showChangePwdModal() {
+            document.getElementById('oldPwd').value = '';
+            document.getElementById('newPwd').value = '';
+            document.getElementById('confirmNewPwd').value = '';
+            document.getElementById('changePwdModal').style.display = 'flex';
+        }
+
+        function handleChangePassword() {
+            const oldPwd = document.getElementById('oldPwd').value;
+            const newPwd = document.getElementById('newPwd').value;
+            const confirmNewPwd = document.getElementById('confirmNewPwd').value;
+            
+            if (!oldPwd || !newPwd || !confirmNewPwd) {
+                alert('请填写所有字段');
+                return;
+            }
+            
+            if (newPwd !== confirmNewPwd) {
+                alert('新密码两次输入不一致');
+                return;
+            }
+            
+            const users = getUsers();
+            const userIndex = users.findIndex(u => u.username === currentUser.username);
+            
+            if (userIndex === -1) {
+                alert('用户不存在');
+                return;
+            }
+            
+            if (users[userIndex].password !== hashPassword(oldPwd)) {
+                alert('原密码错误');
+                return;
+            }
+            
+            users[userIndex].password = hashPassword(newPwd);
+            saveUsers(users);
+            currentUser = users[userIndex];
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            
+            alert('密码修改成功！');
+            closeModal('changePwdModal');
+        }
+
+        function showUserManageModal() {
+            if (!currentUser || currentUser.role !== 'admin') {
+                alert('只有管理员可以管理用户');
+                return;
+            }
+            
+            renderUserList();
+            document.getElementById('newUserUsername').value = '';
+            document.getElementById('newUserPassword').value = '';
+            document.getElementById('newUserName').value = '';
+            document.getElementById('userManageModal').style.display = 'flex';
+        }
+
+        function renderUserList() {
+            const users = getUsers();
+            const listDiv = document.getElementById('userList');
+            
+            let html = '';
+            users.forEach(user => {
+                html += `
+                    <div class="user-item">
+                        <div class="user-item-info">
+                            <div class="user-item-name">${user.name} (${user.username})</div>
+                            <div class="user-item-role">${user.role === 'admin' ? '管理员' : '普通用户'}</div>
+                        </div>
+                        <div class="user-item-actions">
+                            <button class="user-item-btn btn-primary" onclick="handleEditUser('${user.username}')">编辑</button>
+                            ${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + user.username + '\')">删除</button>' : ''}
+                        </div>
+                    </div>
+                `;
+            });
+            
+            listDiv.innerHTML = html || '暂无用户';
+        }
+
+        function handleEditUser(username) {
+            const users = getUsers();
+            const user = users.find(u => u.username === username);
+            if (!user) return;
+            
+            const newUsername = prompt('请输入新用户名：', user.username);
+            if (newUsername === null) return;
+            
+            const trimmedUsername = newUsername.trim();
+            if (!trimmedUsername) {
+                alert('用户名不能为空');
+                return;
+            }
+            
+            if (trimmedUsername !== username) {
+                const exists = users.find(u => u.username === trimmedUsername);
+                if (exists) {
+                    alert('用户名已存在');
+                    return;
+                }
+            }
+            
+            const newName = prompt('请输入新名称：', user.name);
+            if (newName === null) return;
+            
+            const trimmedName = newName.trim();
+            if (!trimmedName) {
+                alert('名称不能为空');
+                return;
+            }
+            
+            const userIndex = users.findIndex(u => u.username === username);
+            users[userIndex].username = trimmedUsername;
+            users[userIndex].name = trimmedName;
+            saveUsers(users);
+            
+            if (currentUser.username === username) {
+                currentUser = users[userIndex];
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                updateUserDisplay();
+            }
+            
+            renderUserList();
+            alert('用户信息修改成功！');
+        }
+
+        function handleAddUser() {
+            const username = document.getElementById('newUserUsername').value.trim();
+            const password = document.getElementById('newUserPassword').value;
+            const name = document.getElementById('newUserName').value.trim();
+            
+            if (!username || !password || !name) {
+                alert('请填写完整信息');
+                return;
+            }
+            
+            const users = getUsers();
+            if (users.find(u => u.username === username)) {
+                alert('用户名已存在');
+                return;
+            }
+            
+            users.push({
+                username: username,
+                password: hashPassword(password),
+                name: name,
+                role: 'user'
+            });
+            
+            saveUsers(users);
+            renderUserList();
+            document.getElementById('newUserUsername').value = '';
+            document.getElementById('newUserPassword').value = '';
+            document.getElementById('newUserName').value = '';
+            alert('用户添加成功！');
+        }
+
+        function handleDeleteUser(username) {
+            if (!confirm('确定删除该用户？')) return;
+            
+            const users = getUsers().filter(u => u.username !== username);
+            saveUsers(users);
+            renderUserList();
+        }
+
+        function updateUserDisplay() {
+            if (currentUser) {
+                document.getElementById('userDisplayName').textContent = currentUser.name;
+                const userManageBtn = document.getElementById('userManageBtn');
+                const autoStartSection = document.getElementById('autoStartSection');
+                
+                if (currentUser.role === 'admin') {
+                    userManageBtn.style.display = 'block';
+                    autoStartSection.style.display = 'block';
+                } else {
+                    userManageBtn.style.display = 'none';
+                    autoStartSection.style.display = 'none';
+                }
+            }
+        }
+
+        function checkLoginStatus() {
+            const saved = localStorage.getItem('currentUser');
+            if (saved) {
+                currentUser = JSON.parse(saved);
+                document.getElementById('loginOverlay').style.display = 'none';
+                updateUserDisplay();
+            } else {
+                document.getElementById('loginOverlay').style.display = 'flex';
+            }
+        }
+
+        let medicines = [];
+
+        let formulas = [
+            {name:'四君子汤',code:'sjzt',effect:'健脾益气',indication:'脾胃气虚证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5}]},
+            {name:'四物汤',code:'swt',effect:'补血调经',indication:'血虚证',composition:[{name:'当归',dosage:10},{name:'熟地黄',dosage:12},{name:'白芍',dosage:10},{name:'川芎',dosage:8}]},
+            {name:'八珍汤',code:'bzt',effect:'气血双补',indication:'气血两虚证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5},{name:'当归',dosage:10},{name:'川芎',dosage:8},{name:'白芍',dosage:10},{name:'熟地黄',dosage:15}]},
+            {name:'六君子汤',code:'ljzt',effect:'健脾益气化痰',indication:'脾胃气虚痰湿证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5},{name:'陈皮',dosage:5},{name:'半夏',dosage:10}]},
+            {name:'参苓白术散',code:'slbzs',effect:'健脾益气渗湿',indication:'脾虚湿盛证',composition:[{name:'人参',dosage:15},{name:'茯苓',dosage:15},{name:'白术',dosage:15},{name:'山药',dosage:15},{name:'白扁豆',dosage:12},{name:'莲子',dosage:9},{name:'薏苡仁',dosage:9},{name:'砂仁',dosage:6},{name:'桔梗',dosage:6},{name:'甘草',dosage:3}]},
+            {name:'补中益气汤',code:'bzyqt',effect:'补中益气升阳',indication:'中气下陷证',composition:[{name:'人参',dosage:10},{name:'黄芪',dosage:15},{name:'白术',dosage:10},{name:'甘草',dosage:6},{name:'当归',dosage:10},{name:'陈皮',dosage:6},{name:'升麻',dosage:6},{name:'柴胡',dosage:6}]},
+            {name:'生脉散',code:'sms',effect:'益气养阴敛汗',indication:'气阴两虚证',composition:[{name:'人参',dosage:10},{name:'麦冬',dosage:15},{name:'五味子',dosage:6}]},
+            {name:'玉屏风散',code:'ypfs',effect:'益气固表止汗',indication:'表虚自汗证',composition:[{name:'黄芪',dosage:30},{name:'白术',dosage:15},{name:'防风',dosage:6}]}
+        ];
+
+        let prescriptionHistory = [];
+        let prescriptionItems = [];
+        let dailyCounter = 1;
+        let currentPrescriptionDate = '';
+        let currentEditIndex = -1;
+        let selectedSearchIndex = 0;
+        let currentSearchColumn = 'code';
+        let medicineMap = new Map();
+        
+        function buildMedicineMap() {
+            medicineMap.clear();
+            medicines.forEach(med => {
+                medicineMap.set(med.name, med);
+            });
+        }
+        
+        function getMedicineByName(name) {
+            return medicineMap.get(name);
+        }
+        
+        let saveTimeout = null;
+        function debouncedSave(key, value, delay = 100) {
+            if (saveTimeout) clearTimeout(saveTimeout);
+            saveTimeout = setTimeout(() => {
+                localStorage.setItem(key, value);
+            }, delay);
+        }
+        
+        function createEmptyMedicine() {
+            return {code:'', name:'', dosage:'', unit:'g', price:'', total:''};
+        }
+
+        function safeParseJSON(str, defaultValue = []) {
+            try {
+                return str ? JSON.parse(str) : defaultValue;
+            } catch (e) {
+                console.warn('JSON解析失败:', e);
+                return defaultValue;
+            }
+        }
+
+        function loadData() {
+            const savedFormulas = localStorage.getItem('formulas');
+            const savedHistory = localStorage.getItem('prescriptionHistory');
+            const savedDailyCounter = localStorage.getItem('dailyCounter');
+            const savedCounterDate = localStorage.getItem('counterDate');
+            const savedMedicines = localStorage.getItem('medicines');
+            
+            formulas = safeParseJSON(savedFormulas, []);
+            prescriptionHistory = safeParseJSON(savedHistory, []);
+            
+            const defaultMedicines = [
+                {name:'人参',code:'rs',price:8.0,unit:'g',dosage:10},
+                {name:'党参',code:'ds',price:0.8,unit:'g',dosage:15},
+                {name:'黄芪',code:'hq',price:0.5,unit:'g',dosage:15},
+                {name:'太子参',code:'tzs',price:1.2,unit:'g',dosage:15},
+                {name:'西洋参',code:'xys',price:15.0,unit:'g',dosage:6},
+                {name:'白术',code:'bz',price:0.5,unit:'g',dosage:10},
+                {name:'山药',code:'sy',price:0.4,unit:'g',dosage:15},
+                {name:'白扁豆',code:'bbd',price:0.4,unit:'g',dosage:15},
+                {name:'甘草',code:'gc',price:0.2,unit:'g',dosage:6},
+                {name:'大枣',code:'dz',price:0.15,unit:'g',dosage:10},
+                {name:'饴糖',code:'yt',price:0.3,unit:'g',dosage:30},
+                {name:'蜂蜜',code:'fm',price:0.5,unit:'g',dosage:15},
+                {name:'黄精',code:'hj',price:0.6,unit:'g',dosage:15},
+                {name:'红景天',code:'hjt',price:0.8,unit:'g',dosage:10},
+                {name:'绞股蓝',code:'jgl',price:0.5,unit:'g',dosage:15},
+                {name:'沙棘',code:'sj',price:0.4,unit:'g',dosage:10},
+                {name:'北沙参',code:'bss',price:0.8,unit:'g',dosage:15},
+                {name:'红参',code:'hs',price:12.0,unit:'g',dosage:10},
+                {name:'白参',code:'bs',price:10.0,unit:'g',dosage:10},
+                {name:'明党参',code:'mdc',price:0.6,unit:'g',dosage:10},
+                {name:'当归',code:'dg',price:0.6,unit:'g',dosage:10},
+                {name:'桂枝',code:'gz',price:0.5,unit:'g',dosage:10},
+                {name:'熟地黄',code:'sdh',price:0.6,unit:'g',dosage:15},
+                {name:'生地黄',code:'sdh',price:0.5,unit:'g',dosage:15},
+                {name:'白芍',code:'bs',price:0.4,unit:'g',dosage:12},
+                {name:'赤芍',code:'cs',price:0.5,unit:'g',dosage:10},
+                {name:'川芎',code:'cx',price:0.5,unit:'g',dosage:10},
+                {name:'丹参',code:'ds',price:0.6,unit:'g',dosage:15},
+                {name:'阿胶',code:'ej',price:25.0,unit:'g',dosage:6},
+                {name:'何首乌',code:'hsw',price:0.5,unit:'g',dosage:15},
+                {name:'枸杞子',code:'gqz',price:0.6,unit:'g',dosage:12},
+                {name:'龙眼肉',code:'lyn',price:0.8,unit:'g',dosage:10},
+                {name:'桑椹',code:'ss',price:0.5,unit:'g',dosage:15},
+                {name:'鸡血藤',code:'jxt',price:0.5,unit:'g',dosage:15},
+                {name:'紫河车',code:'zhc',price:8.0,unit:'g',dosage:3},
+                {name:'鹿角胶',code:'ljj',price:15.0,unit:'g',dosage:6},
+                {name:'龟甲胶',code:'gjj',price:10.0,unit:'g',dosage:6},
+                {name:'鳖甲',code:'bj',price:8.0,unit:'g',dosage:15},
+                {name:'红花',code:'hh',price:0.5,unit:'g',dosage:6},
+                {name:'桃仁',code:'tr',price:0.6,unit:'g',dosage:10},
+                {name:'益母草',code:'ymc',price:0.3,unit:'g',dosage:15},
+                {name:'牛膝',code:'nx',price:0.4,unit:'g',dosage:15},
+                {name:'川牛膝',code:'cnx',price:0.4,unit:'g',dosage:15},
+                {name:'王不留行',code:'wblx',price:0.4,unit:'g',dosage:10},
+                {name:'土鳖虫',code:'tbc',price:1.0,unit:'g',dosage:3},
+                {name:'莪术',code:'ez',price:0.5,unit:'g',dosage:10},
+                {name:'三棱',code:'sl',price:0.5,unit:'g',dosage:10},
+                {name:'水蛭',code:'sz',price:2.0,unit:'g',dosage:3},
+                {name:'虻虫',code:'mc',price:3.0,unit:'g',dosage:1},
+                {name:'穿山甲',code:'csj',price:5.0,unit:'g',dosage:3},
+                {name:'乳香',code:'rx',price:0.6,unit:'g',dosage:6},
+                {name:'没药',code:'my',price:0.6,unit:'g',dosage:6},
+                {name:'延胡索',code:'yhs',price:0.6,unit:'g',dosage:10},
+                {name:'郁金',code:'yj',price:0.5,unit:'g',dosage:10},
+                {name:'姜黄',code:'jh',price:0.4,unit:'g',dosage:10},
+                {name:'三七',code:'sq',price:8.0,unit:'g',dosage:3},
+                {name:'茜草',code:'qc',price:0.4,unit:'g',dosage:10},
+                {name:'蒲黄',code:'ph',price:0.6,unit:'g',dosage:6},
+                {name:'五灵脂',code:'wzl',price:0.5,unit:'g',dosage:10},
+                {name:'降香',code:'jx',price:1.5,unit:'g',dosage:6},
+                {name:'泽兰',code:'zl',price:0.4,unit:'g',dosage:10},
+                {name:'月季花',code:'yhj',price:0.5,unit:'g',dosage:6},
+                {name:'凌霄花',code:'lxh',price:0.6,unit:'g',dosage:6},
+                {name:'自然铜',code:'zrt',price:0.8,unit:'g',dosage:10},
+                {name:'苏木',code:'sm',price:0.4,unit:'g',dosage:10},
+                {name:'骨碎补',code:'gsb',price:0.5,unit:'g',dosage:10},
+                {name:'血竭',code:'xj',price:10.0,unit:'g',dosage:2},
+                {name:'儿茶',code:'ec',price:1.5,unit:'g',dosage:3},
+                {name:'刘寄奴',code:'ljn',price:0.5,unit:'g',dosage:10},
+                {name:'急性子',code:'jxz',price:0.4,unit:'g',dosage:10},
+                {name:'威灵仙',code:'wlx',price:0.4,unit:'g',dosage:10},
+                {name:'川乌',code:'cw',price:0.8,unit:'g',dosage:3},
+                {name:'草乌',code:'cw',price:0.8,unit:'g',dosage:3},
+                {name:'附子',code:'fz',price:1.0,unit:'g',dosage:6},
+                {name:'雪上一枝蒿',code:'xsyz',price:2.0,unit:'g',dosage:1},
+                {name:'独活',code:'dh',price:0.5,unit:'g',dosage:10},
+                {name:'木瓜',code:'mg',price:0.4,unit:'g',dosage:10},
+                {name:'蚕沙',code:'cs',price:0.3,unit:'g',dosage:15},
+                {name:'伸筋草',code:'sjc',price:0.4,unit:'g',dosage:15},
+                {name:'寻骨风',code:'xgf',price:0.4,unit:'g',dosage:15},
+                {name:'松节',code:'sj',price:0.3,unit:'g',dosage:15},
+                {name:'海风藤',code:'hft',price:0.4,unit:'g',dosage:15},
+                {name:'青风藤',code:'qft',price:0.4,unit:'g',dosage:15},
+                {name:'丁公藤',code:'dgt',price:0.5,unit:'g',dosage:10},
+                {name:'昆明山海棠',code:'kmsh',price:0.5,unit:'g',dosage:10},
+                {name:'雪莲花',code:'xlh',price:5.0,unit:'g',dosage:3},
+                {name:'路路通',code:'llt',price:0.4,unit:'g',dosage:10},
+                {name:'丝瓜络',code:'sgl',price:0.3,unit:'g',dosage:15},
+                {name:'五加皮',code:'wjp',price:0.5,unit:'g',dosage:10},
+                {name:'桑寄生',code:'sjs',price:0.5,unit:'g',dosage:15},
+                {name:'千年健',code:'qnj',price:0.6,unit:'g',dosage:10},
+                {name:'鹿衔草',code:'lxc',price:0.5,unit:'g',dosage:10},
+                {name:'石楠叶',code:'sny',price:0.4,unit:'g',dosage:10},
+                {name:'藿香',code:'hx',price:0.4,unit:'g',dosage:10},
+                {name:'佩兰',code:'pl',price:0.4,unit:'g',dosage:10},
+                {name:'厚朴',code:'hp',price:0.4,unit:'g',dosage:10},
+                {name:'砂仁',code:'sr',price:1.5,unit:'g',dosage:6},
+                {name:'豆蔻',code:'dk',price:2.0,unit:'g',dosage:6},
+                {name:'草豆蔻',code:'cdk',price:0.8,unit:'g',dosage:6},
+                {name:'草果',code:'cg',price:1.2,unit:'g',dosage:6},
+                {name:'薏苡仁',code:'yyr',price:0.5,unit:'g',dosage:20},
+                {name:'猪苓',code:'zl',price:0.5,unit:'g',dosage:10},
+                {name:'泽泻',code:'zx',price:0.4,unit:'g',dosage:15},
+                {name:'冬瓜皮',code:'dgp',price:0.3,unit:'g',dosage:30},
+                {name:'赤小豆',code:'xcd',price:0.3,unit:'g',dosage:30},
+                {name:'玉米须',code:'ymx',price:0.3,unit:'g',dosage:30},
+                {name:'葫芦',code:'hl',price:0.3,unit:'g',dosage:15},
+                {name:'香加皮',code:'xjp',price:0.5,unit:'g',dosage:6},
+                {name:'车前子',code:'cqz',price:0.3,unit:'g',dosage:10},
+                {name:'炒车前子',code:'ccqz',price:0.35,unit:'g',dosage:10},
+                {name:'滑石',code:'hs',price:0.3,unit:'g',dosage:15},
+                {name:'木通',code:'mt',price:0.4,unit:'g',dosage:6},
+                {name:'通草',code:'tc',price:0.4,unit:'g',dosage:6},
+                {name:'瞿麦',code:'qm',price:0.4,unit:'g',dosage:10},
+                {name:'扁蓄',code:'bx',price:0.3,unit:'g',dosage:15},
+                {name:'地肤子',code:'dfz',price:0.4,unit:'g',dosage:15},
+                {name:'海金沙',code:'hjs',price:0.6,unit:'g',dosage:6},
+                {name:'石韦',code:'sw',price:0.4,unit:'g',dosage:10},
+                {name:'冬葵子',code:'dkz',price:0.4,unit:'g',dosage:10},
+                {name:'灯心草',code:'dxc',price:0.3,unit:'g',dosage:3},
+                {name:'茵陈',code:'yc',price:0.4,unit:'g',dosage:15},
+                {name:'金钱草',code:'jqc',price:0.3,unit:'g',dosage:30},
+                {name:'虎杖',code:'hz',price:0.3,unit:'g',dosage:15},
+                {name:'地耳草',code:'dec',price:0.4,unit:'g',dosage:15},
+                {name:'垂盆草',code:'cpc',price:0.3,unit:'g',dosage:30},
+                {name:'鸡骨草',code:'jgc',price:0.4,unit:'g',dosage:15},
+                {name:'珍珠草',code:'zzc',price:0.4,unit:'g',dosage:15},
+                {name:'大黄',code:'dh',price:0.4,unit:'g',dosage:10},
+                {name:'番泻叶',code:'fxy',price:0.3,unit:'g',dosage:3},
+                {name:'芦荟',code:'lh',price:0.6,unit:'g',dosage:6},
+                {name:'火麻仁',code:'hmr',price:0.4,unit:'g',dosage:15},
+                {name:'郁李仁',code:'ylr',price:0.5,unit:'g',dosage:10},
+                {name:'松子仁',code:'szr',price:1.0,unit:'g',dosage:10},
+                {name:'杏仁',code:'xr',price:0.5,unit:'g',dosage:10},
+                {name:'决明子',code:'jmz',price:0.3,unit:'g',dosage:15},
+                {name:'瓜蒌',code:'gl',price:0.5,unit:'g',dosage:15},
+                {name:'薤白',code:'xb',price:0.4,unit:'g',dosage:10},
+                {name:'枳实',code:'zs',price:0.4,unit:'g',dosage:6},
+                {name:'枳壳',code:'zk',price:0.4,unit:'g',dosage:10},
+                {name:'木香',code:'mx',price:0.4,unit:'g',dosage:10},
+                {name:'沉香',code:'cx',price:8.0,unit:'g',dosage:2},
+                {name:'檀香',code:'tx',price:1.0,unit:'g',dosage:3},
+                {name:'川楝子',code:'clz',price:0.4,unit:'g',dosage:10},
+                {name:'乌药',code:'wy',price:0.4,unit:'g',dosage:10},
+                {name:'荔枝核',code:'lzh',price:0.4,unit:'g',dosage:10},
+                {name:'香附',code:'xf',price:0.4,unit:'g',dosage:10},
+                {name:'佛手',code:'fs',price:0.5,unit:'g',dosage:10},
+                {name:'香橼',code:'xy',price:0.5,unit:'g',dosage:10},
+                {name:'麻黄',code:'mh',price:0.5,unit:'g',dosage:6},
+                {name:'紫苏叶',code:'zsy',price:0.4,unit:'g',dosage:10},
+                {name:'荆芥',code:'jj',price:0.4,unit:'g',dosage:10},
+                {name:'防风',code:'ff',price:0.5,unit:'g',dosage:10},
+                {name:'羌活',code:'qh',price:0.5,unit:'g',dosage:10},
+                {name:'白芷',code:'bz',price:0.5,unit:'g',dosage:10},
+                {name:'细辛',code:'xx',price:0.8,unit:'g',dosage:3},
+                {name:'辛夷',code:'xy',price:0.6,unit:'g',dosage:6},
+                {name:'苍耳子',code:'cez',price:0.4,unit:'g',dosage:6},
+                {name:'薄荷',code:'bh',price:0.4,unit:'g',dosage:6},
+                {name:'牛蒡子',code:'nbz',price:0.4,unit:'g',dosage:10},
+                {name:'蝉蜕',code:'ct',price:0.5,unit:'g',dosage:6},
+                {name:'桑叶',code:'sy',price:0.3,unit:'g',dosage:10},
+                {name:'菊花',code:'jh',price:0.4,unit:'g',dosage:10},
+                {name:'蔓荆子',code:'mjz',price:0.4,unit:'g',dosage:10},
+                {name:'柴胡',code:'ch',price:0.5,unit:'g',dosage:10},
+                {name:'升麻',code:'sm',price:0.5,unit:'g',dosage:6},
+                {name:'葛根',code:'gg',price:0.4,unit:'g',dosage:15},
+                {name:'淡豆豉',code:'ddc',price:0.3,unit:'g',dosage:10},
+                {name:'浮萍',code:'fp',price:0.3,unit:'g',dosage:10},
+                {name:'木贼',code:'mz',price:0.3,unit:'g',dosage:10},
+                {name:'石膏',code:'sg',price:0.3,unit:'g',dosage:30},
+                {name:'知母',code:'zm',price:0.5,unit:'g',dosage:10},
+                {name:'芦根',code:'lg',price:0.3,unit:'g',dosage:30},
+                {name:'天花粉',code:'thf',price:0.5,unit:'g',dosage:15},
+                {name:'竹叶',code:'zy',price:0.3,unit:'g',dosage:10},
+                {name:'栀子',code:'zz',price:0.4,unit:'g',dosage:10},
+                {name:'夏枯草',code:'xkc',price:0.4,unit:'g',dosage:15},
+                {name:'密蒙花',code:'mmh',price:0.4,unit:'g',dosage:10},
+                {name:'谷精草',code:'gjc',price:0.4,unit:'g',dosage:10},
+                {name:'车前草',code:'cqc',price:0.4,unit:'g',dosage:15},
+                {name:'龙胆草',code:'ldc',price:0.4,unit:'g',dosage:6},
+                {name:'玄参',code:'xs',price:0.5,unit:'g',dosage:15},
+                {name:'牡丹皮',code:'mdp',price:0.5,unit:'g',dosage:10},
+                {name:'紫草',code:'zc',price:0.6,unit:'g',dosage:10},
+                {name:'水牛角',code:'snj',price:0.8,unit:'g',dosage:30},
+                {name:'牛黄',code:'nh',price:50.0,unit:'g',dosage:0.1},
+                {name:'珍珠',code:'zz',price:10.0,unit:'g',dosage:1},
+                {name:'羚羊角',code:'lyj',price:20.0,unit:'g',dosage:1},
+                {name:'钩藤',code:'gt',price:0.6,unit:'g',dosage:10},
+                {name:'天麻',code:'tm',price:2.0,unit:'g',dosage:6},
+                {name:'地龙',code:'dl',price:0.8,unit:'g',dosage:6},
+                {name:'全蝎',code:'qx',price:2.0,unit:'g',dosage:3},
+                {name:'蜈蚣',code:'wg',price:3.0,unit:'g',dosage:2},
+                {name:'僵蚕',code:'jc',price:0.8,unit:'g',dosage:6},
+                {name:'麝香',code:'sx',price:100.0,unit:'g',dosage:0.1},
+                {name:'冰片',code:'bp',price:5.0,unit:'g',dosage:0.3},
+                {name:'石菖蒲',code:'scp',price:0.5,unit:'g',dosage:10},
+                {name:'苏合香',code:'shx',price:8.0,unit:'g',dosage:1},
+                {name:'金银花',code:'jyh',price:0.8,unit:'g',dosage:15},
+                {name:'连翘',code:'lq',price:0.6,unit:'g',dosage:15},
+                {name:'蒲公英',code:'pgy',price:0.4,unit:'g',dosage:15},
+                {name:'紫花地丁',code:'zdd',price:0.3,unit:'g',dosage:15},
+                {name:'野菊花',code:'yjh',price:0.4,unit:'g',dosage:15},
+                {name:'重楼',code:'cl',price:1.5,unit:'g',dosage:10},
+                {name:'拳参',code:'qs',price:0.5,unit:'g',dosage:10},
+                {name:'漏芦',code:'ll',price:0.4,unit:'g',dosage:10},
+                {name:'土茯苓',code:'tfl',price:0.5,unit:'g',dosage:20},
+                {name:'鱼腥草',code:'yxc',price:0.4,unit:'g',dosage:15},
+                {name:'金荞麦',code:'jqm',price:0.4,unit:'g',dosage:15},
+                {name:'大青叶',code:'dqy',price:0.3,unit:'g',dosage:15},
+                {name:'板蓝根',code:'blg',price:0.5,unit:'g',dosage:15},
+                {name:'青黛',code:'qd',price:0.6,unit:'g',dosage:3},
+                {name:'贯众',code:'gz',price:0.3,unit:'g',dosage:10},
+                {name:'白鲜皮',code:'bxp',price:0.5,unit:'g',dosage:10},
+                {name:'椿皮',code:'cp',price:0.4,unit:'g',dosage:10},
+                {name:'地骨皮',code:'dgp',price:0.4,unit:'g',dosage:15},
+                {name:'银柴胡',code:'ych',price:0.5,unit:'g',dosage:10},
+                {name:'胡黄连',code:'hhl',price:0.5,unit:'g',dosage:6},
+                {name:'黄连',code:'hl',price:0.5,unit:'g',dosage:6},
+                {name:'黄芩',code:'hq',price:0.5,unit:'g',dosage:10},
+                {name:'黄柏',code:'hb',price:0.4,unit:'g',dosage:10},
+                {name:'龙胆',code:'ld',price:0.4,unit:'g',dosage:6},
+                {name:'苦参',code:'ks',price:0.4,unit:'g',dosage:10},
+                {name:'白头翁',code:'btw',price:0.5,unit:'g',dosage:15},
+                {name:'马齿苋',code:'mcx',price:0.3,unit:'g',dosage:30},
+                {name:'鸦胆子',code:'ydz',price:0.8,unit:'g',dosage:6},
+                {name:'秦皮',code:'qp',price:0.4,unit:'g',dosage:10},
+                {name:'合欢皮',code:'hhp',price:0.5,unit:'g',dosage:15},
+                {name:'茯苓',code:'fl',price:0.4,unit:'g',dosage:15},
+                {name:'苍术',code:'cz',price:0.5,unit:'g',dosage:10},
+                {name:'狗脊',code:'gj',price:0.4,unit:'g',dosage:15}
+            ];
+            
+            if (localStorage.getItem('clearDefaultMedicines') === 'true') {
+                medicines = [];
+                localStorage.removeItem('clearDefaultMedicines');
+                localStorage.removeItem('medicines');
+            } else if (savedMedicines) {
+                const parsedMedicines = safeParseJSON(savedMedicines, []);
+                if (parsedMedicines.length > 0) {
+                    medicines = removeDuplicateMedicines(parsedMedicines);
+                } else if (localStorage.getItem('medicines') !== null) {
+                    medicines = [];
+                }
+            }
+            
+            if (medicines.length === 0 && localStorage.getItem('medicines') === null) {
+                medicines = defaultMedicines;
+            }
+            
+            buildMedicineMap();
+            
+            medicines.forEach(m => {
+                if (!m.dosage) {
+                    m.dosage = 10;
+                }
+                if (!m.unit) {
+                    m.unit = 'g';
+                }
+                if (!m.price) {
+                    m.price = 0.0;
+                }
+            });
+            
+            function removeDuplicateMedicines(arr) {
+                const seen = new Set();
+                return arr.filter(m => {
+                    const key = m.name + m.code;
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return true;
+                });
+            }
+            
+            dailyCounter = 1;
+            if (savedDailyCounter && savedCounterDate) {
+                const today = new Date().toDateString();
+                if (savedCounterDate === today) {
+                    const parsed = parseInt(savedDailyCounter);
+                    if (!isNaN(parsed) && parsed > 0) {
+                        dailyCounter = parsed;
+                    }
+                }
+            }
+        }
+
+        function generatePrescriptionNo() {
+            const now = new Date();
+            const year = String(now.getFullYear()).slice(-2);
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const count = String(dailyCounter).padStart(2, '0');
+            const result = year + month + day + count;
+            console.log('生成的编号:', result, ' dailyCounter:', dailyCounter);
+            return result;
+        }
+
+        function init() {
+            checkLoginStatus();
+            loadData();
+            const now = new Date();
+            currentPrescriptionDate = now.toDateString();
+            document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
+            const presNo = generatePrescriptionNo();
+            document.getElementById('prescriptionNo').value = presNo;
+            document.getElementById('paperClinicNo').textContent = presNo;
+            document.getElementById('clinicName').value = localStorage.getItem('clinicName') || '惠康堂中医诊所';
+            document.getElementById('clinicNameDisplay').textContent = localStorage.getItem('clinicName') || '惠康堂中医诊所';
+            document.getElementById('defaultRegFee').value = localStorage.getItem('defaultRegFee') || '0';
+            document.getElementById('defaultDose').value = localStorage.getItem('defaultDose') || '7';
+            document.getElementById('registrationFee').value = localStorage.getItem('defaultRegFee') || '0';
+            document.getElementById('doseCountInput').value = localStorage.getItem('defaultDose') || '7';
+            document.getElementById('paperDoseCount').textContent = localStorage.getItem('defaultDose') || '7';
+            document.getElementById('doctorName').value = localStorage.getItem('clinicDoctor') || '王桂杰';
+            document.getElementById('defaultDoctor').value = localStorage.getItem('clinicDoctor') || '王桂杰';
+            document.getElementById('autoStart').checked = localStorage.getItem('autoStartEnabled') === 'true';
+            for (let i = 0; i < 20; i++) addEmptyRow();
+            document.addEventListener('keydown', handleKeyboard);
+            window.addEventListener('beforeunload', handleBeforeUnload);
+            updatePrescriptionPaper();
+        }
+
+        function handleBeforeUnload() {
+            document.removeEventListener('keydown', handleKeyboard);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        }
+
+        function handleKeyboard(e) {
+            if (e.key === 'F1') {e.preventDefault(); showModal('settingsModal');}
+            else if (e.key === 'F2') {e.preventDefault(); showModal('medicineModal');}
+            else if (e.key === 'F3') {e.preventDefault(); showModal('formulaModal');}
+            else if (e.key === 'F5') {e.preventDefault(); saveAsFormula();}
+            else if (e.key === 'F7') {e.preventDefault(); clearPrescription();}
+            else if (e.key === 'F8') {e.preventDefault(); printPrescription();}
+            else if (e.key === 'F9') {e.preventDefault(); savePrescription();}
+            else if (e.altKey && e.key === '1') {e.preventDefault(); showModal('syndromeModal');}
+            else if (e.altKey && e.key === '9') {e.preventDefault(); loadLastHistory();}
+        }
+
+        function addEmptyRow() {
+            prescriptionItems.push(createEmptyMedicine());
+            renderPrescriptionTable();
+        }
+
+        function renderPrescriptionTable() {
+            const tbody = document.getElementById('prescriptionBody');
+            tbody.innerHTML = prescriptionItems.map((item,index) => `
+                <tr>
+                    <td style="text-align:center;font-size:10px;color:#666;">${index + 1}</td>
+                    <td><input type="text" value="${item.code}" id="code-input-${index}"
+                        onfocus="startSearch(event,${index},'code')"
+                        onblur="tryHideSearch()"
+                        onkeyup="handleSearchKey(event,${index},'code')"
+                        style="padding:2px;text-align:left;"></td>
+                    <td><input type="text" value="${item.name}" id="name-input-${index}"
+                        onfocus="startSearch(event,${index},'name')"
+                        onblur="tryHideSearch()"
+                        onkeyup="handleSearchKey(event,${index},'name')"
+                        style="padding:2px;text-align:left;"></td>
+                    <td><input type="number" value="${item.name ? item.dosage : ''}" onchange="updateDosage(${index},this.value)" style="padding:2px;"></td>
+                    <td><input type="text" value="${item.name ? item.unit : ''}" onchange="updateUnit(${index},this.value)" style="padding:2px;"></td>
+                    <td><input type="text" value="${item.name ? item.price : ''}" readonly style="padding:2px;"></td>
+                    <td><input type="text" value="${item.name ? item.total : ''}" readonly style="padding:2px;"></td>
+                    <td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;" onclick="deleteRow(${index})">删</button></td>
+                </tr>
+            `).join('');
+        }
+
+        function startSearch(event, index, column) {
+            currentEditIndex = index;
+            currentSearchColumn = column;
+            const value = event.target.value;
+            if (value.length >= 1) showSearchDropdown(event.target, value, column);
+        }
+
+        function handleSearchKey(event, index, column) {
+            currentSearchColumn = column;
+            const dropdown = document.getElementById('medicineSearchDropdown');
+            if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                selectedSearchIndex = Math.min(selectedSearchIndex + 1, dropdown.querySelectorAll('.search-item').length - 1);
+                updateSearchSelection();
+            } else if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                selectedSearchIndex = Math.max(selectedSearchIndex - 1, 0);
+                updateSearchSelection();
+            } else if (event.key === 'Enter') {
+                event.preventDefault();
+                selectSearchResult();
+            } else if (event.key === 'Tab') {
+                event.preventDefault();
+                if (currentEditIndex >= prescriptionItems.length - 3) addEmptyRow();
+                const nextInput = document.getElementById(`code-input-${index + 1}`);
+                if (nextInput) nextInput.focus();
+            } else {
+                showSearchDropdown(event.target, event.target.value, column);
+            }
+        }
+
+        function updateSearchSelection() {
+            const dropdown = document.getElementById('medicineSearchDropdown');
+            const items = dropdown.querySelectorAll('.search-item');
+            items.forEach((item,i) => {
+                item.classList.toggle('selected', i === selectedSearchIndex);
+            });
+        }
+
+        function selectSearchResult() {
+            const dropdown = document.getElementById('medicineSearchDropdown');
+            const selected = dropdown.querySelector('.search-item.selected');
+            if (selected) selected.click();
+        }
+
+        function showSearchDropdown(element, query, column) {
+            const dropdown = document.getElementById('medicineSearchDropdown');
+            const rect = element.getBoundingClientRect();
+            dropdown.style.left = rect.left + 'px';
+            dropdown.style.top = (rect.bottom + 2) + 'px';
+            dropdown.style.width = (rect.width) + 'px';
+
+            if (!query.trim()) {
+                dropdown.style.display = 'none';
+                return;
+            }
+            
+            let filtered;
+            const sanitizedQuery = query.replace(/[<>\"\'&]/g, '');
+            if (column === 'code') {
+                filtered = medicines.filter(m => m.code && m.code.toLowerCase().startsWith(sanitizedQuery.toLowerCase()));
+            } else {
+                filtered = medicines.filter(m => m.name && m.name.includes(sanitizedQuery));
+            }
+
+            if (filtered.length > 0) {
+                selectedSearchIndex = 0;
+                dropdown.innerHTML = filtered.map((m,i) => {
+                    const safeName = (m.name || '').replace(/[<>\"\'&]/g, '');
+                    const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
+                    const safePrice = parseFloat(m.price) || 0;
+                    const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
+                    return `
+                        <div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}"
+                            onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">
+                            ${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}
+                        </div>
+                    `;
+                }).join('');
+                dropdown.style.display = 'block';
+            } else {
+                dropdown.style.display = 'none';
+            }
+        }
+
+        function tryHideSearch() {
+            setTimeout(() => {document.getElementById('medicineSearchDropdown').style.display = 'none';}, 200);
+        }
+
+        function selectMedicine(index, name, code, price) {
+            const exists = prescriptionItems.some((item, i) => i !== index && item.name === name);
+            if (exists) {
+                alert('该药物已在处方中，不能重复添加！');
+                document.getElementById('medicineSearchDropdown').style.display = 'none';
+                return;
+            }
+            
+            const medicine = getMedicineByName(name);
+            const actualDosage = medicine && medicine.dosage !== undefined && medicine.dosage !== null && medicine.dosage !== '' ? medicine.dosage : 10;
+            
+            prescriptionItems[index].name = name;
+            prescriptionItems[index].code = code;
+            prescriptionItems[index].price = price;
+            prescriptionItems[index].dosage = actualDosage;
+            prescriptionItems[index].total = (price * actualDosage).toFixed(2);
+            if (index >= prescriptionItems.length - 3) addEmptyRow();
+            renderPrescriptionTable();
+            calculateAmount();
+            updatePrescriptionPaper();
+            document.getElementById('medicineSearchDropdown').style.display = 'none';
+            const nextInput = document.getElementById(`code-input-${index + 1}`);
+            if (nextInput) nextInput.focus();
+            showToast(name + ' 已添加');
+        }
+
+        function showToast(message) {
+            const toast = document.createElement('div');
+            toast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#008000;color:white;padding:10px 20px;border-radius:5px;font-size:12px;z-index:9999;opacity:0;transition:opacity 0.3s;';
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.style.opacity = '1', 10);
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 1000);
+        }
+
+        function updateDosage(index, val) {
+            prescriptionItems[index].dosage = parseFloat(val) || 10;
+            prescriptionItems[index].total = (prescriptionItems[index].price * prescriptionItems[index].dosage).toFixed(2);
+            calculateAmount();
+            updatePrescriptionPaper();
+        }
+
+        function updateUnit(index, val) {
+            prescriptionItems[index].unit = val;
+            updatePrescriptionPaper();
+        }
+
+        function deleteRow(index) {
+            prescriptionItems.splice(index, 1);
+            if (prescriptionItems.length < 15) addEmptyRow();
+            renderPrescriptionTable();
+            calculateAmount();
+            updatePrescriptionPaper();
+        }
+
+        function updateDoseCount() {
+            const doseCount = parseInt(document.getElementById('doseCountInput').value) || 7;
+            document.getElementById('paperDoseCount').textContent = doseCount;
+            calculateAmount();
+        }
+
+        function calculateAmount() {
+            const medicineTotal = prescriptionItems.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
+            const doseCount = parseInt(document.getElementById('doseCountInput').value) || 7;
+            const registrationFee = parseFloat(document.getElementById('registrationFee').value) || 0;
+            const total = medicineTotal * doseCount + registrationFee;
+            document.getElementById('perDosePrice').textContent = medicineTotal.toFixed(2);
+            document.getElementById('totalPrice').textContent = (medicineTotal * doseCount).toFixed(2);
+            document.getElementById('grandTotal').textContent = total.toFixed(2);
+            if (document.getElementById('tempAmount')) {
+                document.getElementById('tempAmount').value = total.toFixed(2);
+            }
+        }
+
+        function updatePrescriptionPaper() {
+            document.getElementById('paperName').textContent = document.getElementById('patientName').value;
+            document.getElementById('paperGender').textContent = document.getElementById('patientGender').value;
+            document.getElementById('paperAge').textContent = document.getElementById('patientAge').value;
+            document.getElementById('paperDate').textContent = document.getElementById('visitDate').value;
+            document.getElementById('paperDiagnosis').textContent = document.getElementById('diagnosis').value;
+            document.getElementById('paperDoctor').textContent = document.getElementById('doctorName').value;
+            const linesDiv = document.getElementById('prescriptionLines');
+            const items = prescriptionItems.filter(item => item.name);
+
+            let html = '<div class="prescription-grid-inner">';
+            items.forEach(item => {
+                html += `
+                    <div class="prescription-line">
+                        <span>${item.name}${item.dosage}${item.unit}</span>
+                    </div>
+                `;
+            });
+            html += '</div>';
+            linesDiv.innerHTML = html;
+        }
+
+        function getPinyinCode(chineseName) {
+            const pinyinMap = {
+                '赵':'z','钱':'q','孙':'s','李':'l','周':'z','吴':'w','郑':'z','王':'w',
+                '冯':'f','陈':'c','褚':'c','卫':'w','蒋':'j','沈':'s','韩':'h','杨':'y',
+                '朱':'z','秦':'q','尤':'y','许':'x','何':'h','吕':'l','施':'s','张':'z',
+                '孔':'k','曹':'c','严':'y','华':'h','金':'j','魏':'w','陶':'t','姜':'j',
+                '戚':'q','谢':'x','邹':'z','喻':'y','柏':'b','水':'s','窦':'d','章':'z',
+                '云':'y','苏':'s','潘':'p','葛':'g','奚':'x','范':'f','彭':'p','郎':'l',
+                '鲁':'l','韦':'w','昌':'c','马':'m','苗':'m','凤':'f','花':'h','方':'f',
+                '俞':'y','任':'r','袁':'y','柳':'l','酆':'f','鲍':'b','史':'s','唐':'t',
+                '费':'f','廉':'l','岑':'c','薛':'x','雷':'l','贺':'h','倪':'n','汤':'t',
+                '滕':'t','殷':'y','罗':'l','毕':'b','郝':'h','邬':'w','安':'a','常':'c',
+                '乐':'l','于':'y','时':'s','傅':'f','皮':'p','卞':'b','齐':'q','康':'k',
+                '伍':'w','余':'y','元':'y','卜':'b','顾':'g','孟':'m','平':'p','黄':'h',
+                '和':'h','穆':'m','萧':'x','尹':'y','姚':'y','邵':'s','湛':'z','汪':'w',
+                '祁':'q','毛':'m','禹':'y','狄':'d','米':'m','贝':'b','明':'m','臧':'z',
+                '计':'j','伏':'f','成':'c','戴':'d','谈':'t','宋':'s','茅':'m','庞':'p',
+                '熊':'x','纪':'j','舒':'s','屈':'q','项':'x','祝':'z','董':'d','梁':'l',
+                '杜':'d','阮':'r','蓝':'l','闵':'m','席':'x','季':'j','麻':'m','强':'q',
+                '贾':'j','路':'l','娄':'l','危':'w','江':'j','童':'t','颜':'y','郭':'g',
+                '梅':'m','盛':'s','林':'l','刁':'d','钟':'z','徐':'x','邱':'q','骆':'l',
+                '高':'g','夏':'x','蔡':'c','田':'t','樊':'f','胡':'h','凌':'l','霍':'h',
+                '虞':'y','万':'w','支':'z','柯':'k','昝':'z','管':'g','卢':'l','莫':'m',
+                '经':'j','房':'f','裘':'q','缪':'m','干':'g','解':'x','应':'y','宗':'z',
+                '丁':'d','宣':'x','贲':'b','邓':'d','郁':'y','单':'d','杭':'h','洪':'h',
+                '包':'b','诸':'z','左':'z','石':'s','崔':'c','吉':'j','钮':'n','龚':'g',
+                '程':'c','嵇':'j','邢':'x','滑':'h','裴':'p','陆':'l','荣':'r','翁':'w',
+                '荀':'x','羊':'y','惠':'h','甄':'z','曲':'q','家':'j','封':'f','芮':'r',
+                '羿':'y','储':'c','靳':'j','汲':'j','邴':'b','糜':'m','松':'s','井':'j',
+                '段':'d','富':'f','巫':'w','乌':'w','焦':'j','巴':'b','弓':'g','牧':'m',
+                '隗':'w','山':'s','谷':'g','车':'c','侯':'h','宓':'m','蓬':'p','全':'q',
+                '郗':'x','班':'b','仰':'y','秋':'q','仲':'z','伊':'y','宫':'g','宁':'n',
+                '仇':'q','栾':'l','暴':'b','甘':'g','斜':'x','厉':'l','戎':'r','祖':'z',
+                '武':'w','符':'f','刘':'l','景':'j','詹':'z','束':'s','龙':'l','叶':'y',
+                '幸':'x','司':'s','韶':'s','郜':'g','黎':'l','蓟':'j','薄':'b','印':'y',
+                '宿':'s','白':'b','怀':'h','蒲':'p','邰':'t','从':'c','鄂':'e','索':'s',
+                '咸':'x','籍':'j','赖':'l','卓':'z','蔺':'l','屠':'t','蒙':'m','池':'c',
+                '乔':'q','阴':'y','郁':'y','胥':'x','能':'n','苍':'c','双':'s','闻':'w',
+                '莘':'s','党':'d','翟':'z','谭':'t','贡':'g','劳':'l','逄':'p','姬':'j',
+                '申':'s','扶':'f','堵':'d','冉':'r','宰':'z','郦':'l','雍':'y','郤':'x',
+                '璩':'q','桑':'s','桂':'g','濮':'p','牛':'n','寿':'s','通':'t','边':'b',
+                '扈':'h','燕':'y','冀':'j','浦':'p','尚':'s','农':'n','温':'w','别':'b',
+                '庄':'z','晏':'y','柴':'c','瞿':'q','阎':'y','充':'c','慕':'m','连':'l',
+                '茹':'r','习':'x','宦':'h','艾':'a','鱼':'y','容':'r','向':'x','古':'g',
+                '易':'y','慎':'s','戈':'g','廖':'l','庾':'y','终':'z','暨':'j','居':'j',
+                '衡':'h','步':'b','都':'d','耿':'g','满':'m','弘':'h','匡':'k','国':'g',
+                '文':'w','寇':'k','广':'g','禄':'l','阙':'q','东':'d','欧':'o','殳':'s',
+                '沃':'w','利':'l','蔚':'w','越':'y','夔':'k','隆':'l','师':'s','巩':'g',
+                '厍':'s','聂':'n','晁':'c','勾':'g','敖':'a','融':'r','冷':'l','訾':'z',
+                '辛':'x','阚':'k','那':'n','简':'j','饶':'r','空':'k','曾':'z','毋':'w',
+                '沙':'s','乜':'m','养':'y','鞠':'j','须':'x','丰':'f','巢':'c','关':'g',
+                '蒯':'k','相':'x','查':'z','后':'h','荆':'j','红':'h','游':'y','竺':'z',
+                '权':'q','逯':'l','盖':'g','益':'y','桓':'h','公':'g','万俟':'m','司马':'s',
+                '上官':'s','欧阳':'o','夏侯':'x','诸葛':'z','闻人':'w','东方':'d','赫连':'h',
+                '皇甫':'h','尉迟':'y','公羊':'g','澹台':'d','公冶':'g','宗政':'z','濮阳':'p',
+                '淳于':'c','单于':'c','太叔':'t','申屠':'s','公孙':'g','仲孙':'z','轩辕':'x',
+                '令狐':'l','钟离':'z','宇文':'y','长孙':'z','慕容':'m','鲜于':'x','闾丘':'l',
+                '司徒':'s','司空':'s','亓官':'q','司寇':'s','仉督':'z','子车':'z','颛孙':'z',
+                '端木':'d','巫马':'w','公西':'g','漆雕':'q','乐正':'l','壤驷':'r','公良':'g',
+                '拓跋':'t','夹谷':'j','宰父':'z','谷梁':'g','段干':'d','百里':'b','东郭':'d',
+                '南门':'n','呼延':'h','羊舌':'y','微生':'w','梁丘':'l','左丘':'z','东门':'d',
+                '西门':'x','南宫':'n','第五':'d','言':'y','福':'f'
+            };
+            let code = '';
+            for (let char of chineseName) {
+                code += pinyinMap[char] || char.toLowerCase();
+            }
+            return code;
+        }
+
+        function searchPatientsQuick(event) {
+            const input = event.target.value.toLowerCase();
+            if (!input) {
+                document.getElementById('historyList').innerHTML = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div>';
+                return;
+            }
+            const matched = prescriptionHistory.filter(p => {
+                if (!p.patientName) return false;
+                const name = p.patientName.toLowerCase();
+                if (name.includes(input)) return true;
+                const pinyinCode = getPinyinCode(p.patientName).toLowerCase();
+                return pinyinCode.startsWith(input) || pinyinCode.includes(input);
+            });
+            renderHistoryList(matched);
+        }
+
+        function renderHistoryList(list) {
+            document.getElementById('historyList').innerHTML = list.map((p,i) => `
+                <div class="history-item" onclick="loadHistory(${p.id})">
+                    <div style="display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <div style="display:flex;gap:8px;align-items:center;">
+                                <div class="history-name">${p.patientName}</div>
+                                <div style="font-size:10px;color:#8b0000;font-weight:bold;">[${p.prescriptionNo || ''}]</div>
+                            </div>
+                            <div class="history-date">${p.date} - ${p.diagnosis || ''}</div>
+                        </div>
+                        <button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button>
+                    </div>
+                </div>
+            `).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
+        }
+
+        function deleteHistory(id) {
+            if (!confirm('确定删除该处方历史？')) return;
+            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            renderHistoryList(prescriptionHistory.slice(0, 15));
+        }
+
+        function loadHistory(id) {
+            const record = prescriptionHistory.find(p => p.id === id);
+            if (!record) return;
+            document.getElementById('patientName').value = record.patientName;
+            document.getElementById('patientGender').value = record.patientGender || '男';
+            document.getElementById('patientAge').value = record.patientAge;
+            document.getElementById('patientPhone').value = record.patientPhone;
+            document.getElementById('patientAddress').value = record.patientAddress;
+            document.getElementById('clinicNo').value = record.clinicNo || record.prescriptionNo || '';
+            document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
+            document.getElementById('medicalHistory').value = record.medicalHistory;
+            document.getElementById('diagnosis').value = record.diagnosis;
+            const doseCount = record.doseCount || 7;
+            document.getElementById('doseCountInput').value = doseCount;
+            document.getElementById('paperDoseCount').textContent = doseCount;
+            prescriptionItems = (record.items || []).map(item => ({...item}));
+            while (prescriptionItems.length < 15) addEmptyRow();
+            renderPrescriptionTable();
+            calculateAmount();
+            updatePrescriptionPaper();
+            document.getElementById('paperDate').textContent = record.date || '';
+        }
+
+        function loadLastHistory() {
+            const name = document.getElementById('patientName').value;
+            if (name && prescriptionHistory.length > 0) {
+                const matched = prescriptionHistory.find(p => p.patientName && p.patientName.includes(name));
+                if (matched) {loadHistory(matched.id); return;}
+            }
+            if (prescriptionHistory.length > 0) loadHistory(prescriptionHistory[0].id);
+        }
+
+        function showSideHistory() {
+            renderHistoryList(prescriptionHistory.slice(0, 15));
+        }
+
+        function clearPrescription() {
+            if (!confirm('确定清空当前处方？')) return;
+            document.getElementById('patientName').value = '';
+            document.getElementById('patientAge').value = '';
+            document.getElementById('patientPhone').value = '';
+            document.getElementById('patientAddress').value = '';
+            document.getElementById('clinicNo').value = '';
+            document.getElementById('medicalHistory').value = '';
+            document.getElementById('diagnosis').value = '';
+            prescriptionItems = [];
+            for (let i = 0; i < 20; i++) addEmptyRow();
+            renderPrescriptionTable();
+            calculateAmount();
+            updatePrescriptionPaper();
+        }
+
+        function saveAsFormula() {
+            const name = prompt('请输入验方名称：');
+            if (!name) return;
+            const code = prompt('请输入验方简码：');
+            if (!code) return;
+            const items = prescriptionItems.filter(item => item.name);
+            formulas.push({name:name, code:code, composition:items.map(i => ({name:i.name, dosage:i.dosage, price:i.price, unit:i.unit}))});
+            localStorage.setItem('formulas', JSON.stringify(formulas));
+            alert('验方保存成功！');
+        }
+
+        function printPrescription() {
+            const printContent = document.getElementById('prescriptionPaper').innerHTML;
+            const newWindow = window.open('', '_blank');
+            newWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+    <title>打印处方</title>
+    <style>
+        @page { size: A5; margin: 0; }
+        body { font-family: SimSun, serif; padding: 0; margin: 0; }
+        .prescription-paper { width: 148mm; height: 210mm; padding: 15mm; margin: 0 auto; box-sizing: border-box; }
+        .clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
+        .prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
+        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 12px; }
+        .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 180px; margin-top: 8px; }
+        .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+        .prescription-line { padding: 3px 0; font-size: 13px; text-align: center; }
+        .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #8b0000; }
+        .dose-count { text-align: right; font-size: 13px; color: #000080; }
+        .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 12px; }
+        .usage-text { margin-bottom: 10px; }
+        .signature-row { display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body>
+    <div class="prescription-paper">${printContent}</div>
+</body>
+</html>`);
+            newWindow.document.close();
+            newWindow.print();
+        }
+
+        function savePrescription() {
+            const name = document.getElementById('patientName').value;
+            if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
+            const currentDate = new Date().toISOString().split('T')[0];
+            document.getElementById('visitDate').value = currentDate;
+            document.getElementById('paperDate').textContent = currentDate;
+            const doseCount = parseInt(document.getElementById('doseCountInput').value) || 7;
+            const record = {
+                id: Date.now(),
+                prescriptionNo: document.getElementById('prescriptionNo').value,
+                date: document.getElementById('visitDate').value,
+                patientName: name,
+                patientGender: document.getElementById('patientGender').value,
+                patientAge: document.getElementById('patientAge').value,
+                patientPhone: document.getElementById('patientPhone').value,
+                patientAddress: document.getElementById('patientAddress').value,
+                clinicNo: document.getElementById('clinicNo').value,
+                doctorName: document.getElementById('doctorName').value,
+                medicalHistory: document.getElementById('medicalHistory').value,
+                diagnosis: document.getElementById('diagnosis').value,
+                items: prescriptionItems.filter(item => item.name),
+                doseCount: doseCount,
+                totalAmount: parseFloat(document.getElementById('grandTotal').textContent)
+            };
+            prescriptionHistory.unshift(record);
+            if (prescriptionHistory.length > 1000) {
+                prescriptionHistory = prescriptionHistory.slice(0, 1000);
+            }
+            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            dailyCounter++;
+            localStorage.setItem('dailyCounter', dailyCounter);
+            localStorage.setItem('counterDate', currentPrescriptionDate);
+            document.getElementById('prescriptionNo').value = generatePrescriptionNo();
+            document.getElementById('paperClinicNo').textContent = document.getElementById('prescriptionNo').value;
+            alert('处方保存成功！');
+            searchPatientsQuick({target:{value:name}});
+        }
+
+        function showModal(id) {
+            document.getElementById(id).style.display = 'flex';
+            if (id === 'syndromeModal') renderSyndromeList();
+            if (id === 'medicineModal') renderMedicineList();
+            if (id === 'formulaModal') renderFormulaList();
+            if (id === 'caseModal') renderCaseList(prescriptionHistory);
+            if (id === 'statsModal') updateStats();
+            if (id === 'settingsModal') {
+                document.getElementById('defaultDoctor').value = document.getElementById('doctorName').value;
+            }
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
+        }
+
+        function saveSettings() {
+            localStorage.setItem('clinicName', document.getElementById('clinicName').value);
+            localStorage.setItem('clinicDoctor', document.getElementById('defaultDoctor').value);
+            localStorage.setItem('defaultRegFee', document.getElementById('defaultRegFee').value || '0');
+            localStorage.setItem('defaultDose', document.getElementById('defaultDose').value || '7');
+            
+            const autoStartEnabled = document.getElementById('autoStart').checked;
+            localStorage.setItem('autoStartEnabled', autoStartEnabled ? 'true' : 'false');
+            if (autoStartEnabled) {
+                setAutoStart(true);
+            } else {
+                setAutoStart(false);
+            }
+            
+            document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
+            document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
+            document.getElementById('registrationFee').value = document.getElementById('defaultRegFee').value || '0';
+            document.getElementById('doseCountInput').value = document.getElementById('defaultDose').value || '7';
+            document.getElementById('paperDoseCount').textContent = document.getElementById('defaultDose').value || '7';
+            closeModal('settingsModal');
+            alert('保存成功！');
+        }
+
+        function setAutoStart(enabled) {
+            const scriptPath = window.location.href;
+            const shortcutPath = '中医处方系统.url';
+            
+            if (enabled) {
+                const shortcutContent = `[InternetShortcut]
+URL=${scriptPath}
+IconIndex=0
+IconFile=${scriptPath}`;
+                
+                try {
+                    localStorage.setItem('autoStartShortcut', shortcutContent);
+                    const ws = new ActiveXObject('WScript.Shell');
+                    const startupFolder = ws.SpecialFolders('Startup');
+                    const fullPath = startupFolder + '\\' + shortcutPath;
+                    
+                    const fs = new ActiveXObject('Scripting.FileSystemObject');
+                    const file = fs.CreateTextFile(fullPath, true);
+                    file.Write(shortcutContent);
+                    file.Close();
+                } catch (e) {
+                    console.warn('无法创建快捷方式:', e);
+                }
+            } else {
+                localStorage.removeItem('autoStartShortcut');
+                try {
+                    const ws = new ActiveXObject('WScript.Shell');
+                    const startupFolder = ws.SpecialFolders('Startup');
+                    const fullPath = startupFolder + '\\' + shortcutPath;
+                    
+                    const fs = new ActiveXObject('Scripting.FileSystemObject');
+                    if (fs.FileExists(fullPath)) {
+                        fs.DeleteFile(fullPath);
+                    }
+                } catch (e) {
+                    console.warn('无法删除快捷方式:', e);
+                }
+            }
+        }
+
+        function backupData() {
+            const data = {
+                medicines: medicines,
+                formulas: formulas,
+                prescriptionHistory: prescriptionHistory,
+                dailyCounter: dailyCounter,
+                counterDate: currentPrescriptionDate
+            };
+            const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '本能数据备份_' + new Date().toLocaleDateString() + '.json';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function restoreData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        if (data.medicines) medicines = data.medicines;
+                        if (data.formulas) formulas = data.formulas;
+                        if (data.prescriptionHistory) prescriptionHistory = data.prescriptionHistory;
+                        if (data.dailyCounter) dailyCounter = data.dailyCounter;
+                        if (data.counterDate) currentPrescriptionDate = data.counterDate;
+                        localStorage.setItem('formulas', JSON.stringify(formulas));
+                        localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                        localStorage.setItem('dailyCounter', dailyCounter);
+                        localStorage.setItem('counterDate', currentPrescriptionDate);
+                        document.getElementById('prescriptionNo').value = generatePrescriptionNo();
+                        document.getElementById('paperClinicNo').textContent = document.getElementById('prescriptionNo').value;
+                        alert('数据恢复成功！请刷新页面。');
+                    } catch (err) {
+                        alert('数据恢复失败！');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function clearAllMedicines() {
+            prescriptionItems = [];
+            for (let i = 0; i < 15; i++) {
+                prescriptionItems.push(createEmptyMedicine());
+            }
+            renderPrescriptionTable();
+            updatePrescriptionPaper();
+            calculateAmount();
+            showToast('已清空所有药物');
+        }
+
+        function clearAllData() {
+            if (!confirm('确定清空所有数据？此操作不可恢复！')) return;
+            if (!confirm('再次确认：清空所有数据？')) return;
+            localStorage.clear();
+            location.reload();
+        }
+
+        function deleteCurrentCase() {
+            if (!confirm('确定删除当前处方病历？')) return;
+            clearPrescription();
+            alert('已清空！');
+        }
+
+        function showHelp() {
+            alert('本能中医处方系统\\n\\n快捷键：\\nF1 - 基础设置\\nF2 - 药品管理\\nF3 - 验方设置\\nF5 - 存为验方\\nF7 - 重输方药\\nF8 - 打印处方\\nF9 - 保存录入\\nAlt+1 - 辨证选方\\nAlt+9 - 复诊直调');
+        }
+
+        function exitApp() {
+            alert('感谢使用本能中医处方系统！');
+        }
+
+        function exportData() {
+            const data = {
+                medicines: medicines,
+                formulas: formulas,
+                prescriptionHistory: prescriptionHistory,
+                exportTime: new Date().toLocaleString('zh-CN')
+            };
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'prescription-data.json';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            alert('数据导出成功！文件已保存为 prescription-data.json');
+        }
+
+        function copyData() {
+            const data = {
+                medicines: medicines,
+                formulas: formulas,
+                prescriptionHistory: prescriptionHistory,
+                exportTime: new Date().toLocaleString('zh-CN')
+            };
+            const jsonStr = JSON.stringify(data, null, 2);
+            
+            navigator.clipboard.writeText(jsonStr).then(() => {
+                alert('数据已复制到剪贴板！\n\n下一步：\n1. 打开记事本\n2. 粘贴内容（Ctrl+V）\n3. 保存为 prescription-data.json\n4. 放到 kyt-zy 文件夹里');
+            }).catch(() => {
+                alert('复制失败，请手动复制以下数据：\n\n' + jsonStr.substring(0, 500) + '...');
+            });
+        }
+
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const reader = new FileReader();
+                reader.onload = function(event) {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        if (data.medicines) medicines = data.medicines;
+                        if (data.formulas) formulas = data.formulas;
+                        if (data.prescriptionHistory) prescriptionHistory = data.prescriptionHistory;
+                        
+                        localStorage.setItem('medicines', JSON.stringify(medicines));
+                        localStorage.setItem('formulas', JSON.stringify(formulas));
+                        localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                        
+                        buildMedicineMap();
+                        updateStats();
+                        alert('数据导入成功！');
+                    } catch (error) {
+                        alert('导入失败：文件格式不正确');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function clearAllData() {
+            if (!confirm('确定要清空所有数据吗？此操作不可恢复！')) return;
+            
+            localStorage.removeItem('medicines');
+            localStorage.removeItem('formulas');
+            localStorage.removeItem('prescriptionHistory');
+            localStorage.removeItem('dailyCounter');
+            localStorage.removeItem('counterDate');
+            
+            medicines = defaultMedicines;
+            formulas = [
+                {name:'四君子汤',code:'sjzt',effect:'健脾益气',indication:'脾胃气虚证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5}]},
+                {name:'四物汤',code:'swt',effect:'补血调经',indication:'血虚证',composition:[{name:'当归',dosage:10},{name:'熟地黄',dosage:12},{name:'白芍',dosage:10},{name:'川芎',dosage:8}]},
+                {name:'八珍汤',code:'bzt',effect:'气血双补',indication:'气血两虚证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5},{name:'当归',dosage:10},{name:'川芎',dosage:8},{name:'白芍',dosage:10},{name:'熟地黄',dosage:15}]},
+                {name:'六君子汤',code:'ljzt',effect:'健脾益气化痰',indication:'脾胃气虚痰湿证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5},{name:'陈皮',dosage:5},{name:'半夏',dosage:10}]},
+                {name:'参苓白术散',code:'slbzs',effect:'健脾益气渗湿',indication:'脾虚湿盛证',composition:[{name:'人参',dosage:15},{name:'茯苓',dosage:15},{name:'白术',dosage:15},{name:'山药',dosage:15},{name:'白扁豆',dosage:12},{name:'莲子',dosage:9},{name:'薏苡仁',dosage:9},{name:'砂仁',dosage:6},{name:'桔梗',dosage:6},{name:'甘草',dosage:3}]},
+                {name:'补中益气汤',code:'bzyqt',effect:'补中益气升阳',indication:'中气下陷证',composition:[{name:'人参',dosage:10},{name:'黄芪',dosage:15},{name:'白术',dosage:10},{name:'甘草',dosage:6},{name:'当归',dosage:10},{name:'陈皮',dosage:6},{name:'升麻',dosage:6},{name:'柴胡',dosage:6}]},
+                {name:'生脉散',code:'sms',effect:'益气养阴敛汗',indication:'气阴两虚证',composition:[{name:'人参',dosage:10},{name:'麦冬',dosage:15},{name:'五味子',dosage:6}]},
+                {name:'玉屏风散',code:'ypfs',effect:'益气固表止汗',indication:'表虚自汗证',composition:[{name:'黄芪',dosage:30},{name:'白术',dosage:15},{name:'防风',dosage:6}]}
+            ];
+            prescriptionHistory = [];
+            dailyCounter = 1;
+            
+            buildMedicineMap();
+            updateStats();
+            alert('所有数据已清空，系统已恢复到初始状态');
+        }
+
+        function renderSyndromeList() {
+            const list = document.getElementById('syndromeList');
+            list.innerHTML = formulas.map((f,i) => `
+                <div style="padding:8px;background:#f0f0f0;border-radius:3px;cursor:pointer;" onclick="selectFormula(${i})">
+                    <div style="font-weight:bold;">${f.name}</div>
+                    <div style="font-size:11px;color:#666;">功效：${f.effect} | 主治：${f.indication}</div>
+                </div>
+            `).join('');
+        }
+
+        function selectFormula(index) {
+            const formula = formulas[index];
+            prescriptionItems = formula.composition.map(c => {
+                const med = getMedicineByName(c.name);
+                return {
+                    code: med ? med.code : c.code || '',
+                    name: c.name,
+                    dosage: c.dosage,
+                    unit: c.unit || med?.unit || 'g',
+                    price: c.price || med?.price || 0,
+                    total: ((c.price || med?.price || 0) * c.dosage).toFixed(2)
+                };
+            });
+            while (prescriptionItems.length < 15) addEmptyRow();
+            renderPrescriptionTable();
+            calculateAmount();
+            updatePrescriptionPaper();
+            closeModal('syndromeModal');
+            showToast(formula.name + ' 已添加');
+        }
+
+        function renderMedicineList() {
+            const list = document.getElementById('medicineList');
+            list.innerHTML = medicines.map((m,i) => `
+                <div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;">
+                    <div style="flex:1;">
+                        <div style="font-weight:bold;">${m.name}</div>
+                        <div style="font-size:11px;color:#666;">简码：${m.code} | 进价：${m.costPrice || '0'}元 | 单价：${m.price}元/${m.unit}</div>
+                        <div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${m.unit} | 库存：${m.stock || '0'}</div>
+                    </div>
+                    <div style="display:flex;gap:4px;">
+                        <button class="small-btn" onclick="editMedicine(${i})">编辑</button>
+                        <button class="small-btn" onclick="deleteMedicine(${i})">删除</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function deleteMedicine(index) {
+            if (!confirm('确定删除该药品？')) return;
+            const deletedName = medicines[index].name;
+            medicines.splice(index, 1);
+            prescriptionItems = prescriptionItems.filter(item => item.name !== deletedName);
+            localStorage.setItem('medicines', JSON.stringify(medicines));
+            buildMedicineMap();
+            renderMedicineList();
+            updatePrescriptionPaper();
+        }
+
+        function editMedicine(index) {
+            const m = medicines[index];
+            const name = prompt('请输入药品名称：', m.name);
+            if (name === null) return;
+            const code = prompt('请输入简码：', m.code);
+            if (code === null) return;
+            const costPrice = parseFloat(prompt('请输入进价：', m.costPrice || '0')) || 0;
+            const price = parseFloat(prompt('请输入单价：', m.price)) || 0;
+            const unit = prompt('请输入单位：', m.unit || 'g') || 'g';
+            const dosage = parseFloat(prompt('请输入常用用量：', m.dosage || '10')) || 10;
+            const stock = parseInt(prompt('请输入库存数量：', m.stock || '0')) || 0;
+            medicines[index] = {name, code, costPrice, price, unit, dosage, stock};
+            localStorage.setItem('medicines', JSON.stringify(medicines));
+            buildMedicineMap();
+            renderMedicineList();
+        }
+
+        function showAddMedicineForm() {
+            const name = prompt('请输入药品名称：');
+            if (!name) return;
+            const code = prompt('请输入简码：');
+            if (!code) return;
+            const costPrice = parseFloat(prompt('请输入进价：')) || 0;
+            const price = parseFloat(prompt('请输入单价：')) || 0;
+            const unit = prompt('请输入单位（默认g）：') || 'g';
+            const dosage = parseFloat(prompt('请输入常用用量（默认10）：')) || 10;
+            const stock = parseInt(prompt('请输入库存数量：')) || 0;
+            medicines.push({name, code, costPrice, price, unit, dosage, stock});
+            localStorage.setItem('medicines', JSON.stringify(medicines));
+            buildMedicineMap();
+            renderMedicineList();
+        }
+
+        function showBatchStockForm() {
+            const type = prompt('请选择操作类型：\n1 - 入库\n2 - 出库');
+            if (!type || (type !== '1' && type !== '2')) {
+                alert('请输入1或2');
+                return;
+            }
+            const isIn = type === '1';
+            const inputStr = prompt(`请输入批量${isIn ? '入库' : '出库'}数据（每行一个药品，格式：药品名称|数量）\n例如：\n人参|100\n黄芪|50\n当归|80`);
+            if (!inputStr) return;
+            
+            const lines = inputStr.split('\n');
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (let i = 0; i < lines.length; i++) {
+                const parts = lines[i].split('|');
+                if (parts.length === 2) {
+                    const name = parts[0].trim();
+                    const quantity = parseInt(parts[1].trim());
+                    if (!isNaN(quantity)) {
+                        const medicine = getMedicineByName(name);
+                        if (medicine) {
+                            const change = isIn ? quantity : -quantity;
+                            medicine.stock = (medicine.stock || 0) + change;
+                            if (medicine.stock < 0) medicine.stock = 0;
+                            successCount++;
+                        } else {
+                            failCount++;
+                        }
+                    } else {
+                        failCount++;
+                    }
+                } else {
+                    failCount++;
+                }
+            }
+            
+            localStorage.setItem('medicines', JSON.stringify(medicines));
+            renderMedicineList();
+            alert(`${isIn ? '入库' : '出库'}完成！\n成功：${successCount} 种药品\n失败：${failCount} 种药品`);
+        }
+
+        function exportMedicines() {
+            const headers = ['药品名称', '简码', '进价', '单价', '单位', '常用用量', '库存'];
+            let csvContent = '\uFEFF' + headers.join(',') + '\n';
+            medicines.forEach(m => {
+                const row = [
+                    m.name || '',
+                    m.code || '',
+                    m.costPrice || '0',
+                    m.price || '0',
+                    m.unit || 'g',
+                    m.dosage || '10',
+                    m.stock || '0'
+                ].map(v => `"${v}"`).join(',');
+                csvContent += row + '\n';
+            });
+            const blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `中药库_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast('药品库已导出为Excel格式！');
+        }
+
+        function clearMedicineLibrary() {
+            if (!confirm('确定要完全清空所有药物吗？包括系统默认药物！此操作不可撤销！清空后请重新导入您的药物库！')) return;
+            medicines = [];
+            localStorage.setItem('medicines', '[]');
+            localStorage.removeItem('clearDefaultMedicines');
+            buildMedicineMap();
+            renderMedicineList();
+            showToast('药物库已完全清空，请重新导入您的药物库');
+        }
+
+        function importMedicines(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const fileName = file.name.toLowerCase();
+            const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
+            
+            if (isExcel) {
+                // 检查 XLSX 库是否加载
+                if (typeof XLSX === 'undefined') {
+                    alert('Excel导入功能暂时不可用，请将 Excel 文件另存为 CSV 格式后再导入！');
+                    event.target.value = '';
+                    return;
+                }
+                
+                // Excel 文件导入
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const data = new Uint8Array(e.target.result);
+                        const workbook = XLSX.read(data, { type: 'array' });
+                        
+                        // 获取第一个工作表
+                        const firstSheetName = workbook.SheetNames[0];
+                        const worksheet = workbook.Sheets[firstSheetName];
+                        
+                        // 转换为 JSON
+                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        
+                        if (jsonData.length < 2) {
+                            alert('Excel文件内容为空或格式错误！');
+                            return;
+                        }
+                        
+                        let importedMedicines = [];
+                        for (let i = 1; i < jsonData.length; i++) {
+                            const row = jsonData[i];
+                            if (row && row[0]) {
+                                importedMedicines.push({
+                                    name: row[0] || '',
+                                    code: row[1] || '',
+                                    costPrice: parseFloat(row[2]) || 0,
+                                    price: parseFloat(row[3]) || 0,
+                                    unit: row[4] || 'g',
+                                    dosage: parseFloat(row[5]) || 10,
+                                    stock: parseInt(row[6]) || 0
+                                });
+                            }
+                        }
+                        
+                        processImportedMedicines(importedMedicines);
+                    } catch (err) {
+                        alert('Excel导入失败！请尝试将 Excel 另存为 CSV 格式再导入。错误信息：' + err.message);
+                    }
+                };
+                reader.readAsArrayBuffer(file);
+            } else {
+                // CSV 或 JSON 文件导入
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        let importedMedicines = [];
+                        let content = e.target.result;
+                        
+                        // 移除 BOM 标记
+                        if (content.charCodeAt(0) === 0xFEFF) {
+                            content = content.slice(1);
+                        }
+                        
+                        if (fileName.endsWith('.csv')) {
+                            const lines = content.split(/\r?\n/).filter(line => line.trim());
+                            if (lines.length < 2) {
+                                alert('CSV文件内容为空或格式错误！');
+                                return;
+                            }
+                            
+                            for (let i = 1; i < lines.length; i++) {
+                                const line = lines[i].trim();
+                                if (!line) continue;
+                                
+                                // 更健壮的 CSV 解析
+                                const row = parseCSVLine(line);
+                                if (row.length >= 2 && row[0]) {
+                                    importedMedicines.push({
+                                        name: row[0] || '',
+                                        code: row[1] || '',
+                                        costPrice: parseFloat(row[2]) || 0,
+                                        price: parseFloat(row[3]) || 0,
+                                        unit: row[4] || 'g',
+                                        dosage: parseFloat(row[5]) || 10,
+                                        stock: parseInt(row[6]) || 0
+                                    });
+                                }
+                            }
+                        } else {
+                            const importData = JSON.parse(content);
+                            if (!importData.medicines || !Array.isArray(importData.medicines)) {
+                                alert('文件格式错误！');
+                                return;
+                            }
+                            importedMedicines = importData.medicines;
+                        }
+                        
+                        processImportedMedicines(importedMedicines);
+                    } catch (err) {
+                        alert('导入失败！文件格式错误。' + err.message);
+                    }
+                };
+                reader.readAsText(file, 'UTF-8');
+            }
+            event.target.value = '';
+        }
+        
+        function processImportedMedicines(importedMedicines) {
+            if (importedMedicines.length === 0) {
+                alert('没有导入任何药品！');
+                return;
+            }
+            
+            const action = prompt('导入方式：\n1 - 追加（保留现有药品）\n2 - 覆盖（替换现有药品，以导入为准）\n3 - 合并（同名覆盖，以导入为准）');
+            if (action === '1') {
+                medicines = [...medicines, ...importedMedicines];
+                alert(`导入成功！共导入 ${importedMedicines.length} 种药品`);
+            } else if (action === '2') {
+                if (confirm('确定要覆盖现有药品库吗？导入的药品价格将完全替换现有数据！')) {
+                    medicines = [...importedMedicines];
+                    localStorage.removeItem('clearDefaultMedicines');
+                    alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据`);
+                }
+            } else if (action === '3') {
+                let addCount = 0, updateCount = 0;
+                importedMedicines.forEach(importMed => {
+                    const existIndex = medicines.findIndex(m => m.name === importMed.name);
+                    if (existIndex >= 0) {
+                        medicines[existIndex] = importMed;
+                        updateCount++;
+                    } else {
+                        medicines.push(importMed);
+                        addCount++;
+                    }
+                });
+                alert(`导入完成！新增：${addCount} 种，更新：${updateCount} 种，更新的药品以导入价格为准`);
+            } else {
+                return;
+            }
+            localStorage.setItem('medicines', JSON.stringify(medicines));
+            buildMedicineMap();
+            renderMedicineList();
+        }
+        
+        function parseCSVLine(line) {
+            const result = [];
+            let current = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                const nextChar = line[i + 1];
+                
+                if (char === '"') {
+                    if (inQuotes && nextChar === '"') {
+                        current += '"';
+                        i++;
+                    } else {
+                        inQuotes = !inQuotes;
+                    }
+                } else if (char === ',' && !inQuotes) {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += char;
+                }
+            }
+            result.push(current.trim());
+            return result;
+        }
+
+        function renderFormulaList() {
+            const list = document.getElementById('formulaList');
+            list.innerHTML = formulas.map((f,i) => `
+                <div style="padding:8px;background:#f0f0f0;border-radius:3px;margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;">
+                        <div>
+                            <div style="font-weight:bold;">${f.name}</div>
+                            <div style="font-size:11px;color:#666;">功效：${f.effect || '未知'}</div>
+                        </div>
+                        <div>
+                            <button class="small-btn" onclick="applyFormula(${i})">调用</button>
+                            <button class="small-btn" onclick="deleteFormula(${i})">删除</button>
+                        </div>
+                    </div>
+                    <div style="font-size:10px;color:#999;margin-top:4px;">组成：${(f.composition || []).map(c => c.name + (c.dosage || '') + 'g').join('、')}</div>
+                </div>
+            `).join('');
+        }
+
+        function applyFormula(index) {
+            selectFormula(index);
+            closeModal('formulaModal');
+        }
+
+        function deleteFormula(index) {
+            if (!confirm('确定删除该验方？')) return;
+            formulas.splice(index, 1);
+            localStorage.setItem('formulas', JSON.stringify(formulas));
+            renderFormulaList();
+        }
+
+        function showAddFormulaForm() {
+            const name = prompt('请输入验方名称：');
+            if (!name) return;
+            const code = prompt('请输入验方简码：');
+            if (!code) return;
+            const effect = prompt('请输入功效：');
+            const indication = prompt('请输入主治：');
+            formulas.push({name,code,effect:effect||'',indication:indication||'',composition:[]});
+            localStorage.setItem('formulas', JSON.stringify(formulas));
+            renderFormulaList();
+        }
+
+        function renderCaseList(list) {
+            const listEl = document.getElementById('caseList');
+            listEl.innerHTML = list.map((p,i) => `
+                <div style="padding:10px;border-bottom:1px solid #d0d0d0;cursor:pointer;" onclick="loadHistory(${p.id})">
+                    <div style="display:flex;justify-content:space-between;">
+                        <div>
+                            <div style="font-weight:bold;">${p.patientName}</div>
+                            <div style="font-size:11px;color:#666;">${p.date} | ${p.diagnosis || '无诊断'}</div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-weight:bold;color:#8b0000;">¥${p.totalAmount || 0}</div>
+                            <button class="small-btn" onclick="event.stopPropagation();deleteCase(${p.id})">删除</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('') || '<div style="text-align:center;padding:20px;color:#999;">暂无病历记录</div>';
+        }
+
+        function searchCases() {
+            const name = document.getElementById('caseNameSearch').value.toLowerCase();
+            const dateStart = document.getElementById('caseDateStart').value;
+            const dateEnd = document.getElementById('caseDateEnd').value;
+            let filtered = prescriptionHistory;
+            if (name) filtered = filtered.filter(p => p.patientName && p.patientName.toLowerCase().includes(name));
+            if (dateStart) filtered = filtered.filter(p => p.date >= dateStart);
+            if (dateEnd) filtered = filtered.filter(p => p.date <= dateEnd);
+            renderCaseList(filtered);
+        }
+
+        function resetCaseSearch() {
+            document.getElementById('caseNameSearch').value = '';
+            document.getElementById('caseDateStart').value = '';
+            document.getElementById('caseDateEnd').value = '';
+            renderCaseList(prescriptionHistory);
+        }
+
+        function deleteCase(id) {
+            if (!confirm('确定删除该病历？')) return;
+            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            renderCaseList(prescriptionHistory);
+        }
+
+        function updateStats() {
+            const range = document.getElementById('statsRange').value;
+            const now = new Date();
+            let startDate;
+            if (range === 'today') {
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            } else if (range === 'week') {
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            } else if (range === 'month') {
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+            } else if (range === 'year') {
+                startDate = new Date(now.getFullYear(), 0, 1);
+            } else {
+                startDate = new Date(0);
+            }
+            const filtered = prescriptionHistory.filter(p => new Date(p.date) >= startDate);
+            const totalAmount = filtered.reduce((sum, p) => sum + (p.totalAmount || 0), 0);
+            const count = filtered.length;
+            
+            let totalCost = 0;
+            const filteredLength = filtered.length;
+            for (let i = 0; i < filteredLength; i++) {
+                const p = filtered[i];
+                const doseCount = p.doseCount || 1;
+                const items = p.items || [];
+                for (let j = 0; j < items.length; j++) {
+                    const item = items[j];
+                    const medicine = getMedicineByName(item.name);
+                    if (medicine) {
+                        const costPrice = parseFloat(medicine.costPrice) || parseFloat(medicine.price) || 0;
+                        const dosage = parseFloat(item.dosage) || 0;
+                        totalCost += costPrice * dosage * doseCount;
+                    }
+                }
+            }
+            
+            const profit = totalAmount - totalCost;
+            const profitRate = totalAmount > 0 ? (profit / totalAmount * 100) : 0;
+            
+            const content = document.getElementById('statsContent');
+            content.innerHTML = `
+                <div style="padding:15px;background:#f0f0f0;border-radius:5px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
+                        <div style="text-align:center;padding:12px;background:white;border-radius:3px;">
+                            <div style="font-size:20px;font-weight:bold;color:#8b0000;">¥${totalAmount.toFixed(2)}</div>
+                            <div style="font-size:11px;color:#666;">总收入</div>
+                        </div>
+                        <div style="text-align:center;padding:12px;background:white;border-radius:3px;">
+                            <div style="font-size:20px;font-weight:bold;color:#006400;">¥${totalCost.toFixed(2)}</div>
+                            <div style="font-size:11px;color:#666;">成本</div>
+                        </div>
+                        <div style="text-align:center;padding:12px;background:white;border-radius:3px;">
+                            <div style="font-size:20px;font-weight:bold;color:#000080;">¥${profit.toFixed(2)}</div>
+                            <div style="font-size:11px;color:#666;">利润</div>
+                        </div>
+                        <div style="text-align:center;padding:12px;background:white;border-radius:3px;">
+                            <div style="font-size:20px;font-weight:bold;color:#ff8c00;">${profitRate.toFixed(1)}%</div>
+                            <div style="font-size:11px;color:#666;">利润率</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;padding:10px;background:white;border-radius:3px;">
+                        <div style="font-weight:bold;margin-bottom:8px;">处方数量: ${count}</div>
+                    </div>
+                    <div style="margin-top:10px;padding:10px;background:white;border-radius:3px;">
+                        <div style="font-weight:bold;margin-bottom:8px;">诊断分布（TOP5）</div>
+                        ${getDiagnosisStats(filtered)}
+                    </div>
+                </div>
+            `;
+        }
+
+        function getDiagnosisStats(list) {
+            const stats = {};
+            list.forEach(p => {
+                if (p.diagnosis) {
+                    stats[p.diagnosis] = (stats[p.diagnosis] || 0) + 1;
+                }
+            });
+            const sorted = Object.entries(stats).sort((a,b) => b[1] - a[1]).slice(0, 5);
+            if (sorted.length === 0) return '<div style="color:#999;">暂无数据</div>';
+            return sorted.map(([diag,count]) => `
+                <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid #f0f0f0;">
+                    <span>${diag}</span>
+                    <span style="font-weight:bold;">${count}次</span>
+                </div>
+            `).join('');
+        }
+
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
 </body>
 </html>
