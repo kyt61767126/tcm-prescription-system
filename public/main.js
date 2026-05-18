@@ -114,8 +114,8 @@ window.addEventListener('DOMContentLoaded', function() {
         .patient-label { width: 50px; text-align: right; padding-right: 6px; font-size: 11px; flex-shrink: 0; }
         .patient-input { flex: 1; padding: 4px 6px; border: 1px solid #808080; font-size: 12px; min-width: 30px; height: 22px; box-sizing: border-box; }
         .patient-input.x-small { flex: 0 0 50px; }
-        .patient-input.xx-small { flex: 0 0 55px; }
-        .patient-input.xxx-small { flex: 0 0 90px; }
+        .patient-input.xx-small { flex: 0 0 80px; }
+        .patient-input.xxx-small { flex: 0 0 110px; }
         .patient-input.small { flex: 0 0 120px; }
         .symptom-section { background: white; padding: 4px 8px; border-bottom: 2px solid #808080; flex-shrink: 0; }
         .symptom-textarea { width: 100%; height: 30px; border: 1px solid #808080; padding: 2px; resize: none; font-size: 10px; }
@@ -214,7 +214,7 @@ window.addEventListener('DOMContentLoaded', function() {
               <span class="patient-label">编号</span>
               <input type="text" id="clinicNo" class="patient-input xx-small" onkeyup="updatePrescriptionPaper()">
               <span class="patient-label">住址</span>
-              <input type="text" id="patientAddress" class="patient-input" style="flex: 2;">
+              <input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;">
             </div>
           </div>
           <div class="symptom-section">
