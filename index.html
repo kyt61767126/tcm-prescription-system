@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <title>本能中医处方系统 - 云端版</title>
+    <title>本能中医处方系统 - 云端</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         @page { size: A5; margin: 0; }
@@ -123,7 +123,7 @@
     <div id="loginOverlay" class="login-overlay">
         <div class="login-box">
             <div class="login-title">🏥 本能中医处方系统</div>
-            <div style="text-align:center;margin-bottom:20px;color:#008000;font-weight:bold;">【云端版】</div>
+            <div style="text-align:center;margin-bottom:20px;color:#008000;font-weight:bold;">【云端】</div>
             <div class="login-field">
                 <label>用户名:</label>
                 <input type="text" id="loginUsername" placeholder="请输入用户名">
@@ -229,7 +229,7 @@
         <div class="tab-item" onclick="showChangePwdModal()">【修改密码】</div>
         <div class="tab-hint">
             当前用户: <span style="color:#008000;font-weight:bold;" id="userDisplayName"></span> | 
-            <span style="color:#008000;font-weight:bold;">【云端版】</span>
+            <span style="color:#008000;font-weight:bold;">【云端】</span>
         </div>
     </div>
 
@@ -332,6 +332,9 @@
                     <div>科别: 中医内科</div>
                     <div>门诊号: <span id="paperClinicNo"></span></div>
                     <div>日期: <span id="paperDate"></span></div>
+                </div>
+                <div style="margin-bottom:8px;">
+                    <span>病史症状: <span id="paperMedicalHistory"></span></span>
                 </div>
                 <div style="margin-bottom:8px;">
                     <span>诊断: <span id="paperDiagnosis"></span></span>
@@ -1446,6 +1449,7 @@
             document.getElementById('paperGender').textContent = document.getElementById('patientGender').value;
             document.getElementById('paperAge').textContent = document.getElementById('patientAge').value;
             document.getElementById('paperDate').textContent = document.getElementById('visitDate').value;
+            document.getElementById('paperMedicalHistory').textContent = document.getElementById('medicalHistory').value;
             document.getElementById('paperDiagnosis').textContent = document.getElementById('diagnosis').value;
             document.getElementById('paperDoctor').textContent = document.getElementById('doctorName').value;
             const linesDiv = document.getElementById('prescriptionLines');
