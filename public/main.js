@@ -34,10 +34,12 @@ window.addEventListener('DOMContentLoaded', function() {
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Microsoft YaHei', 'SimSun', sans-serif; background: #f0f0f0; font-size: 13px; overflow: hidden; }
         .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; justify-content: center; align-items: center; z-index: 9999; }
-        .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 350px; text-align: center; }
+        .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 380px; text-align: center; }
         .login-title { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 30px; }
-        .login-input { width: 100%; padding: 12px 15px; margin: 10px 0; border: 2px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
-        .login-input:focus { border-color: #667eea; outline: none; }
+        .login-field { margin-bottom: 15px; text-align: left; }
+        .login-field label { display: inline-block; width: 70px; font-weight: bold; font-size: 14px; color: #333; vertical-align: middle; }
+        .login-field input { width: calc(100% - 80px); padding: 10px 12px; border: 2px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box; vertical-align: middle; }
+        .login-field input:focus { border-color: #667eea; outline: none; }
         .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
         .login-btn:hover { opacity: 0.9; }
         .login-error { color: #ff4444; font-size: 12px; margin-top: 10px; display: none; }
@@ -47,8 +49,14 @@ window.addEventListener('DOMContentLoaded', function() {
         <div class="login-box">
           <div class="login-title">🏥 本能中医处方系统</div>
           <div class="version-tag">【云端版 v${version}】</div>
-          <input type="text" id="loginUsername" class="login-input" placeholder="请输入用户名">
-          <input type="password" id="loginPassword" class="login-input" placeholder="请输入密码" onkeypress="if(event.key==='Enter')handleLogin()">
+          <div class="login-field">
+            <label>用户名:</label>
+            <input type="text" id="loginUsername" placeholder="请输入用户名">
+          </div>
+          <div class="login-field">
+            <label>密码:</label>
+            <input type="password" id="loginPassword" placeholder="请输入密码" onkeypress="if(event.key==='Enter')handleLogin()">
+          </div>
           <button class="login-btn" onclick="handleLogin()">登 录</button>
           <div id="loginError" class="login-error"></div>
         </div>
@@ -118,6 +126,9 @@ window.addEventListener('DOMContentLoaded', function() {
         .patient-input.xxx-small { flex: 0 0 110px; }
         .patient-input.small { flex: 0 0 120px; }
         .symptom-section { background: white; padding: 4px 8px; border-bottom: 2px solid #808080; flex-shrink: 0; }
+        .history-tabs { display: flex; margin-bottom: 2px; }
+        .history-tab { background: #d0d0d0; padding: 2px 10px; cursor: pointer; border: 1px solid #808080; border-bottom: none; margin-right: 2px; font-size: 10px; }
+        .history-tab.active { background: white; }
         .symptom-textarea { width: 100%; height: 30px; border: 1px solid #808080; padding: 2px; resize: none; font-size: 10px; }
         .diagnosis-section { background: white; padding: 2px 4px; border-bottom: 2px solid #808080; flex-shrink: 0; }
         .action-buttons-section { background: white; padding: 4px 8px; border-bottom: 2px solid #808080; flex-shrink: 0; }
@@ -166,6 +177,7 @@ window.addEventListener('DOMContentLoaded', function() {
         .user-item:last-child { border-bottom: none; }
         .user-item-btn { padding: 4px 8px; border: none; border-radius: 4px; cursor: pointer; font-size: 11px; }
         .btn-danger { background: #ff4444; color: white; }
+        .btn-primary { background: #667eea; color: white; }
       </style>
       <div class="top-tabs">
         <div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div>
@@ -186,8 +198,8 @@ window.addEventListener('DOMContentLoaded', function() {
         <div class="left-panel">
           <div class="top-tabs-left">
             <div class="tab-left-item active">填资料</div>
-            <div class="tab-left-item">调原方</div>
-            <div class="tab-left-item">调病历</div>
+            <div class="tab-left-item" onclick="loadLastHistory()">调原方</div>
+            <div class="tab-left-item" onclick="loadLastHistory()">调病历</div>
             <div class="tab-left-item">同病搜</div>
           </div>
           <div class="patient-section">
@@ -204,7 +216,7 @@ window.addEventListener('DOMContentLoaded', function() {
             </div>
             <div class="patient-row">
               <span class="patient-label">姓名</span>
-              <input type="text" id="patientName" class="patient-input" onkeyup="updatePrescriptionPaper()">
+              <input type="text" id="patientName" class="patient-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper()" onfocus="showSideHistory()">
               <span class="patient-label">年龄</span>
               <input type="text" id="patientAge" class="patient-input xx-small" onkeyup="updatePrescriptionPaper()">
               <span class="patient-label">电话</span>
@@ -218,12 +230,16 @@ window.addEventListener('DOMContentLoaded', function() {
             </div>
           </div>
           <div class="symptom-section">
-            <textarea id="medicalHistory" class="symptom-textarea" placeholder="病史症状"></textarea>
+            <div class="history-tabs">
+              <div class="history-tab active">病史症状</div>
+              <div class="history-tab">修改病史</div>
+            </div>
+            <textarea id="medicalHistory" class="symptom-textarea"></textarea>
           </div>
           <div class="diagnosis-section">
             <div class="patient-row">
               <span class="patient-label">诊断</span>
-              <input type="text" id="diagnosis" class="patient-input" style="flex: 1;" onkeyup="updatePrescriptionPaper()">
+              <input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()">
               <span class="patient-label">金额</span>
               <input type="text" class="patient-input.x-small" id="tempAmount" readonly style="width: 45px;">
               <span class="patient-label">医师</span>
@@ -231,7 +247,14 @@ window.addEventListener('DOMContentLoaded', function() {
             </div>
           </div>
           <div class="action-buttons-section">
-            <button class="small-btn" onclick="clearAllMedicines()">一键删除所有药物</button>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <button class="small-btn" onclick="deleteCurrentCase()">删除处方病历</button>
+              <span style="font-size:10px;">自动查找</span>
+              <select class="small-btn" style="font-size:10px;">
+                <option>姓名</option>
+              </select>
+              <button class="small-btn" onclick="clearAllMedicines()">一键删除所有药物</button>
+            </div>
           </div>
           <div class="medicine-section">
             <div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">
@@ -393,9 +416,16 @@ window.addEventListener('DOMContentLoaded', function() {
             <span class="close-btn" onclick="closeModal('medicineModal')">&times;</span>
           </div>
           <div class="modal-body">
-            <input type="text" id="medicineSearch" placeholder="搜索药品" style="width:100%;padding:6px;margin-bottom:10px;">
-            <button class="action-btn" onclick="showAddMedicineForm()">新增药品</button>
-            <div id="medicineList" style="margin-top:10px;"></div>
+            <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+              <input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;">
+              <button class="action-btn" onclick="showAddMedicineForm()">新增药品</button>
+              <button class="action-btn" onclick="showBatchStockForm()">批量出入库</button>
+              <button class="action-btn" onclick="exportMedicines()">导出药品</button>
+              <button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button>
+              <button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button>
+              <input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)">
+            </div>
+            <div id="medicineList" style="overflow:auto;max-height:350px;"></div>
           </div>
           <div class="modal-footer">
             <button class="action-btn" onclick="closeModal('medicineModal')">关闭</button>
@@ -409,9 +439,11 @@ window.addEventListener('DOMContentLoaded', function() {
             <span class="close-btn" onclick="closeModal('formulaModal')">&times;</span>
           </div>
           <div class="modal-body">
-            <input type="text" id="formulaSearch" placeholder="搜索验方" style="width:100%;padding:6px;margin-bottom:10px;">
-            <button class="action-btn" onclick="showAddFormulaForm()">新增验方</button>
-            <div id="formulaList" style="margin-top:10px;"></div>
+            <div style="margin-bottom:12px;display:flex;gap:8px;">
+              <input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;">
+              <button class="action-btn" onclick="showAddFormulaForm()">新增验方</button>
+            </div>
+            <div id="formulaList" style="overflow:auto;max-height:350px;"></div>
           </div>
           <div class="modal-footer">
             <button class="action-btn" onclick="closeModal('formulaModal')">关闭</button>
@@ -425,9 +457,18 @@ window.addEventListener('DOMContentLoaded', function() {
             <span class="close-btn" onclick="closeModal('caseModal')">&times;</span>
           </div>
           <div class="modal-body">
-            <input type="text" id="caseNameSearch" placeholder="患者姓名" style="width:100%;padding:6px;margin-bottom:10px;">
-            <button class="action-btn" onclick="searchCases()">搜索</button>
-            <div id="caseList" style="margin-top:10px;"></div>
+            <div style="margin-bottom:12px;padding:10px;background:#f0f0f0;">
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                <input type="text" id="caseNameSearch" placeholder="患者姓名">
+                <input type="date" id="caseDateStart">
+                <input type="date" id="caseDateEnd">
+              </div>
+              <div style="margin-top:8px;display:flex;gap:8px;">
+                <button class="action-btn" onclick="searchCases()">搜索</button>
+                <button class="action-btn" onclick="resetCaseSearch()">重置</button>
+              </div>
+            </div>
+            <div id="caseList" style="overflow:auto;max-height:350px;"></div>
           </div>
           <div class="modal-footer">
             <button class="action-btn" onclick="closeModal('caseModal')">关闭</button>
@@ -441,9 +482,20 @@ window.addEventListener('DOMContentLoaded', function() {
             <span class="close-btn" onclick="closeModal('statsModal')">&times;</span>
           </div>
           <div class="modal-body">
+            <div style="margin-bottom:15px;">
+              <label>统计范围:</label>
+              <select id="statsRange" onchange="updateStats()">
+                <option value="today">今日</option>
+                <option value="week">本周</option>
+                <option value="month" selected>本月</option>
+                <option value="year">本年</option>
+                <option value="all">全部</option>
+              </select>
+            </div>
             <div id="statsContent"></div>
             <div style="margin-top:20px;padding-top:15px;border-top:1px solid #ccc;">
               <button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">📥 下载数据文件</button>
+              <button class="action-btn" onclick="copyData()" style="background:#FF9800;color:white;">📋 复制数据</button>
               <button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📤 导入数据</button>
               <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button>
             </div>
@@ -527,6 +579,7 @@ window.addEventListener('DOMContentLoaded', function() {
             <div style="font-size:11px;color:#666;">${user.role === 'admin' ? '管理员' : '普通用户'}</div>
           </div>
           <div>
+            <button class="user-item-btn btn-primary" onclick="handleEditUser('${user.username}')">编辑</button>
             ${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + user.username + '\')">删除</button>' : ''}
           </div>
         </div>
@@ -534,6 +587,51 @@ window.addEventListener('DOMContentLoaded', function() {
     });
     
     listDiv.innerHTML = html || '暂无用户';
+  }
+
+  function handleEditUser(username) {
+    const users = getUsers();
+    const user = users.find(u => u.username === username);
+    if (!user) return;
+    
+    const newUsername = prompt('请输入新用户名：', user.username);
+    if (newUsername === null) return;
+    
+    const trimmedUsername = newUsername.trim();
+    if (!trimmedUsername) {
+      alert('用户名不能为空');
+      return;
+    }
+    
+    if (trimmedUsername !== username) {
+      const exists = users.find(u => u.username === trimmedUsername);
+      if (exists) {
+        alert('用户名已存在');
+        return;
+      }
+    }
+    
+    const newName = prompt('请输入新名称：', user.name);
+    if (newName === null) return;
+    
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+      alert('名称不能为空');
+      return;
+    }
+    
+    const userIndex = users.findIndex(u => u.username === username);
+    users[userIndex].username = trimmedUsername;
+    users[userIndex].name = trimmedName;
+    saveUsers(users);
+    
+    if (currentUser && currentUser.username === username) {
+      currentUser = users[userIndex];
+      localStorage.setItem('currentUser', JSON.stringify(currentUser));
+    }
+    
+    renderUserList();
+    alert('用户信息修改成功！');
   }
 
   function handleAddUser() {
@@ -719,6 +817,9 @@ window.addEventListener('DOMContentLoaded', function() {
     document.getElementById('patientAddress').value = '';
     document.getElementById('diagnosis').value = '';
     document.getElementById('medicalHistory').value = '';
+    const today = new Date();
+    document.getElementById('visitDate').value = today.toLocaleDateString('zh-CN');
+    document.getElementById('prescriptionNo').value = 'CF' + today.getFullYear() + String(today.getMonth()+1).padStart(2,'0') + String(today.getDate()).padStart(2,'0') + '001';
     addMedicineRow();
     calculateAmount();
     updatePrescriptionPaper();
@@ -928,6 +1029,20 @@ window.addEventListener('DOMContentLoaded', function() {
       exportDate: new Date().toISOString()
     };
     downloadFile(JSON.stringify(data, null, 2), 'tcm-prescription-data.json', 'application/json');
+  }
+
+  function copyData() {
+    const data = {
+      medicines: JSON.parse(localStorage.getItem('cloudMedicines') || '[]'),
+      formulas: JSON.parse(localStorage.getItem('cloudFormulas') || '[]'),
+      prescriptions: JSON.parse(localStorage.getItem('cloudPrescriptionHistory') || '[]'),
+      users: getUsers()
+    };
+    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
+      alert('数据已复制到剪贴板！');
+    }).catch(() => {
+      alert('复制失败，请手动导出数据');
+    });
   }
 
   function importData() {
