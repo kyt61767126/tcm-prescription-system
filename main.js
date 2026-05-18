@@ -1,210 +1,86 @@
-const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
-const path = require('path');
-const Store = require('electron-store');
+console.log('系统加载中...');
 
-const store = new Store();
-
-let mainWindow;
-
-function createWindow() {
-  mainWindow = new BrowserWindow({
-    width: 1400,
-    height: 900,
-    minWidth: 1200,
-    minHeight: 700,
-    webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false
+window.addEventListener('DOMContentLoaded', function() {
+  console.log('DOM加载完成');
+  
+  const version = '2.1.0-cloud';
+  
+  function hashPassword(password) {
+    let hash = 0;
+    for (let i = 0; i < password.length; i++) {
+      const char = password.charCodeAt(i);
+      hash = ((hash << 5) - hash) + char;
+      hash = hash & hash;
     }
-  });
-
-  mainWindow.loadFile('index.html');
-
-  if (process.argv.includes('--dev')) {
-    mainWindow.webContents.openDevTools();
+    return Math.abs(hash).toString(16);
   }
 
-  mainWindow.on('closed', () => {
-    mainWindow = null;
-  });
+  function getDefaultUsers() {
+    return [
+      {username: 'admin', password: hashPassword('admin123'), name: '管理员', role: 'admin'},
+      {username: 'doctor1', password: hashPassword('doctor123'), name: '张医生', role: 'user'},
+      {username: 'doctor2', password: hashPassword('doctor123'), name: '李医生', role: 'user'}
+    ];
+  }
 
-  createMenu();
-}
+  function getUsers() {
+    const saved = localStorage.getItem('cloudUsers');
+    return saved ? JSON.parse(saved) : getDefaultUsers();
+  }
 
-function createMenu() {
-  const template = [
-    {
-      label: '文件',
-      submenu: [
-        {
-          label: '新建处方',
-          accelerator: 'Ctrl+N',
-          click: () => mainWindow.webContents.send('new-prescription')
-        },
-        {
-          label: '保存处方',
-          accelerator: 'Ctrl+S',
-          click: () => mainWindow.webContents.send('save-prescription')
-        },
-        { type: 'separator' },
-        {
-          label: '打印处方',
-          accelerator: 'Ctrl+P',
-          click: () => mainWindow.webContents.send('print-prescription')
-        },
-        { type: 'separator' },
-        {
-          label: '退出',
-          accelerator: 'Alt+F4',
-          click: () => app.quit()
-        }
-      ]
-    },
-    {
-      label: '编辑',
-      submenu: [
-        { label: '撤销', accelerator: 'Ctrl+Z', role: 'undo' },
-        { label: '重做', accelerator: 'Ctrl+Y', role: 'redo' },
-        { type: 'separator' },
-        { label: '剪切', accelerator: 'Ctrl+X', role: 'cut' },
-        { label: '复制', accelerator: 'Ctrl+C', role: 'copy' },
-        { label: '粘贴', accelerator: 'Ctrl+V', role: 'paste' }
-      ]
-    },
-    {
-      label: '查看',
-      submenu: [
-        { label: '刷新', accelerator: 'F5', role: 'reload' },
-        { type: 'separator' },
-        { label: '实际大小', accelerator: 'Ctrl+0', role: 'resetZoom' },
-        { label: '放大', accelerator: 'Ctrl+Plus', role: 'zoomIn' },
-        { label: '缩小', accelerator: 'Ctrl+Minus', role: 'zoomOut' },
-        { type: 'separator' },
-        { label: '全屏', accelerator: 'F11', role: 'togglefullscreen' }
-      ]
-    },
-    {
-      label: '工具',
-      submenu: [
-        {
-          label: '药品管理',
-          accelerator: 'F2',
-          click: () => mainWindow.webContents.send('open-medicine')
-        },
-        {
-          label: '验方管理',
-          accelerator: 'F3',
-          click: () => mainWindow.webContents.send('open-formula')
-        },
-        {
-          label: '病历管理',
-          accelerator: 'F4',
-          click: () => mainWindow.webContents.send('open-history')
-        },
-        { type: 'separator' },
-        {
-          label: '数据备份',
-          click: () => mainWindow.webContents.send('backup-data')
-        },
-        {
-          label: '数据恢复',
-          click: () => mainWindow.webContents.send('restore-data')
-        }
-      ]
-    },
-    {
-      label: '帮助',
-      submenu: [
-        {
-          label: '使用说明',
-          accelerator: 'F1',
-          click: () => mainWindow.webContents.send('show-help')
-        },
-        { type: 'separator' },
-        {
-          label: '关于',
-          click: () => {
-            dialog.showMessageBox(mainWindow, {
-              type: 'info',
-              title: '关于',
-              message: '中医处方系统专业版 v2.0.0',
-              detail: '专业的中医处方管理软件\n无任何使用限制\n永久免费使用'
-            });
-          }
-        }
-      ]
+  function saveUsers(users) {
+    localStorage.setItem('cloudUsers', JSON.stringify(users));
+  }
+
+  function renderLogin() {
+    console.log('渲染登录页面');
+    const html = `
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', sans-serif; background: #f0f0f0; }
+        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; justify-content: center; align-items: center; }
+        .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 350px; text-align: center; }
+        .login-title { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 30px; }
+        .login-input { width: 100%; padding: 12px 15px; margin: 10px 0; border: 2px solid #ddd; border-radius: 6px; font-size: 14px; }
+        .login-input:focus { border-color: #667eea; outline: none; }
+        .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+        .version-tag { color: #008000; font-weight: bold; margin-bottom: 20px; }
+      </style>
+      <div id="loginOverlay" class="login-overlay">
+        <div class="login-box">
+          <div class="login-title">🏥 本能中医处方系统</div>
+          <div class="version-tag">【云端版 v${version}】</div>
+          <input type="text" id="loginUsername" class="login-input" placeholder="用户名: admin">
+          <input type="password" id="loginPassword" class="login-input" placeholder="密码: admin123">
+          <button class="login-btn" onclick="handleLogin()">登 录</button>
+        </div>
+      </div>
+    `;
+    document.body.innerHTML = html;
+  }
+
+  function handleLogin() {
+    const username = document.getElementById('loginUsername').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    
+    const users = getUsers();
+    const hashedPassword = hashPassword(password);
+    const user = users.find(u => u.username === username && u.password === hashedPassword);
+    
+    if (user) {
+      localStorage.setItem('currentUser', JSON.stringify(user));
+      alert('登录成功！欢迎 ' + user.name);
+    } else {
+      alert('用户名或密码错误');
     }
-  ];
-
-  const menu = Menu.buildFromTemplate(template);
-  Menu.setApplicationMenu(menu);
-}
-
-app.on('ready', createWindow);
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit();
   }
-});
 
-app.on('activate', () => {
-  if (mainWindow === null) {
-    createWindow();
+  const savedUser = localStorage.getItem('currentUser');
+  if (savedUser) {
+    alert('欢迎回来！');
+  } else {
+    renderLogin();
   }
-});
-
-ipcMain.handle('store-get', (event, key) => {
-  return store.get(key);
-});
-
-ipcMain.handle('store-set', (event, key, value) => {
-  store.set(key, value);
-  return true;
-});
-
-ipcMain.handle('store-delete', (event, key) => {
-  store.delete(key);
-  return true;
-});
-
-ipcMain.handle('store-clear', () => {
-  store.clear();
-  return true;
-});
-
-ipcMain.handle('export-data', async (event, data) => {
-  const result = await dialog.showSaveDialog(mainWindow, {
-    title: '导出数据',
-    defaultPath: `tcm-data-${new Date().toISOString().split('T')[0]}.json`,
-    filters: [
-      { name: 'JSON Files', extensions: ['json'] },
-      { name: 'All Files', extensions: ['*'] }
-    ]
-  });
-
-  if (!result.canceled) {
-    const fs = require('fs');
-    fs.writeFileSync(result.filePath, JSON.stringify(data, null, 2), 'utf-8');
-    return { success: true, path: result.filePath };
-  }
-  return { success: false };
-});
-
-ipcMain.handle('import-data', async () => {
-  const result = await dialog.showOpenDialog(mainWindow, {
-    title: '导入数据',
-    filters: [
-      { name: 'JSON Files', extensions: ['json'] },
-      { name: 'All Files', extensions: ['*'] }
-    ],
-    properties: ['openFile']
-  });
-
-  if (!result.canceled && result.filePaths.length > 0) {
-    const fs = require('fs');
-    const content = fs.readFileSync(result.filePaths[0], 'utf-8');
-    return { success: true, data: JSON.parse(content) };
-  }
-  return { success: false };
+  
+  console.log('初始化完成');
 });

@@ -1,7 +1,5 @@
-import { supabase } from './supabase'
 import { defaultMedicines } from './defaultMedicines'
 import type { Medicine, Prescription, PrescriptionItem, Formula, FormulaComposition } from '../types'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
 export interface User {
   id?: number
@@ -11,87 +9,89 @@ export interface User {
   role?: string
 }
 
-const client = supabase as SupabaseClient | null
-
 export async function getUsers(): Promise<User[]> {
-  try {
-    if (!client) return []
-    const { data, error } = await client.from('users').select('*')
-    if (error) return []
-    return data || []
-  } catch {
-    return []
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('cloudUsers')
+    return saved ? JSON.parse(saved) : []
   }
+  return []
 }
 
 export async function addUser(user: User): Promise<any> {
-  if (!client) throw new Error('Supabase not configured')
-  const { data, error } = await client.from('users').insert([user]).select()
-  if (error) throw error
-  return data
+  if (typeof window !== 'undefined') {
+    const users = await getUsers()
+    const newUsers = [...users, user]
+    localStorage.setItem('cloudUsers', JSON.stringify(newUsers))
+    return user
+  }
+  throw new Error('Not in browser environment')
 }
 
 export async function deleteUser(id: number): Promise<void> {
-  if (!client) throw new Error('Supabase not configured')
-  const { error } = await client.from('users').delete().eq('id', id)
-  if (error) throw error
+  if (typeof window !== 'undefined') {
+    const users = await getUsers()
+    const filtered = users.filter((u: User) => u.id !== id)
+    localStorage.setItem('cloudUsers', JSON.stringify(filtered))
+    return
+  }
+  throw new Error('Not in browser environment')
 }
 
 export async function updateUser(id: number, user: Partial<User>): Promise<any> {
-  if (!client) throw new Error('Supabase not configured')
-  const { data, error } = await client.from('users').update(user).eq('id', id).select()
-  if (error) throw error
-  return data
+  if (typeof window !== 'undefined') {
+    const users = await getUsers()
+    const updated = users.map((u: User) => u.id === id ? { ...u, ...user } : u)
+    localStorage.setItem('cloudUsers', JSON.stringify(updated))
+    return updated.find((u: User) => u.id === id)
+  }
+  throw new Error('Not in browser environment')
 }
 
 export async function getMedicines(): Promise<Medicine[]> {
-  try {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('medicines')
-      if (saved) return JSON.parse(saved)
-    }
-    if (!client) return defaultMedicines
-    const { data, error } = await client.from('medicines').select('*')
-    if (error) return defaultMedicines
-    return data && data.length > 0 ? data : defaultMedicines
-  } catch {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('medicines')
+    if (saved) return JSON.parse(saved)
     return defaultMedicines
   }
+  return defaultMedicines
 }
 
 export async function addMedicine(medicine: Medicine): Promise<any> {
-  if (!client) throw new Error('Supabase not configured')
-  const { data, error } = await client.from('medicines').insert([medicine]).select()
-  if (error) throw error
-  return data
+  if (typeof window !== 'undefined') {
+    const medicines = await getMedicines()
+    const newMedicines = [...medicines, medicine]
+    localStorage.setItem('medicines', JSON.stringify(newMedicines))
+    return medicine
+  }
+  throw new Error('Not in browser environment')
 }
 
 export async function updateMedicine(id: number, medicine: Medicine): Promise<any> {
-  if (!client) throw new Error('Supabase not configured')
-  const { data, error } = await client.from('medicines').update(medicine).eq('id', id).select()
-  if (error) throw error
-  return data
+  if (typeof window !== 'undefined') {
+    const medicines = await getMedicines()
+    const updated = medicines.map((m: Medicine) => m.id === id ? medicine : m)
+    localStorage.setItem('medicines', JSON.stringify(updated))
+    return medicine
+  }
+  throw new Error('Not in browser environment')
 }
 
 export async function deleteMedicine(id: number): Promise<void> {
-  if (!client) throw new Error('Supabase not configured')
-  const { error } = await client.from('medicines').delete().eq('id', id)
-  if (error) throw error
+  if (typeof window !== 'undefined') {
+    const medicines = await getMedicines()
+    const filtered = medicines.filter((m: Medicine) => m.id !== id)
+    localStorage.setItem('medicines', JSON.stringify(filtered))
+    return
+  }
+  throw new Error('Not in browser environment')
 }
 
 export async function getPrescriptions(): Promise<Prescription[]> {
-  try {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('prescriptions')
-      if (saved) return JSON.parse(saved)
-    }
-    if (!client) return []
-    const { data, error } = await client.from('prescriptions').select('*').order('created_at', { ascending: false })
-    if (error) return []
-    return data || []
-  } catch {
-    return []
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('prescriptions')
+    return saved ? JSON.parse(saved) : []
   }
+  return []
 }
 
 export async function addPrescription(prescription: Omit<Prescription, 'id'>, items: PrescriptionItem[]) {
@@ -103,66 +103,47 @@ export async function addPrescription(prescription: Omit<Prescription, 'id'>, it
     localStorage.setItem('prescription_items_' + newPrescription.id, JSON.stringify(items))
     return newPrescription
   }
-  if (!client) throw new Error('Supabase not configured')
-  const { data: presData, error: presError } = await client.from('prescriptions').insert([prescription]).select()
-  if (presError) throw presError
-  const prescriptionId = presData[0].id
-  const itemsWithPrescriptionId = items.map(item => ({ ...item, prescription_id: prescriptionId }))
-  const { error: itemsError } = await client.from('prescription_items').insert(itemsWithPrescriptionId)
-  if (itemsError) throw itemsError
-  return presData[0]
+  throw new Error('Not in browser environment')
 }
 
 export async function deletePrescription(id: number): Promise<void> {
   if (typeof window !== 'undefined') {
     const prescriptions = await getPrescriptions()
-    const filtered = prescriptions.filter(p => p.id !== id)
+    const filtered = prescriptions.filter((p: Prescription) => p.id !== id)
     localStorage.setItem('prescriptions', JSON.stringify(filtered))
     localStorage.removeItem('prescription_items_' + id)
     return
   }
-  if (!client) throw new Error('Supabase not configured')
-  await client.from('prescription_items').delete().eq('prescription_id', id)
-  const { error } = await client.from('prescriptions').delete().eq('id', id)
-  if (error) throw error
+  throw new Error('Not in browser environment')
 }
 
 export async function getFormulas(): Promise<Formula[]> {
-  try {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('formulas')
-      if (saved) return JSON.parse(saved)
-    }
-    if (!client) return []
-    const { data, error } = await client.from('formulas').select('*')
-    if (error) return []
-    if (!data || data.length === 0) return []
-    return Promise.all(data.map(async (formula: any) => {
-      if (!client) return formula
-      const { data: compositions } = await client.from('formula_compositions').select('*').eq('formula_id', formula.id)
-      return { ...formula, compositions: compositions || [] }
-    }))
-  } catch {
-    return []
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem('formulas')
+    return saved ? JSON.parse(saved) : []
   }
+  return []
 }
 
 export async function addFormula(formula: Omit<Formula, 'id'>, compositions: FormulaComposition[]) {
-  if (!client) throw new Error('Supabase not configured')
-  const { data: formulaData, error: formulaError } = await client.from('formulas').insert([formula]).select()
-  if (formulaError) throw formulaError
-  const formulaId = formulaData[0].id
-  const compositionsWithFormulaId = compositions.map(comp => ({ ...comp, formula_id: formulaId }))
-  const { error: compError } = await client.from('formula_compositions').insert(compositionsWithFormulaId)
-  if (compError) throw compError
-  return formulaData[0]
+  if (typeof window !== 'undefined') {
+    const formulas = await getFormulas()
+    const newFormula = { ...formula, id: Date.now(), compositions }
+    const updated = [...formulas, newFormula]
+    localStorage.setItem('formulas', JSON.stringify(updated))
+    return newFormula
+  }
+  throw new Error('Not in browser environment')
 }
 
 export async function deleteFormula(id: number): Promise<void> {
-  if (!client) throw new Error('Supabase not configured')
-  await client.from('formula_compositions').delete().eq('formula_id', id)
-  const { error } = await client.from('formulas').delete().eq('id', id)
-  if (error) throw error
+  if (typeof window !== 'undefined') {
+    const formulas = await getFormulas()
+    const filtered = formulas.filter((f: Formula) => f.id !== id)
+    localStorage.setItem('formulas', JSON.stringify(filtered))
+    return
+  }
+  throw new Error('Not in browser environment')
 }
 
 export async function exportAllData() {
@@ -173,12 +154,7 @@ export async function exportAllData() {
     const users = localStorage.getItem('cloudUsers') ? JSON.parse(localStorage.getItem('cloudUsers')!) : []
     return { medicines, prescriptions, formulas, users, exportDate: new Date().toISOString() }
   }
-  const [medicines, prescriptions, formulas] = await Promise.all([
-    getMedicines(),
-    getPrescriptions(),
-    getFormulas()
-  ])
-  return { medicines, prescriptions, formulas, exportDate: new Date().toISOString() }
+  return { medicines: defaultMedicines, prescriptions: [], formulas: [], users: [], exportDate: new Date().toISOString() }
 }
 
 export async function importData(data: any) {
@@ -197,22 +173,5 @@ export async function importData(data: any) {
     }
     return { success: true }
   }
-  if (!client) throw new Error('Supabase not configured')
-  if (data.medicines && data.medicines.length > 0) {
-    for (const medicine of data.medicines) {
-      const { id, created_at, ...medicineData } = medicine
-      await client.from('medicines').upsert(medicineData)
-    }
-  }
-  if (data.formulas && data.formulas.length > 0) {
-    for (const formula of data.formulas) {
-      const { id, created_at, compositions, ...formulaData } = formula
-      const { data: newFormula } = await client.from('formulas').insert([formulaData]).select()
-      if (newFormula && newFormula[0] && compositions) {
-        const compositionsWithId = compositions.map((comp: any) => ({ ...comp, formula_id: newFormula[0].id }))
-        await client.from('formula_compositions').insert(compositionsWithId)
-      }
-    }
-  }
-  return { success: true }
+  throw new Error('Not in browser environment')
 }

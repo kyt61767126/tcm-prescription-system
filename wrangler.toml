@@ -1,8 +1,0 @@
-name = "kyt61767126-kyt-zy-cloud"
-compatibility_date = "2024-01-01"
-
-[build]
-command = "npm install && npm run build"
-
-[env]
-NODE_VERSION = "20"
