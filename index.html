@@ -270,7 +270,7 @@
             </div>
             <div class="symptom-section">
                 <div class="history-tabs">
-                    <div class="history-tab active">病史记录</div>
+                    <div class="history-tab active">病史症状</div>
                     <div class="history-tab">修改病史</div>
                 </div>
                 <textarea id="medicalHistory" class="symptom-textarea"></textarea>
@@ -373,7 +373,8 @@
         <div class="action-buttons">
             <button class="action-btn" onclick="clearPrescription()">重输</button>
             <button class="action-btn" onclick="saveAsFormula()">存验方</button>
-            <button class="action-btn" onclick="printPrescription()">打印</button>
+            <button class="action-btn" onclick="printPrescription('portrait')">纵向打印</button>
+            <button class="action-btn" onclick="printPrescription('landscape')">横向打印</button>
             <button class="action-btn primary" onclick="savePrescription()">保存</button>
         </div>
     </div>
@@ -1635,17 +1636,21 @@
             alert('验方保存成功！');
         }
 
-        function printPrescription() {
+        function printPrescription(orientation = 'portrait') {
             const printContent = document.getElementById('prescriptionPaper').innerHTML;
+            const isLandscape = orientation === 'landscape';
+            const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
+            const paperWidth = isLandscape ? '210mm' : '148mm';
+            const paperHeight = isLandscape ? '148mm' : '210mm';
             const newWindow = window.open('', '_blank');
             newWindow.document.write(`<!DOCTYPE html>
 <html>
 <head>
     <title>打印处方</title>
     <style>
-        @page { size: A5; margin: 0; }
+        @page { size: ${pageSize}; margin: 0; }
         body { font-family: SimSun, serif; padding: 0; margin: 0; }
-        .prescription-paper { width: 148mm; height: 210mm; padding: 15mm; margin: 0 auto; box-sizing: border-box; }
+        .prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 15mm; margin: 0 auto; box-sizing: border-box; }
         .clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
         .prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
         .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 12px; }

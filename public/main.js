@@ -218,7 +218,7 @@ window.addEventListener('DOMContentLoaded', function() {
             </div>
           </div>
           <div class="symptom-section">
-            <textarea id="medicalHistory" class="symptom-textarea" placeholder="病史记录"></textarea>
+            <textarea id="medicalHistory" class="symptom-textarea" placeholder="病史症状"></textarea>
           </div>
           <div class="diagnosis-section">
             <div class="patient-row">
@@ -307,7 +307,8 @@ window.addEventListener('DOMContentLoaded', function() {
         <div class="action-buttons">
           <button class="action-btn" onclick="clearPrescription()">重输</button>
           <button class="action-btn" onclick="saveAsFormula()">存验方</button>
-          <button class="action-btn" onclick="printPrescription()">打印</button>
+          <button class="action-btn" onclick="printPrescription('portrait')">纵向打印</button>
+          <button class="action-btn" onclick="printPrescription('landscape')">横向打印</button>
           <button class="action-btn primary" onclick="savePrescription()">保存</button>
         </div>
       </div>
@@ -801,8 +802,40 @@ window.addEventListener('DOMContentLoaded', function() {
     alert('验方保存成功！');
   }
 
-  function printPrescription() {
-    window.print();
+  function printPrescription(orientation = 'portrait') {
+    const printContent = document.getElementById('prescriptionPaper').innerHTML;
+    const isLandscape = orientation === 'landscape';
+    const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
+    const paperWidth = isLandscape ? '210mm' : '148mm';
+    const paperHeight = isLandscape ? '148mm' : '210mm';
+    const newWindow = window.open('', '_blank');
+    newWindow.document.write(`<!DOCTYPE html>
+<html>
+<head>
+    <title>打印处方</title>
+    <style>
+        @page { size: ${pageSize}; margin: 0; }
+        body { font-family: SimSun, serif; padding: 0; margin: 0; }
+        .prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 15mm; margin: 0 auto; box-sizing: border-box; }
+        .clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
+        .prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
+        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 12px; }
+        .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 180px; margin-top: 8px; }
+        .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+        .prescription-line { padding: 3px 0; font-size: 13px; text-align: center; }
+        .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #8b0000; }
+        .dose-count { text-align: right; font-size: 13px; color: #000080; }
+        .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 12px; }
+        .usage-text { margin-bottom: 10px; }
+        .signature-row { display: flex; justify-content: space-between; }
+    </style>
+</head>
+<body>
+    <div class="prescription-paper">${printContent}</div>
+</body>
+</html>`);
+    newWindow.document.close();
+    newWindow.print();
   }
 
   function getMedicines() {
