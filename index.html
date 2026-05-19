@@ -58,7 +58,7 @@
         .clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
         .prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
         .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 12px; }
-        .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 180px; }
+        .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 100px; }
         .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
         .prescription-line { padding: 3px 0; font-size: 13px; text-align: center; justify-content: center; align-items: center; }
         .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #8b0000; }
@@ -273,7 +273,7 @@
                     <div class="history-tab active">病史症状</div>
                     <div class="history-tab">修改病史</div>
                 </div>
-                <textarea id="medicalHistory" class="symptom-textarea"></textarea>
+                <textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea>
             </div>
             <div class="diagnosis-section">
                 <div class="patient-row">
@@ -333,13 +333,15 @@
                     <div>门诊号: <span id="paperClinicNo"></span></div>
                     <div>日期: <span id="paperDate"></span></div>
                 </div>
-                <div style="margin-bottom:8px;">
+                <div style="margin-bottom:8px; line-height:1.5;">
                     <span>病史症状: <span id="paperMedicalHistory"></span></span>
+                    <div style="border-bottom:1px solid #000; margin-top:8px;"></div>
                 </div>
-                <div style="margin-bottom:8px;">
+                <div style="margin-bottom:3px;">
                     <span>诊断: <span id="paperDiagnosis"></span></span>
+                    <div style="border-bottom:1px solid #000; margin-top:2px;"></div>
                 </div>
-                <div class="prescription-grid">
+                <div class="prescription-grid" style="margin-top:3px;">
                     <div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;">
                         <div class="rp-mark">RP</div>
                         <div></div>
@@ -347,7 +349,7 @@
                     </div>
                     <div id="prescriptionLines"></div>
                 </div>
-                <div class="prescription-footer">
+                <div class="prescription-footer" style="margin-top:3px;">
                     <div class="usage-text">用法: 水煎服，日一剂，早晚分服</div>
                     <div class="signature-row">
                         <span>医师: <span id="paperDoctor"></span>（签字）</span>
