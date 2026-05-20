@@ -116,6 +116,171 @@
         .btn-danger { background: #ff4444; color: white; }
         .btn-warning { background: #ff9800; color: white; }
         .btn-primary { background: #667eea; color: white; }
+        
+        /* 响应式设计 - 手机端优化 */
+        @media screen and (max-width: 768px) {
+            body { font-size: 16px; overflow: auto; }
+            
+            .top-tabs { 
+                flex-wrap: wrap;
+                padding: 2px;
+                position: relative;
+            }
+            .tab-item {
+                padding: 6px 10px;
+                font-size: 14px;
+                margin: 1px;
+            }
+            .tab-hint { display: none; }
+            
+            .main-container { 
+                display: block; 
+                height: auto; 
+                width: 100%;
+                overflow: auto;
+            }
+            
+            .left-panel {
+                width: 100%;
+                min-width: 100%;
+                max-width: 100%;
+                border-right: none;
+                border-bottom: 2px solid #808080;
+                height: auto;
+            }
+            
+            .center-panel {
+                width: 100%;
+                min-width: 100%;
+                padding: 5px;
+                overflow: auto;
+            }
+            
+            .prescription-paper {
+                width: 100%;
+                height: auto;
+                min-height: 210mm;
+                padding: 10px;
+                transform: scale(0.95);
+                transform-origin: top left;
+            }
+            
+            .right-panel {
+                display: none;
+            }
+            
+            .bottom-bar {
+                position: relative;
+                padding: 8px;
+                flex-wrap: wrap;
+            }
+            
+            .price-summary {
+                width: 100%;
+                margin-bottom: 10px;
+            }
+            
+            .price-item {
+                font-size: 14px;
+            }
+            
+            .price-item span {
+                font-size: 16px;
+            }
+            
+            .action-btn {
+                padding: 8px 16px;
+                font-size: 14px;
+                min-height: 44px;
+            }
+            
+            .patient-row {
+                flex-wrap: wrap;
+            }
+            
+            .patient-label {
+                width: 60px;
+                font-size: 14px;
+            }
+            
+            .patient-input {
+                font-size: 14px;
+                height: 40px;
+                min-width: 100px;
+            }
+            
+            .small-btn {
+                padding: 6px 12px;
+                font-size: 14px;
+            }
+            
+            .medicine-table {
+                font-size: 14px;
+            }
+            
+            .medicine-table th,
+            .medicine-table td {
+                padding: 4px;
+                font-size: 12px;
+            }
+            
+            .medicine-table input {
+                font-size: 14px;
+                padding: 4px;
+            }
+            
+            .symptom-textarea {
+                height: 60px;
+                font-size: 14px;
+            }
+            
+            .login-box {
+                width: 90%;
+                padding: 20px;
+            }
+            
+            .login-title {
+                font-size: 20px;
+            }
+            
+            .login-field input {
+                padding: 12px;
+                font-size: 16px;
+                height: 44px;
+            }
+            
+            .login-btn {
+                padding: 14px;
+                font-size: 18px;
+            }
+            
+            .modal-content {
+                width: 95%;
+                max-width: none;
+            }
+            
+            .modal-body {
+                padding: 10px;
+            }
+            
+            .form-group input {
+                padding: 12px;
+                font-size: 16px;
+                height: 44px;
+            }
+            
+            .search-item {
+                padding: 10px;
+                font-size: 14px;
+            }
+        }
+        
+        /* 平板端优化 */
+        @media screen and (max-width: 1024px) and (min-width: 769px) {
+            .left-panel { width: 45%; }
+            .right-panel { width: 30%; }
+            .center-panel { min-width: 250px; }
+        }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
