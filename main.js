@@ -872,6 +872,18 @@ window.addEventListener('DOMContentLoaded', function() {
   }
 
   function backupData() {
+    const now = new Date();
+    const dateStr = now.getFullYear() + '-' + 
+                   String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(now.getDate()).padStart(2, '0');
+    const timeStr = String(now.getHours()).padStart(2, '0') + '-' + 
+                   String(now.getMinutes()).padStart(2, '0') + '-' +
+                   String(now.getSeconds()).padStart(2, '0');
+    
+    const userObj = currentUser;
+    const exportUserName = userObj?.name || userObj?.username || '未知用户';
+    const fileName = `云端_${exportUserName}_${dateStr}_${timeStr}.json`;
+    
     const data = {
       users: getUsers(),
       medicines: JSON.parse(localStorage.getItem('cloudMedicines') || '[]'),
@@ -882,9 +894,18 @@ window.addEventListener('DOMContentLoaded', function() {
         defaultDoctor: localStorage.getItem('cloudDefaultDoctor'),
         defaultRegFee: localStorage.getItem('cloudDefaultRegFee'),
         defaultDose: localStorage.getItem('cloudDefaultDose')
+      },
+      exportInfo: {
+        version: '本能中医处方系统 - 云端版',
+        versionCode: 'v2.1.0',
+        versionType: '云端',
+        exportTime: now.toLocaleString('zh-CN'),
+        exportUser: exportUserName,
+        exportDate: dateStr,
+        exportTimeOnly: timeStr
       }
     };
-    downloadFile(JSON.stringify(data, null, 2), 'tcm-prescription-backup.json', 'application/json');
+    downloadFile(JSON.stringify(data, null, 2), fileName, 'application/json');
   }
 
   function restoreData() {
@@ -920,14 +941,73 @@ window.addEventListener('DOMContentLoaded', function() {
   }
 
   function exportData() {
+    const now = new Date();
+    const dateStr = now.getFullYear() + '-' + 
+                   String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                   String(now.getDate()).padStart(2, '0');
+    const timeStr = String(now.getHours()).padStart(2, '0') + '-' + 
+                   String(now.getMinutes()).padStart(2, '0') + '-' +
+                   String(now.getSeconds()).padStart(2, '0');
+    
+    const currentUserStr = localStorage.getItem('currentUser');
+    let exportUserName = '未知用户';
+    let currentUser = null;
+    if (currentUserStr) {
+      try {
+        currentUser = JSON.parse(currentUserStr);
+        exportUserName = currentUser.name || currentUser.username || '未知用户';
+      } catch {
+        exportUserName = currentUserStr;
+      }
+    }
+    
+    const clinicName = localStorage.getItem('cloudClinicName') || '未知诊所';
+    const doctorName = localStorage.getItem('cloudDefaultDoctor') || '未知医师';
+    
+    const userRole = currentUser?.role || 'user';
+    const userRoleDisplay = (userRole === 'admin') ? '管理员' : '普通用户';
+    
+    const medicines = JSON.parse(localStorage.getItem('cloudMedicines') || '[]');
+    const formulas = JSON.parse(localStorage.getItem('cloudFormulas') || '[]');
+    const prescriptionHistory = JSON.parse(localStorage.getItem('cloudPrescriptionHistory') || '[]');
+    
     const data = {
-      medicines: JSON.parse(localStorage.getItem('cloudMedicines') || '[]'),
-      formulas: JSON.parse(localStorage.getItem('cloudFormulas') || '[]'),
-      prescriptions: JSON.parse(localStorage.getItem('cloudPrescriptionHistory') || '[]'),
-      users: getUsers(),
-      exportDate: new Date().toISOString()
+      exportInfo: {
+        version: '本能中医处方系统 - 云端版',
+        versionCode: 'v2.1.0',
+        versionType: '云版',
+        exportTime: now.toLocaleString('zh-CN'),
+        exportTimeUTC: now.toISOString(),
+        exportDate: dateStr,
+        exportTimeOnly: timeStr,
+        exportUser: exportUserName,
+        userInfo: {
+          username: currentUser?.username || '未知',
+          name: currentUser?.name || exportUserName,
+          role: currentUser?.role || 'user',
+          roleDisplay: userRoleDisplay
+        },
+        clinicName: clinicName,
+        doctorName: doctorName,
+        exportType: 'full',
+        formatVersion: '1.0',
+        dataStatistics: {
+          medicinesCount: medicines.length,
+          formulasCount: formulas.length,
+          prescriptionCount: prescriptionHistory.length
+        },
+        systemInfo: {
+          platform: 'cloud',
+          platformType: '网页版',
+          lastModified: localStorage.getItem('lastModified') || now.toISOString()
+        }
+      },
+      medicines: medicines,
+      formulas: formulas,
+      prescriptionHistory: prescriptionHistory
     };
-    downloadFile(JSON.stringify(data, null, 2), 'tcm-prescription-data.json', 'application/json');
+    
+    downloadFile(JSON.stringify(data, null, 2), `云端_${exportUserName}_${dateStr}_${timeStr}.json`, 'application/json');
   }
 
   function importData() {
@@ -941,11 +1021,24 @@ window.addEventListener('DOMContentLoaded', function() {
         reader.onload = function(event) {
           try {
             const data = JSON.parse(event.target.result);
-            if (data.medicines) localStorage.setItem('cloudMedicines', JSON.stringify(data.medicines));
-            if (data.formulas) localStorage.setItem('cloudFormulas', JSON.stringify(data.formulas));
-            if (data.prescriptions) localStorage.setItem('cloudPrescriptionHistory', JSON.stringify(data.prescriptions));
+            // 兼容新格式（包含 exportInfo）和旧格式
+            const medicines = data.medicines || (data.exportInfo ? data.medicines : null);
+            const formulas = data.formulas || (data.exportInfo ? data.formulas : null);
+            const prescriptions = data.prescriptions || data.prescriptionHistory || (data.exportInfo ? data.prescriptionHistory : null);
+            
+            if (medicines) localStorage.setItem('cloudMedicines', JSON.stringify(medicines));
+            if (formulas) localStorage.setItem('cloudFormulas', JSON.stringify(formulas));
+            if (prescriptions) localStorage.setItem('cloudPrescriptionHistory', JSON.stringify(prescriptions));
             if (data.users) saveUsers(data.users);
-            alert('数据导入成功！');
+            
+            let message = '数据导入成功！';
+            if (data.exportInfo) {
+              message += '\n\n导出信息：';
+              if (data.exportInfo.version) message += '\n版本：' + data.exportInfo.version;
+              if (data.exportInfo.exportUser) message += '\n导出用户：' + data.exportInfo.exportUser;
+              if (data.exportInfo.exportTime) message += '\n导出时间：' + data.exportInfo.exportTime;
+            }
+            alert(message);
           } catch (error) {
             alert('数据导入失败：' + error.message);
           }
