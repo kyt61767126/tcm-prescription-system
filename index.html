@@ -1003,14 +1003,9 @@
         }
 
         function checkLoginStatus() {
-            const saved = localStorage.getItem('currentUser');
-            if (saved) {
-                currentUser = JSON.parse(saved);
-                document.getElementById('loginOverlay').style.display = 'none';
-                updateUserDisplay();
-            } else {
-                document.getElementById('loginOverlay').style.display = 'flex';
-            }
+            localStorage.removeItem('currentUser');
+            currentUser = null;
+            document.getElementById('loginOverlay').style.display = 'flex';
         }
 
         let medicines = [];
@@ -2310,52 +2305,54 @@ IconFile=${scriptPath}`;
             }
         }
 
-        function backupData() {
+        function getCurrentUser() {
+            if (currentUser) return currentUser;
+            const str = localStorage.getItem('currentUser');
+            return str ? JSON.parse(str) : null;
+        }
+
+        function getDateTimeStr() {
             const now = new Date();
-            const dateStr = now.getFullYear() + '-' + 
-                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                           String(now.getDate()).padStart(2, '0');
-            const timeStr = String(now.getHours()).padStart(2, '0') + '-' + 
-                           String(now.getMinutes()).padStart(2, '0') + '-' +
-                           String(now.getSeconds()).padStart(2, '0');
-            
-            let userObj = currentUser;
-            if (!userObj) {
-                const currentUserStr = localStorage.getItem('currentUser');
-                if (currentUserStr) {
-                    try {
-                        userObj = JSON.parse(currentUserStr);
-                    } catch {
-                        userObj = null;
-                    }
-                }
-            }
-            const exportUserName = userObj?.name || userObj?.username || '未知用户';
-            const fileName = `云端_${exportUserName}_${dateStr}_${timeStr}.json`;
-            
-            const data = {
-                medicines: medicines,
-                formulas: formulas,
-                prescriptionHistory: prescriptionHistory,
-                dailyCounter: dailyCounter,
-                counterDate: currentPrescriptionDate,
-                exportInfo: {
-                    version: '本能中医处方系统 - 云端版',
-                    versionCode: 'v2.0.0',
-                    versionType: '云端',
-                    exportTime: now.toLocaleString('zh-CN'),
-                    exportUser: exportUserName,
-                    exportDate: dateStr,
-                    exportTimeOnly: timeStr
-                }
+            return {
+                date: `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`,
+                time: `${String(now.getHours()).padStart(2,'0')}-${String(now.getMinutes()).padStart(2,'0')}-${String(now.getSeconds()).padStart(2,'0')}`,
+                full: now.toLocaleString('zh-CN'),
+                iso: now.toISOString()
             };
+        }
+
+        function downloadJson(data, fileName) {
             const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = fileName;
+            document.body.appendChild(a);
             a.click();
+            document.body.removeChild(a);
             URL.revokeObjectURL(url);
+        }
+
+        function backupData() {
+            const dt = getDateTimeStr();
+            const user = getCurrentUser();
+            const userName = user?.name || user?.username || '未知用户';
+            downloadJson({
+                medicines,
+                formulas,
+                prescriptionHistory,
+                dailyCounter,
+                counterDate: currentPrescriptionDate,
+                exportInfo: {
+                    version: '本能中医处方系统 - 云端版',
+                    versionCode: 'v2.0.0',
+                    versionType: '云端',
+                    exportTime: dt.full,
+                    exportUser: userName,
+                    exportDate: dt.date,
+                    exportTimeOnly: dt.time
+                }
+            }, `云端_${userName}_${dt.date}_${dt.time}.json`);
         }
 
         function restoreData() {
@@ -2422,51 +2419,29 @@ IconFile=${scriptPath}`;
         }
 
         function exportData() {
-            const now = new Date();
-            const dateStr = now.getFullYear() + '-' + 
-                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
-                           String(now.getDate()).padStart(2, '0');
-            const timeStr = String(now.getHours()).padStart(2, '0') + '-' + 
-                           String(now.getMinutes()).padStart(2, '0') + '-' +
-                           String(now.getSeconds()).padStart(2, '0');
+            const dt = getDateTimeStr();
+            const user = getCurrentUser();
+            const userName = user?.name || user?.username || '未知用户';
+            const userRole = user?.role || 'user';
             
-            let userObj = currentUser;
-            if (!userObj) {
-                const currentUserStr = localStorage.getItem('currentUser');
-                if (currentUserStr) {
-                    try {
-                        userObj = JSON.parse(currentUserStr);
-                    } catch {
-                        userObj = null;
-                    }
-                }
-            }
-            const exportUserName = userObj?.name || userObj?.username || '未知用户';
-            const fileName = `云端_${exportUserName}_${dateStr}_${timeStr}.json`;
-            const userRole = userObj?.role || 'user';
-            const userRoleDisplay = (userRole === 'admin') ? '管理员' : '普通用户';
-            
-            const clinicName = document.getElementById('clinicName')?.value || localStorage.getItem('clinicName') || '未知诊所';
-            const doctorName = document.getElementById('defaultDoctor')?.value || localStorage.getItem('defaultDoctor') || '未知医师';
-            
-            const data = {
+            downloadJson({
                 exportInfo: {
                     version: '本能中医处方系统 - 云端版',
                     versionCode: 'v2.0.0',
-                    versionType: '云版',
-                    exportTime: now.toLocaleString('zh-CN'),
-                    exportTimeUTC: now.toISOString(),
-                    exportDate: dateStr,
-                    exportTimeOnly: timeStr,
-                    exportUser: exportUserName,
+                    versionType: '云端',
+                    exportTime: dt.full,
+                    exportTimeUTC: dt.iso,
+                    exportDate: dt.date,
+                    exportTimeOnly: dt.time,
+                    exportUser: userName,
                     userInfo: {
-                        username: userObj?.username || '未知',
-                        name: userObj?.name || exportUserName,
-                        role: userObj?.role || 'user',
-                        roleDisplay: userRoleDisplay
+                        username: user?.username || '未知',
+                        name: user?.name || userName,
+                        role: userRole,
+                        roleDisplay: userRole === 'admin' ? '管理员' : '普通用户'
                     },
-                    clinicName: clinicName,
-                    doctorName: doctorName,
+                    clinicName: document.getElementById('clinicName')?.value || localStorage.getItem('clinicName') || '未知诊所',
+                    doctorName: document.getElementById('defaultDoctor')?.value || localStorage.getItem('defaultDoctor') || '未知医师',
                     exportType: 'full',
                     formatVersion: '1.0',
                     dataStatistics: {
@@ -2477,27 +2452,13 @@ IconFile=${scriptPath}`;
                     systemInfo: {
                         platform: 'cloud',
                         platformType: '网页版',
-                        lastModified: localStorage.getItem('lastModified') || now.toISOString()
+                        lastModified: localStorage.getItem('lastModified') || dt.iso
                     }
                 },
-                medicines: medicines,
-                formulas: formulas,
-                prescriptionHistory: prescriptionHistory
-            };
-            
-            // 生成 JSON 字符串
-            const jsonStr = JSON.stringify(data, null, 2);
-            
-            // 下载文件
-            const blob = new Blob([jsonStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+                medicines,
+                formulas,
+                prescriptionHistory
+            }, `云端_${userName}_${dt.date}_${dt.time}.json`);
         }
 
         function copyData() {
