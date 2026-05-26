@@ -997,7 +997,22 @@
 
         function getUsers() {
             const saved = localStorage.getItem('systemUsers');
-            return saved ? JSON.parse(saved) : getDefaultUsers();
+            if (!saved) {
+                return getDefaultUsers();
+            }
+            try {
+                const users = JSON.parse(saved);
+                if (users.length > 0) {
+                    const firstUser = users[0];
+                    if (firstUser.password && firstUser.password.length === 64) {
+                        localStorage.removeItem('systemUsers');
+                        return getDefaultUsers();
+                    }
+                }
+                return users;
+            } catch {
+                return getDefaultUsers();
+            }
         }
 
         function saveUsers(users) {
