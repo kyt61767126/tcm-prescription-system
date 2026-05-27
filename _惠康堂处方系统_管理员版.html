@@ -1596,16 +1596,7 @@
             const savedMedicines = localStorage.getItem('medicines');
             
             formulas = safeParseJSON(savedFormulas, []);
-            // 优先从 localStorage 加载，如果为空则从 sessionStorage 恢复
             prescriptionHistory = safeParseJSON(savedHistory, []);
-            if (prescriptionHistory.length === 0) {
-                const sessionHistory = sessionStorage.getItem('prescriptionHistory');
-                if (sessionHistory) {
-                    prescriptionHistory = safeParseJSON(sessionHistory, []);
-                    // 恢复到 localStorage
-                    setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                }
-            }
             
             const defaultMedicines = [
                 {name:'阿胶',code:'AJ',price:3.3,unit:'g',dosage:9},
@@ -2381,7 +2372,6 @@
             // 页面关闭/刷新时自动保存数据，防止历史信息丢失
             try {
                 setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                sessionStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 setUserItem('formulas', JSON.stringify(formulas));
                 setUserItem('dailyCounter', dailyCounter);
                 setUserItem('counterDate', currentPrescriptionDate);
@@ -2934,14 +2924,10 @@
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             
             setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            sessionStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            
-            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
             const userDataKey = getUserDataKey('prescriptionHistory');
             if (prescriptionHistory.length === 0) {
                 localStorage.removeItem(userDataKey);
-                sessionStorage.removeItem('prescriptionHistory');
             }
             
             renderHistoryList(prescriptionHistory.slice(0, 15));
@@ -3093,7 +3079,6 @@
                 prescriptionHistory = prescriptionHistory.slice(0, 100000);
             }
             setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            sessionStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             dailyCounter++;
             setUserItem('dailyCounter', dailyCounter);
             setUserItem('counterDate', currentPrescriptionDate);
@@ -4042,13 +4027,10 @@ IconFile=${scriptPath}`;
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             
             setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            sessionStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
             const userDataKey = getUserDataKey('prescriptionHistory');
             if (prescriptionHistory.length === 0) {
                 localStorage.removeItem(userDataKey);
-                sessionStorage.removeItem('prescriptionHistory');
             }
             
             renderCaseList(prescriptionHistory);
