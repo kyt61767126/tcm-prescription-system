@@ -1,4 +1,4 @@
-﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -920,6 +920,27 @@
         let currentUser = null;
         let searchDebounceTimer = null;
 
+        // 用户隔离的 localStorage 操作函数
+        function getUserKey(key) {
+            if (!currentUser || !currentUser.username) return key;
+            return `user_${currentUser.username}_${key}`;
+        }
+
+        function userGetItem(key) {
+            const userKey = getUserKey(key);
+            return localStorage.getItem(userKey);
+        }
+
+        function userSetItem(key, value) {
+            const userKey = getUserKey(key);
+            localStorage.setItem(userKey, value);
+        }
+
+        function userRemoveItem(key) {
+            const userKey = getUserKey(key);
+            localStorage.removeItem(userKey);
+        }
+
         function debounce(func, wait) {
             return function(...args) {
                 clearTimeout(searchDebounceTimer);
@@ -1370,11 +1391,11 @@
         }
 
         function loadData() {
-            const savedFormulas = localStorage.getItem('formulas');
-            const savedHistory = localStorage.getItem('prescriptionHistory');
-            const savedDailyCounter = localStorage.getItem('dailyCounter');
-            const savedCounterDate = localStorage.getItem('counterDate');
-            const savedMedicines = localStorage.getItem('medicines');
+            const savedFormulas = userGetItem('formulas');
+            const savedHistory = userGetItem('prescriptionHistory');
+            const savedDailyCounter = userGetItem('dailyCounter');
+            const savedCounterDate = userGetItem('counterDate');
+            const savedMedicines = userGetItem('medicines');
             
             formulas = safeParseJSON(savedFormulas, []);
             // 优先从 localStorage 加载，如果为空则从 sessionStorage 恢复
@@ -1384,7 +1405,7 @@
                 if (sessionHistory) {
                     prescriptionHistory = safeParseJSON(sessionHistory, []);
                     // 恢复到 localStorage
-                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                    userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 }
             }
             
@@ -2044,20 +2065,20 @@
                 {name:'花生衣',code:'HSY',price:0.1,unit:'g',dosage:10}
             ];
             
-            if (localStorage.getItem('clearDefaultMedicines') === 'true') {
+            if (userGetItem('clearDefaultMedicines') === 'true') {
                 medicines = [];
-                localStorage.removeItem('clearDefaultMedicines');
-                localStorage.removeItem('medicines');
+                userRemoveItem('clearDefaultMedicines');
+                userRemoveItem('medicines');
             } else if (savedMedicines) {
                 const parsedMedicines = safeParseJSON(savedMedicines, []);
                 if (parsedMedicines.length > 0) {
                     medicines = removeDuplicateMedicines(parsedMedicines);
-                } else if (localStorage.getItem('medicines') !== null) {
+                } else if (userGetItem('medicines') !== null) {
                     medicines = [];
                 }
             }
             
-            if (medicines.length === 0 && localStorage.getItem('medicines') === null) {
+            if (medicines.length === 0 && userGetItem('medicines') === null) {
                 medicines = defaultMedicines;
             }
             
@@ -2141,11 +2162,11 @@
         function handleBeforeUnload() {
             // 页面关闭/刷新时自动保存数据，防止历史信息丢失
             try {
-                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 sessionStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                localStorage.setItem('formulas', JSON.stringify(formulas));
-                localStorage.setItem('dailyCounter', dailyCounter);
-                localStorage.setItem('counterDate', currentPrescriptionDate);
+                userSetItem('formulas', JSON.stringify(formulas));
+                userSetItem('dailyCounter', dailyCounter);
+                userSetItem('counterDate', currentPrescriptionDate);
             } catch(e) {
                 console.warn('自动保存失败:', e);
             }
@@ -2690,7 +2711,7 @@
         function deleteHistory(id) {
             if (!confirm('确定删除该处方历史？')) return;
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             sessionStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             renderHistoryList(prescriptionHistory.slice(0, 15));
         }
@@ -2769,7 +2790,7 @@
             if (!code) return;
             const items = prescriptionItems.filter(item => item.name);
             formulas.push({name:name, code:code, composition:items.map(i => ({name:i.name, dosage:i.dosage, price:i.price, unit:i.unit}))});
-            localStorage.setItem('formulas', JSON.stringify(formulas));
+            userSetItem('formulas', JSON.stringify(formulas));
             alert('验方保存成功！');
         }
 
@@ -2839,11 +2860,11 @@
             if (prescriptionHistory.length > 100000) {
                 prescriptionHistory = prescriptionHistory.slice(0, 100000);
             }
-            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             sessionStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             dailyCounter++;
-            localStorage.setItem('dailyCounter', dailyCounter);
-            localStorage.setItem('counterDate', currentPrescriptionDate);
+            userSetItem('dailyCounter', dailyCounter);
+            userSetItem('counterDate', currentPrescriptionDate);
             // 生成新编号
             const newPrescriptionNo = generatePrescriptionNo();
             document.getElementById('prescriptionNo').value = newPrescriptionNo;
@@ -3121,10 +3142,10 @@ IconFile=${scriptPath}`;
                         if (data.prescriptionHistory) prescriptionHistory = data.prescriptionHistory;
                         if (data.dailyCounter) dailyCounter = data.dailyCounter;
                         if (data.counterDate) currentPrescriptionDate = data.counterDate;
-                        localStorage.setItem('formulas', JSON.stringify(formulas));
-                        localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                        localStorage.setItem('dailyCounter', dailyCounter);
-                        localStorage.setItem('counterDate', currentPrescriptionDate);
+                        userSetItem('formulas', JSON.stringify(formulas));
+                        userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                        userSetItem('dailyCounter', dailyCounter);
+                        userSetItem('counterDate', currentPrescriptionDate);
                         document.getElementById('prescriptionNo').value = generatePrescriptionNo();
                         document.getElementById('paperClinicNo').textContent = document.getElementById('prescriptionNo').value;
                         alert('数据恢复成功！请刷新页面。');
@@ -3275,9 +3296,9 @@ IconFile=${scriptPath}`;
                         if (data.formulas) formulas = data.formulas;
                         if (data.prescriptionHistory) prescriptionHistory = data.prescriptionHistory;
                         
-                        localStorage.setItem('medicines', JSON.stringify(medicines));
-                        localStorage.setItem('formulas', JSON.stringify(formulas));
-                        localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                        userSetItem('medicines', JSON.stringify(medicines));
+                        userSetItem('formulas', JSON.stringify(formulas));
+                        userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                         
                         buildMedicineMap();
                         updateStats();
@@ -3294,11 +3315,11 @@ IconFile=${scriptPath}`;
         function clearAllData() {
             if (!confirm('确定要清空所有数据吗？此操作不可恢复！')) return;
             
-            localStorage.removeItem('medicines');
-            localStorage.removeItem('formulas');
-            localStorage.removeItem('prescriptionHistory');
-            localStorage.removeItem('dailyCounter');
-            localStorage.removeItem('counterDate');
+            userRemoveItem('medicines');
+            userRemoveItem('formulas');
+            userRemoveItem('prescriptionHistory');
+            userRemoveItem('dailyCounter');
+            userRemoveItem('counterDate');
             
             medicines = defaultMedicines;
             formulas = [
@@ -3372,7 +3393,7 @@ IconFile=${scriptPath}`;
             const deletedName = medicines[index].name;
             medicines.splice(index, 1);
             prescriptionItems = prescriptionItems.filter(item => item.name !== deletedName);
-            localStorage.setItem('medicines', JSON.stringify(medicines));
+            userSetItem('medicines', JSON.stringify(medicines));
             buildMedicineMap();
             renderMedicineList();
             updatePrescriptionPaper();
@@ -3390,7 +3411,7 @@ IconFile=${scriptPath}`;
             const dosage = parseFloat(prompt('请输入常用用量：', m.dosage || '10')) || 10;
             const stock = parseInt(prompt('请输入库存数量：', m.stock || '0')) || 0;
             medicines[index] = {name, code, costPrice, price, unit, dosage, stock};
-            localStorage.setItem('medicines', JSON.stringify(medicines));
+            userSetItem('medicines', JSON.stringify(medicines));
             buildMedicineMap();
             renderMedicineList();
         }
@@ -3406,7 +3427,7 @@ IconFile=${scriptPath}`;
             const dosage = parseFloat(prompt('请输入常用用量（默认10）：')) || 10;
             const stock = parseInt(prompt('请输入库存数量：')) || 0;
             medicines.push({name, code, costPrice, price, unit, dosage, stock});
-            localStorage.setItem('medicines', JSON.stringify(medicines));
+            userSetItem('medicines', JSON.stringify(medicines));
             buildMedicineMap();
             renderMedicineList();
         }
@@ -3448,7 +3469,7 @@ IconFile=${scriptPath}`;
                 }
             }
             
-            localStorage.setItem('medicines', JSON.stringify(medicines));
+            userSetItem('medicines', JSON.stringify(medicines));
             renderMedicineList();
             alert(`${isIn ? '入库' : '出库'}完成！\n成功：${successCount} 种药品\n失败：${failCount} 种药品`);
         }
@@ -3481,8 +3502,8 @@ IconFile=${scriptPath}`;
         function clearMedicineLibrary() {
             if (!confirm('确定要完全清空所有药物吗？包括系统默认药物！此操作不可撤销！清空后请重新导入您的药物库！')) return;
             medicines = [];
-            localStorage.setItem('medicines', '[]');
-            localStorage.removeItem('clearDefaultMedicines');
+            userSetItem('medicines', '[]');
+            userRemoveItem('clearDefaultMedicines');
             buildMedicineMap();
             renderMedicineList();
             showToast('药物库已完全清空，请重新导入您的药物库');
@@ -3614,7 +3635,7 @@ IconFile=${scriptPath}`;
             } else if (action === '2') {
                 if (confirm('确定要覆盖现有药品库吗？导入的药品价格将完全替换现有数据！')) {
                     medicines = [...importedMedicines];
-                    localStorage.removeItem('clearDefaultMedicines');
+                    userRemoveItem('clearDefaultMedicines');
                     alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据`);
                 }
             } else if (action === '3') {
@@ -3633,7 +3654,7 @@ IconFile=${scriptPath}`;
             } else {
                 return;
             }
-            localStorage.setItem('medicines', JSON.stringify(medicines));
+            userSetItem('medicines', JSON.stringify(medicines));
             buildMedicineMap();
             renderMedicineList();
         }
@@ -3692,7 +3713,7 @@ IconFile=${scriptPath}`;
         function deleteFormula(index) {
             if (!confirm('确定删除该验方？')) return;
             formulas.splice(index, 1);
-            localStorage.setItem('formulas', JSON.stringify(formulas));
+            userSetItem('formulas', JSON.stringify(formulas));
             renderFormulaList();
         }
 
@@ -3704,7 +3725,7 @@ IconFile=${scriptPath}`;
             const effect = prompt('请输入功效：');
             const indication = prompt('请输入主治：');
             formulas.push({name,code,effect:effect||'',indication:indication||'',composition:[]});
-            localStorage.setItem('formulas', JSON.stringify(formulas));
+            userSetItem('formulas', JSON.stringify(formulas));
             renderFormulaList();
         }
 
@@ -3747,7 +3768,7 @@ IconFile=${scriptPath}`;
         function deleteCase(id) {
             if (!confirm('确定删除该病历？')) return;
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             renderCaseList(prescriptionHistory);
         }
 
