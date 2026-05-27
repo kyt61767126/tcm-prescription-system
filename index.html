@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -1061,6 +1061,9 @@
                 document.getElementById('loginOverlay').style.display = 'none';
                 updateUserDisplay();
                 errorDiv.style.display = 'none';
+                // 登录后重新加载当前用户的数据
+                loadData();
+                renderHistoryList(prescriptionHistory.slice(0, 15));
             } else {
                 errorDiv.textContent = '用户名或密码错误';
                 errorDiv.style.display = 'block';
@@ -1070,6 +1073,8 @@
         function handleLogout() {
             currentUser = null;
             sessionStorage.removeItem('currentUser');
+            // 清空当前页面的数据
+            prescriptionHistory = [];
             document.getElementById('loginUsername').value = '';
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginOverlay').style.display = 'flex';
@@ -1399,16 +1404,8 @@
             const savedMedicines = userGetItem('medicines');
             
             formulas = safeParseJSON(savedFormulas, []);
-            // 优先从 localStorage 加载，如果为空则从 sessionStorage 恢复
+            // 只从用户隔离的 localStorage 加载数据
             prescriptionHistory = safeParseJSON(savedHistory, []);
-            if (prescriptionHistory.length === 0) {
-                const sessionHistory = sessionStorage.getItem('prescriptionHistory');
-                if (sessionHistory) {
-                    prescriptionHistory = safeParseJSON(sessionHistory, []);
-                    // 恢复到 localStorage
-                    userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                }
-            }
             
             const defaultMedicines = [
                 {name:'阿胶',code:'AJ',price:3.3,unit:'g',dosage:9},
@@ -2164,7 +2161,6 @@
             // 页面关闭/刷新时自动保存数据，防止历史信息丢失
             try {
                 userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                sessionStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 userSetItem('formulas', JSON.stringify(formulas));
                 userSetItem('dailyCounter', dailyCounter);
                 userSetItem('counterDate', currentPrescriptionDate);
@@ -2713,7 +2709,6 @@
             if (!confirm('确定删除该处方历史？')) return;
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            sessionStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             renderHistoryList(prescriptionHistory.slice(0, 15));
         }
 
@@ -2862,7 +2857,6 @@
                 prescriptionHistory = prescriptionHistory.slice(0, 100000);
             }
             userSetItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            sessionStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             dailyCounter++;
             userSetItem('dailyCounter', dailyCounter);
             userSetItem('counterDate', currentPrescriptionDate);
