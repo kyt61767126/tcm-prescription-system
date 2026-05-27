@@ -996,9 +996,10 @@
             ];
         }
 
+        // 用户隔离的 localStorage 操作函数 - 网页版
         function getUserStorageKey(key) {
-            if (!currentUser) return 'unauthenticated_' + key;
-            return 'user_' + currentUser.username + '_' + key;
+            if (!currentUser) return 'web_unauthenticated_' + key;
+            return 'web_user_' + currentUser.username + '_' + key;
         }
 
         function getUserItem(key) {

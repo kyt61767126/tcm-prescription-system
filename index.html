@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -921,10 +921,10 @@
         let currentUser = null;
         let searchDebounceTimer = null;
 
-        // 用户隔离的 localStorage 操作函数
+        // 用户隔离的 localStorage 操作函数 - 云端版
         function getUserKey(key) {
             if (!currentUser || !currentUser.username) return key;
-            return `user_${currentUser.username}_${key}`;
+            return `cloud_user_${currentUser.username}_${key}`;
         }
 
         function userGetItem(key) {

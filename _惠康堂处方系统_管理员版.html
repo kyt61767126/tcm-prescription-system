@@ -1060,10 +1060,10 @@
             localStorage.setItem('systemUsers', JSON.stringify(users));
         }
 
-        // 用户数据隔离管理
+        // 用户数据隔离管理 - 管理员版
         function getUserDataKey(key) {
             const currentUser = sessionStorage.getItem('currentUsername') || CONFIG.doctorName;
-            return `user_${currentUser}_${key}`;
+            return `admin_user_${currentUser}_${key}`;
         }
         
         function setUserItem(key, value) {
