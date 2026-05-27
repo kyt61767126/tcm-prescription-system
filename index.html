@@ -2562,34 +2562,31 @@
             return code;
         }
 
-        // 智能匹配性别：根据姓名中的性别关键词自动选择
+        // 智能匹配性别：50-90年代取名常用字（各100字）+ 补充字
         function smartMatchGender(name) {
             if (!name) return;
             const genderSelect = document.getElementById('patientGender');
             if (!genderSelect) return;
-            
-            // 如果用户已经手动选择过，不自动修改
             if (genderSelect.dataset.manual === 'true') return;
-            
-            // 常见男性名字用字
-            const maleChars = ['伟', '强', '磊', '洋', '勇', '军', '杰', '涛', '超', '明', '刚', '平', '辉', '鹏', '飞', '波', '华', '建', '峰', '林', '志', '海', '国', '民', '祥', '德', '文', '武', '成', '龙', '虎', '剑', '浩', '宇', '浩', '鑫', '晨', '阳', '睿', '泽', '豪', '瑞', '博', '然', '轩', '霖', '毅', '俊', '凯', '浩', '宇', '航', '翔', '彬', '文', '祥', '福', '荣', '智'];
-            // 常见女性名字用字
-            const femaleChars = ['娟', '芳', '兰', '英', '华', '秀', '英', '敏', '静', '丽', '艳', '娜', '慧', '婷', '玲', '桂', '燕', '霞', '云', '莲', '珍', '贞', '莉', '兰', '凤', '洁', '梅', '琳', '素', '雪', '萍', '雅', '欣', '妍', '瑶', '琪', '琳', '璇', '璐', '怡', '倩', '颖', '佳', '嘉', '思', '雨', '诗', '涵', '梓', '梦', '小', '晓', '晓', '微', '丹', '红', '翠', '平'];
-            
-            // 统计姓名中男性/女性用字出现次数
-            let maleScore = 0;
+
+            // 女性100字 + 果
+            const femaleChars = '英兰芬莲桂秀翠凤珍喜娣桃花香荣珠宝杏云月巧春秋荷环爱灵欢妙甜燕霞红艳菊萍娟娜玲琴美彩仙惠莉梅娥卿虹姿苗菱苇蔓卉柔纯暖馨婷丽芳敏静雪琳莹倩怡琪萱婉菲曼蕾瑶娴雯露汐欣妍芮芷茵晴霏冉伊若晗璐茜珊莎玥凝黛果';
+            // 男性100字 + 蛋
+            const maleChars = '国建军民卫平强勇刚峰保安铁柱山福祥寿兵东石田友财旺群启庆发全伟明辉振德忠昌波涛江光良盛林海阳根弘昭崇厚学怀星炎武利达荣顺杰浩宇哲文博毅俊凯斌锋龙鹏晨旭松柏雷霖轩辰航嘉承峻岩恒硕彦朔腾越卓钧策戈骁峥烁钦蛋';
+
             let femaleScore = 0;
-            
+            let maleScore = 0;
+
             for (let char of name) {
-                if (maleChars.includes(char)) maleScore++;
                 if (femaleChars.includes(char)) femaleScore++;
+                if (maleChars.includes(char)) maleScore++;
             }
-            
-            // 根据得分设置性别
-            if (maleScore > femaleScore) {
-                genderSelect.value = '男';
-            } else if (femaleScore > maleScore) {
+
+            // 女性得分 >= 男性得分，则选女；否则选男
+            if (femaleScore >= maleScore && femaleScore > 0) {
                 genderSelect.value = '女';
+            } else if (maleScore > 0) {
+                genderSelect.value = '男';
             }
         }
 
