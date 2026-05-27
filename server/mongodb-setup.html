@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中医处方系统 - MongoDB Atlas 配置向导</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h2 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        .step {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 20px;
+        }
+        .step-number {
+            background: #667eea;
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            margin-right: 15px;
+            flex-shrink: 0;
+        }
+        .step-content {
+            flex: 1;
+        }
+        .step-content h3 {
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .step-content p {
+            color: #666;
+            line-height: 1.6;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #e83e8c;
+        }
+        .important {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #333;
+            font-weight: 500;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #5568d3;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .btn-secondary {
+            background: #6c757d;
+        }
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+        .config-output {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            margin: 15px 0;
+            overflow-x: auto;
+        }
+        .test-result {
+            margin-top: 15px;
+            padding: 15px;
+            border-radius: 5px;
+        }
+        .test-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .test-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .next-steps {
+            background: #e7f3ff;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌿 中医处方系统 - 云端配置向导</h1>
+        
+        <div class="card">
+            <h2>📋 配置步骤</h2>
+            
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h3>创建 MongoDB Atlas 账户</h3>
+                    <p>访问 <a href="https://www.mongodb.com/cloud/atlas" target="_blank">MongoDB Atlas 官网</a>，使用邮箱注册免费账户。</p>
+                    <div class="important">
+                        ⚠️ 推荐使用 Google 账户注册，速度更快！
+                    </div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h3>创建免费集群</h3>
+                    <p>注册完成后，按照提示创建一个 <strong>FREE</strong> 级别的集群（共享 RAM，512MB 存储空间）。</p>
+                    <p>选择区域：<code>新加坡 (Singapore)</code> 或 <code>东京 (Tokyo)</code> - 距离中国较近，速度更快。</p>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h3>配置数据库访问</h3>
+                    <p>在 <strong>Security</strong> → <strong>Database Access</strong> 中添加用户：</p>
+                    <ul style="margin: 10px 0; padding-left: 20px;">
+                        <li>Authentication Method: <strong>Password</strong></li>
+                        <li>Username: 自定义用户名（如：tcm-admin）</li>
+                        <li>Password: 强密码（至少12位）</li>
+                        <li>Role: <strong>Read and write to any database</strong></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">4</div>
+                <div class="step-content">
+                    <h3>配置网络访问</h3>
+                    <p>在 <strong>Security</strong> → <strong>Network Access</strong> 中添加 IP 白名单：</p>
+                    <p>点击 <strong>Add IP Address</strong>，选择 <strong>Allow Access from Anywhere (0.0.0.0/0)</strong></p>
+                    <div class="important">
+                        ⚠️ 这允许从任何地方访问数据库，生产环境建议限制特定 IP。
+                    </div>
+                </div>
+            </div>
+
+            <div class="step">
+                <div class="step-number">5</div>
+                <div class="step-content">
+                    <h3>获取连接字符串</h3>
+                    <p>点击 <strong>Connect</strong> → <strong>Connect your application</strong></p>
+                    <p>复制连接字符串，类似：</p>
+                    <div class="config-output">
+                        mongodb+srv://username:password@cluster.mongodb.net/tcm-prescription?retryWrites=true&w=majority
+                    </div>
+                    <p style="margin-top: 10px;">将 <code>username</code> 和 <code>password</code> 替换为第3步创建的用户名和密码。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>🔧 配置测试</h2>
+            
+            <div class="form-group">
+                <label for="mongodbUri">MongoDB 连接字符串：</label>
+                <input type="text" id="mongodbUri" placeholder="mongodb+srv://username:password@cluster.mongodb.net/tcm-prescription">
+            </div>
+
+            <div class="form-group">
+                <label for="jwtSecret">JWT 密钥（可选，使用默认值）：</label>
+                <input type="text" id="jwtSecret" placeholder="留空将使用默认值" value="tcm-prescription-secret-key-2024">
+            </div>
+
+            <button onclick="testConnection()" id="testBtn">测试连接</button>
+            <button onclick="generateConfig()" class="btn-secondary">生成配置文件</button>
+
+            <div id="testResult"></div>
+        </div>
+
+        <div class="card">
+            <h2>📝 配置文件预览</h2>
+            <div id="configPreview" class="config-output">
+                # .env 文件内容<br>
+                # 复制以下内容到 server/.env 文件
+            </div>
+            <button onclick="copyConfig()">📋 复制配置</button>
+        </div>
+
+        <div class="card">
+            <h2>🚀 下一步</h2>
+            <div class="next-steps">
+                <p><strong>1. 配置环境变量</strong></p>
+                <p>在 <code>server/</code> 目录下创建 <code>.env</code> 文件，粘贴上方的配置内容。</p>
+                
+                <p style="margin-top: 15px;"><strong>2. 安装依赖</strong></p>
+                <p>打开终端，运行：</p>
+                <div class="config-output">
+                    cd server<br>
+                    npm install
+                </div>
+                
+                <p style="margin-top: 15px;"><strong>3. 启动服务器</strong></p>
+                <p>开发模式：<code>npm run dev</code></p>
+                <p>或生产模式：<code>npm start</code></p>
+                
+                <p style="margin-top: 15px;"><strong>4. 部署到云端</strong></p>
+                <p>推荐使用 <strong>Vercel</strong> 或 <strong>Railway</strong> 部署后端服务。</p>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>💡 费用说明</h2>
+            <div class="success">
+                <p><strong>✅ MongoDB Atlas Free Tier：完全免费</strong></p>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li>512MB 存储空间</li>
+                    <li>共享 RAM</li>
+                    <li>最多 100 个连接</li>
+                    <li>适合个人或小团队使用</li>
+                </ul>
+            </div>
+            <div class="success">
+                <p><strong>✅ Vercel/Railway Free Tier：也完全免费</strong></p>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li>每月 100GB 带宽</li>
+                    <li>100 小时运行时（Vercel）</li>
+                    <li>500MB 内存</li>
+                    <li>适合个人项目</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentConfig = {};
+
+        function testConnection() {
+            const mongodbUri = document.getElementById('mongodbUri').value;
+            const testResult = document.getElementById('testResult');
+            const testBtn = document.getElementById('testBtn');
+
+            if (!mongodbUri) {
+                testResult.innerHTML = '<div class="test-result test-error">请输入 MongoDB 连接字符串</div>';
+                return;
+            }
+
+            testBtn.disabled = true;
+            testBtn.textContent = '测试中...';
+            testResult.innerHTML = '<div class="test-result">正在测试连接...</div>';
+
+            // 模拟测试（实际需要后端服务器）
+            setTimeout(() => {
+                testBtn.disabled = false;
+                testBtn.textContent = '测试连接';
+                
+                if (mongodbUri.startsWith('mongodb+srv://') && mongodbUri.includes('@')) {
+                    testResult.innerHTML = '<div class="test-result test-success">✅ 连接字符串格式正确！请确保数据库用户已创建且密码正确。</div>';
+                    generateConfig();
+                } else {
+                    testResult.innerHTML = '<div class="test-result test-error">❌ 连接字符串格式不正确，请检查格式。</div>';
+                }
+            }, 1500);
+        }
+
+        function generateConfig() {
+            const mongodbUri = document.getElementById('mongodbUri').value;
+            const jwtSecret = document.getElementById('jwtSecret').value || 'tcm-prescription-secret-key-2024';
+
+            if (!mongodbUri) {
+                alert('请先输入 MongoDB 连接字符串');
+                return;
+            }
+
+            currentConfig = {
+                MONGODB_URI: mongodbUri,
+                JWT_SECRET: jwtSecret,
+                PORT: '3000'
+            };
+
+            const configText = `# MongoDB Atlas 连接字符串
+MONGODB_URI=${mongodbUri}
+
+# JWT 密钥
+JWT_SECRET=${jwtSecret}
+
+# 服务器端口
+PORT=3000`;
+
+            document.getElementById('configPreview').innerHTML = configText.replace(/\n/g, '<br>');
+        }
+
+        function copyConfig() {
+            if (Object.keys(currentConfig).length === 0) {
+                alert('请先生成配置文件');
+                return;
+            }
+
+            const configText = Object.entries(currentConfig)
+                .map(([key, value]) => `${key}=${value}`)
+                .join('\n');
+
+            navigator.clipboard.writeText(configText).then(() => {
+                alert('✅ 配置文件已复制到剪贴板！\n\n请在 server/ 目录下创建 .env 文件并粘贴。');
+            }).catch(err => {
+                console.error('复制失败:', err);
+                alert('复制失败，请手动复制配置内容');
+            });
+        }
+    </script>
+</body>
+</html>
