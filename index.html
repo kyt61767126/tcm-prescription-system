@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -2125,26 +2125,26 @@
             const presNo = generatePrescriptionNo();
             document.getElementById('prescriptionNo').value = presNo;
             document.getElementById('paperClinicNo').textContent = presNo;
-            document.getElementById('clinicName').value = localStorage.getItem('clinicName') || '惠康堂中医诊所';
-            document.getElementById('clinicNameDisplay').textContent = localStorage.getItem('clinicName') || '惠康堂中医诊所';
-            document.getElementById('defaultRegFee').value = localStorage.getItem('defaultRegFee') || '0';
-            document.getElementById('defaultDose').value = localStorage.getItem('defaultDose') || '7';
+            document.getElementById('clinicName').value = userGetItem('clinicName') || '惠康堂中医诊所';
+            document.getElementById('clinicNameDisplay').textContent = userGetItem('clinicName') || '惠康堂中医诊所';
+            document.getElementById('defaultRegFee').value = userGetItem('defaultRegFee') || '0';
+            document.getElementById('defaultDose').value = userGetItem('defaultDose') || '7';
             // 同步诊疗费到所有输入框
-            const regFeeVal = localStorage.getItem('defaultRegFee') || '0';
+            const regFeeVal = userGetItem('defaultRegFee') || '0';
             const regFeeEl = document.getElementById('registrationFee');
             if (regFeeEl) regFeeEl.value = regFeeVal;
             const regFeeEl2 = document.getElementById('registrationFee2');
             if (regFeeEl2) regFeeEl2.value = regFeeVal;
             // 同步剂数到所有输入框
-            const doseVal = localStorage.getItem('defaultDose') || '7';
+            const doseVal = userGetItem('defaultDose') || '7';
             const doseEl = document.getElementById('doseCountInput');
             if (doseEl) doseEl.value = doseVal;
             const doseEl3 = document.getElementById('doseCountInput3');
             if (doseEl3) doseEl3.value = doseVal;
             document.getElementById('paperDoseCount').textContent = doseVal;
-            document.getElementById('doctorName').value = localStorage.getItem('clinicDoctor') || '王桂杰';
-            document.getElementById('defaultDoctor').value = localStorage.getItem('clinicDoctor') || '王桂杰';
-            document.getElementById('autoStart').checked = localStorage.getItem('autoStartEnabled') === 'true';
+            document.getElementById('doctorName').value = userGetItem('clinicDoctor') || '王桂杰';
+            document.getElementById('defaultDoctor').value = userGetItem('clinicDoctor') || '王桂杰';
+            document.getElementById('autoStart').checked = userGetItem('autoStartEnabled') === 'true';
             for (let i = 0; i < 25; i++) addEmptyRow();
             renderPrescriptionTable();
             calculateAmount();
@@ -3042,13 +3042,13 @@
         }
 
         function saveSettings() {
-            localStorage.setItem('clinicName', document.getElementById('clinicName').value);
-            localStorage.setItem('clinicDoctor', document.getElementById('defaultDoctor').value);
-            localStorage.setItem('defaultRegFee', document.getElementById('defaultRegFee').value || '0');
-            localStorage.setItem('defaultDose', document.getElementById('defaultDose').value || '7');
+            userSetItem('clinicName', document.getElementById('clinicName').value);
+            userSetItem('clinicDoctor', document.getElementById('defaultDoctor').value);
+            userSetItem('defaultRegFee', document.getElementById('defaultRegFee').value || '0');
+            userSetItem('defaultDose', document.getElementById('defaultDose').value || '7');
             
             const autoStartEnabled = document.getElementById('autoStart').checked;
-            localStorage.setItem('autoStartEnabled', autoStartEnabled ? 'true' : 'false');
+            userSetItem('autoStartEnabled', autoStartEnabled ? 'true' : 'false');
             if (autoStartEnabled) {
                 setAutoStart(true);
             } else {
@@ -3215,8 +3215,8 @@ IconFile=${scriptPath}`;
             
             const fileName = `云端版_${exportUserName}_${dateStr}_${timeStr}.json`;
             
-            const clinicName = document.getElementById('clinicName')?.value || localStorage.getItem('clinicName') || '未知诊所';
-            const doctorName = document.getElementById('defaultDoctor')?.value || localStorage.getItem('defaultDoctor') || '未知医师';
+            const clinicName = document.getElementById('clinicName')?.value || userGetItem('clinicName') || '未知诊所';
+            const doctorName = document.getElementById('defaultDoctor')?.value || userGetItem('clinicDoctor') || '未知医师';
             
             const data = {
                 exportInfo: {
