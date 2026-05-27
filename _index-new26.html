@@ -55,12 +55,13 @@
         .tab-left-item.active { background: white; }
         .patient-section { background: white; padding: 5px; border-bottom: 2px solid #808080; flex-shrink: 0; }
         .patient-row { display: flex; margin-bottom: 6px; align-items: center; gap: 5px; }
-        .patient-label { width: 50px; text-align: right; padding-right: 6px; font-size: 11px; flex-shrink: 0; }
+        .patient-label { width: 55px; text-align: right; padding-right: 8px; font-size: 11px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; }
         .patient-input { flex: 1; padding: 4px 6px; border: 1px solid #808080; font-size: 12px; min-width: 30px; height: 22px; box-sizing: border-box; }
-        .patient-input.small { flex: 0 0 120px; }
+        .patient-input.small { flex: 0 0 100px; }
         .patient-input.x-small { flex: 0 0 50px; }
-        .patient-input.xx-small { flex: 0 0 80px; }
-        .patient-input.xxx-small { flex: 0 0 110px; }
+        .patient-input.xx-small { flex: 0 0 73px; }
+        .patient-input.xxx-small { flex: 0 0 83px; }
+        .patient-input.name-input { flex: 0 0 73px; }
         .symptom-section { background: white; padding: 4px 8px; border-bottom: 2px solid #808080; flex-shrink: 0; }
         .history-tabs { display: flex; margin-bottom: 2px; }
         .history-tab { background: #d0d0d0; padding: 2px 10px; cursor: pointer; border: 1px solid #808080; border-bottom: none; margin-right: 2px; font-size: 10px; }
@@ -588,21 +589,21 @@
             </div>
             <div class="patient-section">
                 <div class="patient-row">
-                    <span class="patient-label" style="width: 45px;">处方<br/>编号</span>
-                    <input type="text" id="prescriptionNo" class="patient-input xxx-small" readonly>
+                    <span class="patient-label">处方</span>
+                    <input type="text" id="prescriptionNo" class="patient-input name-input" readonly>
                     <span class="patient-label">性别</span>
-                    <select id="patientGender" class="patient-input.x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()">
+                    <select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()">
                         <option value="男">男</option>
                         <option value="女">女</option>
                     </select>
                     <span class="patient-label">日期</span>
-                    <input type="text" id="visitDate" class="patient-input.x-small" readonly style="width:90px;min-width:90px;">
+                    <input type="text" id="visitDate" class="patient-input small" readonly>
                 </div>
                 <div class="patient-row">
                     <span class="patient-label">姓名</span>
-                    <input type="text" id="patientName" class="patient-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off">
+                    <input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off">
                     <span class="patient-label">年龄</span>
-                    <input type="text" id="patientAge" class="patient-input xx-small" onkeyup="updatePrescriptionPaper()">
+                    <input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()">
                     <span class="patient-label">电话</span>
                     <input type="text" id="patientPhone" class="patient-input small">
                 </div>
