@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -3012,8 +3012,7 @@
             ctx.fillText('配方: ________  复核: ________', width - 40, lastY + 60);
             
             // 下载图片（使用当下编号）
-            const currentUser = sessionStorage.getItem('currentUser');
-            const fileName = '云端版' + (currentUser ? '_' + currentUser : '') + '_' + (record.patientName || '未知') + (currentPrescriptionNo || record.prescriptionNo || '') + '.png';
+            const fileName = '云端版_' + (record.patientName || '未知') + '_' + (currentPrescriptionNo || record.prescriptionNo || '') + '.png';
             const link = document.createElement('a');
             link.download = fileName;
             link.href = canvas.toDataURL('image/png');
