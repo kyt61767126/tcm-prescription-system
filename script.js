@@ -15,7 +15,17 @@ async function loadFromCloud() {
     });
 
     if (res.ok) {
-      const cloudData = await res.json();
+      const text = await res.text();
+      console.log("📥 云端返回原始数据:", text);
+      
+      let cloudData;
+      try {
+        cloudData = JSON.parse(text);
+      } catch {
+        console.log("❌ 云端数据不是有效JSON，使用空数组");
+        cloudData = [];
+      }
+      
       cloudPrescriptions = Array.isArray(cloudData) ? cloudData : [];
       localStorage.setItem("prescriptions", JSON.stringify(cloudPrescriptions));
       console.log("✅ 云端数据加载成功，共 " + cloudPrescriptions.length + " 条记录");
@@ -66,26 +76,18 @@ async function saveToCloud(prescription) {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  console.log("📄 DOM 加载完成，等待登录后同步数据...");
-  
-  const checkAndSync = setInterval(function() {
-    const loginOverlay = document.getElementById('loginOverlay');
-    if (loginOverlay) {
-      const style = window.getComputedStyle(loginOverlay);
-      if (style.display === 'none') {
-        clearInterval(checkAndSync);
-        console.log("🔓 用户已登录，开始同步云端数据...");
-        loadFromCloud();
-      }
-    }
-  }, 500);
-});
-
 window.simpleLogin = async function() {
-  const username = document.getElementById('loginUsername').value.trim();
-  const password = document.getElementById('loginPassword').value;
+  const usernameInput = document.getElementById('loginUsername');
+  const passwordInput = document.getElementById('loginPassword');
   const errorDiv = document.getElementById('loginError');
+  
+  if (!usernameInput || !passwordInput) {
+    console.error('❌ 找不到登录输入框');
+    return;
+  }
+  
+  const username = usernameInput.value.trim();
+  const password = passwordInput.value;
   
   console.log('🔑 登录按钮点击:', username);
   
@@ -96,21 +98,37 @@ window.simpleLogin = async function() {
   }
   
   try {
-    const response = await fetch('https://tcm-prescription-api.61767126.workers.dev/api/auth/login', {
+    console.log('📡 正在调用登录API...');
+    const response = await fetch(API_URL + '/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password })
     });
     
     console.log('📡 API 返回状态:', response.status);
-    const result = await response.json();
-    console.log('📡 API 返回数据:', result);
+    
+    const text = await response.text();
+    console.log('📡 API 返回原始数据:', text);
+    
+    let result;
+    try {
+      result = JSON.parse(text);
+    } catch {
+      console.error('❌ API返回不是JSON:', text);
+      errorDiv.textContent = '服务器返回格式错误';
+      errorDiv.style.display = 'block';
+      return;
+    }
     
     if (response.ok) {
       window.currentUser = result.user;
       localStorage.setItem('currentUser', JSON.stringify(result.user));
       localStorage.setItem('jwtToken', result.token);
-      document.getElementById('loginOverlay').style.display = 'none';
+      
+      const loginOverlay = document.getElementById('loginOverlay');
+      if (loginOverlay) {
+        loginOverlay.style.display = 'none';
+      }
       
       const userDisplay = document.getElementById('currentUser');
       if (userDisplay) {
@@ -118,7 +136,8 @@ window.simpleLogin = async function() {
       }
       
       errorDiv.style.display = 'none';
-      loadFromCloud();
+      
+      await loadFromCloud();
       alert('✅ 登录成功！');
     } else {
       errorDiv.textContent = result.error || '用户名或密码错误';
@@ -131,4 +150,8 @@ window.simpleLogin = async function() {
   }
 };
 
-console.log("📦 sync script loaded");
+console.log("📦 sync script loaded - simpleLogin function is ready");
+
+window.addEventListener('DOMContentLoaded', function() {
+  console.log("📄 DOM 加载完成");
+});
