@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本能中医处方系统 - 简化版</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Microsoft YaHei', Arial, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; }
+        .login-overlay { display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .login-box { background: white; border-radius: 15px; padding: 40px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); width: 100%; max-width: 400px; }
+        .login-box h1 { text-align: center; color: #333; margin-bottom: 10px; }
+        .login-box .tag { text-align: center; color: #28a745; font-size: 14px; margin-bottom: 30px; }
+        .login-field { margin-bottom: 20px; }
+        .login-field label { display: block; margin-bottom: 8px; color: #555; font-weight: bold; }
+        .login-field input { width: 100%; padding: 12px; border: 2px solid #ddd; border-radius: 8px; font-size: 16px; transition: border-color 0.3s; }
+        .login-field input:focus { outline: none; border-color: #667eea; }
+        .login-btn { width: 100%; padding: 14px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: opacity 0.3s; }
+        .login-btn:hover { opacity: 0.9; }
+        .login-error { color: #dc3545; text-align: center; margin-top: 15px; display: none; }
+        
+        .main-content { display: none; padding: 20px; }
+        .header { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
+        .header h2 { color: #333; }
+        .user-info { color: #666; }
+        .logout-btn { padding: 8px 16px; background: #dc3545; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        
+        .prescription-form { background: white; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+        .form-row { display: flex; gap: 15px; margin-bottom: 15px; }
+        .form-group { flex: 1; }
+        .form-group label { display: block; margin-bottom: 5px; color: #555; }
+        .form-group input, .form-group select, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        .form-group textarea { height: 80px; }
+        .save-btn { padding: 12px 30px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
+        
+        .history-list { background: white; padding: 20px; border-radius: 10px; }
+        .history-list h3 { color: #333; margin-bottom: 15px; }
+        .prescription-item { padding: 15px; border-bottom: 1px solid #eee; }
+        .prescription-item:last-child { border-bottom: none; }
+        .prescription-header { display: flex; justify-content: space-between; margin-bottom: 10px; }
+        .prescription-name { font-weight: bold; color: #333; }
+        .prescription-date { color: #999; font-size: 14px; }
+        .prescription-content { color: #666; }
+    </style>
+</head>
+<body>
+    <div id="loginOverlay" class="login-overlay">
+        <div class="login-box">
+            <h1>🏥 本能中医处方系统</h1>
+            <div class="tag">[简化版]</div>
+            <div class="login-field">
+                <label>用户名:</label>
+                <input type="text" id="loginUsername" placeholder="请输入用户名" value="admin">
+            </div>
+            <div class="login-field">
+                <label>密码:</label>
+                <input type="password" id="loginPassword" placeholder="请输入密码" value="admin">
+            </div>
+            <button class="login-btn" onclick="handleLogin()">登 录</button>
+            <div id="loginError" class="login-error"></div>
+        </div>
+    </div>
+
+    <div id="mainContent" class="main-content">
+        <div class="header">
+            <h2>🏥 本能中医处方系统</h2>
+            <div>
+                <span class="user-info">欢迎, <span id="currentUser">管理员</span></span>
+                <button class="logout-btn" onclick="handleLogout()">退出</button>
+            </div>
+        </div>
+
+        <div class="prescription-form">
+            <h3>📝 新建处方</h3>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>患者姓名</label>
+                    <input type="text" id="patientName" placeholder="请输入患者姓名">
+                </div>
+                <div class="form-group">
+                    <label>性别</label>
+                    <select id="patientGender">
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                    </select>
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>年龄</label>
+                    <input type="number" id="patientAge" placeholder="年龄">
+                </div>
+                <div class="form-group">
+                    <label>诊断结果</label>
+                    <input type="text" id="diagnosis" placeholder="请输入诊断结果">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>处方内容</label>
+                <textarea id="prescriptionContent" placeholder="请输入处方内容"></textarea>
+            </div>
+            <button class="save-btn" onclick="savePrescription()">保存处方</button>
+        </div>
+
+        <div class="history-list">
+            <h3>📋 处方历史</h3>
+            <div id="prescriptionList">暂无处方记录</div>
+        </div>
+    </div>
+
+    <script>
+        let prescriptions = [];
+
+        function loadPrescriptions() {
+            const saved = localStorage.getItem('prescriptions');
+            if (saved) {
+                prescriptions = JSON.parse(saved);
+            }
+        }
+
+        function savePrescriptions() {
+            localStorage.setItem('prescriptions', JSON.stringify(prescriptions));
+        }
+
+        function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorDiv = document.getElementById('loginError');
+
+            if (!username || !password) {
+                errorDiv.textContent = '请输入用户名和密码';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            if (username === 'admin' && password === 'admin') {
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.getElementById('mainContent').style.display = 'block';
+                document.getElementById('currentUser').textContent = '管理员';
+                loadPrescriptions();
+                renderPrescriptions();
+                alert('✅ 登录成功！');
+            } else {
+                errorDiv.textContent = '用户名或密码错误';
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        function handleLogout() {
+            document.getElementById('loginOverlay').style.display = 'flex';
+            document.getElementById('mainContent').style.display = 'none';
+        }
+
+        function savePrescription() {
+            const name = document.getElementById('patientName').value.trim();
+            const gender = document.getElementById('patientGender').value;
+            const age = document.getElementById('patientAge').value;
+            const diagnosis = document.getElementById('diagnosis').value.trim();
+            const content = document.getElementById('prescriptionContent').value.trim();
+
+            if (!name || !content) {
+                alert('请填写患者姓名和处方内容');
+                return;
+            }
+
+            const prescription = {
+                id: Date.now(),
+                name,
+                gender,
+                age: age ? parseInt(age) : '',
+                diagnosis,
+                content,
+                date: new Date().toLocaleString('zh-CN')
+            };
+
+            prescriptions.unshift(prescription);
+            savePrescriptions();
+            renderPrescriptions();
+
+            document.getElementById('patientName').value = '';
+            document.getElementById('patientGender').value = '男';
+            document.getElementById('patientAge').value = '';
+            document.getElementById('diagnosis').value = '';
+            document.getElementById('prescriptionContent').value = '';
+
+            alert('✅ 处方保存成功！');
+        }
+
+        function renderPrescriptions() {
+            const list = document.getElementById('prescriptionList');
+            
+            if (prescriptions.length === 0) {
+                list.innerHTML = '暂无处方记录';
+                return;
+            }
+
+            list.innerHTML = prescriptions.map(p => `
+                <div class="prescription-item">
+                    <div class="prescription-header">
+                        <span class="prescription-name">${p.name} (${p.gender}${p.age ? '，' + p.age + '岁' : ''})</span>
+                        <span class="prescription-date">${p.date}</span>
+                    </div>
+                    ${p.diagnosis ? '<div style="margin-bottom: 5px;"><strong>诊断:</strong> ' + p.diagnosis + '</div>' : ''}
+                    <div class="prescription-content"><strong>处方:</strong> ${p.content}</div>
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
