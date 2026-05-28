@@ -43,12 +43,20 @@ export const onRequestPost = async (context) => {
   const body = await context.request.json()
   const KV = getKV(context)
   
-  const id = Date.now().toString()
+  const id = body.id || body._id || Date.now().toString()
+  const existing = await KV.get(`${PRESCRIPTION_KEY_PREFIX}${user.username}_${id}`)
+  
+  if (existing) {
+    return corsResponse({ error: '处方已存在' }, 409)
+  }
+  
   const prescription = {
     _id: id,
+    id: id,
     ...body,
     userId: user._id,
-    createdAt: Date.now(),
+    username: user.username,
+    createdAt: body.createdAt || Date.now(),
     updatedAt: Date.now()
   }
   
