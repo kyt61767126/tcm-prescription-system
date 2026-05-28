@@ -1,0 +1,64 @@
+<script>
+const SYNC_PASSWORD = "HuikangTang2026!";
+const USERNAME = "admin";
+
+async function syncFromCloud() {
+    try {
+        const response = await fetch("/api/sync", {
+            headers: {
+                "x-sync-password": SYNC_PASSWORD,
+                "x-username": USERNAME
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            if (data && data.length > 0) {
+                const map = new Map();
+                prescriptionHistory.forEach(p => map.set(p.id || p._id, p));
+                data.forEach(p => {
+                    const id = p.id || p._id;
+                    if (!map.has(id)) {
+                        map.set(id, p);
+                    }
+                });
+                prescriptionHistory = Array.from(map.values()).sort((a, b) => 
+                    (b.createdAt || b.id || 0) - (a.createdAt || a.id || 0)
+                );
+                setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                renderHistoryList(prescriptionHistory.slice(0, 15));
+                console.log("✅ 已从云端同步所有处方");
+            }
+        }
+    } catch (e) {
+        console.log("云端同步失败:", e.message);
+    }
+}
+
+async function syncPrescriptionToCloud() {
+    try {
+        const json = JSON.stringify(prescriptionHistory);
+        
+        await fetch("/api/sync", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "x-sync-password": SYNC_PASSWORD,
+                "x-username": USERNAME
+            },
+            body: json
+        });
+        
+        console.log("✅ 处方已保存并同步云端");
+        return true;
+    } catch (e) {
+        console.log("同步失败:", e.message);
+        return false;
+    }
+}
+
+// 页面加载后自动同步
+window.addEventListener('load', function() {
+    setTimeout(() => syncFromCloud(), 1000);
+});
+</script>
