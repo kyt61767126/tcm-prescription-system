@@ -4,7 +4,7 @@ export default {
     const user = request.headers.get("x-username");
 
     if (pass !== env.SYNC_PASSWORD || !user) {
-      return new Response("无权访问", { status: 401 });
+      return new Response("Unauthorized", { status: 401 });
     }
 
     const key = "prescriptions_" + user;
@@ -22,6 +22,6 @@ export default {
       return new Response("ok");
     }
 
-    return new Response("错误", { status: 400 });
+    return new Response("error", { status: 400 });
   }
 };
