@@ -1,12 +1,21 @@
-// 配置（已写死，无需修改）
 const SYNC_PASSWORD = "HuikangTang2026!";
 const USERNAME = "admin";
-let prescriptions = [];
+const USE_LOCAL_SERVER = false;
+const LOCAL_SERVER_URL = "http://localhost:3000";
 
-// 关键函数1：页面加载时，自动从云端拉取数据
+let cloudPrescriptions = [];
+
+function getApiUrl(path) {
+  if (USE_LOCAL_SERVER) {
+    return LOCAL_SERVER_URL + path;
+  }
+  return path;
+}
+
 async function loadFromCloud() {
   try {
-    const res = await fetch("/api/sync", {
+    console.log("🔄 正在从云端加载数据...");
+    const res = await fetch(getApiUrl("/api/sync"), {
       headers: {
         "x-sync-password": SYNC_PASSWORD,
         "x-username": USERNAME
@@ -15,35 +24,35 @@ async function loadFromCloud() {
 
     if (res.ok) {
       const cloudData = await res.json();
-      prescriptions = Array.isArray(cloudData) ? cloudData : [];
-      localStorage.setItem("prescriptions", JSON.stringify(prescriptions));
+      cloudPrescriptions = Array.isArray(cloudData) ? cloudData : [];
+      localStorage.setItem("prescriptions", JSON.stringify(cloudPrescriptions));
+      console.log("✅ 云端数据加载成功，共 " + cloudPrescriptions.length + " 条记录");
+      
       if (typeof renderHistoryList === 'function') {
-        renderHistoryList(prescriptions.slice(0, 15));
+        const list = cloudPrescriptions.slice(0, 15);
+        console.log("📋 调用 renderHistoryList，显示 " + list.length + " 条记录");
+        renderHistoryList(list);
       }
-      console.log("✅ 云端数据加载成功");
     } else {
       console.log("❌ 云端加载失败：" + res.status);
     }
   } catch (e) {
     console.log("❌ 云端同步出错：" + e.message);
-    prescriptions = JSON.parse(localStorage.getItem("prescriptions") || "[]");
+    cloudPrescriptions = JSON.parse(localStorage.getItem("prescriptions") || "[]");
     if (typeof renderHistoryList === 'function') {
-      renderHistoryList(prescriptions.slice(0, 15));
+      renderHistoryList(cloudPrescriptions.slice(0, 15));
     }
   }
 }
 
-// 关键函数2：保存处方时，同时写入本地和云端
 async function saveToCloud(prescription) {
   try {
-    prescriptions.push(prescription);
-    const json = JSON.stringify(prescriptions);
+    cloudPrescriptions.push(prescription);
+    const json = JSON.stringify(cloudPrescriptions);
 
-    // 保存到本地
     localStorage.setItem("prescriptions", json);
 
-    // 保存到云端
-    const res = await fetch("/api/sync", {
+    const res = await fetch(getApiUrl("/api/sync"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -55,7 +64,7 @@ async function saveToCloud(prescription) {
 
     if (res.ok) {
       if (typeof renderHistoryList === 'function') {
-        renderHistoryList(prescriptions.slice(0, 15));
+        renderHistoryList(cloudPrescriptions.slice(0, 15));
       }
       alert("✅ 保存并同步云端成功");
     } else {
@@ -66,5 +75,24 @@ async function saveToCloud(prescription) {
   }
 }
 
-// 关键绑定：页面一打开就执行同步
-window.addEventListener("load", loadFromCloud);
+document.addEventListener('DOMContentLoaded', function() {
+  console.log("📄 DOM 加载完成，等待登录后同步数据...");
+  
+  const checkAndSync = setInterval(function() {
+    const loginOverlay = document.getElementById('loginOverlay');
+    if (loginOverlay) {
+      const style = window.getComputedStyle(loginOverlay);
+      if (style.display === 'none') {
+        clearInterval(checkAndSync);
+        console.log("🔓 用户已登录，开始同步云端数据...");
+        loadFromCloud();
+      }
+    }
+  }, 500);
+});
+
+window.addEventListener("load", function() {
+  console.log("🖥️ 页面完全加载");
+});
+
+console.log("📦 sync script loaded");
