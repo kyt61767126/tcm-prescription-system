@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -3011,25 +3011,14 @@
                 totalAmount: parseFloat(grandTotalEl ? grandTotalEl.textContent : 0),
                 createdAt: Date.now()
             };
-            prescriptionHistory.unshift(record);
-            if (prescriptionHistory.length > 100000) {
-                prescriptionHistory = prescriptionHistory.slice(0, 100000);
-            }
-            setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            saveToCloud(record);
             dailyCounter++;
             setUserItem('dailyCounter', dailyCounter);
             setUserItem('counterDate', currentPrescriptionDate);
-            // 生成新编号
             const newPrescriptionNo = generatePrescriptionNo();
             document.getElementById('prescriptionNo').value = newPrescriptionNo;
             document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
-            // 保存后立即刷新历史处方栏
-            renderHistoryList(prescriptionHistory.slice(0, 15));
-            // 同步到云端
-            syncPrescriptionToCloud(record);
-            // 生成处方签图片并自动下载（使用当下编号）
             savePrescriptionAsImage(record, newPrescriptionNo);
-            alert('处方保存成功！');
             searchPatientsQuick({target:{value:name}});
         }
 
@@ -4019,5 +4008,6 @@ IconFile=${scriptPath}`;
 
         document.addEventListener('DOMContentLoaded', init);
     </script>
+    <script src="script.js"></script>
 </body>
 </html>
