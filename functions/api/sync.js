@@ -1,4 +1,4 @@
-import { authenticate, corsResponse, handleOptions } from '../_utils'
+import { authenticate, corsResponse, handleOptions, getPrescriptionKey } from '../_utils'
 
 const PRESCRIPTION_KEY_PREFIX = 'prescription_'
 
@@ -43,7 +43,7 @@ async function uploadPrescriptions(KV, user, prescriptions) {
   
   for (const prescription of prescriptions) {
     const id = prescription.id || prescription._id || Date.now().toString()
-    const key = `${PRESCRIPTION_KEY_PREFIX}${username}_${id}`
+    const key = getPrescriptionKey(username, id)
     
     const existing = await KV.get(key)
     if (!existing) {
@@ -51,6 +51,7 @@ async function uploadPrescriptions(KV, user, prescriptions) {
         _id: id,
         ...prescription,
         userId: user._id,
+        username: username,
         createdAt: prescription.createdAt || Date.now(),
         updatedAt: Date.now()
       }
@@ -131,11 +132,12 @@ async function syncPrescriptions(KV, user, localData) {
   
   for (const prescription of toUpload) {
     const id = prescription.id || prescription._id || Date.now().toString()
-    const key = `${PRESCRIPTION_KEY_PREFIX}${username}_${id}`
+    const key = getPrescriptionKey(username, id)
     const fullPrescription = {
       _id: id,
       ...prescription,
       userId: user._id,
+      username: username,
       createdAt: prescription.createdAt || Date.now(),
       updatedAt: Date.now()
     }
