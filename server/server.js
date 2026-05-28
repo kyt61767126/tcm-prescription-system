@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
+const path = require('path');
 
 const authRoutes = require('./routes/auth');
 const prescriptionRoutes = require('./routes/prescription');
@@ -16,21 +16,19 @@ app.use('/api/auth', authRoutes);
 app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/settings', settingsRoutes);
 
+app.use(express.static(path.join(__dirname, '..')));
+
 app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', message: '服务器运行正常' });
+    res.json({ status: 'ok', message: '服务器运行正常', version: 'Cloudflare KV版' });
+});
+
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '..', 'index.html'));
 });
 
 const PORT = process.env.PORT || 3000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/tcm-prescription';
 
-mongoose.connect(MONGODB_URI)
-    .then(() => {
-        console.log('✅ MongoDB连接成功');
-        app.listen(PORT, () => {
-            console.log(`🚀 服务器运行在端口 ${PORT}`);
-        });
-    })
-    .catch(err => {
-        console.error('❌ MongoDB连接失败:', err);
-        process.exit(1);
-    });
+app.listen(PORT, () => {
+    console.log(`🚀 服务器运行在端口 ${PORT}`);
+    console.log(`📦 使用 Cloudflare KV 存储`);
+});
