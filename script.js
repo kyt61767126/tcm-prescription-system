@@ -82,4 +82,53 @@ document.addEventListener('DOMContentLoaded', function() {
   }, 500);
 });
 
+window.simpleLogin = async function() {
+  const username = document.getElementById('loginUsername').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const errorDiv = document.getElementById('loginError');
+  
+  console.log('🔑 登录按钮点击:', username);
+  
+  if (!username || !password) {
+    errorDiv.textContent = '请输入用户名和密码';
+    errorDiv.style.display = 'block';
+    return;
+  }
+  
+  try {
+    const response = await fetch('https://tcm-prescription-api.61767126.workers.dev/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    
+    console.log('📡 API 返回状态:', response.status);
+    const result = await response.json();
+    console.log('📡 API 返回数据:', result);
+    
+    if (response.ok) {
+      window.currentUser = result.user;
+      localStorage.setItem('currentUser', JSON.stringify(result.user));
+      localStorage.setItem('jwtToken', result.token);
+      document.getElementById('loginOverlay').style.display = 'none';
+      
+      const userDisplay = document.getElementById('currentUser');
+      if (userDisplay) {
+        userDisplay.textContent = result.user.name;
+      }
+      
+      errorDiv.style.display = 'none';
+      loadFromCloud();
+      alert('✅ 登录成功！');
+    } else {
+      errorDiv.textContent = result.error || '用户名或密码错误';
+      errorDiv.style.display = 'block';
+    }
+  } catch (error) {
+    console.error('❌ 登录错误:', error);
+    errorDiv.textContent = '网络错误，请稍后重试: ' + error.message;
+    errorDiv.style.display = 'block';
+  }
+};
+
 console.log("📦 sync script loaded");
