@@ -1,4 +1,4 @@
-import { authenticate, corsResponse, handleOptions } from '../../_utils'
+import { authenticate, corsResponse, handleOptions } from './_utils'
 
 const PRESCRIPTION_KEY_PREFIX = 'prescription_'
 const getKV = (context) => context.env.TCM_KV || context.env.KV

@@ -1,4 +1,4 @@
-import { createToken, verifyToken, verifyPassword, corsResponse, handleOptions, getUserKey } from '../../_utils'
+import { createToken, verifyToken, verifyPassword, corsResponse, handleOptions, getUserKey } from './_utils'
 
 const getKV = (context) => context.env.TCM_KV || context.env.KV
 

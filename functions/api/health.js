@@ -1,4 +1,4 @@
-import { corsResponse, handleOptions } from '../_utils'
+import { corsResponse, handleOptions } from './_utils'
 
 export const onRequestOptions = () => {
   return handleOptions()

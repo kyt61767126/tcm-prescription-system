@@ -10,7 +10,7 @@ export default {
     const key = "prescriptions_" + user;
 
     if (request.method === "GET") {
-      const data = await env.TCM_KV.get(key);
+      const data = await env.KV.get(key);
       return new Response(data || "[]", {
         headers: { "Content-Type": "application/json" }
       });
@@ -18,7 +18,7 @@ export default {
 
     if (request.method === "POST") {
       const body = await request.text();
-      await env.TCM_KV.put(key, body);
+      await env.KV.put(key, body);
       return new Response("ok");
     }
 
