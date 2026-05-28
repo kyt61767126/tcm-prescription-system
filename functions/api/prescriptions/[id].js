@@ -1,6 +1,7 @@
 import { authenticate, corsResponse, handleOptions } from '../_utils'
 
 const PRESCRIPTION_KEY_PREFIX = 'prescription_'
+const getKV = (context) => context.env.TCM_KV || context.env.KV
 
 export const onRequestOptions = () => {
   return handleOptions()
@@ -14,8 +15,9 @@ export const onRequestGet = async (context) => {
   }
   
   const { id } = context.params
+  const KV = getKV(context)
   const key = `${PRESCRIPTION_KEY_PREFIX}${user.username}_${id}`
-  const prescription = await context.env.KV.get(key)
+  const prescription = await KV.get(key)
   
   if (!prescription) {
     return corsResponse({ error: '处方不存在' }, 404)
@@ -33,8 +35,9 @@ export const onRequestPut = async (context) => {
   
   const { id } = context.params
   const body = await context.request.json()
+  const KV = getKV(context)
   const key = `${PRESCRIPTION_KEY_PREFIX}${user.username}_${id}`
-  const existing = await context.env.KV.get(key)
+  const existing = await KV.get(key)
   
   if (!existing) {
     return corsResponse({ error: '处方不存在' }, 404)
@@ -46,7 +49,7 @@ export const onRequestPut = async (context) => {
     updatedAt: Date.now()
   }
   
-  await context.env.KV.put(key, JSON.stringify(updatedPrescription))
+  await KV.put(key, JSON.stringify(updatedPrescription))
   
   return corsResponse({
     message: '处方更新成功',
@@ -62,14 +65,15 @@ export const onRequestDelete = async (context) => {
   }
   
   const { id } = context.params
+  const KV = getKV(context)
   const key = `${PRESCRIPTION_KEY_PREFIX}${user.username}_${id}`
-  const existing = await context.env.KV.get(key)
+  const existing = await KV.get(key)
   
   if (!existing) {
     return corsResponse({ error: '处方不存在' }, 404)
   }
   
-  await context.env.KV.delete(key)
+  await KV.delete(key)
   
   return corsResponse({ message: '处方删除成功' })
 }

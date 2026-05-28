@@ -2,6 +2,10 @@ import { authenticate, corsResponse, handleOptions } from '../_utils'
 
 const PRESCRIPTION_KEY_PREFIX = 'prescription_'
 
+const getKV = (context) => {
+  return context.env.TCM_KV || context.env.KV
+}
+
 export const onRequestOptions = () => {
   return handleOptions()
 }
@@ -15,14 +19,15 @@ export const onRequestPost = async (context) => {
   
   try {
     const { action, data } = await context.request.json()
+    const KV = getKV(context)
     
     switch (action) {
       case 'upload':
-        return await uploadPrescriptions(context, user, data)
+        return await uploadPrescriptions(KV, user, data)
       case 'download':
-        return await downloadPrescriptions(context, user)
+        return await downloadPrescriptions(KV, user)
       case 'sync':
-        return await syncPrescriptions(context, user, data)
+        return await syncPrescriptions(KV, user, data)
       default:
         return corsResponse({ error: '未知操作' }, 400)
     }
@@ -32,7 +37,7 @@ export const onRequestPost = async (context) => {
   }
 }
 
-async function uploadPrescriptions(context, user, prescriptions) {
+async function uploadPrescriptions(KV, user, prescriptions) {
   const username = user.username
   let count = 0
   
@@ -40,7 +45,7 @@ async function uploadPrescriptions(context, user, prescriptions) {
     const id = prescription.id || prescription._id || Date.now().toString()
     const key = `${PRESCRIPTION_KEY_PREFIX}${username}_${id}`
     
-    const existing = await context.env.KV.get(key)
+    const existing = await KV.get(key)
     if (!existing) {
       const fullPrescription = {
         _id: id,
@@ -49,7 +54,7 @@ async function uploadPrescriptions(context, user, prescriptions) {
         createdAt: prescription.createdAt || Date.now(),
         updatedAt: Date.now()
       }
-      await context.env.KV.put(key, JSON.stringify(fullPrescription))
+      await KV.put(key, JSON.stringify(fullPrescription))
       count++
     }
   }
@@ -60,15 +65,15 @@ async function uploadPrescriptions(context, user, prescriptions) {
   })
 }
 
-async function downloadPrescriptions(context, user) {
+async function downloadPrescriptions(KV, user) {
   const username = user.username
   const prefix = `${PRESCRIPTION_KEY_PREFIX}${username}_`
   
-  const list = await context.env.KV.list({ prefix })
+  const list = await KV.list({ prefix })
   const prescriptions = []
   
   for (const key of list.keys) {
-    const prescription = await context.env.KV.get(key.name)
+    const prescription = await KV.get(key.name)
     if (prescription) {
       prescriptions.push(JSON.parse(prescription))
     }
@@ -83,15 +88,15 @@ async function downloadPrescriptions(context, user) {
   })
 }
 
-async function syncPrescriptions(context, user, localData) {
+async function syncPrescriptions(KV, user, localData) {
   const username = user.username
   const prefix = `${PRESCRIPTION_KEY_PREFIX}${username}_`
   
-  const list = await context.env.KV.list({ prefix })
+  const list = await KV.list({ prefix })
   const cloudPrescriptions = []
   
   for (const key of list.keys) {
-    const prescription = await context.env.KV.get(key.name)
+    const prescription = await KV.get(key.name)
     if (prescription) {
       cloudPrescriptions.push(JSON.parse(prescription))
     }
@@ -134,7 +139,7 @@ async function syncPrescriptions(context, user, localData) {
       createdAt: prescription.createdAt || Date.now(),
       updatedAt: Date.now()
     }
-    await context.env.KV.put(key, JSON.stringify(fullPrescription))
+    await KV.put(key, JSON.stringify(fullPrescription))
   }
   
   return corsResponse({

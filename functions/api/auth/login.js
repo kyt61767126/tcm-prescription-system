@@ -1,5 +1,7 @@
 import { createToken, verifyToken, corsResponse, handleOptions } from '../../_utils'
 
+const getKV = (context) => context.env.TCM_KV || context.env.KV
+
 export const onRequestOptions = () => {
   return handleOptions()
 }
@@ -7,8 +9,9 @@ export const onRequestOptions = () => {
 export const onRequestPost = async (context) => {
   const { username, password } = await context.request.json()
   
+  const KV = getKV(context)
   const userKey = `user_${username}`
-  const userData = await context.env.KV.get(userKey)
+  const userData = await KV.get(userKey)
   
   if (!userData) {
     return corsResponse({ error: '用户不存在' }, 401)
