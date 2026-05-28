@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本能中医处方系统 - 主界面</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .header h1 {
+            font-size: 20px;
+        }
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .current-user {
+            font-size: 14px;
+        }
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: opacity 0.3s;
+        }
+        .btn:hover {
+            opacity: 0.9;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        .nav-tabs {
+            display: flex;
+            background: white;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        .nav-tab {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+            font-size: 14px;
+            color: #666;
+        }
+        .nav-tab:hover {
+            background: #f8f9fa;
+        }
+        .nav-tab.active {
+            border-bottom-color: #667eea;
+            color: #667eea;
+            font-weight: bold;
+        }
+        .main-content {
+            padding: 20px;
+            display: flex;
+            gap: 20px;
+        }
+        .left-panel {
+            width: 350px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .right-panel {
+            flex: 1;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+        .form-row label {
+            font-size: 14px;
+            color: #333;
+            font-weight: 500;
+        }
+        .form-row input, .form-row select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+        }
+        .form-row input:focus, .form-row select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .full-width {
+            grid-column: span 2;
+        }
+        .btn-save {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        .btn-save:hover {
+            opacity: 0.9;
+        }
+        .prescription-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            cursor: pointer;
+            transition: box-shadow 0.3s;
+        }
+        .prescription-card:hover {
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .prescription-card h3 {
+            color: #333;
+            margin-bottom: 5px;
+        }
+        .prescription-card p {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 3px;
+        }
+        .no-data {
+            text-align: center;
+            color: #999;
+            padding: 40px;
+        }
+        .print-area {
+            background: white;
+            padding: 30px;
+            border: 1px solid #ddd;
+            min-height: 600px;
+            font-family: 'SimSun', serif;
+        }
+        .print-header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .print-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #333;
+        }
+        .print-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 15px;
+            font-size: 14px;
+        }
+        .print-patient {
+            margin-bottom: 20px;
+        }
+        .print-medicines {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .print-medicines th, .print-medicines td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+            font-size: 14px;
+        }
+        .print-medicines th {
+            background: #f5f5f5;
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            width: 90%;
+            max-width: 400px;
+        }
+        .modal-content h3 {
+            margin-bottom: 20px;
+        }
+        .modal-content .btn {
+            margin-top: 15px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🏥 本能中医处方系统</h1>
+        <div class="header-right">
+            <span class="current-user">当前用户: <span id="current-user-name">管理员</span></span>
+            <button class="btn btn-danger" id="logout-btn">退出登录</button>
+        </div>
+    </div>
+
+    <div class="nav-tabs">
+        <div class="nav-tab active" data-tab="prescription">处方管理</div>
+        <div class="nav-tab" data-tab="history">处方历史</div>
+        <div class="nav-tab" data-tab="settings">系统设置</div>
+    </div>
+
+    <div class="main-content">
+        <div class="left-panel">
+            <h3 style="margin-bottom: 15px; color: #333;">📝 处方信息</h3>
+            
+            <div class="form-row">
+                <label>处方号:</label>
+                <input type="text" id="prescription-no" placeholder="自动生成">
+            </div>
+            <div class="form-row">
+                <label>姓名:</label>
+                <input type="text" id="patient-name" placeholder="请输入姓名">
+            </div>
+            <div class="form-row">
+                <label>性别:</label>
+                <select id="patient-gender">
+                    <option value="男">男</option>
+                    <option value="女">女</option>
+                </select>
+            </div>
+            <div class="form-row">
+                <label>年龄:</label>
+                <input type="text" id="patient-age" placeholder="请输入年龄">
+            </div>
+            <div class="form-row">
+                <label>电话:</label>
+                <input type="text" id="patient-phone" placeholder="请输入电话">
+            </div>
+            <div class="form-row">
+                <label>住址:</label>
+                <input type="text" id="patient-address" placeholder="请输入住址" class="full-width">
+            </div>
+            <div class="form-row">
+                <label>日期:</label>
+                <input type="date" id="prescription-date">
+            </div>
+            <div class="form-row">
+                <label>科室:</label>
+                <input type="text" id="department" value="中医内科">
+            </div>
+            <div class="form-row">
+                <label>诊断:</label>
+                <textarea id="diagnosis" rows="3" placeholder="请输入诊断结果" class="full-width" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
+            </div>
+            <div class="form-row">
+                <label>症状:</label>
+                <textarea id="symptoms" rows="3" placeholder="请输入症状描述" class="full-width" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
+            </div>
+            <div class="form-row">
+                <label>处方:</label>
+                <textarea id="formula" rows="5" placeholder="请输入中药处方" class="full-width" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
+            </div>
+            <div class="form-row">
+                <label>用法:</label>
+                <textarea id="usage" rows="2" placeholder="请输入用法用量" class="full-width" style="padding: 8px; border: 1px solid #ddd; border-radius: 5px;"></textarea>
+            </div>
+            
+            <button class="btn-save" id="save-btn">💾 保存处方</button>
+        </div>
+
+        <div class="right-panel">
+            <div id="tab-prescription" class="tab-content">
+                <div class="print-area" id="print-area">
+                    <div class="print-header">
+                        <div class="print-title">惠康堂中医诊所</div>
+                        <div style="font-size: 20px; font-weight: bold; margin-top: 10px;">处方笺</div>
+                    </div>
+                    
+                    <div class="print-info">
+                        <div>科别: <span id="print-department">中医内科</span></div>
+                        <div>门诊号: <span id="print-no"></span></div>
+                        <div>日期: <span id="print-date"></span></div>
+                    </div>
+                    
+                    <div class="print-patient">
+                        <div style="display: flex; gap: 20px;">
+                            <span>姓名: <span id="print-name"></span></span>
+                            <span>性别: <span id="print-gender"></span></span>
+                            <span>年龄: <span id="print-age"></span> 岁</span>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <div style="font-weight: bold; margin-bottom: 10px;">病史症状:</div>
+                        <div id="print-symptoms" style="border: 1px solid #ddd; padding: 10px; min-height: 50px;"></div>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <div style="font-weight: bold; margin-bottom: 10px;">诊断:</div>
+                        <div id="print-diagnosis" style="border: 1px solid #ddd; padding: 10px; min-height: 50px;"></div>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <div style="font-weight: bold; margin-bottom: 10px;">RP</div>
+                        <div id="print-formula" style="border: 1px solid #ddd; padding: 10px; min-height: 100px; white-space: pre-wrap;"></div>
+                    </div>
+                    
+                    <div style="margin-top: 20px;">
+                        <div style="font-weight: bold; margin-bottom: 10px;">用法:</div>
+                        <div id="print-usage" style="border: 1px solid #ddd; padding: 10px; min-height: 50px;"></div>
+                    </div>
+                    
+                    <div style="margin-top: 30px; text-align: right;">
+                        <div>医师: <span id="print-doctor"></span></div>
+                    </div>
+                </div>
+                
+                <div style="margin-top: 20px; text-align: right;">
+                    <button class="btn btn-primary" id="print-btn">🖨️ 打印处方</button>
+                </div>
+            </div>
+
+            <div id="tab-history" class="tab-content" style="display: none;">
+                <h3 style="margin-bottom: 15px; color: #333;">📋 处方历史</h3>
+                <div id="history-list">
+                    <div class="no-data">暂无处方记录</div>
+                </div>
+            </div>
+
+            <div id="tab-settings" class="tab-content" style="display: none;">
+                <h3 style="margin-bottom: 20px; color: #333;">⚙️ 系统设置</h3>
+                
+                <div class="form-row">
+                    <label>诊所名称:</label>
+                    <input type="text" id="clinic-name" placeholder="请输入诊所名称">
+                </div>
+                <div class="form-row">
+                    <label>医师姓名:</label>
+                    <input type="text" id="doctor-name" placeholder="请输入医师姓名">
+                </div>
+                <div class="form-row">
+                    <label>处方前缀:</label>
+                    <input type="text" id="prescription-prefix" placeholder="如: CF">
+                </div>
+                
+                <button class="btn btn-primary" id="save-settings-btn" style="margin-top: 20px;">保存设置</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="confirm-modal">
+        <div class="modal-content">
+            <h3>确认删除</h3>
+            <p>确定要删除这条处方记录吗？</p>
+            <button class="btn btn-danger" id="confirm-delete">确定删除</button>
+            <button class="btn btn-primary" id="cancel-delete">取消</button>
+        </div>
+    </div>
+
+    <script>
+        const CURRENT_USER_KEY = 'tcm_current_user';
+        const PRESCRIPTIONS_KEY = 'tcm_prescriptions_';
+        const SETTINGS_KEY = 'tcm_settings_';
+
+        let currentUser = null;
+        let deleteTargetId = null;
+
+        function getUserKey(key) {
+            if (!currentUser) return key;
+            return `${key}${currentUser.username}`;
+        }
+
+        function getUserPrescriptions() {
+            try {
+                const presStr = localStorage.getItem(getUserKey(PRESCRIPTIONS_KEY));
+                return presStr ? JSON.parse(presStr) : [];
+            } catch {
+                return [];
+            }
+        }
+
+        function saveUserPrescriptions(prescriptions) {
+            localStorage.setItem(getUserKey(PRESCRIPTIONS_KEY), JSON.stringify(prescriptions));
+        }
+
+        function getUserSettings() {
+            try {
+                const settingsStr = localStorage.getItem(getUserKey(SETTINGS_KEY));
+                return settingsStr ? JSON.parse(settingsStr) : {};
+            } catch {
+                return {};
+            }
+        }
+
+        function saveUserSettings(settings) {
+            localStorage.setItem(getUserKey(SETTINGS_KEY), JSON.stringify(settings));
+        }
+
+        function loadCurrentUser() {
+            const userStr = localStorage.getItem(CURRENT_USER_KEY);
+            if (userStr) {
+                currentUser = JSON.parse(userStr);
+                document.getElementById('current-user-name').textContent = currentUser.name;
+            } else {
+                window.location.href = 'index.html';
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem(CURRENT_USER_KEY);
+            window.location.href = 'index.html';
+        }
+
+        function generatePrescriptionNo() {
+            const settings = getUserSettings();
+            const prefix = settings.prescriptionPrefix || '';
+            const date = new Date();
+            const year = date.getFullYear().toString().slice(-2);
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const count = getUserPrescriptions().length + 1;
+            return `${prefix}${year}${month}${day}${String(count).padStart(4, '0')}`;
+        }
+
+        function updatePrintArea() {
+            document.getElementById('print-no').textContent = document.getElementById('prescription-no').value || '';
+            document.getElementById('print-date').textContent = document.getElementById('prescription-date').value || new Date().toISOString().split('T')[0];
+            document.getElementById('print-name').textContent = document.getElementById('patient-name').value || '';
+            document.getElementById('print-gender').textContent = document.getElementById('patient-gender').value || '';
+            document.getElementById('print-age').textContent = document.getElementById('patient-age').value || '';
+            document.getElementById('print-department').textContent = document.getElementById('department').value || '';
+            document.getElementById('print-symptoms').textContent = document.getElementById('symptoms').value || '';
+            document.getElementById('print-diagnosis').textContent = document.getElementById('diagnosis').value || '';
+            document.getElementById('print-formula').textContent = document.getElementById('formula').value || '';
+            document.getElementById('print-usage').textContent = document.getElementById('usage').value || '';
+            
+            const settings = getUserSettings();
+            document.getElementById('print-doctor').textContent = settings.doctorName || currentUser.name;
+        }
+
+        function savePrescription() {
+            const prescription = {
+                id: Date.now(),
+                prescriptionNo: document.getElementById('prescription-no').value || generatePrescriptionNo(),
+                patientName: document.getElementById('patient-name').value,
+                patientGender: document.getElementById('patient-gender').value,
+                patientAge: document.getElementById('patient-age').value,
+                patientPhone: document.getElementById('patient-phone').value,
+                patientAddress: document.getElementById('patient-address').value,
+                date: document.getElementById('prescription-date').value || new Date().toISOString().split('T')[0],
+                department: document.getElementById('department').value,
+                diagnosis: document.getElementById('diagnosis').value,
+                symptoms: document.getElementById('symptoms').value,
+                formula: document.getElementById('formula').value,
+                usage: document.getElementById('usage').value,
+                createdAt: new Date().toLocaleString('zh-CN'),
+                doctorName: getUserSettings().doctorName || currentUser.name
+            };
+
+            const prescriptions = getUserPrescriptions();
+            prescriptions.unshift(prescription);
+            saveUserPrescriptions(prescriptions);
+
+            alert('处方保存成功！');
+            loadHistory();
+        }
+
+        function loadHistory() {
+            const prescriptions = getUserPrescriptions();
+            const historyList = document.getElementById('history-list');
+            
+            if (prescriptions.length === 0) {
+                historyList.innerHTML = '<div class="no-data">暂无处方记录</div>';
+                return;
+            }
+
+            historyList.innerHTML = prescriptions.map(p => `
+                <div class="prescription-card" onclick="loadPrescription(${p.id})">
+                    <h3>${p.patientName}</h3>
+                    <p>处方号: ${p.prescriptionNo}</p>
+                    <p>日期: ${p.date}</p>
+                    <p>诊断: ${p.diagnosis || '未填写'}</p>
+                    <button class="btn btn-danger" style="margin-top: 10px; float: right;" onclick="event.stopPropagation(); deletePrescription(${p.id})">删除</button>
+                </div>
+            `).join('');
+        }
+
+        function loadPrescription(id) {
+            const prescriptions = getUserPrescriptions();
+            const pres = prescriptions.find(p => p.id === id);
+            
+            if (pres) {
+                document.getElementById('prescription-no').value = pres.prescriptionNo;
+                document.getElementById('patient-name').value = pres.patientName;
+                document.getElementById('patient-gender').value = pres.patientGender;
+                document.getElementById('patient-age').value = pres.patientAge;
+                document.getElementById('patient-phone').value = pres.patientPhone;
+                document.getElementById('patient-address').value = pres.patientAddress;
+                document.getElementById('prescription-date').value = pres.date;
+                document.getElementById('department').value = pres.department;
+                document.getElementById('diagnosis').value = pres.diagnosis;
+                document.getElementById('symptoms').value = pres.symptoms;
+                document.getElementById('formula').value = pres.formula;
+                document.getElementById('usage').value = pres.usage;
+                
+                updatePrintArea();
+                switchTab('prescription');
+            }
+        }
+
+        function deletePrescription(id) {
+            deleteTargetId = id;
+            document.getElementById('confirm-modal').style.display = 'flex';
+        }
+
+        function confirmDelete() {
+            let prescriptions = getUserPrescriptions();
+            prescriptions = prescriptions.filter(p => p.id !== deleteTargetId);
+            saveUserPrescriptions(prescriptions);
+            document.getElementById('confirm-modal').style.display = 'none';
+            loadHistory();
+            alert('删除成功！');
+        }
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.nav-tab').forEach(tab => tab.classList.remove('active'));
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            
+            document.querySelectorAll('.tab-content').forEach(content => content.style.display = 'none');
+            document.getElementById(`tab-${tabName}`).style.display = 'block';
+            
+            if (tabName === 'history') {
+                loadHistory();
+            }
+        }
+
+        function saveSettings() {
+            const settings = {
+                clinicName: document.getElementById('clinic-name').value,
+                doctorName: document.getElementById('doctor-name').value,
+                prescriptionPrefix: document.getElementById('prescription-prefix').value
+            };
+            saveUserSettings(settings);
+            alert('设置保存成功！');
+        }
+
+        function printPrescription() {
+            const printArea = document.getElementById('print-area');
+            const originalStyle = printArea.style;
+            
+            printArea.style.boxShadow = 'none';
+            printArea.style.border = 'none';
+            
+            window.print();
+            
+            printArea.style = originalStyle;
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCurrentUser();
+            
+            document.getElementById('prescription-no').value = generatePrescriptionNo();
+            document.getElementById('prescription-date').value = new Date().toISOString().split('T')[0];
+            
+            const settings = getUserSettings();
+            document.getElementById('clinic-name').value = settings.clinicName || '';
+            document.getElementById('doctor-name').value = settings.doctorName || '';
+            document.getElementById('prescription-prefix').value = settings.prescriptionPrefix || '';
+            
+            updatePrintArea();
+            
+            document.getElementById('logout-btn').addEventListener('click', logout);
+            document.getElementById('save-btn').addEventListener('click', savePrescription);
+            document.getElementById('print-btn').addEventListener('click', printPrescription);
+            document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
+            document.getElementById('confirm-delete').addEventListener('click', confirmDelete);
+            document.getElementById('cancel-delete').addEventListener('click', () => {
+                document.getElementById('confirm-modal').style.display = 'none';
+            });
+            
+            document.querySelectorAll('.nav-tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    switchTab(tab.dataset.tab);
+                });
+            });
+            
+            document.querySelectorAll('#patient-name, #patient-age, #patient-gender, #patient-phone, #patient-address, #prescription-date, #department, #diagnosis, #symptoms, #formula, #usage').forEach(input => {
+                input.addEventListener('input', updatePrintArea);
+            });
+        });
+    </script>
+</body>
+</html>
