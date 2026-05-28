@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -475,7 +475,7 @@
                 <label>密码:</label>
                 <input type="password" id="loginPassword" placeholder="请输入密码" onkeypress="if(event.key==='Enter')handleLogin()">
             </div>
-            <button class="login-btn" onclick="debugLogin()">登 录</button>
+            <button class="login-btn" onclick="handleLogin()">登 录</button>
             <div id="loginError" class="login-error"></div>
         </div>
     </div>
@@ -1044,7 +1044,7 @@
             }
             
             try {
-                const response = await fetch('/api/auth/login', {
+                const response = await fetch('https://tcm-prescription-api.61767126.workers.dev/api/auth/login', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
