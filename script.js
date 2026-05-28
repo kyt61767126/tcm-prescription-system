@@ -1,21 +1,13 @@
 const SYNC_PASSWORD = "HuikangTang2026!";
 const USERNAME = "admin";
-const USE_LOCAL_SERVER = false;
-const LOCAL_SERVER_URL = "http://localhost:3000";
+const API_URL = "https://tcm-prescription-api.61767126.workers.dev";
 
 let cloudPrescriptions = [];
-
-function getApiUrl(path) {
-  if (USE_LOCAL_SERVER) {
-    return LOCAL_SERVER_URL + path;
-  }
-  return path;
-}
 
 async function loadFromCloud() {
   try {
     console.log("🔄 正在从云端加载数据...");
-    const res = await fetch(getApiUrl("/api/sync"), {
+    const res = await fetch(API_URL + "/api/sync", {
       headers: {
         "x-sync-password": SYNC_PASSWORD,
         "x-username": USERNAME
@@ -30,7 +22,6 @@ async function loadFromCloud() {
       
       if (typeof renderHistoryList === 'function') {
         const list = cloudPrescriptions.slice(0, 15);
-        console.log("📋 调用 renderHistoryList，显示 " + list.length + " 条记录");
         renderHistoryList(list);
       }
     } else {
@@ -52,7 +43,7 @@ async function saveToCloud(prescription) {
 
     localStorage.setItem("prescriptions", json);
 
-    const res = await fetch(getApiUrl("/api/sync"), {
+    const res = await fetch(API_URL + "/api/sync", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -89,10 +80,6 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     }
   }, 500);
-});
-
-window.addEventListener("load", function() {
-  console.log("🖥️ 页面完全加载");
 });
 
 console.log("📦 sync script loaded");
