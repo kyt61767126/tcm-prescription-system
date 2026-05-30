@@ -1059,7 +1059,7 @@
             localStorage.setItem('systemUsers', JSON.stringify(users));
         }
 
-        function handleLogin() {
+        async function handleLogin() {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
             const errorDiv = document.getElementById('loginError');
@@ -1081,7 +1081,8 @@
                 document.getElementById('loginOverlay').style.display = 'none';
                 updateUserDisplay();
                 errorDiv.style.display = 'none';
-                loadData();
+                await loadData();
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 refreshUserInterface();
             } else {
                 errorDiv.textContent = '用户名或密码错误';
@@ -1348,7 +1349,7 @@
             }
         }
 
-        function checkLoginStatus() {
+        async function checkLoginStatus() {
             const sessionUser = sessionStorage.getItem('currentUser');
             const localUser = localStorage.getItem('currentUser');
             
@@ -1357,6 +1358,8 @@
                     currentUser = JSON.parse(sessionUser);
                     document.getElementById('loginOverlay').style.display = 'none';
                     updateUserDisplay();
+                    await loadData(); // 加载处方数据
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
                     currentUser = null;
@@ -1368,6 +1371,8 @@
                     sessionStorage.setItem('currentUser', localUser);
                     document.getElementById('loginOverlay').style.display = 'none';
                     updateUserDisplay();
+                    await loadData(); // 加载处方数据
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
                     currentUser = null;
@@ -2216,9 +2221,9 @@
             return result;
         }
 
-        function init() {
-            checkLoginStatus();
-            loadData();
+        async function init() {
+            await checkLoginStatus();
+            // loadData() 已经在 checkLoginStatus() 中调用了
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
             document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
@@ -2814,7 +2819,8 @@
         async function deleteHistory(id) {
             if (!confirm('确定删除该处方历史？')) return;
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-            // 所有用户都从全局存储删除
+            setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            // 同时从全局存储删除
             localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
             // 尝试从云端删除
@@ -2977,7 +2983,8 @@
             if (prescriptionHistory.length > 100000) {
                 prescriptionHistory = prescriptionHistory.slice(0, 100000);
             }
-            // 所有用户都保存到全局存储，这样管理员能看到所有人的处方
+            setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            // 同时保存到全局存储，这样管理员能看到所有人的处方
             localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
             // 尝试保存到云端
