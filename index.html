@@ -1543,6 +1543,10 @@
                     currentPrescriptionDate = savedCounterDate;
                 }
             }
+            // 确保加载完成后重新渲染历史列表
+            if (currentUser) {
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+            }
             
             const defaultMedicines = [
                 {name:'阿胶',code:'AJ',price:3.3,unit:'g',dosage:9},
@@ -2285,10 +2289,8 @@
             for (let i = 0; i < 25; i++) addEmptyRow();
             renderPrescriptionTable();
             calculateAmount();
-            // 初始化时刷新历史处方栏
-            if (prescriptionHistory.length > 0) {
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-            }
+            // 初始化时刷新历史处方栏（总是渲染）
+            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             document.addEventListener('keydown', handleKeyboard);
             window.addEventListener('beforeunload', handleBeforeUnload);
             updatePrescriptionPaper();
