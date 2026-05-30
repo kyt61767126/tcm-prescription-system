@@ -591,7 +591,7 @@
             <div class="patient-section">
                 <div class="patient-row">
                     <span class="patient-label">处方</span>
-                    <input type="text" id="prescriptionNo" class="patient-input name-input" readonly>
+                    <input type="text" id="prescriptionNo" class="patient-input name-input" readonly oninput="syncPrescriptionNoToPaper()">
                     <span class="patient-label">性别</span>
                     <select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()">
                         <option value="男">男</option>
@@ -2753,6 +2753,11 @@
             });
             html += '</div>';
             linesDiv.innerHTML = html;
+        }
+
+        function syncPrescriptionNoToPaper() {
+            const prescriptionNo = document.getElementById('prescriptionNo').value;
+            document.getElementById('paperClinicNo').textContent = prescriptionNo;
         }
 
         function getPinyinCode(chineseName) {
