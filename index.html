@@ -993,14 +993,10 @@
                     }
                     break;
                 case 'history':
-                    // 检查是否有历史病历，没有则不显示
-                    if (!prescriptionHistory || prescriptionHistory.length === 0) {
-                        showToast('暂无历史病历');
-                        // 保持当前标签激活状态，不切换
-                        return;
-                    }
                     rightPanel.style.display = 'flex';
                     rightPanel.style.flexDirection = 'column';
+                    // 确保渲染历史列表
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                     break;
                 case 'preview':
                     centerPanel.classList.add('active');
