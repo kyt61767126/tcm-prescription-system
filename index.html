@@ -942,10 +942,43 @@
         // Cloudflare KV API 地址
         const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
         
-        // 云端同步辅助函数 - 已禁用，强制使用本地存储
+        // 云端同步辅助函数 - 只对用户API启用
         async function cloudFetch(url, options = {}) {
-            console.log('Cloud API disabled, using local storage only');
-            return { success: false, error: 'Cloud API disabled', fromCloud: false };
+            if (!url.includes('/users')) {
+                return { success: false, error: 'Non-user API disabled', fromCloud: false };
+            }
+            
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 10000);
+            
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    signal: controller.signal,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                
+                clearTimeout(timeoutId);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Cloud operation failed');
+                }
+                
+                return { success: true, data: data.data || data, fromCloud: true };
+                
+            } catch (error) {
+                clearTimeout(timeoutId);
+                console.warn('Cloud sync failed:', error.message);
+                return { success: false, error: error.message, fromCloud: false };
+            }
         }
 
         function debounce(func, wait) {
@@ -1067,8 +1100,16 @@
         }
 
         // 初始化时先从云端获取用户数据
-        function getUsers() {
-            // 纯本地存储，不调用云端
+        async function getUsers() {
+            // 先尝试从云端获取
+            const cloudUsers = await getUsersFromCloud();
+            if (cloudUsers && cloudUsers.length > 0) {
+                // 更新本地存储
+                localStorage.setItem('systemUsers', JSON.stringify(cloudUsers));
+                return cloudUsers;
+            }
+            
+            // 云端没有则从本地获取
             const saved = localStorage.getItem('systemUsers');
             if (saved) {
                 try {
@@ -1087,33 +1128,37 @@
             return getDefaultUsers();
         }
 
-        function saveUsers(users) {
-            // 纯本地存储，不调用云端
+        async function saveUsers(users) {
+            // 保存到本地
             localStorage.setItem('systemUsers', JSON.stringify(users));
+            // 同时保存到云端（异步，不阻塞）
+            saveUsersToCloud(users).catch(e => console.warn('Failed to sync users to cloud:', e));
         }
 
         // 强制把本地用户数据同步到云端
         async function forceSyncUsersToCloud() {
-            // 先从本地读取
             const saved = localStorage.getItem('systemUsers');
-            if (saved) {
-                try {
-                    const users = JSON.parse(saved);
-                    const success = await saveUsersToCloud(users);
-                    if (success) {
-                        alert('用户数据已同步到云端！现在在手机上也能看到这些用户了。');
-                    } else {
-                        alert('同步失败，请稍后重试。');
-                    }
-                } catch (e) {
-                    alert('同步失败：' + e.message);
-                }
-            } else {
+            if (!saved) {
                 alert('本地没有用户数据！');
+                return;
+            }
+            
+            try {
+                const users = JSON.parse(saved);
+                const response = await saveUsersToCloud(users);
+                
+                if (response) {
+                    alert('✅ 用户数据已成功同步到云端！\n\n现在在手机上登录也能看到这些用户了。');
+                } else {
+                    alert('⚠️ 云端同步暂时失败\n\n原因：网络连接问题或云端服务暂时不可用\n\n本地数据不受影响，用户管理功能正常工作。\n请稍后再试或检查网络连接。');
+                }
+            } catch (e) {
+                console.error('Cloud sync error:', e);
+                alert('⚠️ 同步失败\n\n详细信息：' + e.message + '\n\n本地数据安全，可继续使用系统。');
             }
         }
 
-        function handleLogin() {
+        async function handleLogin() {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
             const errorDiv = document.getElementById('loginError');
@@ -1124,7 +1169,7 @@
                 return;
             }
             
-            const users = getUsers();
+            const users = await getUsers();
             const user = users.find(u => u.username === username && u.password === password);
             
             if (user) {
@@ -1199,7 +1244,7 @@
                 return;
             }
             
-            const users = getUsers();
+            const users = await getUsers();
             if (users.find(u => u.username === username)) {
                 alert('用户名已存在');
                 return;
@@ -1212,7 +1257,7 @@
                 role: 'user'
             });
             
-            saveUsers(users);
+            await saveUsers(users);
             alert('注册成功！');
             closeModal('registerModal');
         }
@@ -1239,7 +1284,7 @@
                 return;
             }
             
-            const users = getUsers();
+            const users = await getUsers();
             const userIndex = users.findIndex(u => u.username === currentUser.username);
             
             if (userIndex === -1) {
@@ -1253,7 +1298,7 @@
             }
             
             users[userIndex].password = newPwd;
-            saveUsers(users);
+            await saveUsers(users);
             currentUser = users[userIndex];
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
             
@@ -1261,21 +1306,21 @@
             closeModal('changePwdModal');
         }
 
-        function showUserManageModal() {
+        async function showUserManageModal() {
             if (!currentUser || currentUser.role !== 'admin') {
                 alert('只有管理员可以管理用户');
                 return;
             }
             
-            renderUserList();
+            await renderUserList();
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
             document.getElementById('newUserName').value = '';
             document.getElementById('userManageModal').style.display = 'flex';
         }
 
-        function renderUserList() {
-            const users = getUsers();
+        async function renderUserList() {
+            const users = await getUsers();
             const listDiv = document.getElementById('userList');
             
             let html = '';
@@ -1297,8 +1342,8 @@
             listDiv.innerHTML = html || '暂无用户';
         }
 
-        function handleEditUser(username) {
-            const users = getUsers();
+        async function handleEditUser(username) {
+            const users = await getUsers();
             const user = users.find(u => u.username === username);
             if (!user) return;
             
@@ -1336,7 +1381,7 @@
             if (newPassword !== null && newPassword.trim() !== '') {
                 users[userIndex].password = newPassword.trim();
             }
-            saveUsers(users);
+            await saveUsers(users);
             
             if (currentUser.username === username) {
                 currentUser = users[userIndex];
@@ -1344,11 +1389,11 @@
                 updateUserDisplay();
             }
             
-            renderUserList();
+            await renderUserList();
             alert('用户信息修改成功！');
         }
 
-        function handleAddUser() {
+        async function handleAddUser() {
             const username = document.getElementById('newUserUsername').value.trim();
             const password = document.getElementById('newUserPassword').value;
             const name = document.getElementById('newUserName').value.trim();
@@ -1358,7 +1403,7 @@
                 return;
             }
             
-            const users = getUsers();
+            const users = await getUsers();
             if (users.find(u => u.username === username)) {
                 alert('用户名已存在');
                 return;
@@ -1371,21 +1416,21 @@
                 role: 'user'
             });
             
-            saveUsers(users);
-            renderUserList();
+            await saveUsers(users);
+            await renderUserList();
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
             document.getElementById('newUserName').value = '';
             alert('用户添加成功！');
         }
 
-        function handleDeleteUser(username) {
+        async function handleDeleteUser(username) {
             if (!confirm('确定删除该用户？')) return;
             
-            const users = getUsers();
+            const users = await getUsers();
             const filteredUsers = users.filter(u => u.username !== username);
-            saveUsers(filteredUsers);
-            renderUserList();
+            await saveUsers(filteredUsers);
+            await renderUserList();
         }
 
         function updateUserDisplay() {
