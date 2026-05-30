@@ -84,14 +84,29 @@ export async function onRequest(context) {
                 prescriptions = [];
             }
             
-            const now = new Date().toISOString();
+            const now = new Date();
+            const nowIso = now.toISOString();
+            const year = String(now.getFullYear()).slice(-2);
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const todayPrefix = year + month + day;
+            
+            // 计算当天的序号
+            let todayCount = 0;
+            prescriptions.forEach(p => {
+                if (p.prescriptionNo && p.prescriptionNo.startsWith(todayPrefix)) {
+                    todayCount++;
+                }
+            });
+            const newNumber = todayCount + 1;
+            const newPrescriptionNo = todayPrefix + String(newNumber).padStart(2, '0');
             
             if (Array.isArray(body.prescription)) {
-                // 批量保存模式
+                // 批量保存模式 - 对于批量导入的处方，保留原有编号
                 const newPrescriptions = body.prescription.map(p => ({
                     ...p,
-                    createdAt: p.createdAt || now,
-                    updatedAt: now
+                    createdAt: p.createdAt || nowIso,
+                    updatedAt: nowIso
                 }));
                 
                 // 合并并去重（保留最新的）
@@ -108,12 +123,13 @@ export async function onRequest(context) {
                     return timeB - timeA;
                 });
             } else {
-                // 单条保存模式
+                // 单条保存模式 - 自动生成编号
                 const newPrescription = {
                     ...body.prescription,
                     id: body.prescription.id || Date.now(),
-                    createdAt: body.prescription.createdAt || now,
-                    updatedAt: now
+                    prescriptionNo: newPrescriptionNo,
+                    createdAt: body.prescription.createdAt || nowIso,
+                    updatedAt: nowIso
                 };
                 
                 // 去重

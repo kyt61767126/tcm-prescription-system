@@ -1128,10 +1128,10 @@
                     method: 'POST',
                     body: JSON.stringify({ prescription: prescriptions })
                 });
-                return response.success;
+                return response;
             } catch (error) {
                 console.warn('Failed to save prescriptions to cloud:', error);
-                return false;
+                return { success: false, error: error.message };
             }
         }
 
@@ -3094,20 +3094,9 @@
             const doseCount = parseInt(doseInput ? doseInput.value : 7) || 7;
             const grandTotalEl = document.getElementById('grandTotal') || document.getElementById('grandTotal2');
             
-            // 使用云端时间戳生成全局唯一的处方ID和编号
             const now = new Date();
-            const cloudTimestamp = now.getTime();
-            const year = String(now.getFullYear()).slice(-2);
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hour = String(now.getHours()).padStart(2, '0');
-            const minute = String(now.getMinutes()).padStart(2, '0');
-            const second = String(now.getSeconds()).padStart(2, '0');
-            const globalPrescriptionNo = year + month + day + hour + minute + second;
-            
             const record = {
-                id: cloudTimestamp,
-                prescriptionNo: globalPrescriptionNo,
+                id: Date.now(),
                 date: document.getElementById('visitDate').value,
                 patientName: name,
                 patientGender: document.getElementById('patientGender').value,
@@ -3121,17 +3110,26 @@
                 items: prescriptionItems.filter(item => item.name),
                 doseCount: doseCount,
                 totalAmount: parseFloat(grandTotalEl ? grandTotalEl.textContent : 0),
-                createdBy: currentUser ? currentUser.username : 'unknown',
-                createdAt: now.toISOString(),
-                updatedAt: now.toISOString()
+                createdBy: currentUser ? currentUser.username : 'unknown'
             };
             
             // 统一写入云端数据库（真实数据唯一来源是云端）
-            const success = await savePrescriptionsToCloud([record]);
+            const response = await savePrescriptionsToCloud([record]);
             
-            if (success) {
-                // 云端保存成功，更新本地缓存
-                prescriptionHistory.unshift(record);
+            if (response.success) {
+                // 云端保存成功，使用响应中的完整处方数据
+                if (response.data && Array.isArray(response.data)) {
+                    prescriptionHistory = response.data;
+                } else {
+                    // 如果响应中没有数据，尝试从云端重新获取
+                    const cloudPrescriptions = await getPrescriptionsFromCloud();
+                    if (cloudPrescriptions) {
+                        prescriptionHistory = cloudPrescriptions;
+                    } else {
+                        prescriptionHistory.unshift(record);
+                    }
+                }
+                
                 if (prescriptionHistory.length > 100000) {
                     prescriptionHistory = prescriptionHistory.slice(0, 100000);
                 }
@@ -3141,7 +3139,9 @@
                 setUserItem('dailyCounter', dailyCounter);
                 setUserItem('counterDate', currentPrescriptionDate);
                 
-                // 生成新编号
+                // 从最新的处方中获取编号
+                const latestPrescription = prescriptionHistory[0];
+                const usedNo = latestPrescription ? latestPrescription.prescriptionNo : generatePrescriptionNo();
                 const newPrescriptionNo = generatePrescriptionNo();
                 document.getElementById('prescriptionNo').value = newPrescriptionNo;
                 document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
@@ -3149,7 +3149,7 @@
                 // 保存后立即刷新历史处方栏
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 // 生成处方签图片并自动下载
-                savePrescriptionAsImage(record, newPrescriptionNo);
+                savePrescriptionAsImage(latestPrescription || record, usedNo);
                 alert('处方保存成功！');
                 searchPatientsQuick({target:{value:name}});
             } else {
