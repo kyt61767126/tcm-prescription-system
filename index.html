@@ -1135,6 +1135,19 @@
             }
         }
 
+        // 从云端删除处方
+        async function deletePrescriptionFromCloud(prescriptionId) {
+            try {
+                const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}`, {
+                    method: 'DELETE'
+                });
+                return response.success;
+            } catch (error) {
+                console.warn('Failed to delete prescription from cloud:', error);
+                return false;
+            }
+        }
+
         // 初始化时先从云端获取用户数据
         async function getUsers() {
             // 先尝试从云端获取
@@ -2943,14 +2956,17 @@
             `).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
         }
 
-        function deleteHistory(id) {
+        async function deleteHistory(id) {
             if (!confirm('确定删除该处方历史？')) return;
+            
+            // 先从云端删除
+            await deletePrescriptionFromCloud(id);
+            
+            // 再删除本地数据
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-            setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            // 同时从全局存储删除
             localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
-            // 纯本地存储，不调用云端
+            // 刷新历史列表
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
 
