@@ -1246,9 +1246,14 @@
                 return;
             }
             
+            const newPassword = prompt('请输入新密码（留空则不修改）：', '');
+            
             const userIndex = users.findIndex(u => u.username === username);
             users[userIndex].username = trimmedUsername;
             users[userIndex].name = trimmedName;
+            if (newPassword !== null && newPassword.trim() !== '') {
+                users[userIndex].password = newPassword.trim();
+            }
             saveUsers(users);
             
             if (currentUser.username === username) {
