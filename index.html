@@ -1454,7 +1454,13 @@
 
         async function loadData() {
             const savedFormulas = getUserItem('formulas');
-            const savedHistory = getUserItem('prescriptionHistory');
+            // 管理员从全局存储读取处方，普通用户从用户隔离存储读取
+            let savedHistory;
+            if (currentUser && currentUser.role === 'admin') {
+                savedHistory = localStorage.getItem('prescriptionHistory');
+            } else {
+                savedHistory = getUserItem('prescriptionHistory');
+            }
             const savedDailyCounter = getUserItem('dailyCounter');
             const savedCounterDate = getUserItem('counterDate');
             const savedMedicines = localStorage.getItem('medicines');
@@ -1486,8 +1492,12 @@
                         return timeB - timeA;
                     });
                     prescriptionHistory = prescriptionHistory.slice(0, 1000);
-                    // 保存合并后的数据到本地
-                    setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                    // 管理员保存到全局存储，普通用户保存到用户隔离存储
+                    if (currentUser.role === 'admin') {
+                        localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                    } else {
+                        setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                    }
                     console.log('Loaded prescriptions from cloud:', cloudResult.data.length);
                 }
                 
@@ -2804,7 +2814,8 @@
         async function deleteHistory(id) {
             if (!confirm('确定删除该处方历史？')) return;
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-            setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            // 所有用户都从全局存储删除
+            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
             // 尝试从云端删除
             if (currentUser) {
@@ -2966,7 +2977,8 @@
             if (prescriptionHistory.length > 100000) {
                 prescriptionHistory = prescriptionHistory.slice(0, 100000);
             }
-            setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            // 所有用户都保存到全局存储，这样管理员能看到所有人的处方
+            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
             // 尝试保存到云端
             if (currentUser) {
