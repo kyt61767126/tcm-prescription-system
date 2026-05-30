@@ -16,7 +16,30 @@ export async function onRequest(context) {
     }
     
     try {
-        const kv = context.env.TCM_PRESCRIPTION_KV;
+        // 支持多种KV绑定名称
+        const envKeys = Object.keys(context.env || {});
+        const kv = context.env.TCM_PRESCRIPTION_KV || 
+                   context.env['tcm-prescription-kv'] || 
+                   context.env['TCM-PRESCRIPTION-KV'] ||
+                   context.env.KV || 
+                   context.env.TCM_KV || 
+                   context.env.PRESCRIPTION_KV;
+        
+        if (!kv) {
+            console.error('KV binding not found. Available env keys:', envKeys);
+            return new Response(JSON.stringify({
+                success: false,
+                error: 'KV binding not found. Please configure TCM_PRESCRIPTION_KV in Cloudflare Pages settings.',
+                availableKeys: envKeys
+            }), {
+                status: 500,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            });
+        }
+        
         const KV_PRESCRIPTIONS_KEY = 'prescriptions_all';
         
         // GET - 获取所有处方
