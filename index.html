@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -541,7 +541,7 @@
     <div id="userManageModal" class="modal">
         <div class="modal-content user-modal-content">
             <div class="modal-header">
-                <span>用户管理</span>
+                <span>账户管理</span>
                 <span class="close-btn" onclick="closeModal('userManageModal')">&times;</span>
             </div>
             <div class="modal-body">
@@ -566,7 +566,7 @@
         <div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div>
         <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
         <div class="tab-item" onclick="showModal('statsModal')">【数据管理】</div>
-        <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【用户管理】</div>
+        <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
         <div class="tab-item" onclick="showHelp()">【系统帮助】</div>
         <div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div>
         <div class="tab-item" onclick="showChangePwdModal()">【修改密码】</div>
@@ -1078,7 +1078,7 @@
             document.getElementById('prescriptionNo').value = presNo;
             document.getElementById('paperClinicNo').textContent = presNo;
             if (prescriptionHistory.length > 0) {
-                renderHistoryList(prescriptionHistory.slice(0, 15));
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             }
         }
 
@@ -2180,7 +2180,7 @@
             calculateAmount();
             // 初始化时刷新历史处方栏
             if (prescriptionHistory.length > 0) {
-                renderHistoryList(prescriptionHistory.slice(0, 15));
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             }
             document.addEventListener('keydown', handleKeyboard);
             window.addEventListener('beforeunload', handleBeforeUnload);
@@ -2660,7 +2660,7 @@
                 showPatientNameDropdown([]);
                 return;
             }
-            const matched = prescriptionHistory.filter(p => {
+            const matched = filterPrescriptionsByPermission(prescriptionHistory).filter(p => {
                 if (!p.patientName) return false;
                 const name = p.patientName.toLowerCase();
                 if (name.includes(input)) return true;
@@ -2718,6 +2718,12 @@
             updatePrescriptionPaper();
         }
 
+        function filterPrescriptionsByPermission(prescriptions) {
+            if (!currentUser) return prescriptions;
+            if (currentUser.role === 'admin') return prescriptions;
+            return prescriptions.filter(p => !p.createdBy || p.createdBy === currentUser.username);
+        }
+
         function renderHistoryList(list) {
             document.getElementById('historyList').innerHTML = list.map((p,i) => `
                 <div class="history-item" onclick="loadHistory(${p.id})">
@@ -2739,7 +2745,7 @@
             if (!confirm('确定删除该处方历史？')) return;
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            renderHistoryList(prescriptionHistory.slice(0, 15));
+            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
 
         function loadHistory(id) {
@@ -2790,7 +2796,7 @@
             if (!prescriptionHistory || prescriptionHistory.length === 0) {
                 return; // 无历史病历，不显示
             }
-            renderHistoryList(prescriptionHistory.slice(0, 15));
+            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
 
         function clearPrescription() {
@@ -2880,7 +2886,8 @@
                 diagnosis: document.getElementById('diagnosis').value,
                 items: prescriptionItems.filter(item => item.name),
                 doseCount: doseCount,
-                totalAmount: parseFloat(grandTotalEl ? grandTotalEl.textContent : 0)
+                totalAmount: parseFloat(grandTotalEl ? grandTotalEl.textContent : 0),
+                createdBy: currentUser ? currentUser.username : 'unknown'
             };
             prescriptionHistory.unshift(record);
             if (prescriptionHistory.length > 100000) {
@@ -2895,7 +2902,7 @@
             document.getElementById('prescriptionNo').value = newPrescriptionNo;
             document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
             // 保存后立即刷新历史处方栏
-            renderHistoryList(prescriptionHistory.slice(0, 15));
+            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             // 生成处方签图片并自动下载（使用当下编号）
             savePrescriptionAsImage(record, newPrescriptionNo);
             alert('处方保存成功！');
