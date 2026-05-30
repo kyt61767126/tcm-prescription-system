@@ -1459,19 +1459,55 @@
 
         async function loadData() {
             const savedFormulas = getUserItem('formulas');
-            // 管理员从全局存储读取处方，普通用户从用户隔离存储读取
+            // 管理员从全局存储和所有用户隔离存储读取处方，普通用户只从用户隔离存储读取
             let savedHistory;
             if (currentUser && currentUser.role === 'admin') {
+                // 管理员：先从全局存储读取
                 savedHistory = localStorage.getItem('prescriptionHistory');
+                let allPrescriptions = safeParseJSON(savedHistory, []);
+                // 再从所有用户隔离存储读取
+                const users = getUsers();
+                users.forEach(user => {
+                    const userHistory = localStorage.getItem(`web_user_${user.username}_prescriptionHistory`);
+                    if (userHistory) {
+                        const userPrescriptions = safeParseJSON(userHistory, []);
+                        userPrescriptions.forEach(p => {
+                            // 如果没有 createdBy，加上
+                            if (!p.createdBy) {
+                                p.createdBy = user.username;
+                            }
+                            allPrescriptions.push(p);
+                        });
+                    }
+                });
+                // 去重（按 id）
+                const uniquePrescriptions = [];
+                const seenIds = new Set();
+                allPrescriptions.forEach(p => {
+                    if (!seenIds.has(p.id)) {
+                        seenIds.add(p.id);
+                        uniquePrescriptions.push(p);
+                    }
+                });
+                // 按时间倒序排序
+                uniquePrescriptions.sort((a, b) => {
+                    const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                    const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                    return timeB - timeA;
+                });
+                prescriptionHistory = uniquePrescriptions;
+                // 保存到全局存储
+                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             } else {
                 savedHistory = getUserItem('prescriptionHistory');
+                prescriptionHistory = safeParseJSON(savedHistory, []);
             }
+            
             const savedDailyCounter = getUserItem('dailyCounter');
             const savedCounterDate = getUserItem('counterDate');
             const savedMedicines = localStorage.getItem('medicines');
             
             formulas = safeParseJSON(savedFormulas, []);
-            prescriptionHistory = safeParseJSON(savedHistory, []);
             
             // 尝试从云端读取处方数据
             if (currentUser) {
