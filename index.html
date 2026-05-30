@@ -948,6 +948,9 @@
                 return { success: false, error: 'Non-user API disabled', fromCloud: false };
             }
             
+            console.log('Cloud fetch URL:', url);
+            console.log('Cloud fetch options:', options);
+            
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000);
             
@@ -963,11 +966,17 @@
                 
                 clearTimeout(timeoutId);
                 
+                console.log('Cloud fetch response status:', response.status);
+                
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    const errorText = await response.text();
+                    console.error('Cloud fetch HTTP error:', errorText);
+                    throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
                 }
                 
                 const data = await response.json();
+                console.log('Cloud fetch response data:', data);
+                
                 if (!data.success) {
                     throw new Error(data.error || 'Cloud operation failed');
                 }
@@ -976,7 +985,7 @@
                 
             } catch (error) {
                 clearTimeout(timeoutId);
-                console.warn('Cloud sync failed:', error.message);
+                console.error('Cloud sync failed:', error.message);
                 return { success: false, error: error.message, fromCloud: false };
             }
         }
