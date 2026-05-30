@@ -920,6 +920,33 @@
     <script>
         let currentUser = null;
         let searchDebounceTimer = null;
+        
+        // Cloudflare KV API 地址
+        const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
+        
+        // 云端同步辅助函数
+        async function cloudFetch(url, options = {}) {
+            try {
+                const response = await fetch(url, {
+                    ...options,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    }
+                });
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Cloud operation failed');
+                }
+                return { success: true, data: data.data || data, fromCloud: true };
+            } catch (error) {
+                console.warn('Cloud sync failed, using local storage:', error.message);
+                return { success: false, error: error.message, fromCloud: false };
+            }
+        }
 
         function debounce(func, wait) {
             return function(...args) {
@@ -1425,7 +1452,7 @@
             });
         }
 
-        function loadData() {
+        async function loadData() {
             const savedFormulas = getUserItem('formulas');
             const savedHistory = getUserItem('prescriptionHistory');
             const savedDailyCounter = getUserItem('dailyCounter');
@@ -1435,7 +1462,35 @@
             formulas = safeParseJSON(savedFormulas, []);
             prescriptionHistory = safeParseJSON(savedHistory, []);
             
+            // 尝试从云端读取处方数据
             if (currentUser) {
+                const cloudResult = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`);
+                if (cloudResult.success && Array.isArray(cloudResult.data)) {
+                    // 云端数据按创建时间降序排序
+                    cloudResult.data.sort((a, b) => {
+                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                        return timeB - timeA;
+                    });
+                    // 合并云端数据到本地（去重）
+                    const localIds = new Set(prescriptionHistory.map(p => p.id));
+                    cloudResult.data.forEach(p => {
+                        if (!localIds.has(p.id)) {
+                            prescriptionHistory.push(p);
+                        }
+                    });
+                    // 再次排序并限制数量
+                    prescriptionHistory.sort((a, b) => {
+                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                        return timeB - timeA;
+                    });
+                    prescriptionHistory = prescriptionHistory.slice(0, 1000);
+                    // 保存合并后的数据到本地
+                    setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                    console.log('Loaded prescriptions from cloud:', cloudResult.data.length);
+                }
+                
                 dailyCounter = parseInt(savedDailyCounter) || 1;
                 if (savedCounterDate) {
                     currentPrescriptionDate = savedCounterDate;
@@ -2746,10 +2801,23 @@
             `).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
         }
 
-        function deleteHistory(id) {
+        async function deleteHistory(id) {
             if (!confirm('确定删除该处方历史？')) return;
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            
+            // 尝试从云端删除
+            if (currentUser) {
+                const cloudResult = await cloudFetch(`${CLOUD_API_BASE}/prescriptions?id=${id}`, {
+                    method: 'DELETE'
+                });
+                if (cloudResult.success) {
+                    console.log('Prescription deleted from cloud:', id);
+                } else {
+                    console.warn('Failed to delete prescription from cloud, deleted locally only');
+                }
+            }
+            
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
 
@@ -2867,7 +2935,7 @@
             newWindow.print();
         }
 
-        function savePrescription() {
+        async function savePrescription() {
             const name = document.getElementById('patientName').value;
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
             const currentDate = new Date().toISOString().split('T')[0];
@@ -2899,6 +2967,20 @@
                 prescriptionHistory = prescriptionHistory.slice(0, 100000);
             }
             setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            
+            // 尝试保存到云端
+            if (currentUser) {
+                const cloudResult = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`, {
+                    method: 'POST',
+                    body: JSON.stringify({ prescription: record })
+                });
+                if (cloudResult.success) {
+                    console.log('Prescription synced to cloud:', cloudResult.data.id);
+                } else {
+                    console.warn('Failed to sync prescription to cloud, saved locally only');
+                }
+            }
+            
             dailyCounter++;
             setUserItem('dailyCounter', dailyCounter);
             setUserItem('counterDate', currentPrescriptionDate);
