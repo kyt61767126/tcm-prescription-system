@@ -39,7 +39,7 @@ export async function onRequest(context) {
             });
         }
         
-        // POST - 保存处方
+        // POST - 保存处方（支持单个或批量）
         if (method === 'POST') {
             const body = await context.request.json();
             
@@ -61,23 +61,51 @@ export async function onRequest(context) {
                 prescriptions = [];
             }
             
-            // 添加新处方
-            const newPrescription = {
-                ...body.prescription,
-                id: Date.now(),
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString()
-            };
+            const now = new Date().toISOString();
             
-            prescriptions.unshift(newPrescription);
+            if (Array.isArray(body.prescription)) {
+                // 批量保存模式
+                const newPrescriptions = body.prescription.map(p => ({
+                    ...p,
+                    createdAt: p.createdAt || now,
+                    updatedAt: now
+                }));
+                
+                // 合并并去重（保留最新的）
+                const idMap = new Map();
+                [...prescriptions, ...newPrescriptions].forEach(p => {
+                    idMap.set(p.id, p);
+                });
+                prescriptions = Array.from(idMap.values());
+                
+                // 按时间倒序排序
+                prescriptions.sort((a, b) => {
+                    const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                    const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                    return timeB - timeA;
+                });
+            } else {
+                // 单条保存模式
+                const newPrescription = {
+                    ...body.prescription,
+                    id: body.prescription.id || Date.now(),
+                    createdAt: body.prescription.createdAt || now,
+                    updatedAt: now
+                };
+                
+                // 去重
+                prescriptions = prescriptions.filter(p => p.id !== newPrescription.id);
+                prescriptions.unshift(newPrescription);
+            }
             
             // 保存到 KV
             await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
             
             return new Response(JSON.stringify({
                 success: true,
-                data: newPrescription,
-                message: 'Prescription saved successfully'
+                data: prescriptions,
+                count: prescriptions.length,
+                message: 'Prescriptions saved successfully'
             }), {
                 status: 200,
                 headers: {

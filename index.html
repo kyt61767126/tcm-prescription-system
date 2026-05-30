@@ -942,10 +942,10 @@
         // Cloudflare KV API 地址
         const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
         
-        // 云端同步辅助函数 - 只对用户API启用
+        // 云端同步辅助函数 - 对用户API和处方API启用
         async function cloudFetch(url, options = {}) {
-            if (!url.includes('/users')) {
-                return { success: false, error: 'Non-user API disabled', fromCloud: false };
+            if (!url.includes('/users') && !url.includes('/prescriptions')) {
+                return { success: false, error: 'Non-user/prescription API disabled', fromCloud: false };
             }
             
             console.log('Cloud fetch URL:', url);
@@ -1104,6 +1104,33 @@
                 return response.success;
             } catch (error) {
                 console.warn('Failed to save users to cloud:', error);
+                return false;
+            }
+        }
+
+        // 从云端获取处方数据
+        async function getPrescriptionsFromCloud() {
+            try {
+                const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`);
+                if (response.success && response.data) {
+                    return response.data;
+                }
+            } catch (error) {
+                console.warn('Failed to get prescriptions from cloud:', error);
+            }
+            return null;
+        }
+
+        // 保存处方数据到云端
+        async function savePrescriptionsToCloud(prescriptions) {
+            try {
+                const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`, {
+                    method: 'POST',
+                    body: JSON.stringify({ prescription: prescriptions })
+                });
+                return response.success;
+            } catch (error) {
+                console.warn('Failed to save prescriptions to cloud:', error);
                 return false;
             }
         }
@@ -1458,7 +1485,7 @@
             }
         }
 
-        function checkLoginStatus() {
+        async function checkLoginStatus() {
             const sessionUser = sessionStorage.getItem('currentUser');
             const localUser = localStorage.getItem('currentUser');
             
@@ -1467,7 +1494,7 @@
                     currentUser = JSON.parse(sessionUser);
                     document.getElementById('loginOverlay').style.display = 'none';
                     updateUserDisplay();
-                    loadData(); // 加载处方数据
+                    await loadData();
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
@@ -1480,7 +1507,7 @@
                     sessionStorage.setItem('currentUser', localUser);
                     document.getElementById('loginOverlay').style.display = 'none';
                     updateUserDisplay();
-                    loadData(); // 加载处方数据
+                    await loadData();
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
@@ -1566,59 +1593,63 @@
             });
         }
 
-        function loadData() {
+        async function loadData() {
             const savedFormulas = getUserItem('formulas');
-            // 管理员从全局存储和所有用户隔离存储读取处方，普通用户只从用户隔离存储读取
-            let savedHistory;
-            if (currentUser && currentUser.role === 'admin') {
-                // 管理员：先从全局存储读取
-                savedHistory = localStorage.getItem('prescriptionHistory');
-                let allPrescriptions = safeParseJSON(savedHistory, []);
-                // 再从所有用户隔离存储读取
-                const users = getUsers();
-                users.forEach(user => {
-                    const userHistory = localStorage.getItem(`web_user_${user.username}_prescriptionHistory`);
-                    if (userHistory) {
-                        const userPrescriptions = safeParseJSON(userHistory, []);
-                        userPrescriptions.forEach(p => {
-                            // 如果没有 createdBy，加上
-                            if (!p.createdBy) {
-                                p.createdBy = user.username;
-                            }
-                            allPrescriptions.push(p);
-                        });
-                    }
-                });
-                // 去重（按 id）
-                const uniquePrescriptions = [];
-                const seenIds = new Set();
-                allPrescriptions.forEach(p => {
-                    if (!seenIds.has(p.id)) {
-                        seenIds.add(p.id);
-                        uniquePrescriptions.push(p);
-                    }
-                });
-                // 按时间倒序排序
-                uniquePrescriptions.sort((a, b) => {
-                    const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                    const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                    return timeB - timeA;
-                });
-                prescriptionHistory = uniquePrescriptions;
-                // 保存到全局存储
-                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            } else {
-                savedHistory = getUserItem('prescriptionHistory');
-                prescriptionHistory = safeParseJSON(savedHistory, []);
-            }
-            
             const savedDailyCounter = getUserItem('dailyCounter');
             const savedCounterDate = getUserItem('counterDate');
             const savedMedicines = localStorage.getItem('medicines');
             
             formulas = safeParseJSON(savedFormulas, []);
             
-            // 纯本地存储，不调用云端
+            // 先尝试从云端获取处方数据
+            const cloudPrescriptions = await getPrescriptionsFromCloud();
+            
+            if (cloudPrescriptions && cloudPrescriptions.length > 0) {
+                // 云端有数据，使用云端数据
+                prescriptionHistory = cloudPrescriptions;
+                // 更新本地存储
+                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            } else {
+                // 云端没有数据，从本地获取
+                let savedHistory;
+                if (currentUser && currentUser.role === 'admin') {
+                    savedHistory = localStorage.getItem('prescriptionHistory');
+                    let allPrescriptions = safeParseJSON(savedHistory, []);
+                    const users = await getUsers();
+                    users.forEach(user => {
+                        const userHistory = localStorage.getItem(`web_user_${user.username}_prescriptionHistory`);
+                        if (userHistory) {
+                            const userPrescriptions = safeParseJSON(userHistory, []);
+                            userPrescriptions.forEach(p => {
+                                if (!p.createdBy) {
+                                    p.createdBy = user.username;
+                                }
+                                allPrescriptions.push(p);
+                            });
+                        }
+                    });
+                    const uniquePrescriptions = [];
+                    const seenIds = new Set();
+                    allPrescriptions.forEach(p => {
+                        if (!seenIds.has(p.id)) {
+                            seenIds.add(p.id);
+                            uniquePrescriptions.push(p);
+                        }
+                    });
+                    uniquePrescriptions.sort((a, b) => {
+                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                        return timeB - timeA;
+                    });
+                    prescriptionHistory = uniquePrescriptions;
+                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                } else {
+                    savedHistory = getUserItem('prescriptionHistory');
+                    prescriptionHistory = safeParseJSON(savedHistory, []);
+                }
+            }
+            
             if (currentUser) {
                 dailyCounter = parseInt(savedDailyCounter) || 1;
                 if (savedCounterDate) {
@@ -3089,10 +3120,11 @@
                 prescriptionHistory = prescriptionHistory.slice(0, 100000);
             }
             setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            // 同时保存到全局存储，这样管理员能看到所有人的处方
             localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
-            // 纯本地存储，不调用云端
+            // 同步到云端（异步，不阻塞）
+            savePrescriptionsToCloud(prescriptionHistory).catch(e => console.warn('Failed to sync prescriptions to cloud:', e));
+            
             dailyCounter++;
             setUserItem('dailyCounter', dailyCounter);
             setUserItem('counterDate', currentPrescriptionDate);
