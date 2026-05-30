@@ -3153,8 +3153,11 @@
                 const latestPrescription = prescriptionHistory[0];
                 const usedNo = latestPrescription ? latestPrescription.prescriptionNo : generatePrescriptionNo();
                 const newPrescriptionNo = generatePrescriptionNo();
-                document.getElementById('prescriptionNo').value = newPrescriptionNo;
-                document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
+                
+                // 门诊号与处方号相同
+                document.getElementById('prescriptionNo').value = usedNo;
+                document.getElementById('clinicNo').value = usedNo;
+                document.getElementById('paperClinicNo').textContent = usedNo;
                 
                 // 保存后立即刷新历史处方栏
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
