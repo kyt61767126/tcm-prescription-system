@@ -2974,18 +2974,18 @@
             const record = prescriptionHistory.find(p => p.id === id);
             if (!record) return;
             
-            // ========== 1. 加载病人信息到输入栏 ==========
-            document.getElementById('patientName').value = record.patientName || '';
+            // ========== 1. 加载病人信息到输入栏（姓名、日期保持不变）==========
+            // 不更新姓名、处方号、日期，保持红框内内容不变
             document.getElementById('patientGender').value = record.patientGender || '男';
             document.getElementById('patientAge').value = record.patientAge || '';
             document.getElementById('patientPhone').value = record.patientPhone || '';
             document.getElementById('patientAddress').value = record.patientAddress || '';
-            document.getElementById('visitDate').value = record.date || new Date().toISOString().split('T')[0];
+            // 不更新日期
             
-            // ========== 2. 加载处方信息到输入栏 ==========
+            // ========== 2. 加载处方信息到输入栏（处方号保持不变）==========
             const historyClinicNo = record.clinicNo || record.prescriptionNo || '';
             document.getElementById('clinicNo').value = historyClinicNo;
-            document.getElementById('prescriptionNo').value = record.prescriptionNo || historyClinicNo;
+            // 不更新处方号输入框
             document.getElementById('medicalHistory').value = record.medicalHistory || '';
             document.getElementById('diagnosis').value = record.diagnosis || '';
             document.getElementById('doctorName').value = record.doctorName || currentUser?.name || '';
