@@ -942,28 +942,10 @@
         // Cloudflare KV API 地址
         const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
         
-        // 云端同步辅助函数
+        // 云端同步辅助函数 - 已禁用，强制使用本地存储
         async function cloudFetch(url, options = {}) {
-            try {
-                const response = await fetch(url, {
-                    ...options,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        ...options.headers
-                    }
-                });
-                if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
-                }
-                const data = await response.json();
-                if (!data.success) {
-                    throw new Error(data.error || 'Cloud operation failed');
-                }
-                return { success: true, data: data.data || data, fromCloud: true };
-            } catch (error) {
-                console.warn('Cloud sync failed, using local storage:', error.message);
-                return { success: false, error: error.message, fromCloud: false };
-            }
+            console.log('Cloud API disabled, using local storage only');
+            return { success: false, error: 'Cloud API disabled', fromCloud: false };
         }
 
         function debounce(func, wait) {
@@ -1083,16 +1065,8 @@
         }
 
         // 初始化时先从云端获取用户数据
-        async function getUsers() {
-            // 先尝试从云端获取
-            const cloudUsers = await getUsersFromCloud();
-            if (cloudUsers) {
-                // 更新本地存储
-                localStorage.setItem('systemUsers', JSON.stringify(cloudUsers));
-                return cloudUsers;
-            }
-            
-            // 云端没有则从本地获取
+        function getUsers() {
+            // 纯本地存储，不调用云端
             const saved = localStorage.getItem('systemUsers');
             if (saved) {
                 try {
@@ -1102,21 +1076,18 @@
                         localStorage.removeItem('systemUsers');
                         return getDefaultUsers();
                     }
-                    // 同步到云端
-                    saveUsersToCloud(users);
                     return users;
                 } catch (e) {
                     console.error('Parse users error:', e);
-                return getDefaultUsers();
+                    return getDefaultUsers();
+                }
             }
             return getDefaultUsers();
         }
 
-        async function saveUsers(users) {
-            // 保存到本地
+        function saveUsers(users) {
+            // 纯本地存储，不调用云端
             localStorage.setItem('systemUsers', JSON.stringify(users));
-            // 同时保存到云端
-            await saveUsersToCloud(users);
         }
 
         // 强制把本地用户数据同步到云端
@@ -1140,7 +1111,7 @@
             }
         }
 
-        async function handleLogin() {
+        function handleLogin() {
             const username = document.getElementById('loginUsername').value.trim();
             const password = document.getElementById('loginPassword').value;
             const errorDiv = document.getElementById('loginError');
@@ -1151,7 +1122,7 @@
                 return;
             }
             
-            const users = await getUsers();
+            const users = getUsers();
             const user = users.find(u => u.username === username && u.password === password);
             
             if (user) {
@@ -1162,7 +1133,7 @@
                 document.getElementById('loginOverlay').style.display = 'none';
                 updateUserDisplay();
                 errorDiv.style.display = 'none';
-                await loadData();
+                loadData();
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 refreshUserInterface();
             } else {
@@ -1226,7 +1197,7 @@
                 return;
             }
             
-            const users = await getUsers();
+            const users = getUsers();
             if (users.find(u => u.username === username)) {
                 alert('用户名已存在');
                 return;
@@ -1239,7 +1210,7 @@
                 role: 'user'
             });
             
-            await saveUsers(users);
+            saveUsers(users);
             alert('注册成功！');
             closeModal('registerModal');
         }
@@ -1266,7 +1237,7 @@
                 return;
             }
             
-            const users = await getUsers();
+            const users = getUsers();
             const userIndex = users.findIndex(u => u.username === currentUser.username);
             
             if (userIndex === -1) {
@@ -1280,7 +1251,7 @@
             }
             
             users[userIndex].password = newPwd;
-            await saveUsers(users);
+            saveUsers(users);
             currentUser = users[userIndex];
             localStorage.setItem('currentUser', JSON.stringify(currentUser));
             
@@ -1288,21 +1259,21 @@
             closeModal('changePwdModal');
         }
 
-        async function showUserManageModal() {
+        function showUserManageModal() {
             if (!currentUser || currentUser.role !== 'admin') {
                 alert('只有管理员可以管理用户');
                 return;
             }
             
-            await renderUserList();
+            renderUserList();
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
             document.getElementById('newUserName').value = '';
             document.getElementById('userManageModal').style.display = 'flex';
         }
 
-        async function renderUserList() {
-            const users = await getUsers();
+        function renderUserList() {
+            const users = getUsers();
             const listDiv = document.getElementById('userList');
             
             let html = '';
@@ -1324,8 +1295,8 @@
             listDiv.innerHTML = html || '暂无用户';
         }
 
-        async function handleEditUser(username) {
-            const users = await getUsers();
+        function handleEditUser(username) {
+            const users = getUsers();
             const user = users.find(u => u.username === username);
             if (!user) return;
             
@@ -1363,7 +1334,7 @@
             if (newPassword !== null && newPassword.trim() !== '') {
                 users[userIndex].password = newPassword.trim();
             }
-            await saveUsers(users);
+            saveUsers(users);
             
             if (currentUser.username === username) {
                 currentUser = users[userIndex];
@@ -1375,7 +1346,7 @@
             alert('用户信息修改成功！');
         }
 
-        async function handleAddUser() {
+        function handleAddUser() {
             const username = document.getElementById('newUserUsername').value.trim();
             const password = document.getElementById('newUserPassword').value;
             const name = document.getElementById('newUserName').value.trim();
@@ -1385,7 +1356,7 @@
                 return;
             }
             
-            const users = await getUsers();
+            const users = getUsers();
             if (users.find(u => u.username === username)) {
                 alert('用户名已存在');
                 return;
@@ -1398,7 +1369,7 @@
                 role: 'user'
             });
             
-            await saveUsers(users);
+            saveUsers(users);
             renderUserList();
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
@@ -1406,12 +1377,12 @@
             alert('用户添加成功！');
         }
 
-        async function handleDeleteUser(username) {
+        function handleDeleteUser(username) {
             if (!confirm('确定删除该用户？')) return;
             
-            const users = await getUsers();
+            const users = getUsers();
             const filteredUsers = users.filter(u => u.username !== username);
-            await saveUsers(filteredUsers);
+            saveUsers(filteredUsers);
             renderUserList();
         }
 
@@ -1431,7 +1402,7 @@
             }
         }
 
-        async function checkLoginStatus() {
+        function checkLoginStatus() {
             const sessionUser = sessionStorage.getItem('currentUser');
             const localUser = localStorage.getItem('currentUser');
             
@@ -1440,7 +1411,7 @@
                     currentUser = JSON.parse(sessionUser);
                     document.getElementById('loginOverlay').style.display = 'none';
                     updateUserDisplay();
-                    await loadData(); // 加载处方数据
+                    loadData(); // 加载处方数据
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
@@ -1453,7 +1424,7 @@
                     sessionStorage.setItem('currentUser', localUser);
                     document.getElementById('loginOverlay').style.display = 'none';
                     updateUserDisplay();
-                    await loadData(); // 加载处方数据
+                    loadData(); // 加载处方数据
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
@@ -1539,7 +1510,7 @@
             });
         }
 
-        async function loadData() {
+        function loadData() {
             const savedFormulas = getUserItem('formulas');
             // 管理员从全局存储和所有用户隔离存储读取处方，普通用户只从用户隔离存储读取
             let savedHistory;
@@ -1548,7 +1519,7 @@
                 savedHistory = localStorage.getItem('prescriptionHistory');
                 let allPrescriptions = safeParseJSON(savedHistory, []);
                 // 再从所有用户隔离存储读取
-                const users = await getUsers();
+                const users = getUsers();
                 users.forEach(user => {
                     const userHistory = localStorage.getItem(`web_user_${user.username}_prescriptionHistory`);
                     if (userHistory) {
@@ -1591,39 +1562,8 @@
             
             formulas = safeParseJSON(savedFormulas, []);
             
-            // 尝试从云端读取处方数据
+            // 纯本地存储，不调用云端
             if (currentUser) {
-                const cloudResult = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`);
-                if (cloudResult.success && Array.isArray(cloudResult.data)) {
-                    // 云端数据按创建时间降序排序
-                    cloudResult.data.sort((a, b) => {
-                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                        return timeB - timeA;
-                    });
-                    // 合并云端数据到本地（去重）
-                    const localIds = new Set(prescriptionHistory.map(p => p.id));
-                    cloudResult.data.forEach(p => {
-                        if (!localIds.has(p.id)) {
-                            prescriptionHistory.push(p);
-                        }
-                    });
-                    // 再次排序并限制数量
-                    prescriptionHistory.sort((a, b) => {
-                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                        return timeB - timeA;
-                    });
-                    prescriptionHistory = prescriptionHistory.slice(0, 1000);
-                    // 管理员保存到全局存储，普通用户保存到用户隔离存储
-                    if (currentUser.role === 'admin') {
-                        localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                    } else {
-                        setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                    }
-                    console.log('Loaded prescriptions from cloud:', cloudResult.data.length);
-                }
-                
                 dailyCounter = parseInt(savedDailyCounter) || 1;
                 if (savedCounterDate) {
                     currentPrescriptionDate = savedCounterDate;
@@ -2936,25 +2876,14 @@
             `).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
         }
 
-        async function deleteHistory(id) {
+        function deleteHistory(id) {
             if (!confirm('确定删除该处方历史？')) return;
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             // 同时从全局存储删除
             localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
-            // 尝试从云端删除
-            if (currentUser) {
-                const cloudResult = await cloudFetch(`${CLOUD_API_BASE}/prescriptions?id=${id}`, {
-                    method: 'DELETE'
-                });
-                if (cloudResult.success) {
-                    console.log('Prescription deleted from cloud:', id);
-                } else {
-                    console.warn('Failed to delete prescription from cloud, deleted locally only');
-                }
-            }
-            
+            // 纯本地存储，不调用云端
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
 
@@ -3107,19 +3036,7 @@
             // 同时保存到全局存储，这样管理员能看到所有人的处方
             localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
-            // 尝试保存到云端
-            if (currentUser) {
-                const cloudResult = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`, {
-                    method: 'POST',
-                    body: JSON.stringify({ prescription: record })
-                });
-                if (cloudResult.success) {
-                    console.log('Prescription synced to cloud:', cloudResult.data.id);
-                } else {
-                    console.warn('Failed to sync prescription to cloud, saved locally only');
-                }
-            }
-            
+            // 纯本地存储，不调用云端
             dailyCounter++;
             setUserItem('dailyCounter', dailyCounter);
             setUserItem('counterDate', currentPrescriptionDate);
