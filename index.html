@@ -2974,7 +2974,7 @@
             const record = prescriptionHistory.find(p => p.id === id);
             if (!record) return;
             
-            // 加载病人信息
+            // ========== 1. 加载病人信息到输入栏 ==========
             document.getElementById('patientName').value = record.patientName || '';
             document.getElementById('patientGender').value = record.patientGender || '男';
             document.getElementById('patientAge').value = record.patientAge || '';
@@ -2982,24 +2982,22 @@
             document.getElementById('patientAddress').value = record.patientAddress || '';
             document.getElementById('visitDate').value = record.date || new Date().toISOString().split('T')[0];
             
-            // 加载处方信息 - 优先显示历史保存的门诊号
+            // ========== 2. 加载处方信息到输入栏 ==========
             const historyClinicNo = record.clinicNo || record.prescriptionNo || '';
             document.getElementById('clinicNo').value = historyClinicNo;
             document.getElementById('prescriptionNo').value = record.prescriptionNo || historyClinicNo;
-            document.getElementById('paperClinicNo').textContent = historyClinicNo;
             document.getElementById('medicalHistory').value = record.medicalHistory || '';
             document.getElementById('diagnosis').value = record.diagnosis || '';
             document.getElementById('doctorName').value = record.doctorName || currentUser?.name || '';
             
-            // 加载剂数
+            // ========== 3. 加载剂数到输入栏 ==========
             const doseCount = record.doseCount || 7;
             const doseInput = document.getElementById('doseCountInput') || document.getElementById('doseCountInput3');
             if (doseInput) doseInput.value = doseCount;
             const doseInput2 = document.getElementById('doseCountInput2');
             if (doseInput2) doseInput2.value = doseCount;
-            document.getElementById('paperDoseCount').textContent = doseCount;
             
-            // 加载药物数据
+            // ========== 4. 加载药物数据到药物栏 ==========
             prescriptionItems = (record.items || []).map(item => ({
                 code: item.code || '',
                 name: item.name || '',
@@ -3010,10 +3008,15 @@
             }));
             while (prescriptionItems.length < 25) addEmptyRow();
             
-            // 更新显示
-            renderPrescriptionTable();
-            calculateAmount();
-            updatePrescriptionPaper();
+            // ========== 5. 更新显示 ==========
+            renderPrescriptionTable();  // 更新药物表格
+            calculateAmount();          // 计算金额
+            updatePrescriptionPaper();  // 更新处方签
+            
+            // ========== 6. 确保处方签显示正确的门诊号 ==========
+            document.getElementById('paperClinicNo').textContent = historyClinicNo;
+            document.getElementById('paperDoseCount').textContent = doseCount;
+            document.getElementById('paperDate').textContent = record.date || new Date().toISOString().split('T')[0];
         }
 
         function loadLastHistory() {
