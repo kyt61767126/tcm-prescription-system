@@ -2973,22 +2973,31 @@
         function loadHistory(id) {
             const record = prescriptionHistory.find(p => p.id === id);
             if (!record) return;
-            document.getElementById('patientName').value = record.patientName;
+            
+            // 加载病人信息
+            document.getElementById('patientName').value = record.patientName || '';
             document.getElementById('patientGender').value = record.patientGender || '男';
-            document.getElementById('patientAge').value = record.patientAge;
-            document.getElementById('patientPhone').value = record.patientPhone;
-            document.getElementById('patientAddress').value = record.patientAddress;
+            document.getElementById('patientAge').value = record.patientAge || '';
+            document.getElementById('patientPhone').value = record.patientPhone || '';
+            document.getElementById('patientAddress').value = record.patientAddress || '';
+            document.getElementById('visitDate').value = record.date || new Date().toISOString().split('T')[0];
+            
+            // 加载处方信息
             document.getElementById('clinicNo').value = record.clinicNo || record.prescriptionNo || '';
             document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
-            document.getElementById('medicalHistory').value = record.medicalHistory;
-            document.getElementById('diagnosis').value = record.diagnosis;
+            document.getElementById('medicalHistory').value = record.medicalHistory || '';
+            document.getElementById('diagnosis').value = record.diagnosis || '';
+            document.getElementById('doctorName').value = record.doctorName || currentUser?.name || '';
+            
+            // 加载剂数
             const doseCount = record.doseCount || 7;
             const doseInput = document.getElementById('doseCountInput') || document.getElementById('doseCountInput3');
             if (doseInput) doseInput.value = doseCount;
             const doseInput2 = document.getElementById('doseCountInput2');
             if (doseInput2) doseInput2.value = doseCount;
             document.getElementById('paperDoseCount').textContent = doseCount;
-            // 加载药物数据，确保所有字段都有值
+            
+            // 加载药物数据
             prescriptionItems = (record.items || []).map(item => ({
                 code: item.code || '',
                 name: item.name || '',
@@ -2998,10 +3007,11 @@
                 total: item.total || 0
             }));
             while (prescriptionItems.length < 25) addEmptyRow();
+            
+            // 更新显示
             renderPrescriptionTable();
             calculateAmount();
             updatePrescriptionPaper();
-            document.getElementById('paperDate').textContent = record.date || '';
         }
 
         function loadLastHistory() {
