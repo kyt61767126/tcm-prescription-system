@@ -22,6 +22,38 @@ function parseAuthHeader(request) {
     }
 }
 
+// 从Durable Object获取编号
+async function getNextPrescriptionNoFromDO(username, type) {
+    const DO_URL = 'https://prescription-counter-do.61767126.workers.dev';
+    try {
+        const response = await fetch(`${DO_URL}/next-prescription-no?username=${encodeURIComponent(username)}&type=${type}`);
+        if (!response.ok) throw new Error('Failed to fetch from DO');
+        const data = await response.json();
+        if (data.success && data.prescriptionNo) {
+            return data.prescriptionNo;
+        }
+    } catch (error) {
+        console.error('DO fetch error:', error);
+    }
+    return null;
+}
+
+// 从Durable Object获取当前编号（不递增）
+async function getCurrentPrescriptionNoFromDO(username, type) {
+    const DO_URL = 'https://prescription-counter-do.61767126.workers.dev';
+    try {
+        const response = await fetch(`${DO_URL}/current-prescription-no?username=${encodeURIComponent(username)}&type=${type}`);
+        if (!response.ok) throw new Error('Failed to fetch from DO');
+        const data = await response.json();
+        if (data.success && data.prescriptionNo) {
+            return data.prescriptionNo;
+        }
+    } catch (error) {
+        console.error('DO fetch error:', error);
+    }
+    return null;
+}
+
 export async function onRequest(context) {
     const url = new URL(context.request.url);
     const method = context.request.method;
@@ -145,8 +177,9 @@ export async function onRequest(context) {
             
             const now = new Date();
             const nowIso = now.toISOString();
+            let nextPrescriptionNo = null;
+            let nextClinicNo = null;
             
-            // 编号由前端从云端计数器获取，后端直接使用前端传递的编号
             if (Array.isArray(body.prescription)) {
                 // 批量保存模式 - 对于批量导入的处方，保留原有编号
                 const newPrescriptions = body.prescription.map(p => ({
@@ -173,10 +206,27 @@ export async function onRequest(context) {
                     return timeB - timeA;
                 });
             } else {
-                // 单条保存模式 - 使用前端传递的编号，添加用户身份信息
+                // 单条保存模式 - 后端自动分配编号
+                // 并行获取处方号和编号
+                const [prescriptionNo, clinicNo] = await Promise.all([
+                    getNextPrescriptionNoFromDO(currentUser.username, 'daily'),
+                    getNextPrescriptionNoFromDO(currentUser.username, 'yearly')
+                ]);
+                
+                // 如果获取失败，使用本地备用方案
+                const year = String(now.getFullYear()).slice(-2);
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const todayPrefix = year + month + day;
+                
+                const finalPrescriptionNo = prescriptionNo || (todayPrefix + '01');
+                const finalClinicNo = clinicNo || (year + String(prescriptions.length + 1).padStart(6, '0'));
+                
                 const newPrescription = {
                     ...body.prescription,
                     id: body.prescription.id || Date.now(),
+                    prescriptionNo: finalPrescriptionNo,
+                    clinicNo: finalClinicNo,
                     createdAt: body.prescription.createdAt || nowIso,
                     updatedAt: nowIso,
                     createdBy: currentUser.username,
@@ -195,17 +245,33 @@ export async function onRequest(context) {
                     const timeB = new Date(b.createdAt || b.date || 0).getTime();
                     return timeB - timeA;
                 });
+                
+                // 获取下一个编号（不递增）
+                [nextPrescriptionNo, nextClinicNo] = await Promise.all([
+                    getCurrentPrescriptionNoFromDO(currentUser.username, 'daily'),
+                    getCurrentPrescriptionNoFromDO(currentUser.username, 'yearly')
+                ]);
             }
             
             // 保存到 KV
             await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
             
-            return new Response(JSON.stringify({
+            const responseData = {
                 success: true,
                 data: prescriptions,
                 count: prescriptions.length,
                 message: 'Prescriptions saved successfully'
-            }), {
+            };
+            
+            // 如果是单条保存，返回下一个编号
+            if (nextPrescriptionNo) {
+                responseData.nextPrescriptionNo = nextPrescriptionNo;
+            }
+            if (nextClinicNo) {
+                responseData.nextClinicNo = nextClinicNo;
+            }
+            
+            return new Response(JSON.stringify(responseData), {
                 status: 200,
                 headers: {
                     'Content-Type': 'application/json',
