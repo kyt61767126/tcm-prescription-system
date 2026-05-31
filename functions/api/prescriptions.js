@@ -22,45 +22,60 @@ function parseAuthHeader(request) {
     }
 }
 
-// 从Durable Object获取编号（带超时和错误处理）
-async function getNextPrescriptionNoFromDO(username, type) {
-    const DO_URL = 'https://prescription-counter-do.61767126.workers.dev';
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 3000);
+// 使用KV存储生成处方编号
+async function generatePrescriptionNo(kv, username, type) {
+    const now = new Date();
+    const year = now.getFullYear().toString().substring(2);
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const yymmdd = year + month + day;
     
-    try {
-        const response = await fetch(`${DO_URL}/next-prescription-no?username=${encodeURIComponent(username)}&type=${type}`, {
-            signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) throw new Error('DO response not ok');
-        const data = await response.json();
-        if (data.success && data.prescriptionNo) {
-            return data.prescriptionNo;
-        }
-    } catch (error) {
-        console.warn('DO fetch error (using fallback):', error.message);
-    } finally {
-        clearTimeout(timeoutId);
+    let storageKey, seq, prescriptionNo;
+    
+    if (type === 'yearly') {
+        storageKey = `seq:${username}:yearly:${year}`;
+        const stored = await kv.get(storageKey);
+        seq = stored ? parseInt(stored, 10) : 0;
+        seq += 1;
+        await kv.put(storageKey, seq.toString());
+        prescriptionNo = year + seq.toString().padStart(6, '0');
+    } else {
+        storageKey = `seq:${username}:daily:${yymmdd}`;
+        const stored = await kv.get(storageKey);
+        seq = stored ? parseInt(stored, 10) : 0;
+        seq += 1;
+        await kv.put(storageKey, seq.toString());
+        prescriptionNo = yymmdd + seq.toString().padStart(2, '0');
     }
-    return null;
+    
+    return prescriptionNo;
 }
 
-// 从Durable Object获取当前编号（不递增）
-async function getCurrentPrescriptionNoFromDO(username, type) {
-    const DO_URL = 'https://prescription-counter-do.61767126.workers.dev';
-    try {
-        const response = await fetch(`${DO_URL}/current-prescription-no?username=${encodeURIComponent(username)}&type=${type}`);
-        if (!response.ok) throw new Error('Failed to fetch from DO');
-        const data = await response.json();
-        if (data.success && data.prescriptionNo) {
-            return data.prescriptionNo;
-        }
-    } catch (error) {
-        console.error('DO fetch error:', error);
+// 获取下一个编号（不递增，用于预览）
+async function peekNextPrescriptionNo(kv, username, type) {
+    const now = new Date();
+    const year = now.getFullYear().toString().substring(2);
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const yymmdd = year + month + day;
+    
+    let storageKey, seq, prescriptionNo;
+    
+    if (type === 'yearly') {
+        storageKey = `seq:${username}:yearly:${year}`;
+        const stored = await kv.get(storageKey);
+        seq = stored ? parseInt(stored, 10) : 0;
+        seq += 1;
+        prescriptionNo = year + seq.toString().padStart(6, '0');
+    } else {
+        storageKey = `seq:${username}:daily:${yymmdd}`;
+        const stored = await kv.get(storageKey);
+        seq = stored ? parseInt(stored, 10) : 0;
+        seq += 1;
+        prescriptionNo = yymmdd + seq.toString().padStart(2, '0');
     }
-    return null;
+    
+    return prescriptionNo;
 }
 
 export async function onRequest(context) {
@@ -234,20 +249,15 @@ export async function onRequest(context) {
                     return timeB - timeA;
                 });
             } else {
-                // 单条保存模式 - 后端自动分配编号
+                // 单条保存模式 - 后端自动分配编号（使用KV存储）
                 // 并行获取处方号和编号
                 const [prescriptionNo, clinicNo] = await Promise.all([
-                    getNextPrescriptionNoFromDO(currentUser.username, 'daily'),
-                    getNextPrescriptionNoFromDO(currentUser.username, 'yearly')
+                    generatePrescriptionNo(kv, currentUser.username, 'daily'),
+                    generatePrescriptionNo(kv, currentUser.username, 'yearly')
                 ]);
                 
-                const year = String(now.getFullYear()).slice(-2);
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                const todayPrefix = year + month + day;
-                
-                const finalPrescriptionNo = prescriptionNo || (todayPrefix + '01');
-                const finalClinicNo = clinicNo || (year + String(prescriptions.length + 1).padStart(6, '0'));
+                const finalPrescriptionNo = prescriptionNo;
+                const finalClinicNo = clinicNo;
                 
                 const newPrescription = {
                     ...body.prescription,
@@ -277,10 +287,11 @@ export async function onRequest(context) {
                 const yearSeq = clinicNo ? parseInt(clinicNo.slice(-6)) + 1 : prescriptions.length + 1;
                 nextClinicNo = year + String(yearSeq).padStart(6, '0');
                 
-                const todaySeq = prescriptionNo ? parseInt(prescriptionNo.slice(-2)) + 1 : 1;
-                nextPrescriptionNo = todayPrefix + String(todaySeq).padStart(2, '0');
+                [nextPrescriptionNo, nextClinicNo] = await Promise.all([
+                    peekNextPrescriptionNo(kv, currentUser.username, 'daily'),
+                    peekNextPrescriptionNo(kv, currentUser.username, 'yearly')
+                ]);
                 
-                // 保存新处方的编号到响应中
                 responseData = {
                     success: true,
                     data: prescriptions,
