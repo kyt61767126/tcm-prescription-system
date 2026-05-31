@@ -2528,9 +2528,11 @@
                 
                 if (type === 'yearly') {
                     // yearly 类型：YY + 6位序号，不每日重置
+                    // 统计当前用户的历史处方总数
                     let yearCount = 0;
                     prescriptionHistory.forEach(p => {
-                        if (p.prescriptionNo && p.prescriptionNo.startsWith(year) && 
+                        if ((p.clinicNo && p.clinicNo.startsWith(year)) || 
+                            (p.prescriptionNo && p.prescriptionNo.startsWith(year)) &&
                             (!p.createdBy || p.createdBy === username)) {
                             yearCount++;
                         }
