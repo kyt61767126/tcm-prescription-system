@@ -156,9 +156,27 @@ export async function onRequest(context) {
         
         // POST - 保存处方（支持单个或批量）
         if (method === 'POST') {
-            const body = await context.request.json();
+            console.log('POST /prescriptions called');
+            let body;
+            try {
+                body = await context.request.json();
+                console.log('Request body:', JSON.stringify(body).substring(0, 500));
+            } catch (error) {
+                console.error('Failed to parse request body:', error);
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: 'Failed to parse request body: ' + error.message
+                }), {
+                    status: 400,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
+            }
             
             if (!body.prescription) {
+                console.error('Missing prescription data in request');
                 return new Response(JSON.stringify({
                     success: false,
                     error: 'Missing prescription data'
