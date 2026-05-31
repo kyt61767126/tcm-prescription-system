@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head><script src="lib/getPrescriptionNo.js" defer></script>
 <script defer>
@@ -2407,6 +2407,11 @@
 
         // 更新编号输入框显示
         function updateClinicNoDisplay() {
+            // 如果已经有编号，则保持不变，不再生成新编号
+            const currentClinicNo = document.getElementById('clinicNo').value;
+            if (currentClinicNo && currentClinicNo.trim() !== '') {
+                return;
+            }
             const clinicNo = generateClinicNo();
             document.getElementById('clinicNo').value = clinicNo;
         }
