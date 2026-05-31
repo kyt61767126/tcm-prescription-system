@@ -1,4 +1,4 @@
-﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿https://prescription-counter-do.61767126.workers.dev/next-prescription-no﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head><script src="getPrescriptionNo.js" defer></script>
 <script defer>
@@ -2406,6 +2406,26 @@
             document.getElementById('clinicNo').value = clinicNo;
         }
 
+        // 云端处方号接口地址
+        const PRESCRIPTION_API = 'https://prescription-counter-do.61767126.workers.dev';
+        
+        // 从云端获取下一个处方号
+        async function getNextPrescriptionNoFromCloud() {
+            try {
+                const response = await fetch(`${PRESCRIPTION_API}/next-prescription-no`);
+                if (!response.ok) throw new Error('Failed to fetch');
+                const data = await response.json();
+                if (data.success && data.prescriptionNo) {
+                    return data.prescriptionNo;
+                } else {
+                    throw new Error('Invalid response');
+                }
+            } catch (error) {
+                console.error('云端获取处方号失败，使用本地备用方案:', error);
+                return generatePrescriptionNo(); // 本地备用
+            }
+        }
+        
         function generatePrescriptionNo() {
             try {
                 const now = new Date();
@@ -2433,13 +2453,20 @@
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
             document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
-            // 使用函数生成处方号
-            const presNo = generatePrescriptionNo();
+            // 使用云端接口获取处方号
+            let presNo;
+            try {
+                presNo = await getNextPrescriptionNoFromCloud();
+            } catch (error) {
+                console.error('云端获取失败:', error);
+                presNo = generatePrescriptionNo();
+            }
             if (!presNo) {
                 alert('编号生成失败，请刷新页面重试');
                 return;
             }
             document.getElementById('prescriptionNo').value = presNo;
+            document.getElementById('clinicNo').value = presNo;
             updateClinicNoDisplay();
             document.getElementById('paperClinicNo').textContent = presNo;
             document.getElementById('clinicName').value = getUserItem('clinicName') || '惠康堂中医诊所';
