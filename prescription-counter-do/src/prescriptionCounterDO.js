@@ -45,24 +45,23 @@ export class PrescriptionCounterCloudflare {
   async getNextPrescriptionNo(username) {
     try {
       const now = new Date();
-      const yymmdd = this.getYYMMDD(now);
+      const year = String(now.getFullYear()).slice(-2);
 
-      // 获取该用户今天的序号（按用户隔离）
-      let seq = await this.getSequence(username, yymmdd);
+      // 获取该用户当前年份的序号（按用户+年份隔离，不每日重置）
+      let seq = await this.getSequence(username, year);
       seq += 1;
 
       // 保存该用户的序号
-      await this.state.storage.put(`seq:${username}:${yymmdd}`, seq);
-      await this.state.storage.put(`last_date:${username}`, yymmdd);
+      await this.state.storage.put(`seq:${username}:${year}`, seq);
 
-      // 生成处方号（格式：YYMMDDNN，序号从01开始）
-      const prescriptionNo = yymmdd + seq.toString().padStart(2, "0");
+      // 生成处方号（格式：YY + 6位序号，如 26000001）
+      const prescriptionNo = year + seq.toString().padStart(6, "0");
 
       const response = {
         success: true,
         prescriptionNo: prescriptionNo,
         timestamp: now.toISOString(),
-        date: yymmdd,
+        year: year,
         sequence: seq,
         username: username
       };
@@ -92,16 +91,16 @@ export class PrescriptionCounterCloudflare {
   async getCurrentPrescriptionNo(username) {
     try {
       const now = new Date();
-      const yymmdd = this.getYYMMDD(now);
-      const seq = await this.getSequence(username, yymmdd);
-      // 生成处方号（格式：YYMMDDNN）
-      const prescriptionNo = yymmdd + seq.toString().padStart(2, "0");
+      const year = String(now.getFullYear()).slice(-2);
+      const seq = await this.getSequence(username, year);
+      // 生成处方号（格式：YY + 6位序号，如 26000001）
+      const prescriptionNo = year + seq.toString().padStart(6, "0");
 
       return new Response(JSON.stringify({
         success: true,
         prescriptionNo: prescriptionNo,
         sequence: seq,
-        date: yymmdd,
+        year: year,
         nextSequence: seq + 1,
         username: username
       }), {
@@ -127,13 +126,13 @@ export class PrescriptionCounterCloudflare {
   async resetCounter(username) {
     try {
       const now = new Date();
-      const yymmdd = this.getYYMMDD(now);
-      await this.state.storage.put(`seq:${username}:${yymmdd}`, 0);
+      const year = String(now.getFullYear()).slice(-2);
+      await this.state.storage.put(`seq:${username}:${year}`, 0);
 
       return new Response(JSON.stringify({
         success: true,
         message: "计数器已重置",
-        date: yymmdd,
+        year: year,
         username: username
       }), {
         headers: {
@@ -155,16 +154,9 @@ export class PrescriptionCounterCloudflare {
     }
   }
 
-  async getSequence(username, yymmdd) {
-    // 检查该用户是否是同一天
-    const lastDate = await this.state.storage.get(`last_date:${username}`);
-
-    // 如果日期变了，自动从 01 开始
-    if (lastDate !== yymmdd) {
-      return 0;
-    }
-
-    const seq = await this.state.storage.get(`seq:${username}:${yymmdd}`);
+  async getSequence(username, year) {
+    // 按用户+年份统计序号，不每日重置
+    const seq = await this.state.storage.get(`seq:${username}:${year}`);
     return seq || 0;
   }
 
