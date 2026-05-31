@@ -1307,7 +1307,8 @@
             const migrated = migrateOldData();
             let presNo;
             try {
-                presNo = await getNextPrescriptionNoFromCloud();
+                // 页面初始化时获取当前编号（不递增），保存时再获取下一个编号
+                presNo = await getCurrentPrescriptionNoFromCloud();
             } catch (error) {
                 console.error('云端获取失败，使用本地备用方案:', error);
                 presNo = generatePrescriptionNo();
@@ -2428,30 +2429,68 @@
             document.getElementById('clinicNo').value = clinicNo;
         }
 
-        // 云端处方号接口地址
+        // 云端计数器接口地址（Durable Object）
         const PRESCRIPTION_API = 'https://prescription-counter-do.61767126.workers.dev';
         
-        // 从云端获取下一个处方号
+        // 从云端计数器获取下一个处方号（递增序号）
         async function getNextPrescriptionNoFromCloud() {
             try {
-                const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`);
-                if (response.success && response.data) {
-                    const currentCount = response.data.length;
-                    return String(currentCount + 1).padStart(6, '0');
+                const response = await fetch(`${PRESCRIPTION_API}/next-prescription-no`);
+                if (!response.ok) throw new Error('Failed to fetch');
+                const data = await response.json();
+                if (data.success && data.prescriptionNo) {
+                    console.log('云端获取处方号成功:', data.prescriptionNo);
+                    return data.prescriptionNo;
+                } else {
+                    throw new Error('Invalid response from counter');
                 }
             } catch (error) {
-                console.error('云端获取处方号失败，使用本地备用方案:', error);
+                console.error('云端计数器获取失败，使用本地备用方案:', error);
+                return generatePrescriptionNo();
+            }
+        }
+        
+        // 从云端计数器获取当前处方号（不递增）
+        async function getCurrentPrescriptionNoFromCloud() {
+            try {
+                const response = await fetch(`${PRESCRIPTION_API}/current-prescription-no`);
+                if (!response.ok) throw new Error('Failed to fetch');
+                const data = await response.json();
+                if (data.success && data.prescriptionNo) {
+                    return data.prescriptionNo;
+                }
+            } catch (error) {
+                console.error('云端获取当前编号失败:', error);
             }
             return generatePrescriptionNo();
         }
         
+        // 本地备用编号生成（格式：YYMMDDNN）
         function generatePrescriptionNo() {
             try {
-                const currentCount = prescriptionHistory.length;
-                return String(currentCount + 1).padStart(6, '0');
+                const now = new Date();
+                const year = String(now.getFullYear()).slice(-2);
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const todayPrefix = year + month + day;
+                
+                // 统计今天已有的处方数量
+                let todayCount = 0;
+                prescriptionHistory.forEach(p => {
+                    if (p.prescriptionNo && p.prescriptionNo.startsWith(todayPrefix)) {
+                        todayCount++;
+                    }
+                });
+                
+                return todayPrefix + String(todayCount + 1).padStart(2, '0');
             } catch (error) {
                 console.error('处方编号生成异常:', error);
-                return String(Date.now()).slice(-6);
+                // 使用时间戳作为备用
+                const now = new Date();
+                const year = String(now.getFullYear()).slice(-2);
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                return year + month + day + String(Date.now()).slice(-2);
             }
         }
 
@@ -2493,7 +2532,8 @@
             
             (async () => {
                 try {
-                    const cloudNo = await getNextPrescriptionNoFromCloud();
+                    // 初始化时获取当前编号（不递增），保存时再获取下一个编号
+                    const cloudNo = await getCurrentPrescriptionNoFromCloud();
                     if (cloudNo) {
                         document.getElementById('prescriptionNo').value = cloudNo;
                         document.getElementById('clinicNo').value = cloudNo;
@@ -3355,13 +3395,20 @@
                 }
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
-                // 保存成功后生成下一个编号（基于云端最新计数）
-                const newPrescriptionNo = generatePrescriptionNo();
+                // 保存成功后立即从云端获取下一个编号，为下一次开方做准备
+                let nextPrescriptionNo;
+                try {
+                    nextPrescriptionNo = await getNextPrescriptionNoFromCloud();
+                } catch (error) {
+                    console.error('获取下一个编号失败:', error);
+                    nextPrescriptionNo = generatePrescriptionNo();
+                }
                 
-                if (newPrescriptionNo) {
-                    document.getElementById('prescriptionNo').value = newPrescriptionNo;
+                if (nextPrescriptionNo) {
+                    document.getElementById('prescriptionNo').value = nextPrescriptionNo;
                     updateClinicNoDisplay();
-                    document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
+                    document.getElementById('paperClinicNo').textContent = nextPrescriptionNo;
+                    document.getElementById('clinicNo').value = nextPrescriptionNo;
                 }
                 
                 // 从最新的处方中获取编号（即刚保存的这张）

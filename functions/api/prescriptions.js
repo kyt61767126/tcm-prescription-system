@@ -146,16 +146,17 @@ export async function onRequest(context) {
             const now = new Date();
             const nowIso = now.toISOString();
             
-            // 简化：只统计历史处方数量作为编号
-            const currentCount = prescriptions.length;
-            const newPrescriptionNo = String(currentCount + 1).padStart(6, '0');
-            
+            // 编号由前端从云端计数器获取，后端直接使用前端传递的编号
             if (Array.isArray(body.prescription)) {
                 // 批量保存模式 - 对于批量导入的处方，保留原有编号
                 const newPrescriptions = body.prescription.map(p => ({
                     ...p,
                     createdAt: p.createdAt || nowIso,
-                    updatedAt: nowIso
+                    updatedAt: nowIso,
+                    createdBy: p.createdBy || currentUser.username,
+                    userId: p.userId || currentUser.username,
+                    userRole: p.userRole || currentUser.role,
+                    isAdmin: p.isAdmin || currentUser.isAdmin
                 }));
                 
                 // 合并并去重（保留最新的）
@@ -172,11 +173,10 @@ export async function onRequest(context) {
                     return timeB - timeA;
                 });
             } else {
-                // 单条保存模式 - 自动生成编号，添加用户身份信息
+                // 单条保存模式 - 使用前端传递的编号，添加用户身份信息
                 const newPrescription = {
                     ...body.prescription,
                     id: body.prescription.id || Date.now(),
-                    prescriptionNo: newPrescriptionNo,
                     createdAt: body.prescription.createdAt || nowIso,
                     updatedAt: nowIso,
                     createdBy: currentUser.username,

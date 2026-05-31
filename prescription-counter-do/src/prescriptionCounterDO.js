@@ -52,8 +52,8 @@ export class PrescriptionCounterCloudflare {
       await this.state.storage.put(`seq:${yymmdd}`, seq);
       await this.state.storage.put(`last_date`, yymmdd);
 
-      // 生成处方号
-      const prescriptionNo = yymmdd + seq.toString().padStart(4, "0");
+      // 生成处方号（格式：YYMMDDNN，序号从01开始）
+      const prescriptionNo = yymmdd + seq.toString().padStart(2, "0");
 
       const response = {
         success: true,
@@ -90,12 +90,15 @@ export class PrescriptionCounterCloudflare {
       const now = new Date();
       const yymmdd = this.getYYMMDD(now);
       const seq = await this.getSequence(yymmdd);
-      const prescriptionNo = yymmdd + seq.toString().padStart(4, "0");
+      // 生成处方号（格式：YYMMDDNN）
+      const prescriptionNo = yymmdd + seq.toString().padStart(2, "0");
 
       return new Response(JSON.stringify({
         success: true,
         prescriptionNo: prescriptionNo,
-        sequence: seq
+        sequence: seq,
+        date: yymmdd,
+        nextSequence: seq + 1
       }), {
         headers: {
           "Content-Type": "application/json",
