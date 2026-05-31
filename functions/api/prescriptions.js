@@ -187,7 +187,14 @@ export async function onRequest(context) {
                 
                 // 去重
                 prescriptions = prescriptions.filter(p => p.id !== newPrescription.id);
-                prescriptions.unshift(newPrescription);
+                prescriptions.push(newPrescription);
+                
+                // 按时间倒序排序，确保不同设备保存的处方按时间正确排列
+                prescriptions.sort((a, b) => {
+                    const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                    const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                    return timeB - timeA;
+                });
             }
             
             // 保存到 KV

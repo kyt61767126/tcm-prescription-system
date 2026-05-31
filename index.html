@@ -3392,7 +3392,14 @@
                     if (cloudPrescriptions) {
                         prescriptionHistory = cloudPrescriptions;
                     } else {
-                        prescriptionHistory.unshift(record);
+                        // 添加到列表并按时间排序
+                        prescriptionHistory.push(record);
+                        // 按时间倒序排序，确保不同设备保存的处方按时间正确排列
+                        prescriptionHistory.sort((a, b) => {
+                            const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                            const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                            return timeB - timeA;
+                        });
                     }
                 }
                 
