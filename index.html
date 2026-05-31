@@ -3636,7 +3636,6 @@
         }
 
         function exportPrescriptionImage() {
-            // 从表单获取当前数据生成图片
             const name = document.getElementById('patientName').value;
             if (!name) {
                 alert('请输入患者姓名！');
@@ -3644,12 +3643,9 @@
                 return;
             }
             
-            // 获取处方号
-            const currentPrescriptionNo = document.getElementById('prescriptionNo').value;
-            if (!currentPrescriptionNo || currentPrescriptionNo === 'undefined' || currentPrescriptionNo === 'null') {
-                alert('处方编号无效，请先生成处方号！');
-                return;
-            }
+            const currentPrescriptionNo = document.getElementById('prescriptionNo').value || 
+                                         document.getElementById('clinicNo').value || 
+                                         'TEMP_' + Date.now();
             
             const doseInput = document.getElementById('doseCountInput') || document.getElementById('doseCountInput3');
             const doseCount = parseInt(doseInput ? doseInput.value : 7) || 7;
