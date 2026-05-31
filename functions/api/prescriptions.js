@@ -22,18 +22,27 @@ function parseAuthHeader(request) {
     }
 }
 
-// 从Durable Object获取编号
+// 从Durable Object获取编号（带超时和错误处理）
 async function getNextPrescriptionNoFromDO(username, type) {
     const DO_URL = 'https://prescription-counter-do.61767126.workers.dev';
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3000);
+    
     try {
-        const response = await fetch(`${DO_URL}/next-prescription-no?username=${encodeURIComponent(username)}&type=${type}`);
-        if (!response.ok) throw new Error('Failed to fetch from DO');
+        const response = await fetch(`${DO_URL}/next-prescription-no?username=${encodeURIComponent(username)}&type=${type}`, {
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        
+        if (!response.ok) throw new Error('DO response not ok');
         const data = await response.json();
         if (data.success && data.prescriptionNo) {
             return data.prescriptionNo;
         }
     } catch (error) {
-        console.error('DO fetch error:', error);
+        console.warn('DO fetch error (using fallback):', error.message);
+    } finally {
+        clearTimeout(timeoutId);
     }
     return null;
 }
@@ -284,7 +293,24 @@ export async function onRequest(context) {
             }
             
             // 保存到 KV
-            await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
+            try {
+                console.log('Saving to KV, count:', prescriptions.length);
+                await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
+                console.log('Saved to KV successfully');
+            } catch (kvError) {
+                console.error('KV put error:', kvError);
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: 'Failed to save to KV: ' + kvError.message,
+                    requireSetup: true
+                }), {
+                    status: 500,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
+            }
             
             // 返回响应（单条保存时已在上面定义responseData，批量保存时使用默认响应）
             if (!responseData) {
