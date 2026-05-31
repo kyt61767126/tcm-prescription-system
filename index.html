@@ -987,8 +987,16 @@
                 return { success: false, error: 'Non-user/prescription API disabled', fromCloud: false };
             }
             
+            // 生成认证头
+            let authHeader = '';
+            if (currentUser) {
+                const authString = `${currentUser.username}:${currentUser.role}`;
+                authHeader = 'Basic ' + btoa(authString);
+            }
+            
             console.log('Cloud fetch URL:', url);
             console.log('Cloud fetch options:', options);
+            console.log('Current user:', currentUser);
             
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -999,6 +1007,7 @@
                     signal: controller.signal,
                     headers: {
                         'Content-Type': 'application/json',
+                        ...(authHeader ? { 'Authorization': authHeader } : {}),
                         ...options.headers
                     }
                 });
@@ -1016,11 +1025,18 @@
                 const data = await response.json();
                 console.log('Cloud fetch response data:', data);
                 
+                // 检查是否需要登录
+                if (data.requireAuth) {
+                    alert('请先登录！');
+                    handleLogout();
+                    throw new Error(data.error || '需要登录');
+                }
+                
                 if (!data.success) {
                     throw new Error(data.error || 'Cloud operation failed');
                 }
                 
-                return { success: true, data: data.data || data, fromCloud: true };
+                return { success: true, data: data.data || data, fromCloud: true, isAdmin: data.isAdmin };
                 
             } catch (error) {
                 clearTimeout(timeoutId);
@@ -1269,7 +1285,7 @@
                 updateUserDisplay();
                 errorDiv.style.display = 'none';
                 await loadData();
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                renderHistoryList(prescriptionHistory.slice(0, 15));
                 await refreshUserInterface();
             } else {
                 errorDiv.textContent = '用户名或密码错误';
@@ -1305,7 +1321,7 @@
             updateClinicNoDisplay();
             document.getElementById('paperClinicNo').textContent = presNo;
             if (prescriptionHistory.length > 0) {
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                renderHistoryList(prescriptionHistory.slice(0, 15));
             }
         }
 
@@ -1535,7 +1551,10 @@
 
         function updateUserDisplay() {
             if (currentUser) {
-                document.getElementById('userDisplayName').textContent = currentUser.name;
+                // 显示用户名和角色
+                const roleText = currentUser.role === 'admin' ? '【管理员】' : '【普通用户】';
+                document.getElementById('userDisplayName').textContent = `${currentUser.name} ${roleText}`;
+                
                 const userManageBtn = document.getElementById('userManageBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
                 
@@ -1558,7 +1577,7 @@
                     currentUser = JSON.parse(sessionUser);
                     updateUserDisplay();
                     await loadData();
-                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    renderHistoryList(prescriptionHistory.slice(0, 15));
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
                     currentUser = null;
@@ -1570,7 +1589,7 @@
                     sessionStorage.setItem('currentUser', localUser);
                     updateUserDisplay();
                     await loadData();
-                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    renderHistoryList(prescriptionHistory.slice(0, 15));
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
                     currentUser = null;
@@ -1664,19 +1683,12 @@
             formulas = safeParseJSON(savedFormulas, []);
             
             // 统一从云端获取处方数据（真实数据唯一来源是云端）
-            const cloudPrescriptions = await getPrescriptionsFromCloud();
+            // 后端API会根据用户角色自动筛选数据
+            const cloudResult = await getPrescriptionsFromCloud();
             
-            if (cloudPrescriptions && cloudPrescriptions.length > 0) {
-                // 云端有数据，按用户权限过滤
-                if (currentUser && currentUser.role === 'admin') {
-                    // 管理员：查看所有处方
-                    prescriptionHistory = cloudPrescriptions;
-                } else {
-                    // 普通用户：只查看自己的处方（按 user_id 过滤）
-                    prescriptionHistory = cloudPrescriptions.filter(p => 
-                        p.createdBy === currentUser?.username
-                    );
-                }
+            if (cloudResult && Array.isArray(cloudResult) && cloudResult.length > 0) {
+                // 云端返回的数据已经是根据用户角色筛选过的
+                prescriptionHistory = cloudResult;
                 
                 // 按时间倒序排序
                 prescriptionHistory.sort((a, b) => {
@@ -1700,7 +1712,7 @@
             }
             // 确保加载完成后重新渲染历史列表
             if (currentUser) {
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                renderHistoryList(prescriptionHistory.slice(0, 15));
             }
             
             const defaultMedicines = [
