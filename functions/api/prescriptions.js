@@ -213,7 +213,6 @@ export async function onRequest(context) {
                     getNextPrescriptionNoFromDO(currentUser.username, 'yearly')
                 ]);
                 
-                // 如果获取失败，使用本地备用方案
                 const year = String(now.getFullYear()).slice(-2);
                 const month = String(now.getMonth() + 1).padStart(2, '0');
                 const day = String(now.getDate()).padStart(2, '0');
@@ -246,29 +245,36 @@ export async function onRequest(context) {
                     return timeB - timeA;
                 });
                 
-                // 获取下一个编号（不递增）
-                [nextPrescriptionNo, nextClinicNo] = await Promise.all([
-                    getCurrentPrescriptionNoFromDO(currentUser.username, 'daily'),
-                    getCurrentPrescriptionNoFromDO(currentUser.username, 'yearly')
-                ]);
+                // 计算下一个编号
+                const yearSeq = clinicNo ? parseInt(clinicNo.slice(-6)) + 1 : prescriptions.length + 1;
+                nextClinicNo = year + String(yearSeq).padStart(6, '0');
+                
+                const todaySeq = prescriptionNo ? parseInt(prescriptionNo.slice(-2)) + 1 : 1;
+                nextPrescriptionNo = todayPrefix + String(todaySeq).padStart(2, '0');
+                
+                // 保存新处方的编号到响应中
+                responseData = {
+                    success: true,
+                    data: prescriptions,
+                    savedPrescription: newPrescription,
+                    count: prescriptions.length,
+                    message: 'Prescriptions saved successfully',
+                    nextPrescriptionNo: nextPrescriptionNo,
+                    nextClinicNo: nextClinicNo
+                };
             }
             
             // 保存到 KV
             await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
             
-            const responseData = {
-                success: true,
-                data: prescriptions,
-                count: prescriptions.length,
-                message: 'Prescriptions saved successfully'
-            };
-            
-            // 如果是单条保存，返回下一个编号
-            if (nextPrescriptionNo) {
-                responseData.nextPrescriptionNo = nextPrescriptionNo;
-            }
-            if (nextClinicNo) {
-                responseData.nextClinicNo = nextClinicNo;
+            // 返回响应（单条保存时已在上面定义responseData，批量保存时使用默认响应）
+            if (!responseData) {
+                responseData = {
+                    success: true,
+                    data: prescriptions,
+                    count: prescriptions.length,
+                    message: 'Prescriptions saved successfully'
+                };
             }
             
             return new Response(JSON.stringify(responseData), {

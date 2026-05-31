@@ -3447,24 +3447,31 @@
                     }
                     localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                     
-                    // 使用后端返回的下一个编号
-                    if (response.nextPrescriptionNo) {
-                        document.getElementById('prescriptionNo').value = response.nextPrescriptionNo;
-                        document.getElementById('paperClinicNo').textContent = response.nextPrescriptionNo;
-                    }
-                    if (response.nextClinicNo) {
-                        document.getElementById('clinicNo').value = response.nextClinicNo;
+                    // 获取刚保存的处方（从响应或历史记录）
+                    const savedPrescription = response.savedPrescription || prescriptionHistory[0];
+                    
+                    // 显示当前处方的编号
+                    if (savedPrescription) {
+                        document.getElementById('prescriptionNo').value = savedPrescription.prescriptionNo || savedPrescription.clinicNo || '';
+                        document.getElementById('paperClinicNo').textContent = savedPrescription.prescriptionNo || savedPrescription.clinicNo || '';
+                        document.getElementById('clinicNo').value = savedPrescription.clinicNo || '';
                     }
                     
-                    // 从最新的处方中获取编号（即刚保存的这张）
-                    const latestPrescription = prescriptionHistory[0];
+                    // 使用后端返回的下一个编号（用于下一次保存）
+                    if (response.nextPrescriptionNo) {
+                        localStorage.setItem('nextPrescriptionNo', response.nextPrescriptionNo);
+                    }
+                    if (response.nextClinicNo) {
+                        localStorage.setItem('nextClinicNo', response.nextClinicNo);
+                    }
                     
                     // 保存后立即刷新历史处方栏
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    
                     // 生成处方签图片并自动下载
-                    if (latestPrescription) {
+                    if (savedPrescription) {
                         console.log('生成处方签图片...');
-                        savePrescriptionAsImage(latestPrescription, latestPrescription.prescriptionNo);
+                        savePrescriptionAsImage(savedPrescription, savedPrescription.prescriptionNo || savedPrescription.clinicNo);
                     }
                     alert('处方保存成功！');
                     searchPatientsQuick({target:{value:name}});
