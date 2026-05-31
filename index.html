@@ -1309,23 +1309,9 @@
         async function refreshUserInterface() {
             const migrated = migrateOldData();
             
-            // 获取处方号（daily类型：YYMMDDNN，每日重置）
-            let presNo;
-            try {
-                presNo = await getCurrentPrescriptionNoFromCloud();
-            } catch (error) {
-                console.error('云端获取处方号失败，使用本地备用方案:', error);
-                presNo = generatePrescriptionNo('daily');
-            }
-            
-            // 获取编号（yearly类型：YY + 6位序号，不每日重置）
-            let clinicNo;
-            try {
-                clinicNo = await getCurrentClinicNoFromCloud();
-            } catch (error) {
-                console.error('云端获取编号失败，使用本地备用方案:', error);
-                clinicNo = generatePrescriptionNo('yearly');
-            }
+            // 从 localStorage 获取缓存的下一个编号
+            let presNo = localStorage.getItem('nextPrescriptionNo') || generatePrescriptionNo('daily');
+            let clinicNo = localStorage.getItem('nextClinicNo') || generatePrescriptionNo('yearly');
             
             if (!presNo || !clinicNo) {
                 alert('编号生成失败，请刷新页面重试');
@@ -2467,22 +2453,6 @@
             }
         }
         
-        // 从云端计数器获取当前处方号（不递增，daily类型）
-        async function getCurrentPrescriptionNoFromCloud() {
-            try {
-                const username = currentUser ? currentUser.username : 'default';
-                const response = await fetch(`${PRESCRIPTION_API}/current-prescription-no?username=${encodeURIComponent(username)}&type=daily`);
-                if (!response.ok) throw new Error('Failed to fetch');
-                const data = await response.json();
-                if (data.success && data.prescriptionNo) {
-                    return data.prescriptionNo;
-                }
-            } catch (error) {
-                console.error('云端获取当前处方号失败:', error);
-            }
-            return generatePrescriptionNo('daily');
-        }
-        
         // 从云端计数器获取下一个编号（yearly类型：YY + 6位序号，不每日重置）
         async function getNextClinicNoFromCloud() {
             try {
@@ -2501,22 +2471,6 @@
                 console.error('云端计数器获取失败，使用本地备用方案:', error);
                 return generatePrescriptionNo('yearly');
             }
-        }
-        
-        // 从云端计数器获取当前编号（不递增，yearly类型）
-        async function getCurrentClinicNoFromCloud() {
-            try {
-                const username = currentUser ? currentUser.username : 'default';
-                const response = await fetch(`${PRESCRIPTION_API}/current-prescription-no?username=${encodeURIComponent(username)}&type=yearly`);
-                if (!response.ok) throw new Error('Failed to fetch');
-                const data = await response.json();
-                if (data.success && data.prescriptionNo) {
-                    return data.prescriptionNo;
-                }
-            } catch (error) {
-                console.error('云端获取当前编号失败:', error);
-            }
-            return generatePrescriptionNo('yearly');
         }
         
         // 本地备用编号生成（支持两种类型）
@@ -2602,23 +2556,6 @@
             calculateAmount();
             
             checkLoginStatus().catch(console.error);
-            
-            (async () => {
-                try {
-                    // 初始化时获取当前编号（不递增），保存时再获取下一个编号
-                    const cloudPresNo = await getCurrentPrescriptionNoFromCloud();
-                    const cloudClinicNo = await getCurrentClinicNoFromCloud();
-                    if (cloudPresNo) {
-                        document.getElementById('prescriptionNo').value = cloudPresNo;
-                        document.getElementById('paperClinicNo').textContent = cloudPresNo;
-                    }
-                    if (cloudClinicNo) {
-                        document.getElementById('clinicNo').value = cloudClinicNo;
-                    }
-                } catch (error) {
-                    console.error('云端同步失败:', error);
-                }
-            })().catch(console.error);
             
             document.addEventListener('keydown', handleKeyboard);
             window.addEventListener('beforeunload', handleBeforeUnload);
