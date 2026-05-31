@@ -1,13 +1,14 @@
 @echo off
 cls
-echo 处方系统一键推送
-echo ==================
+echo Push to Git Repository
+echo ======================
 echo.
 
 git add .
-git commit -m "更新"
+git commit -m "Update"
 git push
 
 echo.
-echo 推送完成，按任意键退出...
-pause
+echo Push completed.
+echo Press any key to exit...
+pause >nul
