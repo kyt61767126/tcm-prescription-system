@@ -21,36 +21,39 @@ export class PrescriptionCounterCloudflare {
 
     const url = new URL(request.url);
 
-    // GET /next-prescription-no - 获取下一个处方号
+    // GET /next-prescription-no - 获取下一个处方号（支持按用户隔离）
     if (url.pathname === "/next-prescription-no") {
-      return this.getNextPrescriptionNo();
+      const username = url.searchParams.get('username') || 'default';
+      return this.getNextPrescriptionNo(username);
     }
 
-    // GET /current-prescription-no - 获取当前处方号（不递增）
+    // GET /current-prescription-no - 获取当前处方号（不递增，支持按用户隔离）
     if (url.pathname === "/current-prescription-no") {
-      return this.getCurrentPrescriptionNo();
+      const username = url.searchParams.get('username') || 'default';
+      return this.getCurrentPrescriptionNo(username);
     }
 
-    // GET /reset - 重置计数器（仅用于测试）
+    // GET /reset - 重置计数器（支持按用户隔离）
     if (url.pathname === "/reset") {
-      return this.resetCounter();
+      const username = url.searchParams.get('username') || 'default';
+      return this.resetCounter(username);
     }
 
     return new Response("Not Found", { status: 404 });
   }
 
-  async getNextPrescriptionNo() {
+  async getNextPrescriptionNo(username) {
     try {
       const now = new Date();
       const yymmdd = this.getYYMMDD(now);
 
-      // 获取今天的序号
-      let seq = await this.getSequence(yymmdd);
+      // 获取该用户今天的序号（按用户隔离）
+      let seq = await this.getSequence(username, yymmdd);
       seq += 1;
 
-      // 保存序号
-      await this.state.storage.put(`seq:${yymmdd}`, seq);
-      await this.state.storage.put(`last_date`, yymmdd);
+      // 保存该用户的序号
+      await this.state.storage.put(`seq:${username}:${yymmdd}`, seq);
+      await this.state.storage.put(`last_date:${username}`, yymmdd);
 
       // 生成处方号（格式：YYMMDDNN，序号从01开始）
       const prescriptionNo = yymmdd + seq.toString().padStart(2, "0");
@@ -60,7 +63,8 @@ export class PrescriptionCounterCloudflare {
         prescriptionNo: prescriptionNo,
         timestamp: now.toISOString(),
         date: yymmdd,
-        sequence: seq
+        sequence: seq,
+        username: username
       };
 
       return new Response(JSON.stringify(response), {
@@ -85,11 +89,11 @@ export class PrescriptionCounterCloudflare {
     }
   }
 
-  async getCurrentPrescriptionNo() {
+  async getCurrentPrescriptionNo(username) {
     try {
       const now = new Date();
       const yymmdd = this.getYYMMDD(now);
-      const seq = await this.getSequence(yymmdd);
+      const seq = await this.getSequence(username, yymmdd);
       // 生成处方号（格式：YYMMDDNN）
       const prescriptionNo = yymmdd + seq.toString().padStart(2, "0");
 
@@ -98,7 +102,8 @@ export class PrescriptionCounterCloudflare {
         prescriptionNo: prescriptionNo,
         sequence: seq,
         date: yymmdd,
-        nextSequence: seq + 1
+        nextSequence: seq + 1,
+        username: username
       }), {
         headers: {
           "Content-Type": "application/json",
@@ -119,16 +124,17 @@ export class PrescriptionCounterCloudflare {
     }
   }
 
-  async resetCounter() {
+  async resetCounter(username) {
     try {
       const now = new Date();
       const yymmdd = this.getYYMMDD(now);
-      await this.state.storage.put(`seq:${yymmdd}`, 0);
+      await this.state.storage.put(`seq:${username}:${yymmdd}`, 0);
 
       return new Response(JSON.stringify({
         success: true,
         message: "计数器已重置",
-        date: yymmdd
+        date: yymmdd,
+        username: username
       }), {
         headers: {
           "Content-Type": "application/json",
@@ -149,16 +155,16 @@ export class PrescriptionCounterCloudflare {
     }
   }
 
-  async getSequence(yymmdd) {
-    // 检查是否是同一天
-    const lastDate = await this.state.storage.get("last_date");
+  async getSequence(username, yymmdd) {
+    // 检查该用户是否是同一天
+    const lastDate = await this.state.storage.get(`last_date:${username}`);
 
     // 如果日期变了，自动从 01 开始
     if (lastDate !== yymmdd) {
       return 0;
     }
 
-    const seq = await this.state.storage.get(`seq:${yymmdd}`);
+    const seq = await this.state.storage.get(`seq:${username}:${yymmdd}`);
     return seq || 0;
   }
 
