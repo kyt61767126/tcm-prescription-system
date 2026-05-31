@@ -3431,13 +3431,11 @@
                 };
                 
                 console.log('开始保存到云端...');
-                // 后端自动分配编号
                 const response = await savePrescriptionsToCloud([record]);
                 console.log('云端保存响应:', response);
                 
                 if (response.success) {
                     console.log('云端保存成功');
-                    // 云端保存成功，使用响应中的完整处方数据
                     if (response.data && Array.isArray(response.data)) {
                         prescriptionHistory = response.data;
                     }
@@ -3447,17 +3445,14 @@
                     }
                     localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                     
-                    // 获取刚保存的处方（从响应或历史记录）
                     const savedPrescription = response.savedPrescription || prescriptionHistory[0];
                     
-                    // 显示当前处方的编号
                     if (savedPrescription) {
                         document.getElementById('prescriptionNo').value = savedPrescription.prescriptionNo || savedPrescription.clinicNo || '';
                         document.getElementById('paperClinicNo').textContent = savedPrescription.prescriptionNo || savedPrescription.clinicNo || '';
                         document.getElementById('clinicNo').value = savedPrescription.clinicNo || '';
                     }
                     
-                    // 使用后端返回的下一个编号（用于下一次保存）
                     if (response.nextPrescriptionNo) {
                         localStorage.setItem('nextPrescriptionNo', response.nextPrescriptionNo);
                     }
@@ -3465,10 +3460,8 @@
                         localStorage.setItem('nextClinicNo', response.nextClinicNo);
                     }
                     
-                    // 保存后立即刷新历史处方栏
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                     
-                    // 生成处方签图片并自动下载
                     if (savedPrescription) {
                         console.log('生成处方签图片...');
                         savePrescriptionAsImage(savedPrescription, savedPrescription.prescriptionNo || savedPrescription.clinicNo);
@@ -3477,7 +3470,48 @@
                     searchPatientsQuick({target:{value:name}});
                 } else {
                     console.error('云端保存失败:', response);
-                    alert('处方保存失败，请检查网络连接后重试。');
+                    
+                    if (response.requireSetup) {
+                        alert('云端存储未配置！处方将仅保存到本地。\n\n请联系管理员配置Cloudflare KV存储。');
+                    } else {
+                        alert('云端保存失败，将保存到本地存储。');
+                    }
+                    
+                    const now = new Date();
+                    const year = String(now.getFullYear()).slice(-2);
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    const todayPrefix = year + month + day;
+                    
+                    const dailySeq = prescriptionHistory.filter(p => 
+                        p.prescriptionNo && p.prescriptionNo.startsWith(todayPrefix)
+                    ).length + 1;
+                    const finalPrescriptionNo = todayPrefix + String(dailySeq).padStart(2, '0');
+                    const finalClinicNo = year + String(prescriptionHistory.length + 1).padStart(6, '0');
+                    
+                    const localRecord = {
+                        ...record,
+                        prescriptionNo: finalPrescriptionNo,
+                        clinicNo: finalClinicNo,
+                        createdAt: now.toISOString(),
+                        savedToCloud: false
+                    };
+                    
+                    prescriptionHistory.unshift(localRecord);
+                    if (prescriptionHistory.length > 100000) {
+                        prescriptionHistory = prescriptionHistory.slice(0, 100000);
+                    }
+                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                    
+                    document.getElementById('prescriptionNo').value = finalPrescriptionNo;
+                    document.getElementById('paperClinicNo').textContent = finalPrescriptionNo;
+                    document.getElementById('clinicNo').value = finalClinicNo;
+                    
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    
+                    savePrescriptionAsImage(localRecord, finalPrescriptionNo);
+                    alert('处方已保存到本地！');
+                    searchPatientsQuick({target:{value:name}});
                 }
             } catch (error) {
                 console.error('保存处方异常:', error);

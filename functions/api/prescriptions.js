@@ -101,8 +101,9 @@ export async function onRequest(context) {
             console.error('KV binding not found. Available env keys:', envKeys);
             return new Response(JSON.stringify({
                 success: false,
-                error: 'KV binding not found. Please configure TCM_PRESCRIPTION_KV in Cloudflare Pages settings.',
-                availableKeys: envKeys
+                error: 'KV存储未配置。请在Cloudflare Pages设置中配置KV binding，名称为TCM_PRESCRIPTION_KV',
+                availableKeys: envKeys,
+                requireSetup: true
             }), {
                 status: 500,
                 headers: {
