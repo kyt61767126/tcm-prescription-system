@@ -3480,31 +3480,31 @@
                 }
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
-                // 保存成功后立即从云端获取下一个编号，为下一次开方做准备
-                // 获取下一个处方号（daily类型）
-                let nextPrescriptionNo;
+                // 保存成功后，显示当前编号（不递增），为下一次开方准备
+                // 获取当前处方号（daily类型）- 不递增计数器
+                let currentPresNo;
                 try {
-                    nextPrescriptionNo = await getCurrentPrescriptionNoFromCloud();
+                    currentPresNo = await getCurrentPrescriptionNoFromCloud();
                 } catch (error) {
-                    console.error('获取下一个处方号失败:', error);
-                    nextPrescriptionNo = generatePrescriptionNo('daily');
+                    console.error('获取当前处方号失败:', error);
+                    currentPresNo = generatePrescriptionNo('daily');
                 }
                 
-                // 获取下一个编号（yearly类型）
-                let nextClinicNo;
+                // 获取当前编号（yearly类型）- 不递增计数器
+                let currentClinicNoDisplay;
                 try {
-                    nextClinicNo = await getCurrentClinicNoFromCloud();
+                    currentClinicNoDisplay = await getCurrentClinicNoFromCloud();
                 } catch (error) {
-                    console.error('获取下一个编号失败:', error);
-                    nextClinicNo = generatePrescriptionNo('yearly');
+                    console.error('获取当前编号失败:', error);
+                    currentClinicNoDisplay = generatePrescriptionNo('yearly');
                 }
                 
-                if (nextPrescriptionNo) {
-                    document.getElementById('prescriptionNo').value = nextPrescriptionNo;
-                    document.getElementById('paperClinicNo').textContent = nextPrescriptionNo;
+                if (currentPresNo) {
+                    document.getElementById('prescriptionNo').value = currentPresNo;
+                    document.getElementById('paperClinicNo').textContent = currentPresNo;
                 }
-                if (nextClinicNo) {
-                    document.getElementById('clinicNo').value = nextClinicNo;
+                if (currentClinicNoDisplay) {
+                    document.getElementById('clinicNo').value = currentClinicNoDisplay;
                 }
                 
                 // 从最新的处方中获取编号（即刚保存的这张）
