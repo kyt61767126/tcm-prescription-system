@@ -3434,8 +3434,16 @@
                 };
                 
                 console.log('开始保存到云端...');
-                const response = await savePrescriptionsToCloud([record]);
+                let response = await savePrescriptionsToCloud([record]);
                 console.log('云端保存响应:', response);
+                
+                // 重试一次（处理间歇性失败）
+                if (!response.success && !response.requireSetup) {
+                    console.log('云端保存失败，重试一次...');
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    response = await savePrescriptionsToCloud([record]);
+                    console.log('重试响应:', response);
+                }
                 
                 if (response.success) {
                     console.log('云端保存成功');
