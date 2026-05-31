@@ -50,7 +50,7 @@ export class PrescriptionCounterCloudflare {
       let seq, prescriptionNo, storageKey;
 
       if (type === 'yearly') {
-        // yearly 类型：YY + 6位序号，不每日重置（如 2600001）
+        // yearly 类型：YY + 6位序号，不每日重置（如 26000001）
         storageKey = `seq:${username}:yearly:${year}`;
         seq = await this.state.storage.get(storageKey) || 0;
         seq += 1;
