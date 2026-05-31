@@ -1,6 +1,21 @@
 ﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
-<head>
+<head><script src="getPrescriptionNo.js" defer></script>
+<script defer>
+  // 在页面加载完成后调用这个函数
+  document.addEventListener('DOMContentLoaded', async function() {
+    // 这里可以写你的初始化代码
+    console.log('页面加载完成');
+  });
+
+  // 生成处方号的函数
+  window.getPrescriptionNumber = async function() {
+    const prescriptionNo = await getNextPrescriptionNo();
+    console.log('新处方号：', prescriptionNo);
+    // 把 prescriptionNo 赋值给你的处方号输入框
+    // document.getElementById('prescription-no').value = prescriptionNo;
+  }
+</script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
