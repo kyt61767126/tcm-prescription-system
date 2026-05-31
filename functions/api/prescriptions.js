@@ -88,12 +88,12 @@ export async function onRequest(context) {
             });
         }
         
-        // 支持多种KV绑定名称
+        // 支持多种KV绑定名称（Cloudflare配置中绑定名为KV）
         const envKeys = Object.keys(context.env || {});
-        const kv = context.env.TCM_PRESCRIPTION_KV || 
+        const kv = context.env.KV || 
+                   context.env.TCM_PRESCRIPTION_KV || 
                    context.env['tcm-prescription-kv'] || 
                    context.env['TCM-PRESCRIPTION-KV'] ||
-                   context.env.KV || 
                    context.env.TCM_KV || 
                    context.env.PRESCRIPTION_KV;
         

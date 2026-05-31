@@ -19,10 +19,10 @@ export async function onRequest(context) {
         const envKeys = Object.keys(context.env || {});
         console.log('Available environment keys:', envKeys);
         
-        const kv = context.env.TCM_PRESCRIPTION_KV || 
+        const kv = context.env.KV || 
+                   context.env.TCM_PRESCRIPTION_KV || 
                    context.env['tcm-prescription-kv'] || 
                    context.env['TCM-PRESCRIPTION-KV'] ||
-                   context.env.KV || 
                    context.env.TCM_KV || 
                    context.env.PRESCRIPTION_KV;
         
