@@ -139,8 +139,35 @@ export async function onRequest(context) {
         
         const KV_PRESCRIPTIONS_KEY = 'prescriptions_all';
         
-        // GET - 获取处方（根据用户角色筛选）
+        // GET - 处理旧的编号请求端点（兼容旧客户端）
         if (method === 'GET') {
+            if (url.pathname.includes('/current-prescription-no') || url.pathname.includes('/next-prescription-no')) {
+                const type = url.searchParams.get('type') || 'daily';
+                const now = new Date();
+                const year = String(now.getFullYear()).slice(-2);
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                
+                let prescriptionNo;
+                if (type === 'yearly') {
+                    prescriptionNo = year + '000001';
+                } else {
+                    prescriptionNo = year + month + day + '01';
+                }
+                
+                return new Response(JSON.stringify({
+                    success: true,
+                    prescriptionNo: prescriptionNo,
+                    message: 'Using fallback number (old API)'
+                }), {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
+            }
+            
             let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
             if (!prescriptions) {
                 prescriptions = [];
