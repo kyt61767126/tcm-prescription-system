@@ -1305,20 +1305,32 @@
 
         async function refreshUserInterface() {
             const migrated = migrateOldData();
+            
+            // 获取处方号（daily类型：YYMMDDNN，每日重置）
             let presNo;
             try {
-                // 页面初始化时获取当前编号（不递增），保存时再获取下一个编号
                 presNo = await getCurrentPrescriptionNoFromCloud();
             } catch (error) {
-                console.error('云端获取失败，使用本地备用方案:', error);
-                presNo = generatePrescriptionNo();
+                console.error('云端获取处方号失败，使用本地备用方案:', error);
+                presNo = generatePrescriptionNo('daily');
             }
-            if (!presNo) {
+            
+            // 获取编号（yearly类型：YY + 6位序号，不每日重置）
+            let clinicNo;
+            try {
+                clinicNo = await getCurrentClinicNoFromCloud();
+            } catch (error) {
+                console.error('云端获取编号失败，使用本地备用方案:', error);
+                clinicNo = generatePrescriptionNo('yearly');
+            }
+            
+            if (!presNo || !clinicNo) {
                 alert('编号生成失败，请刷新页面重试');
                 return;
             }
+            
             document.getElementById('prescriptionNo').value = presNo;
-            document.getElementById('clinicNo').value = presNo;
+            document.getElementById('clinicNo').value = clinicNo;
             updateClinicNoDisplay();
             document.getElementById('paperClinicNo').textContent = presNo;
             if (prescriptionHistory.length > 0) {
@@ -2432,32 +2444,67 @@
         // 云端计数器接口地址（Durable Object）
         const PRESCRIPTION_API = 'https://prescription-counter-do.61767126.workers.dev';
         
-        // 从云端计数器获取下一个处方号（递增序号，按用户隔离）
+        // 从云端计数器获取下一个处方号（daily类型：YYMMDDNN，每日重置）
         async function getNextPrescriptionNoFromCloud() {
             try {
-                // 获取当前登录用户的用户名
                 const username = currentUser ? currentUser.username : 'default';
-                const response = await fetch(`${PRESCRIPTION_API}/next-prescription-no?username=${encodeURIComponent(username)}`);
+                // 使用 daily 类型：YYMMDDNN，每日重置
+                const response = await fetch(`${PRESCRIPTION_API}/next-prescription-no?username=${encodeURIComponent(username)}&type=daily`);
                 if (!response.ok) throw new Error('Failed to fetch');
                 const data = await response.json();
                 if (data.success && data.prescriptionNo) {
-                    console.log(`用户 ${username} 云端获取处方号成功:`, data.prescriptionNo);
+                    console.log(`用户 ${username} 云端获取处方号成功(daily):`, data.prescriptionNo);
                     return data.prescriptionNo;
                 } else {
                     throw new Error('Invalid response from counter');
                 }
             } catch (error) {
                 console.error('云端计数器获取失败，使用本地备用方案:', error);
-                return generatePrescriptionNo();
+                return generatePrescriptionNo('daily');
             }
         }
         
-        // 从云端计数器获取当前处方号（不递增，按用户隔离）
+        // 从云端计数器获取当前处方号（不递增，daily类型）
         async function getCurrentPrescriptionNoFromCloud() {
             try {
-                // 获取当前登录用户的用户名
                 const username = currentUser ? currentUser.username : 'default';
-                const response = await fetch(`${PRESCRIPTION_API}/current-prescription-no?username=${encodeURIComponent(username)}`);
+                const response = await fetch(`${PRESCRIPTION_API}/current-prescription-no?username=${encodeURIComponent(username)}&type=daily`);
+                if (!response.ok) throw new Error('Failed to fetch');
+                const data = await response.json();
+                if (data.success && data.prescriptionNo) {
+                    return data.prescriptionNo;
+                }
+            } catch (error) {
+                console.error('云端获取当前处方号失败:', error);
+            }
+            return generatePrescriptionNo('daily');
+        }
+        
+        // 从云端计数器获取下一个编号（yearly类型：YY + 6位序号，不每日重置）
+        async function getNextClinicNoFromCloud() {
+            try {
+                const username = currentUser ? currentUser.username : 'default';
+                // 使用 yearly 类型：YY + 6位序号，不每日重置
+                const response = await fetch(`${PRESCRIPTION_API}/next-prescription-no?username=${encodeURIComponent(username)}&type=yearly`);
+                if (!response.ok) throw new Error('Failed to fetch');
+                const data = await response.json();
+                if (data.success && data.prescriptionNo) {
+                    console.log(`用户 ${username} 云端获取编号成功(yearly):`, data.prescriptionNo);
+                    return data.prescriptionNo;
+                } else {
+                    throw new Error('Invalid response from counter');
+                }
+            } catch (error) {
+                console.error('云端计数器获取失败，使用本地备用方案:', error);
+                return generatePrescriptionNo('yearly');
+            }
+        }
+        
+        // 从云端计数器获取当前编号（不递增，yearly类型）
+        async function getCurrentClinicNoFromCloud() {
+            try {
+                const username = currentUser ? currentUser.username : 'default';
+                const response = await fetch(`${PRESCRIPTION_API}/current-prescription-no?username=${encodeURIComponent(username)}&type=yearly`);
                 if (!response.ok) throw new Error('Failed to fetch');
                 const data = await response.json();
                 if (data.success && data.prescriptionNo) {
@@ -2466,32 +2513,51 @@
             } catch (error) {
                 console.error('云端获取当前编号失败:', error);
             }
-            return generatePrescriptionNo();
+            return generatePrescriptionNo('yearly');
         }
         
-        // 本地备用编号生成（格式：YY + 6位序号，按用户+年份隔离，不每日重置）
-        function generatePrescriptionNo() {
+        // 本地备用编号生成（支持两种类型）
+        function generatePrescriptionNo(type = 'daily') {
             try {
                 const now = new Date();
                 const year = String(now.getFullYear()).slice(-2);
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                const todayPrefix = year + month + day;
                 const username = currentUser ? currentUser.username : 'default';
                 
-                // 统计当前用户当前年份已有的处方数量（按用户+年份隔离）
-                let yearCount = 0;
-                prescriptionHistory.forEach(p => {
-                    if (p.prescriptionNo && p.prescriptionNo.startsWith(year) && 
-                        (!p.createdBy || p.createdBy === username)) {
-                        yearCount++;
-                    }
-                });
-                
-                return year + String(yearCount + 1).padStart(6, '0');
+                if (type === 'yearly') {
+                    // yearly 类型：YY + 6位序号，不每日重置
+                    let yearCount = 0;
+                    prescriptionHistory.forEach(p => {
+                        if (p.prescriptionNo && p.prescriptionNo.startsWith(year) && 
+                            (!p.createdBy || p.createdBy === username)) {
+                            yearCount++;
+                        }
+                    });
+                    return year + String(yearCount + 1).padStart(6, '0');
+                } else {
+                    // daily 类型（默认）：YYMMDDNN，每日重置
+                    let todayCount = 0;
+                    prescriptionHistory.forEach(p => {
+                        if (p.prescriptionNo && p.prescriptionNo.startsWith(todayPrefix) && 
+                            (!p.createdBy || p.createdBy === username)) {
+                            todayCount++;
+                        }
+                    });
+                    return todayPrefix + String(todayCount + 1).padStart(2, '0');
+                }
             } catch (error) {
                 console.error('处方编号生成异常:', error);
-                // 使用时间戳作为备用
                 const now = new Date();
                 const year = String(now.getFullYear()).slice(-2);
-                return year + String(prescriptionHistory.length + 1).padStart(6, '0');
+                if (type === 'yearly') {
+                    return year + String(prescriptionHistory.length + 1).padStart(6, '0');
+                } else {
+                    const month = String(now.getMonth() + 1).padStart(2, '0');
+                    const day = String(now.getDate()).padStart(2, '0');
+                    return year + month + day + '01';
+                }
             }
         }
 
@@ -2519,9 +2585,10 @@
             document.getElementById('autoStart').checked = getUserItem('autoStartEnabled') === 'true';
             
             // 立即生成并显示编号（同步执行，无延迟）
-            const initialPresNo = generatePrescriptionNo() || '2605310001';
+            const initialPresNo = generatePrescriptionNo('daily') || '26053101';  // daily类型：YYMMDDNN
+            const initialClinicNo = generatePrescriptionNo('yearly') || '26000001';  // yearly类型：YY + 6位
             document.getElementById('prescriptionNo').value = initialPresNo;
-            document.getElementById('clinicNo').value = initialPresNo;
+            document.getElementById('clinicNo').value = initialClinicNo;
             updateClinicNoDisplay();
             document.getElementById('paperClinicNo').textContent = initialPresNo;
             
@@ -2534,12 +2601,14 @@
             (async () => {
                 try {
                     // 初始化时获取当前编号（不递增），保存时再获取下一个编号
-                    const cloudNo = await getCurrentPrescriptionNoFromCloud();
-                    if (cloudNo) {
-                        document.getElementById('prescriptionNo').value = cloudNo;
-                        document.getElementById('clinicNo').value = cloudNo;
-                        updateClinicNoDisplay();
-                        document.getElementById('paperClinicNo').textContent = cloudNo;
+                    const cloudPresNo = await getCurrentPrescriptionNoFromCloud();
+                    const cloudClinicNo = await getCurrentClinicNoFromCloud();
+                    if (cloudPresNo) {
+                        document.getElementById('prescriptionNo').value = cloudPresNo;
+                        document.getElementById('paperClinicNo').textContent = cloudPresNo;
+                    }
+                    if (cloudClinicNo) {
+                        document.getElementById('clinicNo').value = cloudClinicNo;
                     }
                 } catch (error) {
                     console.error('云端同步失败:', error);
@@ -3328,24 +3397,32 @@
             const name = document.getElementById('patientName').value;
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
             
-            // 保存时强制从云端获取编号，确保唯一性
+            // 获取处方号（daily类型：YYMMDDNN，每日重置）
             let currentPrescriptionNo;
             try {
                 currentPrescriptionNo = await getNextPrescriptionNoFromCloud();
             } catch (error) {
-                console.error('云端获取编号失败:', error);
-                currentPrescriptionNo = generatePrescriptionNo();
+                console.error('云端获取处方号失败:', error);
+                currentPrescriptionNo = generatePrescriptionNo('daily');
             }
             
-            if (!currentPrescriptionNo) {
-                alert('处方编号生成失败，请刷新页面重试！');
+            // 获取编号（yearly类型：YY + 6位序号，不每日重置）
+            let currentClinicNo;
+            try {
+                currentClinicNo = await getNextClinicNoFromCloud();
+            } catch (error) {
+                console.error('云端获取编号失败:', error);
+                currentClinicNo = generatePrescriptionNo('yearly');
+            }
+            
+            if (!currentPrescriptionNo || !currentClinicNo) {
+                alert('编号生成失败，请刷新页面重试！');
                 return;
             }
             
             document.getElementById('prescriptionNo').value = currentPrescriptionNo;
+            document.getElementById('clinicNo').value = currentClinicNo;
             document.getElementById('paperClinicNo').textContent = currentPrescriptionNo;
-            
-            // 编号输入框使用统计编号规则，不再与处方号同步
             
             const currentDate = new Date().toISOString().split('T')[0];
             document.getElementById('visitDate').value = currentDate;
@@ -3363,8 +3440,8 @@
                 patientAge: document.getElementById('patientAge').value,
                 patientPhone: document.getElementById('patientPhone').value,
                 patientAddress: document.getElementById('patientAddress').value,
-                clinicNo: currentPrescriptionNo,
-                prescriptionNo: currentPrescriptionNo,
+                clinicNo: currentClinicNo,      // yearly类型编号
+                prescriptionNo: currentPrescriptionNo, // daily类型处方号
                 doctorName: document.getElementById('doctorName').value,
                 medicalHistory: document.getElementById('medicalHistory').value,
                 diagnosis: document.getElementById('diagnosis').value,
@@ -3404,19 +3481,30 @@
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
                 // 保存成功后立即从云端获取下一个编号，为下一次开方做准备
+                // 获取下一个处方号（daily类型）
                 let nextPrescriptionNo;
                 try {
-                    nextPrescriptionNo = await getNextPrescriptionNoFromCloud();
+                    nextPrescriptionNo = await getCurrentPrescriptionNoFromCloud();
+                } catch (error) {
+                    console.error('获取下一个处方号失败:', error);
+                    nextPrescriptionNo = generatePrescriptionNo('daily');
+                }
+                
+                // 获取下一个编号（yearly类型）
+                let nextClinicNo;
+                try {
+                    nextClinicNo = await getCurrentClinicNoFromCloud();
                 } catch (error) {
                     console.error('获取下一个编号失败:', error);
-                    nextPrescriptionNo = generatePrescriptionNo();
+                    nextClinicNo = generatePrescriptionNo('yearly');
                 }
                 
                 if (nextPrescriptionNo) {
                     document.getElementById('prescriptionNo').value = nextPrescriptionNo;
-                    updateClinicNoDisplay();
                     document.getElementById('paperClinicNo').textContent = nextPrescriptionNo;
-                    document.getElementById('clinicNo').value = nextPrescriptionNo;
+                }
+                if (nextClinicNo) {
+                    document.getElementById('clinicNo').value = nextClinicNo;
                 }
                 
                 // 从最新的处方中获取编号（即刚保存的这张）
@@ -3429,7 +3517,7 @@
                 // 确保记录包含正确的处方号
                 const imageRecord = latestPrescription || record;
                 imageRecord.prescriptionNo = currentPrescriptionNo;
-                imageRecord.clinicNo = currentPrescriptionNo;
+                imageRecord.clinicNo = currentClinicNo;
                 savePrescriptionAsImage(imageRecord, currentPrescriptionNo);
                 alert('处方保存成功！已自动生成新编号。');
                 searchPatientsQuick({target:{value:name}});
