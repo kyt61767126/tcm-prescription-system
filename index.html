@@ -3394,13 +3394,23 @@
         }
 
         async function savePrescription() {
+            console.log('savePrescription 开始执行');
             const name = document.getElementById('patientName').value;
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
+            
+            // 显示保存中提示
+            const saveBtn = event.target;
+            const originalText = saveBtn.textContent;
+            saveBtn.textContent = '保存中...';
+            saveBtn.disabled = true;
+            
+            console.log('开始获取处方号和编号...');
             
             // 获取处方号（daily类型：YYMMDDNN，每日重置）
             let currentPrescriptionNo;
             try {
                 currentPrescriptionNo = await getNextPrescriptionNoFromCloud();
+                console.log('处方号获取成功:', currentPrescriptionNo);
             } catch (error) {
                 console.error('云端获取处方号失败:', error);
                 currentPrescriptionNo = generatePrescriptionNo('daily');
@@ -3410,6 +3420,7 @@
             let currentClinicNo;
             try {
                 currentClinicNo = await getNextClinicNoFromCloud();
+                console.log('编号获取成功:', currentClinicNo);
             } catch (error) {
                 console.error('云端获取编号失败:', error);
                 currentClinicNo = generatePrescriptionNo('yearly');
@@ -3451,78 +3462,90 @@
                 createdBy: currentUser ? currentUser.username : 'unknown'
             };
             
+            console.log('开始保存到云端...');
             // 统一写入云端数据库（真实数据唯一来源是云端）
             const response = await savePrescriptionsToCloud([record]);
+            console.log('云端保存响应:', response);
             
-            if (response.success) {
-                // 云端保存成功，使用响应中的完整处方数据
-                if (response.data && Array.isArray(response.data)) {
-                    prescriptionHistory = response.data;
-                } else {
-                    // 如果响应中没有数据，尝试从云端重新获取
-                    const cloudPrescriptions = await getPrescriptionsFromCloud();
-                    if (cloudPrescriptions) {
-                        prescriptionHistory = cloudPrescriptions;
+            try {
+                if (response.success) {
+                    console.log('云端保存成功');
+                    // 云端保存成功，使用响应中的完整处方数据
+                    if (response.data && Array.isArray(response.data)) {
+                        prescriptionHistory = response.data;
                     } else {
-                        // 添加到列表并按时间排序
-                        prescriptionHistory.push(record);
-                        // 按时间倒序排序，确保不同设备保存的处方按时间正确排列
-                        prescriptionHistory.sort((a, b) => {
-                            const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                            const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                            return timeB - timeA;
-                        });
+                        // 如果响应中没有数据，尝试从云端重新获取
+                        const cloudPrescriptions = await getPrescriptionsFromCloud();
+                        if (cloudPrescriptions) {
+                            prescriptionHistory = cloudPrescriptions;
+                        } else {
+                            // 添加到列表并按时间排序
+                            prescriptionHistory.push(record);
+                            // 按时间倒序排序，确保不同设备保存的处方按时间正确排列
+                            prescriptionHistory.sort((a, b) => {
+                                const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                                const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                                return timeB - timeA;
+                            });
+                        }
                     }
+                    
+                    if (prescriptionHistory.length > 100000) {
+                        prescriptionHistory = prescriptionHistory.slice(0, 100000);
+                    }
+                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                    
+                    console.log('开始获取下一个编号...');
+                    // 保存成功后，显示当前编号（不递增），为下一次开方准备
+                    // 获取当前处方号（daily类型）- 不递增计数器
+                    let currentPresNo;
+                    try {
+                        currentPresNo = await getCurrentPrescriptionNoFromCloud();
+                    } catch (error) {
+                        console.error('获取当前处方号失败:', error);
+                        currentPresNo = generatePrescriptionNo('daily');
+                    }
+                    
+                    // 获取当前编号（yearly类型）- 不递增计数器
+                    let currentClinicNoDisplay;
+                    try {
+                        currentClinicNoDisplay = await getCurrentClinicNoFromCloud();
+                    } catch (error) {
+                        console.error('获取当前编号失败:', error);
+                        currentClinicNoDisplay = generatePrescriptionNo('yearly');
+                    }
+                    
+                    if (currentPresNo) {
+                        document.getElementById('prescriptionNo').value = currentPresNo;
+                        document.getElementById('paperClinicNo').textContent = currentPresNo;
+                    }
+                    if (currentClinicNoDisplay) {
+                        document.getElementById('clinicNo').value = currentClinicNoDisplay;
+                    }
+                    
+                    // 从最新的处方中获取编号（即刚保存的这张）
+                    const latestPrescription = prescriptionHistory[0];
+                    const usedNo = latestPrescription ? (latestPrescription.prescriptionNo || latestPrescription.clinicNo) : currentPrescriptionNo;
+                    
+                    // 保存后立即刷新历史处方栏
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    // 生成处方签图片并自动下载（使用刚保存的处方号）
+                    // 确保记录包含正确的处方号
+                    const imageRecord = latestPrescription || record;
+                    imageRecord.prescriptionNo = currentPrescriptionNo;
+                    imageRecord.clinicNo = currentClinicNo;
+                    console.log('生成处方签图片...');
+                    savePrescriptionAsImage(imageRecord, currentPrescriptionNo);
+                    alert('处方保存成功！已自动生成新编号。');
+                    searchPatientsQuick({target:{value:name}});
+                } else {
+                    console.error('云端保存失败:', response);
+                    alert('处方保存失败，请检查网络连接后重试。');
                 }
-                
-                if (prescriptionHistory.length > 100000) {
-                    prescriptionHistory = prescriptionHistory.slice(0, 100000);
-                }
-                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                
-                // 保存成功后，显示当前编号（不递增），为下一次开方准备
-                // 获取当前处方号（daily类型）- 不递增计数器
-                let currentPresNo;
-                try {
-                    currentPresNo = await getCurrentPrescriptionNoFromCloud();
-                } catch (error) {
-                    console.error('获取当前处方号失败:', error);
-                    currentPresNo = generatePrescriptionNo('daily');
-                }
-                
-                // 获取当前编号（yearly类型）- 不递增计数器
-                let currentClinicNoDisplay;
-                try {
-                    currentClinicNoDisplay = await getCurrentClinicNoFromCloud();
-                } catch (error) {
-                    console.error('获取当前编号失败:', error);
-                    currentClinicNoDisplay = generatePrescriptionNo('yearly');
-                }
-                
-                if (currentPresNo) {
-                    document.getElementById('prescriptionNo').value = currentPresNo;
-                    document.getElementById('paperClinicNo').textContent = currentPresNo;
-                }
-                if (currentClinicNoDisplay) {
-                    document.getElementById('clinicNo').value = currentClinicNoDisplay;
-                }
-                
-                // 从最新的处方中获取编号（即刚保存的这张）
-                const latestPrescription = prescriptionHistory[0];
-                const usedNo = latestPrescription ? (latestPrescription.prescriptionNo || latestPrescription.clinicNo) : currentPrescriptionNo;
-                
-                // 保存后立即刷新历史处方栏
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                // 生成处方签图片并自动下载（使用刚保存的处方号）
-                // 确保记录包含正确的处方号
-                const imageRecord = latestPrescription || record;
-                imageRecord.prescriptionNo = currentPrescriptionNo;
-                imageRecord.clinicNo = currentClinicNo;
-                savePrescriptionAsImage(imageRecord, currentPrescriptionNo);
-                alert('处方保存成功！已自动生成新编号。');
-                searchPatientsQuick({target:{value:name}});
-            } else {
-                alert('处方保存失败，请检查网络连接后重试。');
+            } finally {
+                // 恢复按钮状态
+                saveBtn.textContent = originalText;
+                saveBtn.disabled = false;
             }
         }
 
