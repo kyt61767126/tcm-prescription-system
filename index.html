@@ -3507,16 +3507,10 @@
         }
 
         function savePrescriptionAsImage(record, currentPrescriptionNo) {
-            // 创建处方签图片 - 样式与预览一致，字体适合手机端
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             
-            // 确保使用有效的门诊号
-            const validPrescriptionNo = currentPrescriptionNo || record.prescriptionNo || record.clinicNo || '';
-            if (!validPrescriptionNo || validPrescriptionNo === 'undefined' || validPrescriptionNo === 'null') {
-                alert('处方编号无效，无法导出图片');
-                return;
-            }
+            const validPrescriptionNo = currentPrescriptionNo || record.prescriptionNo || record.clinicNo || '未编号';
             
             // 设置画布尺寸 (A5 148mm x 210mm at 150 DPI)
             const width = 870;
