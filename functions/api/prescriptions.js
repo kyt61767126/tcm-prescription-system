@@ -86,20 +86,10 @@ export async function onRequest(context) {
             
             const now = new Date();
             const nowIso = now.toISOString();
-            const year = String(now.getFullYear()).slice(-2);
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const todayPrefix = year + month + day;
             
-            // 计算当天的序号
-            let todayCount = 0;
-            prescriptions.forEach(p => {
-                if (p.prescriptionNo && p.prescriptionNo.startsWith(todayPrefix)) {
-                    todayCount++;
-                }
-            });
-            const newNumber = todayCount + 1;
-            const newPrescriptionNo = todayPrefix + String(newNumber).padStart(2, '0');
+            // 简化：只统计历史处方数量作为编号
+            const currentCount = prescriptions.length;
+            const newPrescriptionNo = String(currentCount + 1).padStart(6, '0');
             
             if (Array.isArray(body.prescription)) {
                 // 批量保存模式 - 对于批量导入的处方，保留原有编号

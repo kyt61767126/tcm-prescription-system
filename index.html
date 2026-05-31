@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head><script src="lib/getPrescriptionNo.js" defer></script>
 <script defer>
@@ -2422,39 +2422,24 @@
         // 从云端获取下一个处方号
         async function getNextPrescriptionNoFromCloud() {
             try {
-                const response = await fetch(`${PRESCRIPTION_API}/next-prescription-no`);
-                if (!response.ok) throw new Error('Failed to fetch');
-                const data = await response.json();
-                if (data.success && data.prescriptionNo) {
-                    return data.prescriptionNo;
-                } else {
-                    throw new Error('Invalid response');
+                const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`);
+                if (response.success && response.data) {
+                    const currentCount = response.data.length;
+                    return String(currentCount + 1).padStart(6, '0');
                 }
             } catch (error) {
                 console.error('云端获取处方号失败，使用本地备用方案:', error);
-                return generatePrescriptionNo(); // 本地备用
             }
+            return generatePrescriptionNo();
         }
         
         function generatePrescriptionNo() {
             try {
-                const now = new Date();
-                const year = String(now.getFullYear()).slice(-2);
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                if (dailyCounter === undefined || dailyCounter === null || isNaN(dailyCounter)) {
-                    dailyCounter = 1;
-                }
-                const count = String(dailyCounter).padStart(4, '0');
-                const result = year + month + day + count;
-                if (!result || result.length !== 10) {
-                    console.error('处方编号生成失败，result:', result);
-                    return null;
-                }
-                return result;
+                const currentCount = prescriptionHistory.length;
+                return String(currentCount + 1).padStart(6, '0');
             } catch (error) {
                 console.error('处方编号生成异常:', error);
-                return null;
+                return String(Date.now()).slice(-6);
             }
         }
 
@@ -2502,13 +2487,6 @@
                         document.getElementById('clinicNo').value = cloudNo;
                         updateClinicNoDisplay();
                         document.getElementById('paperClinicNo').textContent = cloudNo;
-                        if (cloudNo.length === 10) {
-                            const seq = parseInt(cloudNo.slice(-4), 10);
-                            if (!isNaN(seq)) {
-                                dailyCounter = seq;
-                                setUserItem('dailyCounter', dailyCounter);
-                            }
-                        }
                     }
                 } catch (error) {
                     console.error('云端同步失败:', error);
@@ -3365,16 +3343,7 @@
                 }
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
-                // 保存成功后根据云端编号同步本地计数器，然后生成下一个编号
-                if (currentPrescriptionNo && currentPrescriptionNo.length === 10) {
-                    const seqStr = currentPrescriptionNo.slice(-4);
-                    const seq = parseInt(seqStr, 10);
-                    if (!isNaN(seq)) {
-                        dailyCounter = seq + 1;
-                    }
-                }
-                setUserItem('dailyCounter', dailyCounter);
-                setUserItem('counterDate', currentPrescriptionDate);
+                // 保存成功后生成下一个编号（基于云端最新计数）
                 const newPrescriptionNo = generatePrescriptionNo();
                 
                 if (newPrescriptionNo) {
