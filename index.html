@@ -4312,37 +4312,73 @@ IconFile=${scriptPath}`;
             `).join('');
         }
 
-        document.addEventListener('DOMContentLoaded', init);
-    </script>
+    
 document.addEventListener('DOMContentLoaded', init);
 </script>
 
-<!-- 在这里插入我们的自动转换代码！ -->
+<!-- 处方号：拦截后端返回 + 自动转换 12位 → YYMMDD+序号 -->
 <script>
-// 处方历史自动转换：时间戳 → YYMMDD+序号格式
-window.addEventListener('load', function() {
-    function formatPrescriptionNo(timestamp) {
-        if (!timestamp || timestamp.length < 6) return timestamp;
-        const yymmdd = timestamp.substring(0, 6);
-        const seconds = parseInt(timestamp.substring(10, 12), 10);
-        const seq = String((seconds % 99) + 1).padStart(2, '0');
-        return `${yymmdd}${seq}`;
+(function() {
+    // 转换函数：12位时间戳 → YYMMDD+两位序号
+    function formatNo(timestamp) {
+        if (!/^\d{12}$/.test(timestamp)) return timestamp;
+        const yymmdd = timestamp.slice(0,6);
+        const sec = parseInt(timestamp.slice(10,12),10);
+        const seq = String((sec % 99)+1).padStart(2,'0');
+        return yymmdd + seq;
     }
 
-    function updateHistoryList() {
-        const allElements = document.querySelectorAll('*');
-        allElements.forEach(el => {
-            const text = el.textContent.trim();
-            if (/^\d{12}$/.test(text)) {
-                el.textContent = formatPrescriptionNo(text);
-            }
+    // 替换文本中的所有12位数字（含方括号）
+    function replaceAll(text) {
+        return text.replace(/(\[?\d{12}\]?)/g, m => {
+            let raw = m.replace(/[\[\]]/g,'');
+            let fmt = formatNo(raw);
+            return m.startsWith('[') ? `[${fmt}]` : fmt;
         });
     }
 
-    updateHistoryList();
-    const observer = new MutationObserver(updateHistoryList);
-    observer.observe(document.body, { childList: true, subtree: true });
-});
+    // 1. 拦截 fetch 返回
+    const origFetch = window.fetch;
+    window.fetch = async function(...args) {
+        const res = await origFetch.apply(this, args);
+        const text = await res.text();
+        const newText = replaceAll(text);
+        return new Response(newText, {
+            status: res.status,
+            headers: res.headers
+        });
+    };
+
+    // 2. 拦截 XHR 返回
+    const origOpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function() {
+        this.addEventListener('load', function() {
+            if (this.responseText) {
+                this.responseText = replaceAll(this.responseText);
+            }
+        });
+        origOpen.apply(this, arguments);
+    };
+
+    // 3. 页面已有的内容也强制转一次
+    function updateDOM() {
+        const walker = document.createTreeWalker(
+            document.body,
+            NodeFilter.SHOW_TEXT,
+            null,
+            false
+        );
+        let node;
+        while ((node = walker.nextNode())) {
+            node.textContent = replaceAll(node.textContent);
+        }
+    }
+
+    // 初始执行 + 持续监听
+    updateDOM();
+    const obs = new MutationObserver(updateDOM);
+    obs.observe(document.body, { childList:true, subtree:true });
+})();
 </script>
 
 </body>
