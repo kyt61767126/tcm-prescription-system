@@ -3079,10 +3079,12 @@
             document.getElementById('patientAge').value = record.patientAge;
             document.getElementById('patientPhone').value = record.patientPhone;
             document.getElementById('patientAddress').value = record.patientAddress;
-            const displayNo = record.prescriptionNo || '';
-            document.getElementById('prescriptionNo').value = displayNo;
-            document.getElementById('clinicNo').value = displayNo;
-            document.getElementById('paperClinicNo').textContent = displayNo;
+            // 分别加载处方编号和统计编号
+            const prescriptionNo = record.prescriptionNo || '';
+            const clinicNo = record.clinicNo || '';
+            document.getElementById('prescriptionNo').value = prescriptionNo;
+            document.getElementById('clinicNo').value = clinicNo;
+            document.getElementById('paperClinicNo').textContent = prescriptionNo;
             document.getElementById('medicalHistory').value = record.medicalHistory;
             document.getElementById('diagnosis').value = record.diagnosis;
             const doseCount = record.doseCount || 7;
@@ -3265,8 +3267,18 @@
                 // 刷新历史处方列表
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 // 生成处方签图片并下载
-                savePrescriptionAsImage(record, displayNo);
+                savePrescriptionAsImage(record, record.prescriptionNo);
                 alert('处方保存成功！');
+                
+                // 保存成功后，生成新的处方编号供下次使用
+                dailyCounter++;
+                localStorage.setItem('dailyCounter', dailyCounter.toString());
+                const newPrescriptionNo = generatePrescriptionNo();
+                const newClinicNo = generateClinicNo();
+                document.getElementById('prescriptionNo').value = newPrescriptionNo;
+                document.getElementById('clinicNo').value = newClinicNo;
+                document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
+                
                 searchPatientsQuick({target:{value:name}});
             } else {
                 // 显示具体的错误信息
