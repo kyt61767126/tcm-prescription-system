@@ -1036,10 +1036,19 @@
                 
                 if (!data.success) {
                     console.error('Cloud API error:', data.error);
-                    return { success: false, error: data.error || 'Cloud operation failed', requireSetup: data.requireSetup, fromCloud: true };
+                    return { 
+                        success: false, 
+                        error: data.error || 'Cloud operation failed', 
+                        requireSetup: data.requireSetup, 
+                        fromCloud: true 
+                    };
                 }
                 
-                return { success: true, data: data.data || data, fromCloud: true, isAdmin: data.isAdmin };
+                // 保留后端返回的所有字段（包括savedPrescription, nextPrescriptionNo, nextClinicNo等）
+                return { 
+                    ...data, 
+                    fromCloud: true 
+                };
                 
             } catch (error) {
                 clearTimeout(timeoutId);
