@@ -287,6 +287,8 @@ export async function onRequest(context) {
                     generatePrescriptionNo(kv, currentUser.username, 'yearly')
                 ]);
                 
+                console.log('Generated numbers:', { prescriptionNo, clinicNo });
+                
                 const finalPrescriptionNo = prescriptionNo;
                 const finalClinicNo = clinicNo;
                 
