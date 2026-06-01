@@ -1126,7 +1126,10 @@
                     }
                 });
                 if (response.success && response.data) {
-                    return response.data;
+                    return {
+                        data: response.data,
+                        totalCount: response.totalCount
+                    };
                 }
             } catch (error) {
                 console.warn('Failed to get prescriptions from cloud:', error);
@@ -1683,18 +1686,23 @@
             formulas = safeParseJSON(savedFormulas, []);
             
             // 统一从云端获取处方数据（真实数据唯一来源是云端）
-            const cloudPrescriptions = await getPrescriptionsFromCloud();
+            const cloudResult = await getPrescriptionsFromCloud();
             
-            if (cloudPrescriptions && cloudPrescriptions.length > 0) {
+            if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
                 // 云端有数据，按用户权限过滤
                 if (currentUser && currentUser.role === 'admin') {
                     // 管理员：查看所有处方
-                    prescriptionHistory = cloudPrescriptions;
+                    prescriptionHistory = cloudResult.data;
                 } else {
                     // 普通用户：只查看自己的处方（按 user_id 过滤）
-                    prescriptionHistory = cloudPrescriptions.filter(p => 
+                    prescriptionHistory = cloudResult.data.filter(p => 
                         p.createdBy === currentUser?.username
                     );
+                }
+                
+                // 统计输入框：只显示历史处方累计数量
+                if (cloudResult.totalCount) {
+                    document.getElementById('clinicNo').value = cloudResult.totalCount;
                 }
                 
                 // 按时间倒序排序
@@ -3083,11 +3091,29 @@
             if (!confirm('确定删除该处方历史？')) return;
             
             // 先从云端删除
-            await deletePrescriptionFromCloud(id);
+            const success = await deletePrescriptionFromCloud(id);
             
-            // 再删除本地数据
-            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            if (success) {
+                // 从云端重新获取最新数据，更新统计数量
+                const cloudResult = await getPrescriptionsFromCloud();
+                if (cloudResult && cloudResult.data) {
+                    prescriptionHistory = cloudResult.data;
+                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                    
+                    // 更新统计输入框（只显示历史处方累计数量）
+                    if (cloudResult.totalCount) {
+                        document.getElementById('clinicNo').value = cloudResult.totalCount;
+                    }
+                } else {
+                    // 云端获取失败，删除本地数据
+                    prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                }
+            } else {
+                // 云端删除失败，删除本地数据
+                prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            }
             
             // 刷新历史列表
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
@@ -3101,7 +3127,7 @@
             document.getElementById('patientAge').value = record.patientAge;
             document.getElementById('patientPhone').value = record.patientPhone;
             document.getElementById('patientAddress').value = record.patientAddress;
-            document.getElementById('clinicNo').value = record.clinicNo || record.prescriptionNo || '';
+            // 统计输入框保持显示历史处方累计数量，不被打开的处方覆盖
             document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
             document.getElementById('medicalHistory').value = record.medicalHistory;
             document.getElementById('diagnosis').value = record.diagnosis;
