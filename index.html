@@ -1,4 +1,4 @@
-﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -3147,8 +3147,7 @@
             
             if (result.success) {
                 // 使用后端返回的编号（如果有）
-                const cloudData = result.data;
-                const savedPrescription = cloudData.savedPrescription || cloudData.data?.savedPrescription;
+                const savedPrescription = result.data?.savedPrescription;
                 if (savedPrescription) {
                     record.prescriptionNo = savedPrescription.prescriptionNo;
                     record.clinicNo = savedPrescription.clinicNo;
