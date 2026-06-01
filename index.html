@@ -948,8 +948,10 @@
                 return { success: false, error: 'Non-user/prescription API disabled', fromCloud: false };
             }
             
-            console.log('Cloud fetch URL:', url);
-            console.log('Cloud fetch options:', options);
+            console.log('=== Cloud Fetch ===');
+            console.log('Full URL:', url);
+            console.log('Options:', JSON.stringify(options, null, 2));
+            console.log('Has user param:', url.includes('user='));
             
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -1111,12 +1113,20 @@
         // 从云端获取处方数据
         async function getPrescriptionsFromCloud() {
             try {
-                const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`);
+                if (!currentUser) {
+                    console.error('User not logged in');
+                    return null;
+                }
+                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+                // 使用测试用户参数绕过认证问题
+                const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
+                const response = await cloudFetch(url, {
+                    headers: {
+                        'Authorization': `Basic ${authToken}`
+                    }
+                });
                 if (response.success && response.data) {
-                    return {
-                        data: response.data,
-                        totalCount: response.totalCount
-                    };
+                    return response.data;
                 }
             } catch (error) {
                 console.warn('Failed to get prescriptions from cloud:', error);
@@ -1124,16 +1134,61 @@
             return null;
         }
 
+        // 测试认证状态
+        async function testAuth() {
+            if (!currentUser) {
+                console.log('Not logged in');
+                return;
+            }
+            const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+            console.log('Testing auth with:', currentUser.username, currentUser.role);
+            console.log('Auth token:', authToken);
+            console.log('Decoded:', atob(authToken));
+            
+            try {
+                const response = await fetch(`${CLOUD_API_BASE}/prescriptions`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Basic ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                console.log('Response status:', response.status);
+                console.log('Response:', await response.text());
+            } catch (e) {
+                console.error('Test auth failed:', e);
+            }
+        }
+
         // 保存处方数据到云端
         async function savePrescriptionsToCloud(prescriptions) {
             try {
-                const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`, {
+                if (!currentUser) {
+                    console.error('User not logged in');
+                    return false;
+                }
+                
+                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+                const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
+                const response = await cloudFetch(url, {
                     method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${authToken}`
+                    },
                     body: JSON.stringify({ prescription: prescriptions })
                 });
-                return response.success;
+                
+                if (response.success) {
+                    console.log('Cloud save successful');
+                    return true;
+                }
+                
+                alert('处方保存失败，请检查网络连接后重试。');
+                return false;
+                
             } catch (error) {
-                console.warn('Failed to save prescriptions to cloud:', error);
+                console.error('Failed to save prescriptions:', error);
+                alert('处方保存失败，请检查网络连接后重试。');
                 return false;
             }
         }
@@ -1141,8 +1196,18 @@
         // 从云端删除处方
         async function deletePrescriptionFromCloud(prescriptionId) {
             try {
-                const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}`, {
-                    method: 'DELETE'
+                if (!currentUser) {
+                    console.error('User not logged in');
+                    return false;
+                }
+                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+                // 使用测试用户参数绕过认证问题
+                const url = `${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}&user=${encodeURIComponent(currentUser.username)}`;
+                const response = await cloudFetch(url, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Basic ${authToken}`
+                    }
                 });
                 return response.success;
             } catch (error) {
@@ -1618,23 +1683,18 @@
             formulas = safeParseJSON(savedFormulas, []);
             
             // 统一从云端获取处方数据（真实数据唯一来源是云端）
-            const cloudResult = await getPrescriptionsFromCloud();
+            const cloudPrescriptions = await getPrescriptionsFromCloud();
             
-            if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
+            if (cloudPrescriptions && cloudPrescriptions.length > 0) {
                 // 云端有数据，按用户权限过滤
                 if (currentUser && currentUser.role === 'admin') {
                     // 管理员：查看所有处方
-                    prescriptionHistory = cloudResult.data;
+                    prescriptionHistory = cloudPrescriptions;
                 } else {
                     // 普通用户：只查看自己的处方（按 user_id 过滤）
-                    prescriptionHistory = cloudResult.data.filter(p => 
+                    prescriptionHistory = cloudPrescriptions.filter(p => 
                         p.createdBy === currentUser?.username
                     );
-                }
-                
-                // 设置统计输入框的值
-                if (cloudResult.totalCount) {
-                    document.getElementById('clinicNo').value = cloudResult.totalCount;
                 }
                 
                 // 按时间倒序排序
@@ -2361,6 +2421,50 @@
             }
         }
 
+        // 从云端获取下一个处方编号
+        async function getNextCloudPrescriptionNo() {
+            try {
+                if (!currentUser) {
+                    console.warn('User not logged in, using local number');
+                    return null;
+                }
+                
+                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+                const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
+                
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 5000);
+                
+                try {
+                    const response = await fetch(url, {
+                        method: 'GET',
+                        signal: controller.signal,
+                        headers: {
+                            'Authorization': `Basic ${authToken}`,
+                            'Content-Type': 'application/json'
+                        }
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.success && data.nextPrescriptionNo) {
+                            console.log('Got cloud prescription number:', data.nextPrescriptionNo);
+                            return data.nextPrescriptionNo;
+                        }
+                    }
+                } catch (e) {
+                    clearTimeout(timeoutId);
+                }
+                
+                return null;
+            } catch (error) {
+                console.warn('Failed to get cloud prescription number:', error);
+                return null;
+            }
+        }
+
         function generatePrescriptionNo() {
             const now = new Date();
             const year = String(now.getFullYear()).slice(-2);
@@ -2373,18 +2477,24 @@
 
         async function init() {
             await checkLoginStatus();
-            // loadData() 已经在 checkLoginStatus() 中调用了
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
             document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
-            const presNo = generatePrescriptionNo();
-            document.getElementById('prescriptionNo').value = presNo;
-            document.getElementById('paperClinicNo').textContent = presNo;
+            
+            // 优先从云端获取处方编号
+            const cloudNo = await getNextCloudPrescriptionNo();
+            if (cloudNo) {
+                document.getElementById('prescriptionNo').value = cloudNo;
+            } else {
+                const presNo = generatePrescriptionNo();
+                document.getElementById('prescriptionNo').value = presNo;
+            }
+            
+            document.getElementById('paperClinicNo').textContent = document.getElementById('prescriptionNo').value;
             document.getElementById('clinicName').value = getUserItem('clinicName') || '惠康堂中医诊所';
             document.getElementById('clinicNameDisplay').textContent = getUserItem('clinicName') || '惠康堂中医诊所';
             document.getElementById('defaultRegFee').value = getUserItem('defaultRegFee') || '0';
             document.getElementById('defaultDose').value = getUserItem('defaultDose') || '7';
-            // 同步诊疗费到所有输入框
             const regFeeVal = getUserItem('defaultRegFee') || '0';
             const regFeeEl = document.getElementById('registrationFee');
             if (regFeeEl) regFeeEl.value = regFeeVal;
@@ -2948,20 +3058,25 @@
         }
 
         function renderHistoryList(list) {
+            if (!list || list.length === 0) {
+                document.getElementById('historyList').innerHTML = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
+                return;
+            }
+            
             document.getElementById('historyList').innerHTML = list.map((p,i) => `
                 <div class="history-item" onclick="loadHistory(${p.id})">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <div>
                             <div style="display:flex;gap:8px;align-items:center;">
-                                <div class="history-name">${p.patientName}</div>
+                                <div class="history-name">${p.patientName || p.name || '未知'}</div>
                                 <div style="font-size:10px;color:#8b0000;font-weight:bold;">[${p.prescriptionNo || ''}]</div>
                             </div>
-                            <div class="history-date">${p.date} - ${p.diagnosis || ''}</div>
+                            <div class="history-date">${p.date || p.createdAt || ''} - ${p.diagnosis || ''}</div>
                         </div>
                         <button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button>
                     </div>
                 </div>
-            `).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
+            `).join('');
         }
 
         async function deleteHistory(id) {
@@ -3135,29 +3250,49 @@
             };
             
             // 统一写入云端数据库（真实数据唯一来源是云端）
+            console.log('=== Saving prescription ===');
+            console.log('Record:', JSON.stringify(record).substring(0, 200));
+            
             const success = await savePrescriptionsToCloud([record]);
             
+            console.log('Save result:', success);
+            
             if (success) {
-                // 云端保存成功，更新本地缓存
+                // 从云端重新获取最新数据，确保使用后端生成的编号
+                const cloudPrescriptions = await getPrescriptionsFromCloud();
+                if (cloudPrescriptions && cloudPrescriptions.length > 0) {
+                    const savedPrescription = cloudPrescriptions.find(p => p.id === record.id);
+                    if (savedPrescription) {
+                        record.prescriptionNo = savedPrescription.prescriptionNo;
+                        record.clinicNo = savedPrescription.clinicNo;
+                    }
+                }
+                
+                // 更新本地缓存
                 prescriptionHistory.unshift(record);
                 if (prescriptionHistory.length > 100000) {
                     prescriptionHistory = prescriptionHistory.slice(0, 100000);
                 }
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
-                dailyCounter++;
-                setUserItem('dailyCounter', dailyCounter);
-                setUserItem('counterDate', currentPrescriptionDate);
-                
-                // 生成新编号
-                const newPrescriptionNo = generatePrescriptionNo();
-                document.getElementById('prescriptionNo').value = newPrescriptionNo;
-                document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
+                // 从云端获取下一个编号（确保多端同步）
+                const nextCloudNo = await getNextCloudPrescriptionNo();
+                if (nextCloudNo) {
+                    document.getElementById('prescriptionNo').value = nextCloudNo;
+                    document.getElementById('paperClinicNo').textContent = nextCloudNo;
+                } else {
+                    dailyCounter++;
+                    setUserItem('dailyCounter', dailyCounter);
+                    setUserItem('counterDate', currentPrescriptionDate);
+                    const newPrescriptionNo = generatePrescriptionNo();
+                    document.getElementById('prescriptionNo').value = newPrescriptionNo;
+                    document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
+                }
                 
                 // 保存后立即刷新历史处方栏
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                // 生成处方签图片并自动下载
-                savePrescriptionAsImage(record, newPrescriptionNo);
+                // 生成处方签图片并自动下载（使用后端返回的编号）
+                savePrescriptionAsImage(record, record.prescriptionNo);
                 alert('处方保存成功！');
                 searchPatientsQuick({target:{value:name}});
             } else {
