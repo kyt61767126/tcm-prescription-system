@@ -3203,7 +3203,7 @@
             renderPrescriptionTable();  // 更新药物表格
             calculateAmount();          // 计算金额
             
-            // ========== 6. 更新处方签显示（处方签显示历史处方完整信息）==========
+            // ========== 6. 更新处方签显示和输入框（显示历史处方完整信息）==========
             document.getElementById('paperName').textContent = record.patientName || '';
             document.getElementById('paperGender').textContent = record.patientGender || '男';
             document.getElementById('paperAge').textContent = record.patientAge || '';
@@ -3213,6 +3213,14 @@
             document.getElementById('paperDiagnosis').textContent = record.diagnosis || '';
             document.getElementById('paperDoctor').textContent = record.doctorName || currentUser?.name || '';
             document.getElementById('paperDoseCount').textContent = doseCount;
+            
+            // 同时更新输入框中的编号
+            if (record.prescriptionNo) {
+                document.getElementById('prescriptionNo').value = record.prescriptionNo;
+            }
+            if (record.clinicNo) {
+                document.getElementById('clinicNo').value = record.clinicNo;
+            }
             
             // 更新处方签药物列表
             const linesDiv = document.getElementById('prescriptionLines');
