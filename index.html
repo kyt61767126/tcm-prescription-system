@@ -3208,19 +3208,18 @@
             document.getElementById('paperGender').textContent = record.patientGender || '男';
             document.getElementById('paperAge').textContent = record.patientAge || '';
             document.getElementById('paperDate').textContent = record.date || new Date().toLocaleDateString('zh-CN');
-            document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
+            
+            // 门诊号优先显示处方号，其次显示统计号
+            const displayClinicNo = record.prescriptionNo || record.clinicNo || '';
+            document.getElementById('paperClinicNo').textContent = displayClinicNo;
             document.getElementById('paperMedicalHistory').textContent = record.medicalHistory || '';
             document.getElementById('paperDiagnosis').textContent = record.diagnosis || '';
             document.getElementById('paperDoctor').textContent = record.doctorName || currentUser?.name || '';
             document.getElementById('paperDoseCount').textContent = doseCount;
             
             // 同时更新输入框中的编号
-            if (record.prescriptionNo) {
-                document.getElementById('prescriptionNo').value = record.prescriptionNo;
-            }
-            if (record.clinicNo) {
-                document.getElementById('clinicNo').value = record.clinicNo;
-            }
+            document.getElementById('prescriptionNo').value = record.prescriptionNo || '';
+            document.getElementById('clinicNo').value = record.clinicNo || '';
             
             // 更新处方签药物列表
             const linesDiv = document.getElementById('prescriptionLines');
