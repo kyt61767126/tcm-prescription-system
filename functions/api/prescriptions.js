@@ -189,11 +189,15 @@ export async function onRequest(context) {
                 return timeB - timeA;
             });
             
+            const now = new Date();
+            const year = now.getFullYear().toString().substring(2);
+            const formattedTotalCount = year + prescriptions.length.toString().padStart(6, '0');
+            
             return new Response(JSON.stringify({
                 success: true,
                 data: filteredPrescriptions,
                 count: filteredPrescriptions.length,
-                totalCount: prescriptions.length,
+                totalCount: formattedTotalCount,
                 userRole: currentUser.role,
                 isAdmin: currentUser.isAdmin
             }), {

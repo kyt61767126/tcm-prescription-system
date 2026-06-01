@@ -1113,7 +1113,10 @@
             try {
                 const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`);
                 if (response.success && response.data) {
-                    return response.data;
+                    return {
+                        data: response.data,
+                        totalCount: response.totalCount
+                    };
                 }
             } catch (error) {
                 console.warn('Failed to get prescriptions from cloud:', error);
@@ -1615,18 +1618,23 @@
             formulas = safeParseJSON(savedFormulas, []);
             
             // 统一从云端获取处方数据（真实数据唯一来源是云端）
-            const cloudPrescriptions = await getPrescriptionsFromCloud();
+            const cloudResult = await getPrescriptionsFromCloud();
             
-            if (cloudPrescriptions && cloudPrescriptions.length > 0) {
+            if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
                 // 云端有数据，按用户权限过滤
                 if (currentUser && currentUser.role === 'admin') {
                     // 管理员：查看所有处方
-                    prescriptionHistory = cloudPrescriptions;
+                    prescriptionHistory = cloudResult.data;
                 } else {
                     // 普通用户：只查看自己的处方（按 user_id 过滤）
-                    prescriptionHistory = cloudPrescriptions.filter(p => 
+                    prescriptionHistory = cloudResult.data.filter(p => 
                         p.createdBy === currentUser?.username
                     );
+                }
+                
+                // 设置统计输入框的值
+                if (cloudResult.totalCount) {
+                    document.getElementById('clinicNo').value = cloudResult.totalCount;
                 }
                 
                 // 按时间倒序排序
