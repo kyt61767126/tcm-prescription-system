@@ -249,6 +249,7 @@ export async function onRequest(context) {
             const nowIso = now.toISOString();
             let nextPrescriptionNo = null;
             let nextClinicNo = null;
+            let responseData;
             
             if (Array.isArray(body.prescription)) {
                 // 批量保存模式 - 对于批量导入的处方，保留原有编号
@@ -309,10 +310,6 @@ export async function onRequest(context) {
                     const timeB = new Date(b.createdAt || b.date || 0).getTime();
                     return timeB - timeA;
                 });
-                
-                // 计算下一个编号
-                const yearSeq = clinicNo ? parseInt(clinicNo.slice(-6)) + 1 : prescriptions.length + 1;
-                nextClinicNo = year + String(yearSeq).padStart(6, '0');
                 
                 [nextPrescriptionNo, nextClinicNo] = await Promise.all([
                     peekNextPrescriptionNo(kv, currentUser.username, 'daily'),
