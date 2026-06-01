@@ -208,6 +208,9 @@ export async function onRequest(context) {
         // POST - 保存处方（支持单个或批量）
         if (method === 'POST') {
             console.log('POST /prescriptions called');
+            console.log('Authorization header:', context.request.headers.get('Authorization'));
+            console.log('Current user:', JSON.stringify(currentUser));
+            
             let body;
             try {
                 body = await context.request.json();
