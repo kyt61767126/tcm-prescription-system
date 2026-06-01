@@ -285,22 +285,25 @@ export async function onRequest(context) {
                 });
             } else {
                 // 单条保存模式 - 后端自动分配编号（使用KV存储）
-                // 并行获取处方号和编号
-                const [prescriptionNo, clinicNo] = await Promise.all([
+                // 并行获取处方号、门诊号和短门诊号
+                const [prescriptionNo, clinicNo, outpatientNo] = await Promise.all([
                     generatePrescriptionNo(kv, currentUser.username, 'daily'),
-                    generatePrescriptionNo(kv, currentUser.username, 'yearly')
+                    generatePrescriptionNo(kv, currentUser.username, 'yearly'),
+                    generatePrescriptionNo(kv, currentUser.username, 'daily')
                 ]);
                 
-                console.log('Generated numbers:', { prescriptionNo, clinicNo });
+                console.log('Generated numbers:', { prescriptionNo, clinicNo, outpatientNo });
                 
                 const finalPrescriptionNo = prescriptionNo;
                 const finalClinicNo = clinicNo;
+                const finalOutpatientNo = outpatientNo;
                 
                 const newPrescription = {
                     ...body.prescription,
                     id: body.prescription.id || Date.now(),
                     prescriptionNo: finalPrescriptionNo,
                     clinicNo: finalClinicNo,
+                    outpatientNo: finalOutpatientNo,
                     createdAt: body.prescription.createdAt || nowIso,
                     updatedAt: nowIso,
                     createdBy: currentUser.username,
