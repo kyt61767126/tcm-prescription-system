@@ -1183,6 +1183,8 @@
                 
                 if (response.success) {
                     console.log('Cloud save successful');
+                    // 保存成功后从云端获取最新数据，更新本地记录的编号
+                    await loadData();
                     return true;
                 }
                 
