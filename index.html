@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -957,13 +957,17 @@
             if (currentUserStr) {
                 try {
                     const userObj = JSON.parse(currentUserStr);
+                    console.log('Current user for auth:', userObj);
                     const credentials = btoa(`${userObj.username}:${userObj.role}`);
                     authHeaders = {
                         'Authorization': `Basic ${credentials}`
                     };
+                    console.log('Authorization header set:', `Basic ${credentials.substring(0, 20)}...`);
                 } catch (e) {
                     console.warn('Failed to parse currentUser for auth:', e);
                 }
+            } else {
+                console.warn('currentUser not found in localStorage');
             }
             
             const controller = new AbortController();
@@ -983,6 +987,7 @@
                 clearTimeout(timeoutId);
                 
                 console.log('Cloud fetch response status:', response.status);
+                console.log('Cloud fetch response headers:', response.headers);
                 
                 if (!response.ok) {
                     const errorText = await response.text();
@@ -990,11 +995,21 @@
                     throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
                 }
                 
-                const data = await response.json();
-                console.log('Cloud fetch response data:', data);
+                const responseText = await response.text();
+                console.log('Cloud fetch raw response:', responseText);
                 
-                if (!data.success) {
-                    throw new Error(data.error || 'Cloud operation failed');
+                let data;
+                try {
+                    data = JSON.parse(responseText);
+                    console.log('Cloud fetch parsed data:', data);
+                } catch (parseError) {
+                    console.error('JSON parse error:', parseError.message);
+                    throw new Error('Invalid JSON response from server');
+                }
+                
+                if (data.success !== true) {
+                    console.warn('Response success is not true:', data.success);
+                    throw new Error(data.error || data.message || 'Cloud operation failed');
                 }
                 
                 return { success: true, ...data, fromCloud: true };
@@ -1124,12 +1139,45 @@
             }
         }
 
+        // 检查编号是否为时间戳格式（10位以上的数字字符串）
+        function isTimestampFormat(no) {
+            const strNo = String(no);
+            // 时间戳格式：10位以上数字，但不是10位的正确格式
+            return /^\d+$/.test(strNo) && strNo.length > 10;
+        }
+
+        // 迁移旧数据格式 - 标记需要后端重新编号
+        function migrateOldPrescriptionFormat(prescription) {
+            const no = prescription.prescriptionNo;
+            console.log('Checking prescription:', prescription.id, 'prescriptionNo:', no, 'type:', typeof no);
+            
+            if (isTimestampFormat(no)) {
+                console.log('>>> MARKING FOR RENUMBER:', prescription.id, 'current:', no);
+                // 标记需要后端重新编号
+                prescription._needRenumber = true;
+                // 提取日期用于后端处理
+                const strNo = String(no);
+                prescription._originalDate = strNo.substring(0, 6);
+            }
+            return prescription;
+        }
+
         // 从云端获取处方数据
         async function getPrescriptionsFromCloud() {
             try {
                 const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`);
+                console.log('getPrescriptionsFromCloud response:', response);
+                
                 if (response.success && response.data) {
-                    return response.data;
+                    // 检查并标记需要重新编号的旧数据
+                    const migratedData = response.data.map(migrateOldPrescriptionFormat);
+                    
+                    // 检查第一条数据的编号格式
+                    if (migratedData.length > 0) {
+                        console.log('First prescription from cloud:', migratedData[0]);
+                        console.log('prescriptionNo format check:', migratedData[0].prescriptionNo);
+                    }
+                    return migratedData;
                 }
             } catch (error) {
                 console.warn('Failed to get prescriptions from cloud:', error);
@@ -1140,10 +1188,16 @@
         // 保存处方数据到云端
         async function savePrescriptionsToCloud(prescriptions) {
             try {
+                console.log('savePrescriptionsToCloud called with:', prescriptions.length, 'items');
+                console.log('Current user at save:', currentUser);
+                console.log('localStorage currentUser:', localStorage.getItem('currentUser'));
+                
                 const response = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`, {
                     method: 'POST',
                     body: JSON.stringify({ prescription: prescriptions })
                 });
+                
+                console.log('savePrescriptionsToCloud response:', response);
                 return response;
             } catch (error) {
                 console.warn('Failed to save prescriptions to cloud:', error);
@@ -1268,6 +1322,7 @@
             const migrated = migrateOldData();
             const presNo = generatePrescriptionNo();
             document.getElementById('prescriptionNo').value = presNo;
+            document.getElementById('clinicNo').value = presNo;
             document.getElementById('paperClinicNo').textContent = presNo;
             if (prescriptionHistory.length > 0) {
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
@@ -1634,15 +1689,26 @@
             const cloudPrescriptions = await getPrescriptionsFromCloud();
             
             if (cloudPrescriptions && cloudPrescriptions.length > 0) {
-                // 云端有数据，按用户权限过滤
-                if (currentUser && currentUser.role === 'admin') {
-                    // 管理员：查看所有处方
-                    prescriptionHistory = cloudPrescriptions;
+                // 检查是否有需要重新编号的旧数据
+                const needRenumber = cloudPrescriptions.filter(p => p._needRenumber);
+                if (needRenumber.length > 0) {
+                    console.log('Found', needRenumber.length, 'prescriptions need renumbering');
+                    // 触发一次保存来重新编号（静默执行）
+                    await savePrescriptionsToCloud(needRenumber);
+                    // 重新获取数据
+                    const renumberedPrescriptions = await getPrescriptionsFromCloud();
+                    prescriptionHistory = renumberedPrescriptions || cloudPrescriptions;
                 } else {
-                    // 普通用户：只查看自己的处方（按 user_id 过滤）
-                    prescriptionHistory = cloudPrescriptions.filter(p => 
-                        p.createdBy === currentUser?.username
-                    );
+                    // 云端有数据，按用户权限过滤
+                    if (currentUser && currentUser.role === 'admin') {
+                        // 管理员：查看所有处方
+                        prescriptionHistory = cloudPrescriptions;
+                    } else {
+                        // 普通用户：只查看自己的处方（按 user_id 过滤）
+                        prescriptionHistory = cloudPrescriptions.filter(p => 
+                            p.createdBy === currentUser?.username
+                        );
+                    }
                 }
                 
                 // 按时间倒序排序
@@ -2379,15 +2445,34 @@
             return result;
         }
 
+        // 生成统计编号：年(2位) + 5位序号，基于未删除的处方数量
+        function generateClinicNo() {
+            try {
+                const now = new Date();
+                const year = String(now.getFullYear()).slice(-2);
+                // 只统计未删除的处方数量
+                const count = prescriptionHistory.filter(p => !p.deleted).length;
+                const seq = String(count + 1).padStart(5, '0');
+                return year + seq;
+            } catch (error) {
+                console.error('统计编号生成异常:', error);
+                return '2600001';
+            }
+        }
+
         async function init() {
             await checkLoginStatus();
             // loadData() 已经在 checkLoginStatus() 中调用了
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
             document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
+            // 处方编号：多端同步，从云端获取或本地生成
             const presNo = generatePrescriptionNo();
             document.getElementById('prescriptionNo').value = presNo;
             document.getElementById('paperClinicNo').textContent = presNo;
+            // 统计编号：基于未删除的处方数量生成
+            const clinicNo = generateClinicNo();
+            document.getElementById('clinicNo').value = clinicNo;
             document.getElementById('clinicName').value = getUserItem('clinicName') || '惠康堂中医诊所';
             document.getElementById('clinicNameDisplay').textContent = getUserItem('clinicName') || '惠康堂中医诊所';
             document.getElementById('defaultRegFee').value = getUserItem('defaultRegFee') || '0';
@@ -2994,8 +3079,10 @@
             document.getElementById('patientAge').value = record.patientAge;
             document.getElementById('patientPhone').value = record.patientPhone;
             document.getElementById('patientAddress').value = record.patientAddress;
-            document.getElementById('clinicNo').value = record.clinicNo || record.prescriptionNo || '';
-            document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
+            const displayNo = record.prescriptionNo || '';
+            document.getElementById('prescriptionNo').value = displayNo;
+            document.getElementById('clinicNo').value = displayNo;
+            document.getElementById('paperClinicNo').textContent = displayNo;
             document.getElementById('medicalHistory').value = record.medicalHistory;
             document.getElementById('diagnosis').value = record.diagnosis;
             const doseCount = record.doseCount || 7;
@@ -3110,27 +3197,19 @@
             const doseCount = parseInt(doseInput ? doseInput.value : 7) || 7;
             const grandTotalEl = document.getElementById('grandTotal') || document.getElementById('grandTotal2');
             
-            // 使用云端时间戳生成全局唯一的处方ID和编号
+            // 使用前端预览处方号（与后端格式一致），后端会返回正式编号
             const now = new Date();
             const cloudTimestamp = now.getTime();
-            const year = String(now.getFullYear()).slice(-2);
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hour = String(now.getHours()).padStart(2, '0');
-            const minute = String(now.getMinutes()).padStart(2, '0');
-            const second = String(now.getSeconds()).padStart(2, '0');
-            const globalPrescriptionNo = year + month + day + hour + minute + second;
+            const previewPrescriptionNo = generatePrescriptionNo();
             
             const record = {
                 id: cloudTimestamp,
-                prescriptionNo: globalPrescriptionNo,
                 date: document.getElementById('visitDate').value,
                 patientName: name,
                 patientGender: document.getElementById('patientGender').value,
                 patientAge: document.getElementById('patientAge').value,
                 patientPhone: document.getElementById('patientPhone').value,
                 patientAddress: document.getElementById('patientAddress').value,
-                clinicNo: document.getElementById('clinicNo').value,
                 doctorName: document.getElementById('doctorName').value,
                 medicalHistory: document.getElementById('medicalHistory').value,
                 diagnosis: document.getElementById('diagnosis').value,
@@ -3146,11 +3225,26 @@
             const result = await savePrescriptionsToCloud([record]);
             
             if (result.success) {
-                // 使用后端返回的编号（如果有）
+                // 使用后端返回的编号
                 const savedPrescription = result.savedPrescription;
-                if (savedPrescription) {
-                    record.prescriptionNo = savedPrescription.prescriptionNo;
-                    record.clinicNo = savedPrescription.clinicNo;
+                console.log('Saved prescription from backend:', savedPrescription);
+                
+                let backendNo = savedPrescription?.prescriptionNo;
+                console.log('Backend prescriptionNo:', backendNo);
+                
+                // 验证编号格式是否正确（YYMMDD+2位序号，共10位）
+                const isValidFormat = backendNo && /^\d{10}$/.test(backendNo);
+                console.log('Number format valid:', isValidFormat);
+                
+                if (isValidFormat) {
+                    record.prescriptionNo = backendNo;
+                    // 统计编号：基于历史处方数量生成
+                    record.clinicNo = generateClinicNo();
+                    console.log('Using valid backend number:', record.prescriptionNo, 'clinicNo:', record.clinicNo);
+                } else {
+                    console.warn('Backend number invalid or missing, generating local number');
+                    record.prescriptionNo = generatePrescriptionNo();
+                    record.clinicNo = generateClinicNo();
                 }
                 
                 // 云端保存成功，更新本地缓存
@@ -3160,26 +3254,31 @@
                 }
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
-                dailyCounter++;
-                setUserItem('dailyCounter', dailyCounter);
-                setUserItem('counterDate', currentPrescriptionDate);
+                // 更新显示
+                // 处方编号：使用云端返回的编号
+                // 统计编号：生成新的统计编号
+                console.log('Displaying prescription number:', record.prescriptionNo, 'clinicNo:', record.clinicNo);
+                document.getElementById('prescriptionNo').value = record.prescriptionNo;
+                document.getElementById('clinicNo').value = record.clinicNo;
+                document.getElementById('paperClinicNo').textContent = record.prescriptionNo;
                 
-                // 使用后端返回的编号更新显示
-                const displayPrescriptionNo = record.prescriptionNo || generatePrescriptionNo();
-                const displayClinicNo = record.clinicNo || '';
-                
-                document.getElementById('prescriptionNo').value = displayPrescriptionNo;
-                document.getElementById('clinicNo').value = displayClinicNo;
-                document.getElementById('paperClinicNo').textContent = displayPrescriptionNo;
-                
-                // 保存后立即刷新历史处方栏
+                // 刷新历史处方列表
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                // 生成处方签图片并自动下载（使用后端编号）
-                savePrescriptionAsImage(record, displayPrescriptionNo);
+                // 生成处方签图片并下载
+                savePrescriptionAsImage(record, displayNo);
                 alert('处方保存成功！');
                 searchPatientsQuick({target:{value:name}});
             } else {
-                alert('处方保存失败，请检查网络连接后重试。');
+                // 显示具体的错误信息
+                const errorMsg = result.error || result.message || '未知错误';
+                if (result.requireAuth) {
+                    alert('登录已过期，请重新登录！');
+                    window.location.reload();
+                } else if (result.requireSetup) {
+                    alert('系统配置错误: ' + errorMsg);
+                } else {
+                    alert('处方保存失败: ' + errorMsg);
+                }
             }
         }
 
@@ -3242,7 +3341,7 @@
             ctx.fillText('科别: 中医内科', 560, 170);
             
             // 患者信息第二行
-            ctx.fillText('门诊号: ' + (currentPrescriptionNo || record.prescriptionNo || ''), 40, 200);
+            ctx.fillText('门诊号: ' + (record.prescriptionNo || ''), 40, 200);
             ctx.fillText('日期: ' + (record.date || ''), 320, 200);
             
             // 分隔线
@@ -3453,8 +3552,10 @@ IconFile=${scriptPath}`;
                         setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                         setUserItem('dailyCounter', dailyCounter);
                         setUserItem('counterDate', currentPrescriptionDate);
-                        document.getElementById('prescriptionNo').value = generatePrescriptionNo();
-                        document.getElementById('paperClinicNo').textContent = document.getElementById('prescriptionNo').value;
+                        const presNo = generatePrescriptionNo();
+                        document.getElementById('prescriptionNo').value = presNo;
+                        document.getElementById('clinicNo').value = presNo;
+                        document.getElementById('paperClinicNo').textContent = presNo;
                         alert('数据恢复成功！请刷新页面。');
                     } catch (err) {
                         alert('数据恢复失败！');
