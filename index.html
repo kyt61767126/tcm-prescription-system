@@ -4318,44 +4318,38 @@ document.addEventListener('DOMContentLoaded', init);
 
 <script>
 (function() {
-    // 全局处方计数器：今天第1张、第2张、第3张……
-    let prescriptionCount = 0;
+    function updatePrescriptionNumbers() {
+        // 1. 收集所有处方记录（按页面显示顺序：最新在上）
+        const items = [];
+        const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+        let node;
+        while (node = walker.nextNode()) {
+            if (/\[\d{12}\]/.test(node.textContent)) {
+                items.push(node);
+            }
+        }
 
-    function formatNo(timestamp) {
-        if (!/^\d{12}$/.test(timestamp)) return timestamp;
-        const yymmdd = timestamp.slice(0, 6);
-        prescriptionCount++;
-        return yymmdd + String(prescriptionCount).padStart(2, '0');
-    }
+        // 2. 反转 → 从旧到新编号
+        const reversed = items.reverse();
 
-    function replaceAll(text) {
-        return text.replace(/(\[?\d{12}\]?)/g, m => {
-            let raw = m.replace(/[\[\]]/g, '');
-            let fmt = formatNo(raw);
-            return m.startsWith('[') ? `[${fmt}]` : fmt;
+        // 3. 自动获取今天日期：YYMMDD
+        const now = new Date();
+        const yymmdd = 
+            now.getFullYear().toString().slice(2) +
+            String(now.getMonth() + 1).padStart(2, '0') +
+            String(now.getDate()).padStart(2, '0');
+
+        // 4. 编号：旧=01，新=最大
+        reversed.forEach((node, idx) => {
+            const seq = String(idx + 1).padStart(2, '0');
+            node.textContent = node.textContent.replace(/\[\d+\]/, `[${yymmdd}${seq}]`);
         });
     }
 
-    // 强制刷新所有处方号
-    function updateDOM() {
-        prescriptionCount = 0; // 每次刷新重新排序
-        const walker = document.createTreeWalker(
-            document.body,
-            NodeFilter.SHOW_TEXT,
-            null,
-            false
-        );
-        let node;
-        while ((node = walker.nextNode())) {
-            node.textContent = replaceAll(node.textContent);
-        }
-    }
-
-    updateDOM();
-    const obs = new MutationObserver(updateDOM);
-    obs.observe(document.body, { childList: true, subtree: true });
+    updatePrescriptionNumbers();
+    const observer = new MutationObserver(updatePrescriptionNumbers);
+    observer.observe(document.body, { childList: true, subtree: true });
 })();
 </script>
-
 </body>
 </html>
