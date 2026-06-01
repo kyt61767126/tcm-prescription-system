@@ -997,7 +997,7 @@
                     throw new Error(data.error || 'Cloud operation failed');
                 }
                 
-                return { success: true, data: data.data || data, fromCloud: true };
+                return { success: true, ...data, fromCloud: true };
                 
             } catch (error) {
                 clearTimeout(timeoutId);
@@ -3147,7 +3147,7 @@
             
             if (result.success) {
                 // 使用后端返回的编号（如果有）
-                const savedPrescription = result.data?.savedPrescription;
+                const savedPrescription = result.savedPrescription;
                 if (savedPrescription) {
                     record.prescriptionNo = savedPrescription.prescriptionNo;
                     record.clinicNo = savedPrescription.clinicNo;
