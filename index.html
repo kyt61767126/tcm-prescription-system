@@ -1144,10 +1144,10 @@
                     method: 'POST',
                     body: JSON.stringify({ prescription: prescriptions })
                 });
-                return response.success;
+                return response;
             } catch (error) {
                 console.warn('Failed to save prescriptions to cloud:', error);
-                return false;
+                return { success: false, error: error.message };
             }
         }
 
