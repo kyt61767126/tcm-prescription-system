@@ -4314,5 +4314,36 @@ IconFile=${scriptPath}`;
 
         document.addEventListener('DOMContentLoaded', init);
     </script>
+document.addEventListener('DOMContentLoaded', init);
+</script>
+
+<!-- 在这里插入我们的自动转换代码！ -->
+<script>
+// 处方历史自动转换：时间戳 → YYMMDD+序号格式
+window.addEventListener('load', function() {
+    function formatPrescriptionNo(timestamp) {
+        if (!timestamp || timestamp.length < 6) return timestamp;
+        const yymmdd = timestamp.substring(0, 6);
+        const seconds = parseInt(timestamp.substring(10, 12), 10);
+        const seq = String((seconds % 99) + 1).padStart(2, '0');
+        return `${yymmdd}${seq}`;
+    }
+
+    function updateHistoryList() {
+        const allElements = document.querySelectorAll('*');
+        allElements.forEach(el => {
+            const text = el.textContent.trim();
+            if (/^\d{12}$/.test(text)) {
+                el.textContent = formatPrescriptionNo(text);
+            }
+        });
+    }
+
+    updateHistoryList();
+    const observer = new MutationObserver(updateHistoryList);
+    observer.observe(document.body, { childList: true, subtree: true });
+});
+</script>
+
 </body>
 </html>
