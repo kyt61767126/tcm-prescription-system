@@ -4315,48 +4315,5 @@ IconFile=${scriptPath}`;
     
 document.addEventListener('DOMContentLoaded', init);
 </script>
-
-<script>
-// 轻度增强版 | 安全 | 不破坏页面 | 不崩溃
-(function() {
-    function refreshNumbers() {
-        const now = new Date();
-        const yymmdd = String(now.getFullYear()).slice(2) +
-            String(now.getMonth() + 1).padStart(2, '0') +
-            String(now.getDate()).padStart(2, '0');
-
-        // 1. 收集处方历史
-        const items = [];
-        const tree = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
-        let node;
-        while (node = tree.nextNode()) {
-            if (/\[\d{12}\]/.test(node.textContent)) items.push(node);
-        }
-
-        // 2. 旧 → 新 排序
-        const sorted = items.reverse();
-
-        // 3. 给处方列表编号（安全操作）
-        sorted.forEach((n, i) => {
-            const seq = String(i + 1).padStart(2, '0');
-            n.textContent = n.textContent.replace(/\[\d+\]/, `[${yymmdd}${seq}]`);
-        });
-
-        // 4. 轻度同步：只改最新一条到输入框（不强改页面）
-        if (sorted.length > 0) {
-            const last = yymmdd + String(sorted.length).padStart(2, '0');
-            
-            // 只改长数字输入框（不破坏其他）
-            document.querySelectorAll('input').forEach(i => {
-                if (i.value && i.value.length >= 12) i.value = last;
-            });
-        }
-    }
-
-    refreshNumbers();
-    const observer = new MutationObserver(refreshNumbers);
-    observer.observe(document.body, { childList: true, subtree: true });
-})();
-</script>
 </body>
 </html>
