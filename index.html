@@ -3143,9 +3143,17 @@
             };
             
             // 统一写入云端数据库（真实数据唯一来源是云端）
-            const success = await savePrescriptionsToCloud([record]);
+            const result = await savePrescriptionsToCloud([record]);
             
-            if (success) {
+            if (result.success) {
+                // 使用后端返回的编号（如果有）
+                const cloudData = result.data;
+                const savedPrescription = cloudData.savedPrescription || cloudData.data?.savedPrescription;
+                if (savedPrescription) {
+                    record.prescriptionNo = savedPrescription.prescriptionNo;
+                    record.clinicNo = savedPrescription.clinicNo;
+                }
+                
                 // 云端保存成功，更新本地缓存
                 prescriptionHistory.unshift(record);
                 if (prescriptionHistory.length > 100000) {
@@ -3157,15 +3165,18 @@
                 setUserItem('dailyCounter', dailyCounter);
                 setUserItem('counterDate', currentPrescriptionDate);
                 
-                // 生成新编号
-                const newPrescriptionNo = generatePrescriptionNo();
-                document.getElementById('prescriptionNo').value = newPrescriptionNo;
-                document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
+                // 使用后端返回的编号更新显示
+                const displayPrescriptionNo = record.prescriptionNo || generatePrescriptionNo();
+                const displayClinicNo = record.clinicNo || '';
+                
+                document.getElementById('prescriptionNo').value = displayPrescriptionNo;
+                document.getElementById('clinicNo').value = displayClinicNo;
+                document.getElementById('paperClinicNo').textContent = displayPrescriptionNo;
                 
                 // 保存后立即刷新历史处方栏
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                // 生成处方签图片并自动下载
-                savePrescriptionAsImage(record, newPrescriptionNo);
+                // 生成处方签图片并自动下载（使用后端编号）
+                savePrescriptionAsImage(record, displayPrescriptionNo);
                 alert('处方保存成功！');
                 searchPatientsQuick({target:{value:name}});
             } else {
