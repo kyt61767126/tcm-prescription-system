@@ -3209,17 +3209,16 @@
             document.getElementById('paperAge').textContent = record.patientAge || '';
             document.getElementById('paperDate').textContent = record.date || new Date().toLocaleDateString('zh-CN');
             
-            // 门诊号优先显示处方号，其次显示统计号
-            const displayClinicNo = record.prescriptionNo || record.clinicNo || '';
-            document.getElementById('paperClinicNo').textContent = displayClinicNo;
+            // 更新门诊号显示（处方签优先显示处方号）
+            document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
             document.getElementById('paperMedicalHistory').textContent = record.medicalHistory || '';
             document.getElementById('paperDiagnosis').textContent = record.diagnosis || '';
             document.getElementById('paperDoctor').textContent = record.doctorName || currentUser?.name || '';
             document.getElementById('paperDoseCount').textContent = doseCount;
             
-            // 同时更新输入框中的编号
+            // 更新输入框中的编号（统计号输入框优先使用统计号，如果没有则使用处方号）
             document.getElementById('prescriptionNo').value = record.prescriptionNo || '';
-            document.getElementById('clinicNo').value = record.clinicNo || '';
+            document.getElementById('clinicNo').value = record.clinicNo || record.prescriptionNo || '';
             
             // 更新处方签药物列表
             const linesDiv = document.getElementById('prescriptionLines');
