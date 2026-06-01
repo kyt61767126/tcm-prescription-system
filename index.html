@@ -4316,16 +4316,28 @@ IconFile=${scriptPath}`;
 document.addEventListener('DOMContentLoaded', init);
 </script>
 
-<!-- 处方号：拦截后端返回 + 自动转换 12位 → YYMMDD+序号 -->
+<!-- 处方号：拦截后端返回 + 自动转换 12位 → YYMMDD+顺序号(01,02...) -->
 <script>
 (function() {
-    // 转换函数：12位时间戳 → YYMMDD+两位序号
+    // 按“当天+首次出现顺序”编号
+    const seen = new Map(); // 存：原始12位时间戳 → 序号
+    const todayYYMMDD = new Date().toISOString().slice(2,8); // 取 YYMMDD
+
     function formatNo(timestamp) {
         if (!/^\d{12}$/.test(timestamp)) return timestamp;
-        const yymmdd = timestamp.slice(0,6);
-        const sec = parseInt(timestamp.slice(10,12),10);
-        const seq = String((sec % 99)+1).padStart(2,'0');
-        return yymmdd + seq;
+
+        const tsYYMMDD = timestamp.slice(0,6);
+        // 不是今天的，直接返回 YYMMDD01（或你想保留原格式也行）
+        if (tsYYMMDD !== todayYYMMDD) {
+            return tsYYMMDD + '01';
+        }
+
+        // 今天的：按第一次出现顺序给号
+        if (!seen.has(timestamp)) {
+            seen.set(timestamp, seen.size + 1);
+        }
+        const seq = String(seen.get(timestamp)).padStart(2,'0');
+        return tsYYMMDD + seq;
     }
 
     // 替换文本中的所有12位数字（含方括号）
