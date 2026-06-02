@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -942,17 +942,6 @@
         // Cloudflare KV API 地址
         const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
         
-        // 安全的Base64编码函数，支持中文
-        function safeBtoa(str) {
-            try {
-                return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
-                    return String.fromCharCode(parseInt(p1, 16));
-                }));
-            } catch (e) {
-                return btoa(str);
-            }
-        }
-
         // 云端同步辅助函数 - 对用户API和处方API启用
         async function cloudFetch(url, options = {}) {
             if (!url.includes('/users') && !url.includes('/prescriptions')) {
@@ -994,8 +983,7 @@
                     throw new Error(data.error || 'Cloud operation failed');
                 }
                 
-                // 返回完整的响应数据，保留所有字段包括 savedPrescription
-                return { ...data, fromCloud: true };
+                return { success: true, data: data.data || data, fromCloud: true };
                 
             } catch (error) {
                 clearTimeout(timeoutId);
@@ -1129,7 +1117,7 @@
                     console.error('User not logged in');
                     return null;
                 }
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
                 // 使用测试用户参数绕过认证问题
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 const response = await cloudFetch(url, {
@@ -1180,10 +1168,10 @@
             try {
                 if (!currentUser) {
                     console.error('User not logged in');
-                    return { success: false };
+                    return false;
                 }
                 
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 const response = await cloudFetch(url, {
                     method: 'POST',
@@ -1195,17 +1183,18 @@
                 
                 if (response.success) {
                     console.log('Cloud save successful');
-                    // 直接返回响应数据，让调用方处理数据更新，避免重复加载
-                    return response;
+                    // 保存成功后从云端获取最新数据，更新本地记录的编号
+                    await loadData();
+                    return true;
                 }
                 
                 alert('处方保存失败，请检查网络连接后重试。');
-                return { success: false };
+                return false;
                 
             } catch (error) {
                 console.error('Failed to save prescriptions:', error);
                 alert('处方保存失败，请检查网络连接后重试。');
-                return { success: false };
+                return false;
             }
         }
 
@@ -1216,7 +1205,7 @@
                     console.error('User not logged in');
                     return false;
                 }
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
                 // 使用测试用户参数绕过认证问题
                 const url = `${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}&user=${encodeURIComponent(currentUser.username)}`;
                 const response = await cloudFetch(url, {
@@ -1234,34 +1223,31 @@
 
         // 初始化时先从云端获取用户数据
         async function getUsers() {
-            // 优先从本地获取，确保登录不被云端请求卡住
-            const saved = localStorage.getItem('systemUsers');
-            let localUsers = null;
-            
-            if (saved) {
-                try {
-                    localUsers = JSON.parse(saved);
-                    const firstUser = localUsers[0];
-                    if (firstUser && firstUser.password && firstUser.password.length === 64) {
-                        localStorage.removeItem('systemUsers');
-                        localUsers = null;
-                    }
-                } catch (e) {
-                    console.error('Parse users error:', e);
-                    localUsers = null;
-                }
+            // 先尝试从云端获取
+            const cloudUsers = await getUsersFromCloud();
+            if (cloudUsers && cloudUsers.length > 0) {
+                // 更新本地存储
+                localStorage.setItem('systemUsers', JSON.stringify(cloudUsers));
+                return cloudUsers;
             }
             
-            const users = localUsers || getDefaultUsers();
-            
-            // 后台异步同步云端数据，不阻塞登录
-            getUsersFromCloud().then(cloudUsers => {
-                if (cloudUsers && cloudUsers.length > 0) {
-                    localStorage.setItem('systemUsers', JSON.stringify(cloudUsers));
+            // 云端没有则从本地获取
+            const saved = localStorage.getItem('systemUsers');
+            if (saved) {
+                try {
+                    const users = JSON.parse(saved);
+                    const firstUser = users[0];
+                    if (firstUser && firstUser.password && firstUser.password.length === 64) {
+                        localStorage.removeItem('systemUsers');
+                        return getDefaultUsers();
+                    }
+                    return users;
+                } catch (e) {
+                    console.error('Parse users error:', e);
+                    return getDefaultUsers();
                 }
-            }).catch(e => console.warn('Cloud user sync failed:', e));
-            
-            return users;
+            }
+            return getDefaultUsers();
         }
 
         async function saveUsers(users) {
@@ -1316,11 +1302,9 @@
                 document.getElementById('loginOverlay').style.display = 'none';
                 updateUserDisplay();
                 errorDiv.style.display = 'none';
-                // 立即刷新界面，不等待数据加载
-                refreshUserInterface();
+                loadData();
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                // 后台异步加载数据
-                loadData().catch(e => console.warn('Load data failed:', e));
+                refreshUserInterface();
             } else {
                 errorDiv.textContent = '用户名或密码错误';
                 errorDiv.style.display = 'block';
@@ -1339,7 +1323,6 @@
 
         function refreshUserInterface() {
             const migrated = migrateOldData();
-            // 先从本地生成编号，确保界面能立即工作
             const presNo = generatePrescriptionNo();
             document.getElementById('prescriptionNo').value = presNo;
             document.getElementById('paperClinicNo').textContent = presNo;
@@ -1597,11 +1580,8 @@
                     currentUser = JSON.parse(sessionUser);
                     document.getElementById('loginOverlay').style.display = 'none';
                     updateUserDisplay();
-                    // 立即刷新界面，不等待数据加载
-                    refreshUserInterface();
+                    await loadData();
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                    // 后台异步加载数据
-                    loadData().catch(e => console.warn('Load data failed:', e));
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
                     currentUser = null;
@@ -1613,11 +1593,8 @@
                     sessionStorage.setItem('currentUser', localUser);
                     document.getElementById('loginOverlay').style.display = 'none';
                     updateUserDisplay();
-                    // 立即刷新界面，不等待数据加载
-                    refreshUserInterface();
+                    await loadData();
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                    // 后台异步加载数据
-                    loadData().catch(e => console.warn('Load data failed:', e));
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
                     currentUser = null;
@@ -2462,7 +2439,7 @@
                     return null;
                 }
                 
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 
                 const controller = new AbortController();
@@ -2509,35 +2486,26 @@
         }
 
         async function init() {
-            // 先立即设置界面基本状态，不等待登录检查完成
+            await checkLoginStatus();
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const currentDate = `${year}-${month}-${day}`;
-            document.getElementById('visitDate').value = currentDate;
+            document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
             
-            // 先使用本地生成的编号，确保界面立即可用
-            const presNo = generatePrescriptionNo();
-            document.getElementById('prescriptionNo').value = presNo;
-            document.getElementById('paperClinicNo').textContent = presNo;
+            // 优先从云端获取处方编号
+            const cloudNo = await getNextCloudPrescriptionNo();
+            if (cloudNo) {
+                document.getElementById('prescriptionNo').value = cloudNo;
+            } else {
+                const presNo = generatePrescriptionNo();
+                document.getElementById('prescriptionNo').value = presNo;
+            }
+            
+            document.getElementById('paperClinicNo').textContent = document.getElementById('prescriptionNo').value;
             document.getElementById('clinicName').value = getUserItem('clinicName') || '惠康堂中医诊所';
             document.getElementById('clinicNameDisplay').textContent = getUserItem('clinicName') || '惠康堂中医诊所';
             document.getElementById('defaultRegFee').value = getUserItem('defaultRegFee') || '0';
             document.getElementById('defaultDose').value = getUserItem('defaultDose') || '7';
             const regFeeVal = getUserItem('defaultRegFee') || '0';
-            
-            // 后台异步检查登录状态和获取云端编号
-            checkLoginStatus().catch(e => console.warn('Check login status failed:', e));
-            
-            // 后台异步尝试获取云端编号
-            getNextCloudPrescriptionNo().then(cloudNo => {
-                if (cloudNo && document.getElementById('prescriptionNo')) {
-                    document.getElementById('prescriptionNo').value = cloudNo;
-                    document.getElementById('paperClinicNo').textContent = cloudNo;
-                }
-            }).catch(e => console.warn('Get cloud prescription no failed:', e));
             const regFeeEl = document.getElementById('registrationFee');
             if (regFeeEl) regFeeEl.value = regFeeVal;
             const regFeeEl2 = document.getElementById('registrationFee2');
@@ -3111,7 +3079,7 @@
                         <div>
                             <div style="display:flex;gap:8px;align-items:center;">
                                 <div class="history-name">${p.patientName || p.name || '未知'}</div>
-                                <div style="font-size:10px;color:#8b0000;font-weight:bold;">[${p.outpatientNo || p.prescriptionNo || '']</div>
+                                <div style="font-size:10px;color:#8b0000;font-weight:bold;">[${p.prescriptionNo || ''}]</div>
                             </div>
                             <div class="history-date">${p.date || p.createdAt || ''} - ${p.diagnosis || ''}</div>
                         </div>
@@ -3162,7 +3130,7 @@
             document.getElementById('patientPhone').value = record.patientPhone;
             document.getElementById('patientAddress').value = record.patientAddress;
             // 统计输入框保持显示历史处方累计数量，不被打开的处方覆盖
-            document.getElementById('paperClinicNo').textContent = record.outpatientNo || record.prescriptionNo || record.clinicNo || '';
+            document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
             document.getElementById('medicalHistory').value = record.medicalHistory;
             document.getElementById('diagnosis').value = record.diagnosis;
             const doseCount = record.doseCount || 7;
@@ -3270,12 +3238,7 @@
         async function savePrescription() {
             const name = document.getElementById('patientName').value;
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
-            // 使用本地时间而不是 UTC 时间
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const currentDate = `${year}-${month}-${day}`;
+            const currentDate = new Date().toISOString().split('T')[0];
             document.getElementById('visitDate').value = currentDate;
             document.getElementById('paperDate').textContent = currentDate;
             const doseInput = document.getElementById('doseCountInput') || document.getElementById('doseCountInput3');
@@ -3283,17 +3246,20 @@
             const grandTotalEl = document.getElementById('grandTotal') || document.getElementById('grandTotal2');
             
             // 使用云端时间戳生成全局唯一的处方ID和编号
+            const now = new Date();
             const cloudTimestamp = now.getTime();
-            const shortYear = String(now.getFullYear()).slice(-2);
+            const year = String(now.getFullYear()).slice(-2);
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
             const hour = String(now.getHours()).padStart(2, '0');
             const minute = String(now.getMinutes()).padStart(2, '0');
             const second = String(now.getSeconds()).padStart(2, '0');
-            const globalPrescriptionNo = shortYear + month + day + hour + minute + second;
+            const globalPrescriptionNo = year + month + day + hour + minute + second;
             
             const record = {
                 id: cloudTimestamp,
                 prescriptionNo: globalPrescriptionNo,
-                date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`, // 强制使用本地当前日期
+                date: document.getElementById('visitDate').value,
                 patientName: name,
                 patientGender: document.getElementById('patientGender').value,
                 patientAge: document.getElementById('patientAge').value,
@@ -3315,52 +3281,30 @@
             console.log('=== Saving prescription ===');
             console.log('Record:', JSON.stringify(record).substring(0, 200));
             
-            const saveResult = await savePrescriptionsToCloud([record]);
+            const success = await savePrescriptionsToCloud([record]);
             
-            console.log('Save result:', saveResult);
+            console.log('Save result:', success);
             
-            if (saveResult && saveResult.success) {
-                // 优先从保存响应中获取 savedPrescription
-                let savedPrescription = null;
-                if (saveResult.savedPrescription) {
-                    savedPrescription = saveResult.savedPrescription;
-                } else if (saveResult.data && saveResult.data.savedPrescription) {
-                    savedPrescription = saveResult.data.savedPrescription;
-                }
-                
-                // 如果响应中没有，则从云端重新获取最新数据
-                let cloudPrescriptions = null;
-                if (!savedPrescription) {
-                    const cloudResult = await getPrescriptionsFromCloud();
-                    if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
-                        cloudPrescriptions = cloudResult.data;
-                        prescriptionHistory = cloudPrescriptions;
-                        // 从云端数据中找到刚保存的处方
-                        savedPrescription = cloudPrescriptions.find(p => p.id === record.id);
+            if (success) {
+                // 从云端重新获取最新数据，确保使用后端生成的编号
+                const cloudPrescriptions = await getPrescriptionsFromCloud();
+                if (cloudPrescriptions && cloudPrescriptions.length > 0) {
+                    const savedPrescription = cloudPrescriptions.find(p => p.id === record.id);
+                    if (savedPrescription) {
+                        record.prescriptionNo = savedPrescription.prescriptionNo;
+                        record.clinicNo = savedPrescription.clinicNo;
                     }
-                } else if (saveResult.data && Array.isArray(saveResult.data)) {
-                    // 如果响应中有数据，也更新本地缓存
-                    prescriptionHistory = saveResult.data;
                 }
                 
-                // 获取正确的编号
-                let displayNo = record.prescriptionNo;
-                if (savedPrescription) {
-                    displayNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo || displayNo;
-                    // 更新 record 对象，确保使用云端的完整数据
-                    record.prescriptionNo = displayNo;
-                    record.clinicNo = displayNo;
-                    record.outpatientNo = displayNo;
+                // 更新本地缓存
+                prescriptionHistory.unshift(record);
+                if (prescriptionHistory.length > 100000) {
+                    prescriptionHistory = prescriptionHistory.slice(0, 100000);
                 }
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
-                // 优先从云端获取下一个编号，如果失败则使用本地生成，确保功能能正常工作
-                let nextCloudNo = null;
-                try {
-                    nextCloudNo = await getNextCloudPrescriptionNo();
-                } catch (e) {
-                    console.warn('获取云端编号失败，使用本地生成', e);
-                }
+                // 从云端获取下一个编号（确保多端同步）
+                const nextCloudNo = await getNextCloudPrescriptionNo();
                 if (nextCloudNo) {
                     document.getElementById('prescriptionNo').value = nextCloudNo;
                     document.getElementById('paperClinicNo').textContent = nextCloudNo;
@@ -3368,28 +3312,16 @@
                     dailyCounter++;
                     setUserItem('dailyCounter', dailyCounter);
                     setUserItem('counterDate', currentPrescriptionDate);
-                    const newPresNo = generatePrescriptionNo();
-                    document.getElementById('prescriptionNo').value = newPresNo;
-                    document.getElementById('paperClinicNo').textContent = newPresNo;
+                    const newPrescriptionNo = generatePrescriptionNo();
+                    document.getElementById('prescriptionNo').value = newPrescriptionNo;
+                    document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
                 }
                 
-                // 保存后立即刷新历史处方栏（使用去重后的云端数据）
-                const filtered = filterPrescriptionsByPermission(prescriptionHistory);
-                // 按ID去重
-                const uniquePrescriptions = filtered.filter((p, index, self) => 
-                    index === self.findIndex(t => t.id === p.id)
-                );
-                renderHistoryList(uniquePrescriptions.slice(0, 15));
-                
-                // 生成处方签图片并自动下载（使用后端返回的正确编号）
-                savePrescriptionAsImage(record, displayNo);
+                // 保存后立即刷新历史处方栏
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                // 生成处方签图片并自动下载（使用后端返回的编号）
+                savePrescriptionAsImage(record, record.prescriptionNo);
                 alert('处方保存成功！');
-                // 重置日期输入框为当前日期
-                const now = new Date();
-                const year = now.getFullYear();
-                const month = String(now.getMonth() + 1).padStart(2, '0');
-                const day = String(now.getDate()).padStart(2, '0');
-                document.getElementById('visitDate').value = `${year}-${month}-${day}`;
                 searchPatientsQuick({target:{value:name}});
             } else {
                 alert('处方保存失败，请检查网络连接后重试。');
@@ -3455,7 +3387,7 @@
             ctx.fillText('科别: 中医内科', 560, 170);
             
             // 患者信息第二行
-            ctx.fillText('门诊号: ' + (currentPrescriptionNo || record.outpatientNo || record.prescriptionNo || ''), 40, 200);
+            ctx.fillText('门诊号: ' + (currentPrescriptionNo || record.prescriptionNo || ''), 40, 200);
             ctx.fillText('日期: ' + (record.date || ''), 320, 200);
             
             // 分隔线
@@ -3529,11 +3461,9 @@
             ctx.textAlign = 'right';
             ctx.fillText('配方: ________  复核: ________', width - 40, lastY + 60);
             
-            // 下载图片（使用后端生成的正确编号）
+            // 下载图片（使用当下编号，包含用户名）
             const userName = currentUser ? currentUser.name || currentUser.username : '未知用户';
-            // 优先使用传入的正确编号，确保图片文件名使用规范编号
-            const finalNo = currentPrescriptionNo || record.outpatientNo || record.prescriptionNo || '';
-            const fileName = userName + '_' + (record.patientName || '未知') + '_' + finalNo + '.png';
+            const fileName = userName + '_' + (record.patientName || '未知') + '_' + (currentPrescriptionNo || record.prescriptionNo || '') + '.png';
             const link = document.createElement('a');
             link.download = fileName;
             link.href = canvas.toDataURL('image/png');
