@@ -310,15 +310,21 @@ export async function onRequest(context) {
             let responseData;
             
             if (Array.isArray(body.prescription)) {
-                // 批量保存模式 - 对于批量导入的处方，保留原有编号
-                const newPrescriptions = body.prescription.map(p => ({
-                    ...p,
-                    createdAt: p.createdAt || nowIso,
-                    updatedAt: nowIso,
-                    createdBy: p.createdBy || currentUser.username,
-                    userId: p.userId || currentUser.username,
-                    userRole: p.userRole || currentUser.role,
-                    isAdmin: p.isAdmin || currentUser.isAdmin
+                // 批量保存模式 - 自动生成编号
+                const newPrescriptions = await Promise.all(body.prescription.map(async p => {
+                    // 生成当日序号
+                    const outpatientNo = await generatePrescriptionNo(kv, currentUser.username, 'daily');
+                    return {
+                        ...p,
+                        prescriptionNo: outpatientNo,
+                        outpatientNo: outpatientNo,
+                        createdAt: p.createdAt || nowIso,
+                        updatedAt: nowIso,
+                        createdBy: p.createdBy || currentUser.username,
+                        userId: p.userId || currentUser.username,
+                        userRole: p.userRole || currentUser.role,
+                        isAdmin: p.isAdmin || currentUser.isAdmin
+                    };
                 }));
                 
                 // 合并并去重（保留最新的）
@@ -334,6 +340,24 @@ export async function onRequest(context) {
                     const noB = b.outpatientNo || b.prescriptionNo || '';
                     return noB.localeCompare(noA);
                 });
+                
+                // 生成下一个编号供前端使用
+                [nextPrescriptionNo, nextClinicNo] = await Promise.all([
+                    peekNextPrescriptionNo(kv, currentUser.username, 'daily'),
+                    peekNextPrescriptionNo(kv, currentUser.username, 'yearly')
+                ]);
+                
+                responseData = {
+                    success: true,
+                    data: prescriptions,
+                    savedPrescription: newPrescriptions[0],
+                    count: prescriptions.length,
+                    message: 'Prescriptions saved successfully',
+                    nextPrescriptionNo: nextPrescriptionNo,
+                    nextClinicNo: nextClinicNo,
+                    userRole: currentUser.role,
+                    isAdmin: currentUser.isAdmin
+                };
             } else {
                 // 单条保存模式 - 后端自动分配编号（使用KV存储）
                 // 获取短编号（YYMMDD + 当日序号）
