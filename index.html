@@ -3289,20 +3289,24 @@
                 // 从云端重新获取最新数据，确保使用后端生成的编号
                 const cloudPrescriptions = await getPrescriptionsFromCloud();
                 if (cloudPrescriptions && cloudPrescriptions.length > 0) {
+                    // 使用云端数据替换本地缓存，避免重复
+                    prescriptionHistory = cloudPrescriptions;
+                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                    
                     const savedPrescription = cloudPrescriptions.find(p => p.id === record.id);
                     if (savedPrescription) {
                         record.prescriptionNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
                         record.clinicNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
                         record.outpatientNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
                     }
+                } else {
+                    // 云端数据为空时，才手动添加记录
+                    prescriptionHistory.unshift(record);
+                    if (prescriptionHistory.length > 100000) {
+                        prescriptionHistory = prescriptionHistory.slice(0, 100000);
+                    }
+                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 }
-                
-                // 更新本地缓存
-                prescriptionHistory.unshift(record);
-                if (prescriptionHistory.length > 100000) {
-                    prescriptionHistory = prescriptionHistory.slice(0, 100000);
-                }
-                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
                 // 从云端获取下一个编号（确保多端同步）
                 const nextCloudNo = await getNextCloudPrescriptionNo();
