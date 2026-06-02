@@ -3381,8 +3381,8 @@
             ctx.fillText('年龄: ' + (record.patientAge || '') + '岁', 420, 170);
             ctx.fillText('科别: 中医内科', 560, 170);
             
-            // 患者信息第二行
-            ctx.fillText('门诊号: ' + (currentPrescriptionNo || record.prescriptionNo || ''), 40, 200);
+            // 患者信息第二行（使用标准格式的门诊号）
+            ctx.fillText('门诊号: ' + (currentPrescriptionNo || record.outpatientNo || record.prescriptionNo || ''), 40, 200);
             ctx.fillText('日期: ' + (record.date || ''), 320, 200);
             
             // 分隔线
