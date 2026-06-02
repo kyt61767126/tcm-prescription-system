@@ -3300,6 +3300,13 @@
                     );
                 }
                 
+                // 按处方编号倒序排序（编号大的排在前面）
+                prescriptionHistory.sort((a, b) => {
+                    const noA = a.outpatientNo || a.prescriptionNo || '';
+                    const noB = b.outpatientNo || b.prescriptionNo || '';
+                    return noB.localeCompare(noA);
+                });
+                
                 // 更新统计输入框
                 if (cloudData.totalCount) {
                     document.getElementById('clinicNo').value = cloudData.totalCount;
