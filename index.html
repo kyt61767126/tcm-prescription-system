@@ -3291,8 +3291,9 @@
                 if (cloudPrescriptions && cloudPrescriptions.length > 0) {
                     const savedPrescription = cloudPrescriptions.find(p => p.id === record.id);
                     if (savedPrescription) {
-                        record.prescriptionNo = savedPrescription.prescriptionNo;
-                        record.clinicNo = savedPrescription.clinicNo;
+                        record.prescriptionNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
+                        record.clinicNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
+                        record.outpatientNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
                     }
                 }
                 
