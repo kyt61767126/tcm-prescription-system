@@ -3303,13 +3303,22 @@
                 // 直接从保存响应中获取后端生成的编号
                 let displayNo = record.prescriptionNo;
                 
+                console.log('=== Debug: saveResult structure ===');
+                console.log('saveResult:', JSON.stringify(saveResult, null, 2));
+                console.log('saveResult.savedPrescription:', saveResult.savedPrescription ? JSON.stringify(saveResult.savedPrescription) : 'undefined');
+                console.log('saveResult.data:', saveResult.data ? JSON.stringify(saveResult.data) : 'undefined');
+                
                 // 优先从响应中获取 savedPrescription
                 let savedPrescription = null;
                 if (saveResult.savedPrescription) {
                     savedPrescription = saveResult.savedPrescription;
+                    console.log('Found savedPrescription in saveResult');
                 } else if (saveResult.data && saveResult.data.savedPrescription) {
                     savedPrescription = saveResult.data.savedPrescription;
+                    console.log('Found savedPrescription in saveResult.data');
                 }
+                
+                console.log('savedPrescription:', savedPrescription ? JSON.stringify(savedPrescription) : 'null');
                 
                 if (savedPrescription) {
                     record.prescriptionNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
@@ -3317,6 +3326,7 @@
                     record.outpatientNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
                     displayNo = record.prescriptionNo;
                     console.log('Got saved prescription from response, displayNo:', displayNo);
+                    console.log('record.prescriptionNo after update:', record.prescriptionNo);
                 } else {
                     console.log('Warning: savedPrescription not found in response');
                 }
