@@ -994,7 +994,8 @@
                     throw new Error(data.error || 'Cloud operation failed');
                 }
                 
-                return { success: true, data: data.data || data, fromCloud: true };
+                // 返回完整的响应数据，保留所有字段包括 savedPrescription
+                return { ...data, fromCloud: true };
                 
             } catch (error) {
                 clearTimeout(timeoutId);
