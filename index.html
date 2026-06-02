@@ -3256,7 +3256,12 @@
         async function savePrescription() {
             const name = document.getElementById('patientName').value;
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
-            const currentDate = new Date().toISOString().split('T')[0];
+            // 使用本地时间而不是 UTC 时间
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const currentDate = `${year}-${month}-${day}`;
             document.getElementById('visitDate').value = currentDate;
             document.getElementById('paperDate').textContent = currentDate;
             const doseInput = document.getElementById('doseCountInput') || document.getElementById('doseCountInput3');
@@ -3264,7 +3269,6 @@
             const grandTotalEl = document.getElementById('grandTotal') || document.getElementById('grandTotal2');
             
             // 使用云端时间戳生成全局唯一的处方ID和编号
-            const now = new Date();
             const cloudTimestamp = now.getTime();
             const year = String(now.getFullYear()).slice(-2);
             const month = String(now.getMonth() + 1).padStart(2, '0');
