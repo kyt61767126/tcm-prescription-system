@@ -2502,7 +2502,11 @@
             await checkLoginStatus();
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
-            const currentDate = now.toISOString().split('T')[0];
+            // 使用本地时间而不是UTC时间
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const currentDate = `${year}-${month}-${day}`;
             document.getElementById('visitDate').value = currentDate;
             
             // 优先从云端获取处方编号
@@ -3273,7 +3277,7 @@
             const record = {
                 id: cloudTimestamp,
                 prescriptionNo: globalPrescriptionNo,
-                date: now.toISOString().split('T')[0], // 强制使用当前日期
+                date: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`, // 强制使用本地当前日期
                 patientName: name,
                 patientGender: document.getElementById('patientGender').value,
                 patientAge: document.getElementById('patientAge').value,
