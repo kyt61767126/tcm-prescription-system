@@ -182,50 +182,32 @@ export async function onRequest(context) {
                 );
             }
             
-            // 先按时间排序（用于生成唯一序号）
+            // 按时间戳升序排序（最早的在前，确保编号按创建顺序生成）
+            // id 是创建时生成的时间戳（毫秒级），是最可靠的排序依据
             const sortedForSeq = [...filteredPrescriptions].sort((a, b) => {
-                const timeA = new Date(a.createdAt || a.date || a.id || 0).getTime();
-                const timeB = new Date(b.createdAt || b.date || b.id || 0).getTime();
-                return timeA - timeB;
+                const idA = typeof a.id === 'number' ? a.id : 0;
+                const idB = typeof b.id === 'number' ? b.id : 0;
+                return idA - idB;
             });
             
-            // 按日期分组并生成序号
+            // 按日期分组并生成序号（使用排序后的数组确保编号按时间顺序生成）
+            // 编号格式：YYMMDD + 01, 02, 03...
+            // 同一秒内原则上不会有2个处方，所以按时间戳顺序生成不会错乱
             const dateCounter = {};
-            filteredPrescriptions = filteredPrescriptions.map(p => {
-                if (p.outpatientNo && p.outpatientNo.length === 8) {
-                    return p;
-                }
-                
-                // 获取日期
-                let dateStr;
-                if (p.id && typeof p.id === 'number') {
-                    const date = new Date(p.id);
-                    dateStr = date.getFullYear().toString().substring(2) + 
-                              String(date.getMonth() + 1).padStart(2, '0') + 
-                              String(date.getDate()).padStart(2, '0');
-                } else if (p.createdAt) {
-                    const date = new Date(p.createdAt);
-                    dateStr = date.getFullYear().toString().substring(2) + 
-                              String(date.getMonth() + 1).padStart(2, '0') + 
-                              String(date.getDate()).padStart(2, '0');
-                } else if (p.date) {
-                    const dateParts = p.date.split(/[/\-]/);
-                    if (dateParts.length >= 3) {
-                        const year = dateParts[0].substring(2);
-                        const month = String(dateParts[1]).padStart(2, '0');
-                        const day = String(dateParts[2]).padStart(2, '0');
-                        dateStr = year + month + day;
-                    } else {
-                        dateStr = '260602';
-                    }
+            filteredPrescriptions = sortedForSeq.map(p => {
+                // 获取日期（从 id 时间戳提取，确保与排序依据一致）
+                let timestamp;
+                if (typeof p.id === 'number') {
+                    timestamp = p.id;
                 } else {
-                    const now = new Date();
-                    dateStr = now.getFullYear().toString().substring(2) + 
-                              String(now.getMonth() + 1).padStart(2, '0') + 
-                              String(now.getDate()).padStart(2, '0');
+                    timestamp = new Date(p.createdAt || p.date || Date.now()).getTime();
                 }
+                const date = new Date(timestamp);
+                const dateStr = date.getFullYear().toString().substring(2) + 
+                               String(date.getMonth() + 1).padStart(2, '0') + 
+                               String(date.getDate()).padStart(2, '0');
                 
-                // 生成当日序号
+                // 生成当日序号（按时间戳顺序递增）
                 if (!dateCounter[dateStr]) {
                     dateCounter[dateStr] = 1;
                 } else {
@@ -241,12 +223,22 @@ export async function onRequest(context) {
                 };
             });
             
-            // 按时间倒序排序
+            // 按编号倒序排序（编号大的排在前面）
             filteredPrescriptions.sort((a, b) => {
-                const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                return timeB - timeA;
+                const noA = a.outpatientNo || a.prescriptionNo || '';
+                const noB = b.outpatientNo || b.prescriptionNo || '';
+                return noB.localeCompare(noA);
             });
+            
+            // 将生成的编号保存回KV存储（确保编号持久化）
+            const updatedPrescriptions = [...prescriptions];
+            filteredPrescriptions.forEach(p => {
+                const index = updatedPrescriptions.findIndex(item => item.id === p.id);
+                if (index !== -1) {
+                    updatedPrescriptions[index] = p;
+                }
+            });
+            await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(updatedPrescriptions));
             
             const now = new Date();
             const year = now.getFullYear().toString().substring(2);
@@ -336,11 +328,11 @@ export async function onRequest(context) {
                 });
                 prescriptions = Array.from(idMap.values());
                 
-                // 按时间倒序排序
+                // 按编号倒序排序（编号大的排在前面）
                 prescriptions.sort((a, b) => {
-                    const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                    const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                    return timeB - timeA;
+                    const noA = a.outpatientNo || a.prescriptionNo || '';
+                    const noB = b.outpatientNo || b.prescriptionNo || '';
+                    return noB.localeCompare(noA);
                 });
             } else {
                 // 单条保存模式 - 后端自动分配编号（使用KV存储）
@@ -366,11 +358,11 @@ export async function onRequest(context) {
                 prescriptions = prescriptions.filter(p => p.id !== newPrescription.id);
                 prescriptions.push(newPrescription);
                 
-                // 按时间倒序排序，确保不同设备保存的处方按时间正确排列
+                // 按编号倒序排序（编号大的排在前面）
                 prescriptions.sort((a, b) => {
-                    const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                    const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                    return timeB - timeA;
+                    const noA = a.outpatientNo || a.prescriptionNo || '';
+                    const noB = b.outpatientNo || b.prescriptionNo || '';
+                    return noB.localeCompare(noA);
                 });
                 
                 [nextPrescriptionNo, nextClinicNo] = await Promise.all([

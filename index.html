@@ -1700,11 +1700,11 @@
                     document.getElementById('clinicNo').value = cloudResult.totalCount;
                 }
                 
-                // 按时间倒序排序
+                // 按处方编号倒序排序（编号大的排在前面）
                 prescriptionHistory.sort((a, b) => {
-                    const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                    const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                    return timeB - timeA;
+                    const noA = a.outpatientNo || a.prescriptionNo || '';
+                    const noB = b.outpatientNo || b.prescriptionNo || '';
+                    return noB.localeCompare(noA);
                 });
             } else {
                 // 云端没有数据，初始化为空数组
@@ -3088,6 +3088,13 @@
                     if (cloudResult.totalCount) {
                         document.getElementById('clinicNo').value = cloudResult.totalCount;
                     }
+                    
+                    // 按处方编号倒序排序（编号大的排在前面）
+                    prescriptionHistory.sort((a, b) => {
+                        const noA = a.outpatientNo || a.prescriptionNo || '';
+                        const noB = b.outpatientNo || b.prescriptionNo || '';
+                        return noB.localeCompare(noA);
+                    });
                 } else {
                     // 云端获取失败，从内存中移除
                     prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
