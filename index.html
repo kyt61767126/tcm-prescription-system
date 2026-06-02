@@ -3097,7 +3097,7 @@
                         <div>
                             <div style="display:flex;gap:8px;align-items:center;">
                                 <div class="history-name">${p.patientName || p.name || '未知'}</div>
-                                <div style="font-size:10px;color:#8b0000;font-weight:bold;">[${p.prescriptionNo || ''}]</div>
+                                <div style="font-size:10px;color:#8b0000;font-weight:bold;">[${p.outpatientNo || p.prescriptionNo || '']</div>
                             </div>
                             <div class="history-date">${p.date || p.createdAt || ''} - ${p.diagnosis || ''}</div>
                         </div>
@@ -3148,7 +3148,7 @@
             document.getElementById('patientPhone').value = record.patientPhone;
             document.getElementById('patientAddress').value = record.patientAddress;
             // 统计输入框保持显示历史处方累计数量，不被打开的处方覆盖
-            document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
+            document.getElementById('paperClinicNo').textContent = record.outpatientNo || record.prescriptionNo || record.clinicNo || '';
             document.getElementById('medicalHistory').value = record.medicalHistory;
             document.getElementById('diagnosis').value = record.diagnosis;
             const doseCount = record.doseCount || 7;
