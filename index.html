@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -3300,55 +3300,25 @@
             console.log('Save result:', saveResult);
             
             if (saveResult && saveResult.success) {
-                // 直接从保存响应中获取后端生成的编号
-                let displayNo = record.prescriptionNo;
-                
-                console.log('=== Debug: saveResult structure ===');
-                console.log('saveResult:', JSON.stringify(saveResult, null, 2));
-                console.log('saveResult.savedPrescription:', saveResult.savedPrescription ? JSON.stringify(saveResult.savedPrescription) : 'undefined');
-                console.log('saveResult.data:', saveResult.data ? JSON.stringify(saveResult.data) : 'undefined');
-                
-                // 优先从响应中获取 savedPrescription
-                let savedPrescription = null;
-                if (saveResult.savedPrescription) {
-                    savedPrescription = saveResult.savedPrescription;
-                    console.log('Found savedPrescription in saveResult');
-                } else if (saveResult.data && saveResult.data.savedPrescription) {
-                    savedPrescription = saveResult.data.savedPrescription;
-                    console.log('Found savedPrescription in saveResult.data');
-                }
-                
-                console.log('savedPrescription:', savedPrescription ? JSON.stringify(savedPrescription) : 'null');
-                
-                if (savedPrescription) {
-                    record.prescriptionNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
-                    record.clinicNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
-                    record.outpatientNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
-                    displayNo = record.prescriptionNo;
-                    console.log('Got saved prescription from response, displayNo:', displayNo);
-                    console.log('record.prescriptionNo after update:', record.prescriptionNo);
-                } else {
-                    console.log('Warning: savedPrescription not found in response');
-                }
-                
-                // 从云端重新获取最新数据，确保数据完整
+                // 从云端重新获取最新数据，确保使用正确的后端编号
                 const cloudPrescriptions = await getPrescriptionsFromCloud();
                 
                 // 使用云端数据替换本地缓存，避免重复
                 if (cloudPrescriptions && cloudPrescriptions.length > 0) {
                     prescriptionHistory = cloudPrescriptions;
-                    
-                    // 如果之前没找到 savedPrescription，从云端数据中查找
-                    if (!savedPrescription) {
-                        const cloudSaved = cloudPrescriptions.find(p => p.id === record.id);
-                        if (cloudSaved) {
-                            record.prescriptionNo = cloudSaved.outpatientNo || cloudSaved.prescriptionNo;
-                            record.clinicNo = cloudSaved.outpatientNo || cloudSaved.prescriptionNo;
-                            record.outpatientNo = cloudSaved.outpatientNo || cloudSaved.prescriptionNo;
-                            displayNo = record.prescriptionNo;
-                            console.log('Got saved prescription from cloud data, displayNo:', displayNo);
-                        }
-                    }
+                }
+                
+                // 从云端数据中找到刚保存的处方，使用完整的云端数据
+                const cloudSaved = cloudPrescriptions ? cloudPrescriptions.find(p => p.id === record.id) : null;
+                
+                // 获取正确的编号
+                let displayNo = record.prescriptionNo;
+                if (cloudSaved) {
+                    displayNo = cloudSaved.outpatientNo || cloudSaved.prescriptionNo || displayNo;
+                    // 更新 record 对象，确保使用云端的完整数据
+                    record.prescriptionNo = displayNo;
+                    record.clinicNo = displayNo;
+                    record.outpatientNo = displayNo;
                 }
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
