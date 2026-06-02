@@ -3040,7 +3040,13 @@
         function filterPrescriptionsByPermission(prescriptions) {
             if (!currentUser) return prescriptions;
             if (currentUser.role === 'admin') return prescriptions;
-            return prescriptions.filter(p => !p.createdBy || p.createdBy === currentUser.username);
+            // 非管理员用户可以查看自己创建的处方，或没有创建者信息的处方
+            const allowedUsernames = [currentUser.username, currentUser.name, currentUser.userId];
+            return prescriptions.filter(p => 
+                !p.createdBy || 
+                allowedUsernames.includes(p.createdBy) || 
+                allowedUsernames.includes(p.userId)
+            );
         }
 
         function renderHistoryList(list) {
@@ -3303,15 +3309,10 @@
                 console.log('allPrescriptions count:', allPrescriptions.length);
                 console.log('currentUser:', currentUser);
                 
-                if (currentUser && currentUser.role === 'admin') {
-                    prescriptionHistory = allPrescriptions;
-                } else {
-                    prescriptionHistory = allPrescriptions.filter(p => 
-                        !p.createdBy || p.createdBy === currentUser?.username || p.createdBy === currentUser?.name
-                    );
-                }
+                // 直接使用所有处方，权限过滤由 filterPrescriptionsByPermission 处理
+                prescriptionHistory = allPrescriptions;
                 
-                console.log('prescriptionHistory count after filter:', prescriptionHistory.length);
+                console.log('prescriptionHistory count:', prescriptionHistory.length);
                 
                 // 按处方编号倒序排序（编号大的排在前面）
                 prescriptionHistory.sort((a, b) => {
