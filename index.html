@@ -3351,6 +3351,12 @@
                 // 生成处方签图片并自动下载（使用后端返回的正确编号）
                 savePrescriptionAsImage(record, displayNo);
                 alert('处方保存成功！');
+                // 重置日期输入框为当前日期
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = String(now.getMonth() + 1).padStart(2, '0');
+                const day = String(now.getDate()).padStart(2, '0');
+                document.getElementById('visitDate').value = `${year}-${month}-${day}`;
                 searchPatientsQuick({target:{value:name}});
             } else {
                 alert('处方保存失败，请检查网络连接后重试。');
