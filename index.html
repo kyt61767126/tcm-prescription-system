@@ -3307,10 +3307,12 @@
             
             if (saveResult && saveResult.success) {
                 // 从云端重新获取最新数据，确保使用正确的后端编号
-                const cloudPrescriptions = await getPrescriptionsFromCloud();
+                const cloudResult = await getPrescriptionsFromCloud();
+                let cloudPrescriptions = null;
                 
                 // 使用云端数据替换本地缓存，避免重复
-                if (cloudPrescriptions && cloudPrescriptions.length > 0) {
+                if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
+                    cloudPrescriptions = cloudResult.data;
                     prescriptionHistory = cloudPrescriptions;
                 }
                 
