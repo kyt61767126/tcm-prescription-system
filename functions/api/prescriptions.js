@@ -10,6 +10,68 @@ function safeAtob(str) {
     }
 }
 
+// 获取东八区当前时间
+function getBeijingTime() {
+    const now = new Date();
+    // 转换为东八区时间
+    const beijingTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
+    return beijingTime;
+}
+
+// 格式化东八区日期为 YYMMDD
+function formatBeijingDateYYMMDD(date) {
+    const year = date.getUTCFullYear().toString().substring(2);
+    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    return year + month + day;
+}
+
+// 清洗历史异常编码 - 将时间戳格式转换为标准 YYMMDD + 序号
+function cleanHistoricalPrescriptionNo(prescription, index, dateGroups) {
+    let no = prescription.outpatientNo || prescription.prescriptionNo || '';
+    
+    // 如果已经是标准格式（6-8位数字），直接返回
+    if (/^\d{6,8}$/.test(no)) {
+        return no;
+    }
+    
+    // 尝试解析时间戳
+    let timestamp = null;
+    if (/^\d{10}$/.test(no)) {
+        timestamp = parseInt(no) * 1000;
+    } else if (/^\d{13}$/.test(no)) {
+        timestamp = parseInt(no);
+    } else if (prescription.id && /^\d{10,13}$/.test(prescription.id.toString())) {
+        const idStr = prescription.id.toString();
+        timestamp = idStr.length === 10 ? parseInt(idStr) * 1000 : parseInt(idStr);
+    } else if (prescription.createdAt) {
+        timestamp = new Date(prescription.createdAt).getTime();
+    }
+    
+    if (timestamp) {
+        const date = new Date(timestamp);
+        // 使用东八区时间
+        const beijingDate = new Date(date.getTime() + (8 * 60 * 60 * 1000));
+        const yymmdd = formatBeijingDateYYMMDD(beijingDate);
+        
+        if (!dateGroups[yymmdd]) {
+            dateGroups[yymmdd] = 0;
+        }
+        dateGroups[yymmdd]++;
+        
+        return yymmdd + String(dateGroups[yymmdd]).padStart(2, '0');
+    }
+    
+    // 都无法解析，返回默认
+    const now = getBeijingTime();
+    const yymmdd = formatBeijingDateYYMMDD(now);
+    if (!dateGroups[yymmdd]) {
+        dateGroups[yymmdd] = 0;
+    }
+    dateGroups[yymmdd]++;
+    return yymmdd + String(dateGroups[yymmdd]).padStart(2, '0');
+}
+
 // 用户身份验证辅助函数
 async function parseAuthHeaderAndValidate(request, kv) {
     const authHeader = request.headers.get('Authorization');
@@ -50,13 +112,11 @@ async function parseAuthHeaderAndValidate(request, kv) {
     }
 }
 
-// 使用KV存储生成处方编号
+// 使用KV存储生成处方编号（东八区时间）
 async function generatePrescriptionNo(kv, username, type) {
-    const now = new Date();
-    const year = now.getFullYear().toString().substring(2);
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const yymmdd = year + month + day;
+    const now = getBeijingTime();
+    const year = now.getUTCFullYear().toString().substring(2);
+    const yymmdd = formatBeijingDateYYMMDD(now);
     
     let storageKey, seq, prescriptionNo;
     
@@ -79,13 +139,11 @@ async function generatePrescriptionNo(kv, username, type) {
     return prescriptionNo;
 }
 
-// 获取下一个编号（不递增，用于预览）
+// 获取下一个编号（不递增，用于预览，东八区时间）
 async function peekNextPrescriptionNo(kv, username, type) {
-    const now = new Date();
-    const year = now.getFullYear().toString().substring(2);
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    const yymmdd = year + month + day;
+    const now = getBeijingTime();
+    const year = now.getUTCFullYear().toString().substring(2);
+    const yymmdd = formatBeijingDateYYMMDD(now);
     
     let storageKey, seq, prescriptionNo;
     
@@ -311,44 +369,29 @@ export async function onRequest(context) {
             }
             
             // 按时间戳升序排序（最早的在前，确保编号按创建顺序生成）
-            // id 是创建时生成的时间戳（毫秒级），是最可靠的排序依据
             const sortedForSeq = [...filteredPrescriptions].sort((a, b) => {
                 const idA = typeof a.id === 'number' ? a.id : 0;
                 const idB = typeof b.id === 'number' ? b.id : 0;
                 return idA - idB;
             });
             
-            // 按日期分组并生成序号（使用排序后的数组确保编号按时间顺序生成）
-            // 编号格式：YYMMDD + 01, 02, 03...
-            // 同一秒内原则上不会有2个处方，所以按时间戳顺序生成不会错乱
+            // 清洗历史异常编码，统一为标准格式
             const dateCounter = {};
-            filteredPrescriptions = sortedForSeq.map(p => {
-                // 获取日期（从 id 时间戳提取，确保与排序依据一致）
-                let timestamp;
-                if (typeof p.id === 'number') {
-                    timestamp = p.id;
-                } else {
-                    timestamp = new Date(p.createdAt || p.date || Date.now()).getTime();
+            let needsUpdate = false;
+            
+            filteredPrescriptions = sortedForSeq.map((p, index) => {
+                const cleanNo = cleanHistoricalPrescriptionNo(p, index, dateCounter);
+                const currentNo = p.outpatientNo || p.prescriptionNo || '';
+                
+                if (cleanNo !== currentNo) {
+                    needsUpdate = true;
+                    return {
+                        ...p,
+                        prescriptionNo: cleanNo,
+                        outpatientNo: cleanNo
+                    };
                 }
-                const date = new Date(timestamp);
-                const dateStr = date.getFullYear().toString().substring(2) + 
-                               String(date.getMonth() + 1).padStart(2, '0') + 
-                               String(date.getDate()).padStart(2, '0');
-                
-                // 生成当日序号（按时间戳顺序递增）
-                if (!dateCounter[dateStr]) {
-                    dateCounter[dateStr] = 1;
-                } else {
-                    dateCounter[dateStr]++;
-                }
-                
-                const seq = String(dateCounter[dateStr]).padStart(2, '0');
-                const outpatientNo = dateStr + seq;
-                
-                return {
-                    ...p,
-                    outpatientNo: outpatientNo
-                };
+                return p;
             });
             
             // 按编号倒序排序（编号大的排在前面）
@@ -358,18 +401,20 @@ export async function onRequest(context) {
                 return noB.localeCompare(noA);
             });
             
-            // 将生成的编号保存回KV存储（确保编号持久化）
-            const updatedPrescriptions = [...prescriptions];
-            filteredPrescriptions.forEach(p => {
-                const index = updatedPrescriptions.findIndex(item => item.id === p.id);
-                if (index !== -1) {
-                    updatedPrescriptions[index] = p;
-                }
-            });
-            await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(updatedPrescriptions));
+            // 如果有编码被清洗，保存回KV存储
+            if (needsUpdate) {
+                const updatedPrescriptions = [...prescriptions];
+                filteredPrescriptions.forEach(p => {
+                    const index = updatedPrescriptions.findIndex(item => item.id === p.id);
+                    if (index !== -1) {
+                        updatedPrescriptions[index] = p;
+                    }
+                });
+                await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(updatedPrescriptions));
+            }
             
-            const now = new Date();
-            const year = now.getFullYear().toString().substring(2);
+            const now = getBeijingTime();
+            const year = now.getUTCFullYear().toString().substring(2);
             const formattedTotalCount = year + prescriptions.length.toString().padStart(6, '0');
             
             return new Response(JSON.stringify({
@@ -445,7 +490,7 @@ export async function onRequest(context) {
                 prescriptions = [];
             }
             
-            const now = new Date();
+            const now = getBeijingTime();
             const nowIso = now.toISOString();
             let nextPrescriptionNo = null;
             let nextClinicNo = null;
