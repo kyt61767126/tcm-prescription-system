@@ -1,4 +1,4 @@
-﻿﻿﻿<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -1118,7 +1118,6 @@
                     return null;
                 }
                 const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
-                // 使用测试用户参数绕过认证问题
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 const response = await cloudFetch(url, {
                     headers: {
@@ -1135,6 +1134,84 @@
                 console.warn('Failed to get prescriptions from cloud:', error);
             }
             return null;
+        }
+
+        // 从云端获取药品库
+        async function getMedicinesFromCloud() {
+            try {
+                const url = `${CLOUD_API_BASE}/medicines`;
+                const response = await cloudFetch(url, {
+                    headers: currentUser ? { 'Authorization': `Basic ${btoa(`${currentUser.username}:${currentUser.role}`)}` } : {}
+                });
+                if (response.success && response.data) {
+                    return response.data;
+                }
+            } catch (error) {
+                console.warn('Failed to get medicines from cloud:', error);
+            }
+            return null;
+        }
+
+        // 保存药品库到云端
+        async function saveMedicinesToCloud(medicines) {
+            try {
+                if (!currentUser || !currentUser.isAdmin) {
+                    console.warn('Only admin can save medicines');
+                    return false;
+                }
+                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+                const response = await cloudFetch(`${CLOUD_API_BASE}/medicines`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ medicines })
+                });
+                return response.success;
+            } catch (error) {
+                console.warn('Failed to save medicines to cloud:', error);
+                return false;
+            }
+        }
+
+        // 从云端获取方剂库
+        async function getFormulasFromCloud() {
+            try {
+                const url = `${CLOUD_API_BASE}/formulas`;
+                const response = await cloudFetch(url, {
+                    headers: currentUser ? { 'Authorization': `Basic ${btoa(`${currentUser.username}:${currentUser.role}`)}` } : {}
+                });
+                if (response.success && response.data) {
+                    return response.data;
+                }
+            } catch (error) {
+                console.warn('Failed to get formulas from cloud:', error);
+            }
+            return null;
+        }
+
+        // 保存方剂库到云端
+        async function saveFormulasToCloud(formulas) {
+            try {
+                if (!currentUser) {
+                    console.warn('User not logged in');
+                    return false;
+                }
+                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+                const response = await cloudFetch(`${CLOUD_API_BASE}/formulas`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ formulas })
+                });
+                return response.success;
+            } catch (error) {
+                console.warn('Failed to save formulas to cloud:', error);
+                return false;
+            }
         }
 
         // 测试认证状态
@@ -1680,54 +1757,44 @@
         }
 
         async function loadData() {
-            const savedFormulas = getUserItem('formulas');
-            const savedDailyCounter = getUserItem('dailyCounter');
-            const savedCounterDate = getUserItem('counterDate');
-            const savedMedicines = localStorage.getItem('medicines');
+            // 从云端获取药品库
+            const cloudMedicines = await getMedicinesFromCloud();
+            if (cloudMedicines && cloudMedicines.length > 0) {
+                medicines = cloudMedicines;
+            }
             
-            formulas = safeParseJSON(savedFormulas, []);
+            // 从云端获取方剂库
+            const cloudFormulas = await getFormulasFromCloud();
+            if (cloudFormulas) {
+                formulas = cloudFormulas;
+            }
             
-            // 统一从云端获取处方数据（真实数据唯一来源是云端）
+            // 从云端获取处方数据
             const cloudResult = await getPrescriptionsFromCloud();
             
             if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
-                // 云端有数据，按用户权限过滤
                 if (currentUser && currentUser.role === 'admin') {
-                    // 管理员：查看所有处方
                     prescriptionHistory = cloudResult.data;
                 } else {
-                    // 普通用户：只查看自己的处方（按 user_id 过滤）
                     prescriptionHistory = cloudResult.data.filter(p => 
                         p.createdBy === currentUser?.username
                     );
                 }
                 
-                // 统计输入框：只显示历史处方累计数量
                 if (cloudResult.totalCount) {
-                    document.getElementById('clinicNo').value = cloudResult.totalCount;
+                    const clinicNoEl = document.getElementById('clinicNo');
+                    if (clinicNoEl) clinicNoEl.value = cloudResult.totalCount;
                 }
                 
-                // 按时间倒序排序
                 prescriptionHistory.sort((a, b) => {
                     const timeA = new Date(a.createdAt || a.date || 0).getTime();
                     const timeB = new Date(b.createdAt || b.date || 0).getTime();
                     return timeB - timeA;
                 });
-                
-                // 本地只做缓存展示
-                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             } else {
-                // 云端没有数据，初始化为空数组
                 prescriptionHistory = [];
             }
             
-            if (currentUser) {
-                dailyCounter = parseInt(savedDailyCounter) || 1;
-                if (savedCounterDate) {
-                    currentPrescriptionDate = savedCounterDate;
-                }
-            }
-            // 确保加载完成后重新渲染历史列表
             if (currentUser) {
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             }

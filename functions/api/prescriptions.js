@@ -11,23 +11,39 @@ function safeAtob(str) {
 }
 
 // 用户身份验证辅助函数
-function parseAuthHeader(request) {
+async function parseAuthHeaderAndValidate(request, kv) {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) {
         return null;
     }
     
     try {
+        let userInfo;
         if (authHeader.startsWith('Basic ')) {
             const base64Credentials = authHeader.substring(6);
             const credentials = safeAtob(base64Credentials);
             const [username, role] = credentials.split(':');
-            return { username, role, isAdmin: role === 'admin' };
+            userInfo = { username, role, isAdmin: role === 'admin' };
         } else if (authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
-            return JSON.parse(safeAtob(token));
+            userInfo = JSON.parse(safeAtob(token));
+        } else {
+            return null;
         }
-        return null;
+        
+        // 从 KV 验证用户并获取完整信息
+        const users = await kv.get('system_users', 'json');
+        if (users && Array.isArray(users)) {
+            const user = users.find(u => u.username === userInfo.username);
+            if (user) {
+                return {
+                    ...userInfo,
+                    allowSavePrescription: user.allowSavePrescription !== false
+                };
+            }
+        }
+        
+        return userInfo;
     } catch (error) {
         console.error('Auth parsing error:', error);
         return null;
@@ -90,9 +106,26 @@ async function peekNextPrescriptionNo(kv, username, type) {
     return prescriptionNo;
 }
 
+// 获取默认药品库
+function getDefaultMedicines() {
+    return [
+        { id: 1, name: "麻黄", code: "mh", unit: "g", defaultDosage: 6 },
+        { id: 2, name: "桂枝", code: "gz", unit: "g", defaultDosage: 6 },
+        { id: 3, name: "杏仁", code: "xr", unit: "g", defaultDosage: 9 },
+        { id: 4, name: "甘草", code: "gc", unit: "g", defaultDosage: 3 },
+        { id: 5, name: "石膏", code: "sg", unit: "g", defaultDosage: 15 },
+        { id: 6, name: "知母", code: "zm", unit: "g", defaultDosage: 9 },
+        { id: 7, name: "黄连", code: "hl", unit: "g", defaultDosage: 3 },
+        { id: 8, name: "黄芩", code: "hq", unit: "g", defaultDosage: 6 },
+        { id: 9, name: "黄柏", code: "hb", unit: "g", defaultDosage: 6 },
+        { id: 10, name: "栀子", code: "zz", unit: "g", defaultDosage: 6 }
+    ];
+}
+
 export async function onRequest(context) {
     const url = new URL(context.request.url);
     const method = context.request.method;
+    const pathname = url.pathname;
     
     // 处理 CORS 预检请求
     if (method === 'OPTIONS') {
@@ -100,7 +133,7 @@ export async function onRequest(context) {
             status: 200,
             headers: {
                 'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type, Authorization',
                 'Access-Control-Max-Age': '86400'
             }
@@ -108,22 +141,6 @@ export async function onRequest(context) {
     }
     
     try {
-        // 解析用户身份
-        const currentUser = parseAuthHeader(context.request);
-        if (!currentUser) {
-            return new Response(JSON.stringify({
-                success: false,
-                error: '未授权访问，请先登录',
-                requireAuth: true
-            }), {
-                status: 401,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            });
-        }
-        
         // 支持多种KV绑定名称（Cloudflare配置中绑定名为KV）
         const envKeys = Object.keys(context.env || {});
         const kv = context.env.KV || 
@@ -149,7 +166,106 @@ export async function onRequest(context) {
             });
         }
         
+        // KV 存储 key 定义
         const KV_PRESCRIPTIONS_KEY = 'prescriptions_all';
+        const KV_MEDICINES_KEY = 'medicines_all';
+        const KV_FORMULAS_KEY = 'formulas_all';
+        
+        // 解析用户身份并验证
+        const currentUser = await parseAuthHeaderAndValidate(context.request, kv);
+        
+        // ============ 药品库 API ============
+        if (pathname.includes('/medicines')) {
+            if (method === 'GET') {
+                let medicines = await kv.get(KV_MEDICINES_KEY, 'json');
+                if (!medicines || !Array.isArray(medicines) || medicines.length === 0) {
+                    medicines = getDefaultMedicines();
+                    await kv.put(KV_MEDICINES_KEY, JSON.stringify(medicines));
+                }
+                return new Response(JSON.stringify({
+                    success: true,
+                    data: medicines
+                }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+                });
+            }
+            
+            if (!currentUser) {
+                return new Response(JSON.stringify({ success: false, error: '未授权访问' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+            }
+            
+            if (method === 'POST' || method === 'PUT') {
+                if (!currentUser.isAdmin) {
+                    return new Response(JSON.stringify({ success: false, error: '仅管理员可管理药品库' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+                }
+                const body = await context.request.json();
+                if (body.medicines && Array.isArray(body.medicines)) {
+                    await kv.put(KV_MEDICINES_KEY, JSON.stringify(body.medicines));
+                    return new Response(JSON.stringify({ success: true, message: '药品库保存成功' }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+                }
+                return new Response(JSON.stringify({ success: false, error: '无效的药品数据' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+            }
+        }
+        
+        // ============ 方剂库 API ============
+        if (pathname.includes('/formulas')) {
+            if (method === 'GET') {
+                let formulas = await kv.get(KV_FORMULAS_KEY, 'json');
+                if (!formulas || !Array.isArray(formulas)) {
+                    formulas = [];
+                    await kv.put(KV_FORMULAS_KEY, JSON.stringify(formulas));
+                }
+                return new Response(JSON.stringify({
+                    success: true,
+                    data: formulas
+                }), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+                });
+            }
+            
+            if (!currentUser) {
+                return new Response(JSON.stringify({ success: false, error: '未授权访问' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+            }
+            
+            if (method === 'POST' || method === 'PUT') {
+                const body = await context.request.json();
+                if (body.formulas && Array.isArray(body.formulas)) {
+                    const formulasWithOwner = body.formulas.map(f => ({
+                        ...f,
+                        createdBy: f.createdBy || currentUser.username,
+                        updatedAt: new Date().toISOString()
+                    }));
+                    let existingFormulas = await kv.get(KV_FORMULAS_KEY, 'json') || [];
+                    if (currentUser.isAdmin) {
+                        existingFormulas = formulasWithOwner;
+                    } else {
+                        const userFormulas = existingFormulas.filter(f => f.createdBy === currentUser.username);
+                        const otherFormulas = existingFormulas.filter(f => f.createdBy !== currentUser.username);
+                        existingFormulas = [...otherFormulas, ...formulasWithOwner.filter(f => f.createdBy === currentUser.username)];
+                    }
+                    await kv.put(KV_FORMULAS_KEY, JSON.stringify(existingFormulas));
+                    return new Response(JSON.stringify({ success: true, message: '方剂库保存成功', data: existingFormulas }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+                }
+                return new Response(JSON.stringify({ success: false, error: '无效的方剂数据' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
+            }
+        }
+        
+        // ============ 处方 API 需要认证 ============
+        if (!currentUser) {
+            return new Response(JSON.stringify({
+                success: false,
+                error: '未授权访问，请先登录',
+                requireAuth: true
+            }), {
+                status: 401,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            });
+        }
         
         // GET - 处理旧的编号请求端点（兼容旧客户端）
         if (method === 'GET') {
@@ -277,6 +393,20 @@ export async function onRequest(context) {
             console.log('POST /prescriptions called');
             console.log('Authorization header:', context.request.headers.get('Authorization'));
             console.log('Current user:', JSON.stringify(currentUser));
+            
+            // 检查保存处方权限
+            if (currentUser.allowSavePrescription === false) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '您没有保存处方的权限，请联系管理员开通'
+                }), {
+                    status: 403,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
+            }
             
             let body;
             try {
