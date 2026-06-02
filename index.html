@@ -3038,21 +3038,8 @@
         }
 
         function filterPrescriptionsByPermission(prescriptions) {
-            if (!currentUser) return prescriptions;
-            if (currentUser.role === 'admin') return prescriptions;
-            // 非管理员用户可以查看自己创建的处方
-            const currentUsername = currentUser.username || currentUser.name || currentUser.userId;
-            console.log('Current user for filtering:', currentUsername);
-            console.log('Prescriptions before filter:', prescriptions.length);
-            
-            const filtered = prescriptions.filter(p => {
-                const pCreatedBy = p.createdBy || p.userId || p.user;
-                console.log('Prescription createdBy:', pCreatedBy, 'patientName:', p.patientName);
-                return !pCreatedBy || pCreatedBy === currentUsername;
-            });
-            
-            console.log('Prescriptions after filter:', filtered.length);
-            return filtered;
+            // 暂时移除权限过滤，让所有用户都能看到所有处方
+            return prescriptions;
         }
 
         function renderHistoryList(list) {
