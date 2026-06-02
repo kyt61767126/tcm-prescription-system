@@ -3299,6 +3299,10 @@
                 const displayNo = savedPrescription ? (savedPrescription.outpatientNo || savedPrescription.prescriptionNo) : record.prescriptionNo;
                 
                 // 更新内存数据
+                console.log('=== History Update ===');
+                console.log('allPrescriptions count:', allPrescriptions.length);
+                console.log('currentUser:', currentUser);
+                
                 if (currentUser && currentUser.role === 'admin') {
                     prescriptionHistory = allPrescriptions;
                 } else {
@@ -3306,6 +3310,8 @@
                         !p.createdBy || p.createdBy === currentUser?.username || p.createdBy === currentUser?.name
                     );
                 }
+                
+                console.log('prescriptionHistory count after filter:', prescriptionHistory.length);
                 
                 // 按处方编号倒序排序（编号大的排在前面）
                 prescriptionHistory.sort((a, b) => {
@@ -3326,7 +3332,9 @@
                 }
                 
                 // 刷新历史列表
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                const finalList = filterPrescriptionsByPermission(prescriptionHistory);
+                console.log('finalList count:', finalList.length);
+                renderHistoryList(finalList.slice(0, 15));
                 
                 // 生成处方签图片
                 savePrescriptionAsImage(record, displayNo);
