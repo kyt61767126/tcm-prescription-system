@@ -3306,23 +3306,33 @@
             console.log('Save result:', saveResult);
             
             if (saveResult && saveResult.success) {
-                // 从云端重新获取最新数据，确保使用正确的后端编号
-                const cloudResult = await getPrescriptionsFromCloud();
-                let cloudPrescriptions = null;
-                
-                // 使用云端数据替换本地缓存，避免重复
-                if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
-                    cloudPrescriptions = cloudResult.data;
-                    prescriptionHistory = cloudPrescriptions;
+                // 优先从保存响应中获取 savedPrescription
+                let savedPrescription = null;
+                if (saveResult.savedPrescription) {
+                    savedPrescription = saveResult.savedPrescription;
+                } else if (saveResult.data && saveResult.data.savedPrescription) {
+                    savedPrescription = saveResult.data.savedPrescription;
                 }
                 
-                // 从云端数据中找到刚保存的处方，使用完整的云端数据
-                const cloudSaved = cloudPrescriptions ? cloudPrescriptions.find(p => p.id === record.id) : null;
+                // 如果响应中没有，则从云端重新获取最新数据
+                let cloudPrescriptions = null;
+                if (!savedPrescription) {
+                    const cloudResult = await getPrescriptionsFromCloud();
+                    if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
+                        cloudPrescriptions = cloudResult.data;
+                        prescriptionHistory = cloudPrescriptions;
+                        // 从云端数据中找到刚保存的处方
+                        savedPrescription = cloudPrescriptions.find(p => p.id === record.id);
+                    }
+                } else if (saveResult.data && Array.isArray(saveResult.data)) {
+                    // 如果响应中有数据，也更新本地缓存
+                    prescriptionHistory = saveResult.data;
+                }
                 
                 // 获取正确的编号
                 let displayNo = record.prescriptionNo;
-                if (cloudSaved) {
-                    displayNo = cloudSaved.outpatientNo || cloudSaved.prescriptionNo || displayNo;
+                if (savedPrescription) {
+                    displayNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo || displayNo;
                     // 更新 record 对象，确保使用云端的完整数据
                     record.prescriptionNo = displayNo;
                     record.clinicNo = displayNo;
