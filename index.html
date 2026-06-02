@@ -942,10 +942,11 @@
         // Cloudflare KV API 地址
         const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
         
-        // 云端同步辅助函数 - 对用户API和处方API启用
+        // 云端同步辅助函数 - 对用户、处方、药品、方剂API启用
         async function cloudFetch(url, options = {}) {
-            if (!url.includes('/users') && !url.includes('/prescriptions')) {
-                return { success: false, error: 'Non-user/prescription API disabled', fromCloud: false };
+            if (!url.includes('/users') && !url.includes('/prescriptions') && 
+                !url.includes('/medicines') && !url.includes('/formulas')) {
+                return { success: false, error: 'Non-allowed API disabled', fromCloud: false };
             }
             
             console.log('=== Cloud Fetch ===');
@@ -983,7 +984,8 @@
                     throw new Error(data.error || 'Cloud operation failed');
                 }
                 
-                return { success: true, data: data.data || data, fromCloud: true };
+                // 返回完整的响应数据，保留所有字段
+                return { ...data, success: true, fromCloud: true };
                 
             } catch (error) {
                 clearTimeout(timeoutId);
