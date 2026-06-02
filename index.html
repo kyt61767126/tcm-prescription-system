@@ -1179,7 +1179,7 @@
             try {
                 if (!currentUser) {
                     console.error('User not logged in');
-                    return false;
+                    return { success: false };
                 }
                 
                 const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
@@ -1196,7 +1196,8 @@
                     console.log('Cloud save successful');
                     // 保存成功后从云端获取最新数据，更新本地记录的编号
                     await loadData();
-                    return true;
+                    // 返回完整的响应数据，包含后端生成的编号
+                    return response;
                 }
                 
                 alert('处方保存失败，请检查网络连接后重试。');
@@ -3292,12 +3293,23 @@
             console.log('=== Saving prescription ===');
             console.log('Record:', JSON.stringify(record).substring(0, 200));
             
-            const success = await savePrescriptionsToCloud([record]);
+            const saveResult = await savePrescriptionsToCloud([record]);
             
-            console.log('Save result:', success);
+            console.log('Save result:', saveResult);
             
-            if (success) {
-                // 从云端重新获取最新数据，确保使用后端生成的编号
+            if (saveResult && saveResult.success) {
+                // 直接从保存响应中获取后端生成的编号
+                let displayNo = record.prescriptionNo;
+                if (saveResult.data && saveResult.data.savedPrescription) {
+                    const savedPrescription = saveResult.data.savedPrescription;
+                    record.prescriptionNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
+                    record.clinicNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
+                    record.outpatientNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
+                    displayNo = record.prescriptionNo;
+                    console.log('Got saved prescription from response:', savedPrescription);
+                }
+                
+                // 从云端重新获取最新数据，确保数据完整
                 const cloudPrescriptions = await getPrescriptionsFromCloud();
                 
                 // 使用云端数据替换本地缓存，避免重复
@@ -3305,19 +3317,6 @@
                     prescriptionHistory = cloudPrescriptions;
                 }
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                
-                // 找到刚保存的处方，获取正确的编号
-                let displayNo = record.prescriptionNo;
-                if (cloudPrescriptions && cloudPrescriptions.length > 0) {
-                    const savedPrescription = cloudPrescriptions.find(p => p.id === record.id);
-                    if (savedPrescription) {
-                        // 更新record的编号为后端生成的编号
-                        record.prescriptionNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
-                        record.clinicNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
-                        record.outpatientNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
-                        displayNo = record.prescriptionNo;
-                    }
-                }
                 
                 // 从云端获取下一个编号（确保多端同步）
                 const nextCloudNo = await getNextCloudPrescriptionNo();
