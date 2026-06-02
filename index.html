@@ -3273,7 +3273,7 @@
             const record = {
                 id: cloudTimestamp,
                 prescriptionNo: globalPrescriptionNo,
-                date: document.getElementById('visitDate').value,
+                date: now.toISOString().split('T')[0], // 强制使用当前日期
                 patientName: name,
                 patientGender: document.getElementById('patientGender').value,
                 patientAge: document.getElementById('patientAge').value,
