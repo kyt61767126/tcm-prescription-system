@@ -3320,7 +3320,8 @@
                 // 保存后立即刷新历史处方栏
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 // 生成处方签图片并自动下载（使用后端返回的编号）
-                savePrescriptionAsImage(record, record.prescriptionNo);
+                const displayNo = record.outpatientNo || record.prescriptionNo || '';
+                savePrescriptionAsImage(record, displayNo);
                 alert('处方保存成功！');
                 searchPatientsQuick({target:{value:name}});
             } else {
