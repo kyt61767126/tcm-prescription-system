@@ -182,35 +182,58 @@ export async function onRequest(context) {
                 );
             }
             
-            // 确保每条记录都有 outpatientNo（短编号）
+            // 先按时间排序（用于生成唯一序号）
+            const sortedForSeq = [...filteredPrescriptions].sort((a, b) => {
+                const timeA = new Date(a.createdAt || a.date || a.id || 0).getTime();
+                const timeB = new Date(b.createdAt || b.date || b.id || 0).getTime();
+                return timeA - timeB;
+            });
+            
+            // 按日期分组并生成序号
+            const dateCounter = {};
             filteredPrescriptions = filteredPrescriptions.map(p => {
-                if (p.outpatientNo) {
+                if (p.outpatientNo && p.outpatientNo.length === 8) {
                     return p;
                 }
                 
-                // 如果没有 outpatientNo，尝试从 prescriptionNo 提取或生成
-                let outpatientNo = p.prescriptionNo;
-                
-                // 如果是时间戳格式（13位数字），转换为日期格式
+                // 获取日期
+                let dateStr;
                 if (p.id && typeof p.id === 'number') {
                     const date = new Date(p.id);
-                    const year = date.getFullYear().toString().substring(2);
-                    const month = String(date.getMonth() + 1).padStart(2, '0');
-                    const day = String(date.getDate()).padStart(2, '0');
-                    outpatientNo = year + month + day + '01';
-                } else if (outpatientNo && outpatientNo.length === 8) {
-                    // 已经是 YYMMDD+序号格式
-                } else if (outpatientNo && outpatientNo.length > 8) {
-                    // 截取前8位
-                    outpatientNo = outpatientNo.substring(0, 8);
+                    dateStr = date.getFullYear().toString().substring(2) + 
+                              String(date.getMonth() + 1).padStart(2, '0') + 
+                              String(date.getDate()).padStart(2, '0');
+                } else if (p.createdAt) {
+                    const date = new Date(p.createdAt);
+                    dateStr = date.getFullYear().toString().substring(2) + 
+                              String(date.getMonth() + 1).padStart(2, '0') + 
+                              String(date.getDate()).padStart(2, '0');
+                } else if (p.date) {
+                    const dateParts = p.date.split(/[/\-]/);
+                    if (dateParts.length >= 3) {
+                        const year = dateParts[0].substring(2);
+                        const month = String(dateParts[1]).padStart(2, '0');
+                        const day = String(dateParts[2]).padStart(2, '0');
+                        dateStr = year + month + day;
+                    } else {
+                        dateStr = '260602';
+                    }
                 } else {
-                    // 默认生成一个
                     const now = new Date();
-                    const year = now.getFullYear().toString().substring(2);
-                    const month = String(now.getMonth() + 1).padStart(2, '0');
-                    const day = String(now.getDate()).padStart(2, '0');
-                    outpatientNo = year + month + day + '01';
+                    dateStr = now.getFullYear().toString().substring(2) + 
+                              String(now.getMonth() + 1).padStart(2, '0') + 
+                              String(now.getDate()).padStart(2, '0');
                 }
+                
+                // 生成当日序号
+                if (!dateCounter[dateStr]) {
+                    dateCounter[dateStr] = 1;
+                } else {
+                    dateCounter[dateStr]++;
+                }
+                
+                const seq = String(dateCounter[dateStr]).padStart(2, '0');
+                const outpatientNo = dateStr + seq;
                 
                 return {
                     ...p,
