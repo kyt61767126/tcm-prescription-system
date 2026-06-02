@@ -1195,19 +1195,17 @@
                 
                 if (response.success) {
                     console.log('Cloud save successful');
-                    // 保存成功后从云端获取最新数据，更新本地记录的编号
-                    await loadData();
-                    // 返回完整的响应数据，包含后端生成的编号
+                    // 直接返回响应数据，让调用方处理数据更新，避免重复加载
                     return response;
                 }
                 
                 alert('处方保存失败，请检查网络连接后重试。');
-                return false;
+                return { success: false };
                 
             } catch (error) {
                 console.error('Failed to save prescriptions:', error);
                 alert('处方保存失败，请检查网络连接后重试。');
-                return false;
+                return { success: false };
             }
         }
 
