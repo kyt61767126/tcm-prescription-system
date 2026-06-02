@@ -1,4 +1,16 @@
 // 用户身份验证辅助函数
+function safeAtob(str) {
+    try {
+        const decoded = atob(str);
+        return decodeURIComponent(Array.prototype.map.call(decoded, function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+    } catch (e) {
+        return atob(str);
+    }
+}
+
+// 用户身份验证辅助函数
 function parseAuthHeader(request) {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) {
@@ -8,12 +20,12 @@ function parseAuthHeader(request) {
     try {
         if (authHeader.startsWith('Basic ')) {
             const base64Credentials = authHeader.substring(6);
-            const credentials = atob(base64Credentials);
+            const credentials = safeAtob(base64Credentials);
             const [username, role] = credentials.split(':');
             return { username, role, isAdmin: role === 'admin' };
         } else if (authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
-            return JSON.parse(atob(token));
+            return JSON.parse(safeAtob(token));
         }
         return null;
     } catch (error) {

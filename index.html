@@ -942,6 +942,17 @@
         // Cloudflare KV API 地址
         const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
         
+        // 安全的Base64编码函数，支持中文
+        function safeBtoa(str) {
+            try {
+                return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1) {
+                    return String.fromCharCode(parseInt(p1, 16));
+                }));
+            } catch (e) {
+                return btoa(str);
+            }
+        }
+
         // 云端同步辅助函数 - 对用户API和处方API启用
         async function cloudFetch(url, options = {}) {
             if (!url.includes('/users') && !url.includes('/prescriptions')) {
@@ -1117,7 +1128,7 @@
                     console.error('User not logged in');
                     return null;
                 }
-                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
                 // 使用测试用户参数绕过认证问题
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 const response = await cloudFetch(url, {
@@ -1171,7 +1182,7 @@
                     return false;
                 }
                 
-                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 const response = await cloudFetch(url, {
                     method: 'POST',
@@ -1205,7 +1216,7 @@
                     console.error('User not logged in');
                     return false;
                 }
-                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
                 // 使用测试用户参数绕过认证问题
                 const url = `${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}&user=${encodeURIComponent(currentUser.username)}`;
                 const response = await cloudFetch(url, {
@@ -2439,7 +2450,7 @@
                     return null;
                 }
                 
-                const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 
                 const controller = new AbortController();
