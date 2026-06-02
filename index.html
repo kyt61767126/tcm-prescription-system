@@ -2502,7 +2502,8 @@
             await checkLoginStatus();
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
-            document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
+            const currentDate = now.toISOString().split('T')[0];
+            document.getElementById('visitDate').value = currentDate;
             
             // 优先从云端获取处方编号
             const cloudNo = await getNextCloudPrescriptionNo();
