@@ -3288,24 +3288,24 @@
             if (success) {
                 // 从云端重新获取最新数据，确保使用后端生成的编号
                 const cloudPrescriptions = await getPrescriptionsFromCloud();
+                
+                // 使用云端数据替换本地缓存，避免重复
                 if (cloudPrescriptions && cloudPrescriptions.length > 0) {
-                    // 使用云端数据替换本地缓存，避免重复
                     prescriptionHistory = cloudPrescriptions;
-                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                    
+                }
+                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                
+                // 找到刚保存的处方，获取正确的编号
+                let displayNo = record.prescriptionNo;
+                if (cloudPrescriptions && cloudPrescriptions.length > 0) {
                     const savedPrescription = cloudPrescriptions.find(p => p.id === record.id);
                     if (savedPrescription) {
+                        // 更新record的编号为后端生成的编号
                         record.prescriptionNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
                         record.clinicNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
                         record.outpatientNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
+                        displayNo = record.prescriptionNo;
                     }
-                } else {
-                    // 云端数据为空时，才手动添加记录
-                    prescriptionHistory.unshift(record);
-                    if (prescriptionHistory.length > 100000) {
-                        prescriptionHistory = prescriptionHistory.slice(0, 100000);
-                    }
-                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 }
                 
                 // 从云端获取下一个编号（确保多端同步）
@@ -3322,10 +3322,15 @@
                     document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
                 }
                 
-                // 保存后立即刷新历史处方栏
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                // 生成处方签图片并自动下载（使用后端返回的编号）
-                const displayNo = record.outpatientNo || record.prescriptionNo || '';
+                // 保存后立即刷新历史处方栏（使用去重后的云端数据）
+                const filtered = filterPrescriptionsByPermission(prescriptionHistory);
+                // 按ID去重
+                const uniquePrescriptions = filtered.filter((p, index, self) => 
+                    index === self.findIndex(t => t.id === p.id)
+                );
+                renderHistoryList(uniquePrescriptions.slice(0, 15));
+                
+                // 生成处方签图片并自动下载（使用后端返回的正确编号）
                 savePrescriptionAsImage(record, displayNo);
                 alert('处方保存成功！');
                 searchPatientsQuick({target:{value:name}});
