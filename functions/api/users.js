@@ -51,12 +51,26 @@ export async function onRequest(context) {
             
             if (!users || !Array.isArray(users) || users.length === 0) {
                 users = [
-                    {username: 'admin', password: 'admin', name: '管理员', role: 'admin'},
-                    {username: 'doctor1', password: '123456', name: '张医生', role: 'user'},
-                    {username: 'doctor2', password: '123456', name: '李医生', role: 'user'}
+                    {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true},
+                    {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true},
+                    {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true}
                 ];
                 console.log('Saving default users to KV');
                 await kv.put(KV_USERS_KEY, JSON.stringify(users));
+            } else {
+                // 存量用户兼容性：为老用户添加 allowSavePrescription 字段，默认为 true
+                let needsUpdate = false;
+                users = users.map(user => {
+                    if (user.allowSavePrescription === undefined) {
+                        needsUpdate = true;
+                        return { ...user, allowSavePrescription: true };
+                    }
+                    return user;
+                });
+                if (needsUpdate) {
+                    console.log('Updating existing users with allowSavePrescription field');
+                    await kv.put(KV_USERS_KEY, JSON.stringify(users));
+                }
             }
             
             return new Response(JSON.stringify({
@@ -89,8 +103,16 @@ export async function onRequest(context) {
                 });
             }
             
-            console.log('Saving users to KV:', body.users.length);
-            await kv.put(KV_USERS_KEY, JSON.stringify(body.users));
+            // 确保新增用户都有 allowSavePrescription 字段，默认为 true
+            const usersWithPermission = body.users.map(user => {
+                if (user.allowSavePrescription === undefined) {
+                    return { ...user, allowSavePrescription: true };
+                }
+                return user;
+            });
+            
+            console.log('Saving users to KV:', usersWithPermission.length);
+            await kv.put(KV_USERS_KEY, JSON.stringify(usersWithPermission));
             console.log('Users saved successfully');
             
             return new Response(JSON.stringify({
