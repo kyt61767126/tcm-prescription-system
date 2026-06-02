@@ -1684,16 +1684,8 @@
             const cloudResult = await getPrescriptionsFromCloud();
             
             if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
-                // 云端有数据，按用户权限过滤
-                if (currentUser && currentUser.role === 'admin') {
-                    // 管理员：查看所有处方
-                    prescriptionHistory = cloudResult.data;
-                } else {
-                    // 普通用户：只查看自己的处方（按 user_id 过滤）
-                    prescriptionHistory = cloudResult.data.filter(p => 
-                        p.createdBy === currentUser?.username
-                    );
-                }
+                // 云端有数据，所有用户都能看到所有处方
+                prescriptionHistory = cloudResult.data;
                 
                 // 统计输入框：只显示历史处方累计数量
                 if (cloudResult.totalCount) {
@@ -3074,14 +3066,8 @@
                 // 从云端重新获取最新数据，更新统计数量
                 const cloudResult = await getPrescriptionsFromCloud();
                 if (cloudResult && cloudResult.data) {
-                    // 按用户权限过滤
-                    if (currentUser && currentUser.role === 'admin') {
-                        prescriptionHistory = cloudResult.data;
-                    } else {
-                        prescriptionHistory = cloudResult.data.filter(p => 
-                            p.createdBy === currentUser?.username
-                        );
-                    }
+                    // 所有用户都能看到所有处方
+                    prescriptionHistory = cloudResult.data;
                     
                     // 更新统计输入框（只显示历史处方累计数量）
                     if (cloudResult.totalCount) {
