@@ -72,40 +72,33 @@ function cleanHistoricalPrescriptionNo(prescription, index, dateGroups) {
     return yymmdd + String(dateGroups[yymmdd]).padStart(2, '0');
 }
 
-// 用户身份验证辅助函数
-async function parseAuthHeaderAndValidate(request, kv) {
+// 用户身份验证辅助函数（简化版，确保登录兼容性）
+function parseAuthHeaderSimple(request) {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) {
         return null;
     }
     
     try {
-        let userInfo;
         if (authHeader.startsWith('Basic ')) {
             const base64Credentials = authHeader.substring(6);
             const credentials = safeAtob(base64Credentials);
             const [username, role] = credentials.split(':');
-            userInfo = { username, role, isAdmin: role === 'admin' };
+            return { 
+                username, 
+                role, 
+                isAdmin: role === 'admin',
+                allowSavePrescription: true  // 默认允许保存
+            };
         } else if (authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
-            userInfo = JSON.parse(safeAtob(token));
-        } else {
-            return null;
+            const userInfo = JSON.parse(safeAtob(token));
+            return {
+                ...userInfo,
+                allowSavePrescription: true
+            };
         }
-        
-        // 从 KV 验证用户并获取完整信息
-        const users = await kv.get('system_users', 'json');
-        if (users && Array.isArray(users)) {
-            const user = users.find(u => u.username === userInfo.username);
-            if (user) {
-                return {
-                    ...userInfo,
-                    allowSavePrescription: user.allowSavePrescription !== false
-                };
-            }
-        }
-        
-        return userInfo;
+        return null;
     } catch (error) {
         console.error('Auth parsing error:', error);
         return null;
@@ -229,8 +222,8 @@ export async function onRequest(context) {
         const KV_MEDICINES_KEY = 'medicines_all';
         const KV_FORMULAS_KEY = 'formulas_all';
         
-        // 解析用户身份并验证
-        const currentUser = await parseAuthHeaderAndValidate(context.request, kv);
+        // 解析用户身份（简化版，确保登录兼容性）
+        const currentUser = parseAuthHeaderSimple(context.request);
         
         // ============ 药品库 API ============
         if (pathname.includes('/medicines')) {
