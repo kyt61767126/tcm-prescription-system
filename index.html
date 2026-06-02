@@ -3040,13 +3040,19 @@
         function filterPrescriptionsByPermission(prescriptions) {
             if (!currentUser) return prescriptions;
             if (currentUser.role === 'admin') return prescriptions;
-            // 非管理员用户可以查看自己创建的处方，或没有创建者信息的处方
-            const allowedUsernames = [currentUser.username, currentUser.name, currentUser.userId];
-            return prescriptions.filter(p => 
-                !p.createdBy || 
-                allowedUsernames.includes(p.createdBy) || 
-                allowedUsernames.includes(p.userId)
-            );
+            // 非管理员用户可以查看自己创建的处方
+            const currentUsername = currentUser.username || currentUser.name || currentUser.userId;
+            console.log('Current user for filtering:', currentUsername);
+            console.log('Prescriptions before filter:', prescriptions.length);
+            
+            const filtered = prescriptions.filter(p => {
+                const pCreatedBy = p.createdBy || p.userId || p.user;
+                console.log('Prescription createdBy:', pCreatedBy, 'patientName:', p.patientName);
+                return !pCreatedBy || pCreatedBy === currentUsername;
+            });
+            
+            console.log('Prescriptions after filter:', filtered.length);
+            return filtered;
         }
 
         function renderHistoryList(list) {
