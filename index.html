@@ -3275,7 +3275,7 @@
                 headers: {
                     'Authorization': `Basic ${authToken}`
                 },
-                body: JSON.stringify({ prescription: [record] })
+                body: JSON.stringify({ prescription: record })
             });
             
             console.log('Save response:', response);
