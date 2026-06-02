@@ -53,7 +53,9 @@ export async function onRequest(context) {
                 users = [
                     {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true},
                     {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true},
-                    {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true}
+                    {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true},
+                    {username: '王桂杰', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
+                    {username: '王耀燮', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
                 ];
                 console.log('Saving default users to KV');
                 await kv.put(KV_USERS_KEY, JSON.stringify(users));

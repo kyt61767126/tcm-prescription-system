@@ -1399,9 +1399,9 @@
 
         function refreshUserInterface() {
             const migrated = migrateOldData();
-            const presNo = generatePrescriptionNo();
-            document.getElementById('prescriptionNo').value = presNo;
-            document.getElementById('paperClinicNo').textContent = presNo;
+            // 处方编号先留空，保存时由云端生成
+            document.getElementById('prescriptionNo').value = '';
+            document.getElementById('paperClinicNo').textContent = '';
             if (prescriptionHistory.length > 0) {
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             }
