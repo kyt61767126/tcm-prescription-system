@@ -1315,9 +1315,9 @@
                 document.getElementById('loginOverlay').style.display = 'none';
                 updateUserDisplay();
                 errorDiv.style.display = 'none';
-                loadData();
+                await loadData();
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                refreshUserInterface();
+                await refreshUserInterface();
             } else {
                 errorDiv.textContent = '用户名或密码错误';
                 errorDiv.style.display = 'block';
@@ -1334,11 +1334,17 @@
             window.location.href = window.location.href;
         }
 
-        function refreshUserInterface() {
+        async function refreshUserInterface() {
             const migrated = migrateOldData();
-            const presNo = generatePrescriptionNo();
-            document.getElementById('prescriptionNo').value = presNo;
-            document.getElementById('paperClinicNo').textContent = presNo;
+            // 完全依赖云端获取编号
+            const cloudNo = await getNextCloudPrescriptionNo();
+            if (cloudNo) {
+                document.getElementById('prescriptionNo').value = cloudNo;
+                document.getElementById('paperClinicNo').textContent = cloudNo;
+            } else {
+                document.getElementById('prescriptionNo').value = '';
+                document.getElementById('paperClinicNo').textContent = '';
+            }
             if (prescriptionHistory.length > 0) {
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             }
@@ -1734,11 +1740,10 @@
                 prescriptionHistory = [];
             }
             
+            // 完全移除本地计数器，完全依赖云端
             if (currentUser) {
-                dailyCounter = parseInt(savedDailyCounter) || 1;
-                if (savedCounterDate) {
-                    currentPrescriptionDate = savedCounterDate;
-                }
+                dailyCounter = 1;
+                currentPrescriptionDate = new Date().toDateString();
             }
             // 确保加载完成后重新渲染历史列表
             if (currentUser) {
@@ -2509,13 +2514,13 @@
             const currentDate = `${year}-${month}-${day}`;
             document.getElementById('visitDate').value = currentDate;
             
-            // 优先从云端获取处方编号
+            // 完全依赖云端获取处方编号
             const cloudNo = await getNextCloudPrescriptionNo();
             if (cloudNo) {
                 document.getElementById('prescriptionNo').value = cloudNo;
             } else {
-                const presNo = generatePrescriptionNo();
-                document.getElementById('prescriptionNo').value = presNo;
+                // 即使云端获取失败，也等待云端恢复，不使用本地生成
+                document.getElementById('prescriptionNo').value = '';
             }
             
             document.getElementById('paperClinicNo').textContent = document.getElementById('prescriptionNo').value;
@@ -3340,18 +3345,15 @@
                 }
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
-                // 从云端获取下一个编号（确保多端同步）
+                // 从云端获取下一个编号（确保多端同步，完全依赖云端）
                 const nextCloudNo = await getNextCloudPrescriptionNo();
                 if (nextCloudNo) {
                     document.getElementById('prescriptionNo').value = nextCloudNo;
                     document.getElementById('paperClinicNo').textContent = nextCloudNo;
                 } else {
-                    dailyCounter++;
-                    setUserItem('dailyCounter', dailyCounter);
-                    setUserItem('counterDate', currentPrescriptionDate);
-                    const newPrescriptionNo = generatePrescriptionNo();
-                    document.getElementById('prescriptionNo').value = newPrescriptionNo;
-                    document.getElementById('paperClinicNo').textContent = newPrescriptionNo;
+                    // 即使云端获取失败，也等待云端恢复，不使用本地生成
+                    document.getElementById('prescriptionNo').value = '';
+                    document.getElementById('paperClinicNo').textContent = '';
                 }
                 
                 // 保存后立即刷新历史处方栏（使用去重后的云端数据）
