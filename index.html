@@ -3300,13 +3300,23 @@
             if (saveResult && saveResult.success) {
                 // 直接从保存响应中获取后端生成的编号
                 let displayNo = record.prescriptionNo;
-                if (saveResult.data && saveResult.data.savedPrescription) {
-                    const savedPrescription = saveResult.data.savedPrescription;
+                
+                // 优先从响应中获取 savedPrescription
+                let savedPrescription = null;
+                if (saveResult.savedPrescription) {
+                    savedPrescription = saveResult.savedPrescription;
+                } else if (saveResult.data && saveResult.data.savedPrescription) {
+                    savedPrescription = saveResult.data.savedPrescription;
+                }
+                
+                if (savedPrescription) {
                     record.prescriptionNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
                     record.clinicNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
                     record.outpatientNo = savedPrescription.outpatientNo || savedPrescription.prescriptionNo;
                     displayNo = record.prescriptionNo;
-                    console.log('Got saved prescription from response:', savedPrescription);
+                    console.log('Got saved prescription from response, displayNo:', displayNo);
+                } else {
+                    console.log('Warning: savedPrescription not found in response');
                 }
                 
                 // 从云端重新获取最新数据，确保数据完整
@@ -3315,6 +3325,18 @@
                 // 使用云端数据替换本地缓存，避免重复
                 if (cloudPrescriptions && cloudPrescriptions.length > 0) {
                     prescriptionHistory = cloudPrescriptions;
+                    
+                    // 如果之前没找到 savedPrescription，从云端数据中查找
+                    if (!savedPrescription) {
+                        const cloudSaved = cloudPrescriptions.find(p => p.id === record.id);
+                        if (cloudSaved) {
+                            record.prescriptionNo = cloudSaved.outpatientNo || cloudSaved.prescriptionNo;
+                            record.clinicNo = cloudSaved.outpatientNo || cloudSaved.prescriptionNo;
+                            record.outpatientNo = cloudSaved.outpatientNo || cloudSaved.prescriptionNo;
+                            displayNo = record.prescriptionNo;
+                            console.log('Got saved prescription from cloud data, displayNo:', displayNo);
+                        }
+                    }
                 }
                 localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
                 
