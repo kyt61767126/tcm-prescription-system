@@ -1313,9 +1313,12 @@
                 document.getElementById('loginOverlay').style.display = 'none';
                 updateUserDisplay();
                 errorDiv.style.display = 'none';
-                await loadData();
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                await refreshUserInterface();
+                // 异步加载数据，不阻塞 UI
+                (async () => {
+                    await loadData();
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    await refreshUserInterface();
+                })();
             } else {
                 errorDiv.textContent = '用户名或密码错误';
                 errorDiv.style.display = 'block';
