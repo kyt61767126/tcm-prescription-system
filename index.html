@@ -3223,9 +3223,15 @@
         }
 
         async function savePrescription() {
+            console.log('=== savePrescription called ===');
+            console.log('currentUser:', currentUser);
             try {
-            const name = document.getElementById('patientName').value;
-            if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
+                const name = document.getElementById('patientName').value;
+            if (!name) {
+                alert('请输入患者姓名！');
+                document.getElementById('patientName').focus();
+                return;
+            }
             const currentDate = new Date().toISOString().split('T')[0];
             document.getElementById('visitDate').value = currentDate;
             document.getElementById('paperDate').textContent = currentDate;
