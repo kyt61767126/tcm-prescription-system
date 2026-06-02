@@ -3223,6 +3223,7 @@
         }
 
         async function savePrescription() {
+            try {
             const name = document.getElementById('patientName').value;
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
             const currentDate = new Date().toISOString().split('T')[0];
@@ -3328,9 +3329,13 @@
             } else {
                 alert('处方保存失败，请检查网络连接后重试。');
             }
+            } catch (error) {
+                console.error('保存处方发生错误:', error);
+                alert('保存处方发生错误: ' + error.message);
+            }
         }
 
-        function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+        function wrapText(ctx, text, x, maxWidth, lineHeight) {
             const words = text.split('');
             let line = '';
             let currentY = y;
