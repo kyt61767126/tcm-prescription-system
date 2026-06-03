@@ -1,4 +1,4 @@
-﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -115,7 +115,7 @@
         .modal-body { flex: 1; overflow: auto; padding: 15px; background: white; }
         .modal-footer { padding: 10px 15px; background: #e0e0e0; display: flex; justify-content: flex-end; gap: 10px; border-top: 2px solid #808080; }
         .close-btn { font-size: 24px; cursor: pointer; line-height: 1; }
-        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: none; justify-content: center; align-items: center; z-index: 9999; }
         .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 380px; text-align: center; }
         .login-title { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 30px; }
         .login-field { margin-bottom: 15px; text-align: left; }
@@ -586,7 +586,6 @@
                 <button class="action-btn" onclick="saveAsFormula()" style="padding:2px 8px;font-size:12px;">存验方</button>
                 <button class="action-btn" onclick="printPrescription('portrait')" style="padding:2px 8px;font-size:12px;">纵向打印</button>
                 <button class="action-btn" onclick="printPrescription('landscape')" style="padding:2px 8px;font-size:12px;">横向打印</button>
-                <button class="action-btn" onclick="downloadPrescriptionImage()" style="padding:2px 8px;font-size:12px;background-color:#007bff;color:white;">下载图片</button>
                 <button class="action-btn primary" onclick="savePrescription()" style="padding:2px 8px;font-size:12px;">保存</button>
             </div>
             <div class="patient-section">
@@ -2611,7 +2610,35 @@
         }
 
         async function init() {
-            // 先不等待登录状态检查，立即初始化界面
+            // 先同步检查登录状态，恢复用户信息
+            const sessionUser = sessionStorage.getItem('currentUser');
+            const localUser = localStorage.getItem('currentUser');
+            
+            if (sessionUser) {
+                // 从sessionStorage恢复
+                try {
+                    currentUser = JSON.parse(sessionUser);
+                    document.getElementById('loginOverlay').style.display = 'none';
+                } catch (e) {
+                    console.error('解析用户数据失败:', e);
+                    document.getElementById('loginOverlay').style.display = 'flex';
+                }
+            } else if (localUser) {
+                // 从localStorage恢复
+                try {
+                    currentUser = JSON.parse(localUser);
+                    sessionStorage.setItem('currentUser', localUser);
+                    document.getElementById('loginOverlay').style.display = 'none';
+                } catch (e) {
+                    console.error('解析用户数据失败:', e);
+                    document.getElementById('loginOverlay').style.display = 'flex';
+                }
+            } else {
+                // 没有登录状态，显示登录界面
+                document.getElementById('loginOverlay').style.display = 'flex';
+            }
+            
+            // 继续初始化界面
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
             document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
