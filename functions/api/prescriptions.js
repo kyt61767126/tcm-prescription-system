@@ -84,11 +84,12 @@ function parseAuthHeaderSimple(request) {
             const base64Credentials = authHeader.substring(6);
             const credentials = safeAtob(base64Credentials);
             const [username, role] = credentials.split(':');
+            // 简化处理：所有登录用户都能保存处方
             return { 
                 username, 
                 role, 
                 isAdmin: role === 'admin',
-                allowSavePrescription: true  // 默认允许保存
+                allowSavePrescription: true
             };
         } else if (authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
@@ -432,19 +433,7 @@ export async function onRequest(context) {
             console.log('Authorization header:', context.request.headers.get('Authorization'));
             console.log('Current user:', JSON.stringify(currentUser));
             
-            // 检查保存处方权限
-            if (currentUser.allowSavePrescription === false) {
-                return new Response(JSON.stringify({
-                    success: false,
-                    error: '您没有保存处方的权限，请联系管理员开通'
-                }), {
-                    status: 403,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
-            }
+            // 简化处理：移除 allowSavePrescription 检查，所有登录用户都能保存处方
             
             let body;
             try {
