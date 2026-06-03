@@ -2678,8 +2678,12 @@
             renderPrescriptionTable();
             calculateAmount();
             
-            // 后台异步检查登录状态和加载数据
-            checkLoginStatus().catch(e => console.warn('Check login status failed:', e));
+            // 如果已经有有效的用户登录状态，直接加载数据；否则继续检查登录状态
+            if (hasValidUser) {
+                loadData().catch(e => console.warn('Load data failed:', e));
+            } else {
+                checkLoginStatus().catch(e => console.warn('Check login status failed:', e));
+            }
             
             document.addEventListener('keydown', handleKeyboard);
             updatePrescriptionPaper();
