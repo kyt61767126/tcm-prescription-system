@@ -3511,19 +3511,27 @@
             const historyText = '病史症状: ' + (record.medicalHistory || '');
             const lastHistoryY = wrapText(ctx, historyText, 40, 260, width - 80, 36);
             
-            // 诊断（2倍行距，在病史症状最后一行之后加足够的间距）
+            // 病史症状下方的分隔线
+            ctx.beginPath();
+            ctx.moveTo(30, lastHistoryY + 15);
+            ctx.lineTo(width - 30, lastHistoryY + 15);
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            
+            // 诊断（在病史症状分隔线之后加足够的间距）
             const diagnosisY = lastHistoryY + 50;
             ctx.font = 'bold 22px SimSun, serif';
             ctx.fillText('诊断: ' + (record.diagnosis || ''), 40, diagnosisY);
             
-            // 分隔线
+            // 诊断下方的分隔线
             ctx.beginPath();
-            ctx.moveTo(30, diagnosisY + 20);
-            ctx.lineTo(width - 30, diagnosisY + 20);
+            ctx.moveTo(30, diagnosisY + 25);
+            ctx.lineTo(width - 30, diagnosisY + 25);
+            ctx.lineWidth = 1;
             ctx.stroke();
             
             // RP 标记和剂数
-            const rpY = diagnosisY + 55;
+            const rpY = diagnosisY + 65;
             ctx.font = 'italic bold 44px serif';
             ctx.fillStyle = '#8b0000';
             ctx.fillText('RP', 40, rpY);
