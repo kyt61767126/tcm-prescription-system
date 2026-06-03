@@ -2659,38 +2659,60 @@
             document.getElementById('prescriptionNo').value = '';
             document.getElementById('paperClinicNo').textContent = '';
             
-            document.getElementById('clinicName').value = getUserItem('clinicName') || '惠康堂中医诊所';
-            document.getElementById('clinicNameDisplay').textContent = getUserItem('clinicName') || '惠康堂中医诊所';
-            document.getElementById('defaultRegFee').value = getUserItem('defaultRegFee') || '0';
-            document.getElementById('defaultDose').value = getUserItem('defaultDose') || '7';
-            const regFeeVal = getUserItem('defaultRegFee') || '0';
+            // 批量读取本地存储配置，减少重复读取
+            const config = {
+                clinicName: getUserItem('clinicName') || '惠康堂中医诊所',
+                defaultRegFee: getUserItem('defaultRegFee') || '0',
+                defaultDose: getUserItem('defaultDose') || '7',
+                clinicDoctor: getUserItem('clinicDoctor') || '王桂杰',
+                autoStartEnabled: getUserItem('autoStartEnabled') === 'true'
+            };
+            
+            // 设置DOM元素
+            document.getElementById('clinicName').value = config.clinicName;
+            document.getElementById('clinicNameDisplay').textContent = config.clinicName;
+            document.getElementById('defaultRegFee').value = config.defaultRegFee;
+            document.getElementById('defaultDose').value = config.defaultDose;
+            document.getElementById('doctorName').value = config.clinicDoctor;
+            document.getElementById('defaultDoctor').value = config.clinicDoctor;
+            document.getElementById('autoStart').checked = config.autoStartEnabled;
+            
             const regFeeEl = document.getElementById('registrationFee');
-            if (regFeeEl) regFeeEl.value = regFeeVal;
+            if (regFeeEl) regFeeEl.value = config.defaultRegFee;
             const regFeeEl2 = document.getElementById('registrationFee2');
-            if (regFeeEl2) regFeeEl2.value = regFeeVal;
-            // 同步剂数到所有输入框
-            const doseVal = getUserItem('defaultDose') || '7';
+            if (regFeeEl2) regFeeEl2.value = config.defaultRegFee;
+            
             const doseEl = document.getElementById('doseCountInput');
-            if (doseEl) doseEl.value = doseVal;
+            if (doseEl) doseEl.value = config.defaultDose;
             const doseEl3 = document.getElementById('doseCountInput3');
-            if (doseEl3) doseEl3.value = doseVal;
-            document.getElementById('paperDoseCount').textContent = doseVal;
-            document.getElementById('doctorName').value = getUserItem('clinicDoctor') || '王桂杰';
-            document.getElementById('defaultDoctor').value = getUserItem('clinicDoctor') || '王桂杰';
-            document.getElementById('autoStart').checked = getUserItem('autoStartEnabled') === 'true';
-            for (let i = 0; i < 25; i++) addEmptyRow();
+            if (doseEl3) doseEl3.value = config.defaultDose;
+            document.getElementById('paperDoseCount').textContent = config.defaultDose;
+            
+            // 快速初始化表格（只创建必要的行）
+            for (let i = 0; i < 10; i++) addEmptyRow();
             renderPrescriptionTable();
             calculateAmount();
             
-            // 如果已经有有效的用户登录状态，直接加载数据；否则继续检查登录状态
-            if (hasValidUser) {
-                loadData().catch(e => console.warn('Load data failed:', e));
-            } else {
-                checkLoginStatus().catch(e => console.warn('Check login status failed:', e));
-            }
-            
+            // 延迟加载非关键数据，不阻塞页面渲染
             document.addEventListener('keydown', handleKeyboard);
             updatePrescriptionPaper();
+            
+            // 延迟执行：补充表格行数
+            setTimeout(() => {
+                for (let i = 10; i < 25; i++) addEmptyRow();
+                renderPrescriptionTable();
+            }, 50);
+            
+            // 如果已经有有效的用户登录状态，延迟加载云端数据
+            if (hasValidUser) {
+                setTimeout(() => {
+                    loadData().catch(e => console.warn('Load data failed:', e));
+                }, 100);
+            } else {
+                setTimeout(() => {
+                    checkLoginStatus().catch(e => console.warn('Check login status failed:', e));
+                }, 100);
+            }
         }
 
         function handleBeforeUnload() {
