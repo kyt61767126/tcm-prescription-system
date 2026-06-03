@@ -586,6 +586,7 @@
                 <button class="action-btn" onclick="saveAsFormula()" style="padding:2px 8px;font-size:12px;">存验方</button>
                 <button class="action-btn" onclick="printPrescription('portrait')" style="padding:2px 8px;font-size:12px;">纵向打印</button>
                 <button class="action-btn" onclick="printPrescription('landscape')" style="padding:2px 8px;font-size:12px;">横向打印</button>
+                <button class="action-btn" onclick="downloadPrescriptionImage()" style="padding:2px 8px;font-size:12px;background-color:#007bff;color:white;">下载图片</button>
                 <button class="action-btn primary" onclick="savePrescription()" style="padding:2px 8px;font-size:12px;">保存</button>
             </div>
             <div class="patient-section">
@@ -3457,6 +3458,24 @@
             }
             ctx.fillText(line, x, currentY);
             return currentY;
+        }
+
+        function downloadPrescriptionImage() {
+            // 从当前表单直接生成处方签图片，不需要保存到云端
+            const record = {
+                patientName: document.getElementById('patientName').value,
+                patientGender: document.getElementById('patientGender').value,
+                patientAge: document.getElementById('patientAge').value,
+                medicalHistory: document.getElementById('medicalHistory').value,
+                diagnosis: document.getElementById('diagnosis').value,
+                doctorName: document.getElementById('doctorName').value,
+                doseCount: parseInt(document.getElementById('doseCountInput3').value) || 7,
+                date: document.getElementById('visitDate').value,
+                items: currentItems || []
+            };
+            
+            const prescriptionNo = document.getElementById('prescriptionNo').value || '临时编号';
+            savePrescriptionAsImage(record, prescriptionNo);
         }
 
         function savePrescriptionAsImage(record, currentPrescriptionNo) {
