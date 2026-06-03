@@ -1329,9 +1329,16 @@
             // 先尝试从云端获取
             const cloudUsers = await getUsersFromCloud();
             if (cloudUsers && cloudUsers.length > 0) {
+                // 确保所有用户都有 allowSavePrescription 字段
+                const usersWithPermission = cloudUsers.map(user => {
+                    if (user.allowSavePrescription === undefined) {
+                        return { ...user, allowSavePrescription: true };
+                    }
+                    return user;
+                });
                 // 更新本地存储
-                localStorage.setItem('systemUsers', JSON.stringify(cloudUsers));
-                return cloudUsers;
+                localStorage.setItem('systemUsers', JSON.stringify(usersWithPermission));
+                return usersWithPermission;
             }
             
             // 云端没有则从本地获取
@@ -1354,10 +1361,25 @@
         }
 
         async function saveUsers(users) {
-            // 保存到本地
-            localStorage.setItem('systemUsers', JSON.stringify(users));
-            // 同时保存到云端（异步，不阻塞）
-            saveUsersToCloud(users).catch(e => console.warn('Failed to sync users to cloud:', e));
+            // 确保所有用户都有 allowSavePrescription 字段
+            const usersWithPermission = users.map(user => {
+                if (user.allowSavePrescription === undefined) {
+                    return { ...user, allowSavePrescription: true };
+                }
+                return user;
+            });
+            
+            // 优先保存到云端
+            const cloudSuccess = await saveUsersToCloud(usersWithPermission);
+            
+            if (cloudSuccess) {
+                console.log('✅ Users saved to cloud');
+            } else {
+                console.warn('⚠️ Failed to save users to cloud, but local save will proceed');
+            }
+            
+            // 总是保存到本地，确保数据不丢失
+            localStorage.setItem('systemUsers', JSON.stringify(usersWithPermission));
         }
 
         // 强制把本地用户数据同步到云端
