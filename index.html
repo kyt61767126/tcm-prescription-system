@@ -989,7 +989,11 @@
                     throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
                 }
                 
-                const data = await response.json();
+                const text = await response.text();
+                console.log('Cloud fetch response text (first 200 chars):', text.substring(0, 200));
+                // 清理可能的BOM字符和其他无效字符
+                const cleanText = text.replace(/^\uFEFF/, '').trim();
+                const data = JSON.parse(cleanText);
                 console.log('Cloud fetch response data:', data);
                 
                 if (!data.success) {
@@ -2504,6 +2508,9 @@
                 {name:'生姜片',code:'SJP',price:0.1,unit:'g',dosage:10},
                 {name:'花生衣',code:'HSY',price:0.1,unit:'g',dosage:10}
             ];
+            
+            // 先从 localStorage 读取 savedMedicines
+            const savedMedicines = localStorage.getItem('medicines');
             
             if (localStorage.getItem('clearDefaultMedicines') === 'true') {
                 medicines = [];
