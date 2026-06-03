@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -1247,12 +1247,20 @@
             try {
                 if (!currentUser) {
                     console.error('User not logged in');
+                    alert('请先登录后再保存处方');
                     return null;
                 }
                 
+                console.log('Current user:', currentUser);
+                
                 const authToken = btoa(`${currentUser.username}:${currentUser.role}`);
                 const url = `${CLOUD_API_BASE}/prescriptions`;
-                const response = await cloudFetch(url, {
+                
+                console.log('Saving to URL:', url);
+                console.log('Prescriptions:', prescriptions);
+                
+                // 直接使用 fetch 而不是 cloudFetch，避免中间层问题
+                const response = await fetch(url, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Basic ${authToken}`,
@@ -1261,17 +1269,22 @@
                     body: JSON.stringify({ prescription: prescriptions })
                 });
                 
-                if (response.success) {
+                console.log('Response status:', response.status);
+                
+                const data = await response.json();
+                console.log('Response data:', data);
+                
+                if (data.success) {
                     console.log('Cloud save successful');
-                    return response;
+                    return data;
                 }
                 
-                alert('处方保存失败，请检查网络连接后重试。');
+                alert('处方保存失败：' + (data.error || '未知错误'));
                 return null;
                 
             } catch (error) {
                 console.error('Failed to save prescriptions:', error);
-                alert('处方保存失败，请检查网络连接后重试。');
+                alert('处方保存失败：' + error.message);
                 return null;
             }
         }

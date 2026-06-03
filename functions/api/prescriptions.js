@@ -485,105 +485,48 @@ export async function onRequest(context) {
             
             const now = getBeijingTime();
             const nowIso = now.toISOString();
-            let nextPrescriptionNo = null;
-            let nextClinicNo = null;
-            let responseData;
             
-            if (Array.isArray(body.prescription)) {
-                // 批量保存模式 - 自动生成编号
-                const newPrescriptions = await Promise.all(body.prescription.map(async p => {
-                    // 生成当日序号
-                    const outpatientNo = await generatePrescriptionNo(kv, currentUser.username, 'daily');
-                    return {
-                        ...p,
-                        prescriptionNo: outpatientNo,
-                        outpatientNo: outpatientNo,
-                        createdAt: p.createdAt || nowIso,
-                        updatedAt: nowIso,
-                        createdBy: p.createdBy || currentUser.username,
-                        userId: p.userId || currentUser.username,
-                        userRole: p.userRole || currentUser.role,
-                        isAdmin: p.isAdmin || currentUser.isAdmin
-                    };
-                }));
-                
-                // 合并并去重（保留最新的）
-                const idMap = new Map();
-                [...prescriptions, ...newPrescriptions].forEach(p => {
-                    idMap.set(p.id, p);
-                });
-                prescriptions = Array.from(idMap.values());
-                
-                // 按编号倒序排序（编号大的排在前面）
-                prescriptions.sort((a, b) => {
-                    const noA = a.outpatientNo || a.prescriptionNo || '';
-                    const noB = b.outpatientNo || b.prescriptionNo || '';
-                    return noB.localeCompare(noA);
-                });
-                
-                // 生成下一个编号供前端使用
-                [nextPrescriptionNo, nextClinicNo] = await Promise.all([
-                    peekNextPrescriptionNo(kv, currentUser.username, 'daily'),
-                    peekNextPrescriptionNo(kv, currentUser.username, 'yearly')
-                ]);
-                
-                responseData = {
-                    success: true,
-                    data: prescriptions,
-                    savedPrescription: newPrescriptions[0],
-                    count: prescriptions.length,
-                    message: 'Prescriptions saved successfully',
-                    nextPrescriptionNo: nextPrescriptionNo,
-                    nextClinicNo: nextClinicNo,
-                    userRole: currentUser.role,
-                    isAdmin: currentUser.isAdmin
-                };
-            } else {
-                // 单条保存模式 - 后端自动分配编号（使用KV存储）
-                // 获取短编号（YYMMDD + 当日序号）
+            // 简化处理：统一处理单条和批量
+            let prescriptionList = Array.isArray(body.prescription) ? body.prescription : [body.prescription];
+            
+            // 为每个处方生成编号
+            const savedPrescriptions = [];
+            for (const p of prescriptionList) {
                 const outpatientNo = await generatePrescriptionNo(kv, currentUser.username, 'daily');
-                
-                console.log('Generated outpatientNo:', outpatientNo);
-                
                 const newPrescription = {
-                    ...body.prescription,
-                    id: body.prescription.id || Date.now(),
+                    ...p,
+                    id: p.id || Date.now(),
                     prescriptionNo: outpatientNo,
                     outpatientNo: outpatientNo,
-                    createdAt: body.prescription.createdAt || nowIso,
+                    createdAt: p.createdAt || nowIso,
                     updatedAt: nowIso,
                     createdBy: currentUser.username,
                     userId: currentUser.username,
                     userRole: currentUser.role,
                     isAdmin: currentUser.isAdmin
                 };
-                
-                // 去重
-                prescriptions = prescriptions.filter(p => p.id !== newPrescription.id);
-                prescriptions.push(newPrescription);
-                
-                // 按编号倒序排序（编号大的排在前面）
-                prescriptions.sort((a, b) => {
-                    const noA = a.outpatientNo || a.prescriptionNo || '';
-                    const noB = b.outpatientNo || b.prescriptionNo || '';
-                    return noB.localeCompare(noA);
-                });
-                
-                [nextPrescriptionNo, nextClinicNo] = await Promise.all([
-                    peekNextPrescriptionNo(kv, currentUser.username, 'daily'),
-                    peekNextPrescriptionNo(kv, currentUser.username, 'yearly')
-                ]);
-                
-                responseData = {
-                    success: true,
-                    data: prescriptions,
-                    savedPrescription: newPrescription,
-                    count: prescriptions.length,
-                    message: 'Prescriptions saved successfully',
-                    nextPrescriptionNo: nextPrescriptionNo,
-                    nextClinicNo: nextClinicNo
-                };
+                savedPrescriptions.push(newPrescription);
             }
+            
+            // 合并并去重
+            const idMap = new Map();
+            [...prescriptions, ...savedPrescriptions].forEach(p => {
+                idMap.set(p.id, p);
+            });
+            prescriptions = Array.from(idMap.values());
+            
+            // 按编号倒序排序
+            prescriptions.sort((a, b) => {
+                const noA = a.outpatientNo || a.prescriptionNo || '';
+                const noB = b.outpatientNo || b.prescriptionNo || '';
+                return noB.localeCompare(noA);
+            });
+            
+            // 获取下一个编号
+            const [nextPrescriptionNo, nextClinicNo] = await Promise.all([
+                peekNextPrescriptionNo(kv, currentUser.username, 'daily'),
+                peekNextPrescriptionNo(kv, currentUser.username, 'yearly')
+            ]);
             
             // 保存到 KV
             try {
@@ -605,15 +548,18 @@ export async function onRequest(context) {
                 });
             }
             
-            // 返回响应（单条保存时已在上面定义responseData，批量保存时使用默认响应）
-            if (!responseData) {
-                responseData = {
-                    success: true,
-                    data: prescriptions,
-                    count: prescriptions.length,
-                    message: 'Prescriptions saved successfully'
-                };
-            }
+            // 返回响应
+            const responseData = {
+                success: true,
+                data: prescriptions,
+                savedPrescription: savedPrescriptions[0],
+                count: prescriptions.length,
+                message: 'Prescriptions saved successfully',
+                nextPrescriptionNo: nextPrescriptionNo,
+                nextClinicNo: nextClinicNo,
+                userRole: currentUser.role,
+                isAdmin: currentUser.isAdmin
+            };
             
             return new Response(JSON.stringify(responseData), {
                 status: 200,
