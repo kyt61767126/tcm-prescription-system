@@ -683,9 +683,9 @@
                     <span>病史症状: <span id="paperMedicalHistory"></span></span>
                     <div style="border-bottom:1px solid #000; margin-top:8px;"></div>
                 </div>
-                <div style="margin-bottom:3px;">
+                <div style="margin-bottom:10px;">
                     <span>诊断: <span id="paperDiagnosis"></span></span>
-                    <div style="border-bottom:1px solid #000; margin-top:2px;"></div>
+                    <div style="border-bottom:1px solid #000; margin-top:8px;"></div>
                 </div>
                 <div class="prescription-grid" style="margin-top:3px;">
                     <div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;">
@@ -3511,8 +3511,8 @@
             const historyText = '病史症状: ' + (record.medicalHistory || '');
             wrapText(ctx, historyText, 40, 260, width - 80, 28);
             
-            // 诊断
-            const diagnosisY = 260 + Math.ceil((record.medicalHistory || '').length / 25) * 28 + 15;
+            // 诊断（增加与病史症状之间的间距）
+            const diagnosisY = 260 + Math.ceil((record.medicalHistory || '').length / 25) * 28 + 25;
             ctx.font = 'bold 22px SimSun, serif';
             ctx.fillText('诊断: ' + (record.diagnosis || ''), 40, diagnosisY);
             
