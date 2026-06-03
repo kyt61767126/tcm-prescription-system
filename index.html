@@ -3500,6 +3500,8 @@
                 // 刷新历史处方栏
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 
+                // 生成处方签图片并自动下载（使用云端返回的编号）
+                savePrescriptionAsImage(savedRecord, officialNo);
                 searchPatientsQuick({target:{value:name}});
                 
                 // 后台异步重新加载完整数据
