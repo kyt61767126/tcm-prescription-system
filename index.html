@@ -3395,6 +3395,19 @@
         }
 
         async function savePrescription() {
+            // 检查用户是否登录
+            if (!currentUser) {
+                alert('请先登录后再保存处方！');
+                document.getElementById('loginOverlay').style.display = 'flex';
+                return;
+            }
+            
+            // 检查用户是否有保存处方的权限
+            if (currentUser.allowSavePrescription === false) {
+                alert('您没有保存处方的权限，请联系管理员！');
+                return;
+            }
+            
             const name = document.getElementById('patientName').value;
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
             const currentDate = new Date().toISOString().split('T')[0];
