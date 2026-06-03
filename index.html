@@ -3509,10 +3509,10 @@
             // 病史症状
             ctx.font = '20px SimSun, serif';
             const historyText = '病史症状: ' + (record.medicalHistory || '');
-            wrapText(ctx, historyText, 40, 260, width - 80, 36);
+            const lastHistoryY = wrapText(ctx, historyText, 40, 260, width - 80, 36);
             
-            // 诊断（2倍行距）
-            const diagnosisY = 260 + Math.ceil((record.medicalHistory || '').length / 25) * 36 + 40;
+            // 诊断（2倍行距，在病史症状最后一行之后加足够的间距）
+            const diagnosisY = lastHistoryY + 50;
             ctx.font = 'bold 22px SimSun, serif';
             ctx.fillText('诊断: ' + (record.diagnosis || ''), 40, diagnosisY);
             
