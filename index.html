@@ -1811,27 +1811,30 @@
         }
 
         async function loadData() {
-            // 从云端获取药品库
-            const cloudMedicines = await getMedicinesFromCloud();
+            // 并行请求云端数据，减少加载时间
+            const [cloudMedicines, cloudFormulas, cloudResult] = await Promise.all([
+                getMedicinesFromCloud().catch(e => { console.warn('Failed to get medicines:', e); return null; }),
+                getFormulasFromCloud().catch(e => { console.warn('Failed to get formulas:', e); return null; }),
+                getPrescriptionsFromCloud().catch(e => { console.warn('Failed to get prescriptions:', e); return null; })
+            ]);
+            
+            // 更新药品库
             if (cloudMedicines && cloudMedicines.length > 0) {
                 medicines = cloudMedicines;
             }
             
-            // 从云端获取方剂库
-            const cloudFormulas = await getFormulasFromCloud();
+            // 更新方剂库
             if (cloudFormulas) {
                 formulas = cloudFormulas;
             }
             
-            // 从云端获取处方数据
-            const cloudResult = await getPrescriptionsFromCloud();
-            
+            // 更新处方历史（最重要，优先处理）
             if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
                 if (currentUser && currentUser.role === 'admin') {
                     prescriptionHistory = cloudResult.data;
                 } else {
                     prescriptionHistory = cloudResult.data.filter(p => 
-                        p.createdBy === currentUser?.username
+                        p.createdBy === currentUser?.username || !p.createdBy
                     );
                 }
                 
@@ -1849,6 +1852,7 @@
                 prescriptionHistory = [];
             }
             
+            // 渲染历史列表
             if (currentUser) {
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             }
