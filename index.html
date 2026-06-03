@@ -231,26 +231,28 @@
             }
             
             .patient-row {
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
                 margin-bottom: 4px;
                 gap: 3px;
             }
             
             .patient-label {
-                width: 45px;
+                width: auto;
                 font-size: 12px;
-                padding-right: 4px;
+                padding-right: 3px;
+                white-space: nowrap;
             }
             
             .patient-input {
                 min-height: 32px;
-                font-size: 14px;
-                padding: 4px 6px;
+                font-size: 12px;
+                padding: 4px 4px;
             }
             
-            .patient-input.x-small { flex: 0 0 55px; }
-            .patient-input.xx-small { flex: 0 0 90px; }
-            .patient-input.xxx-small { flex: 0 0 110px; }
+            .patient-input.name-input { flex: 1; min-width: 0; }
+            .patient-input.x-small { flex: 0 0 45px; }
+            .patient-input.xx-small { flex: 0 0 70px; }
+            .patient-input.small { flex: 0 0 80px; }
             
             /* 症状文本域 */
             .symptom-textarea {
