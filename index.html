@@ -3378,7 +3378,6 @@
             const items = prescriptionItems.filter(item => item.name);
             formulas.push({name:name, code:code, composition:items.map(i => ({name:i.name, dosage:i.dosage, price:i.price, unit:i.unit}))});
             setUserItem('formulas', JSON.stringify(formulas));
-            alert('验方保存成功！');
         }
 
         function printPrescription(orientation = 'portrait') {
@@ -3503,7 +3502,6 @@
                 
                 // 生成处方签图片并自动下载（使用云端返回的编号）
                 savePrescriptionAsImage(savedRecord, officialNo);
-                alert('处方保存成功！');
                 searchPatientsQuick({target:{value:name}});
                 
                 // 后台异步重新加载完整数据
@@ -3730,7 +3728,6 @@
             document.getElementById('paperDoseCount').textContent = doseVal;
             calculateAmount();
             closeModal('settingsModal');
-            alert('保存成功！');
         }
 
         function setAutoStart(enabled) {
