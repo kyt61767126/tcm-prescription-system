@@ -413,14 +413,15 @@
             }
             
             .patient-row {
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
                 gap: 2px;
             }
             
             .patient-label {
-                width: 40px;
+                width: auto;
                 font-size: 11px;
-                padding-right: 3px;
+                padding-right: 2px;
+                white-space: nowrap;
             }
             
             .patient-input {
@@ -429,8 +430,10 @@
                 padding: 3px 4px;
             }
             
-            .patient-input.x-small { flex: 0 0 48px; }
-            .patient-input.xx-small { flex: 0 0 80px; }
+            .patient-input.name-input { flex: 0 0 70px; }
+            .patient-input.x-small { flex: 0 0 45px; }
+            .patient-input.xx-small { flex: 0 0 51px; }
+            .patient-input.small { flex: 0 0 150px; }
             
             /* 药品表格进一步紧凑 */
             .medicine-table-container {
