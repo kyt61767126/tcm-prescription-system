@@ -2613,12 +2613,14 @@
             // 先同步检查登录状态，恢复用户信息
             const sessionUser = sessionStorage.getItem('currentUser');
             const localUser = localStorage.getItem('currentUser');
+            let hasValidUser = false;
             
             if (sessionUser) {
                 // 从sessionStorage恢复
                 try {
                     currentUser = JSON.parse(sessionUser);
                     document.getElementById('loginOverlay').style.display = 'none';
+                    hasValidUser = true;
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
                     document.getElementById('loginOverlay').style.display = 'flex';
@@ -2629,6 +2631,7 @@
                     currentUser = JSON.parse(localUser);
                     sessionStorage.setItem('currentUser', localUser);
                     document.getElementById('loginOverlay').style.display = 'none';
+                    hasValidUser = true;
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
                     document.getElementById('loginOverlay').style.display = 'flex';
@@ -2636,6 +2639,11 @@
             } else {
                 // 没有登录状态，显示登录界面
                 document.getElementById('loginOverlay').style.display = 'flex';
+            }
+            
+            // 如果成功恢复了登录状态，更新用户显示
+            if (hasValidUser) {
+                updateUserDisplay();
             }
             
             // 继续初始化界面
