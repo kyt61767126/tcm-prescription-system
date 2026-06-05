@@ -540,6 +540,27 @@
         </div>
     </div>
 
+    <!-- 删除确认弹窗 -->
+    <div id="deleteConfirmModal" class="modal">
+        <div class="modal-content user-modal-content">
+            <div class="modal-header">
+                <span>确认删除</span>
+                <span class="close-btn" onclick="cancelDelete()">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="text-align: center; padding: 20px 0;">
+                    <div style="font-size: 16px; margin-bottom: 15px; color: #333;">确定要删除该处方历史吗？</div>
+                    <div style="font-size: 48px; font-weight: bold; color: #ff4444; margin: 20px 0;" id="deleteCountdown">3</div>
+                    <div style="font-size: 12px; color: #666;">秒后自动执行删除，点击"取消"可中止</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="cancelDelete()">取消</button>
+                <button class="action-btn" style="background: #ff4444; color: white; border-color: #cc0000;" onclick="confirmDeleteNow()">立即删除</button>
+            </div>
+        </div>
+    </div>
+
     <div id="userManageModal" class="modal">
         <div class="modal-content user-modal-content">
             <div class="modal-header">
@@ -1769,6 +1790,89 @@
         let selectedSearchIndex = 0;
         let currentSearchColumn = 'code';
         let medicineMap = new Map();
+        
+        // 删除倒计时相关变量
+        let deleteTimer = null;
+        let deleteTargetId = null;
+        let countdownValue = 3;
+        
+        // 显示删除确认弹窗（带倒计时）
+        function showDeleteConfirm(id) {
+            deleteTargetId = id;
+            countdownValue = 3;
+            document.getElementById('deleteCountdown').textContent = countdownValue;
+            showModal('deleteConfirmModal');
+            
+            // 开始倒计时
+            deleteTimer = setInterval(() => {
+                countdownValue--;
+                document.getElementById('deleteCountdown').textContent = countdownValue;
+                
+                if (countdownValue <= 0) {
+                    // 倒计时结束，自动执行删除
+                    clearInterval(deleteTimer);
+                    closeModal('deleteConfirmModal');
+                    executeDelete(deleteTargetId);
+                    deleteTargetId = null;
+                    deleteTimer = null;
+                }
+            }, 1000);
+        }
+        
+        // 取消删除
+        function cancelDelete() {
+            if (deleteTimer) {
+                clearInterval(deleteTimer);
+                deleteTimer = null;
+            }
+            deleteTargetId = null;
+            closeModal('deleteConfirmModal');
+        }
+        
+        // 立即确认删除
+        function confirmDeleteNow() {
+            if (deleteTimer) {
+                clearInterval(deleteTimer);
+                deleteTimer = null;
+            }
+            const idToDelete = deleteTargetId;
+            closeModal('deleteConfirmModal');
+            if (idToDelete !== null) {
+                executeDelete(idToDelete);
+            }
+            deleteTargetId = null;
+        }
+        
+        // 执行实际删除操作
+        async function executeDelete(id) {
+            // 先从云端删除
+            const success = await deletePrescriptionFromCloud(id);
+            
+            if (success) {
+                // 从云端重新获取最新数据，更新统计数量
+                const cloudResult = await getPrescriptionsFromCloud();
+                if (cloudResult && cloudResult.data) {
+                    prescriptionHistory = cloudResult.data;
+                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                    
+                    // 更新统计输入框（只显示历史处方累计数量）
+                    if (cloudResult.totalCount) {
+                        document.getElementById('clinicNo').value = cloudResult.totalCount;
+                    }
+                } else {
+                    // 云端获取失败，删除本地数据
+                    prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+                }
+            } else {
+                // 云端删除失败，删除本地数据
+                prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            }
+            
+            // 刷新历史列表
+            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+        }
         
         function buildMedicineMap() {
             medicineMap.clear();
@@ -3306,35 +3410,8 @@
         }
 
         async function deleteHistory(id) {
-            if (!confirm('确定删除该处方历史？')) return;
-            
-            // 先从云端删除
-            const success = await deletePrescriptionFromCloud(id);
-            
-            if (success) {
-                // 从云端重新获取最新数据，更新统计数量
-                const cloudResult = await getPrescriptionsFromCloud();
-                if (cloudResult && cloudResult.data) {
-                    prescriptionHistory = cloudResult.data;
-                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                    
-                    // 更新统计输入框（只显示历史处方累计数量）
-                    if (cloudResult.totalCount) {
-                        document.getElementById('clinicNo').value = cloudResult.totalCount;
-                    }
-                } else {
-                    // 云端获取失败，删除本地数据
-                    prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                }
-            } else {
-                // 云端删除失败，删除本地数据
-                prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-            }
-            
-            // 刷新历史列表
-            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+            // 显示带倒计时的删除确认弹窗
+            showDeleteConfirm(id);
         }
 
         function loadHistory(id) {
