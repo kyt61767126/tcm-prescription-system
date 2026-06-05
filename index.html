@@ -3765,86 +3765,25 @@
             return `${year}-${month}`;
         }
 
-        // 保存图片到本地（自动按月创建文件夹）
+        // 保存图片到本地（直接下载到浏览器默认下载目录）
         async function saveImageLocally(canvas, record, currentPrescriptionNo) {
             const userName = currentUser ? currentUser.name || currentUser.username : '未知用户';
             const prescriptionNo = currentPrescriptionNo || record.prescriptionNo || '';
             const patientName = record.patientName || '未知';
             const monthFolder = getCurrentMonthFolder();
             
-            // 生成文件名：用户名_患者名_门诊号.png
-            const fileName = `${userName}_${patientName}_${prescriptionNo}.png`;
+            // 生成文件名：年月_用户名_患者名_门诊号.png
+            const fileName = `${monthFolder}_${userName}_${patientName}_${prescriptionNo}.png`;
             
-            // 转换为 Blob
-            const canvasBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-            
-            // 检查浏览器是否支持 File System Access API
-            if ('showDirectoryPicker' in window) {
-                try {
-                    // 尝试获取已保存的目录
-                    let rootHandle = null;
-                    const savedDirName = localStorage.getItem('prescriptionImageDir');
-                    
-                    if (savedDirName) {
-                        try {
-                            // 尝试获取已授权的目录句柄
-                            rootHandle = await window.showDirectoryPicker({
-                                mode: 'readwrite',
-                                startIn: savedDirName
-                            });
-                        } catch (e) {
-                            // 用户取消或权限问题，继续提示选择新目录
-                            console.log('无法使用已保存的目录:', e);
-                        }
-                    }
-                    
-                    if (!rootHandle) {
-                        // 首次使用或权限失效，让用户选择保存位置
-                        showToast('请选择处方图片的保存位置（只需选择一次）');
-                        rootHandle = await window.showDirectoryPicker({
-                            mode: 'readwrite',
-                            startIn: 'downloads'
-                        });
-                        
-                        if (rootHandle) {
-                            // 保存用户选择的目录名称（注意：句柄本身无法序列化）
-                            localStorage.setItem('prescriptionImageDir', rootHandle.name);
-                        }
-                    }
-                    
-                    if (rootHandle) {
-                        // 在根目录下创建月份文件夹
-                        const monthDirHandle = await rootHandle.getDirectoryHandle(monthFolder, { create: true });
-                        
-                        // 在月份文件夹中创建文件
-                        const fileHandle = await monthDirHandle.getFileHandle(fileName, { create: true });
-                        const writable = await fileHandle.createWritable();
-                        await writable.write(canvasBlob);
-                        await writable.close();
-                        
-                        console.log('图片已保存到文件夹:', monthFolder, '/', fileName);
-                        showToast(`处方图片已保存到 ${monthFolder} 文件夹`);
-                        return;
-                    }
-                } catch (error) {
-                    if (error.name !== 'AbortError') {
-                        console.error('保存到本地失败:', error);
-                        showToast('保存失败，将使用传统方式下载');
-                    }
-                }
-            }
-            
-            // 传统浏览器或用户取消：使用传统下载方式（文件名包含年月）
-            const organizedFileName = `${monthFolder}_${fileName}`;
+            // 使用传统下载方式，直接下载到浏览器默认下载目录
             const link = document.createElement('a');
-            link.download = organizedFileName;
+            link.download = fileName;
             link.href = canvas.toDataURL('image/png');
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             
-            console.log('图片已下载（传统方式）:', organizedFileName);
-            showToast(`处方图片已保存（${organizedFileName}）`);
+            console.log('图片已下载:', fileName);
         }
 
         function showModal(id) {
