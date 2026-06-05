@@ -1770,6 +1770,33 @@
         let currentSearchColumn = 'code';
         let medicineMap = new Map();
         
+        // 格式化时间显示
+        function formatHistoryTime(dateStr) {
+            if (!dateStr) return '';
+            
+            const date = new Date(dateStr);
+            if (isNaN(date.getTime())) return dateStr;
+            
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const yesterday = new Date(today.getTime() - 86400000);
+            const inputDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const timeStr = `${hours}:${minutes}`;
+            
+            if (inputDate.getTime() === today.getTime()) {
+                return `今天 ${timeStr}`;
+            } else if (inputDate.getTime() === yesterday.getTime()) {
+                return `昨天 ${timeStr}`;
+            } else {
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${month}-${day} ${timeStr}`;
+            }
+        }
+        
         // 执行删除操作
         async function executeDelete(id) {
             // 先从云端删除
@@ -3320,20 +3347,28 @@
                 return;
             }
             
-            document.getElementById('historyList').innerHTML = list.map((p,i) => `
+            document.getElementById('historyList').innerHTML = list.map((p,i) => {
+                // 检查是否是今天的处方
+                const recordDate = new Date(p.date || p.createdAt);
+                const today = new Date();
+                const isToday = recordDate.toDateString() === today.toDateString();
+                const timeDisplay = formatHistoryTime(p.date || p.createdAt);
+                
+                return `
                 <div class="history-item" onclick="loadHistory(${p.id})">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <div>
                             <div style="display:flex;gap:8px;align-items:center;">
                                 <div class="history-name">${p.patientName || p.name || '未知'}</div>
                                 <div style="font-size:10px;color:#8b0000;font-weight:bold;">[${p.prescriptionNo || ''}]</div>
+                                ${isToday ? '<div style="font-size:9px;background:#4CAF50;color:white;padding:1px 5px;border-radius:3px;">今天</div>' : ''}
                             </div>
-                            <div class="history-date">${p.date || p.createdAt || ''} - ${p.diagnosis || ''}</div>
+                            <div class="history-date">${timeDisplay} - ${p.diagnosis || ''}</div>
                         </div>
                         <button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button>
                     </div>
                 </div>
-            `).join('');
+            `}).join('');
         }
 
         async function deleteHistory(id) {
@@ -3475,6 +3510,10 @@
             document.getElementById('paperDate').textContent = currentDate;
             const doseInput = document.getElementById('doseCountInput') || document.getElementById('doseCountInput3');
             const doseCount = parseInt(doseInput ? doseInput.value : 7) || 7;
+            
+            // 显示保存中的提示
+            showToast('正在保存...');
+            
             const grandTotalEl = document.getElementById('grandTotal') || document.getElementById('grandTotal2');
             
             // 前端不生成编号，只提交基本数据
