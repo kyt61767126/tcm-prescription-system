@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -3243,6 +3243,35 @@
         function selectPatientName(name) {
             document.getElementById('patientName').value = name;
             hidePatientNameDropdown();
+            
+            // 找到该患者的最新记录，自动填充电话、地址、年龄
+            const patientRecords = filterPrescriptionsByPermission(prescriptionHistory).filter(p => 
+                p.patientName && p.patientName.includes(name)
+            );
+            
+            if (patientRecords.length > 0) {
+                // 按时间排序，获取最新的记录
+                patientRecords.sort((a, b) => {
+                    const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                    const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                    return timeB - timeA;
+                });
+                
+                const latestRecord = patientRecords[0];
+                if (latestRecord.patientAge) {
+                    document.getElementById('patientAge').value = latestRecord.patientAge;
+                }
+                if (latestRecord.patientPhone) {
+                    document.getElementById('patientPhone').value = latestRecord.patientPhone;
+                }
+                if (latestRecord.patientAddress) {
+                    document.getElementById('patientAddress').value = latestRecord.patientAddress;
+                }
+                if (latestRecord.patientGender) {
+                    document.getElementById('patientGender').value = latestRecord.patientGender;
+                }
+            }
+            
             // 触发搜索以加载该患者的历史记录
             searchPatientsQuick({target: {value: name}});
             updatePrescriptionPaper();
@@ -3504,6 +3533,9 @@
                 
                 // 刷新历史处方栏
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                
+                // 保存成功提示
+                alert('处方保存成功！');
                 
                 // 生成处方签图片并自动下载（使用云端返回的编号）
                 savePrescriptionAsImage(savedRecord, officialNo);
