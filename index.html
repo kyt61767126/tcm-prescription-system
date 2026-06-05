@@ -3535,7 +3535,7 @@
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 
                 // 保存成功提示
-                alert('处方保存成功！');
+                showToast('处方保存成功！');
                 
                 // 生成处方签图片并自动下载（使用云端返回的编号）
                 savePrescriptionAsImage(savedRecord, officialNo);
