@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -3765,25 +3765,53 @@
             return `${year}-${month}`;
         }
 
-        // 保存图片到本地（直接下载到浏览器默认下载目录）
+        // 保存图片到本地（自动检测 Electron 环境）
         async function saveImageLocally(canvas, record, currentPrescriptionNo) {
             const userName = currentUser ? currentUser.name || currentUser.username : '未知用户';
             const prescriptionNo = currentPrescriptionNo || record.prescriptionNo || '';
             const patientName = record.patientName || '未知';
-            const monthFolder = getCurrentMonthFolder();
             
-            // 生成文件名：年月_用户名_患者名_门诊号.png
-            const fileName = `${monthFolder}_${userName}_${patientName}_${prescriptionNo}.png`;
+            // 生成文件名：用户名_患者名_门诊号.png
+            const fileName = `${userName}_${patientName}_${prescriptionNo}.png`;
             
-            // 使用传统下载方式，直接下载到浏览器默认下载目录
+            // 检查是否在 Electron 桌面环境中
+            if (window.electronAPI && window.electronAPI.isElectron) {
+                try {
+                    // 桌面版：使用 Electron API 自动保存到本地文件夹
+                    const imageData = canvas.toDataURL('image/png');
+                    const result = await window.electronAPI.savePrescriptionImage(imageData, fileName);
+                    
+                    if (result.success) {
+                        console.log('桌面版：图片已保存到本地', result.filePath);
+                        showToast(`处方图片已保存到 ${result.filePath}`);
+                    } else {
+                        console.error('桌面版：保存图片失败', result.error);
+                        showToast('保存图片失败，将使用浏览器下载方式');
+                        // 降级到浏览器下载方式
+                        downloadViaBrowser(canvas, fileName);
+                    }
+                } catch (error) {
+                    console.error('桌面版：保存图片出错', error);
+                    showToast('保存图片出错，将使用浏览器下载方式');
+                    downloadViaBrowser(canvas, fileName);
+                }
+            } else {
+                // 浏览器版：使用传统下载方式
+                const monthFolder = getCurrentMonthFolder();
+                const fileNameWithMonth = `${monthFolder}_${fileName}`;
+                downloadViaBrowser(canvas, fileNameWithMonth);
+            }
+        }
+        
+        // 通过浏览器下载（降级方案）
+        function downloadViaBrowser(canvas, fileName) {
             const link = document.createElement('a');
             link.download = fileName;
             link.href = canvas.toDataURL('image/png');
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            
-            console.log('图片已下载:', fileName);
+            console.log('浏览器版：图片已下载:', fileName);
         }
 
         function showModal(id) {
