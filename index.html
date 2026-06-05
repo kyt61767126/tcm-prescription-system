@@ -3722,92 +3722,25 @@
             return `${year}-${month}`;
         }
 
-        // 保存图片到本地（支持按月创建文件夹）
+        // 保存图片到本地（直接下载到默认下载目录）
         async function saveImageLocally(canvas, record, currentPrescriptionNo) {
             const userName = currentUser ? currentUser.name || currentUser.username : '未知用户';
             const prescriptionNo = currentPrescriptionNo || record.prescriptionNo || '';
             const patientName = record.patientName || '未知';
             const monthFolder = getCurrentMonthFolder();
             
-            // 生成文件名：用户名_患者名_门诊号.png
-            const fileName = `${userName}_${patientName}_${prescriptionNo}.png`;
+            // 生成文件名：年月_用户名_患者名_门诊号.png
+            const fileName = `${monthFolder}_${userName}_${patientName}_${prescriptionNo}.png`;
             
-            // 转换为 Blob
-            const canvasBlob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-            
-            // 检查浏览器是否支持 File System Access API
-            if ('showSaveFilePicker' in window) {
-                // 现代浏览器：使用 File System Access API 创建真实文件夹结构
-                try {
-                    // 创建月份文件夹
-                    const monthDirHandle = await createMonthFolder(monthFolder);
-                    
-                    // 在月份文件夹中创建文件
-                    const fileHandle = await monthDirHandle.getFileHandle(fileName, { create: true });
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(canvasBlob);
-                    await writable.close();
-                    
-                    console.log('图片已保存到文件夹:', monthFolder, fileName);
-                    showToast(`处方图片已保存到 ${monthFolder} 文件夹`);
-                    return;
-                } catch (error) {
-                    console.error('保存到本地失败:', error);
-                    // 如果用户取消选择或出错，回退到传统下载方式
-                }
-            }
-            
-            // 传统浏览器：使用模拟文件夹的方式（文件名包含年月信息）
-            // 或者回退到传统下载
-            const organizedFileName = `${monthFolder}_${fileName}`;
+            // 使用传统下载方式，直接下载到浏览器默认下载目录
             const link = document.createElement('a');
-            link.download = organizedFileName;
+            link.download = fileName;
             link.href = canvas.toDataURL('image/png');
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
             
-            console.log('图片已下载:', organizedFileName);
-            showToast(`处方图片已保存（${organizedFileName}）`);
-        }
-
-        // 创建月份文件夹（使用 File System Access API）
-        async function createMonthFolder(monthFolder) {
-            // 获取或创建处方图片根目录
-            let rootHandle;
-            const rootDirName = '中医处方图片';
-            
-            try {
-                // 尝试获取已保存的目录句柄
-                const rootDirStr = localStorage.getItem('prescriptionImageDirHandle');
-                if (rootDirStr) {
-                    try {
-                        rootHandle = await window.showDirectoryPicker({
-                            mode: 'readwrite',
-                            startIn: 'downloads'
-                        });
-                    } catch {
-                        // 如果获取失败，重新选择目录
-                    }
-                }
-                
-                if (!rootHandle) {
-                    // 用户首次使用，需要选择根目录
-                    rootHandle = await window.showDirectoryPicker({
-                        mode: 'readwrite',
-                        startIn: 'downloads'
-                    });
-                    // 保存目录句柄（实际在生产环境中需要序列化）
-                    localStorage.setItem('prescriptionImageDirHandle', 'saved');
-                }
-                
-                // 在根目录下创建月份文件夹
-                const monthDirHandle = await rootHandle.getDirectoryHandle(monthFolder, { create: true });
-                return monthDirHandle;
-            } catch (error) {
-                console.error('创建月份文件夹失败:', error);
-                throw error;
-            }
+            console.log('图片已下载:', fileName);
         }
 
         function showModal(id) {
