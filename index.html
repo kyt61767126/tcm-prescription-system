@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -115,18 +115,18 @@
         .modal-body { flex: 1; overflow: auto; padding: 15px; background: white; }
         .modal-footer { padding: 10px 15px; background: #e0e0e0; display: flex; justify-content: flex-end; gap: 10px; border-top: 2px solid #808080; }
         .close-btn { font-size: 24px; cursor: pointer; line-height: 1; }
-        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: none; justify-content: center; align-items: center; z-index: 9999; }
-        .login-box { background: white; padding: 40px; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); width: 380px; text-align: center; }
-        .login-title { font-size: 24px; font-weight: bold; color: #333; margin-bottom: 30px; }
-        .login-field { margin-bottom: 15px; text-align: left; }
-        .login-field input { width: 100%; padding: 12px 15px; border: 2px solid #ddd; border-radius: 6px; font-size: 14px; box-sizing: border-box; }
-        .login-field input:focus { border-color: #667eea; outline: none; }
-        .login-btn { width: 100%; padding: 12px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
-        .login-btn:hover { opacity: 0.9; }
-        .login-error { color: #ff4444; font-size: 12px; margin-top: 10px; display: none; }
-        .login-links { margin-top: 15px; font-size: 12px; }
-        .login-links a { color: #667eea; text-decoration: none; cursor: pointer; }
-        .login-links a:hover { text-decoration: underline; }
+        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); display: none; justify-content: center; align-items: center; z-index: 9999; }
+        .login-box { background: linear-gradient(180deg, #ffffff 0%, #f0f7ff 100%); padding: 25px; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); width: 520px; border: 3px solid #4a90d9; position: relative; }
+        .login-title { font-size: 28px; font-weight: bold; color: #1e3c72; margin-bottom: 20px; text-align: center; }
+        .login-field { margin-bottom: 12px; display: flex; align-items: center; gap: 10px; }
+        .login-field label { width: 70px; text-align: right; font-weight: bold; font-size: 14px; color: #333; }
+        .login-field input, .login-field select { flex: 1; padding: 8px 12px; border: 2px solid #4a90d9; border-radius: 4px; font-size: 14px; box-sizing: border-box; background: white; }
+        .login-field input:focus, .login-field select:focus { border-color: #1e3c72; outline: none; box-shadow: 0 0 5px rgba(74, 144, 217, 0.5); }
+        .login-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 20px; }
+        .login-btn { padding: 8px 40px; background: linear-gradient(180deg, #6cb3f0 0%, #4a90d9 100%); color: #000; border: 2px solid #333; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; box-shadow: 2px 2px 5px rgba(0,0,0,0.3); }
+        .login-btn:hover { background: linear-gradient(180deg, #8dc8f7 0%, #6cb3f0 100%); }
+        .login-error { color: #ff4444; font-size: 12px; margin-top: 10px; display: none; text-align: center; }
+        .login-decoration { text-align: center; margin-top: 15px; font-size: 12px; color: #666; }
         .user-modal-content { width: 350px; }
         .form-group { margin: 15px 0; text-align: left; }
         .form-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 12px; color: #333; }
@@ -470,15 +470,30 @@
     <div id="loginOverlay" class="login-overlay">
         <div class="login-box">
             <div class="login-title">🏥 本能中医处方系统</div>
-            <div style="text-align:center;margin-bottom:20px;color:#008000;font-weight:bold;">【云版】</div>
-            <div class="login-field">
-                <input type="text" id="loginUsername" placeholder="用户名">
+            <div style="text-align:center;margin-bottom:20px;color:#008000;font-weight:bold;font-size:16px;">【云版】</div>
+            <div style="display:flex;justify-content:center;">
+                <div style="width:380px;">
+                    <div class="login-field">
+                        <label>用户：</label>
+                        <select id="loginUsername">
+                        </select>
+                    </div>
+                    <div class="login-field">
+                        <label>密码：</label>
+                        <input type="password" id="loginPassword" placeholder="" onkeypress="if(event.key==='Enter')handleLogin()">
+                    </div>
+                    <div class="login-buttons">
+                        <button class="login-btn" onclick="handleLogin()">确定</button>
+                        <button class="login-btn" onclick="closeLogin()">取消</button>
+                    </div>
+                </div>
             </div>
-            <div class="login-field">
-                <input type="password" id="loginPassword" placeholder="密码" onkeypress="if(event.key==='Enter')handleLogin()">
-            </div>
-            <button class="login-btn" onclick="handleLogin()">登 录</button>
             <div id="loginError" class="login-error"></div>
+            <div class="login-decoration">
+                <div style="margin-top:15px;padding-top:10px;border-top:1px solid #ccc;">
+                    <div style="color:#666;">微信电话: 18566243358</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -569,6 +584,7 @@
         <div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div>
         <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
         <div class="tab-item" onclick="showModal('statsModal')">【数据管理】</div>
+        <div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div>
         <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
         <div class="tab-item" onclick="showHelp()">【系统帮助】</div>
         <div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div>
@@ -789,6 +805,10 @@
                 </div>
                 <hr style="margin:15px 0;">
                 <div style="text-align:center;">
+                    <div id="desktopSettings" style="margin-bottom:10px;">
+                        <button class="action-btn" onclick="selectImageSaveDirectory()" style="background:#4CAF50;color:white;">📂 设置图片保存位置</button>
+                        <div id="imageSavePath" style="font-size:11px;color:#666;margin-top:4px;"></div>
+                    </div>
                     <button class="action-btn" onclick="backupData()">备份数据</button>
                     <button class="action-btn" onclick="restoreData()">恢复数据</button>
                     <button class="action-btn" onclick="clearAllData()" style="background:#ffdddd;">清空数据</button>
@@ -937,12 +957,226 @@
         </div>
     </div>
 
+    <div class="modal" id="analyticsModal">
+        <div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;">
+            <div class="modal-header">
+                <h3>📊 统计分析</h3>
+                <span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;">
+                    <div>
+                        <label>统计范围:</label>
+                        <select id="analyticsRange" onchange="refreshAnalytics()">
+                            <option value="today">今日</option>
+                            <option value="week">本周</option>
+                            <option value="month" selected>本月</option>
+                            <option value="year">本年</option>
+                            <option value="all">全部</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>就诊次数筛选:</label>
+                        <select id="visitCountFilter" onchange="refreshAnalytics()">
+                            <option value="all">全部</option>
+                            <option value="1">1诊</option>
+                            <option value="2">2诊</option>
+                            <option value="3">3诊</option>
+                            <option value="4">4诊及以上</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label>排序:</label>
+                        <select id="analyticsSort" onchange="refreshAnalytics()">
+                            <option value="visitCount-desc">就诊次数(降序)</option>
+                            <option value="visitCount-asc">就诊次数(升序)</option>
+                            <option value="lastVisit-desc">最近就诊(降序)</option>
+                            <option value="lastVisit-asc">最近就诊(升序)</option>
+                        </select>
+                    </div>
+                    <button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
+                    <div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;">
+                        <div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div>
+                        <div style="font-size:12px;color:#666;">总就诊人数</div>
+                    </div>
+                    <div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;">
+                        <div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div>
+                        <div style="font-size:12px;color:#666;">初诊人数</div>
+                    </div>
+                    <div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;">
+                        <div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div>
+                        <div style="font-size:12px;color:#666;">复诊人数</div>
+                    </div>
+                    <div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;">
+                        <div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div>
+                        <div style="font-size:12px;color:#666;">复诊率</div>
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">
+                    <div style="background:white;border:1px solid #ddd;border-radius:8px;padding:15px;">
+                        <h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4>
+                        <canvas id="visitTrendChart" height="200"></canvas>
+                    </div>
+                    <div style="background:white;border:1px solid #ddd;border-radius:8px;padding:15px;">
+                        <h4 style="margin-bottom:12px;color:#333;">🏥 病种分布</h4>
+                        <canvas id="diseaseChart" height="200"></canvas>
+                    </div>
+                </div>
+
+                <div style="margin-top:15px;background:white;border:1px solid #ddd;border-radius:8px;padding:15px;">
+                    <h4 style="margin-bottom:12px;color:#333;">💊 药材使用统计 Top 10</h4>
+                    <canvas id="medicineChart" height="200"></canvas>
+                </div>
+
+                <div style="margin-top:15px;background:white;border:1px solid #ddd;border-radius:8px;padding:15px;">
+                    <h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4>
+                    <div style="max-height:300px;overflow:auto;">
+                        <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                            <thead>
+                                <tr style="background:#f5f5f5;">
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="patientVisitList">
+                                <tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentUser = null;
         let searchDebounceTimer = null;
         
         // Cloudflare KV API 地址
         const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
+        
+        // ============ 数据缓存层（性能优化） ============
+        const DataCache = {
+            prescriptions: { data: null, timestamp: 0, ttl: 60000 }, // 处方缓存60秒
+            medicines: { data: null, timestamp: 0, ttl: 300000 },     // 药品缓存5分钟
+            formulas: { data: null, timestamp: 0, ttl: 300000 },      // 方剂缓存5分钟
+            
+            isValid(key) {
+                if (!this[key] || !this[key].data) return false;
+                return Date.now() - this[key].timestamp < this[key].ttl;
+            },
+            
+            set(key, data) {
+                if (this[key]) {
+                    this[key].data = data;
+                    this[key].timestamp = Date.now();
+                }
+            },
+            
+            get(key) {
+                if (this.isValid(key)) {
+                    console.log(`[Cache Hit] ${key}`);
+                    return this[key].data;
+                }
+                console.log(`[Cache Miss] ${key}`);
+                return null;
+            },
+            
+            invalidate(key) {
+                if (key) {
+                    this[key].data = null;
+                    this[key].timestamp = 0;
+                } else {
+                    // 清除所有缓存
+                    Object.keys(this).forEach(k => {
+                        if (this[k] && typeof this[k].timestamp !== 'undefined') {
+                            this[k].data = null;
+                            this[k].timestamp = 0;
+                        }
+                    });
+                }
+            }
+        };
+        
+        // ============ 闲置节流优化（轻量化优化） ============
+        const IdleManager = {
+            lastActivity: Date.now(),
+            idleThreshold: 300000, // 5分钟无操作视为闲置
+            checkInterval: null,
+            isIdle: false,
+            
+            init() {
+                // 监听用户活动
+                ['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(event => {
+                    document.addEventListener(event, () => this.resetIdle(), { passive: true });
+                });
+                
+                // 定期检查闲置状态
+                this.checkInterval = setInterval(() => this.checkIdle(), 60000); // 每分钟检查一次
+            },
+            
+            resetIdle() {
+                this.lastActivity = Date.now();
+                if (this.isIdle) {
+                    console.log('[Idle] User active again, resuming...');
+                    this.isIdle = false;
+                }
+            },
+            
+            checkIdle() {
+                const idleTime = Date.now() - this.lastActivity;
+                if (idleTime > this.idleThreshold && !this.isIdle) {
+                    this.isIdle = true;
+                    console.log('[Idle] User idle for too long, reducing sync frequency');
+                    // 闲置时延长缓存TTL，减少云端请求
+                    DataCache.prescriptions.ttl = 300000; // 5分钟
+                    DataCache.medicines.ttl = 600000; // 10分钟
+                    DataCache.formulas.ttl = 600000; // 10分钟
+                }
+            },
+            
+            destroy() {
+                if (this.checkInterval) {
+                    clearInterval(this.checkInterval);
+                }
+            }
+        };
+        
+        // ============ 登录日志（多端优化） ============
+        async function saveLoginLog(username, action, userAgent) {
+            try {
+                const logEntry = {
+                    username,
+                    action, // 'login' | 'logout'
+                    timestamp: new Date().toISOString(),
+                    userAgent: userAgent.substring(0, 200), // 截断过长内容
+                    ipAddress: '', // 浏览器端无法获取真实IP，留空
+                    device: /mobile/i.test(userAgent) ? 'mobile' : 'desktop'
+                };
+                
+                // 获取现有日志
+                let logs = JSON.parse(localStorage.getItem('loginLogs') || '[]');
+                logs.unshift(logEntry); // 添加到开头
+                logs = logs.slice(0, 100); // 只保留最近100条
+                localStorage.setItem('loginLogs', JSON.stringify(logs));
+                
+                console.log(`[Login Log] ${username} ${action} at ${logEntry.timestamp}`);
+                return true;
+            } catch (error) {
+                console.warn('Failed to save login log:', error);
+                return false;
+            }
+        }
         
         // 安全的 base64 编码函数，支持中文字符
         function safeBtoa(str) {
@@ -1075,7 +1309,19 @@
             });
         }
 
+        // 获取默认用户列表（支持动态添加）
         function getDefaultUsers() {
+            // 尝试从本地存储读取自定义默认用户
+            const savedDefaults = localStorage.getItem('defaultUsers');
+            if (savedDefaults) {
+                try {
+                    return JSON.parse(savedDefaults);
+                } catch {
+                    console.warn('Failed to parse defaultUsers, using hardcoded defaults');
+                }
+            }
+            
+            // 返回硬编码的默认用户（首次使用时）
             return [
                 {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true},
                 {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true},
@@ -1083,6 +1329,11 @@
                 {username: '王桂杰', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
                 {username: '王耀燮', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
             ];
+        }
+        
+        // 保存默认用户列表到本地存储
+        function saveDefaultUsers(users) {
+            localStorage.setItem('defaultUsers', JSON.stringify(users));
         }
 
         // 用户隔离的 localStorage 操作函数 - 网页版
@@ -1130,8 +1381,13 @@
             }
         }
 
-        // 从云端获取处方数据
-        async function getPrescriptionsFromCloud() {
+        // 从云端获取处方数据（带缓存优化）
+        async function getPrescriptionsFromCloud(forceRefresh = false) {
+            // 如果不是强制刷新，且缓存有效，则返回缓存数据
+            if (!forceRefresh && DataCache.isValid('prescriptions')) {
+                return DataCache.get('prescriptions');
+            }
+            
             try {
                 if (!currentUser) {
                     console.error('User not logged in');
@@ -1145,10 +1401,13 @@
                     }
                 });
                 if (response.success && response.data) {
-                    return {
+                    const result = {
                         data: response.data,
                         totalCount: response.totalCount
                     };
+                    // 更新缓存
+                    DataCache.set('prescriptions', result);
+                    return result;
                 }
             } catch (error) {
                 console.warn('Failed to get prescriptions from cloud:', error);
@@ -1156,14 +1415,21 @@
             return null;
         }
 
-        // 从云端获取药品库
-        async function getMedicinesFromCloud() {
+        // 从云端获取药品库（带缓存优化）
+        async function getMedicinesFromCloud(forceRefresh = false) {
+            // 如果不是强制刷新，且缓存有效，则返回缓存数据
+            if (!forceRefresh && DataCache.isValid('medicines')) {
+                return DataCache.get('medicines');
+            }
+            
             try {
                 const url = `${CLOUD_API_BASE}/medicines`;
                 const response = await cloudFetch(url, {
                     headers: currentUser ? { 'Authorization': `Basic ${safeBtoa(`${currentUser.username}:${currentUser.role}`)}` } : {}
                 });
                 if (response.success && response.data) {
+                    // 更新缓存
+                    DataCache.set('medicines', response.data);
                     return response.data;
                 }
             } catch (error) {
@@ -1174,6 +1440,9 @@
 
         // 保存药品库到云端
         async function saveMedicinesToCloud(medicines) {
+            // 清除药品缓存
+            DataCache.invalidate('medicines');
+            
             try {
                 if (!currentUser || !currentUser.isAdmin) {
                     console.warn('Only admin can save medicines');
@@ -1196,13 +1465,20 @@
         }
 
         // 从云端获取方剂库
-        async function getFormulasFromCloud() {
+        async function getFormulasFromCloud(forceRefresh = false) {
+            // 如果不是强制刷新，且缓存有效，则返回缓存数据
+            if (!forceRefresh && DataCache.isValid('formulas')) {
+                return DataCache.get('formulas');
+            }
+            
             try {
                 const url = `${CLOUD_API_BASE}/formulas`;
                 const response = await cloudFetch(url, {
                     headers: currentUser ? { 'Authorization': `Basic ${safeBtoa(`${currentUser.username}:${currentUser.role}`)}` } : {}
                 });
                 if (response.success && response.data) {
+                    // 更新缓存
+                    DataCache.set('formulas', response.data);
                     return response.data;
                 }
             } catch (error) {
@@ -1213,6 +1489,9 @@
 
         // 保存方剂库到云端
         async function saveFormulasToCloud(formulas) {
+            // 清除方剂缓存
+            DataCache.invalidate('formulas');
+            
             try {
                 if (!currentUser) {
                     console.warn('User not logged in');
@@ -1411,13 +1690,31 @@
             }
         }
 
+        async function initLoginDropdown() {
+            const select = document.getElementById('loginUsername');
+            const users = await getUsers();
+            
+            select.innerHTML = '';
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.username;
+                option.textContent = user.name || user.username;
+                select.appendChild(option);
+            });
+        }
+
+        function closeLogin() {
+            document.getElementById('loginPassword').value = '';
+            document.getElementById('loginError').style.display = 'none';
+        }
+
         async function handleLogin() {
-            const username = document.getElementById('loginUsername').value.trim();
+            const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
             const errorDiv = document.getElementById('loginError');
             
-            if (!username || !password) {
-                errorDiv.textContent = '请输入用户名和密码';
+            if (!password) {
+                errorDiv.textContent = '请输入密码';
                 errorDiv.style.display = 'block';
                 return;
             }
@@ -1430,22 +1727,49 @@
                 const userData = JSON.stringify(user);
                 localStorage.setItem('currentUser', userData);
                 sessionStorage.setItem('currentUser', userData);
-                document.getElementById('loginOverlay').style.display = 'none';
-                updateUserDisplay();
-                errorDiv.style.display = 'none';
-                loadData();
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                refreshUserInterface();
+                
+                // 记录登录日志（多端优化）
+                await saveLoginLog(user.username, 'login', navigator.userAgent);
+                
+                // 如果是Electron桌面版，关闭登录窗口并打开主窗口
+                if (window.electronAPI && window.electronAPI.loginSuccess) {
+                    await window.electronAPI.loginSuccess();
+                } else {
+                    // 浏览器版，隐藏登录覆盖层
+                    document.getElementById('loginOverlay').style.display = 'none';
+                    updateUserDisplay();
+                    errorDiv.style.display = 'none';
+                    loadData();
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    refreshUserInterface();
+                }
             } else {
-                errorDiv.textContent = '用户名或密码错误';
+                errorDiv.textContent = '密码错误';
                 errorDiv.style.display = 'block';
             }
         }
 
         function handleLogout() {
+            // 记录登出日志（多端优化）
+            if (currentUser) {
+                saveLoginLog(currentUser.username, 'logout', navigator.userAgent);
+            }
+            
+            // 清除登录状态
             currentUser = null;
             localStorage.removeItem('currentUser');
             sessionStorage.removeItem('currentUser');
+            
+            // 清除所有缓存
+            DataCache.invalidate();
+            
+            // 如果是Electron桌面版，先清除状态再退出程序
+            if (window.electronAPI && window.electronAPI.quitApp) {
+                window.electronAPI.quitApp();
+                return;
+            }
+            
+            // 浏览器版，回到登录界面
             document.getElementById('loginUsername').value = '';
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginOverlay').style.display = 'flex';
@@ -1663,20 +1987,29 @@
                 return;
             }
             
-            users.push({
+            const newUser = {
                 username: username,
                 password: password,
                 name: name,
                 role: 'user',
                 allowSavePrescription: true
-            });
+            };
             
+            users.push(newUser);
             await saveUsers(users);
             await renderUserList();
+            
+            // 自动添加到默认用户列表（以后重新安装也能看到）
+            const defaultUsers = getDefaultUsers();
+            if (!defaultUsers.find(u => u.username === username)) {
+                defaultUsers.push(newUser);
+                saveDefaultUsers(defaultUsers);
+            }
+            
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
             document.getElementById('newUserName').value = '';
-            alert('用户添加成功！');
+            alert('用户添加成功！\n\n该用户已自动添加到默认用户列表，以后重新安装也会显示。');
         }
 
         async function handleDeleteUser(username) {
@@ -2674,35 +3007,54 @@
         }
 
         async function init() {
+            // 先初始化用户下拉框
+            await initLoginDropdown();
+            
             // 先同步检查登录状态，恢复用户信息
             const sessionUser = sessionStorage.getItem('currentUser');
             const localUser = localStorage.getItem('currentUser');
             let hasValidUser = false;
             
+            // 检查是否是Electron环境
+            const isElectron = window.electronAPI && window.electronAPI.isElectron;
+            
             if (sessionUser) {
                 // 从sessionStorage恢复
                 try {
                     currentUser = JSON.parse(sessionUser);
-                    document.getElementById('loginOverlay').style.display = 'none';
                     hasValidUser = true;
+                    // Electron环境中不显示loginOverlay
+                    if (!isElectron) {
+                        document.getElementById('loginOverlay').style.display = 'none';
+                    }
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
-                    document.getElementById('loginOverlay').style.display = 'flex';
+                    if (!isElectron) {
+                        document.getElementById('loginOverlay').style.display = 'flex';
+                    }
                 }
             } else if (localUser) {
                 // 从localStorage恢复
                 try {
                     currentUser = JSON.parse(localUser);
                     sessionStorage.setItem('currentUser', localUser);
-                    document.getElementById('loginOverlay').style.display = 'none';
                     hasValidUser = true;
+                    // Electron环境中不显示loginOverlay
+                    if (!isElectron) {
+                        document.getElementById('loginOverlay').style.display = 'none';
+                    }
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
-                    document.getElementById('loginOverlay').style.display = 'flex';
+                    if (!isElectron) {
+                        document.getElementById('loginOverlay').style.display = 'flex';
+                    }
                 }
             } else {
-                // 没有登录状态，显示登录界面
-                document.getElementById('loginOverlay').style.display = 'flex';
+                // 没有登录状态
+                // Electron环境中不显示loginOverlay（因为有单独的登录窗口）
+                if (!isElectron) {
+                    document.getElementById('loginOverlay').style.display = 'flex';
+                }
             }
             
             // 如果成功恢复了登录状态，更新用户显示
@@ -3783,7 +4135,7 @@
                     
                     if (result.success) {
                         console.log('桌面版：图片已保存到本地', result.filePath);
-                        showToast(`处方图片已保存到 ${result.filePath}`);
+                        showToast('处方图片保存成功！');
                     } else {
                         console.error('桌面版：保存图片失败', result.error);
                         showToast('保存图片失败，将使用浏览器下载方式');
@@ -3814,15 +4166,47 @@
             console.log('浏览器版：图片已下载:', fileName);
         }
 
-        function showModal(id) {
-            document.getElementById(id).style.display = 'flex';
-            if (id === 'syndromeModal') renderSyndromeList();
-            if (id === 'medicineModal') renderMedicineList();
-            if (id === 'formulaModal') renderFormulaList();
-            if (id === 'caseModal') renderCaseList(prescriptionHistory);
-            if (id === 'statsModal') updateStats();
-            if (id === 'settingsModal') {
-                document.getElementById('defaultDoctor').value = document.getElementById('doctorName').value;
+        // 选择图片保存位置（仅桌面版）
+        async function selectImageSaveDirectory() {
+            if (!window.electronAPI || !window.electronAPI.isElectron) {
+                alert('此功能仅桌面版可用！');
+                return;
+            }
+            
+            try {
+                const result = await window.electronAPI.selectImageSaveDirectory();
+                if (result.success) {
+                    showToast(`图片保存位置已设置为：${result.path}`);
+                    updateImageSavePathDisplay();
+                }
+            } catch (error) {
+                console.error('选择保存位置失败:', error);
+                alert('选择保存位置失败，请重试！');
+            }
+        }
+
+        // 更新图片保存位置显示
+        async function updateImageSavePathDisplay() {
+            const pathDisplay = document.getElementById('imageSavePath');
+            const desktopSettings = document.getElementById('desktopSettings');
+            
+            if (!window.electronAPI || !window.electronAPI.isElectron) {
+                if (desktopSettings) {
+                    desktopSettings.style.display = 'none';
+                }
+                return;
+            }
+            
+            try {
+                const path = await window.electronAPI.getImageDirectory();
+                if (pathDisplay) {
+                    pathDisplay.textContent = `当前保存位置：${path}`;
+                }
+                if (desktopSettings) {
+                    desktopSettings.style.display = 'block';
+                }
+            } catch (error) {
+                console.error('获取保存位置失败:', error);
             }
         }
 
@@ -3911,6 +4295,10 @@ IconFile=${scriptPath}`;
                 dailyCounter: dailyCounter,
                 counterDate: currentPrescriptionDate
             };
+            
+            // 同时保存到本地备份存储（安全优化：自动备份）
+            saveLocalBackup(data);
+            
             const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -3918,6 +4306,59 @@ IconFile=${scriptPath}`;
             a.download = '本能数据备份_' + new Date().toLocaleDateString() + '.json';
             a.click();
             URL.revokeObjectURL(url);
+        }
+
+        // ============ 本地备份存储（安全优化） ============
+        function saveLocalBackup(data) {
+            try {
+                let backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                const backup = {
+                    timestamp: new Date().toISOString(),
+                    data: data,
+                    prescriptionCount: (data.prescriptionHistory || []).length
+                };
+                backups.unshift(backup);
+                // 最多保留10个本地备份
+                backups = backups.slice(0, 10);
+                localStorage.setItem('localBackups', JSON.stringify(backups));
+                console.log('[Backup] Local backup saved, total:', backups.length);
+            } catch (error) {
+                console.warn('Failed to save local backup:', error);
+            }
+        }
+
+        // 一键回滚功能（安全优化）
+        function rollbackToBackup(backupIndex) {
+            try {
+                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                if (backupIndex < 0 || backupIndex >= backups.length) {
+                    alert('无效的备份索引');
+                    return;
+                }
+                
+                const backup = backups[backupIndex];
+                if (!confirm(`确定要回滚到 ${new Date(backup.timestamp).toLocaleString()} 的备份吗？\n当前处方数: ${(prescriptionHistory || []).length}\n备份处方数: ${backup.prescriptionCount}`)) {
+                    return;
+                }
+                
+                if (backup.data.medicines) medicines = backup.data.medicines;
+                if (backup.data.formulas) formulas = backup.data.formulas;
+                if (backup.data.prescriptionHistory) prescriptionHistory = backup.data.prescriptionHistory;
+                if (backup.data.dailyCounter) dailyCounter = backup.data.dailyCounter;
+                if (backup.data.counterDate) currentPrescriptionDate = backup.data.counterDate;
+                
+                // 保存到本地
+                saveMedicinesToLocal();
+                saveFormulasToLocal();
+                savePrescriptionHistory();
+                saveDailyCounter();
+                
+                alert('数据已成功回滚！');
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+            } catch (error) {
+                console.error('回滚失败:', error);
+                alert('回滚失败: ' + error.message);
+            }
         }
 
         function restoreData() {
@@ -4653,8 +5094,431 @@ IconFile=${scriptPath}`;
             `).join('');
         }
 
+        // ============ 统计分析功能 ============
+        
+        let visitTrendChart = null;
+        let diseaseChart = null;
+        let medicineChart = null;
+
+        function getFilteredPrescriptions() {
+            const range = document.getElementById('analyticsRange')?.value || 'month';
+            const now = new Date();
+            let startDate = new Date(1970, 0, 1);
+            
+            switch(range) {
+                case 'today':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                    break;
+                case 'week':
+                    startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    break;
+                case 'month':
+                    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                    break;
+                case 'year':
+                    startDate = new Date(now.getFullYear(), 0, 1);
+                    break;
+            }
+            
+            return prescriptionHistory.filter(p => {
+                const date = new Date(p.createdAt || p.date || 0);
+                return date >= startDate;
+            });
+        }
+
+        function analyzePatients() {
+            const filteredPrescriptions = getFilteredPrescriptions();
+            const patientMap = new Map();
+            
+            filteredPrescriptions.forEach(p => {
+                const name = p.patientName || '未知';
+                if (!patientMap.has(name)) {
+                    patientMap.set(name, {
+                        visits: [],
+                        firstVisit: null,
+                        lastVisit: null
+                    });
+                }
+                const patient = patientMap.get(name);
+                const visitDate = new Date(p.createdAt || p.date || 0);
+                patient.visits.push(visitDate);
+                if (!patient.firstVisit || visitDate < patient.firstVisit) {
+                    patient.firstVisit = visitDate;
+                }
+                if (!patient.lastVisit || visitDate > patient.lastVisit) {
+                    patient.lastVisit = visitDate;
+                }
+            });
+            
+            return Array.from(patientMap.entries()).map(([name, data]) => ({
+                name,
+                visitCount: data.visits.length,
+                firstVisit: data.firstVisit,
+                lastVisit: data.lastVisit
+            }));
+        }
+
+        function analyzeDiseases() {
+            const filteredPrescriptions = getFilteredPrescriptions();
+            const diseaseMap = new Map();
+            
+            filteredPrescriptions.forEach(p => {
+                const diagnosis = p.diagnosis || '未诊断';
+                diseaseMap.set(diagnosis, (diseaseMap.get(diagnosis) || 0) + 1);
+            });
+            
+            return Array.from(diseaseMap.entries())
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count);
+        }
+
+        function analyzeMedicines() {
+            const filteredPrescriptions = getFilteredPrescriptions();
+            const medicineMap = new Map();
+            
+            filteredPrescriptions.forEach(p => {
+                if (p.medicines && Array.isArray(p.medicines)) {
+                    p.medicines.forEach(m => {
+                        const name = m.name || m.medicineName || '未知';
+                        const dosage = parseFloat(m.dosage) || 0;
+                        medicineMap.set(name, (medicineMap.get(name) || 0) + dosage);
+                    });
+                }
+            });
+            
+            return Array.from(medicineMap.entries())
+                .map(([name, totalDosage]) => ({ name, totalDosage }))
+                .sort((a, b) => b.totalDosage - a.totalDosage)
+                .slice(0, 10);
+        }
+
+        function analyzeVisitTrend() {
+            const filteredPrescriptions = getFilteredPrescriptions();
+            const dailyMap = new Map();
+            
+            filteredPrescriptions.forEach(p => {
+                const date = new Date(p.createdAt || p.date || 0);
+                const dateStr = date.toLocaleDateString('zh-CN');
+                dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + 1);
+            });
+            
+            const dates = Array.from(dailyMap.keys()).sort();
+            return {
+                dates,
+                counts: dates.map(d => dailyMap.get(d))
+            };
+        }
+
+        function formatDate(date) {
+            if (!date) return '-';
+            return date.toLocaleDateString('zh-CN');
+        }
+
+        function formatDateTime(date) {
+            if (!date) return '-';
+            return date.toLocaleString('zh-CN');
+        }
+
+        function createChart(canvasId, type, data) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return null;
+            
+            const ctx = canvas.getContext('2d');
+            
+            const dpr = window.devicePixelRatio || 1;
+            const rect = canvas.getBoundingClientRect();
+            canvas.width = rect.width * dpr;
+            canvas.height = rect.height * dpr;
+            ctx.scale(dpr, dpr);
+            
+            const width = rect.width;
+            const height = rect.height;
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            if (type === 'bar') {
+                if (!data.labels || !data.values || data.labels.length === 0) {
+                    ctx.fillStyle = '#999';
+                    ctx.font = '14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('暂无数据', width / 2, height / 2);
+                    return;
+                }
+                
+                const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+                const chartWidth = width - padding.left - padding.right;
+                const chartHeight = height - padding.top - padding.bottom;
+                
+                const maxValue = Math.max(...data.values, 1);
+                const barWidth = Math.min(chartWidth / data.labels.length * 0.7, 30);
+                const gap = chartWidth / data.labels.length;
+                
+                ctx.fillStyle = '#333';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                data.labels.forEach((label, i) => {
+                    const x = padding.left + i * gap + gap / 2;
+                    ctx.fillText(label.length > 6 ? label.substring(0, 5) + '...' : label, x, height - 10);
+                });
+                
+                ctx.save();
+                ctx.translate(padding.left, padding.top + chartHeight);
+                ctx.scale(1, -1);
+                
+                data.values.forEach((value, i) => {
+                    const x = i * gap + (gap - barWidth) / 2;
+                    const barHeight = (value / maxValue) * chartHeight;
+                    const gradient = ctx.createLinearGradient(x, 0, x, barHeight);
+                    gradient.addColorStop(0, '#4CAF50');
+                    gradient.addColorStop(1, '#2E7D32');
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(x, 0, barWidth, barHeight);
+                    ctx.strokeStyle = '#1B5E20';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(x, 0, barWidth, barHeight);
+                });
+                
+                ctx.restore();
+                
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                data.values.forEach((value, i) => {
+                    const x = padding.left + i * gap + gap / 2;
+                    const barHeight = (value / maxValue) * chartHeight;
+                    ctx.fillText(value.toString(), x, padding.top + chartHeight - barHeight - 8);
+                });
+                
+                ctx.strokeStyle = '#ddd';
+                ctx.lineWidth = 1;
+                for (let i = 0; i <= 4; i++) {
+                    const y = padding.top + (chartHeight / 4) * i;
+                    ctx.beginPath();
+                    ctx.moveTo(padding.left, y);
+                    ctx.lineTo(width - padding.right, y);
+                    ctx.stroke();
+                    
+                    const value = Math.round(maxValue * (1 - i / 4));
+                    ctx.fillStyle = '#666';
+                    ctx.font = '10px Arial';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(value.toString(), padding.left - 5, y + 4);
+                }
+                
+                ctx.strokeStyle = '#ddd';
+                ctx.beginPath();
+                ctx.moveTo(padding.left, padding.top);
+                ctx.lineTo(padding.left, height - padding.bottom);
+                ctx.stroke();
+                
+            } else if (type === 'pie') {
+                if (!data.labels || !data.values || data.labels.length === 0) {
+                    ctx.fillStyle = '#999';
+                    ctx.font = '14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('暂无数据', width / 2, height / 2);
+                    return;
+                }
+                
+                const centerX = width / 2;
+                const centerY = height / 2;
+                const radius = Math.min(width, height) / 2 - 20;
+                
+                const total = data.values.reduce((a, b) => a + b, 0);
+                let startAngle = -Math.PI / 2;
+                
+                const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'];
+                
+                data.values.forEach((value, i) => {
+                    const sliceAngle = (value / total) * 2 * Math.PI;
+                    const color = colors[i % colors.length];
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(centerX, centerY);
+                    ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
+                    ctx.closePath();
+                    ctx.fillStyle = color;
+                    ctx.fill();
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    startAngle += sliceAngle;
+                });
+                
+                ctx.fillStyle = '#333';
+                ctx.font = '11px Arial';
+                ctx.textAlign = 'left';
+                const legendY = 20;
+                let legendX = 20;
+                
+                data.labels.forEach((label, i) => {
+                    const color = colors[i % colors.length];
+                    const text = `${label.length > 8 ? label.substring(0, 7) + '...' : label} (${data.values[i]})`;
+                    
+                    ctx.fillStyle = color;
+                    ctx.fillRect(legendX, legendY + i * 18, 12, 12);
+                    ctx.fillStyle = '#333';
+                    ctx.fillText(text, legendX + 18, legendY + i * 18 + 10);
+                    
+                    legendX += ctx.measureText(text).width + 25;
+                    if (legendX > width - 100) {
+                        legendX = 20;
+                    }
+                });
+                
+            } else if (type === 'horizontalBar') {
+                if (!data.labels || !data.values || data.labels.length === 0) {
+                    ctx.fillStyle = '#999';
+                    ctx.font = '14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('暂无数据', width / 2, height / 2);
+                    return;
+                }
+                
+                const padding = { top: 10, right: 80, bottom: 10, left: 80 };
+                const chartWidth = width - padding.left - padding.right;
+                const chartHeight = height - padding.top - padding.bottom;
+                
+                const maxValue = Math.max(...data.values, 1);
+                const barHeight = Math.min(chartHeight / data.labels.length * 0.8, 25);
+                const gap = chartHeight / data.labels.length;
+                
+                const colors = ['#4CAF50', '#2196F3', '#FF9800', '#F44336', '#9C27B0', '#00BCD4', '#FFEB3B', '#E91E63', '#607D8B', '#8BC34A'];
+                
+                data.labels.forEach((label, i) => {
+                    const y = padding.top + i * gap + (gap - barHeight) / 2;
+                    const barWidth = (data.values[i] / maxValue) * chartWidth;
+                    const color = colors[i % colors.length];
+                    
+                    ctx.fillStyle = color;
+                    ctx.fillRect(padding.left, y, barWidth, barHeight);
+                    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.strokeRect(padding.left, y, barWidth, barHeight);
+                    
+                    ctx.fillStyle = '#333';
+                    ctx.font = '11px Arial';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(label.length > 8 ? label.substring(0, 7) + '...' : label, padding.left - 8, y + barHeight / 2 + 4);
+                    
+                    ctx.textAlign = 'left';
+                    ctx.fillText(Math.round(data.values[i]) + 'g', padding.left + barWidth + 5, y + barHeight / 2 + 4);
+                });
+                
+                ctx.strokeStyle = '#ddd';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([5, 5]);
+                for (let i = 0; i <= 4; i++) {
+                    const x = padding.left + (chartWidth / 4) * i;
+                    ctx.beginPath();
+                    ctx.moveTo(x, padding.top);
+                    ctx.lineTo(x, height - padding.bottom);
+                    ctx.stroke();
+                }
+                ctx.setLineDash([]);
+            }
+        }
+
+        async function refreshAnalytics() {
+            const patients = analyzePatients();
+            const visitCountFilter = document.getElementById('visitCountFilter')?.value || 'all';
+            const sortOption = document.getElementById('analyticsSort')?.value || 'visitCount-desc';
+            
+            let filteredPatients = patients;
+            
+            if (visitCountFilter !== 'all') {
+                const count = parseInt(visitCountFilter);
+                if (count === 4) {
+                    filteredPatients = patients.filter(p => p.visitCount >= 4);
+                } else {
+                    filteredPatients = patients.filter(p => p.visitCount === count);
+                }
+            }
+            
+            filteredPatients.sort((a, b) => {
+                const [field, dir] = sortOption.split('-');
+                let comparison = 0;
+                
+                if (field === 'visitCount') {
+                    comparison = a.visitCount - b.visitCount;
+                } else if (field === 'lastVisit') {
+                    comparison = (a.lastVisit?.getTime() || 0) - (b.lastVisit?.getTime() || 0);
+                }
+                
+                return dir === 'desc' ? -comparison : comparison;
+            });
+            
+            const totalPatients = patients.length;
+            const newPatients = patients.filter(p => p.visitCount === 1).length;
+            const returnPatients = patients.filter(p => p.visitCount > 1).length;
+            const returnRate = totalPatients > 0 ? ((returnPatients / totalPatients) * 100).toFixed(1) : '0.0';
+            
+            document.getElementById('statTotalPatients').textContent = totalPatients;
+            document.getElementById('statNewPatients').textContent = newPatients;
+            document.getElementById('statReturnPatients').textContent = returnPatients;
+            document.getElementById('statReturnRate').textContent = returnRate + '%';
+            
+            const trend = analyzeVisitTrend();
+            createChart('visitTrendChart', 'bar', {
+                labels: trend.dates.slice(-14),
+                values: trend.counts.slice(-14)
+            });
+            
+            const diseases = analyzeDiseases().slice(0, 6);
+            createChart('diseaseChart', 'pie', {
+                labels: diseases.map(d => d.name),
+                values: diseases.map(d => d.count)
+            });
+            
+            const medicines = analyzeMedicines();
+            createChart('medicineChart', 'horizontalBar', {
+                labels: medicines.map(m => m.name),
+                values: medicines.map(m => m.totalDosage)
+            });
+            
+            const tbody = document.getElementById('patientVisitList');
+            if (filteredPatients.length > 0) {
+                tbody.innerHTML = filteredPatients.slice(0, 50).map(p => `
+                    <tr style="hover:background:#f5f5f5;">
+                        <td style="border:1px solid #ddd;padding:6px;">${p.name}</td>
+                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${p.visitCount}</td>
+                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${formatDate(p.firstVisit)}</td>
+                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${formatDate(p.lastVisit)}</td>
+                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">
+                            <button class="small-btn" onclick="loadPatientHistory('${p.name}')" style="padding:2px 8px;">调取处方</button>
+                        </td>
+                    </tr>
+                `).join('');
+            } else {
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr>';
+            }
+        }
+
+        function loadPatientHistory(patientName) {
+            closeModal('analyticsModal');
+            document.getElementById('patientName').value = patientName;
+            searchPatientsQuick({ key: 'Enter' });
+            showSideHistory();
+        }
+
+        function showModal(modalId) {
+            document.getElementById(modalId).style.display = 'flex';
+            if (modalId === 'syndromeModal') renderSyndromeList();
+            if (modalId === 'medicineModal') renderMedicineList();
+            if (modalId === 'formulaModal') renderFormulaList();
+            if (modalId === 'caseModal') renderCaseList(prescriptionHistory);
+            if (modalId === 'statsModal') updateStats();
+            if (modalId === 'analyticsModal') {
+                setTimeout(refreshAnalytics, 100);
+            }
+            if (modalId === 'settingsModal') {
+                document.getElementById('defaultDoctor').value = document.getElementById('doctorName').value;
+                updateImageSavePathDisplay();
+            }
+        }
     
-document.addEventListener('DOMContentLoaded', init);
-</script>
+    document.addEventListener('DOMContentLoaded', init);
+    </script>
 </body>
 </html>

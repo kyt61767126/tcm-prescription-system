@@ -1,14 +1,41 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, session } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fsSync = require('fs');
 
 let mainWindow;
+let loginWindow;
+let sharedSession;
 
-// 获取系统文档目录下的固定根目录
+// 获取用户设置的图片保存目录，默认在文档目录
 function getBaseImageDir() {
+    const userDataPath = app.getPath('userData');
+    const settingsPath = path.join(userDataPath, 'settings.json');
+    
+    try {
+        if (fsSync.existsSync(settingsPath)) {
+            const settings = JSON.parse(fsSync.readFileSync(settingsPath, 'utf8'));
+            if (settings.imageSavePath) {
+                return path.join(settings.imageSavePath, '惠康堂处方图片');
+            }
+        }
+    } catch (e) {
+        console.log('读取设置失败，使用默认路径');
+    }
+    
+    // 默认保存到用户文档目录
     const userDocuments = app.getPath('documents');
     return path.join(userDocuments, '惠康堂处方图片');
+}
+
+// 保存用户设置的目录
+function saveImageDirSetting(dirPath) {
+    const userDataPath = app.getPath('userData');
+    const settingsPath = path.join(userDataPath, 'settings.json');
+    const settings = {
+        imageSavePath: dirPath
+    };
+    fsSync.writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 }
 
 // 获取当前年月文件夹名称
@@ -54,15 +81,68 @@ async function savePrescriptionImage(imageData, fileName) {
     }
 }
 
+// 检查是否有保存的登录状态
+function hasSavedLoginState() {
+    try {
+        const userDataPath = app.getPath('userData');
+        const settingsPath = path.join(userDataPath, 'login-state.json');
+        if (fsSync.existsSync(settingsPath)) {
+            const data = JSON.parse(fsSync.readFileSync(settingsPath, 'utf8'));
+            return data && data.hasLoggedIn;
+        }
+    } catch (e) {
+        console.log('检查登录状态失败:', e);
+    }
+    return false;
+}
+
+// 保存登录状态
+function saveLoginState(hasLoggedIn) {
+    try {
+        const userDataPath = app.getPath('userData');
+        const settingsPath = path.join(userDataPath, 'login-state.json');
+        fsSync.writeFileSync(settingsPath, JSON.stringify({ hasLoggedIn }));
+    } catch (e) {
+        console.log('保存登录状态失败:', e);
+    }
+}
+
+// 创建登录窗口
+function createLoginWindow() {
+    loginWindow = new BrowserWindow({
+        width: 400,
+        height: 310,
+        resizable: false,
+        autoHideMenuBar: true,
+        webPreferences: {
+            nodeIntegration: true,
+            contextIsolation: false,
+            session: sharedSession
+        },
+        icon: path.join(__dirname, 'icon.png')
+    });
+
+    // 加载登录页面
+    const loginPath = path.join(__dirname, 'login.html');
+    loginWindow.loadFile(loginPath);
+
+    // 开发模式下打开 DevTools
+    if (!app.isPackaged) {
+        loginWindow.webContents.openDevTools();
+    }
+}
+
 // 创建主窗口
-function createWindow() {
+function createMainWindow() {
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
+        autoHideMenuBar: true,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
-            nodeIntegration: false
+            nodeIntegration: false,
+            session: sharedSession
         },
         icon: path.join(__dirname, 'icon.png')
     });
@@ -79,17 +159,31 @@ function createWindow() {
 
 // 应用就绪
 app.whenReady().then(() => {
+    // 创建共享session
+    sharedSession = session.fromPartition('persist:tcm-prescription-system');
+    
     // 初始化根目录
     const baseDir = getBaseImageDir();
     ensureDir(baseDir).then(() => {
         console.log('图片保存目录已准备就绪:', baseDir);
     });
 
-    createWindow();
+    // 检查是否有保存的登录状态
+    if (hasSavedLoginState()) {
+        // 有登录状态，直接显示主窗口
+        createMainWindow();
+    } else {
+        // 没有登录状态，显示登录窗口
+        createLoginWindow();
+    }
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
+            if (hasSavedLoginState()) {
+                createMainWindow();
+            } else {
+                createLoginWindow();
+            }
         }
     });
 });
@@ -110,6 +204,55 @@ ipcMain.handle('open-image-directory', async () => {
         defaultPath: dir,
         properties: ['openDirectory']
     });
+});
+
+ipcMain.handle('select-image-save-directory', async () => {
+    const result = await dialog.showOpenDialog(mainWindow, {
+        title: '选择处方图片保存位置',
+        properties: ['openDirectory', 'createDirectory'],
+        defaultPath: app.getPath('documents')
+    });
+    
+    if (!result.canceled && result.filePaths.length > 0) {
+        const selectedPath = result.filePaths[0];
+        saveImageDirSetting(selectedPath);
+        
+        // 立即测试创建目录
+        const baseDir = getBaseImageDir();
+        await ensureDir(baseDir);
+        
+        return { success: true, path: baseDir };
+    }
+    
+    return { success: false };
+});
+
+ipcMain.handle('login-success', async () => {
+    // 保存登录状态
+    saveLoginState(true);
+    
+    // 关闭登录窗口
+    if (loginWindow) {
+        loginWindow.close();
+        loginWindow = null;
+    }
+    
+    // 打开主窗口
+    createMainWindow();
+    
+    return { success: true };
+});
+
+ipcMain.handle('quit-app', async () => {
+    // 清除登录状态
+    saveLoginState(false);
+    app.quit();
+    return { success: true };
+});
+
+ipcMain.handle('login-cancel', async () => {
+    app.quit();
+    return { success: true };
 });
 
 // 关闭所有窗口时退出（Windows/Linux）
