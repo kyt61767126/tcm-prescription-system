@@ -389,10 +389,11 @@
             .login-buttons {
                 gap: 12px;
                 margin-top: 25px;
+                justify-content: center;
             }
             
             .login-btn {
-                flex: 1;
+                width: 100px;
                 height: 52px;
                 font-size: 18px;
                 padding: 0;
@@ -1735,19 +1736,9 @@
         function closeLogin() {
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginError').style.display = 'none';
-            
-            if (currentUser) {
-                // 如果已登录，隐藏登录浮层
-                document.getElementById('loginOverlay').style.display = 'none';
-            } else {
-                // 如果未登录，尝试关闭浏览器窗口
-                if (window.electronAPI && window.electronAPI.quitApp) {
-                    window.electronAPI.quitApp();
-                } else {
-                    // 浏览器环境，隐藏登录浮层
-                    document.getElementById('loginOverlay').style.display = 'none';
-                }
-            }
+            // 隐藏登录浮层，显示主界面
+            document.getElementById('loginOverlay').style.display = 'none';
+            document.body.style.overflow = '';
         }
 
         async function handleLogin() {
