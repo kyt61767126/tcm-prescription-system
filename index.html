@@ -1736,9 +1736,14 @@
         function closeLogin() {
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginError').style.display = 'none';
-            // 隐藏登录浮层，显示主界面
-            document.getElementById('loginOverlay').style.display = 'none';
-            document.body.style.overflow = '';
+            
+            // Electron桌面版退出程序
+            if (window.electronAPI && window.electronAPI.quitApp) {
+                window.electronAPI.quitApp();
+            } else {
+                // 网页版尝试关闭浏览器窗口
+                window.close();
+            }
         }
 
         async function handleLogin() {
