@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本能中医处方系统 - 登录</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            background: linear-gradient(180deg, #e0f0ff 0%, #b8d8f8 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .login-container {
+            width: 400px;
+            height: 310px;
+            background: linear-gradient(180deg, #ffffff 0%, #f0f8ff 100%);
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 102, 204, 0.3);
+            overflow: hidden;
+            position: relative;
+            border: 3px solid #64b5f6;
+        }
+        
+        .bg-decoration {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 310"><defs><linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:%23e0f4ff;stop-opacity:1"/><stop offset="100%" style="stop-color:%23b8d8f8;stop-opacity:0.5"/></linearGradient><pattern id="circles" x="0" y="0" width="30" height="30" patternUnits="userSpaceOnUse"><circle cx="15" cy="15" r="1.5" fill="rgba(100, 181, 246, 0.15)"/></pattern></defs><rect fill="url(%23grad1)" width="400" height="310"/><rect fill="url(%23circles)" width="400" height="310"/></svg>');
+            background-size: cover;
+        }
+        
+        .header-section {
+            position: relative;
+            z-index: 1;
+            padding: 12px 13px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            background: linear-gradient(180deg, #64b5f6 0%, #42a5f5 100%);
+            border-bottom: 2px solid #1e88e5;
+        }
+        
+        .tcm-icon {
+            font-size: 32px;
+            filter: drop-shadow(1px 1px 3px rgba(0,0,0,0.3));
+        }
+        
+        .system-title {
+            font-size: 16px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+            letter-spacing: 1px;
+        }
+        
+        .version-tag {
+            font-size: 12px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+        }
+        
+        .main-content {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            height: calc(100% - 53px);
+            padding-top: 0px;
+        }
+        
+        .login-box {
+            background: rgba(255,255,255,0.98);
+            border-radius: 8px;
+            padding: 15px 30px 20px;
+            width: 100%;
+            max-width: 230px;
+            box-shadow: 0 3px 12px rgba(100, 181, 246, 0.25);
+            border: 2px solid #90caf9;
+        }
+        
+        .login-field {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .login-field label {
+            width: 37px;
+            font-size: 11px;
+            font-weight: bold;
+            color: #333;
+            text-align: left;
+            white-space: nowrap;
+            line-height: 1;
+        }
+        
+        .login-field select {
+            flex: 1;
+            padding: 6px 8px;
+            border: 2px solid #64b5f6;
+            border-radius: 5px;
+            font-size: 12px;
+            background: white;
+            min-width: 120px;
+            max-width: 150px;
+        }
+        
+        .login-field input {
+            flex: 1;
+            padding: 6px 8px;
+            border: 2px solid #64b5f6;
+            border-radius: 5px;
+            font-size: 12px;
+            background: white;
+            min-width: 120px;
+            max-width: 150px;
+        }
+        
+        .login-field select:focus,
+        .login-field input:focus {
+            border-color: #1e88e5;
+            outline: none;
+            box-shadow: 0 0 4px rgba(30, 136, 229, 0.5);
+        }
+        
+        .login-buttons {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 17px;
+        }
+        
+        .login-btn {
+            padding: 5px 10px;
+            min-width: 60px;
+            background: linear-gradient(180deg, #81d4fa 0%, #4fc3f7 50%, #29b6f6 100%);
+            color: #0d47a1;
+            border: 2px solid #0288d1;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 2px 2px 4px rgba(0, 131, 195, 0.3);
+            transition: all 0.2s;
+        }
+        
+        .login-btn:hover {
+            background: linear-gradient(180deg, #b3e5fc 0%, #81d4fa 50%, #4fc3f7 100%);
+            transform: translateY(-1px);
+            box-shadow: 3px 4px 6px rgba(0, 131, 195, 0.4);
+        }
+        
+        .login-footer {
+            text-align: center;
+            margin-top: 15px;
+            padding-top: 11px;
+            border-top: 1px solid #ddd;
+            font-size: 8px;
+            color: #666;
+        }
+        
+        .login-error {
+            color: #dc2626;
+            font-size: 9px;
+            text-align: center;
+            margin-top: 8px;
+            padding: 5px;
+            background: #fff5f5;
+            border-radius: 3px;
+            border: 1px solid #fcc;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="bg-decoration"></div>
+        
+        <div class="header-section">
+            <span class="tcm-icon">🏥</span>
+            <span class="system-title">本能中医处方系统</span>
+            <span class="version-tag">【云版】</span>
+        </div>
+        
+        <div class="main-content">
+            <div class="login-box">
+                <div class="login-field">
+                    <label>用户：</label>
+                    <select id="loginUsername"></select>
+                </div>
+                
+                <div class="login-field">
+                    <label>密码：</label>
+                    <input type="password" id="loginPassword" placeholder="">
+                </div>
+                
+                <div class="login-buttons">
+                    <button class="login-btn" onclick="handleLogin()">确定</button>
+                    <button class="login-btn" onclick="handleCancel()">取消</button>
+                </div>
+                
+                <div id="loginError" class="login-error"></div>
+                
+                <div class="login-footer">
+                    微信号: yqjz1688
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const { ipcRenderer } = require('electron');
+        
+        const defaultUsers = [
+            { username: 'admin', password: 'admin', name: '管理员', role: 'admin' },
+            { username: 'doctor1', password: '123456', name: '张医生', role: 'user' },
+            { username: 'doctor2', password: '123456', name: '李医生', role: 'user' },
+            { username: '王桂杰', password: '123456', name: '王桂杰', role: 'user' },
+            { username: '王耀燮', password: '123456', name: '王耀燮', role: 'user' }
+        ];
+        
+        async function getUsers() {
+            try {
+                const savedUsers = localStorage.getItem('tcmUsers');
+                if (savedUsers) {
+                    const users = JSON.parse(savedUsers);
+                    if (Array.isArray(users) && users.length > 0) {
+                        return users;
+                    }
+                }
+            } catch (e) {
+                console.log('读取用户数据失败:', e);
+            }
+            return defaultUsers;
+        }
+        
+        async function initLoginDropdown() {
+            const select = document.getElementById('loginUsername');
+            const users = await getUsers();
+            
+            select.innerHTML = '';
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.username;
+                option.textContent = user.name || user.username;
+                select.appendChild(option);
+            });
+        }
+        
+        async function handleLogin() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+            const errorDiv = document.getElementById('loginError');
+            
+            if (!password) {
+                errorDiv.textContent = '请输入密码';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            const users = await getUsers();
+            const user = users.find(u => u.username === username && u.password === password);
+            
+            if (user) {
+                localStorage.setItem('currentUser', JSON.stringify(user));
+                sessionStorage.setItem('currentUser', JSON.stringify(user));
+                ipcRenderer.invoke('login-success');
+            } else {
+                errorDiv.textContent = '密码错误';
+                errorDiv.style.display = 'block';
+            }
+        }
+        
+        function handleCancel() {
+            ipcRenderer.invoke('login-cancel');
+        }
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initLoginDropdown();
+        });
+    </script>
+</body>
+</html>

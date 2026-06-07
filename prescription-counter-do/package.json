@@ -1,0 +1,22 @@
+{
+  "name": "prescription-counter-do",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Cloudflare Durable Objects 处方号计数器 - 全局唯一、云端统一",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "test": "node test.js"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  },
+  "keywords": [
+    "cloudflare",
+    "durable-objects",
+    "prescription",
+    "counter"
+  ],
+  "author": "",
+  "license": "MIT"
+}
