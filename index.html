@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -2173,29 +2173,22 @@
             // 先从云端删除
             const success = await deletePrescriptionFromCloud(id);
             
-            if (success) {
-                // 从云端重新获取最新数据，更新统计数量
-                const cloudResult = await getPrescriptionsFromCloud();
-                if (cloudResult && cloudResult.data) {
-                    prescriptionHistory = cloudResult.data;
-                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                    
-                    // 更新统计输入框（只显示历史处方累计数量）
-                    if (cloudResult.totalCount) {
-                        document.getElementById('clinicNo').value = cloudResult.totalCount;
-                    }
-                } else {
-                    // 云端获取失败，删除本地数据
-                    prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-                    localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
-                }
-            } else {
-                // 云端删除失败，删除本地数据
-                prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-                localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            // 无论云端是否成功，都立即更新本地数据
+            const oldCount = prescriptionHistory.length;
+            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            
+            // 更新统计输入框（历史处方累计数量递减1）
+            const clinicNoInput = document.getElementById('clinicNo');
+            if (clinicNoInput && oldCount > prescriptionHistory.length) {
+                const currentValue = parseInt(clinicNoInput.value) || oldCount;
+                clinicNoInput.value = Math.max(0, currentValue - 1);
             }
             
-            // 刷新历史列表
+            // 清除处方缓存，下次获取时重新加载
+            DataCache.invalidate('prescriptions');
+            
+            // 刷新历史列表（直接使用本地数据，无需等待云端响应）
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
         
