@@ -661,6 +661,7 @@
                 <button class="action-btn" onclick="printPrescription('portrait')" style="padding:2px 8px;font-size:12px;">纵向打印</button>
                 <button class="action-btn" onclick="printPrescription('landscape')" style="padding:2px 8px;font-size:12px;">横向打印</button>
                 <button class="action-btn primary" onclick="savePrescription()" style="padding:2px 8px;font-size:12px;">保存</button>
+                <button class="action-btn" onclick="refreshHistory()" style="padding:2px 8px;font-size:12px;">🔄 刷新</button>
             </div>
             <div class="patient-section">
                 <div class="patient-row">
@@ -1446,6 +1447,53 @@
             } catch (error) {
                 console.warn('Failed to save users to cloud:', error);
                 return false;
+            }
+        }
+
+        // 刷新历史处方列表
+        async function refreshHistory() {
+            if (!currentUser) {
+                alert('请先登录！');
+                return;
+            }
+            
+            showToast('正在刷新...');
+            
+            try {
+                // 强制刷新云端数据
+                const cloudResult = await getPrescriptionsFromCloud(true);
+                
+                if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
+                    // 更新本地数据
+                    if (currentUser.role === 'admin') {
+                        prescriptionHistory = cloudResult.data;
+                    } else {
+                        prescriptionHistory = cloudResult.data.filter(p => 
+                            p.createdBy === currentUser.username || !p.createdBy
+                        );
+                    }
+                    
+                    // 排序
+                    prescriptionHistory.sort((a, b) => {
+                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                        return timeB - timeA;
+                    });
+                    
+                    // 更新界面
+                    if (cloudResult.totalCount) {
+                        const clinicNoEl = document.getElementById('clinicNo');
+                        if (clinicNoEl) clinicNoEl.value = cloudResult.totalCount;
+                    }
+                    
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    showToast('刷新成功！');
+                } else {
+                    showToast('暂无数据');
+                }
+            } catch (e) {
+                console.error('刷新失败:', e);
+                showToast('刷新失败，请重试');
             }
         }
 
@@ -4047,12 +4095,23 @@
                 // 更新显示的编号为云端返回的编号
                 const officialNo = savedRecord.prescriptionNo || savedRecord.outpatientNo || '';
                 
-                // 更新本地缓存的历史记录
+                // 更新本地缓存的历史记录（确保新处方总是被添加）
                 if (savedPrescription) {
-                    prescriptionHistory.unshift(savedPrescription);
-                    if (prescriptionHistory.length > 100000) {
-                        prescriptionHistory = prescriptionHistory.slice(0, 100000);
+                    // 避免重复添加
+                    const exists = prescriptionHistory.some(p => p.id === savedPrescription.id);
+                    if (!exists) {
+                        prescriptionHistory.unshift(savedPrescription);
                     }
+                } else {
+                    // 如果云端没有返回保存的处方，使用本地记录
+                    const exists = prescriptionHistory.some(p => p.id === record.id);
+                    if (!exists) {
+                        prescriptionHistory.unshift(record);
+                    }
+                }
+                
+                if (prescriptionHistory.length > 100000) {
+                    prescriptionHistory = prescriptionHistory.slice(0, 100000);
                 }
                 
                 // 更新界面上的编号显示为云端返回的下一个编号
