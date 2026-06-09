@@ -1563,7 +1563,20 @@
             
             try {
                 const url = `${CLOUD_API_BASE}/medicines`;
-                const response = await cloudFetch(url);
+                console.log('请求药品API:', url);
+                
+                // 添加认证头（即使GET请求不需要认证，保持一致性）
+                const options = {};
+                if (currentUser) {
+                    const authToken = btoa(`${currentUser.username}:${currentUser.role || 'user'}`);
+                    options.headers = {
+                        'Authorization': `Basic ${authToken}`
+                    };
+                }
+                
+                const response = await cloudFetch(url, options);
+                console.log('药品API响应:', response);
+                
                 if (response.success && response.data) {
                     // 更新缓存
                     DataCache.set('medicines', response.data);
@@ -1610,7 +1623,20 @@
             
             try {
                 const url = `${CLOUD_API_BASE}/formulas`;
-                const response = await cloudFetch(url);
+                console.log('请求方剂API:', url);
+                
+                // 添加认证头（即使GET请求不需要认证，保持一致性）
+                const options = {};
+                if (currentUser) {
+                    const authToken = btoa(`${currentUser.username}:${currentUser.role || 'user'}`);
+                    options.headers = {
+                        'Authorization': `Basic ${authToken}`
+                    };
+                }
+                
+                const response = await cloudFetch(url, options);
+                console.log('方剂API响应:', response);
+                
                 if (response.success && response.data) {
                     // 更新缓存
                     DataCache.set('formulas', response.data);
