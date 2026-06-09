@@ -1457,11 +1457,14 @@
                 return;
             }
             
+            console.log('=== refreshHistory() 开始 ===');
+            console.log('当前用户:', currentUser);
             showToast('正在刷新...');
             
             try {
                 // 强制刷新云端数据
                 const cloudResult = await getPrescriptionsFromCloud(true);
+                console.log('cloudResult:', cloudResult);
                 
                 if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
                     // 更新本地数据
