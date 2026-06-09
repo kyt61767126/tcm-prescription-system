@@ -1515,7 +1515,14 @@
                 }
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 console.log('请求处方API:', url);
-                const response = await cloudFetch(url);
+                
+                // 添加认证头
+                const authToken = btoa(`${currentUser.username}:${currentUser.role || 'user'}`);
+                const response = await cloudFetch(url, {
+                    headers: {
+                        'Authorization': `Basic ${authToken}`
+                    }
+                });
                 console.log('处方API响应:', response);
                 
                 if (response.success) {
