@@ -96,12 +96,17 @@ function hasSavedLoginState() {
     return false;
 }
 
+let currentLoggedInUser = null;
+
 // 保存登录状态
-function saveLoginState(hasLoggedIn) {
+function saveLoginState(hasLoggedIn, user = null) {
     try {
         const userDataPath = app.getPath('userData');
         const settingsPath = path.join(userDataPath, 'login-state.json');
-        fsSync.writeFileSync(settingsPath, JSON.stringify({ hasLoggedIn }));
+        fsSync.writeFileSync(settingsPath, JSON.stringify({ hasLoggedIn, user }));
+        if (user) {
+            currentLoggedInUser = user;
+        }
     } catch (e) {
         console.log('保存登录状态失败:', e);
     }
@@ -111,7 +116,7 @@ function saveLoginState(hasLoggedIn) {
 function createLoginWindow() {
     loginWindow = new BrowserWindow({
         width: 400,
-        height: 310,
+        height: 350,
         resizable: false,
         autoHideMenuBar: true,
         webPreferences: {
@@ -132,6 +137,9 @@ function createLoginWindow() {
     }
 }
 
+// 配置：使用本地版本还是云端版本
+const USE_CLOUD_VERSION = true; // 设置为 true 使用云端，false 使用本地版本
+
 // 创建主窗口
 function createMainWindow() {
     mainWindow = new BrowserWindow({
@@ -142,14 +150,61 @@ function createMainWindow() {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false,
-            session: sharedSession
+            session: sharedSession,
+            webviewTag: false
         },
         icon: path.join(__dirname, 'icon.png')
     });
 
-    // 加载应用
-    const indexPath = path.join(__dirname, '..', 'index.html');
-    mainWindow.loadFile(indexPath);
+    if (USE_CLOUD_VERSION) {
+        // 云端版本：加载云端网页
+        const cloudUrl = 'https://tcm-prescription-system.pages.dev';
+        
+        // 在页面加载前，通过拦截机制注入登录用户信息到 localStorage
+        // 使用 dom-ready 尽早注入（在页面脚本执行前）
+        mainWindow.webContents.once('dom-ready', () => {
+            if (currentLoggedInUser) {
+                mainWindow.webContents.executeJavaScript(`
+                    (function() {
+                        var userStr = ${JSON.stringify(JSON.stringify(currentLoggedInUser))};
+                        if (window.localStorage) {
+                            window.localStorage.setItem('currentUser', userStr);
+                        }
+                        if (window.sessionStorage) {
+                            window.sessionStorage.setItem('currentUser', userStr);
+                        }
+                    })();
+                `).catch(err => console.log('注入登录状态失败:', err));
+            }
+        });
+        
+        // 备用：页面加载完成后再注入一次，确保登录状态已写入
+        mainWindow.webContents.once('did-finish-load', () => {
+            if (currentLoggedInUser) {
+                mainWindow.webContents.executeJavaScript(`
+                    (function() {
+                        var userStr = ${JSON.stringify(JSON.stringify(currentLoggedInUser))};
+                        if (window.localStorage && !window.localStorage.getItem('currentUser')) {
+                            window.localStorage.setItem('currentUser', userStr);
+                        }
+                        if (window.sessionStorage && !window.sessionStorage.getItem('currentUser')) {
+                            window.sessionStorage.setItem('currentUser', userStr);
+                        }
+                        // 触发登录状态刷新
+                        if (typeof checkLoginStatus === 'function') {
+                            setTimeout(function() { checkLoginStatus(); }, 200);
+                        }
+                    })();
+                `).catch(err => console.log('备用注入登录状态失败:', err));
+            }
+        });
+        
+        mainWindow.loadURL(cloudUrl);
+    } else {
+        // 本地版本：加载本地 index.html
+        const indexPath = path.join(__dirname, '..', 'index.html');
+        mainWindow.loadFile(indexPath);
+    }
 
     // 开发模式下打开 DevTools
     if (!app.isPackaged) {
@@ -227,9 +282,9 @@ ipcMain.handle('select-image-save-directory', async () => {
     return { success: false };
 });
 
-ipcMain.handle('login-success', async () => {
-    // 保存登录状态
-    saveLoginState(true);
+ipcMain.handle('login-success', async (event, userData) => {
+    // 保存登录状态和用户信息
+    saveLoginState(true, userData);
     
     // 关闭登录窗口
     if (loginWindow) {
@@ -241,6 +296,10 @@ ipcMain.handle('login-success', async () => {
     createMainWindow();
     
     return { success: true };
+});
+
+ipcMain.handle('get-logged-in-user', async () => {
+    return currentLoggedInUser;
 });
 
 ipcMain.handle('quit-app', async () => {

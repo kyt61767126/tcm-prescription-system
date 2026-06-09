@@ -26,8 +26,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
     
     // 登录成功
-    loginSuccess: () => {
-        return ipcRenderer.invoke('login-success');
+    loginSuccess: (userData) => {
+        return ipcRenderer.invoke('login-success', userData);
+    },
+    
+    // 获取登录用户
+    getLoggedInUser: () => {
+        return ipcRenderer.invoke('get-logged-in-user');
     },
     
     // 退出应用
