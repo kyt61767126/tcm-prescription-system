@@ -3199,10 +3199,10 @@
             }
             
             // 继续初始化界面
-            finishInitUI();
+            finishInitUI(hasValidUser);
         }
         
-        function finishInitUI() {
+        function finishInitUI(hasValidUser) {
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
             document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
