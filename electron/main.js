@@ -212,6 +212,25 @@ function createMainWindow() {
     }
 }
 
+// 恢复登录状态（应用重启后从文件恢复用户信息）
+function restoreLoginState() {
+    try {
+        const userDataPath = app.getPath('userData');
+        const settingsPath = path.join(userDataPath, 'login-state.json');
+        if (fsSync.existsSync(settingsPath)) {
+            const data = JSON.parse(fsSync.readFileSync(settingsPath, 'utf8'));
+            if (data && data.hasLoggedIn && data.user) {
+                currentLoggedInUser = data.user;
+                console.log('已恢复登录用户:', data.user.username);
+                return true;
+            }
+        }
+    } catch (e) {
+        console.log('恢复登录状态失败:', e);
+    }
+    return false;
+}
+
 // 应用就绪
 app.whenReady().then(() => {
     // 创建共享session
@@ -223,18 +242,23 @@ app.whenReady().then(() => {
         console.log('图片保存目录已准备就绪:', baseDir);
     });
 
+    // 恢复登录状态（从文件恢复用户信息到内存）
+    const restored = restoreLoginState();
+    
     // 检查是否有保存的登录状态
-    if (hasSavedLoginState()) {
+    if (restored) {
         // 有登录状态，直接显示主窗口
+        console.log('恢复登录状态成功，直接打开主窗口');
         createMainWindow();
     } else {
         // 没有登录状态，显示登录窗口
+        console.log('无登录状态，显示登录窗口');
         createLoginWindow();
     }
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
-            if (hasSavedLoginState()) {
+            if (restoreLoginState()) {
                 createMainWindow();
             } else {
                 createLoginWindow();
