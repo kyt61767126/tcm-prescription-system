@@ -2352,7 +2352,12 @@
             
             // 渲染历史列表
             if (currentUser) {
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                const filtered = filterPrescriptionsByPermission(prescriptionHistory);
+                console.log('过滤后处方数量:', filtered.length);
+                console.log('用户权限:', currentUser.role);
+                renderHistoryList(filtered.slice(0, 15));
+            } else {
+                console.log('currentUser 为空，不渲染历史列表');
             }
             
             const defaultMedicines = [
