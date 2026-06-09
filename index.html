@@ -1461,13 +1461,9 @@
                     console.error('User not logged in');
                     return null;
                 }
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                // 移除 Basic 认证，简化请求
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
-                const response = await cloudFetch(url, {
-                    headers: {
-                        'Authorization': `Basic ${authToken}`
-                    }
-                });
+                const response = await cloudFetch(url);
                 if (response.success && (response.data || Array.isArray(response))) {
                     // 兼容不同的响应格式
                     const result = {
@@ -1493,9 +1489,7 @@
             
             try {
                 const url = `${CLOUD_API_BASE}/medicines`;
-                const response = await cloudFetch(url, {
-                    headers: currentUser ? { 'Authorization': `Basic ${safeBtoa(`${currentUser.username}:${currentUser.role}`)}` } : {}
-                });
+                const response = await cloudFetch(url);
                 if (response.success && response.data) {
                     // 更新缓存
                     DataCache.set('medicines', response.data);
@@ -1542,9 +1536,7 @@
             
             try {
                 const url = `${CLOUD_API_BASE}/formulas`;
-                const response = await cloudFetch(url, {
-                    headers: currentUser ? { 'Authorization': `Basic ${safeBtoa(`${currentUser.username}:${currentUser.role}`)}` } : {}
-                });
+                const response = await cloudFetch(url);
                 if (response.success && response.data) {
                     // 更新缓存
                     DataCache.set('formulas', response.data);
