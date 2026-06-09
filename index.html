@@ -115,7 +115,7 @@
         .modal-body { flex: 1; overflow: auto; padding: 15px; background: white; }
         .modal-footer { padding: 10px 15px; background: #e0e0e0; display: flex; justify-content: flex-end; gap: 10px; border-top: 2px solid #808080; }
         .close-btn { font-size: 24px; cursor: pointer; line-height: 1; }
-        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(180deg, #e0f4ff 0%, #c8e1f5 100%); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(180deg, #e0e0e0 0%, #c8e1f5 100%); display: none; justify-content: center; align-items: center; z-index: 9999; }
         .login-container { width: 247px; height: 300px; background: linear-gradient(180deg, #e0f4ff 0%, #c8e1f5 100%); border-radius: 8px; box-shadow: 0 6px 20px rgba(0, 102, 204, 0.3); overflow: hidden; position: relative; border: 2px solid #4a90d9; }
         .bg-decoration { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 247 300"%3E%3Cdefs%3E%3Cpattern id="circles" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse"%3E%3Ccircle cx="10" cy="10" r="1.5" fill="rgba(74, 144, 217, 0.12)"/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill="url(%23circles)" width="247" height="300"/%3E%3C/svg%3E'); background-size: cover; }
         .header-section { position: relative; z-index: 1; padding: 13px 17px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; background: linear-gradient(180deg, #4a90d9 0%, #357abd 100%); border-bottom: 1.5px solid #2962a3; }
@@ -3250,31 +3250,30 @@
             const sessionUser = sessionStorage.getItem('currentUser');
             const localUser = localStorage.getItem('currentUser');
             let hasValidUser = false;
+            let shouldShowLogin = !isElectron; // 默认需要显示登录（非Electron模式）
             
             if (sessionUser) {
                 try {
                     currentUser = JSON.parse(sessionUser);
                     hasValidUser = true;
-                    if (!isElectron) document.getElementById('loginOverlay').style.display = 'none';
+                    shouldShowLogin = false;
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
-                    if (!isElectron) document.getElementById('loginOverlay').style.display = 'flex';
                 }
             } else if (localUser) {
                 try {
                     currentUser = JSON.parse(localUser);
                     sessionStorage.setItem('currentUser', localUser);
                     hasValidUser = true;
-                    if (!isElectron) document.getElementById('loginOverlay').style.display = 'none';
+                    shouldShowLogin = false;
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
-                    if (!isElectron) document.getElementById('loginOverlay').style.display = 'flex';
                 }
-            } else {
-                // 没有登录状态
-                if (!isElectron) {
-                    document.getElementById('loginOverlay').style.display = 'flex';
-                }
+            }
+            
+            // 只有确认用户未登录时才显示登录覆盖层（避免短暂闪烁）
+            if (shouldShowLogin && !hasValidUser) {
+                document.getElementById('loginOverlay').style.display = 'flex';
             }
             
             // 如果成功恢复了登录状态，更新用户显示
