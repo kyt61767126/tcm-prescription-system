@@ -2295,12 +2295,18 @@
         }
 
         async function loadData() {
+            console.log('=== loadData() 开始 ===');
+            console.log('当前用户:', currentUser);
+            
             // 并行请求云端数据，减少加载时间
             const [cloudMedicines, cloudFormulas, cloudResult] = await Promise.all([
                 getMedicinesFromCloud().catch(e => { console.warn('Failed to get medicines:', e); return null; }),
                 getFormulasFromCloud().catch(e => { console.warn('Failed to get formulas:', e); return null; }),
                 getPrescriptionsFromCloud().catch(e => { console.warn('Failed to get prescriptions:', e); return null; })
             ]);
+            
+            console.log('cloudResult:', cloudResult);
+            console.log('cloudResult.data:', cloudResult ? cloudResult.data : 'undefined');
             
             // 更新药品库
             if (cloudMedicines && cloudMedicines.length > 0) {
