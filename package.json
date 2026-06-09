@@ -24,7 +24,8 @@
     "files": [
       "electron/**/*",
       "index.html",
-      "package.json"
+      "package.json",
+      "package-lock.json"
     ],
     "win": {
       "target": [

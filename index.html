@@ -1288,9 +1288,21 @@
                 const data = JSON.parse(cleanText);
                 console.log('Cloud fetch response data:', data);
                 
-                if (!data.success) {
-                    throw new Error(data.error || 'Cloud operation failed');
+                // 兼容不同的响应格式：有些API可能直接返回数组或对象，没有success字段
+                if (Array.isArray(data) || typeof data === 'object' && data !== null) {
+                    // 如果是数组，包装成标准格式
+                    if (Array.isArray(data)) {
+                        return { success: true, fromCloud: true, data: data };
+                    }
+                    // 如果是对象，检查是否已经有success字段，没有则添加
+                    if (data.success === undefined) {
+                        return { ...data, success: true, fromCloud: true };
+                    }
+                    // 如果有success字段，直接返回
+                    return { ...data, fromCloud: true };
                 }
+                
+                throw new Error('Invalid response format');
                 
                 // 返回完整的响应数据，保留所有字段
                 return { ...data, success: true, fromCloud: true };
@@ -1456,10 +1468,11 @@
                         'Authorization': `Basic ${authToken}`
                     }
                 });
-                if (response.success && response.data) {
+                if (response.success && (response.data || Array.isArray(response))) {
+                    // 兼容不同的响应格式
                     const result = {
-                        data: response.data,
-                        totalCount: response.totalCount
+                        data: response.data || response,
+                        totalCount: response.totalCount || (response.data ? response.data.length : response.length)
                     };
                     // 更新缓存
                     DataCache.set('prescriptions', result);
@@ -1803,7 +1816,7 @@
                     document.getElementById('loginOverlay').style.display = 'none';
                     updateUserDisplay();
                     errorDiv.style.display = 'none';
-                    loadData();
+                    await loadData();
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                     refreshUserInterface();
                 }
