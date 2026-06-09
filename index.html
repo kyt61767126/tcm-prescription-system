@@ -1918,31 +1918,25 @@
             }
         }
 
-        function handleLogout() {
-            // 记录登出日志（多端优化）
-            if (currentUser) {
-                saveLoginLog(currentUser.username, 'logout', navigator.userAgent);
-            }
+        window.handleLogout = function() {
+            try {
+                if (currentUser && window.saveLoginLog) {
+                    saveLoginLog(currentUser.username, 'logout', navigator.userAgent);
+                }
+            } catch(e) {}
             
-            // 清除登录状态
             currentUser = null;
             localStorage.removeItem('currentUser');
             sessionStorage.removeItem('currentUser');
             
-            // 清除所有缓存
-            DataCache.invalidate();
+            try { if (window.DataCache && DataCache.invalidate) DataCache.invalidate(); } catch(e) {}
             
-            // 如果是Electron桌面版，先清除状态再退出程序
-            if (window.electronAPI && window.electronAPI.quitApp) {
+            if (window.electronAPI && typeof window.electronAPI.quitApp === 'function') {
                 window.electronAPI.quitApp();
-                return;
+            } else {
+                window.close();
             }
-            
-            // 浏览器版，回到登录界面
-            document.getElementById('loginUsername').value = '';
-            document.getElementById('loginPassword').value = '';
-            document.getElementById('loginOverlay').style.display = 'flex';
-            window.location.href = window.location.href;
+            return false;
         }
 
         function refreshUserInterface() {
