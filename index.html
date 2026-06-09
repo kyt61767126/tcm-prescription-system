@@ -1453,6 +1453,7 @@
         async function getPrescriptionsFromCloud(forceRefresh = false) {
             // 如果不是强制刷新，且缓存有效，则返回缓存数据
             if (!forceRefresh && DataCache.isValid('prescriptions')) {
+                console.log('使用缓存数据');
                 return DataCache.get('prescriptions');
             }
             
@@ -1461,18 +1462,33 @@
                     console.error('User not logged in');
                     return null;
                 }
-                // 移除 Basic 认证，简化请求
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
+                console.log('请求处方API:', url);
                 const response = await cloudFetch(url);
-                if (response.success && (response.data || Array.isArray(response))) {
-                    // 兼容不同的响应格式
-                    const result = {
-                        data: response.data || response,
-                        totalCount: response.totalCount || (response.data ? response.data.length : response.length)
-                    };
-                    // 更新缓存
-                    DataCache.set('prescriptions', result);
-                    return result;
+                console.log('处方API响应:', response);
+                
+                if (response.success) {
+                    if (response.data) {
+                        console.log('响应有data字段，长度:', response.data.length);
+                        const result = {
+                            data: response.data,
+                            totalCount: response.totalCount || response.data.length
+                        };
+                        DataCache.set('prescriptions', result);
+                        return result;
+                    } else if (Array.isArray(response)) {
+                        console.log('响应本身是数组，长度:', response.length);
+                        const result = {
+                            data: response,
+                            totalCount: response.length
+                        };
+                        DataCache.set('prescriptions', result);
+                        return result;
+                    } else {
+                        console.log('响应成功但数据为空:', response);
+                    }
+                } else {
+                    console.log('响应失败:', response.error);
                 }
             } catch (error) {
                 console.warn('Failed to get prescriptions from cloud:', error);
