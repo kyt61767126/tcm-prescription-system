@@ -82,10 +82,8 @@ function parseAuthHeaderSimple(request) {
     try {
         if (authHeader.startsWith('Basic ')) {
             const base64Credentials = authHeader.substring(6);
-            // 前端safeBtoa已经处理了中文编码：encodeURIComponent -> 字符转换 -> btoa
-            // 后端只需直接解码base64即可得到原始字符串
-            const decoded = atob(base64Credentials);
-            const credentials = decodeURIComponent(escape(decoded));
+            // 使用 safeAtob 正确解码前端 safeBtoa 编码的中文用户名
+            const credentials = safeAtob(base64Credentials);
             const [username, role] = credentials.split(':');
             // 简化处理：所有登录用户都能保存处方
             return { 
@@ -96,8 +94,7 @@ function parseAuthHeaderSimple(request) {
             };
         } else if (authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
-            const decoded = atob(token);
-            const userInfo = JSON.parse(decodeURIComponent(escape(decoded)));
+            const userInfo = JSON.parse(safeAtob(token));
             return {
                 ...userInfo,
                 allowSavePrescription: true
