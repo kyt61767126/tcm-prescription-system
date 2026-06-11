@@ -41,5 +41,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     }
+  },
+  "dependencies": {
+    "fs-extra": "^11.3.5"
   }
 }
