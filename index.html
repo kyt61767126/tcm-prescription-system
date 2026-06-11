@@ -1390,13 +1390,9 @@
                 }
             }
             
-            // 返回硬编码的默认用户（首次使用时）
+            // 返回硬编码的默认用户（首次使用时）- 个人版只有一个用户
             return [
-                {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true},
-                {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true},
-                {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true},
-                {username: '王桂杰', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
-                {username: '王耀燮', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
+                {username: 'doctor1', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true}
             ];
         }
         
