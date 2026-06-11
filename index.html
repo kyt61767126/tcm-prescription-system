@@ -519,22 +519,7 @@
             .prescription-paper { padding: 20mm; }
         }
     </style>
-    <script>
-        // XLSX库按需加载（延迟加载，只有在导出Excel时才加载）
-        window.loadXLSX = function() {
-            return new Promise((resolve, reject) => {
-                if (window.XLSX) {
-                    resolve(window.XLSX);
-                    return;
-                }
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-                script.onload = () => resolve(window.XLSX);
-                script.onerror = reject;
-                document.head.appendChild(script);
-            });
-        };
-    </script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
     <div id="loginOverlay" class="login-overlay">
@@ -1299,19 +1284,10 @@
                 
                 const text = await response.text();
                 console.log('Cloud fetch response text (first 200 chars):', text.substring(0, 200));
-                
-                // 尝试解析JSON，如果失败则返回错误
-                let data;
-                try {
-                    // 清理可能的BOM字符和其他无效字符
-                    const cleanText = text.replace(/^\uFEFF/, '').trim();
-                    data = JSON.parse(cleanText);
-                    console.log('Cloud fetch response data:', data);
-                } catch (jsonError) {
-                    console.error('JSON解析失败:', jsonError.message);
-                    console.error('响应内容:', text);
-                    return { success: false, error: 'Invalid JSON response', fromCloud: true };
-                }
+                // 清理可能的BOM字符和其他无效字符
+                const cleanText = text.replace(/^\uFEFF/, '').trim();
+                const data = JSON.parse(cleanText);
+                console.log('Cloud fetch response data:', data);
                 
                 // 兼容不同的响应格式：有些API可能直接返回数组或对象，没有success字段
                 if (Array.isArray(data) || typeof data === 'object' && data !== null) {
@@ -1540,12 +1516,11 @@
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 console.log('请求处方API:', url);
                 
-                // 添加认证头（使用JSON编码支持中文用户名）
-                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
-                const authToken = safeBtoa(authPayload);
+                // 添加认证头
+                const authToken = btoa(`${currentUser.username}:${currentUser.role || 'user'}`);
                 const response = await cloudFetch(url, {
                     headers: {
-                        'Authorization': `Bearer ${authToken}`
+                        'Authorization': `Basic ${authToken}`
                     }
                 });
                 console.log('处方API响应:', response);
@@ -1593,10 +1568,9 @@
                 // 添加认证头（即使GET请求不需要认证，保持一致性）
                 const options = {};
                 if (currentUser) {
-                    const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
-                    const authToken = safeBtoa(authPayload);
+                    const authToken = btoa(`${currentUser.username}:${currentUser.role || 'user'}`);
                     options.headers = {
-                        'Authorization': `Bearer ${authToken}`
+                        'Authorization': `Basic ${authToken}`
                     };
                 }
                 
@@ -1624,12 +1598,11 @@
                     console.warn('Only admin can save medicines');
                     return false;
                 }
-                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
-                const authToken = safeBtoa(authPayload);
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/medicines`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${authToken}`,
+                        'Authorization': `Basic ${authToken}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ medicines })
@@ -1655,10 +1628,9 @@
                 // 添加认证头（即使GET请求不需要认证，保持一致性）
                 const options = {};
                 if (currentUser) {
-                    const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
-                    const authToken = safeBtoa(authPayload);
+                    const authToken = btoa(`${currentUser.username}:${currentUser.role || 'user'}`);
                     options.headers = {
-                        'Authorization': `Bearer ${authToken}`
+                        'Authorization': `Basic ${authToken}`
                     };
                 }
                 
@@ -1686,12 +1658,11 @@
                     console.warn('User not logged in');
                     return false;
                 }
-                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
-                const authToken = safeBtoa(authPayload);
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/formulas`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${authToken}`,
+                        'Authorization': `Basic ${authToken}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ formulas })
@@ -1709,8 +1680,7 @@
                 console.log('Not logged in');
                 return;
             }
-            const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
-            const authToken = safeBtoa(authPayload);
+            const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
             console.log('Testing auth with:', currentUser.username, currentUser.role);
             console.log('Auth token:', authToken);
             console.log('Decoded:', atob(authToken));
@@ -1719,7 +1689,7 @@
                 const response = await fetch(`${CLOUD_API_BASE}/prescriptions`, {
                     method: 'GET',
                     headers: {
-                        'Authorization': `Bearer ${authToken}`,
+                        'Authorization': `Basic ${authToken}`,
                         'Content-Type': 'application/json'
                     }
                 });
@@ -1741,8 +1711,7 @@
                 
                 console.log('Current user:', currentUser);
                 
-                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
-                const authToken = safeBtoa(authPayload);
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
                 const url = `${CLOUD_API_BASE}/prescriptions`;
                 
                 console.log('Saving to URL:', url);
@@ -1752,7 +1721,7 @@
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Bearer ${authToken}`,
+                        'Authorization': `Basic ${authToken}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ prescription: prescriptions })
@@ -1785,14 +1754,13 @@
                     console.error('User not logged in');
                     return false;
                 }
-                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
-                const authToken = safeBtoa(authPayload);
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
                 // 使用测试用户参数绕过认证问题
                 const url = `${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}&user=${encodeURIComponent(currentUser.username)}`;
                 const response = await cloudFetch(url, {
                     method: 'DELETE',
                     headers: {
-                        'Authorization': `Bearer ${authToken}`
+                        'Authorization': `Basic ${authToken}`
                     }
                 });
                 return response.success;
@@ -1926,6 +1894,7 @@
             if (user) {
                 currentUser = user;
                 const userData = JSON.stringify(user);
+                localStorage.setItem('currentUser', userData);
                 sessionStorage.setItem('currentUser', userData);
                 
                 // 记录登录日志（多端优化）
@@ -1957,6 +1926,7 @@
             } catch(e) {}
             
             currentUser = null;
+            localStorage.removeItem('currentUser');
             sessionStorage.removeItem('currentUser');
             
             try { if (window.DataCache && DataCache.invalidate) DataCache.invalidate(); } catch(e) {}
@@ -2071,7 +2041,7 @@
             users[userIndex].password = newPwd;
             await saveUsers(users);
             currentUser = users[userIndex];
-            sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
+            localStorage.setItem('currentUser', JSON.stringify(currentUser));
             
             alert('密码修改成功！');
             closeModal('changePwdModal');
@@ -2156,7 +2126,7 @@
             
             if (currentUser.username === username) {
                 currentUser = users[userIndex];
-                sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
                 updateUserDisplay();
             }
             
@@ -2266,6 +2236,7 @@
                     if (user) {
                         currentUser = user;
                         const userData = JSON.stringify(user);
+                        localStorage.setItem('currentUser', userData);
                         sessionStorage.setItem('currentUser', userData);
                         document.getElementById('loginOverlay').style.display = 'none';
                         updateUserDisplay();
@@ -2348,18 +2319,16 @@
             // 先从云端删除
             const success = await deletePrescriptionFromCloud(id);
             
-            // 从云端删除后，重新加载数据
-            const cloudResult = await getPrescriptionsFromCloud(true);
-            if (cloudResult && cloudResult.data) {
-                prescriptionHistory = cloudResult.data;
-            } else {
-                prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-            }
+            // 无论云端是否成功，都立即更新本地数据
+            const oldCount = prescriptionHistory.length;
+            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
             
-            // 更新统计输入框
+            // 更新统计输入框（历史处方累计数量递减1）
             const clinicNoInput = document.getElementById('clinicNo');
-            if (clinicNoInput) {
-                clinicNoInput.value = prescriptionHistory.length;
+            if (clinicNoInput && oldCount > prescriptionHistory.length) {
+                const currentValue = parseInt(clinicNoInput.value) || oldCount;
+                clinicNoInput.value = Math.max(0, currentValue - 1);
             }
             
             // 清除处方缓存，下次获取时重新加载
@@ -3195,8 +3164,7 @@
                     return null;
                 }
                 
-                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
-                const authToken = safeBtoa(authPayload);
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 
                 const controller = new AbortController();
@@ -3207,7 +3175,7 @@
                         method: 'GET',
                         signal: controller.signal,
                         headers: {
-                            'Authorization': `Bearer ${authToken}`,
+                            'Authorization': `Basic ${authToken}`,
                             'Content-Type': 'application/json'
                         }
                     });
@@ -3256,6 +3224,7 @@
                     if (ipcUser) {
                         currentUser = ipcUser;
                         const userData = JSON.stringify(ipcUser);
+                        localStorage.setItem('currentUser', userData);
                         sessionStorage.setItem('currentUser', userData);
                         // 确保登录覆盖层隐藏
                         document.getElementById('loginOverlay').style.display = 'none';
@@ -3263,7 +3232,7 @@
                         await loadData();
                         renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                         // 继续初始化界面
-                        finishInitUI(true);
+                        finishInitUI();
                         return;
                     }
                 } catch (e) {
@@ -3284,8 +3253,6 @@
                     shouldShowLogin = false;
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
-                    currentUser = null;
-                    shouldShowLogin = !isElectron;
                 }
             } else if (localUser) {
                 try {
@@ -3295,8 +3262,6 @@
                     shouldShowLogin = false;
                 } catch (e) {
                     console.error('解析用户数据失败:', e);
-                    currentUser = null;
-                    shouldShowLogin = !isElectron;
                 }
             }
             
@@ -3305,11 +3270,9 @@
                 document.getElementById('loginOverlay').style.display = 'flex';
             }
             
-            // 如果成功恢复了登录状态，更新用户显示并加载数据
+            // 如果成功恢复了登录状态，更新用户显示
             if (hasValidUser) {
                 updateUserDisplay();
-                await loadData();
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             }
             
             // 继续初始化界面
@@ -3317,9 +3280,6 @@
         }
         
         function finishInitUI(hasValidUser) {
-            console.log('=== finishInitUI 开始 ===');
-            console.log('当前 prescriptionItems 长度:', prescriptionItems.length);
-            
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
             document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
@@ -3358,14 +3318,7 @@
             document.getElementById('paperDoseCount').textContent = config.defaultDose;
             
             // 快速初始化表格（只创建必要的行）
-            console.log('=== 初始化药物表格 ===');
-            console.log('prescriptionBody 存在:', document.getElementById('prescriptionBody') !== null);
-            
-            for (let i = 0; i < 10; i++) {
-                addEmptyRow();
-            }
-            console.log('添加空行后 prescriptionItems 长度:', prescriptionItems.length);
-            
+            for (let i = 0; i < 10; i++) addEmptyRow();
             renderPrescriptionTable();
             calculateAmount();
             
@@ -3379,88 +3332,16 @@
                 renderPrescriptionTable();
             }, 50);
             
-            // 如果用户未登录，延迟检查登录状态
-            if (!hasValidUser) {
+            // 如果已经有有效的用户登录状态，延迟加载云端数据
+            if (hasValidUser) {
+                setTimeout(() => {
+                    loadData().catch(e => console.warn('Load data failed:', e));
+                }, 100);
+            } else {
                 setTimeout(() => {
                     checkLoginStatus().catch(e => console.warn('Check login status failed:', e));
                 }, 100);
             }
-            
-            // 确保表格渲染完成（保障机制）
-            setTimeout(() => {
-                console.log('=== 表格渲染保障 ===');
-                console.log('prescriptionItems 长度:', prescriptionItems.length);
-                const tbody = document.getElementById('prescriptionBody');
-                console.log('表格内容:', tbody ? tbody.innerHTML.substring(0, 200) : 'tbody不存在');
-                
-                // 如果表格为空，强制重新渲染
-                if (prescriptionItems.length === 0 || !tbody.innerHTML.includes('<tr>')) {
-                    console.log('表格为空，重新初始化...');
-                    prescriptionItems = [];
-                    for (let i = 0; i < 25; i++) {
-                        prescriptionItems.push(createEmptyMedicine());
-                    }
-                    renderPrescriptionTable();
-                }
-            }, 200);
-            
-            // 延迟加载药品库（失败不影响主功能）
-            setTimeout(() => {
-                if (medicines.length === 0) {
-                    // 使用默认药品数据
-                    const defaultMedicines = [
-                        {name:'阿胶',code:'AJ',price:3.3,unit:'g',dosage:9},
-                        {name:'艾叶',code:'AY',price:0.018,unit:'g',dosage:10},
-                        {name:'白芍',code:'BS',price:0.042,unit:'g',dosage:15},
-                        {name:'白术',code:'BZ',price:0.024,unit:'g',dosage:12},
-                        {name:'茯苓',code:'FL',price:0.06,unit:'g',dosage:15},
-                        {name:'甘草',code:'GC',price:0.018,unit:'g',dosage:6},
-                        {name:'当归',code:'DG',price:0.15,unit:'g',dosage:15},
-                        {name:'黄芪',code:'HQ',price:0.075,unit:'g',dosage:30},
-                        {name:'党参',code:'DS',price:0.048,unit:'g',dosage:15},
-                        {name:'陈皮',code:'CP',price:0.024,unit:'g',dosage:10}
-                    ];
-                    medicines = [...medicines, ...defaultMedicines];
-                    buildMedicineMap();
-                }
-            }, 500);
-            
-            // 更强的表格渲染保障：确保表格一定能显示
-            const ensureTableVisible = () => {
-                const tbody = document.getElementById('prescriptionBody');
-                if (!tbody) {
-                    console.error('prescriptionBody 不存在！');
-                    return;
-                }
-                
-                // 检查表格是否有内容
-                if (!tbody.innerHTML.includes('<tr>') || prescriptionItems.length === 0) {
-                    console.log('=== 强制重新渲染表格 ===');
-                    prescriptionItems = [];
-                    for (let i = 0; i < 25; i++) {
-                        prescriptionItems.push(createEmptyMedicine());
-                    }
-                    renderPrescriptionTable();
-                    
-                    // 再检查一次
-                    setTimeout(() => {
-                        if (!tbody.innerHTML.includes('<tr>')) {
-                            console.error('表格渲染失败！尝试直接设置HTML');
-                            let html = '';
-                            for (let i = 0; i < 10; i++) {
-                                html += `<tr><td style="text-align:center;font-size:10px;color:#666;">${i + 1}</td><td><input type="text" style="padding:2px;text-align:left;"></td><td><input type="text" style="padding:2px;text-align:left;"></td><td><input type="number" style="padding:2px;"></td><td><input type="text" style="padding:2px;"></td><td><input type="text" readonly style="padding:2px;"></td><td><input type="text" readonly style="padding:2px;"></td><td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;">删</button></td></tr>`;
-                            }
-                            tbody.innerHTML = html;
-                        }
-                    }, 100);
-                }
-            };
-            
-            // 多次检查确保表格显示
-            ensureTableVisible();
-            setTimeout(ensureTableVisible, 100);
-            setTimeout(ensureTableVisible, 300);
-            setTimeout(ensureTableVisible, 500);
         }
 
         function handleBeforeUnload() {
@@ -3496,12 +3377,7 @@
 
         function renderPrescriptionTable() {
             const tbody = document.getElementById('prescriptionBody');
-            if (!tbody) {
-                console.error('renderPrescriptionTable: prescriptionBody 不存在!');
-                return;
-            }
-            
-            const html = prescriptionItems.map((item,index) => `
+            tbody.innerHTML = prescriptionItems.map((item,index) => `
                 <tr>
                     <td style="text-align:center;font-size:10px;color:#666;">${index + 1}</td>
                     <td><input type="text" value="${item.code}" id="code-input-${index}"
@@ -3529,9 +3405,6 @@
                     <td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;" onclick="deleteRow(${index})">删</button></td>
                 </tr>
             `).join('');
-            
-            tbody.innerHTML = html;
-            console.log('renderPrescriptionTable: 渲染了', prescriptionItems.length, '行');
         }
 
         function startSearch(event, index, column) {
@@ -4084,8 +3957,6 @@
             document.getElementById('patientAddress').value = record.patientAddress;
             // 统计输入框保持显示历史处方累计数量，不被打开的处方覆盖
             document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
-            document.getElementById('prescriptionNo').value = record.prescriptionNo || record.clinicNo || '';
-            currentSavedPrescriptionNo = record.prescriptionNo || record.clinicNo || '';
             document.getElementById('medicalHistory').value = record.medicalHistory;
             document.getElementById('diagnosis').value = record.diagnosis;
             const doseCount = record.doseCount || 7;
@@ -4246,19 +4117,22 @@
             console.log('Save result:', response);
             
             if (response && response.success) {
+                // 直接使用云端返回的已保存处方（带正确的编号）
                 const savedPrescription = response.savedPrescription;
                 const savedRecord = savedPrescription || record;
                 
+                // 更新显示的编号为云端返回的编号
                 const officialNo = savedRecord.prescriptionNo || savedRecord.outpatientNo || '';
                 
-                currentSavedPrescriptionNo = officialNo;
-                
+                // 更新本地缓存的历史记录（确保新处方总是被添加）
                 if (savedPrescription) {
+                    // 避免重复添加
                     const exists = prescriptionHistory.some(p => p.id === savedPrescription.id);
                     if (!exists) {
                         prescriptionHistory.unshift(savedPrescription);
                     }
                 } else {
+                    // 如果云端没有返回保存的处方，使用本地记录
                     const exists = prescriptionHistory.some(p => p.id === record.id);
                     if (!exists) {
                         prescriptionHistory.unshift(record);
@@ -4269,24 +4143,33 @@
                     prescriptionHistory = prescriptionHistory.slice(0, 100000);
                 }
                 
+                // 更新界面上的编号显示为云端返回的下一个编号
                 const nextNo = response.nextPrescriptionNo || '';
                 if (nextNo) {
                     document.getElementById('prescriptionNo').value = nextNo;
                     document.getElementById('paperClinicNo').textContent = nextNo;
                 }
                 
+                // 更新统计编号
                 if (response.nextClinicNo) {
                     const clinicNoEl = document.getElementById('clinicNo');
                     if (clinicNoEl) clinicNoEl.value = response.nextClinicNo;
                 }
                 
+                // 刷新历史处方栏
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 
+                // 保存成功提示（立即显示）
                 showToast('处方保存成功！');
                 
+                // 延迟执行耗时操作，避免阻塞 Toast 动画
                 setTimeout(() => {
+                    // 生成处方签图片并自动下载（使用云端返回的编号）
                     savePrescriptionAsImage(savedRecord, officialNo);
                     searchPatientsQuick({target:{value:name}});
+                    
+                    // 后台异步重新加载完整数据
+                    loadData().catch(e => console.warn('Load data failed:', e));
                 }, 100);
             } else {
                 alert('处方保存失败，请检查网络连接后重试。');
@@ -4315,9 +4198,8 @@
             return currentY;
         }
 
-        let currentSavedPrescriptionNo = '';
-
         function downloadPrescriptionImage() {
+            // 从当前表单直接生成处方签图片，不需要保存到云端
             const record = {
                 patientName: document.getElementById('patientName').value,
                 patientGender: document.getElementById('patientGender').value,
@@ -4330,7 +4212,7 @@
                 items: currentItems || []
             };
             
-            const prescriptionNo = currentSavedPrescriptionNo || document.getElementById('prescriptionNo').value || '临时编号';
+            const prescriptionNo = document.getElementById('prescriptionNo').value || '临时编号';
             savePrescriptionAsImage(record, prescriptionNo);
         }
 
@@ -5099,15 +4981,17 @@ IconFile=${scriptPath}`;
             const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
             
             if (isExcel) {
-                // Excel 文件导入 - 按需加载 XLSX 库
+                // 检查 XLSX 库是否加载
+                if (typeof XLSX === 'undefined') {
+                    alert('Excel导入功能暂时不可用，请将 Excel 文件另存为 CSV 格式后再导入！');
+                    event.target.value = '';
+                    return;
+                }
+                
+                // Excel 文件导入
                 const reader = new FileReader();
-                reader.onload = async function(e) {
+                reader.onload = function(e) {
                     try {
-                        // 先加载 XLSX 库（如果尚未加载）
-                        if (typeof XLSX === 'undefined') {
-                            await loadXLSX();
-                        }
-                        
                         const data = new Uint8Array(e.target.result);
                         const workbook = XLSX.read(data, { type: 'array' });
                         
