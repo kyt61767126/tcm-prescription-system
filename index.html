@@ -3404,9 +3404,25 @@
                 }
             }, 200);
             
-            // 延迟加载非关键资源（药品库等）
+            // 延迟加载药品库（失败不影响主功能）
             setTimeout(() => {
-                loadMedicines().catch(e => console.warn('加载药品库失败:', e));
+                if (medicines.length === 0) {
+                    // 使用默认药品数据
+                    const defaultMedicines = [
+                        {name:'阿胶',code:'AJ',price:3.3,unit:'g',dosage:9},
+                        {name:'艾叶',code:'AY',price:0.018,unit:'g',dosage:10},
+                        {name:'白芍',code:'BS',price:0.042,unit:'g',dosage:15},
+                        {name:'白术',code:'BZ',price:0.024,unit:'g',dosage:12},
+                        {name:'茯苓',code:'FL',price:0.06,unit:'g',dosage:15},
+                        {name:'甘草',code:'GC',price:0.018,unit:'g',dosage:6},
+                        {name:'当归',code:'DG',price:0.15,unit:'g',dosage:15},
+                        {name:'黄芪',code:'HQ',price:0.075,unit:'g',dosage:30},
+                        {name:'党参',code:'DS',price:0.048,unit:'g',dosage:15},
+                        {name:'陈皮',code:'CP',price:0.024,unit:'g',dosage:10}
+                    ];
+                    medicines = [...medicines, ...defaultMedicines];
+                    buildMedicineMap();
+                }
             }, 500);
             
             // 更强的表格渲染保障：确保表格一定能显示
