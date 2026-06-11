@@ -82,7 +82,9 @@ function parseAuthHeaderSimple(request) {
     try {
         if (authHeader.startsWith('Basic ')) {
             const base64Credentials = authHeader.substring(6);
-            const credentials = safeAtob(base64Credentials);
+            // 先解码base64，然后解码URL编码（支持中文用户名）
+            const decoded = atob(base64Credentials);
+            const credentials = decodeURIComponent(decoded);
             const [username, role] = credentials.split(':');
             // 简化处理：所有登录用户都能保存处方
             return { 
@@ -93,7 +95,8 @@ function parseAuthHeaderSimple(request) {
             };
         } else if (authHeader.startsWith('Bearer ')) {
             const token = authHeader.substring(7);
-            const userInfo = JSON.parse(safeAtob(token));
+            const decoded = atob(token);
+            const userInfo = JSON.parse(decodeURIComponent(decoded));
             return {
                 ...userInfo,
                 allowSavePrescription: true
