@@ -3345,12 +3345,8 @@
                 renderPrescriptionTable();
             }, 50);
             
-            // 如果已经有有效的用户登录状态，延迟加载云端数据
-            if (hasValidUser) {
-                setTimeout(() => {
-                    loadData().catch(e => console.warn('Load data failed:', e));
-                }, 100);
-            } else {
+            // 如果用户未登录，延迟检查登录状态
+            if (!hasValidUser) {
                 setTimeout(() => {
                     checkLoginStatus().catch(e => console.warn('Check login status failed:', e));
                 }, 100);
