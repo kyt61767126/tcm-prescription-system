@@ -3293,6 +3293,9 @@
         }
         
         function finishInitUI(hasValidUser) {
+            console.log('=== finishInitUI 开始 ===');
+            console.log('当前 prescriptionItems 长度:', prescriptionItems.length);
+            
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
             document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
@@ -3351,6 +3354,24 @@
                     checkLoginStatus().catch(e => console.warn('Check login status failed:', e));
                 }, 100);
             }
+            
+            // 确保表格渲染完成（保障机制）
+            setTimeout(() => {
+                console.log('=== 表格渲染保障 ===');
+                console.log('prescriptionItems 长度:', prescriptionItems.length);
+                const tbody = document.getElementById('prescriptionBody');
+                console.log('表格内容:', tbody ? tbody.innerHTML.substring(0, 200) : 'tbody不存在');
+                
+                // 如果表格为空，强制重新渲染
+                if (prescriptionItems.length === 0 || !tbody.innerHTML.includes('<tr>')) {
+                    console.log('表格为空，重新初始化...');
+                    prescriptionItems = [];
+                    for (let i = 0; i < 25; i++) {
+                        prescriptionItems.push(createEmptyMedicine());
+                    }
+                    renderPrescriptionTable();
+                }
+            }, 200);
         }
 
         function handleBeforeUnload() {
