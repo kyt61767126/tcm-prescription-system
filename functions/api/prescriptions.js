@@ -80,7 +80,17 @@ function parseAuthHeaderSimple(request) {
     }
     
     try {
-        if (authHeader.startsWith('Basic ')) {
+        if (authHeader.startsWith('Bearer ')) {
+            // 使用JSON编码的用户信息
+            const token = authHeader.substring(7);
+            const userInfo = JSON.parse(atob(token));
+            return {
+                username: userInfo.username,
+                role: userInfo.role || 'user',
+                isAdmin: userInfo.role === 'admin',
+                allowSavePrescription: true
+            };
+        } else if (authHeader.startsWith('Basic ')) {
             const base64Credentials = authHeader.substring(6);
             // 使用 safeAtob 正确解码前端 safeBtoa 编码的中文用户名
             const credentials = safeAtob(base64Credentials);
@@ -90,13 +100,6 @@ function parseAuthHeaderSimple(request) {
                 username, 
                 role, 
                 isAdmin: role === 'admin',
-                allowSavePrescription: true
-            };
-        } else if (authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            const userInfo = JSON.parse(safeAtob(token));
-            return {
-                ...userInfo,
                 allowSavePrescription: true
             };
         }
