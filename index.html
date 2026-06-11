@@ -519,7 +519,22 @@
             .prescription-paper { padding: 20mm; }
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        // XLSX库按需加载（延迟加载，只有在导出Excel时才加载）
+        window.loadXLSX = function() {
+            return new Promise((resolve, reject) => {
+                if (window.XLSX) {
+                    resolve(window.XLSX);
+                    return;
+                }
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
+                script.onload = () => resolve(window.XLSX);
+                script.onerror = reject;
+                document.head.appendChild(script);
+            });
+        };
+    </script>
 </head>
 <body>
     <div id="loginOverlay" class="login-overlay">
@@ -1284,10 +1299,19 @@
                 
                 const text = await response.text();
                 console.log('Cloud fetch response text (first 200 chars):', text.substring(0, 200));
-                // 清理可能的BOM字符和其他无效字符
-                const cleanText = text.replace(/^\uFEFF/, '').trim();
-                const data = JSON.parse(cleanText);
-                console.log('Cloud fetch response data:', data);
+                
+                // 尝试解析JSON，如果失败则返回错误
+                let data;
+                try {
+                    // 清理可能的BOM字符和其他无效字符
+                    const cleanText = text.replace(/^\uFEFF/, '').trim();
+                    data = JSON.parse(cleanText);
+                    console.log('Cloud fetch response data:', data);
+                } catch (jsonError) {
+                    console.error('JSON解析失败:', jsonError.message);
+                    console.error('响应内容:', text);
+                    return { success: false, error: 'Invalid JSON response', fromCloud: true };
+                }
                 
                 // 兼容不同的响应格式：有些API可能直接返回数组或对象，没有success字段
                 if (Array.isArray(data) || typeof data === 'object' && data !== null) {
@@ -3334,7 +3358,14 @@
             document.getElementById('paperDoseCount').textContent = config.defaultDose;
             
             // 快速初始化表格（只创建必要的行）
-            for (let i = 0; i < 10; i++) addEmptyRow();
+            console.log('=== 初始化药物表格 ===');
+            console.log('prescriptionBody 存在:', document.getElementById('prescriptionBody') !== null);
+            
+            for (let i = 0; i < 10; i++) {
+                addEmptyRow();
+            }
+            console.log('添加空行后 prescriptionItems 长度:', prescriptionItems.length);
+            
             renderPrescriptionTable();
             calculateAmount();
             
@@ -3372,6 +3403,48 @@
                     renderPrescriptionTable();
                 }
             }, 200);
+            
+            // 延迟加载非关键资源（药品库等）
+            setTimeout(() => {
+                loadMedicines().catch(e => console.warn('加载药品库失败:', e));
+            }, 500);
+            
+            // 更强的表格渲染保障：确保表格一定能显示
+            const ensureTableVisible = () => {
+                const tbody = document.getElementById('prescriptionBody');
+                if (!tbody) {
+                    console.error('prescriptionBody 不存在！');
+                    return;
+                }
+                
+                // 检查表格是否有内容
+                if (!tbody.innerHTML.includes('<tr>') || prescriptionItems.length === 0) {
+                    console.log('=== 强制重新渲染表格 ===');
+                    prescriptionItems = [];
+                    for (let i = 0; i < 25; i++) {
+                        prescriptionItems.push(createEmptyMedicine());
+                    }
+                    renderPrescriptionTable();
+                    
+                    // 再检查一次
+                    setTimeout(() => {
+                        if (!tbody.innerHTML.includes('<tr>')) {
+                            console.error('表格渲染失败！尝试直接设置HTML');
+                            let html = '';
+                            for (let i = 0; i < 10; i++) {
+                                html += `<tr><td style="text-align:center;font-size:10px;color:#666;">${i + 1}</td><td><input type="text" style="padding:2px;text-align:left;"></td><td><input type="text" style="padding:2px;text-align:left;"></td><td><input type="number" style="padding:2px;"></td><td><input type="text" style="padding:2px;"></td><td><input type="text" readonly style="padding:2px;"></td><td><input type="text" readonly style="padding:2px;"></td><td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;">删</button></td></tr>`;
+                            }
+                            tbody.innerHTML = html;
+                        }
+                    }, 100);
+                }
+            };
+            
+            // 多次检查确保表格显示
+            ensureTableVisible();
+            setTimeout(ensureTableVisible, 100);
+            setTimeout(ensureTableVisible, 300);
+            setTimeout(ensureTableVisible, 500);
         }
 
         function handleBeforeUnload() {
@@ -5010,17 +5083,15 @@ IconFile=${scriptPath}`;
             const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
             
             if (isExcel) {
-                // 检查 XLSX 库是否加载
-                if (typeof XLSX === 'undefined') {
-                    alert('Excel导入功能暂时不可用，请将 Excel 文件另存为 CSV 格式后再导入！');
-                    event.target.value = '';
-                    return;
-                }
-                
-                // Excel 文件导入
+                // Excel 文件导入 - 按需加载 XLSX 库
                 const reader = new FileReader();
-                reader.onload = function(e) {
+                reader.onload = async function(e) {
                     try {
+                        // 先加载 XLSX 库（如果尚未加载）
+                        if (typeof XLSX === 'undefined') {
+                            await loadXLSX();
+                        }
+                        
                         const data = new Uint8Array(e.target.result);
                         const workbook = XLSX.read(data, { type: 'array' });
                         
