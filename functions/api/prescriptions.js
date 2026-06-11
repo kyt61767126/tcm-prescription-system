@@ -83,7 +83,9 @@ function parseAuthHeaderSimple(request) {
         if (authHeader.startsWith('Bearer ')) {
             // 使用JSON编码的用户信息
             const token = authHeader.substring(7);
-            const userInfo = JSON.parse(atob(token));
+            // 使用 safeAtob 正确解码前端 safeBtoa 编码的中文用户名
+            const decodedToken = safeAtob(token);
+            const userInfo = JSON.parse(decodedToken);
             return {
                 username: userInfo.username,
                 role: userInfo.role || 'user',

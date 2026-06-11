@@ -1390,9 +1390,13 @@
                 }
             }
             
-            // 返回硬编码的默认用户（首次使用时）- 个人版只有一个用户
+            // 返回硬编码的默认用户（首次使用时）
             return [
-                {username: 'doctor1', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true}
+                {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true},
+                {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true},
+                {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true},
+                {username: '王桂杰', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
+                {username: '王耀燮', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
             ];
         }
         
@@ -1512,11 +1516,12 @@
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 console.log('请求处方API:', url);
                 
-                // 添加认证头
-                const authToken = btoa(`${currentUser.username}:${currentUser.role || 'user'}`);
+                // 添加认证头（使用JSON编码支持中文用户名）
+                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
+                const authToken = safeBtoa(authPayload);
                 const response = await cloudFetch(url, {
                     headers: {
-                        'Authorization': `Basic ${authToken}`
+                        'Authorization': `Bearer ${authToken}`
                     }
                 });
                 console.log('处方API响应:', response);
@@ -1564,9 +1569,10 @@
                 // 添加认证头（即使GET请求不需要认证，保持一致性）
                 const options = {};
                 if (currentUser) {
-                    const authToken = btoa(`${currentUser.username}:${currentUser.role || 'user'}`);
+                    const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
+                    const authToken = safeBtoa(authPayload);
                     options.headers = {
-                        'Authorization': `Basic ${authToken}`
+                        'Authorization': `Bearer ${authToken}`
                     };
                 }
                 
@@ -1594,11 +1600,12 @@
                     console.warn('Only admin can save medicines');
                     return false;
                 }
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
+                const authToken = safeBtoa(authPayload);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/medicines`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': `Bearer ${authToken}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ medicines })
@@ -1624,9 +1631,10 @@
                 // 添加认证头（即使GET请求不需要认证，保持一致性）
                 const options = {};
                 if (currentUser) {
-                    const authToken = btoa(`${currentUser.username}:${currentUser.role || 'user'}`);
+                    const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
+                    const authToken = safeBtoa(authPayload);
                     options.headers = {
-                        'Authorization': `Basic ${authToken}`
+                        'Authorization': `Bearer ${authToken}`
                     };
                 }
                 
@@ -1654,11 +1662,12 @@
                     console.warn('User not logged in');
                     return false;
                 }
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
+                const authToken = safeBtoa(authPayload);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/formulas`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': `Bearer ${authToken}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ formulas })
@@ -1676,7 +1685,8 @@
                 console.log('Not logged in');
                 return;
             }
-            const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+            const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
+            const authToken = safeBtoa(authPayload);
             console.log('Testing auth with:', currentUser.username, currentUser.role);
             console.log('Auth token:', authToken);
             console.log('Decoded:', atob(authToken));
@@ -1685,7 +1695,7 @@
                 const response = await fetch(`${CLOUD_API_BASE}/prescriptions`, {
                     method: 'GET',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': `Bearer ${authToken}`,
                         'Content-Type': 'application/json'
                     }
                 });
@@ -1707,7 +1717,8 @@
                 
                 console.log('Current user:', currentUser);
                 
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
+                const authToken = safeBtoa(authPayload);
                 const url = `${CLOUD_API_BASE}/prescriptions`;
                 
                 console.log('Saving to URL:', url);
@@ -1717,7 +1728,7 @@
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': `Bearer ${authToken}`,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ prescription: prescriptions })
@@ -1750,13 +1761,14 @@
                     console.error('User not logged in');
                     return false;
                 }
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
+                const authToken = safeBtoa(authPayload);
                 // 使用测试用户参数绕过认证问题
                 const url = `${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}&user=${encodeURIComponent(currentUser.username)}`;
                 const response = await cloudFetch(url, {
                     method: 'DELETE',
                     headers: {
-                        'Authorization': `Basic ${authToken}`
+                        'Authorization': `Bearer ${authToken}`
                     }
                 });
                 return response.success;
@@ -1890,7 +1902,6 @@
             if (user) {
                 currentUser = user;
                 const userData = JSON.stringify(user);
-                localStorage.setItem('currentUser', userData);
                 sessionStorage.setItem('currentUser', userData);
                 
                 // 记录登录日志（多端优化）
@@ -1922,7 +1933,6 @@
             } catch(e) {}
             
             currentUser = null;
-            localStorage.removeItem('currentUser');
             sessionStorage.removeItem('currentUser');
             
             try { if (window.DataCache && DataCache.invalidate) DataCache.invalidate(); } catch(e) {}
@@ -2037,7 +2047,7 @@
             users[userIndex].password = newPwd;
             await saveUsers(users);
             currentUser = users[userIndex];
-            localStorage.setItem('currentUser', JSON.stringify(currentUser));
+            sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
             
             alert('密码修改成功！');
             closeModal('changePwdModal');
@@ -2122,7 +2132,7 @@
             
             if (currentUser.username === username) {
                 currentUser = users[userIndex];
-                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                sessionStorage.setItem('currentUser', JSON.stringify(currentUser));
                 updateUserDisplay();
             }
             
@@ -2232,7 +2242,6 @@
                     if (user) {
                         currentUser = user;
                         const userData = JSON.stringify(user);
-                        localStorage.setItem('currentUser', userData);
                         sessionStorage.setItem('currentUser', userData);
                         document.getElementById('loginOverlay').style.display = 'none';
                         updateUserDisplay();
@@ -2315,16 +2324,18 @@
             // 先从云端删除
             const success = await deletePrescriptionFromCloud(id);
             
-            // 无论云端是否成功，都立即更新本地数据
-            const oldCount = prescriptionHistory.length;
-            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-            localStorage.setItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            // 从云端删除后，重新加载数据
+            const cloudResult = await getPrescriptionsFromCloud(true);
+            if (cloudResult && cloudResult.data) {
+                prescriptionHistory = cloudResult.data;
+            } else {
+                prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            }
             
-            // 更新统计输入框（历史处方累计数量递减1）
+            // 更新统计输入框
             const clinicNoInput = document.getElementById('clinicNo');
-            if (clinicNoInput && oldCount > prescriptionHistory.length) {
-                const currentValue = parseInt(clinicNoInput.value) || oldCount;
-                clinicNoInput.value = Math.max(0, currentValue - 1);
+            if (clinicNoInput) {
+                clinicNoInput.value = prescriptionHistory.length;
             }
             
             // 清除处方缓存，下次获取时重新加载
@@ -3160,7 +3171,8 @@
                     return null;
                 }
                 
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authPayload = JSON.stringify({ username: currentUser.username, role: currentUser.role || 'user' });
+                const authToken = safeBtoa(authPayload);
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 
                 const controller = new AbortController();
@@ -3171,7 +3183,7 @@
                         method: 'GET',
                         signal: controller.signal,
                         headers: {
-                            'Authorization': `Basic ${authToken}`,
+                            'Authorization': `Bearer ${authToken}`,
                             'Content-Type': 'application/json'
                         }
                     });
@@ -3220,7 +3232,6 @@
                     if (ipcUser) {
                         currentUser = ipcUser;
                         const userData = JSON.stringify(ipcUser);
-                        localStorage.setItem('currentUser', userData);
                         sessionStorage.setItem('currentUser', userData);
                         // 确保登录覆盖层隐藏
                         document.getElementById('loginOverlay').style.display = 'none';
@@ -3270,9 +3281,11 @@
                 document.getElementById('loginOverlay').style.display = 'flex';
             }
             
-            // 如果成功恢复了登录状态，更新用户显示
+            // 如果成功恢复了登录状态，更新用户显示并加载数据
             if (hasValidUser) {
                 updateUserDisplay();
+                await loadData();
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             }
             
             // 继续初始化界面
@@ -4160,8 +4173,6 @@
                 setTimeout(() => {
                     savePrescriptionAsImage(savedRecord, officialNo);
                     searchPatientsQuick({target:{value:name}});
-                    
-                    loadData().catch(e => console.warn('Load data failed:', e));
                 }, 100);
             } else {
                 alert('处方保存失败，请检查网络连接后重试。');
