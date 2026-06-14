@@ -1500,9 +1500,15 @@
                     });
                     
                     // 更新界面
-                    if (cloudResult.totalCount) {
-                        const clinicNoEl = document.getElementById('clinicNo');
-                        if (clinicNoEl) clinicNoEl.value = cloudResult.totalCount;
+                    const clinicNoEl = document.getElementById('clinicNo');
+                    if (clinicNoEl) {
+                        if (currentUser && currentUser.role === 'admin') {
+                            // 管理员显示全部用户处方总数
+                            clinicNoEl.value = cloudResult.totalCount || cloudResult.data?.length || 0;
+                        } else {
+                            // 普通用户显示自己的处方数量
+                            clinicNoEl.value = prescriptionHistory.length;
+                        }
                     }
                     
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
@@ -2484,9 +2490,16 @@
                         console.log('过滤后处方数量:', prescriptionHistory.length);
                     }
                     
-                    if (cloudResult.totalCount) {
-                        const clinicNoEl = document.getElementById('clinicNo');
-                        if (clinicNoEl) clinicNoEl.value = cloudResult.totalCount;
+                    // 根据用户角色更新统计输入框
+                    const clinicNoEl = document.getElementById('clinicNo');
+                    if (clinicNoEl) {
+                        if (currentUser && currentUser.role === 'admin') {
+                            // 管理员显示全部用户处方总数
+                            clinicNoEl.value = cloudResult.totalCount || cloudResult.data?.length || 0;
+                        } else {
+                            // 普通用户显示自己的处方数量
+                            clinicNoEl.value = prescriptionHistory.length;
+                        }
                     }
                     
                     prescriptionHistory.sort((a, b) => {
@@ -4234,9 +4247,15 @@
                 }
                 
                 // 更新统计编号
-                if (response.nextClinicNo) {
-                    const clinicNoEl = document.getElementById('clinicNo');
-                    if (clinicNoEl) clinicNoEl.value = response.nextClinicNo;
+                const clinicNoEl = document.getElementById('clinicNo');
+                if (clinicNoEl) {
+                    if (currentUser && currentUser.role === 'admin') {
+                        // 管理员显示全部用户处方总数
+                        clinicNoEl.value = response.nextClinicNo || prescriptionHistory.length;
+                    } else {
+                        // 普通用户显示自己的处方数量
+                        clinicNoEl.value = prescriptionHistory.length;
+                    }
                 }
                 
                 // 刷新历史处方栏
