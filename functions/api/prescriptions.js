@@ -2,10 +2,22 @@
 function safeAtob(str) {
     try {
         const decoded = atob(str);
-        return decodeURIComponent(Array.prototype.map.call(decoded, function(c) {
-            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-        }).join(''));
+        // 检查是否包含URI编码的特征（%XX）
+        if (decoded.indexOf('%') !== -1) {
+            try {
+                return decodeURIComponent(Array.prototype.map.call(decoded, function(c) {
+                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+                }).join(''));
+            } catch (decodeError) {
+                // 如果decodeURIComponent失败，尝试手动解码
+                return decoded.replace(/%([0-9A-F]{2})/gi, function(match, p1) {
+                    return String.fromCharCode(parseInt(p1, 16));
+                });
+            }
+        }
+        return decoded;
     } catch (e) {
+        console.error('safeAtob error:', e);
         return atob(str);
     }
 }
@@ -359,13 +371,23 @@ export async function onRequest(context) {
                 prescriptions = [];
             }
             
+            // 调试日志
+            console.log('=== GET /prescriptions ===');
+            console.log('Current user:', JSON.stringify(currentUser));
+            console.log('Total prescriptions:', prescriptions.length);
+            
             // 根据用户角色筛选数据
             let filteredPrescriptions = prescriptions;
             if (!currentUser.isAdmin) {
                 // 普通用户只能看到自己的处方
-                filteredPrescriptions = prescriptions.filter(p => 
+                const userPrescriptions = prescriptions.filter(p => 
                     p.createdBy === currentUser.username
                 );
+                console.log('User prescriptions:', userPrescriptions.length);
+                console.log('Filter by createdBy:', currentUser.username);
+                filteredPrescriptions = userPrescriptions;
+            } else {
+                console.log('Admin user, showing all prescriptions');
             }
             
             // 按时间戳升序排序（最早的在前，确保编号按创建顺序生成）
@@ -423,7 +445,12 @@ export async function onRequest(context) {
                 count: filteredPrescriptions.length,
                 totalCount: formattedTotalCount,
                 userRole: currentUser.role,
-                isAdmin: currentUser.isAdmin
+                isAdmin: currentUser.isAdmin,
+                currentUsername: currentUser.username,
+                debug: {
+                    totalInKV: prescriptions.length,
+                    filteredCount: filteredPrescriptions.length
+                }
             }), {
                 status: 200,
                 headers: {
@@ -486,6 +513,8 @@ export async function onRequest(context) {
             
             // 为每个处方生成编号
             const savedPrescriptions = [];
+            console.log('=== POST /prescriptions ===');
+            console.log('Current user:', JSON.stringify(currentUser));
             for (const p of prescriptionList) {
                 const outpatientNo = await generatePrescriptionNo(kv, currentUser.username, 'daily');
                 const newPrescription = {
@@ -500,6 +529,7 @@ export async function onRequest(context) {
                     userRole: currentUser.role,
                     isAdmin: currentUser.isAdmin
                 };
+                console.log('Saved prescription with createdBy:', currentUser.username);
                 savedPrescriptions.push(newPrescription);
             }
             
