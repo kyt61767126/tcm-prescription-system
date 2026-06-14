@@ -1448,10 +1448,17 @@
         // 保存用户数据到云端
         async function saveUsersToCloud(users) {
             try {
+                // 添加认证头
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role || 'user'}`);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/users`, {
                     method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({ users: users })
                 });
+                console.log('保存用户到云端响应:', response);
                 return response.success;
             } catch (error) {
                 console.warn('Failed to save users to cloud:', error);
@@ -1831,17 +1838,25 @@
                 return user;
             });
             
+            console.log('=== 保存用户数据 ===');
+            console.log('用户列表:', usersWithPermission);
+            console.log('当前用户:', currentUser);
+            
             // 优先保存到云端
             const cloudSuccess = await saveUsersToCloud(usersWithPermission);
             
             if (cloudSuccess) {
-                console.log('✅ Users saved to cloud');
+                console.log('✅ 用户数据已保存到云端');
+                showToast('用户数据已同步到云端');
             } else {
-                console.warn('⚠️ Failed to save users to cloud, but local save will proceed');
+                console.warn('⚠️ 云端保存失败，本地保存继续');
+                showToast('云端同步失败，已保存到本地');
             }
             
             // 总是保存到本地，确保数据不丢失
             localStorage.setItem('systemUsers', JSON.stringify(usersWithPermission));
+            
+            return cloudSuccess;
         }
 
         // 强制把本地用户数据同步到云端
@@ -2143,7 +2158,7 @@
             if (newPassword !== null && newPassword.trim() !== '') {
                 users[userIndex].password = newPassword.trim();
             }
-            await saveUsers(users);
+            const saveSuccess = await saveUsers(users);
             
             if (currentUser.username === username) {
                 currentUser = users[userIndex];
@@ -2152,7 +2167,7 @@
             }
             
             await renderUserList();
-            alert('用户信息修改成功！');
+            alert(saveSuccess ? '✅ 用户信息修改成功！\n\n数据已自动同步到云端，其他设备登录也能看到此用户。' : '⚠️ 用户信息已保存到本地\n\n云端同步失败，可在设置中手动同步。');
         }
 
         async function handleAddUser() {
@@ -2180,7 +2195,7 @@
             };
             
             users.push(newUser);
-            await saveUsers(users);
+            const saveSuccess = await saveUsers(users);
             await renderUserList();
             
             // 自动添加到默认用户列表（以后重新安装也能看到）
@@ -2193,7 +2208,7 @@
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
             document.getElementById('newUserName').value = '';
-            alert('用户添加成功！\n\n该用户已自动添加到默认用户列表，以后重新安装也会显示。');
+            alert(saveSuccess ? '✅ 用户添加成功！\n\n该用户已自动同步到云端，手机等其他设备登录也能看到此用户。' : '⚠️ 用户已添加到本地\n\n云端同步失败，可在设置中手动同步。');
         }
 
         async function handleDeleteUser(username) {
@@ -2201,8 +2216,9 @@
             
             const users = await getUsers();
             const filteredUsers = users.filter(u => u.username !== username);
-            await saveUsers(filteredUsers);
+            const saveSuccess = await saveUsers(filteredUsers);
             await renderUserList();
+            showToast(saveSuccess ? '用户已删除并同步到云端' : '用户已删除，云端同步失败');
         }
 
         function updateUserDisplay() {
