@@ -661,7 +661,6 @@
                 <button class="action-btn" onclick="printPrescription('portrait')" style="padding:2px 8px;font-size:12px;">纵向打印</button>
                 <button class="action-btn" onclick="printPrescription('landscape')" style="padding:2px 8px;font-size:12px;">横向打印</button>
                 <button class="action-btn primary" onclick="savePrescription()" style="padding:2px 8px;font-size:12px;">保存</button>
-                <button class="action-btn" onclick="refreshHistory()" style="padding:2px 8px;font-size:12px;">🔄 刷新</button>
             </div>
             <div class="patient-section">
                 <div class="patient-row">
@@ -781,7 +780,10 @@
         </div>
 
         <div class="right-panel">
-            <div class="history-header">处方历史</div>
+            <div class="history-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>处方历史</span>
+                <button onclick="refreshHistory()" style="background:none;border:none;color:white;font-size:12px;cursor:pointer;padding:2px 4px;" title="刷新历史处方">🔄</button>
+            </div>
             <div class="history-list" id="historyList">
                 <div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div>
             </div>
