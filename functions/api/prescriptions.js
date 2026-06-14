@@ -1,21 +1,64 @@
-// 用户身份验证辅助函数
+// 用户身份验证辅助函数 - 与客户端safeBtoa对称
 function safeAtob(str) {
     try {
+        // 先用atob解码base64得到二进制字符串
         const decoded = atob(str);
-        // 检查是否包含URI编码的特征（%XX）
-        if (decoded.indexOf('%') !== -1) {
-            try {
-                return decodeURIComponent(Array.prototype.map.call(decoded, function(c) {
-                    return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
-                }).join(''));
-            } catch (decodeError) {
-                // 如果decodeURIComponent失败，尝试手动解码
-                return decoded.replace(/%([0-9A-F]{2})/gi, function(match, p1) {
-                    return String.fromCharCode(parseInt(p1, 16));
-                });
+        // 将二进制字符串转换为字节数组
+        const bytes = [];
+        for (let i = 0; i < decoded.length; i++) {
+            bytes.push(decoded.charCodeAt(i));
+        }
+        // 将字节数组转换回字符串（假设是UTF-8编码）
+        // 处理多字节UTF-8字符
+        let result = '';
+        let i = 0;
+        while (i < bytes.length) {
+            const byte = bytes[i];
+            if (byte < 0x80) {
+                // 单字节字符（ASCII）
+                result += String.fromCharCode(byte);
+                i++;
+            } else if (byte < 0xC0) {
+                // 无效的UTF-8起始字节
+                result += String.fromCharCode(byte);
+                i++;
+            } else if (byte < 0xE0) {
+                // 2字节字符
+                if (i + 1 < bytes.length) {
+                    const charCode = ((byte & 0x1F) << 6) | (bytes[i + 1] & 0x3F);
+                    result += String.fromCharCode(charCode);
+                    i += 2;
+                } else {
+                    result += String.fromCharCode(byte);
+                    i++;
+                }
+            } else if (byte < 0xF0) {
+                // 3字节字符
+                if (i + 2 < bytes.length) {
+                    const charCode = ((byte & 0x0F) << 12) | ((bytes[i + 1] & 0x3F) << 6) | (bytes[i + 2] & 0x3F);
+                    result += String.fromCharCode(charCode);
+                    i += 3;
+                } else {
+                    result += String.fromCharCode(byte);
+                    i++;
+                }
+            } else if (byte < 0xF8) {
+                // 4字节字符
+                if (i + 3 < bytes.length) {
+                    const charCode = ((byte & 0x07) << 18) | ((bytes[i + 1] & 0x3F) << 12) | ((bytes[i + 2] & 0x3F) << 6) | (bytes[i + 3] & 0x3F);
+                    result += String.fromCharCode(charCode);
+                    i += 4;
+                } else {
+                    result += String.fromCharCode(byte);
+                    i++;
+                }
+            } else {
+                // 无效的UTF-8字节
+                result += String.fromCharCode(byte);
+                i++;
             }
         }
-        return decoded;
+        return result;
     } catch (e) {
         console.error('safeAtob error:', e);
         return atob(str);
@@ -106,9 +149,13 @@ function parseAuthHeaderSimple(request) {
             };
         } else if (authHeader.startsWith('Basic ')) {
             const base64Credentials = authHeader.substring(6);
+            // 调试日志
+            console.log('Base64 credentials:', base64Credentials);
             // 使用 safeAtob 正确解码前端 safeBtoa 编码的中文用户名
             const credentials = safeAtob(base64Credentials);
+            console.log('Decoded credentials:', credentials);
             const [username, role] = credentials.split(':');
+            console.log('Parsed username:', username, 'role:', role);
             // 简化处理：所有登录用户都能保存处方
             return { 
                 username, 

@@ -1240,11 +1240,18 @@
         // 安全的 base64 编码函数，支持中文字符
         function safeBtoa(str) {
             try {
-                return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (match, p1) => {
-                    return String.fromCharCode('0x' + p1);
-                }));
+                // 使用TextEncoder获取UTF-8字节，然后转换为base64
+                const encoder = new TextEncoder();
+                const bytes = encoder.encode(str);
+                // 将字节转换为二进制字符串
+                let binary = '';
+                for (let i = 0; i < bytes.length; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                return btoa(binary);
             } catch (e) {
-                console.warn('safeBtoa error, using alternative method');
+                console.warn('safeBtoa error:', e);
+                // 备用方法
                 return btoa(unescape(encodeURIComponent(str)));
             }
         }
@@ -2442,14 +2449,23 @@
                 if (cloudResult.data.length > 0) {
                     console.log('currentUser.role:', currentUser ? currentUser.role : 'undefined');
                     console.log('currentUser.username:', currentUser ? currentUser.username : 'undefined');
+                    console.log('cloudResult.currentUsername:', cloudResult.currentUsername);
+                    console.log('cloudResult.isAdmin:', cloudResult.isAdmin);
+                    
+                    // 使用云端返回的currentUsername来确保一致性
+                    const effectiveUsername = cloudResult.currentUsername || currentUser?.username;
+                    
                     if (currentUser && currentUser.role === 'admin') {
                         console.log('管理员模式，显示所有处方');
                         prescriptionHistory = cloudResult.data;
                     } else {
                         console.log('普通用户模式，过滤处方');
+                        console.log('使用用户名过滤:', effectiveUsername);
+                        console.log('云端返回的处方:', cloudResult.data.map(p => ({ id: p.id, createdBy: p.createdBy })));
                         prescriptionHistory = cloudResult.data.filter(p => 
-                            p.createdBy === currentUser?.username || !p.createdBy
+                            p.createdBy === effectiveUsername || !p.createdBy
                         );
+                        console.log('过滤后处方数量:', prescriptionHistory.length);
                     }
                     
                     if (cloudResult.totalCount) {
