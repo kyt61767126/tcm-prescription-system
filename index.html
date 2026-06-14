@@ -676,17 +676,17 @@
                 </div>
                 <div class="patient-row">
                     <span class="patient-label">姓名</span>
-                    <input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off">
+                    <input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" onkeydown="handleEnterToNext(event, 'patientAge')" autocomplete="off">
                     <span class="patient-label">年龄</span>
-                    <input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()">
+                    <input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" onkeydown="handleEnterToNext(event, 'patientPhone')">
                     <span class="patient-label">电话</span>
-                    <input type="text" id="patientPhone" class="patient-input small">
+                    <input type="text" id="patientPhone" class="patient-input small" onkeydown="handleEnterToNext(event, 'patientAddress')">
                 </div>
                 <div class="patient-row">
                     <span class="patient-label">统计</span>
                     <input type="text" id="clinicNo" class="patient-input xx-small" onkeyup="updatePrescriptionPaper()">
                     <span class="patient-label">住址</span>
-                    <input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;">
+                    <input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;" onkeydown="handleEnterToNext(event, 'medicine_0')">
                 </div>
             </div>
             <div class="symptom-section">
@@ -3832,6 +3832,24 @@
             return code;
         }
 
+        // 回车键跳转到下一个输入框
+        function handleEnterToNext(event, nextFieldId) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                // 隐藏姓名下拉框
+                hidePatientNameDropdown();
+                // 跳转到下一个输入框
+                const nextField = document.getElementById(nextFieldId);
+                if (nextField) {
+                    nextField.focus();
+                    // 如果是姓名字段，选择后自动选第一个
+                    if (nextFieldId === 'patientAge' && nextField.value) {
+                        nextField.select();
+                    }
+                }
+            }
+        }
+        
         // 智能匹配性别：50-90年代取名常用字（各100字）+ 补充字
         function smartMatchGender(name) {
             if (!name) return;
