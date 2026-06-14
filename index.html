@@ -643,7 +643,7 @@
         <div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div>
         <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
         <div class="tab-item" onclick="showHelp()">【系统帮助】</div>
-        <div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div>
+        <div class="tab-item" style="background:#ffdddd;color:#8b0000;" id="logoutBtn">【退出登录】</div>
         <div class="tab-item" onclick="showChangePwdModal()">【修改密码】</div>
         <div class="tab-hint">
             当前用户: <span style="color:#008000;font-weight:bold;" id="userDisplayName"></span> | 
@@ -1918,7 +1918,7 @@
             }
         }
 
-        window.handleLogout = function() {
+        function doLogout() {
             try {
                 if (currentUser && window.saveLoginLog) {
                     saveLoginLog(currentUser.username, 'logout', navigator.userAgent);
@@ -1928,16 +1928,18 @@
             currentUser = null;
             localStorage.removeItem('currentUser');
             sessionStorage.removeItem('currentUser');
+            localStorage.removeItem('prescription_cache');
+            localStorage.removeItem('prescription_cache_time');
             
             try { if (window.DataCache && DataCache.invalidate) DataCache.invalidate(); } catch(e) {}
             
-            if (window.electronAPI && typeof window.electronAPI.quitApp === 'function') {
-                window.electronAPI.quitApp();
-            } else {
-                window.close();
-            }
+            // 显示登录窗口
+            document.getElementById('loginOverlay').style.display = 'flex';
+            document.getElementById('loginPassword').value = '';
             return false;
         }
+        
+        window.handleLogout = doLogout;
 
         function refreshUserInterface() {
             const migrated = migrateOldData();
@@ -4159,6 +4161,11 @@
                 // 刷新历史处方栏
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 
+                // 清空姓名输入框，准备输入新处方
+                document.getElementById('patientName').value = '';
+                // 隐藏姓名下拉框
+                hidePatientNameDropdown();
+                
                 // 保存成功提示（立即显示）
                 showToast('处方保存成功！');
                 
@@ -4166,7 +4173,6 @@
                 setTimeout(() => {
                     // 生成处方签图片并自动下载（使用云端返回的编号）
                     savePrescriptionAsImage(savedRecord, officialNo);
-                    searchPatientsQuick({target:{value:name}});
                     
                     // 后台异步重新加载完整数据
                     loadData().catch(e => console.warn('Load data failed:', e));
@@ -5747,8 +5753,22 @@ IconFile=${scriptPath}`;
                 updateImageSavePathDisplay();
             }
         }
-    
-    document.addEventListener('DOMContentLoaded', init);
+
+    document.addEventListener('DOMContentLoaded', () => {
+        init();
+        
+        // 绑定退出按钮点击事件
+        const logoutBtn = document.getElementById('logoutBtn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', doLogout);
+        }
+        
+        // 绑定移动端退出按钮
+        const mobileLogoutBtn = document.querySelector('.mobile-nav-item[onclick="handleLogout()"]');
+        if (mobileLogoutBtn) {
+            mobileLogoutBtn.addEventListener('click', doLogout);
+        }
+    });
     </script>
 </body>
 </html>
