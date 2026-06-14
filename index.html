@@ -816,7 +816,7 @@
                 <span class="mobile-nav-icon">⚙️</span>
                 <span>设置</span>
             </div>
-            <div class="mobile-nav-item" onclick="handleLogout()" style="color:var(--danger-color);">
+            <div class="mobile-nav-item" id="mobileLogoutBtn" style="color:var(--danger-color);">
                 <span class="mobile-nav-icon">🚪</span>
                 <span>退出</span>
             </div>
@@ -5812,7 +5812,7 @@ IconFile=${scriptPath}`;
         }
         
         // 绑定移动端退出按钮
-        const mobileLogoutBtn = document.querySelector('.mobile-nav-item[onclick="handleLogout()"]');
+        const mobileLogoutBtn = document.getElementById('mobileLogoutBtn');
         if (mobileLogoutBtn) {
             mobileLogoutBtn.addEventListener('click', doLogout);
         }
