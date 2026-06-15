@@ -827,8 +827,8 @@
     <div class="mobile-action-bar" id="mobileActionBar">
         <div class="action-buttons">
             <button class="action-btn" onclick="clearPrescription()">🗑️ 清空</button>
-            <button class="action-btn primary" onclick="savePrescription()">💾 保存</button>
-            <button class="action-btn" onclick="printPrescription('portrait')">🖨️ 打印</button>
+            <button class="action-btn primary" id="mobileActionBtn1" onclick="savePrescription()">💾 保存</button>
+            <button class="action-btn" id="mobileActionBtn2" onclick="printPrescription('portrait')">🖨️ 打印</button>
         </div>
     </div>
 
@@ -2234,7 +2234,7 @@
                 document.getElementById('userDisplayName').textContent = currentUser.name;
                 const userManageBtn = document.getElementById('userManageBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
-                
+
                 if (currentUser.role === 'admin') {
                     userManageBtn.style.display = 'block';
                     autoStartSection.style.display = 'block';
@@ -2242,6 +2242,31 @@
                     userManageBtn.style.display = 'none';
                     autoStartSection.style.display = 'none';
                 }
+
+                // 更新手机端底部按钮
+                updateMobileActionButtons();
+            }
+        }
+
+        // 根据用户角色更新手机端底部按钮
+        function updateMobileActionButtons() {
+            const btn1 = document.getElementById('mobileActionBtn1');
+            const btn2 = document.getElementById('mobileActionBtn2');
+
+            if (!btn1 || !btn2) return;
+
+            if (currentUser && currentUser.role === 'admin') {
+                // 管理员：统计分析、用户管理
+                btn1.innerHTML = '📊 统计分析';
+                btn1.onclick = function() { showModal('analyticsModal'); };
+                btn2.innerHTML = '👥 用户管理';
+                btn2.onclick = function() { showUserManageModal(); };
+            } else {
+                // 普通用户：统计分析、修改密码
+                btn1.innerHTML = '📊 统计分析';
+                btn1.onclick = function() { showModal('analyticsModal'); };
+                btn2.innerHTML = '🔑 修改密码';
+                btn2.onclick = function() { showChangePwdModal(); };
             }
         }
 
