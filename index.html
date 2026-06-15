@@ -2547,6 +2547,20 @@
             
             console.log('最终 prescriptionHistory 长度:', prescriptionHistory.length);
             
+            // 统计当天的处方数量，更新 dailyCounter
+            const today = new Date().toDateString();
+            const todayPrescriptions = prescriptionHistory.filter(p => {
+                const pDate = new Date(p.createdAt || p.date || 0).toDateString();
+                return pDate === today;
+            });
+            dailyCounter = todayPrescriptions.length + 1;
+            currentPrescriptionDate = today;
+            
+            // 更新编号输入框显示最新编号
+            const prescriptionNo = generatePrescriptionNo();
+            document.getElementById('prescriptionNo').value = prescriptionNo;
+            document.getElementById('paperClinicNo').textContent = prescriptionNo;
+            
             // 渲染历史列表
             if (currentUser) {
                 const filtered = filterPrescriptionsByPermission(prescriptionHistory);
@@ -3444,6 +3458,10 @@
                         const filtered = filterPrescriptionsByPermission(prescriptionHistory);
                         renderHistoryList(filtered.slice(0, 15));
                     }
+                    // 生成初始处方编号
+                    const prescriptionNo = generatePrescriptionNo();
+                    document.getElementById('prescriptionNo').value = prescriptionNo;
+                    document.getElementById('paperClinicNo').textContent = prescriptionNo;
                 }, 100);
             } else {
                 setTimeout(() => {
