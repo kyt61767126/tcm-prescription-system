@@ -1502,12 +1502,14 @@
                     // 更新界面
                     const clinicNoEl = document.getElementById('clinicNo');
                     if (clinicNoEl) {
+                        // 生成年份后两位 + 数量(6位)的格式
+                        const year = new Date().getFullYear().toString().substring(2);
                         if (currentUser && currentUser.role === 'admin') {
                             // 管理员显示全部用户处方总数
-                            clinicNoEl.value = cloudResult.totalCount || cloudResult.data?.length || 0;
+                            clinicNoEl.value = cloudResult.totalCount || (year + '000000');
                         } else {
-                            // 普通用户显示自己的处方数量
-                            clinicNoEl.value = prescriptionHistory.length;
+                            // 普通用户显示自己的处方数量（相同格式）
+                            clinicNoEl.value = year + prescriptionHistory.length.toString().padStart(6, '0');
                         }
                     }
                     
@@ -2493,12 +2495,14 @@
                     // 根据用户角色更新统计输入框
                     const clinicNoEl = document.getElementById('clinicNo');
                     if (clinicNoEl) {
+                        // 生成年份后两位 + 数量(6位)的格式
+                        const year = new Date().getFullYear().toString().substring(2);
                         if (currentUser && currentUser.role === 'admin') {
                             // 管理员显示全部用户处方总数
-                            clinicNoEl.value = cloudResult.totalCount || cloudResult.data?.length || 0;
+                            clinicNoEl.value = cloudResult.totalCount || (year + '000000');
                         } else {
-                            // 普通用户显示自己的处方数量
-                            clinicNoEl.value = prescriptionHistory.length;
+                            // 普通用户显示自己的处方数量（相同格式）
+                            clinicNoEl.value = year + prescriptionHistory.length.toString().padStart(6, '0');
                         }
                     }
                     
@@ -4249,12 +4253,14 @@
                 // 更新统计编号
                 const clinicNoEl = document.getElementById('clinicNo');
                 if (clinicNoEl) {
+                    // 生成年份后两位 + 数量(6位)的格式
+                    const year = new Date().getFullYear().toString().substring(2);
                     if (currentUser && currentUser.role === 'admin') {
                         // 管理员显示全部用户处方总数
-                        clinicNoEl.value = response.nextClinicNo || prescriptionHistory.length;
+                        clinicNoEl.value = response.nextClinicNo || (year + '000000');
                     } else {
-                        // 普通用户显示自己的处方数量
-                        clinicNoEl.value = prescriptionHistory.length;
+                        // 普通用户显示自己的处方数量（相同格式）
+                        clinicNoEl.value = year + prescriptionHistory.length.toString().padStart(6, '0');
                     }
                 }
                 
