@@ -192,7 +192,7 @@
             
             /* 显示移动端导航 */
             .mobile-nav { display: block; }
-            .mobile-action-bar { display: none; }
+            .mobile-action-bar { display: block; }
             
             /* 主容器调整 */
             .main-container {
@@ -2256,10 +2256,10 @@
             if (!btn1 || !btn2) return;
 
             if (currentUser && currentUser.role === 'admin') {
-                // 管理员：统计分析、用户管理
+                // 管理员：统计分析、账户管理
                 btn1.innerHTML = '📊 统计分析';
                 btn1.onclick = function() { showModal('analyticsModal'); };
-                btn2.innerHTML = '👥 用户管理';
+                btn2.innerHTML = '👤 账户管理';
                 btn2.onclick = function() { showUserManageModal(); };
             } else {
                 // 普通用户：统计分析、修改密码
