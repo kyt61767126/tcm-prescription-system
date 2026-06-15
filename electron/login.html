@@ -187,9 +187,10 @@
         
         <div class="main-content">
             <div class="login-box">
-                <div class="login-field">
+                <div class="login-field" id="usernameField">
                     <label>用户：</label>
                     <select id="loginUsername"></select>
+                    <input type="text" id="loginUsernameInput" style="display:none;" placeholder="输入用户名">
                 </div>
                 
                 <div class="login-field">
@@ -235,23 +236,53 @@
             return defaultUsers;
         }
         
+        // 检测是否有管理员用户
+        function hasAdminUser(users) {
+            return users.some(u => u.role === 'admin');
+        }
+        
         async function initLoginDropdown() {
-            const select = document.getElementById('loginUsername');
             const users = await getUsers();
+            const select = document.getElementById('loginUsername');
+            const input = document.getElementById('loginUsernameInput');
             
-            select.innerHTML = '';
-            users.forEach(user => {
-                const option = document.createElement('option');
-                option.value = user.username;
-                option.textContent = user.name || user.username;
-                select.appendChild(option);
-            });
+            if (hasAdminUser(users)) {
+                // 有管理员，显示下拉框
+                select.style.display = 'block';
+                input.style.display = 'none';
+                select.innerHTML = '';
+                users.forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.username;
+                    option.textContent = user.name || user.username;
+                    select.appendChild(option);
+                });
+            } else {
+                // 无管理员（全部是普通用户），显示输入框
+                select.style.display = 'none';
+                input.style.display = 'block';
+                // 如果有记住的用户名，显示出来
+                const savedUser = localStorage.getItem('lastUsername');
+                if (savedUser) {
+                    input.value = savedUser;
+                }
+            }
         }
         
         async function handleLogin() {
-            const username = document.getElementById('loginUsername').value;
+            const select = document.getElementById('loginUsername');
+            const input = document.getElementById('loginUsernameInput');
             const password = document.getElementById('loginPassword').value;
             const errorDiv = document.getElementById('loginError');
+            
+            // 获取用户名（下拉框或输入框）
+            const username = select.style.display !== 'none' ? select.value : input.value.trim();
+            
+            if (!username) {
+                errorDiv.textContent = '请输入用户名';
+                errorDiv.style.display = 'block';
+                return;
+            }
             
             if (!password) {
                 errorDiv.textContent = '请输入密码';
@@ -263,6 +294,8 @@
             const user = users.find(u => u.username === username && u.password === password);
             
             if (user) {
+                // 记住用户名
+                localStorage.setItem('lastUsername', username);
                 localStorage.setItem('currentUser', JSON.stringify(user));
                 sessionStorage.setItem('currentUser', JSON.stringify(user));
                 ipcRenderer.invoke('login-success', user);
@@ -276,8 +309,14 @@
             ipcRenderer.invoke('login-cancel');
         }
         
+        // 回车键登录
         document.addEventListener('DOMContentLoaded', async () => {
             await initLoginDropdown();
+            document.getElementById('loginPassword').addEventListener('keyup', (e) => {
+                if (e.key === 'Enter') {
+                    handleLogin();
+                }
+            });
         });
     </script>
 </body>
