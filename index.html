@@ -2332,6 +2332,40 @@
         let selectedSearchIndex = 0;
         let currentSearchColumn = 'code';
         let medicineMap = new Map();
+        let medicineFrequency = {};
+        
+        function buildMedicineMap() {
+            medicineMap.clear();
+            medicines.forEach(med => {
+                medicineMap.set(med.name, med);
+            });
+        }
+        
+        function getMedicineByName(name) {
+            return medicineMap.get(name);
+        }
+        
+        function loadMedicineFrequency() {
+            try {
+                const saved = localStorage.getItem('medicineFrequency');
+                if (saved) medicineFrequency = JSON.parse(saved);
+            } catch (e) {
+                medicineFrequency = {};
+            }
+        }
+        
+        function saveMedicineFrequency() {
+            localStorage.setItem('medicineFrequency', JSON.stringify(medicineFrequency));
+        }
+        
+        function updateMedicineFrequency(items) {
+            items.forEach(item =>{
+                if (item.name) {
+                    medicineFrequency[item.name] = (medicineFrequency[item.name] || 0) + 1;
+                }
+            });
+            saveMedicineFrequency();
+        }
         
         // 格式化时间显示
         function formatHistoryTime(dateStr) {
@@ -2389,17 +2423,6 @@
             
             // 立即刷新历史列表
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-        }
-        
-        function buildMedicineMap() {
-            medicineMap.clear();
-            medicines.forEach(med => {
-                medicineMap.set(med.name, med);
-            });
-        }
-        
-        function getMedicineByName(name) {
-            return medicineMap.get(name);
         }
         
         let saveTimeout = null;
@@ -3210,18 +3233,31 @@
                 localStorage.removeItem('medicines');
             } else if (savedMedicines) {
                 const parsedMedicines = safeParseJSON(savedMedicines, []);
-                if (parsedMedicines.length > 0) {
+                if (Array.isArray(parsedMedicines) && parsedMedicines.length > 0) {
                     medicines = removeDuplicateMedicines(parsedMedicines);
-                } else if (localStorage.getItem('medicines') !== null) {
-                    medicines = [];
                 }
             }
             
-            if (medicines.length === 0 && localStorage.getItem('medicines') === null) {
+            // 如果medicines为空，尝试从非加密的localStorage读取
+            if (medicines.length === 0) {
+                const plainMedicines = localStorage.getItem('medicines');
+                if (plainMedicines) {
+                    try {
+                        const parsed = JSON.parse(plainMedicines);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            medicines = removeDuplicateMedicines(parsed);
+                        }
+                    } catch (e) {}
+                }
+            }
+            
+            // 如果仍然为空，使用默认药物
+            if (medicines.length === 0) {
                 medicines = defaultMedicines;
             }
             
             buildMedicineMap();
+            loadMedicineFrequency();
             
             medicines.forEach(m => {
                 if (!m.dosage) {
@@ -3603,8 +3639,12 @@
             
             filtered = filtered.filter(m => !prescriptionItems.some(item => item.name === m.name));
 
-            // 排序：先按药名字数，同字数按简码长度
             filtered.sort((a, b) => {
+                const aFreq = medicineFrequency[a.name] || 0;
+                const bFreq = medicineFrequency[b.name] || 0;
+                if (aFreq !== bFreq) {
+                    return bFreq - aFreq;
+                }
                 const aNameLen = (a.name || '').length;
                 const bNameLen = (b.name || '').length;
                 if (aNameLen !== bNameLen) {
@@ -4115,8 +4155,7 @@
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
 
-        function clearPrescription(skipConfirm) {
-            if (!skipConfirm && !confirm('确定清空当前处方？')) return;
+        function clearPrescription() {
             document.getElementById('patientName').value = '';
             document.getElementById('patientAge').value = '';
             document.getElementById('patientPhone').value = '';
@@ -4294,6 +4333,9 @@
                 hidePatientNameDropdown();
                 // 重新渲染历史列表（清空输入框会触发onkeyup事件清空历史，需要重新渲染）
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                
+                // 更新药物使用频率
+                updateMedicineFrequency(record.items);
                 
                 // 保存成功提示（立即显示）
                 showToast('处方保存成功！');
