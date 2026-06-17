@@ -4115,8 +4115,8 @@
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
 
-        function clearPrescription() {
-            if (!confirm('确定清空当前处方？')) return;
+        function clearPrescription(skipConfirm) {
+            if (!skipConfirm && !confirm('确定清空当前处方？')) return;
             document.getElementById('patientName').value = '';
             document.getElementById('patientAge').value = '';
             document.getElementById('patientPhone').value = '';
@@ -4302,8 +4302,8 @@
                 setTimeout(() => {
                     // 生成处方签图片并自动下载（使用云端返回的编号）
                     savePrescriptionAsImage(savedRecord, officialNo);
-                    // 保存后清空表单，方便下一次使用
-                    clearPrescription();
+                    // 保存后清空表单，方便下一次使用（跳过确认弹窗）
+                    clearPrescription(true);
                 }, 100);
             } else {
                 alert('处方保存失败，请检查网络连接后重试。');
