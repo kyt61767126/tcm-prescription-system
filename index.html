@@ -4302,6 +4302,8 @@
                 setTimeout(() => {
                     // 生成处方签图片并自动下载（使用云端返回的编号）
                     savePrescriptionAsImage(savedRecord, officialNo);
+                    // 保存后清空表单，方便下一次使用
+                    clearPrescription();
                 }, 100);
             } else {
                 alert('处方保存失败，请检查网络连接后重试。');
