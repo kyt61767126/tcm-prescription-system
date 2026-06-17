@@ -4554,10 +4554,9 @@
                     downloadViaBrowser(canvas, fileName);
                 }
             } else {
-                // 浏览器版：使用传统下载方式
-                const monthFolder = getCurrentMonthFolder();
-                const fileNameWithMonth = `${monthFolder}_${fileName}`;
-                downloadViaBrowser(canvas, fileNameWithMonth);
+                // 浏览器版（手机端）：不自动下载图片，避免弹出下载对话框
+                // 用户可以通过预览页面手动下载或截图保存
+                console.log('浏览器版：处方已保存，图片可通过预览页面下载');
             }
         }
         
