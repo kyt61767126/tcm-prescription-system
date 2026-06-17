@@ -2368,28 +2368,26 @@
             // 清除处方缓存
             DataCache.invalidate('prescriptions');
             
-            // 重新从云端获取数据并刷新列表
-            if (currentUser) {
-                const cloudResult = await getPrescriptionsFromCloud(true);
-                if (cloudResult && cloudResult.data) {
-                    prescriptionHistory = cloudResult.data.filter(p => 
+            // 直接从本地数组中移除被删除的处方（更可靠，避免依赖云端返回）
+            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            
+            // 同步更新 clinicNo 输入框（管理员显示总数，普通用户显示自己的数量）
+            const clinicNoInput = document.getElementById('clinicNo');
+            if (clinicNoInput) {
+                const year = new Date().getFullYear().toString().substring(2);
+                if (currentUser && currentUser.role === 'admin') {
+                    // 管理员显示总数（使用本地计数）
+                    clinicNoInput.value = prescriptionHistory.length.toString().padStart(6, '0');
+                } else {
+                    // 普通用户显示自己的处方数量
+                    const myPrescriptions = prescriptionHistory.filter(p => 
                         p.createdBy === currentUser.username || !p.createdBy
                     );
-                    prescriptionHistory.sort((a, b) => {
-                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                        return timeB - timeA;
-                    });
+                    clinicNoInput.value = year + myPrescriptions.length.toString().padStart(6, '0');
                 }
             }
             
-            // 更新统计输入框
-            const clinicNoInput = document.getElementById('clinicNo');
-            if (clinicNoInput) {
-                clinicNoInput.value = prescriptionHistory.length;
-            }
-            
-            // 刷新历史列表
+            // 立即刷新历史列表
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
         
@@ -5365,22 +5363,13 @@ IconFile=${scriptPath}`;
             // 从云端删除
             await deletePrescriptionFromCloud(id);
             
-            // 清除缓存并重新获取数据
+            // 清除缓存
             DataCache.invalidate('prescriptions');
-            if (currentUser) {
-                const cloudResult = await getPrescriptionsFromCloud(true);
-                if (cloudResult && cloudResult.data) {
-                    prescriptionHistory = cloudResult.data.filter(p => 
-                        p.createdBy === currentUser.username || !p.createdBy
-                    );
-                    prescriptionHistory.sort((a, b) => {
-                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                        return timeB - timeA;
-                    });
-                }
-            }
             
+            // 直接从本地数组中移除被删除的处方（更可靠）
+            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            
+            // 刷新病历列表
             renderCaseList(prescriptionHistory);
         }
 
