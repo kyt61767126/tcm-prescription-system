@@ -4,8 +4,60 @@ const fs = require('fs').promises;
 const fse = require('fs-extra');
 
 let mainWindow;
-let loginWindow;
 let sharedSession;
+let currentLoggedInUser = null;
+
+app.commandLine.appendSwitch('enable-features', 'WebDialog');
+
+app.on('browser-window-created', (event, window) => {
+    window.webContents.on('dom-ready', () => {
+        window.webContents.executeJavaScript(`
+            (function() {
+                if (window.__electronDialogsInjected) return;
+                window.__electronDialogsInjected = true;
+                
+                window.alert = function(message) {
+                    return new Promise((resolve) => { showElectronAlert(String(message || ''), () => resolve()); });
+                };
+                window.prompt = function(message, defaultValue) {
+                    return new Promise((resolve) => { showElectronPrompt(String(message || ''), String(defaultValue || ''), (value) => resolve(value)); });
+                };
+                window.confirm = function(message) {
+                    return new Promise((resolve) => { showElectronConfirm(String(message || ''), (result) => resolve(result)); });
+                };
+                
+                function showElectronAlert(message, callback) {
+                    const modal = document.createElement('div');
+                    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
+                    modal.innerHTML = '<div style="background:#fff;padding:20px;border-radius:8px;min-width:300px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"><div style="margin-bottom:15px;font-size:14px;color:#333;white-space:pre-wrap;">' + escapeHtml(message) + '</div><div style="text-align:right;"><button id="__alertOk" style="padding:6px 16px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;">确定</button></div></div>';
+                    document.body.appendChild(modal);
+                    document.getElementById('__alertOk').onclick = function() { modal.remove(); if (callback) callback(); };
+                }
+                function showElectronPrompt(message, defaultValue, callback) {
+                    const modal = document.createElement('div');
+                    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
+                    modal.innerHTML = '<div style="background:#fff;padding:20px;border-radius:8px;min-width:300px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"><div style="margin-bottom:15px;font-size:14px;color:#333;">' + escapeHtml(message) + '</div><input id="__promptInput" type="text" value="' + escapeAttr(defaultValue) + '" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px;box-sizing:border-box;"><div style="margin-top:15px;text-align:right;"><button id="__promptCancel" style="padding:6px 16px;margin-right:8px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">取消</button><button id="__promptOk" style="padding:6px 16px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;">确定</button></div></div>';
+                    document.body.appendChild(modal);
+                    const input = document.getElementById('__promptInput');
+                    input.focus(); input.select();
+                    document.getElementById('__promptOk').onclick = function() { const v = input.value; modal.remove(); if (callback) callback(v); };
+                    document.getElementById('__promptCancel').onclick = function() { modal.remove(); if (callback) callback(null); };
+                    input.onkeydown = function(e) { if (e.key === 'Enter') document.getElementById('__promptOk').click(); else if (e.key === 'Escape') document.getElementById('__promptCancel').click(); };
+                }
+                function showElectronConfirm(message, callback) {
+                    const modal = document.createElement('div');
+                    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
+                    modal.innerHTML = '<div style="background:#fff;padding:20px;border-radius:8px;min-width:300px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"><div style="margin-bottom:15px;font-size:14px;color:#333;white-space:pre-wrap;">' + escapeHtml(message) + '</div><div style="text-align:right;"><button id="__confirmCancel" style="padding:6px 16px;margin-right:8px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">取消</button><button id="__confirmOk" style="padding:6px 16px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;">确定</button></div></div>';
+                    document.body.appendChild(modal);
+                    document.getElementById('__confirmOk').onclick = function() { modal.remove(); if (callback) callback(true); };
+                    document.getElementById('__confirmCancel').onclick = function() { modal.remove(); if (callback) callback(false); };
+                }
+                function escapeHtml(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+                function escapeAttr(str) { return String(str).replace(/"/g, '&quot;').replace(/&/g, '&amp;'); }
+            })();
+        `).catch(() => {});
+    });
+});
 
 function getExeDirectory() {
     if (process.env.PORTABLE_EXECUTABLE_DIR) {
@@ -69,21 +121,7 @@ async function savePrescriptionImage(imageData, fileName) {
     }
 }
 
-function hasSavedLoginState() {
-    try {
-        const userDataPath = app.getPath('userData');
-        const settingsPath = path.join(userDataPath, 'login-state.json');
-        if (fse.pathExistsSync(settingsPath)) {
-            const data = fse.readJsonSync(settingsPath);
-            return data && data.hasLoggedIn;
-        }
-    } catch (e) {
-        console.log('检查登录状态失败:', e);
-    }
-    return false;
-}
 
-let currentLoggedInUser = null;
 
 function saveLoginState(hasLoggedIn, user = null) {
     try {
@@ -97,30 +135,6 @@ function saveLoginState(hasLoggedIn, user = null) {
         console.log('保存登录状态失败:', e);
     }
 }
-
-function createLoginWindow() {
-    loginWindow = new BrowserWindow({
-        width: 400,
-        height: 350,
-        resizable: false,
-        autoHideMenuBar: true,
-        webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false,
-            session: sharedSession
-        },
-        icon: path.join(__dirname, 'icon.png')
-    });
-
-    const loginPath = path.join(__dirname, 'login.html');
-    loginWindow.loadFile(loginPath);
-
-    if (!app.isPackaged) {
-        loginWindow.webContents.openDevTools();
-    }
-}
-
-const USE_CLOUD_VERSION = true;
 
 function createMainWindow() {
     mainWindow = new BrowserWindow({
@@ -137,95 +151,24 @@ function createMainWindow() {
         icon: path.join(__dirname, 'icon.png')
     });
 
-    if (USE_CLOUD_VERSION) {
-        const cloudUrl = 'https://tcm-prescription-system.pages.dev';
-        
-        mainWindow.webContents.once('dom-ready', () => {
-            if (currentLoggedInUser) {
-                mainWindow.webContents.executeJavaScript(`
-                    (function() {
-                        var userStr = ${JSON.stringify(JSON.stringify(currentLoggedInUser))};
-                        if (window.localStorage) {
-                            window.localStorage.setItem('currentUser', userStr);
-                        }
-                        if (window.sessionStorage) {
-                            window.sessionStorage.setItem('currentUser', userStr);
-                        }
-                    })();
-                `).catch(err => console.log('注入登录状态失败:', err));
-            }
-        });
-        
-        mainWindow.webContents.once('did-finish-load', () => {
-            if (currentLoggedInUser) {
-                mainWindow.webContents.executeJavaScript(`
-                    (function() {
-                        var userStr = ${JSON.stringify(JSON.stringify(currentLoggedInUser))};
-                        if (window.localStorage && !window.localStorage.getItem('currentUser')) {
-                            window.localStorage.setItem('currentUser', userStr);
-                        }
-                        if (window.sessionStorage && !window.sessionStorage.getItem('currentUser')) {
-                            window.sessionStorage.setItem('currentUser', userStr);
-                        }
-                        if (typeof checkLoginStatus === 'function') {
-                            setTimeout(function() { checkLoginStatus(); }, 200);
-                        }
-                    })();
-                `).catch(err => console.log('备用注入登录状态失败:', err));
-            }
-        });
-        
-        mainWindow.loadURL(cloudUrl);
-    } else {
-        const indexPath = path.join(__dirname, '..', 'index.html');
-        mainWindow.loadFile(indexPath);
-    }
+    const indexPath = path.join(__dirname, '..', 'index.html');
+    
+    mainWindow.loadFile(indexPath);
 
     if (!app.isPackaged) {
         mainWindow.webContents.openDevTools();
     }
 }
-
-function restoreLoginState() {
-    try {
-        const userDataPath = app.getPath('userData');
-        const settingsPath = path.join(userDataPath, 'login-state.json');
-        if (fse.pathExistsSync(settingsPath)) {
-            const data = fse.readJsonSync(settingsPath);
-            if (data && data.hasLoggedIn && data.user) {
-                currentLoggedInUser = data.user;
-                console.log('已恢复登录用户:', data.user.username);
-                return true;
-            }
-        }
-    } catch (e) {
-        console.log('恢复登录状态失败:', e);
-    }
-    return false;
-}
-
 app.whenReady().then(() => {
     sharedSession = session.fromPartition('persist:tcm-prescription-system');
     
     fse.ensureDirSync(getDownloadsDirectory());
 
-    const restored = restoreLoginState();
-    
-    if (restored) {
-        console.log('恢复登录状态成功，直接打开主窗口');
-        createMainWindow();
-    } else {
-        console.log('无登录状态，显示登录窗口');
-        createLoginWindow();
-    }
+    createMainWindow();
 
     app.on('activate', () => {
         if (BrowserWindow.getAllWindows().length === 0) {
-            if (restoreLoginState()) {
-                createMainWindow();
-            } else {
-                createLoginWindow();
-            }
+            createMainWindow();
         }
     });
 });
@@ -252,14 +195,6 @@ ipcMain.handle('get-downloads-root', async () => {
 
 ipcMain.handle('login-success', async (event, userData) => {
     saveLoginState(true, userData);
-
-    if (loginWindow) {
-        loginWindow.close();
-        loginWindow = null;
-    }
-
-    createMainWindow();
-
     return { success: true };
 });
 
@@ -269,11 +204,6 @@ ipcMain.handle('get-logged-in-user', async () => {
 
 ipcMain.handle('quit-app', async () => {
     saveLoginState(false);
-    app.quit();
-    return { success: true };
-});
-
-ipcMain.handle('login-cancel', async () => {
     app.quit();
     return { success: true };
 });
