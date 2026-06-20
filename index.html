@@ -535,8 +535,8 @@
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>用户名</label>
-                    <input type="text" id="regUsername" placeholder="请输入用户名">
+                    <label>登录账号</label>
+                    <input type="text" id="regUsername" placeholder="用于登录，建议英文或拼音">
                 </div>
                 <div class="form-group">
                     <label>密码</label>
@@ -547,8 +547,8 @@
                     <input type="password" id="regConfirmPwd" placeholder="请再次输入密码">
                 </div>
                 <div class="form-group">
-                    <label>姓名/昵称</label>
-                    <input type="text" id="regName" placeholder="请输入姓名或昵称">
+                    <label>医师姓名</label>
+                    <input type="text" id="regName" placeholder="处方上显示的医师姓名，如：张医生">
                 </div>
             </div>
             <div class="modal-footer">
@@ -595,9 +595,9 @@
                 <div id="userList" class="user-list"></div>
                 <div class="form-group" style="margin-top:15px;">
                     <label>添加新用户</label>
-                    <input type="text" id="newUserUsername" placeholder="用户名">
+                    <input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音">
                     <input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;">
-                    <input type="text" id="newUserName" placeholder="姓名/昵称" style="margin-top:5px;">
+                    <input type="text" id="newUserName" placeholder="医师姓名，如：张医生" style="margin-top:5px;">
                 </div>
             </div>
             <div class="modal-footer">
@@ -1999,6 +1999,12 @@
                 return;
             }
             
+            // 验证用户名是否包含中文
+            if (/[\u4e00-\u9fa5]/.test(username)) {
+                alert('登录账号不能使用中文，请使用英文或拼音！\n示例：zhaoyisheng 或 doctor3');
+                return;
+            }
+            
             if (password !== confirmPwd) {
                 alert('两次输入的密码不一致');
                 return;
@@ -2161,6 +2167,12 @@
             
             if (!username || !password || !name) {
                 alert('请填写完整信息');
+                return;
+            }
+            
+            // 验证用户名是否包含中文
+            if (/[\u4e00-\u9fa5]/.test(username)) {
+                alert('登录账号不能使用中文，请使用英文或拼音！\n示例：zhaoyisheng 或 doctor3');
                 return;
             }
             
