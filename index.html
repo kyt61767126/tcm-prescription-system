@@ -5175,6 +5175,49 @@ IconFile=${scriptPath}`;
             showToast('药物库已完全清空，请重新导入您的药物库');
         }
 
+        function decodeTextWithAutoEncoding(uint8Array) {
+            const len = uint8Array.length;
+            
+            let hasUTF8BOM = false;
+            if (len >= 3 && uint8Array[0] === 0xEF && uint8Array[1] === 0xBB && uint8Array[2] === 0xBF) {
+                hasUTF8BOM = true;
+            }
+            
+            let hasGBKPattern = false;
+            for (let i = 0; i < len - 1; i++) {
+                const byte1 = uint8Array[i];
+                const byte2 = uint8Array[i + 1];
+                
+                if ((byte1 >= 0x81 && byte1 <= 0xFE) && (byte2 >= 0x40 && byte2 <= 0xFE && byte2 !== 0x7F)) {
+                    hasGBKPattern = true;
+                    break;
+                }
+            }
+            
+            let text;
+            if (hasUTF8BOM) {
+                text = new TextDecoder('utf-8').decode(uint8Array.slice(3));
+            } else if (hasGBKPattern) {
+                try {
+                    text = new TextDecoder('GBK').decode(uint8Array);
+                } catch (e) {
+                    text = new TextDecoder('utf-8').decode(uint8Array);
+                }
+            } else {
+                try {
+                    text = new TextDecoder('utf-8').decode(uint8Array);
+                } catch (e) {
+                    text = new TextDecoder('GBK').decode(uint8Array);
+                }
+            }
+            
+            if (text.charCodeAt(0) === 0xFEFF) {
+                text = text.slice(1);
+            }
+            
+            return text;
+        }
+
         function importMedicines(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -5237,12 +5280,12 @@ IconFile=${scriptPath}`;
                 reader.onload = function(e) {
                     try {
                         let importedMedicines = [];
-                        let content = e.target.result;
+                        let content;
                         
-                        // 移除 BOM 标记
-                        if (content.charCodeAt(0) === 0xFEFF) {
-                            content = content.slice(1);
-                        }
+                        const arrayBuffer = e.target.result;
+                        const uint8Array = new Uint8Array(arrayBuffer);
+                        
+                        content = decodeTextWithAutoEncoding(uint8Array);
                         
                         if (fileName.endsWith('.csv')) {
                             const lines = content.split(/\r?\n/).filter(line => line.trim());
@@ -5283,7 +5326,7 @@ IconFile=${scriptPath}`;
                         alert('导入失败！文件格式错误。' + err.message);
                     }
                 };
-                reader.readAsText(file, 'UTF-8');
+                reader.readAsArrayBuffer(file);
             }
             event.target.value = '';
         }
