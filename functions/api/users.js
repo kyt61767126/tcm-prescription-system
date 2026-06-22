@@ -54,23 +54,34 @@ export async function onRequest(context) {
                     {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true},
                     {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true},
                     {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true},
-                    {username: '王桂杰', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
-                    {username: '王耀燮', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
+                    {username: 'wangguijie', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
+                    {username: 'wangyaoxie', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
                 ];
                 console.log('Saving default users to KV');
                 await kv.put(KV_USERS_KEY, JSON.stringify(users));
             } else {
-                // 存量用户兼容性：为老用户添加 allowSavePrescription 字段，默认为 true
                 let needsUpdate = false;
                 users = users.map(user => {
-                    if (user.allowSavePrescription === undefined) {
+                    let updatedUser = { ...user };
+                    
+                    if (updatedUser.allowSavePrescription === undefined) {
                         needsUpdate = true;
-                        return { ...user, allowSavePrescription: true };
+                        updatedUser.allowSavePrescription = true;
                     }
-                    return user;
+                    
+                    const chineseToPinyin = {
+                        '王桂杰': 'wangguijie',
+                        '王耀燮': 'wangyaoxie'
+                    };
+                    if (chineseToPinyin[updatedUser.username]) {
+                        needsUpdate = true;
+                        updatedUser.username = chineseToPinyin[updatedUser.username];
+                    }
+                    
+                    return updatedUser;
                 });
                 if (needsUpdate) {
-                    console.log('Updating existing users with allowSavePrescription field');
+                    console.log('Updating existing users with migration');
                     await kv.put(KV_USERS_KEY, JSON.stringify(users));
                 }
             }

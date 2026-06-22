@@ -217,8 +217,8 @@
             { username: 'admin', password: 'admin', name: '管理员', role: 'admin' },
             { username: 'doctor1', password: '123456', name: '张医生', role: 'user' },
             { username: 'doctor2', password: '123456', name: '李医生', role: 'user' },
-            { username: '王桂杰', password: '123456', name: '王桂杰', role: 'user' },
-            { username: '王耀燮', password: '123456', name: '王耀燮', role: 'user' }
+            { username: 'wangguijie', password: '123456', name: '王桂杰', role: 'user' },
+            { username: 'wangyaoxie', password: '123456', name: '王耀燮', role: 'user' }
         ];
         
         async function getUsers() {
@@ -254,7 +254,7 @@
                 users.forEach(user => {
                     const option = document.createElement('option');
                     option.value = user.username;
-                    option.textContent = user.name || user.username;
+                    option.textContent = user.username;
                     select.appendChild(option);
                 });
             } else {

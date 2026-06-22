@@ -525,7 +525,7 @@
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name">惠康堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"><option value="admin">管理员</option></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="window.close()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjz1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name">惠康堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"><option value="admin">admin</option></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="window.close()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjz1688</div></div></div></div></div>
 
     <div id="registerModal" class="modal">
         <div class="modal-content user-modal-content">
@@ -1378,8 +1378,8 @@
                 {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true},
                 {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true},
                 {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true},
-                {username: '王桂杰', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
-                {username: '王耀燮', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
+                {username: 'wangguijie', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
+                {username: 'wangyaoxie', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
             ];
         }
         
@@ -1841,7 +1841,7 @@
             users.forEach(user => {
                 const option = document.createElement('option');
                 option.value = user.username;
-                option.textContent = user.name || user.username;
+                option.textContent = user.username;
                 select.appendChild(option);
             });
             
@@ -2114,7 +2114,7 @@
             const user = users.find(u => u.username === username);
             if (!user) return;
             
-            const newUsername = prompt('请输入新用户名：', user.username);
+            const newUsername = prompt('请输入新登录账户（英文或拼音）：', user.username);
             if (newUsername === null) return;
             
             const trimmedUsername = newUsername.trim();
@@ -2131,7 +2131,7 @@
                 }
             }
             
-            const newName = prompt('请输入新名称：', user.name);
+            const newName = prompt('请输入医师姓名（中文）：', user.name);
             if (newName === null) return;
             
             const trimmedName = newName.trim();
