@@ -1592,6 +1592,13 @@
             } catch (error) {
                 console.warn('Failed to get medicines from cloud:', error);
             }
+            
+            // 云端请求失败时，返回本地缓存作为后备（防止手机端断网时数据丢失）
+            if (DataCache.has('medicines')) {
+                console.log('云端获取失败，使用本地缓存');
+                return DataCache.get('medicines');
+            }
+            
             return null;
         }
 
@@ -1653,6 +1660,13 @@
             } catch (error) {
                 console.warn('Failed to get formulas from cloud:', error);
             }
+            
+            // 云端请求失败时，返回本地缓存作为后备（防止手机端断网时数据丢失）
+            if (DataCache.has('formulas')) {
+                console.log('云端获取失败，使用本地缓存');
+                return DataCache.get('formulas');
+            }
+            
             return null;
         }
 
