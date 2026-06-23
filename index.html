@@ -1604,11 +1604,8 @@
 
         // 保存药品库到云端
         async function saveMedicinesToCloud(medicines) {
-            // 清除药品缓存
-            DataCache.invalidate('medicines');
-            
             try {
-                if (!currentUser || !currentUser.isAdmin) {
+                if (!currentUser || currentUser.role !== 'admin') {
                     console.warn('Only admin can save medicines');
                     return false;
                 }
@@ -1621,6 +1618,12 @@
                     },
                     body: JSON.stringify({ medicines })
                 });
+                
+                // 仅在保存成功后才清除缓存，防止保存失败导致数据丢失
+                if (response.success) {
+                    DataCache.invalidate('medicines');
+                }
+                
                 return response.success;
             } catch (error) {
                 console.warn('Failed to save medicines to cloud:', error);
@@ -1672,9 +1675,6 @@
 
         // 保存方剂库到云端
         async function saveFormulasToCloud(formulas) {
-            // 清除方剂缓存
-            DataCache.invalidate('formulas');
-            
             try {
                 if (!currentUser) {
                     console.warn('User not logged in');
@@ -1689,6 +1689,12 @@
                     },
                     body: JSON.stringify({ formulas })
                 });
+                
+                // 仅在保存成功后才清除缓存，防止保存失败导致数据丢失
+                if (response.success) {
+                    DataCache.invalidate('formulas');
+                }
+                
                 return response.success;
             } catch (error) {
                 console.warn('Failed to save formulas to cloud:', error);
