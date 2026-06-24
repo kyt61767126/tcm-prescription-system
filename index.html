@@ -190,7 +190,14 @@
             
             /* 隐藏桌面端元素 */
             .top-tabs { display: none; }
-            .right-panel { display: none; }
+            .right-panel { 
+                display: none; 
+                width: 100% !important;
+                min-width: 100% !important;
+                max-width: 100% !important;
+                flex: 1 !important;
+                border-left: none !important;
+            }
             .bottom-bar { display: none; }
             
             /* 显示移动端导航 */
@@ -1491,11 +1498,37 @@
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                     showToast('刷新成功！');
                 } else {
-                    showToast('暂无数据');
+                    console.log('云端无数据，尝试从本地备份恢复');
+                    const localData = restoreFromLocalBackup();
+                    if (localData.length > 0) {
+                        prescriptionHistory = localData;
+                        prescriptionHistory.sort((a, b) => {
+                            const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                            const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                            return timeB - timeA;
+                        });
+                        renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                        showToast('已从本地备份恢复 ' + localData.length + ' 条处方');
+                    } else {
+                        showToast('暂无数据');
+                    }
                 }
             } catch (e) {
                 console.error('刷新失败:', e);
-                showToast('刷新失败，请重试');
+                console.log('尝试从本地备份恢复');
+                const localData = restoreFromLocalBackup();
+                if (localData.length > 0) {
+                    prescriptionHistory = localData;
+                    prescriptionHistory.sort((a, b) => {
+                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                        return timeB - timeA;
+                    });
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    showToast('已从本地备份恢复 ' + localData.length + ' 条处方');
+                } else {
+                    showToast('刷新失败，请重试');
+                }
             }
         }
 
@@ -2570,12 +2603,12 @@
                         return timeB - timeA;
                     });
                 } else {
-                    console.log('cloudResult.data 是空数组');
-                    prescriptionHistory = [];
+                    console.log('cloudResult.data 是空数组，尝试从本地备份恢复');
+                    prescriptionHistory = restoreFromLocalBackup();
                 }
             } else {
-                console.log('cloudResult 或 cloudResult.data 为空');
-                prescriptionHistory = [];
+                console.log('cloudResult 或 cloudResult.data 为空，尝试从本地备份恢复');
+                prescriptionHistory = restoreFromLocalBackup();
             }
             
             console.log('最终 prescriptionHistory 长度:', prescriptionHistory.length);
@@ -4807,6 +4840,25 @@ IconFile=${scriptPath}`;
             } catch (error) {
                 console.warn('Failed to save local backup:', error);
             }
+        }
+
+        // 从本地备份恢复处方数据（当云端数据不可用时）
+        function restoreFromLocalBackup() {
+            try {
+                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                if (backups.length > 0) {
+                    const latestBackup = backups[0];
+                    if (latestBackup.data && latestBackup.data.prescriptionHistory && latestBackup.data.prescriptionHistory.length > 0) {
+                        console.log('[Restore] 从本地备份恢复处方数:', latestBackup.data.prescriptionHistory.length);
+                        console.log('[Restore] 备份时间:', latestBackup.timestamp);
+                        return latestBackup.data.prescriptionHistory;
+                    }
+                }
+                console.log('[Restore] 没有找到有效的本地备份');
+            } catch (error) {
+                console.warn('[Restore] 从本地备份恢复失败:', error);
+            }
+            return [];
         }
 
         // 一键回滚功能（安全优化）
