@@ -983,7 +983,12 @@
                         <h5 style="margin-bottom:8px;color:#008000;">📥 数据恢复</h5>
                         <div style="display:flex;gap:10px;flex-wrap:wrap;">
                             <button class="action-btn" onclick="importData()" style="background:#9C27B0;color:white;">📤 导入数据文件</button>
+                            <button class="action-btn" onclick="showLocalBackups()" style="background:#2196F3;color:white;">🔄 查看本地备份</button>
                         </div>
+                    </div>
+                    <div id="localBackupList" style="margin-bottom:15px;display:none;">
+                        <h5 style="margin-bottom:8px;color:#008000;">💾 本地备份列表（自动保存，最多10个）</h5>
+                        <div id="backupListContainer" style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:5px;"></div>
                     </div>
                     <div style="margin-bottom:15px;">
                         <h5 style="margin-bottom:8px;color:#f44336;">⚠️ 危险操作</h5>
@@ -4859,6 +4864,98 @@ IconFile=${scriptPath}`;
                 console.warn('[Restore] 从本地备份恢复失败:', error);
             }
             return [];
+        }
+
+        // 显示本地备份列表
+        function showLocalBackups() {
+            try {
+                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                const backupListDiv = document.getElementById('localBackupList');
+                const container = document.getElementById('backupListContainer');
+                
+                if (backups.length === 0) {
+                    container.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">暂无本地备份</p>';
+                } else {
+                    let html = '';
+                    backups.forEach((backup, index) => {
+                        const date = new Date(backup.timestamp);
+                        const dateStr = date.toLocaleString('zh-CN');
+                        const rxCount = backup.prescriptionCount || 0;
+                        const medCount = (backup.data && backup.data.medicines) ? backup.data.medicines.length : 0;
+                        html += `
+                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid #eee;${index === 0 ? 'background:#e8f5e9;' : ''}">
+                                <div>
+                                    <div style="font-weight:bold;font-size:13px;color:#333;">
+                                        ${index === 0 ? '🟢 最新备份 - ' : ''}${dateStr}
+                                    </div>
+                                    <div style="font-size:12px;color:#666;margin-top:2px;">
+                                        处方: ${rxCount} 条 | 药材: ${medCount} 味
+                                    </div>
+                                </div>
+                                <button class="action-btn" onclick="restoreFromBackup(${index})" 
+                                    style="background:#4CAF50;color:white;font-size:12px;padding:5px 10px;">
+                                    恢复此备份
+                                </button>
+                            </div>
+                        `;
+                    });
+                    container.innerHTML = html;
+                }
+                
+                backupListDiv.style.display = 'block';
+            } catch (error) {
+                console.error('显示备份列表失败:', error);
+                alert('显示备份列表失败: ' + error.message);
+            }
+        }
+
+        // 从指定备份恢复数据
+        function restoreFromBackup(backupIndex) {
+            try {
+                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                if (backupIndex < 0 || backupIndex >= backups.length) {
+                    alert('无效的备份索引');
+                    return;
+                }
+                
+                const backup = backups[backupIndex];
+                const dateStr = new Date(backup.timestamp).toLocaleString('zh-CN');
+                const rxCount = backup.prescriptionCount || 0;
+                
+                if (!confirm(`确定要恢复此备份吗？\n\n备份时间: ${dateStr}\n处方数量: ${rxCount} 条\n\n恢复后将覆盖当前数据，建议先导出当前数据备份。`)) {
+                    return;
+                }
+                
+                if (backup.data.medicines) medicines = backup.data.medicines;
+                if (backup.data.formulas) formulas = backup.data.formulas;
+                if (backup.data.prescriptionHistory) prescriptionHistory = backup.data.prescriptionHistory;
+                if (backup.data.dailyCounter) dailyCounter = backup.data.dailyCounter;
+                if (backup.data.counterDate) currentPrescriptionDate = backup.data.counterDate;
+                
+                saveMedicinesToLocal();
+                saveFormulasToLocal();
+                savePrescriptionHistory();
+                saveDailyCounter();
+                saveLocalBackup(getCurrentDataForBackup());
+                
+                alert(`成功恢复 ${rxCount} 条处方！`);
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                updateStats();
+            } catch (error) {
+                console.error('恢复备份失败:', error);
+                alert('恢复失败: ' + error.message);
+            }
+        }
+
+        // 获取当前数据用于备份
+        function getCurrentDataForBackup() {
+            return {
+                prescriptionHistory: prescriptionHistory,
+                medicines: medicines,
+                formulas: formulas,
+                dailyCounter: dailyCounter,
+                counterDate: currentPrescriptionDate
+            };
         }
 
         // 一键回滚功能（安全优化）

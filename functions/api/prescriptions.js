@@ -287,6 +287,7 @@ export async function onRequest(context) {
         const KV_PRESCRIPTIONS_KEY = 'prescriptions_all';
         const KV_MEDICINES_KEY = 'medicines_all';
         const KV_FORMULAS_KEY = 'formulas_all';
+        const KV_TRASH_KEY = 'prescriptions_trash'; // 回收站：软删除处方，可恢复
         
         // 解析用户身份（简化版，确保登录兼容性）
         const currentUser = parseAuthHeaderSimple(context.request);
@@ -413,6 +414,42 @@ export async function onRequest(context) {
                 });
             }
             
+            // 回收站列表接口：GET /prescriptions?trash=true
+            if (url.searchParams.get('trash') === 'true') {
+                let trash = await kv.get(KV_TRASH_KEY, 'json');
+                if (!trash || !Array.isArray(trash)) {
+                    trash = [];
+                }
+                
+                // 根据用户角色筛选回收站数据
+                let filteredTrash = trash;
+                if (!currentUser.isAdmin) {
+                    filteredTrash = trash.filter(p => p.createdBy === currentUser.username);
+                }
+                
+                // 按删除时间倒序排序
+                filteredTrash.sort((a, b) => {
+                    const timeA = new Date(a.deletedAt || 0).getTime();
+                    const timeB = new Date(b.deletedAt || 0).getTime();
+                    return timeB - timeA;
+                });
+                
+                return new Response(JSON.stringify({
+                    success: true,
+                    data: filteredTrash,
+                    count: filteredTrash.length,
+                    userRole: currentUser.role,
+                    isAdmin: currentUser.isAdmin,
+                    currentUsername: currentUser.username
+                }), {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
+            }
+
             let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
             if (!prescriptions) {
                 prescriptions = [];
@@ -508,7 +545,7 @@ export async function onRequest(context) {
         }
         
         // POST - 保存处方（支持单个或批量）
-        if (method === 'POST') {
+        if (method === 'POST' && url.searchParams.get('restore') !== 'true') {
             console.log('POST /prescriptions called');
             console.log('Authorization header:', context.request.headers.get('Authorization'));
             console.log('Current user:', JSON.stringify(currentUser));
@@ -642,9 +679,10 @@ export async function onRequest(context) {
             });
         }
         
-        // DELETE - 删除处方（权限检查）
+        // DELETE - 删除处方（软删除到回收站，可恢复；permanent=true 时永久删除）
         if (method === 'DELETE') {
             const prescriptionId = url.searchParams.get('id');
+            const isPermanent = url.searchParams.get('permanent') === 'true';
             
             if (!prescriptionId) {
                 return new Response(JSON.stringify({
@@ -659,6 +697,58 @@ export async function onRequest(context) {
                 });
             }
             
+            // 永久删除：从回收站中彻底删除（仅手动操作触发）
+            if (isPermanent) {
+                let trash = await kv.get(KV_TRASH_KEY, 'json');
+                if (!trash || !Array.isArray(trash)) {
+                    trash = [];
+                }
+                
+                const prescriptionToDelete = trash.find(p => p.id.toString() === prescriptionId.toString());
+                
+                if (!prescriptionToDelete) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        error: '回收站中未找到此处方'
+                    }), {
+                        status: 404,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Access-Control-Allow-Origin': '*'
+                        }
+                    });
+                }
+                
+                if (prescriptionToDelete.createdBy !== currentUser.username && !currentUser.isAdmin) {
+                    return new Response(JSON.stringify({
+                        success: false,
+                        error: '无权删除此处方，只能删除自己创建的处方'
+                    }), {
+                        status: 403,
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Access-Control-Allow-Origin': '*'
+                        }
+                    });
+                }
+                
+                trash = trash.filter(p => p.id.toString() !== prescriptionId.toString());
+                await kv.put(KV_TRASH_KEY, JSON.stringify(trash));
+                
+                return new Response(JSON.stringify({
+                    success: true,
+                    message: '处方已永久删除',
+                    deletedBy: currentUser.username
+                }), {
+                    status: 200,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
+            }
+            
+            // 软删除：移入回收站，可恢复
             let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
             if (!prescriptions) {
                 prescriptions = [];
@@ -694,15 +784,114 @@ export async function onRequest(context) {
                 });
             }
             
-            const initialLength = prescriptions.length;
+            // 从主列表移除
             prescriptions = prescriptions.filter(p => p.id.toString() !== prescriptionId.toString());
+            await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
             
+            // 移入回收站，记录删除时间和操作人，可恢复
+            let trash = await kv.get(KV_TRASH_KEY, 'json');
+            if (!trash || !Array.isArray(trash)) {
+                trash = [];
+            }
+            const nowIso = getBeijingTime().toISOString();
+            trash.unshift({
+                ...prescriptionToDelete,
+                deletedAt: nowIso,
+                deletedBy: currentUser.username
+            });
+            // 回收站最多保留 10000 条，超出按时间清理
+            if (trash.length > 10000) {
+                trash = trash.slice(0, 10000);
+            }
+            await kv.put(KV_TRASH_KEY, JSON.stringify(trash));
+            
+            return new Response(JSON.stringify({
+                success: true,
+                message: '处方已移入回收站，可恢复',
+                deletedBy: currentUser.username,
+                softDeleted: true
+            }), {
+                status: 200,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                }
+            });
+        }
+        
+        // POST - 恢复回收站处方：POST /prescriptions?restore=true&id=xxx
+        if (method === 'POST' && url.searchParams.get('restore') === 'true') {
+            const prescriptionId = url.searchParams.get('id');
+            
+            if (!prescriptionId) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: 'Missing prescription ID'
+                }), {
+                    status: 400,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
+            }
+            
+            let trash = await kv.get(KV_TRASH_KEY, 'json');
+            if (!trash || !Array.isArray(trash)) {
+                trash = [];
+            }
+            
+            const prescriptionToRestore = trash.find(p => p.id.toString() === prescriptionId.toString());
+            
+            if (!prescriptionToRestore) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '回收站中未找到此处方'
+                }), {
+                    status: 404,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
+            }
+            
+            if (prescriptionToRestore.createdBy !== currentUser.username && !currentUser.isAdmin) {
+                return new Response(JSON.stringify({
+                    success: false,
+                    error: '无权恢复此处方，只能恢复自己创建的处方'
+                }), {
+                    status: 403,
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': '*'
+                    }
+                });
+            }
+            
+            // 从回收站移除
+            trash = trash.filter(p => p.id.toString() !== prescriptionId.toString());
+            await kv.put(KV_TRASH_KEY, JSON.stringify(trash));
+            
+            // 恢复到主列表（去除删除标记字段）
+            let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
+            if (!prescriptions) {
+                prescriptions = [];
+            }
+            const { deletedAt, deletedBy, ...restoredPrescription } = prescriptionToRestore;
+            
+            // 避免重复 ID
+            const exists = prescriptions.some(p => p.id.toString() === prescriptionId.toString());
+            if (!exists) {
+                prescriptions.push(restoredPrescription);
+            }
             await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
             
             return new Response(JSON.stringify({
                 success: true,
-                message: 'Prescription deleted successfully',
-                deletedBy: currentUser.username
+                message: '处方已恢复',
+                restoredBy: currentUser.username,
+                data: restoredPrescription
             }), {
                 status: 200,
                 headers: {
