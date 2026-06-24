@@ -51,11 +51,11 @@ export async function onRequest(context) {
             
             if (!users || !Array.isArray(users) || users.length === 0) {
                 users = [
-                    {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true},
-                    {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true},
-                    {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true},
-                    {username: 'wangguijie', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
-                    {username: 'wangyaoxie', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
+                    {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true, allowedMode: 'both'},
+                    {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true, allowedMode: 'both'},
+                    {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true, allowedMode: 'both'},
+                    {username: 'wangguijie', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true, allowedMode: 'both'},
+                    {username: 'wangyaoxie', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true, allowedMode: 'both'}
                 ];
                 console.log('Saving default users to KV');
                 await kv.put(KV_USERS_KEY, JSON.stringify(users));
@@ -67,6 +67,12 @@ export async function onRequest(context) {
                     if (updatedUser.allowSavePrescription === undefined) {
                         needsUpdate = true;
                         updatedUser.allowSavePrescription = true;
+                    }
+                    
+                    // 确保 allowedMode 字段存在（默认为 both）
+                    if (updatedUser.allowedMode === undefined) {
+                        needsUpdate = true;
+                        updatedUser.allowedMode = 'both';
                     }
                     
                     const chineseToPinyin = {
@@ -116,12 +122,17 @@ export async function onRequest(context) {
                 });
             }
             
-            // 确保新增用户都有 allowSavePrescription 字段，默认为 true
+            // 确保新增用户都有 allowSavePrescription 和 allowedMode 字段
             const usersWithPermission = body.users.map(user => {
-                if (user.allowSavePrescription === undefined) {
-                    return { ...user, allowSavePrescription: true };
+                let updatedUser = { ...user };
+                if (updatedUser.allowSavePrescription === undefined) {
+                    updatedUser.allowSavePrescription = true;
                 }
-                return user;
+                // 确保 allowedMode 字段存在，默认为 both
+                if (updatedUser.allowedMode === undefined) {
+                    updatedUser.allowedMode = 'both';
+                }
+                return updatedUser;
             });
             
             console.log('Saving users to KV:', usersWithPermission.length);

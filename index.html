@@ -4307,6 +4307,22 @@
             
             // 前端不生成编号，只提交基本数据
             const now = new Date();
+            // 使用当前药物库的最新单价重新计算金额（支持修改历史处方时按最新价格结算）
+            const updatedItems = prescriptionItems.filter(item => item.name).map(item => {
+                const latestMedicine = getMedicineByName(item.name);
+                const latestPrice = latestMedicine ? parseFloat(latestMedicine.price) || 0 : (parseFloat(item.price) || 0);
+                const calculatedTotal = latestPrice * (parseFloat(item.dosage) || 0);
+                return {
+                    ...item,
+                    price: latestPrice,
+                    total: calculatedTotal
+                };
+            });
+            
+            // 重新计算总金额
+            const updatedMedicineTotal = updatedItems.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
+            const updatedTotalAmount = updatedMedicineTotal * doseCount + (parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0);
+            
             const record = {
                 id: Date.now(),
                 date: document.getElementById('visitDate').value,
@@ -4318,9 +4334,9 @@
                 doctorName: document.getElementById('doctorName').value,
                 medicalHistory: document.getElementById('medicalHistory').value,
                 diagnosis: document.getElementById('diagnosis').value,
-                items: prescriptionItems.filter(item => item.name),
+                items: updatedItems,
                 doseCount: doseCount,
-                totalAmount: parseFloat(grandTotalEl ? grandTotalEl.textContent : 0),
+                totalAmount: updatedTotalAmount,
                 createdBy: currentUser ? currentUser.username : 'unknown',
                 createdAt: now.toISOString(),
                 updatedAt: now.toISOString()
