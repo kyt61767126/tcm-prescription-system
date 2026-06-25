@@ -9,7 +9,7 @@ export async function onRequest(context) {
             headers: {
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
                 'Access-Control-Max-Age': '86400'
             }
         });
@@ -51,11 +51,11 @@ export async function onRequest(context) {
             
             if (!users || !Array.isArray(users) || users.length === 0) {
                 users = [
-                    {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true, allowedMode: 'both'},
-                    {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true, allowedMode: 'both'},
-                    {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true, allowedMode: 'both'},
-                    {username: 'wangguijie', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true, allowedMode: 'both'},
-                    {username: 'wangyaoxie', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true, allowedMode: 'both'}
+                    {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true},
+                    {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true},
+                    {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true},
+                    {username: 'wangguijie', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
+                    {username: 'wangyaoxie', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
                 ];
                 console.log('Saving default users to KV');
                 await kv.put(KV_USERS_KEY, JSON.stringify(users));
@@ -67,12 +67,6 @@ export async function onRequest(context) {
                     if (updatedUser.allowSavePrescription === undefined) {
                         needsUpdate = true;
                         updatedUser.allowSavePrescription = true;
-                    }
-                    
-                    // 确保 allowedMode 字段存在（默认为 both）
-                    if (updatedUser.allowedMode === undefined) {
-                        needsUpdate = true;
-                        updatedUser.allowedMode = 'both';
                     }
                     
                     const chineseToPinyin = {
@@ -121,18 +115,69 @@ export async function onRequest(context) {
                     }
                 });
             }
-            
-            // 确保新增用户都有 allowSavePrescription 和 allowedMode 字段
+
+            // ===== 鉴权：解析 Authorization: Basic base64(username:role) =====
+            // 管理员全权增删改用户；普通用户仅可修改自己的 password 字段；匿名/伪造一律 403
+            const authHeader = context.request.headers.get('Authorization') || '';
+            let authUser = null, authRole = null;
+            if (authHeader.startsWith('Basic ')) {
+                try {
+                    const binary = atob(authHeader.slice(6));
+                    const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+                    const decoded = new TextDecoder().decode(bytes);
+                    const idx = decoded.indexOf(':');
+                    if (idx >= 0) { authUser = decoded.slice(0, idx); authRole = decoded.slice(idx + 1); }
+                } catch(e) {}
+            }
+            // 与云端网页 getUsers 一致的兜底，确保 diff-check 基准一致
+            const kvUsers = (await kv.get(KV_USERS_KEY, 'json') || []).map(u => ({
+                ...u,
+                allowSavePrescription: u.allowSavePrescription === undefined ? true : u.allowSavePrescription,
+                allowedMode: u.allowedMode || (u.role === 'admin' ? 'both' : 'local')
+            }));
+            const matched = kvUsers.find(u => u.username === authUser);
+            const isAdmin = authRole === 'admin' && matched && matched.role === 'admin';
+            const isSelfRegular = !isAdmin && matched && matched.username === authUser;
+            const forbiddenResp = (msg) => new Response(JSON.stringify({
+                success: false,
+                error: 'Forbidden: ' + msg
+            }), {
+                status: 403,
+                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
+            });
+            if (!isAdmin && !isSelfRegular) {
+                return forbiddenResp('需管理员或本人身份');
+            }
+            // 普通用户：仅允许修改自己的 password 字段（防止增删用户、改 role/allowedMode、改他人信息）
+            if (isSelfRegular) {
+                if (body.users.length !== kvUsers.length) {
+                    return forbiddenResp('仅可修改自己的密码，不可增删用户');
+                }
+                const keysEqualExcept = (a, b, except) => {
+                    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+                    for (const k of keys) {
+                        if (except.includes(k)) continue;
+                        if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) return false;
+                    }
+                    return true;
+                };
+                for (const bu of body.users) {
+                    const ku = kvUsers.find(u => u.username === bu.username);
+                    if (!ku) return forbiddenResp('用户列表不可变更');
+                    if (bu.username !== authUser) {
+                        if (!keysEqualExcept(bu, ku, [])) return forbiddenResp('不可修改他人信息');
+                    } else {
+                        if (!keysEqualExcept(bu, ku, ['password'])) return forbiddenResp('仅可修改密码字段');
+                    }
+                }
+            }
+
+            // 确保新增用户都有 allowSavePrescription 字段，默认为 true
             const usersWithPermission = body.users.map(user => {
-                let updatedUser = { ...user };
-                if (updatedUser.allowSavePrescription === undefined) {
-                    updatedUser.allowSavePrescription = true;
+                if (user.allowSavePrescription === undefined) {
+                    return { ...user, allowSavePrescription: true };
                 }
-                // 确保 allowedMode 字段存在，默认为 both
-                if (updatedUser.allowedMode === undefined) {
-                    updatedUser.allowedMode = 'both';
-                }
-                return updatedUser;
+                return user;
             });
             
             console.log('Saving users to KV:', usersWithPermission.length);
