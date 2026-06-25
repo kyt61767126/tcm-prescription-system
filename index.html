@@ -1392,11 +1392,11 @@
             
             // 返回硬编码的默认用户（首次使用时）
             return [
-                {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true},
-                {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true},
-                {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true},
-                {username: 'wangguijie', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true},
-                {username: 'wangyaoxie', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true}
+                {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true, allowedMode: 'both'},
+                {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true, allowedMode: 'local'},
+                {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true, allowedMode: 'local'},
+                {username: 'wangguijie', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true, allowedMode: 'local'},
+                {username: 'wangyaoxie', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true, allowedMode: 'local'}
             ];
         }
         
@@ -1846,7 +1846,9 @@
             if (cloudUsers && cloudUsers.length > 0) {
                 return cloudUsers.map(user => ({
                     ...user,
-                    allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription
+                    allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
+                    // 默认离线模式：管理员为both，普通用户为local
+                    allowedMode: user.allowedMode || (user.role === 'admin' ? 'both' : 'local')
                 }));
             }
             return getDefaultUsers();
@@ -2267,7 +2269,7 @@
                 name: name,
                 role: 'user',
                 allowSavePrescription: true,
-                allowedMode: 'both'
+                allowedMode: 'local'
             };
             
             users.push(newUser);
