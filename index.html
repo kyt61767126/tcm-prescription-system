@@ -534,36 +534,7 @@
 <body>
     <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name">惠康堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"><option value="admin">admin</option></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="window.close()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjz1688</div></div></div></div></div>
 
-    <div id="registerModal" class="modal">
-        <div class="modal-content user-modal-content">
-            <div class="modal-header">
-                <span>注册新账号</span>
-                <span class="close-btn" onclick="closeModal('registerModal')">&times;</span>
-            </div>
-            <div class="modal-body">
-                <div class="form-group">
-                    <label>登录账号</label>
-                    <input type="text" id="regUsername" placeholder="用于登录，建议英文或拼音">
-                </div>
-                <div class="form-group">
-                    <label>密码</label>
-                    <input type="password" id="regPassword" placeholder="请输入密码">
-                </div>
-                <div class="form-group">
-                    <label>确认密码</label>
-                    <input type="password" id="regConfirmPwd" placeholder="请再次输入密码">
-                </div>
-                <div class="form-group">
-                    <label>医师姓名</label>
-                    <input type="text" id="regName" placeholder="处方上显示的医师姓名，如：张医生">
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button class="action-btn" onclick="closeModal('registerModal')">取消</button>
-                <button class="action-btn primary" onclick="handleRegister()">注册</button>
-            </div>
-        </div>
-    </div>
+    <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
     <div id="changePwdModal" class="modal">
         <div class="modal-content user-modal-content">
@@ -2048,52 +2019,11 @@
         }
 
         function showRegisterModal() {
-            document.getElementById('regUsername').value = '';
-            document.getElementById('regPassword').value = '';
-            document.getElementById('regConfirmPwd').value = '';
-            document.getElementById('regName').value = '';
-            document.getElementById('registerModal').style.display = 'flex';
+            alert('本系统禁止自助注册，请联系管理员创建账号。');
         }
 
         async function handleRegister() {
-            const username = document.getElementById('regUsername').value.trim();
-            const password = document.getElementById('regPassword').value;
-            const confirmPwd = document.getElementById('regConfirmPwd').value;
-            const name = document.getElementById('regName').value.trim();
-            
-            if (!username || !password || !name) {
-                alert('请填写完整信息');
-                return;
-            }
-            
-            // 验证用户名是否包含中文
-            if (/[\u4e00-\u9fa5]/.test(username)) {
-                alert('登录账号不能使用中文，请使用英文或拼音！\n示例：zhaoyisheng 或 doctor3');
-                return;
-            }
-            
-            if (password !== confirmPwd) {
-                alert('两次输入的密码不一致');
-                return;
-            }
-            
-            const users = await getUsers();
-            if (users.find(u => u.username === username)) {
-                alert('用户名已存在');
-                return;
-            }
-            
-            users.push({
-                username: username,
-                password: password,
-                name: name,
-                role: 'user',
-                allowSavePrescription: true
-            });
-            
-            await saveUsers(users);
-            alert('注册成功！');
-            closeModal('registerModal');
+            alert('本系统禁止自助注册，请联系管理员创建账号。');
         }
 
         function showChangePwdModal() {
@@ -2170,6 +2100,10 @@
                         </div>
                         <div class="user-item-actions">
                             <button class="user-item-btn btn-primary" onclick="handleEditUser('${user.username}')">编辑</button>
+                            ${user.username !== 'admin' ? (mode === 'local'
+                                ? `<button class="user-item-btn" style="background:#2196f3;color:white;" onclick="toggleUserCloudMode('${user.username}')">开通云端</button>`
+                                : `<button class="user-item-btn" style="background:#ff9800;color:white;" onclick="toggleUserCloudMode('${user.username}')">关闭云端</button>`
+                            ) : ''}
                             ${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + user.username + '\')">删除</button>' : ''}
                         </div>
                     </div>
@@ -2177,6 +2111,31 @@
             });
             
             listDiv.innerHTML = html || '暂无用户';
+        }
+
+        async function toggleUserCloudMode(username) {
+            if (!currentUser || currentUser.role !== 'admin') {
+                alert('只有管理员可以切换云端权限');
+                return;
+            }
+            const users = await getUsers();
+            const user = users.find(u => u.username === username);
+            if (!user) return;
+            const currentMode = user.allowedMode || 'both';
+            const newMode = currentMode === 'local' ? 'both' : 'local';
+            user.allowedMode = newMode;
+            const saveSuccess = await saveUsers(users);
+            // 若改的是当前登录用户，同步本地状态
+            if (currentUser.username === username) {
+                currentUser.allowedMode = newMode;
+                localStorage.setItem('cloud_currentUser', JSON.stringify(currentUser));
+                updateUserDisplay();
+            }
+            await renderUserList();
+            const modeText = newMode === 'local' ? '仅离线' : '双模式';
+            alert(saveSuccess
+                ? `✅ 已切换为【${modeText}】\n数据已同步到云端。`
+                : `⚠️ 已切换为【${modeText}】\n云端同步失败，可在设置中手动同步。`);
         }
 
         async function handleEditUser(username) {
@@ -6317,8 +6276,16 @@ IconFile=${scriptPath}`;
 
         // 更新离线同步信息显示
         function updateOfflineSyncInfo() {
+            const sectionEl = document.getElementById('offline-sync-section');
             const infoEl = document.getElementById('offline-sync-info');
-            if (!infoEl) return;
+            // 普通用户且纯离线模式：隐藏整个区块（不显示状态、无切换按钮）
+            const isLocalNormal = currentUser
+                && currentUser.role !== 'admin'
+                && (currentUser.allowedMode || 'both') === 'local';
+            if (sectionEl) {
+                sectionEl.style.display = isLocalNormal ? 'none' : '';
+            }
+            if (!infoEl || isLocalNormal) return;
             const mode = (currentUser && currentUser.allowedMode) || 'both';
             const modeText = mode === 'cloud' ? '仅云端' : mode === 'local' ? '仅离线' : '双模式';
             const onlineStatus = navigator.onLine ? '在线' : '离线';
