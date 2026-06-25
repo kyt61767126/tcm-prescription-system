@@ -1986,8 +1986,10 @@
             
             if (window.electronAPI && window.electronAPI.logout) {
                 window.electronAPI.logout();
+            } else if (window.AndroidAppExit && window.AndroidAppExit.exit) {
+                // APP端：调用 Android JavaScript Interface 直接退出到手机主屏
+                window.AndroidAppExit.exit();
             } else {
-                // APP端：window.close() 会触发 WebChromeClient.onClose() → finish() 直接退出到手机主屏
                 // 网页端：window.close() 通常无效，延迟 100ms 后回到登录界面
                 window.close();
                 setTimeout(function() {
