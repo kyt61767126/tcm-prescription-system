@@ -820,6 +820,10 @@
                 <span class="close-btn" onclick="closeModal('settingsModal')">&times;</span>
             </div>
             <div class="modal-body">
+                <div id="offline-sync-section" style="margin-bottom:12px;padding:10px;background:linear-gradient(135deg,#e8f5e9,#f1f8e9);border:1px solid #81c784;border-radius:6px;">
+                    <div style="color:#2e7d32;font-weight:bold;font-size:13px;margin-bottom:6px;">📱 离线数据同步</div>
+                    <div id="offline-sync-info" style="font-size:12px;color:#555;"></div>
+                </div>
                 <div style="margin-bottom:12px;">
                     <label>诊所名称:</label>
                     <input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;">
@@ -2153,11 +2157,14 @@
             
             let html = '';
             users.forEach(user => {
+                const mode = user.allowedMode || 'both';
+                const modeText = mode === 'cloud' ? '仅云端' : mode === 'local' ? '仅离线' : '双模式';
+                const modeColor = mode === 'cloud' ? '#2196f3' : mode === 'local' ? '#ff9800' : '#4caf50';
                 html += `
                     <div class="user-item">
                         <div class="user-item-info">
                             <div class="user-item-name">${user.name} (${user.username})</div>
-                            <div class="user-item-role">${user.role === 'admin' ? '管理员' : '普通用户'}</div>
+                            <div class="user-item-role">${user.role === 'admin' ? '管理员' : '普通用户'} <span style="color:${modeColor};font-size:11px;margin-left:6px;">[${modeText}]</span></div>
                         </div>
                         <div class="user-item-actions">
                             <button class="user-item-btn btn-primary" onclick="handleEditUser('${user.username}')">编辑</button>
@@ -2202,23 +2209,34 @@
             }
             
             const newPassword = prompt('请输入新密码（留空则不修改）：', '');
-            
+
+            // 第4步：模式选择（APP离线功能）
+            const currentMode = user.allowedMode || 'both';
+            const modeDefault = currentMode === 'cloud' ? '2' : currentMode === 'local' ? '3' : '1';
+            const modeChoice = prompt('请选择用户使用模式（输入数字，直接点确定保持原设置）：\n1. 双模式（云端+离线）\n2. 仅云端\n3. 仅离线', modeDefault);
+            if (modeChoice === null) return;
+
+            const newMode = modeChoice.trim() === '2' ? 'cloud' : modeChoice.trim() === '3' ? 'local' : 'both';
+            const modeText = newMode === 'cloud' ? '仅云端' : newMode === 'local' ? '仅离线' : '双模式';
+
             const userIndex = users.findIndex(u => u.username === username);
             users[userIndex].username = trimmedUsername;
             users[userIndex].name = trimmedName;
+            users[userIndex].allowedMode = newMode;
             if (newPassword !== null && newPassword.trim() !== '') {
                 users[userIndex].password = newPassword.trim();
             }
             const saveSuccess = await saveUsers(users);
-            
+
             if (currentUser.username === username) {
                 currentUser = users[userIndex];
+                currentUser.allowedMode = newMode;
                 localStorage.setItem('cloud_currentUser', JSON.stringify(currentUser));
                 updateUserDisplay();
             }
-            
+
             await renderUserList();
-            alert(saveSuccess ? '✅ 用户信息修改成功！\n\n数据已自动同步到云端，其他设备登录也能看到此用户。' : '⚠️ 用户信息已保存到本地\n\n云端同步失败，可在设置中手动同步。');
+            alert(saveSuccess ? '✅ 用户信息修改成功！\n\n使用模式：' + modeText + '\n数据已自动同步到云端，其他设备登录也能看到此用户。' : '⚠️ 用户信息已保存到本地\n\n云端同步失败，可在设置中手动同步。');
         }
 
         async function handleAddUser() {
@@ -2248,7 +2266,8 @@
                 password: password,
                 name: name,
                 role: 'user',
-                allowSavePrescription: true
+                allowSavePrescription: true,
+                allowedMode: 'both'
             };
             
             users.push(newUser);
@@ -6290,7 +6309,46 @@ IconFile=${scriptPath}`;
             if (modalId === 'settingsModal') {
                 document.getElementById('defaultDoctor').value = document.getElementById('doctorName').value;
                 updateImageSavePathDisplay();
+                updateOfflineSyncInfo();
             }
+        }
+
+        // 更新离线同步信息显示
+        function updateOfflineSyncInfo() {
+            const infoEl = document.getElementById('offline-sync-info');
+            if (!infoEl) return;
+            const mode = (currentUser && currentUser.allowedMode) || 'both';
+            const modeText = mode === 'cloud' ? '仅云端' : mode === 'local' ? '仅离线' : '双模式';
+            const onlineStatus = navigator.onLine ? '在线' : '离线';
+            let count = 0;
+            try { count = JSON.parse(localStorage.getItem('offline_prescriptions') || '[]').length; } catch(e) {}
+            infoEl.innerHTML = `
+                <div>当前模式: <b>${modeText}</b> (${onlineStatus})</div>
+                <div>待同步处方: <b style="color:#f44336;">${count}</b> 条</div>
+                ${count > 0 ? '<button onclick="syncOfflinePrescriptions()" style="margin-top:6px;padding:4px 12px;background:#4caf50;color:white;border:none;border-radius:4px;font-size:12px;">立即同步</button>' : '<span style="color:#4caf50;">✓ 全部已同步</span>'}
+            `;
+        }
+
+        // 同步离线处方到云端
+        async function syncOfflinePrescriptions() {
+            let queue = [];
+            try { queue = JSON.parse(localStorage.getItem('offline_prescriptions') || '[]'); } catch(e) {}
+            if (queue.length === 0) { alert('没有待同步的处方'); return; }
+            let success = 0, fail = 0;
+            for (const prescription of queue) {
+                try {
+                    const response = await fetch('/api/prescriptions', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(prescription)
+                    });
+                    if (response.ok) success++;
+                    else fail++;
+                } catch(e) { fail++; }
+            }
+            localStorage.setItem('offline_prescriptions', '[]');
+            alert(`同步完成！成功 ${success} 条，失败 ${fail} 条。`);
+            updateOfflineSyncInfo();
         }
 
     document.addEventListener('DOMContentLoaded', () => {
