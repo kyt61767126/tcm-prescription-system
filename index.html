@@ -1112,51 +1112,23 @@
                 this._ready = (async () => {
                     const sqlite = this._plugin();
                     if (!sqlite) { console.warn('LocalDB: CapacitorSQLite 不可用，降级纯云端'); return false; }
-                    // #region debug-point offline-save-fail
-                    try { alert('[DBG ready] step1: plugin OK, 开始 setEncryptionSecret'); } catch(_) {}
-                    // #endregion
                     try {
                         // 先检查 secret 是否已存储，避免重复设置报错
                         try {
                             const stored = await sqlite.isSecretStored();
-                            // #region debug-point offline-save-fail
-                            try { alert('[DBG ready] step1.5: isSecretStored=' + (stored && stored.result)); } catch(_) {}
-                            // #endregion
                             if (!stored || !stored.result) {
                                 await sqlite.setEncryptionSecret({ passphrase: this.SECRET });
-                                // #region debug-point offline-save-fail
-                                try { alert('[DBG ready] step2: setEncryptionSecret OK'); } catch(_) {}
-                                // #endregion
-                            } else {
-                                // #region debug-point offline-save-fail
-                                try { alert('[DBG ready] step2-skip: secret 已存储，跳过设置'); } catch(_) {}
-                                // #endregion
                             }
                         } catch (e) {
-                            // #region debug-point offline-save-fail
-                            try { alert('[DBG ready] step2-warn: setEncryptionSecret 检查/设置抛错: ' + (e && e.message ? e.message : String(e))); } catch(_) {}
-                            // #endregion
                             /* 可能已设置或方法不支持，继续尝试 */
                         }
                         await sqlite.createConnection({ database: this.DB, encrypted: true, mode: 'secret', version: 1 });
-                        // #region debug-point offline-save-fail
-                        try { alert('[DBG ready] step3: createConnection OK'); } catch(_) {}
-                        // #endregion
                         await sqlite.open({ database: this.DB });
-                        // #region debug-point offline-save-fail
-                        try { alert('[DBG ready] step4: open OK'); } catch(_) {}
-                        // #endregion
                         await this._createTables();
-                        // #region debug-point offline-save-fail
-                        try { alert('[DBG ready] step5: _createTables OK'); } catch(_) {}
-                        // #endregion
                         console.log('LocalDB: 初始化成功');
                         return true;
                     } catch (e) {
                         console.error('LocalDB: 初始化失败', e);
-                        // #region debug-point offline-save-fail
-                        try { alert('[DBG ready err]\n步骤失败: ' + (e && e.message ? e.message : String(e)) + '\nstack=' + (e && e.stack ? String(e.stack).substring(0, 500) : 'N/A')); } catch(_) {}
-                        // #endregion
                         this._ready = null;
                         return false;
                     }
