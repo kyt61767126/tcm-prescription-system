@@ -1097,6 +1097,36 @@
             return (mode === 'both' || mode === 'local') && LocalDB.available();
         }
 
+        // #region debug-point offline-save-fail
+        // [DEBUG offline-save-fail] 临时诊断函数（修复后删除）
+        function __dbgDumpSaveState(prefix, extra) {
+            try {
+                var cap = (typeof window.Capacitor !== 'undefined') ? 'Y' : 'N';
+                var plugKeys = 'N';
+                try { if (window.Capacitor && window.Capacitor.Plugins) plugKeys = Object.keys(window.Capacitor.Plugins).join(',') || 'empty'; } catch (e) { plugKeys = 'err:' + e.message; }
+                var sqlite = 'N';
+                try { sqlite = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorSQLite) ? 'Y' : 'N'; } catch (e) { sqlite = 'err:' + e.message; }
+                var mode = 'noUser';
+                try { mode = (currentUser && currentUser.allowedMode) ? currentUser.allowedMode : 'undef'; } catch (e) { mode = 'err:' + e.message; }
+                var online = navigator.onLine ? 'Y' : 'N';
+                var co = 'N';
+                try { co = offlineCapable() ? 'Y' : 'N'; } catch (e) { co = 'err:' + e.message; }
+                var u = 'N';
+                try { u = (currentUser && currentUser.username) ? currentUser.username : 'N'; } catch (e) {}
+                var msg = '[DBG ' + prefix + ']\n' +
+                          'capacitor=' + cap + '\n' +
+                          'plugins=' + plugKeys + '\n' +
+                          'sqlite=' + sqlite + '\n' +
+                          'mode=' + mode + '\n' +
+                          'online=' + online + '\n' +
+                          'canOffline=' + co + '\n' +
+                          'user=' + u;
+                if (extra) msg += '\n---\n' + extra;
+                alert(msg);
+            } catch (e) { alert('[DBG dump err] ' + e.message); }
+        }
+        // #endregion
+
         const LocalDB = {
             DB: 'tcm_prescription',
             SECRET: 'secret',
@@ -1121,6 +1151,9 @@
                         return true;
                     } catch (e) {
                         console.error('LocalDB: 初始化失败', e);
+                        // #region debug-point offline-save-fail
+                        try { alert('[DBG LocalDB.ready err]\n' + (e && e.message ? e.message : String(e)) + '\nstack=' + (e && e.stack ? String(e.stack).substring(0, 300) : 'N/A')); } catch (_) {}
+                        // #endregion
                         this._ready = null;
                         return false;
                     }
@@ -2070,6 +2103,11 @@
                 const canOffline = offlineCapable();
                 const isOnline = navigator.onLine;
                 const mode = getAllowedMode();
+                // #region debug-point offline-save-fail
+                if (typeof __dbgDumpSaveState === 'function') {
+                    __dbgDumpSaveState('save-start', 'arr.length=' + arr.length + ', canOffline=' + canOffline + ', mode=' + mode + ', isOnline=' + isOnline);
+                }
+                // #endregion
 
                 // 1) local 模式：仅落本地，synced=0
                 if (canOffline && mode === 'local') {
