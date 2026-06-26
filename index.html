@@ -1085,7 +1085,248 @@
         
         // Cloudflare KV API 地址
         const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
-        
+
+        // ============ 离线本地数据库（Capacitor SQLite） ============
+        // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
+        // allowedMode: cloud=纯云端 / local=纯离线 / both=离线优先+联网双向同步
+        function getAllowedMode() {
+            return (currentUser && currentUser.allowedMode) || 'both';
+        }
+        function offlineCapable() {
+            const mode = getAllowedMode();
+            return (mode === 'both' || mode === 'local') && LocalDB.available();
+        }
+
+        const LocalDB = {
+            DB: 'tcm_prescription',
+            SECRET: 'secret',
+            _ready: null,
+            _plugin() {
+                try {
+                    return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorSQLite) || null;
+                } catch (e) { return null; }
+            },
+            available() { return !!this._plugin(); },
+            ready() {
+                if (this._ready) return this._ready;
+                this._ready = (async () => {
+                    const sqlite = this._plugin();
+                    if (!sqlite) { console.warn('LocalDB: CapacitorSQLite 不可用，降级纯云端'); return false; }
+                    try {
+                        try { await sqlite.setSecret({ secret: this.SECRET }); } catch (e) { /* 可能已设置 */ }
+                        await sqlite.createConnection({ database: this.DB, encrypted: true, mode: 'secret', version: 1 });
+                        await sqlite.open({ database: this.DB });
+                        await this._createTables();
+                        console.log('LocalDB: 初始化成功');
+                        return true;
+                    } catch (e) {
+                        console.error('LocalDB: 初始化失败', e);
+                        this._ready = null;
+                        return false;
+                    }
+                })();
+                return this._ready;
+            },
+            async _createTables() {
+                const sqlite = this._plugin();
+                const stmts = [
+                    "CREATE TABLE IF NOT EXISTS prescriptions (id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT, updated_at_ms INTEGER, created_by TEXT, synced INTEGER DEFAULT 0, deleted INTEGER DEFAULT 0);",
+                    "CREATE INDEX IF NOT EXISTS idx_pres_synced ON prescriptions(synced);",
+                    "CREATE INDEX IF NOT EXISTS idx_pres_user ON prescriptions(created_by);",
+                    "CREATE TABLE IF NOT EXISTS cache_kv (key TEXT PRIMARY KEY, data TEXT NOT NULL, cached_at TEXT);",
+                    "CREATE TABLE IF NOT EXISTS sync_status (id INTEGER PRIMARY KEY DEFAULT 1, last_push TEXT, last_pull TEXT, pending_count INTEGER DEFAULT 0);"
+                ];
+                for (const s of stmts) await sqlite.execute({ database: this.DB, statements: s });
+            },
+            async exec(sql) { return await this._plugin().execute({ database: this.DB, statements: sql }); },
+            async run(sql, values) { return await this._plugin().run({ database: this.DB, statement: sql, values: values || [] }); },
+            async query(sql, values) {
+                const r = await this._plugin().query({ database: this.DB, statement: sql, values: values || [] });
+                return r.values || [];
+            },
+            async getPrescriptions(username) {
+                const rows = await this.query('SELECT data FROM prescriptions WHERE created_by=? AND deleted=0 ORDER BY updated_at_ms DESC', [username]);
+                return rows.map(r => { try { return JSON.parse(r.data); } catch (e) { return null; } }).filter(Boolean);
+            },
+            async upsertPrescription(p, opts) {
+                const id = p.id || Date.now();
+                const ua = p.updatedAt || new Date().toISOString();
+                const uaMs = new Date(ua).getTime() || Date.now();
+                const cb = p.createdBy || (currentUser ? currentUser.username : '');
+                const synced = (opts && opts.synced !== undefined) ? opts.synced : 0;
+                const deleted = (opts && opts.deleted !== undefined) ? opts.deleted : 0;
+                await this.run(
+                    'INSERT OR REPLACE INTO prescriptions (id, data, updated_at, updated_at_ms, created_by, synced, deleted) VALUES (?,?,?,?,?,?,?)',
+                    [id, JSON.stringify(p), ua, uaMs, cb, synced, deleted]
+                );
+                return id;
+            },
+            async getPrescriptionRow(id) {
+                const rows = await this.query('SELECT id, updated_at_ms, synced, deleted FROM prescriptions WHERE id=?', [id]);
+                return rows[0] || null;
+            },
+            async getUnsyncedRows() {
+                const rows = await this.query('SELECT id, data, deleted FROM prescriptions WHERE synced=0 ORDER BY updated_at_ms ASC');
+                return rows.map(r => { try { return { id: r.id, prescription: JSON.parse(r.data), deleted: r.deleted }; } catch (e) { return null; } }).filter(Boolean);
+            },
+            async markSynced(id) { await this.run('UPDATE prescriptions SET synced=1 WHERE id=?', [id]); },
+            async markDeleted(id) { await this.run('UPDATE prescriptions SET deleted=1, synced=0 WHERE id=?', [id]); },
+            async countUnsynced() {
+                const rows = await this.query('SELECT COUNT(*) AS c FROM prescriptions WHERE synced=0');
+                return (rows[0] && rows[0].c) || 0;
+            },
+            async setCache(key, data) {
+                await this.run('INSERT OR REPLACE INTO cache_kv (key, data, cached_at) VALUES (?,?,?)', [key, JSON.stringify(data), new Date().toISOString()]);
+            },
+            async getCache(key) {
+                const rows = await this.query('SELECT data FROM cache_kv WHERE key=?', [key]);
+                if (!rows[0]) return null;
+                try { return JSON.parse(rows[0].data); } catch (e) { return null; }
+            },
+            async setSyncStatus(field, pending) {
+                const now = new Date().toISOString();
+                await this.run('INSERT OR IGNORE INTO sync_status (id, last_push, last_pull, pending_count) VALUES (1, NULL, NULL, 0)');
+                if (field === 'push') await this.run('UPDATE sync_status SET last_push=?, pending_count=? WHERE id=1', [now, pending]);
+                else if (field === 'pull') await this.run('UPDATE sync_status SET last_pull=?, pending_count=? WHERE id=1', [now, pending]);
+            },
+            async getSyncStatus() {
+                const rows = await this.query('SELECT last_push, last_pull, pending_count FROM sync_status WHERE id=1');
+                return rows[0] || null;
+            }
+        };
+
+        // ============ 双向同步引擎（仅 both 模式在线时执行） ============
+        const SyncEngine = {
+            _running: false,
+            _inited: false,
+            _timer: null,
+            _authHeader() {
+                if (!currentUser) return null;
+                try { return 'Basic ' + safeBtoa(currentUser.username + ':' + (currentUser.role || 'user')); } catch (e) { return null; }
+            },
+            async _cloudGetPrescriptions() {
+                const auth = this._authHeader();
+                // 后端按 Authorization 头过滤（普通用户只拿自己的，管理员拿全部），无需 ?user= 参数
+                const url = CLOUD_API_BASE + '/prescriptions';
+                const resp = await fetch(url, { headers: { 'Authorization': auth, 'Content-Type': 'application/json' } });
+                if (!resp.ok) throw new Error('GET prescriptions ' + resp.status);
+                const json = await resp.json();
+                return (json && json.data) || [];
+            },
+            async _cloudPostPrescription(p) {
+                const auth = this._authHeader();
+                const resp = await fetch(CLOUD_API_BASE + '/prescriptions', {
+                    method: 'POST',
+                    headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prescription: [p] })
+                });
+                if (!resp.ok) throw new Error('POST prescriptions ' + resp.status);
+                return await resp.json();
+            },
+            async _cloudDeletePrescription(id) {
+                const auth = this._authHeader();
+                // 后端 DELETE 按 Authorization 头鉴权，不读 user 参数
+                const url = CLOUD_API_BASE + '/prescriptions?id=' + id;
+                const resp = await fetch(url, { method: 'DELETE', headers: { 'Authorization': auth } });
+                if (!resp.ok) throw new Error('DELETE prescriptions ' + resp.status);
+                return true;
+            },
+            async _pullCache(key, url) {
+                try {
+                    const resp = await fetch(url, { headers: { 'Authorization': this._authHeader() } });
+                    if (!resp.ok) return;
+                    const json = await resp.json();
+                    if (json && json.success && json.data) await LocalDB.setCache(key, json.data);
+                } catch (e) { console.warn('pull cache ' + key + ' 失败', e); }
+            },
+            async run() {
+                if (this._running) return;
+                if (!currentUser) return;
+                if (getAllowedMode() !== 'both') return;       // 仅 both 模式同步
+                if (!navigator.onLine) return;
+                const ok = await LocalDB.ready();
+                if (!ok) return;
+                this._running = true;
+                try {
+                    await this.push();
+                    await this.pull();
+                    const pending = await LocalDB.countUnsynced();
+                    await LocalDB.setSyncStatus('pull', pending);
+                    if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
+                    console.log('SyncEngine.run 完成，待同步:', pending);
+                } catch (e) {
+                    console.warn('SyncEngine.run 出错:', e);
+                } finally {
+                    this._running = false;
+                }
+            },
+            async push() {
+                const rows = await LocalDB.getUnsyncedRows();
+                if (rows.length === 0) return 0;
+                let cloudMap = new Map();
+                try {
+                    const cloudList = await this._cloudGetPrescriptions();
+                    cloudList.forEach(p => cloudMap.set(p.id, p));
+                } catch (e) { console.warn('push: 拉取云端列表失败，按无冲突推送', e); }
+                let pushed = 0;
+                for (const r of rows) {
+                    const p = r.prescription;
+                    try {
+                        if (r.deleted) {
+                            if (cloudMap.has(p.id)) await this._cloudDeletePrescription(p.id);
+                            await LocalDB.markSynced(p.id);
+                        } else {
+                            const cloudP = cloudMap.get(p.id);
+                            const localMs = new Date(p.updatedAt || 0).getTime() || 0;
+                            const cloudMs = cloudP ? (new Date(cloudP.updatedAt || 0).getTime() || 0) : 0;
+                            if (cloudP && cloudMs > localMs) {
+                                // 云端更新：用云端覆盖本地，标记已同步
+                                await LocalDB.upsertPrescription(cloudP, { synced: 1, deleted: 0 });
+                            } else {
+                                const resp = await this._cloudPostPrescription(p);
+                                if (resp && resp.success) {
+                                    const saved = resp.savedPrescription || p;
+                                    await LocalDB.upsertPrescription(saved, { synced: 1, deleted: 0 });
+                                    pushed++;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('push: 处方 ' + p.id + ' 失败，保留待同步:', e);
+                    }
+                }
+                await LocalDB.setSyncStatus('push', await LocalDB.countUnsynced());
+                return pushed;
+            },
+            async pull() {
+                let cloudList = [];
+                try { cloudList = await this._cloudGetPrescriptions(); } catch (e) { console.warn('pull: 拉取失败', e); return; }
+                for (const cp of cloudList) {
+                    try {
+                        const row = await LocalDB.getPrescriptionRow(cp.id);
+                        const cloudMs = new Date(cp.updatedAt || 0).getTime() || 0;
+                        if (!row) {
+                            await LocalDB.upsertPrescription(cp, { synced: 1, deleted: 0 });
+                        } else if (row.synced === 1 && (row.updated_at_ms || 0) < cloudMs) {
+                            await LocalDB.upsertPrescription(cp, { synced: 1, deleted: 0 });
+                        }
+                        // row.synced===0（待推送）跳过，由 push 处理
+                    } catch (e) { console.warn('pull: 处方 ' + cp.id + ' 失败', e); }
+                }
+                await this._pullCache('medicines_all', CLOUD_API_BASE + '/medicines');
+                await this._pullCache('formulas_all', CLOUD_API_BASE + '/formulas');
+            },
+            init() {
+                if (this._inited) return;
+                this._inited = true;
+                window.addEventListener('online', () => { setTimeout(() => SyncEngine.run(), 800); });
+                document.addEventListener('visibilitychange', () => {
+                    if (!document.hidden && navigator.onLine) SyncEngine.run();
+                });
+                this._timer = setInterval(() => { if (navigator.onLine) SyncEngine.run(); }, 60000);
+            }
+        };
+
         // ============ 数据缓存层（性能优化） ============
         const DataCache = {
             prescriptions: { data: null, timestamp: 0, ttl: 60000 }, // 处方缓存60秒
@@ -1514,6 +1755,34 @@
 
         // 从云端获取处方数据（带缓存优化）
         async function getPrescriptionsFromCloud(forceRefresh = false) {
+            const mode = getAllowedMode();
+            const canOffline = offlineCapable();
+
+            // 离线优先：本地库有数据则直接返回
+            if (canOffline && currentUser) {
+                await LocalDB.ready();
+                try {
+                    const localList = await LocalDB.getPrescriptions(currentUser.username);
+                    if (localList.length > 0) {
+                        const result = { data: localList, totalCount: localList.length };
+                        DataCache.set('prescriptions', result);
+                        // both 模式在线：后台拉新（不阻塞返回）
+                        if (mode === 'both' && navigator.onLine) {
+                            SyncEngine.run().catch(e => console.warn('后台同步失败', e));
+                        }
+                        console.log('使用本地 SQLite 处方数据:', localList.length);
+                        return result;
+                    }
+                    // 本地空 + local模式 或 离线：返回空
+                    if (mode === 'local' || !navigator.onLine) {
+                        return { data: [], totalCount: 0 };
+                    }
+                } catch (e) {
+                    console.warn('LocalDB 读处方失败，回退云端', e);
+                }
+            }
+
+            // 以下为云端逻辑（cloud 模式，或 both 模式在线且本地空）
             // 如果不是强制刷新，且缓存有效，则返回缓存数据
             if (!forceRefresh && DataCache.isValid('prescriptions')) {
                 console.log('使用缓存数据');
@@ -1530,18 +1799,12 @@
                 
                 // 添加认证头（使用 safeBtoa 处理中文字符）
                 const authToken = safeBtoa(`${currentUser.username}:${currentUser.role || 'user'}`);
-                console.log('认证Token:', authToken);
-                console.log('当前用户:', currentUser);
-                console.log('当前用户名:', currentUser.username);
-                console.log('当前用户角色:', currentUser.role);
                 const response = await cloudFetch(url, {
                     headers: {
                         'Authorization': `Basic ${authToken}`
                     }
                 });
                 console.log('处方API响应:', response);
-                console.log('云端返回的用户名:', response.currentUsername);
-                console.log('云端返回的isAdmin:', response.isAdmin);
                 console.log('云端返回的data数量:', response.data ? response.data.length : 0);
                 
                 if (response.success) {
@@ -1552,6 +1815,10 @@
                             totalCount: response.totalCount || response.data.length
                         };
                         DataCache.set('prescriptions', result);
+                        // 写入本地库（离线缓存，标记已同步）
+                        if (canOffline) {
+                            try { for (const p of response.data) { await LocalDB.upsertPrescription(p, { synced: 1, deleted: 0 }); } } catch (e) { console.warn('本地缓存处方失败', e); }
+                        }
                         return result;
                     } else if (Array.isArray(response)) {
                         console.log('响应本身是数组，长度:', response.length);
@@ -1575,14 +1842,38 @@
 
         // 从云端获取药品库（带缓存优化）
         async function getMedicinesFromCloud(forceRefresh = false) {
+            const mode = getAllowedMode();
+            const canOffline = offlineCapable();
+
+            // 离线优先：本地库缓存
+            if (canOffline) {
+                await LocalDB.ready();
+                try {
+                    const cached = await LocalDB.getCache('medicines_all');
+                    if (cached && cached.length > 0) {
+                        DataCache.set('medicines', cached);
+                        if (mode === 'both' && navigator.onLine) {
+                            SyncEngine.run().catch(() => {});
+                        }
+                        return cached;
+                    }
+                    // 本地空 + local模式 或 离线：返回空数组兜底
+                    if (mode === 'local' || !navigator.onLine) {
+                        return cached || [];
+                    }
+                } catch (e) {
+                    console.warn('LocalDB 读药品失败', e);
+                }
+            }
+
             // 如果不是强制刷新，且缓存有效，则返回缓存数据
             if (!forceRefresh && DataCache.isValid('medicines')) {
                 return DataCache.get('medicines');
             }
             
             try {
-                // URL 拼接时间戳，绕过浏览器缓存（解决手机端不更新价格问题）
-                const url = `${CLOUD_API_BASE}/medicines?_t=${Date.now()}`;
+                // 去掉 _t 时间戳：新鲜度由 LocalDB 缓存控制（WebView 已 LOAD_NO_CACHE）
+                const url = `${CLOUD_API_BASE}/medicines`;
                 console.log('请求药品API:', url);
                 
                 // 添加认证头（即使GET请求不需要认证，保持一致性）
@@ -1600,6 +1891,10 @@
                 if (response.success && response.data) {
                     // 更新缓存
                     DataCache.set('medicines', response.data);
+                    // 写入本地库缓存
+                    if (canOffline) {
+                        try { await LocalDB.setCache('medicines_all', response.data); } catch (e) { console.warn('本地缓存药品失败', e); }
+                    }
                     return response.data;
                 }
             } catch (error) {
@@ -1635,8 +1930,11 @@
                 // 仅在保存成功后才清除缓存，防止保存失败导致数据丢失
                 if (response.success) {
                     DataCache.invalidate('medicines');
+                    if (offlineCapable()) {
+                        try { await LocalDB.setCache('medicines_all', medicines); } catch(e) { console.warn('LocalDB medicines 刷新失败:', e); }
+                    }
                 }
-                
+
                 return response.success;
             } catch (error) {
                 console.warn('Failed to save medicines to cloud:', error);
@@ -1644,19 +1942,36 @@
             }
         }
 
-        // 从云端获取方剂库
+        // 从云端获取方剂库（离线优先：Capacitor 环境下先查 LocalDB，云端成功后回写本地）
         async function getFormulasFromCloud(forceRefresh = false) {
-            // 如果不是强制刷新，且缓存有效，则返回缓存数据
+            // 如果不是强制刷新，且内存缓存有效，则返回缓存数据
             if (!forceRefresh && DataCache.isValid('formulas')) {
                 return DataCache.get('formulas');
             }
-            
+            const canOffline = offlineCapable();
+            // 1) 离线优先：先查 LocalDB
+            if (canOffline) {
+                try {
+                    await LocalDB.ready();
+                    const cached = await LocalDB.getCache('formulas_all');
+                    if (cached && Array.isArray(cached) && cached.length > 0) {
+                        DataCache.set('formulas', cached);
+                        // both 模式在线时后台同步（不阻塞返回）
+                        if (getAllowedMode() === 'both' && navigator.onLine) {
+                            SyncEngine.run().catch(e => console.warn('SyncEngine 后台同步失败:', e));
+                        }
+                        return cached;
+                    }
+                } catch (e) { console.warn('LocalDB formulas 读取失败:', e); }
+            }
+            // 2) 本地空 + local 模式 或 离线：返回空数组（避免无谓的云端请求）
+            if (!navigator.onLine || getAllowedMode() === 'local') {
+                return canOffline ? [] : null;
+            }
+            // 3) 云端拉取
             try {
-                // URL 拼接时间戳，绕过浏览器缓存
-                const url = `${CLOUD_API_BASE}/formulas?_t=${Date.now()}`;
-                console.log('请求方剂API:', url);
-                
-                // 添加认证头（即使GET请求不需要认证，保持一致性）
+                // 去掉 _t 时间戳：与 getMedicinesFromCloud 一致，避免缓存漂移
+                const url = `${CLOUD_API_BASE}/formulas`;
                 const options = {};
                 if (currentUser) {
                     const authToken = safeBtoa(`${currentUser.username}:${currentUser.role || 'user'}`);
@@ -1664,25 +1979,24 @@
                         'Authorization': `Basic ${authToken}`
                     };
                 }
-                
                 const response = await cloudFetch(url, options);
-                console.log('方剂API响应:', response);
-                
                 if (response.success && response.data) {
-                    // 更新缓存
                     DataCache.set('formulas', response.data);
+                    if (canOffline) {
+                        try { await LocalDB.setCache('formulas_all', response.data); } catch(e) { console.warn('LocalDB formulas 写入失败:', e); }
+                    }
                     return response.data;
                 }
             } catch (error) {
                 console.warn('Failed to get formulas from cloud:', error);
             }
-            
-            // 云端请求失败时，返回本地缓存作为后备（防止手机端断网时数据丢失）
+            // 4) fallback：内存缓存 → LocalDB
             if (DataCache.has('formulas')) {
-                console.log('云端获取失败，使用本地缓存');
                 return DataCache.get('formulas');
             }
-            
+            if (canOffline) {
+                try { return await LocalDB.getCache('formulas_all') || null; } catch(e) {}
+            }
             return null;
         }
 
@@ -1702,12 +2016,15 @@
                     },
                     body: JSON.stringify({ formulas })
                 });
-                
+
                 // 仅在保存成功后才清除缓存，防止保存失败导致数据丢失
                 if (response.success) {
                     DataCache.invalidate('formulas');
+                    if (offlineCapable()) {
+                        try { await LocalDB.setCache('formulas_all', formulas); } catch(e) { console.warn('LocalDB formulas 刷新失败:', e); }
+                    }
                 }
-                
+
                 return response.success;
             } catch (error) {
                 console.warn('Failed to save formulas to cloud:', error);
@@ -1741,7 +2058,7 @@
             }
         }
 
-        // 保存处方数据到云端
+        // 保存处方数据（离线优先：local/both 离线落本地 synced=0；both 在线直连云端并回写本地 synced=1；cloud 模式或非 Capacitor 环境走纯云端）
         async function savePrescriptionsToCloud(prescriptions) {
             try {
                 if (!currentUser) {
@@ -1749,38 +2066,84 @@
                     alert('请先登录后再保存处方');
                     return null;
                 }
-                
-                console.log('Current user:', currentUser);
-                
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
-                const url = `${CLOUD_API_BASE}/prescriptions`;
-                
-                console.log('Saving to URL:', url);
-                console.log('Prescriptions:', prescriptions);
-                
-                // 直接使用 fetch 而不是 cloudFetch，避免中间层问题
-                const response = await fetch(url, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Basic ${authToken}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ prescription: prescriptions })
-                });
-                
-                console.log('Response status:', response.status);
-                
-                const data = await response.json();
-                console.log('Response data:', data);
-                
-                if (data.success) {
-                    console.log('Cloud save successful');
-                    return data;
+                const arr = Array.isArray(prescriptions) ? prescriptions : [prescriptions];
+                const canOffline = offlineCapable();
+                const isOnline = navigator.onLine;
+                const mode = getAllowedMode();
+
+                // 1) local 模式：仅落本地，synced=0
+                if (canOffline && mode === 'local') {
+                    let lastSaved = null;
+                    for (const p of arr) {
+                        const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
+                        await LocalDB.upsertPrescription(record, { synced: 0, deleted: 0 });
+                        lastSaved = record;
+                    }
+                    if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
+                    return { success: true, savedPrescription: lastSaved, offline: true };
                 }
-                
+
+                // 2) both 模式在线：直连云端，成功后回写本地 synced=1
+                if (canOffline && mode === 'both' && isOnline) {
+                    try {
+                        const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                        const response = await fetch(`${CLOUD_API_BASE}/prescriptions`, {
+                            method: 'POST',
+                            headers: { 'Authorization': `Basic ${authToken}`, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ prescription: arr })
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            // 云端返回的 savedPrescription（含 updatedAt 等）回写本地
+                            const saved = data.savedPrescription || arr[arr.length - 1];
+                            try {
+                                const savedArr = Array.isArray(saved) ? saved : [saved];
+                                for (const s of savedArr) {
+                                    await LocalDB.upsertPrescription(s, { synced: 1, deleted: 0 });
+                                }
+                            } catch(e) { console.warn('LocalDB 回写失败:', e); }
+                            return data;
+                        }
+                        // 云端返回失败：保持原行为提示失败
+                        alert('处方保存失败：' + (data.error || '未知错误'));
+                        return null;
+                    } catch (netErr) {
+                        // 网络异常：降级落本地 synced=0，待 SyncEngine 推送
+                        console.warn('云端保存网络异常，降级落本地:', netErr);
+                        let lastSaved = null;
+                        for (const p of arr) {
+                            const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
+                            await LocalDB.upsertPrescription(record, { synced: 0, deleted: 0 });
+                            lastSaved = record;
+                        }
+                        if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
+                        return { success: true, savedPrescription: lastSaved, offline: true };
+                    }
+                }
+
+                // 3) both 模式离线：落本地 synced=0
+                if (canOffline && mode === 'both' && !isOnline) {
+                    let lastSaved = null;
+                    for (const p of arr) {
+                        const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
+                        await LocalDB.upsertPrescription(record, { synced: 0, deleted: 0 });
+                        lastSaved = record;
+                    }
+                    if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
+                    return { success: true, savedPrescription: lastSaved, offline: true };
+                }
+
+                // 4) cloud 模式或非 Capacitor 环境：原纯云端逻辑
+                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const response = await fetch(`${CLOUD_API_BASE}/prescriptions`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Basic ${authToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prescription: arr })
+                });
+                const data = await response.json();
+                if (data.success) return data;
                 alert('处方保存失败：' + (data.error || '未知错误'));
                 return null;
-                
             } catch (error) {
                 console.error('Failed to save prescriptions:', error);
                 alert('处方保存失败：' + error.message);
@@ -1788,25 +2151,54 @@
             }
         }
 
-        // 从云端删除处方
+        // 删除处方（离线优先：local/both 离线 markDeleted 待推送；both 在线/cloud 直连云端成功后本地标记已同步删除）
         async function deletePrescriptionFromCloud(prescriptionId) {
             try {
                 if (!currentUser) {
                     console.error('User not logged in');
                     return false;
                 }
+                const canOffline = offlineCapable();
+                const isOnline = navigator.onLine;
+                const mode = getAllowedMode();
+
+                // 1) local 模式：仅 markDeleted，待同步推送删除
+                if (canOffline && mode === 'local') {
+                    await LocalDB.markDeleted(prescriptionId);
+                    if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
+                    return true;
+                }
+
+                // 2) both 模式离线：markDeleted，待同步推送
+                if (canOffline && mode === 'both' && !isOnline) {
+                    await LocalDB.markDeleted(prescriptionId);
+                    if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
+                    return true;
+                }
+
+                // 3) both 模式在线 / cloud 模式 / 非 Capacitor：直连云端 DELETE
                 const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
-                // 使用测试用户参数绕过认证问题
-                const url = `${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}&user=${encodeURIComponent(currentUser.username)}`;
+                const url = `${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}`;
                 const response = await cloudFetch(url, {
                     method: 'DELETE',
                     headers: {
                         'Authorization': `Basic ${authToken}`
                     }
                 });
+                if (response.success && canOffline) {
+                    try {
+                        // 云端删除成功，本地标记为已同步删除（deleted=1, synced=1），避免后续 push 重复推送删除请求
+                        await LocalDB.markDeleted(prescriptionId);
+                        await LocalDB.markSynced(prescriptionId);
+                    } catch(e) { console.warn('LocalDB 删除标记失败:', e); }
+                }
                 return response.success;
             } catch (error) {
                 console.warn('Failed to delete prescription from cloud:', error);
+                // 网络异常降级：markDeleted 待同步推送
+                if (offlineCapable()) {
+                    try { await LocalDB.markDeleted(prescriptionId); } catch(e) {}
+                }
                 return false;
             }
         }
@@ -2520,6 +2912,10 @@
         }
 
         async function loadData() {
+            // 启动同步引擎（幂等，仅首次执行生效；注册 online/visibilitychange/60s 定时器）
+            // 必须在 currentUser 已设置后调用；loadData 所有调用点（handleLogin/init）都在 currentUser 设置之后
+            try { SyncEngine.init(); } catch(e) { console.warn('SyncEngine.init 失败:', e); }
+
             console.log('=== loadData() 开始 ===');
             console.log('当前用户:', currentUser);
             
@@ -6284,7 +6680,7 @@ IconFile=${scriptPath}`;
         }
 
         // 更新离线同步信息显示
-        function updateOfflineSyncInfo() {
+        async function updateOfflineSyncInfo() {
             const sectionEl = document.getElementById('offline-sync-section');
             const infoEl = document.getElementById('offline-sync-info');
             // 普通用户且纯离线模式：隐藏整个区块（不显示状态、无切换按钮）
@@ -6298,34 +6694,44 @@ IconFile=${scriptPath}`;
             const mode = (currentUser && currentUser.allowedMode) || 'both';
             const modeText = mode === 'cloud' ? '仅云端' : mode === 'local' ? '仅离线' : '双模式';
             const onlineStatus = navigator.onLine ? '在线' : '离线';
-            let count = 0;
-            try { count = JSON.parse(localStorage.getItem('offline_prescriptions') || '[]').length; } catch(e) {}
+            let count = 0, syncStatus = null;
+            if (offlineCapable()) {
+                try {
+                    count = await LocalDB.countUnsynced();
+                    syncStatus = await LocalDB.getSyncStatus();
+                } catch(e) { console.warn('updateOfflineSyncInfo 读取 LocalDB 失败:', e); }
+            }
+            const lastPush = syncStatus && syncStatus.last_push ? new Date(syncStatus.last_push).toLocaleString('zh-CN') : '—';
+            const lastPull = syncStatus && syncStatus.last_pull ? new Date(syncStatus.last_pull).toLocaleString('zh-CN') : '—';
             infoEl.innerHTML = `
                 <div>当前模式: <b>${modeText}</b> (${onlineStatus})</div>
                 <div>待同步处方: <b style="color:#f44336;">${count}</b> 条</div>
+                <div style="font-size:11px;color:#666;">上次推送: ${lastPush} | 上次拉取: ${lastPull}</div>
                 ${count > 0 ? '<button onclick="syncOfflinePrescriptions()" style="margin-top:6px;padding:4px 12px;background:#4caf50;color:white;border:none;border-radius:4px;font-size:12px;">立即同步</button>' : '<span style="color:#4caf50;">✓ 全部已同步</span>'}
             `;
         }
 
-        // 同步离线处方到云端
+        // 手动触发离线同步（"立即同步"按钮 onclick 调用，函数名保留以兼容 HTML 绑定）
         async function syncOfflinePrescriptions() {
-            let queue = [];
-            try { queue = JSON.parse(localStorage.getItem('offline_prescriptions') || '[]'); } catch(e) {}
-            if (queue.length === 0) { alert('没有待同步的处方'); return; }
-            let success = 0, fail = 0;
-            for (const prescription of queue) {
-                try {
-                    const response = await fetch('/api/prescriptions', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(prescription)
-                    });
-                    if (response.ok) success++;
-                    else fail++;
-                } catch(e) { fail++; }
+            if (!offlineCapable()) {
+                alert('当前环境不支持离线同步（需 Capacitor + local/both 模式）');
+                return;
             }
-            localStorage.setItem('offline_prescriptions', '[]');
-            alert(`同步完成！成功 ${success} 条，失败 ${fail} 条。`);
+            if (!navigator.onLine) {
+                alert('当前离线，请联网后再同步');
+                return;
+            }
+            if (getAllowedMode() !== 'both') {
+                alert('仅双模式(both)支持同步到云端，当前模式: ' + getAllowedMode());
+                return;
+            }
+            alert('开始同步...');
+            try {
+                await SyncEngine.run();
+                alert('同步完成');
+            } catch(e) {
+                alert('同步失败: ' + e.message);
+            }
             updateOfflineSyncInfo();
         }
 
