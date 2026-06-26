@@ -1328,6 +1328,11 @@
                                 if (resp && resp.success) {
                                     const saved = resp.savedPrescription || p;
                                     await LocalDB.upsertPrescription(saved, { synced: 1, deleted: 0 });
+                                    // 修复：如果云端返回的 id 和本地不同（云端重新分配了 id），
+                                    // 标记旧记录已同步，避免下次 push 重复推送
+                                    if (saved.id && saved.id !== p.id) {
+                                        try { await LocalDB.markSynced(p.id); } catch(e) { console.warn('markSynced 旧记录失败:', e); }
+                                    }
                                     pushed++;
                                 }
                             }
@@ -1801,25 +1806,66 @@
 
             // 离线优先：本地库有数据则直接返回
             if (canOffline && currentUser) {
-                await LocalDB.ready();
-                try {
-                    const localList = await LocalDB.getPrescriptions(currentUser.username);
-                    if (localList.length > 0) {
-                        const result = { data: localList, totalCount: localList.length };
-                        DataCache.set('prescriptions', result);
-                        // both 模式在线：后台拉新（不阻塞返回）
+                const dbReady = await LocalDB.ready();
+                if (dbReady) {
+                    try {
+                        const localList = await LocalDB.getPrescriptions(currentUser.username);
+
+                        // both 模式在线：合并本地 + 云端数据，确保不丢失任何一方
+                        // 修复：之前本地有数据就直接返回不合并云端，切换模式后可能导致数据不全
                         if (mode === 'both' && navigator.onLine) {
-                            SyncEngine.run().catch(e => console.warn('后台同步失败', e));
+                            try {
+                                const cloudList = await SyncEngine._cloudGetPrescriptions();
+                                // 用 Map 按 id 合并去重，取 updatedAt 最新
+                                const mergedMap = new Map();
+                                for (const p of localList) mergedMap.set(p.id, p);
+                                for (const cp of cloudList) {
+                                    const existing = mergedMap.get(cp.id);
+                                    if (!existing) {
+                                        // 云端有但本地没有：写入本地（synced=1）
+                                        mergedMap.set(cp.id, cp);
+                                        try { await LocalDB.upsertPrescription(cp, { synced: 1, deleted: 0 }); } catch (e) {}
+                                    } else {
+                                        // 都有：取 updatedAt 最新的
+                                        const localMs = new Date(existing.updatedAt || 0).getTime() || 0;
+                                        const cloudMs = new Date(cp.updatedAt || 0).getTime() || 0;
+                                        if (cloudMs > localMs) mergedMap.set(cp.id, cp);
+                                    }
+                                }
+                                const merged = Array.from(mergedMap.values());
+                                const result = { data: merged, totalCount: merged.length };
+                                DataCache.set('prescriptions', result);
+                                // 后台 push 未同步的本地数据（synced=0）
+                                SyncEngine.run().catch(e => console.warn('后台同步失败', e));
+                                console.log('both 模式合并本地+云端处方:', localList.length, '+', cloudList.length, '=>', merged.length);
+                                return result;
+                            } catch (e) {
+                                console.warn('both 模式云端拉取失败，返回本地数据:', e);
+                                if (localList.length > 0) {
+                                    const result = { data: localList, totalCount: localList.length };
+                                    DataCache.set('prescriptions', result);
+                                    return result;
+                                }
+                                // 本地也空，继续走下方云端逻辑
+                            }
                         }
-                        console.log('使用本地 SQLite 处方数据:', localList.length);
-                        return result;
+
+                        // local 模式或离线：直接返回本地数据
+                        if (localList.length > 0) {
+                            const result = { data: localList, totalCount: localList.length };
+                            DataCache.set('prescriptions', result);
+                            console.log('使用本地 SQLite 处方数据:', localList.length);
+                            return result;
+                        }
+                        // 本地空 + local模式 或 离线：返回空
+                        if (mode === 'local' || !navigator.onLine) {
+                            return { data: [], totalCount: 0 };
+                        }
+                    } catch (e) {
+                        console.warn('LocalDB 读处方失败，回退云端', e);
                     }
-                    // 本地空 + local模式 或 离线：返回空
-                    if (mode === 'local' || !navigator.onLine) {
-                        return { data: [], totalCount: 0 };
-                    }
-                } catch (e) {
-                    console.warn('LocalDB 读处方失败，回退云端', e);
+                } else {
+                    console.warn('LocalDB ready 失败，回退云端');
                 }
             }
 
