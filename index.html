@@ -1097,36 +1097,6 @@
             return (mode === 'both' || mode === 'local') && LocalDB.available();
         }
 
-        // #region debug-point offline-save-fail
-        // [DEBUG offline-save-fail] 临时诊断函数（修复后删除）
-        function __dbgDumpSaveState(prefix, extra) {
-            try {
-                var cap = (typeof window.Capacitor !== 'undefined') ? 'Y' : 'N';
-                var plugKeys = 'N';
-                try { if (window.Capacitor && window.Capacitor.Plugins) plugKeys = Object.keys(window.Capacitor.Plugins).join(',') || 'empty'; } catch (e) { plugKeys = 'err:' + e.message; }
-                var sqlite = 'N';
-                try { sqlite = (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorSQLite) ? 'Y' : 'N'; } catch (e) { sqlite = 'err:' + e.message; }
-                var mode = 'noUser';
-                try { mode = (currentUser && currentUser.allowedMode) ? currentUser.allowedMode : 'undef'; } catch (e) { mode = 'err:' + e.message; }
-                var online = navigator.onLine ? 'Y' : 'N';
-                var co = 'N';
-                try { co = offlineCapable() ? 'Y' : 'N'; } catch (e) { co = 'err:' + e.message; }
-                var u = 'N';
-                try { u = (currentUser && currentUser.username) ? currentUser.username : 'N'; } catch (e) {}
-                var msg = '[DBG ' + prefix + ']\n' +
-                          'capacitor=' + cap + '\n' +
-                          'plugins=' + plugKeys + '\n' +
-                          'sqlite=' + sqlite + '\n' +
-                          'mode=' + mode + '\n' +
-                          'online=' + online + '\n' +
-                          'canOffline=' + co + '\n' +
-                          'user=' + u;
-                if (extra) msg += '\n---\n' + extra;
-                alert(msg);
-            } catch (e) { alert('[DBG dump err] ' + e.message); }
-        }
-        // #endregion
-
         const LocalDB = {
             DB: 'tcm_prescription',
             SECRET: 'secret',
@@ -1151,9 +1121,6 @@
                         return true;
                     } catch (e) {
                         console.error('LocalDB: 初始化失败', e);
-                        // #region debug-point offline-save-fail
-                        try { alert('[DBG LocalDB.ready err]\n' + (e && e.message ? e.message : String(e)) + '\nstack=' + (e && e.stack ? String(e.stack).substring(0, 300) : 'N/A')); } catch (_) {}
-                        // #endregion
                         this._ready = null;
                         return false;
                     }
@@ -2103,29 +2070,20 @@
                 const canOffline = offlineCapable();
                 const isOnline = navigator.onLine;
                 const mode = getAllowedMode();
-                // #region debug-point offline-save-fail
-                if (typeof __dbgDumpSaveState === 'function') {
-                    __dbgDumpSaveState('save-start', 'arr.length=' + arr.length + ', canOffline=' + canOffline + ', mode=' + mode + ', isOnline=' + isOnline);
-                }
-                // #endregion
 
                 // 1) local 模式：仅落本地，synced=0
                 if (canOffline && mode === 'local') {
-                    // #region debug-point offline-save-fail
-                    if (typeof __dbgDumpSaveState === 'function') __dbgDumpSaveState('branch1-enter', 'LocalDB._ready=' + (LocalDB._ready === null ? 'null' : (LocalDB._ready ? 'promise' : 'not-set')));
-                    // #endregion
+                    const dbReady = await LocalDB.ready();
+                    if (!dbReady) {
+                        console.error('LocalDB ready failed in local mode');
+                        alert('本地数据库初始化失败，请重试');
+                        return null;
+                    }
                     let lastSaved = null;
-                    try {
-                        for (const p of arr) {
-                            const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
-                            await LocalDB.upsertPrescription(record, { synced: 0, deleted: 0 });
-                            lastSaved = record;
-                        }
-                    } catch (branchErr) {
-                        // #region debug-point offline-save-fail
-                        try { alert('[DBG branch1 upsert err]\n' + (branchErr && branchErr.message ? branchErr.message : String(branchErr)) + '\nstack=' + (branchErr && branchErr.stack ? String(branchErr.stack).substring(0, 400) : 'N/A')); } catch (_) {}
-                        // #endregion
-                        throw branchErr;
+                    for (const p of arr) {
+                        const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
+                        await LocalDB.upsertPrescription(record, { synced: 0, deleted: 0 });
+                        lastSaved = record;
                     }
                     if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
                     return { success: true, savedPrescription: lastSaved, offline: true };
@@ -2142,12 +2100,15 @@
                         });
                         const data = await response.json();
                         if (data.success) {
-                            // 云端返回的 savedPrescription（含 updatedAt 等）回写本地
+                            // 云端返回的 savedPrescription（含 updatedAt 等）回写本地 synced=1
                             const saved = data.savedPrescription || arr[arr.length - 1];
                             try {
-                                const savedArr = Array.isArray(saved) ? saved : [saved];
-                                for (const s of savedArr) {
-                                    await LocalDB.upsertPrescription(s, { synced: 1, deleted: 0 });
+                                const dbReady = await LocalDB.ready();
+                                if (dbReady) {
+                                    const savedArr = Array.isArray(saved) ? saved : [saved];
+                                    for (const s of savedArr) {
+                                        await LocalDB.upsertPrescription(s, { synced: 1, deleted: 0 });
+                                    }
                                 }
                             } catch(e) { console.warn('LocalDB 回写失败:', e); }
                             return data;
@@ -2158,6 +2119,11 @@
                     } catch (netErr) {
                         // 网络异常：降级落本地 synced=0，待 SyncEngine 推送
                         console.warn('云端保存网络异常，降级落本地:', netErr);
+                        const dbReady = await LocalDB.ready();
+                        if (!dbReady) {
+                            alert('处方保存失败：本地数据库初始化失败');
+                            return null;
+                        }
                         let lastSaved = null;
                         for (const p of arr) {
                             const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
@@ -2171,6 +2137,12 @@
 
                 // 3) both 模式离线：落本地 synced=0
                 if (canOffline && mode === 'both' && !isOnline) {
+                    const dbReady = await LocalDB.ready();
+                    if (!dbReady) {
+                        console.error('LocalDB ready failed in both offline mode');
+                        alert('本地数据库初始化失败，请重试');
+                        return null;
+                    }
                     let lastSaved = null;
                     for (const p of arr) {
                         const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
@@ -2194,9 +2166,7 @@
                 return null;
             } catch (error) {
                 console.error('Failed to save prescriptions:', error);
-                // #region debug-point offline-save-fail
-                try { alert('[DBG outer-catch]\n处方保存失败：' + (error && error.message ? error.message : String(error)) + '\nstack=' + (error && error.stack ? String(error.stack).substring(0, 500) : 'N/A')); } catch (_) {}
-                // #endregion
+                alert('处方保存失败：' + error.message);
                 return null;
             }
         }
@@ -2214,6 +2184,8 @@
 
                 // 1) local 模式：仅 markDeleted，待同步推送删除
                 if (canOffline && mode === 'local') {
+                    const dbReady = await LocalDB.ready();
+                    if (!dbReady) { alert('本地数据库初始化失败，请重试'); return false; }
                     await LocalDB.markDeleted(prescriptionId);
                     if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
                     return true;
@@ -2221,6 +2193,8 @@
 
                 // 2) both 模式离线：markDeleted，待同步推送
                 if (canOffline && mode === 'both' && !isOnline) {
+                    const dbReady = await LocalDB.ready();
+                    if (!dbReady) { alert('本地数据库初始化失败，请重试'); return false; }
                     await LocalDB.markDeleted(prescriptionId);
                     if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
                     return true;
@@ -2238,8 +2212,11 @@
                 if (response.success && canOffline) {
                     try {
                         // 云端删除成功，本地标记为已同步删除（deleted=1, synced=1），避免后续 push 重复推送删除请求
-                        await LocalDB.markDeleted(prescriptionId);
-                        await LocalDB.markSynced(prescriptionId);
+                        const dbReady = await LocalDB.ready();
+                        if (dbReady) {
+                            await LocalDB.markDeleted(prescriptionId);
+                            await LocalDB.markSynced(prescriptionId);
+                        }
                     } catch(e) { console.warn('LocalDB 删除标记失败:', e); }
                 }
                 return response.success;
@@ -2247,7 +2224,10 @@
                 console.warn('Failed to delete prescription from cloud:', error);
                 // 网络异常降级：markDeleted 待同步推送
                 if (offlineCapable()) {
-                    try { await LocalDB.markDeleted(prescriptionId); } catch(e) {}
+                    try {
+                        const dbReady = await LocalDB.ready();
+                        if (dbReady) await LocalDB.markDeleted(prescriptionId);
+                    } catch(e) {}
                 }
                 return false;
             }
