@@ -1203,6 +1203,35 @@
             }
         };
 
+        // ============ 离线处方编号生成（与本地版规则一致：YYMMDD + 两位序号） ============
+        // 扫描本地 SQLite 中该用户当日已存处方的最大序号，+1 生成新编号
+        async function generateOfflinePrescriptionNo(username) {
+            const now = new Date();
+            const year = String(now.getFullYear()).slice(-2);
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const todayPrefix = year + month + day; // YYMMDD
+            let maxSeq = 0;
+            try {
+                const ok = await LocalDB.ready();
+                if (ok) {
+                    // 查询该用户所有未删除处方，扫描当日最大序号
+                    const list = await LocalDB.getPrescriptions(username);
+                    for (const p of list) {
+                        if (p.prescriptionNo && typeof p.prescriptionNo === 'string' &&
+                            p.prescriptionNo.startsWith(todayPrefix) && p.prescriptionNo.length === 8) {
+                            const seq = parseInt(p.prescriptionNo.slice(6), 10);
+                            if (!isNaN(seq) && seq > maxSeq) maxSeq = seq;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('generateOfflinePrescriptionNo 扫描本地失败，从 01 开始:', e);
+            }
+            const nextSeq = maxSeq + 1;
+            return todayPrefix + String(nextSeq).padStart(2, '0');
+        }
+
         // ============ 双向同步引擎（仅 both 模式在线时执行） ============
         const SyncEngine = {
             _running: false,
@@ -2079,7 +2108,7 @@
                 const isOnline = navigator.onLine;
                 const mode = getAllowedMode();
 
-                // 1) local 模式：仅落本地，synced=0
+                // 1) local 模式：仅落本地，synced=0，本地生成处方编号
                 if (canOffline && mode === 'local') {
                     const dbReady = await LocalDB.ready();
                     if (!dbReady) {
@@ -2088,13 +2117,28 @@
                         return null;
                     }
                     let lastSaved = null;
+                    let lastNo = null;
                     for (const p of arr) {
-                        const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
+                        // 离线生成处方编号（YYMMDD + 两位序号），与本地版规则一致
+                        const offlineNo = await generateOfflinePrescriptionNo(currentUser.username);
+                        const record = {
+                            ...p,
+                            prescriptionNo: offlineNo,
+                            outpatientNo: offlineNo,
+                            updatedAt: p.updatedAt || new Date().toISOString()
+                        };
                         await LocalDB.upsertPrescription(record, { synced: 0, deleted: 0 });
                         lastSaved = record;
+                        lastNo = offlineNo;
                     }
                     if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
-                    return { success: true, savedPrescription: lastSaved, offline: true };
+                    // 返回 nextPrescriptionNo 供 UI 显示下一个可用编号
+                    return {
+                        success: true,
+                        savedPrescription: lastSaved,
+                        offline: true,
+                        nextPrescriptionNo: await generateOfflinePrescriptionNo(currentUser.username)
+                    };
                 }
 
                 // 2) both 模式在线：直连云端，成功后回写本地 synced=1
@@ -2125,7 +2169,7 @@
                         alert('处方保存失败：' + (data.error || '未知错误'));
                         return null;
                     } catch (netErr) {
-                        // 网络异常：降级落本地 synced=0，待 SyncEngine 推送
+                        // 网络异常：降级落本地 synced=0，待 SyncEngine 推送，本地生成处方编号
                         console.warn('云端保存网络异常，降级落本地:', netErr);
                         const dbReady = await LocalDB.ready();
                         if (!dbReady) {
@@ -2134,16 +2178,27 @@
                         }
                         let lastSaved = null;
                         for (const p of arr) {
-                            const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
+                            const offlineNo = await generateOfflinePrescriptionNo(currentUser.username);
+                            const record = {
+                                ...p,
+                                prescriptionNo: offlineNo,
+                                outpatientNo: offlineNo,
+                                updatedAt: p.updatedAt || new Date().toISOString()
+                            };
                             await LocalDB.upsertPrescription(record, { synced: 0, deleted: 0 });
                             lastSaved = record;
                         }
                         if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
-                        return { success: true, savedPrescription: lastSaved, offline: true };
+                        return {
+                            success: true,
+                            savedPrescription: lastSaved,
+                            offline: true,
+                            nextPrescriptionNo: await generateOfflinePrescriptionNo(currentUser.username)
+                        };
                     }
                 }
 
-                // 3) both 模式离线：落本地 synced=0
+                // 3) both 模式离线：落本地 synced=0，本地生成处方编号
                 if (canOffline && mode === 'both' && !isOnline) {
                     const dbReady = await LocalDB.ready();
                     if (!dbReady) {
@@ -2153,12 +2208,23 @@
                     }
                     let lastSaved = null;
                     for (const p of arr) {
-                        const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
+                        const offlineNo = await generateOfflinePrescriptionNo(currentUser.username);
+                        const record = {
+                            ...p,
+                            prescriptionNo: offlineNo,
+                            outpatientNo: offlineNo,
+                            updatedAt: p.updatedAt || new Date().toISOString()
+                        };
                         await LocalDB.upsertPrescription(record, { synced: 0, deleted: 0 });
                         lastSaved = record;
                     }
                     if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
-                    return { success: true, savedPrescription: lastSaved, offline: true };
+                    return {
+                        success: true,
+                        savedPrescription: lastSaved,
+                        offline: true,
+                        nextPrescriptionNo: await generateOfflinePrescriptionNo(currentUser.username)
+                    };
                 }
 
                 // 4) cloud 模式或非 Capacitor 环境：原纯云端逻辑
