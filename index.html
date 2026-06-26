@@ -1669,6 +1669,7 @@
         }
 
         function getUserItem(key) {
+            if (!currentUser) return null;
             return localStorage.getItem(getUserStorageKey(key));
         }
 
@@ -4095,8 +4096,9 @@
             document.getElementById('paperClinicNo').textContent = '';
             
             // 批量读取本地存储配置，减少重复读取
+            // 诊所名称优先从用户存储读取，未登录时从全局存储读取
             const config = {
-                clinicName: getUserItem('clinicName') || '惠康堂中医诊所',
+                clinicName: getUserItem('clinicName') || localStorage.getItem('global_clinicName') || '惠康堂中医诊所',
                 defaultRegFee: getUserItem('defaultRegFee') || '0',
                 defaultDose: getUserItem('defaultDose') || '7',
                 clinicDoctor: getUserItem('clinicDoctor') || '王桂杰',
@@ -5328,6 +5330,8 @@
 
         function saveSettings() {
             setUserItem('clinicName', document.getElementById('clinicName').value);
+            // 同时保存到全局存储，供未登录时（登录界面）读取
+            localStorage.setItem('global_clinicName', document.getElementById('clinicName').value);
             setUserItem('clinicDoctor', document.getElementById('defaultDoctor').value);
             setUserItem('defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             setUserItem('defaultDose', document.getElementById('defaultDose').value || '7');
@@ -5636,10 +5640,6 @@ IconFile=${scriptPath}`;
 
         function showHelp() {
             alert('本能中医处方系统\\n\\n快捷键：\\nF1 - 基础设置\\nF2 - 药品管理\\nF3 - 验方设置\\nF5 - 存为验方\\nF7 - 重输方药\\nF8 - 打印处方\\nF9 - 保存录入\\nAlt+1 - 辨证选方\\nAlt+9 - 复诊直调');
-        }
-
-        function exitApp() {
-            alert('感谢使用本能中医处方系统！');
         }
 
         function exportData() {
