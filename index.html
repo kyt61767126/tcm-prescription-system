@@ -531,7 +531,7 @@
     </style>
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name">惠康堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjz1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">惠康堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjz1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -4106,6 +4106,9 @@
             // 设置DOM元素
             document.getElementById('clinicName').value = config.clinicName;
             document.getElementById('clinicNameDisplay').textContent = config.clinicName;
+            // 同步登录界面的诊所名称
+            const loginClinicNameEl = document.getElementById('loginClinicName');
+            if (loginClinicNameEl) loginClinicNameEl.textContent = config.clinicName;
             document.getElementById('defaultRegFee').value = config.defaultRegFee;
             document.getElementById('defaultDose').value = config.defaultDose;
             document.getElementById('doctorName').value = config.clinicDoctor;
@@ -5339,6 +5342,9 @@
             
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
+            // 同步登录界面的诊所名称
+            const loginClinicNameSave = document.getElementById('loginClinicName');
+            if (loginClinicNameSave) loginClinicNameSave.textContent = document.getElementById('clinicName').value;
             // 同步诊疗费
             const regFeeVal = document.getElementById('defaultRegFee').value || '0';
             const regFeeInput = document.getElementById('registrationFee');
