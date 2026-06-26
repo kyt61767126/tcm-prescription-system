@@ -2481,6 +2481,9 @@
 
         // 退出 APP（登录界面取消按钮）
         function exitApp() {
+            // 立即隐藏页面，给用户即时反馈（避免感知到 finish() 的延迟）
+            document.body.style.opacity = '0';
+            document.body.style.pointerEvents = 'none';
             if (window.AndroidAppExit && window.AndroidAppExit.exit) {
                 window.AndroidAppExit.exit();
             } else {
