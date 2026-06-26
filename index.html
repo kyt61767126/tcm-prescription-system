@@ -2111,11 +2111,21 @@
 
                 // 1) local 模式：仅落本地，synced=0
                 if (canOffline && mode === 'local') {
+                    // #region debug-point offline-save-fail
+                    if (typeof __dbgDumpSaveState === 'function') __dbgDumpSaveState('branch1-enter', 'LocalDB._ready=' + (LocalDB._ready === null ? 'null' : (LocalDB._ready ? 'promise' : 'not-set')));
+                    // #endregion
                     let lastSaved = null;
-                    for (const p of arr) {
-                        const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
-                        await LocalDB.upsertPrescription(record, { synced: 0, deleted: 0 });
-                        lastSaved = record;
+                    try {
+                        for (const p of arr) {
+                            const record = { ...p, updatedAt: p.updatedAt || new Date().toISOString() };
+                            await LocalDB.upsertPrescription(record, { synced: 0, deleted: 0 });
+                            lastSaved = record;
+                        }
+                    } catch (branchErr) {
+                        // #region debug-point offline-save-fail
+                        try { alert('[DBG branch1 upsert err]\n' + (branchErr && branchErr.message ? branchErr.message : String(branchErr)) + '\nstack=' + (branchErr && branchErr.stack ? String(branchErr.stack).substring(0, 400) : 'N/A')); } catch (_) {}
+                        // #endregion
+                        throw branchErr;
                     }
                     if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
                     return { success: true, savedPrescription: lastSaved, offline: true };
@@ -2184,7 +2194,9 @@
                 return null;
             } catch (error) {
                 console.error('Failed to save prescriptions:', error);
-                alert('处方保存失败：' + error.message);
+                // #region debug-point offline-save-fail
+                try { alert('[DBG outer-catch]\n处方保存失败：' + (error && error.message ? error.message : String(error)) + '\nstack=' + (error && error.stack ? String(error.stack).substring(0, 500) : 'N/A')); } catch (_) {}
+                // #endregion
                 return null;
             }
         }
