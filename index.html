@@ -1090,15 +1090,70 @@
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
         window.__APP_VERSION__ = '2026-06-26-v1';
 
+        // ============ #region debug-point offline-prescription-lost ============
+        // 调试插桩：页面内日志收集器（不修改业务逻辑，仅记录关键路径）
+        // 用户复现问题后，点击右下角浮动按钮查看日志并截图反馈
+        window.__debugLogs = [];
+        window.__pushDebugLog = function(tag, msg, data) {
+            try {
+                var entry = {
+                    t: new Date().toISOString().substring(11, 23),
+                    tag: tag,
+                    msg: msg,
+                    data: data === undefined ? null : (typeof data === 'string' ? data : JSON.stringify(data).substring(0, 300))
+                };
+                window.__debugLogs.push(entry);
+                if (window.__debugLogs.length > 200) window.__debugLogs.shift();
+                console.log('[DBG]', entry.t, tag, msg, entry.data);
+            } catch(e) {}
+        };
+        // 延迟注入浮动按钮（等 DOM 就绪）
+        (function() {
+            function injectDebugBtn() {
+                if (document.getElementById('__debugFab')) return;
+                var btn = document.createElement('div');
+                btn.id = '__debugFab';
+                btn.textContent = 'DBG';
+                btn.style.cssText = 'position:fixed;right:8px;bottom:80px;z-index:99999;width:40px;height:40px;border-radius:50%;background:#dc2626;color:#fff;font-size:11px;font-weight:bold;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.3);-webkit-tap-highlight-color:transparent;';
+                btn.onclick = function() {
+                    var logs = window.__debugLogs;
+                    var text = '=== 调试日志 (' + logs.length + ' 条) ===\n';
+                    for (var i = 0; i < logs.length; i++) {
+                        var e = logs[i];
+                        text += '[' + e.t + '] ' + e.tag + ' | ' + e.msg + (e.data ? ' | ' + e.data : '') + '\n';
+                    }
+                    var panel = document.getElementById('__debugPanel');
+                    if (!panel) {
+                        panel = document.createElement('div');
+                        panel.id = '__debugPanel';
+                        panel.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;z-index:999999;background:rgba(0,0,0,0.9);overflow:auto;padding:12px;font-family:monospace;font-size:11px;color:#0f0;white-space:pre-wrap;word-break:break-all;';
+                        document.body.appendChild(panel);
+                    }
+                    panel.textContent = text;
+                    panel.style.display = 'block';
+                    panel.onclick = function() { panel.style.display = 'none'; };
+                };
+                document.body.appendChild(btn);
+            }
+            if (document.body) injectDebugBtn();
+            else document.addEventListener('DOMContentLoaded', injectDebugBtn);
+        })();
+        // ============ endregion debug-point offline-prescription-lost ============
+
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
         // allowedMode: cloud=纯云端 / local=纯离线 / both=离线优先+联网双向同步
         function getAllowedMode() {
-            return (currentUser && currentUser.allowedMode) || 'both';
+            const m = (currentUser && currentUser.allowedMode) || 'both';
+            try { window.__pushDebugLog && window.__pushDebugLog('MODE', 'getAllowedMode=' + m, { user: currentUser ? currentUser.username : null, allowedMode: currentUser ? currentUser.allowedMode : null }); } catch(e) {}
+            return m;
         }
         function offlineCapable() {
             const mode = getAllowedMode();
-            return (mode === 'both' || mode === 'local') && LocalDB.available();
+            const avail = LocalDB.available();
+            const cap = (mode === 'both' || mode === 'local') && avail;
+            try { window.__pushDebugLog && window.__pushDebugLog('MODE', 'offlineCapable=' + cap, { mode: mode, pluginAvail: avail }); } catch(e) {}
+            return cap;
         }
 
         const LocalDB = {
@@ -1115,8 +1170,9 @@
                 if (this._ready) return this._ready;
                 this._ready = (async () => {
                     const sqlite = this._plugin();
-                    if (!sqlite) { console.warn('LocalDB: CapacitorSQLite 不可用，降级纯云端'); return false; }
+                    if (!sqlite) { console.warn('LocalDB: CapacitorSQLite 不可用，降级纯云端'); try { window.__pushDebugLog && window.__pushDebugLog('DB', 'ready: plugin 不可用'); } catch(e) {} return false; }
                     try {
+                        try { window.__pushDebugLog && window.__pushDebugLog('DB', 'ready: 开始初始化'); } catch(e) {}
                         // 先检查 secret 是否已存储，避免重复设置报错
                         try {
                             const stored = await sqlite.isSecretStored();
@@ -1124,15 +1180,17 @@
                                 await sqlite.setEncryptionSecret({ passphrase: this.SECRET });
                             }
                         } catch (e) {
-                            /* 可能已设置或方法不支持，继续尝试 */
+                            try { window.__pushDebugLog && window.__pushDebugLog('DB', 'ready: secret 设置警告', String(e && e.message || e)); } catch(e2) {}
                         }
                         await sqlite.createConnection({ database: this.DB, encrypted: true, mode: 'secret', version: 1 });
                         await sqlite.open({ database: this.DB });
                         await this._createTables();
                         console.log('LocalDB: 初始化成功');
+                        try { window.__pushDebugLog && window.__pushDebugLog('DB', 'ready: 初始化成功'); } catch(e) {}
                         return true;
                     } catch (e) {
                         console.error('LocalDB: 初始化失败', e);
+                        try { window.__pushDebugLog && window.__pushDebugLog('DB', 'ready: 初始化失败', String(e && e.message || e)); } catch(e2) {}
                         this._ready = null;
                         return false;
                     }
@@ -1158,7 +1216,9 @@
             },
             async getPrescriptions(username) {
                 const rows = await this.query('SELECT data FROM prescriptions WHERE created_by=? AND deleted=0 ORDER BY updated_at_ms DESC', [username]);
-                return rows.map(r => { try { return JSON.parse(r.data); } catch (e) { return null; } }).filter(Boolean);
+                const list = rows.map(r => { try { return JSON.parse(r.data); } catch (e) { return null; } }).filter(Boolean);
+                try { window.__pushDebugLog && window.__pushDebugLog('DB', 'getPrescriptions(' + username + ') => ' + list.length + ' 条'); } catch(e) {}
+                return list;
             },
             async upsertPrescription(p, opts) {
                 const id = p.id || Date.now();
@@ -1803,19 +1863,24 @@
         async function getPrescriptionsFromCloud(forceRefresh = false) {
             const mode = getAllowedMode();
             const canOffline = offlineCapable();
+            try { window.__pushDebugLog && window.__pushDebugLog('GETP', '入口 mode=' + mode + ' canOffline=' + canOffline + ' onLine=' + navigator.onLine + ' user=' + (currentUser ? currentUser.username : null)); } catch(e) {}
 
             // 离线优先：本地库有数据则直接返回
             if (canOffline && currentUser) {
                 const dbReady = await LocalDB.ready();
+                try { window.__pushDebugLog && window.__pushDebugLog('GETP', 'dbReady=' + dbReady); } catch(e) {}
                 if (dbReady) {
                     try {
                         const localList = await LocalDB.getPrescriptions(currentUser.username);
+                        try { window.__pushDebugLog && window.__pushDebugLog('GETP', 'localList=' + localList.length + ' 条'); } catch(e) {}
 
                         // both 模式在线：合并本地 + 云端数据，确保不丢失任何一方
                         // 修复：之前本地有数据就直接返回不合并云端，切换模式后可能导致数据不全
                         if (mode === 'both' && navigator.onLine) {
+                            try { window.__pushDebugLog && window.__pushDebugLog('GETP', '进入 both 合并分支'); } catch(e) {}
                             try {
                                 const cloudList = await SyncEngine._cloudGetPrescriptions();
+                                try { window.__pushDebugLog && window.__pushDebugLog('GETP', 'cloudList=' + cloudList.length + ' 条'); } catch(e) {}
                                 // 用 Map 按 id 合并去重，取 updatedAt 最新
                                 const mergedMap = new Map();
                                 for (const p of localList) mergedMap.set(p.id, p);
@@ -1838,16 +1903,21 @@
                                 // 后台 push 未同步的本地数据（synced=0）
                                 SyncEngine.run().catch(e => console.warn('后台同步失败', e));
                                 console.log('both 模式合并本地+云端处方:', localList.length, '+', cloudList.length, '=>', merged.length);
+                                try { window.__pushDebugLog && window.__pushDebugLog('GETP', '合并完成 merged=' + merged.length + '，返回'); } catch(e) {}
                                 return result;
                             } catch (e) {
                                 console.warn('both 模式云端拉取失败，返回本地数据:', e);
+                                try { window.__pushDebugLog && window.__pushDebugLog('GETP', 'both 云端拉取失败', String(e && e.message || e)); } catch(e2) {}
                                 if (localList.length > 0) {
                                     const result = { data: localList, totalCount: localList.length };
                                     DataCache.set('prescriptions', result);
+                                    try { window.__pushDebugLog && window.__pushDebugLog('GETP', '返回 localList=' + localList.length); } catch(e2) {}
                                     return result;
                                 }
-                                // 本地也空，继续走下方云端逻辑
+                                try { window.__pushDebugLog && window.__pushDebugLog('GETP', '本地也空，继续走云端逻辑'); } catch(e2) {}
                             }
+                        } else {
+                            try { window.__pushDebugLog && window.__pushDebugLog('GETP', '未进入 both 分支， mode=' + mode + ' onLine=' + navigator.onLine); } catch(e) {}
                         }
 
                         // local 模式或离线：直接返回本地数据
@@ -1855,18 +1925,25 @@
                             const result = { data: localList, totalCount: localList.length };
                             DataCache.set('prescriptions', result);
                             console.log('使用本地 SQLite 处方数据:', localList.length);
+                            try { window.__pushDebugLog && window.__pushDebugLog('GETP', 'local/离线分支 返回 localList=' + localList.length); } catch(e) {}
                             return result;
                         }
                         // 本地空 + local模式 或 离线：返回空
                         if (mode === 'local' || !navigator.onLine) {
+                            try { window.__pushDebugLog && window.__pushDebugLog('GETP', '本地空+local/离线，返回空数组'); } catch(e) {}
                             return { data: [], totalCount: 0 };
                         }
+                        try { window.__pushDebugLog && window.__pushDebugLog('GETP', '本地空+both在线，走云端逻辑'); } catch(e) {}
                     } catch (e) {
                         console.warn('LocalDB 读处方失败，回退云端', e);
+                        try { window.__pushDebugLog && window.__pushDebugLog('GETP', 'LocalDB 读处方异常', String(e && e.message || e)); } catch(e2) {}
                     }
                 } else {
                     console.warn('LocalDB ready 失败，回退云端');
+                    try { window.__pushDebugLog && window.__pushDebugLog('GETP', 'dbReady=false 回退云端'); } catch(e) {}
                 }
+            } else {
+                try { window.__pushDebugLog && window.__pushDebugLog('GETP', 'canOffline=' + canOffline + ' currentUser=' + !!currentUser + '，走云端逻辑'); } catch(e) {}
             }
 
             // 以下为云端逻辑（cloud 模式，或 both 模式在线且本地空）
@@ -2470,6 +2547,7 @@
             
             if (user) {
                 currentUser = user;
+                try { window.__pushDebugLog && window.__pushDebugLog('LOGIN', '登录成功', { username: user.username, role: user.role, allowedMode: user.allowedMode }); } catch(e) {}
                 const userData = JSON.stringify(user);
                 localStorage.setItem('cloud_currentUser', userData);
                 localStorage.setItem('cloud_isLoggedIn', 'true');
@@ -3072,27 +3150,29 @@
 
             console.log('=== loadData() 开始 ===');
             console.log('当前用户:', currentUser);
-            
+            try { window.__pushDebugLog && window.__pushDebugLog('LOAD', 'loadData 开始', { user: currentUser ? currentUser.username : null, role: currentUser ? currentUser.role : null, allowedMode: currentUser ? currentUser.allowedMode : null }); } catch(e) {}
+
             // 并行请求云端数据，减少加载时间
             const [cloudMedicines, cloudFormulas, cloudResult] = await Promise.all([
                 getMedicinesFromCloud().catch(e => { console.warn('Failed to get medicines:', e); return null; }),
                 getFormulasFromCloud().catch(e => { console.warn('Failed to get formulas:', e); return null; }),
-                getPrescriptionsFromCloud().catch(e => { console.warn('Failed to get prescriptions:', e); return null; })
+                getPrescriptionsFromCloud().catch(e => { console.warn('Failed to get prescriptions:', e); try { window.__pushDebugLog && window.__pushDebugLog('LOAD', 'getPrescriptionsFromCloud 异常', String(e && e.message || e)); } catch(e2) {} return null; })
             ]);
-            
+
             console.log('cloudResult:', cloudResult);
             console.log('cloudResult.data:', cloudResult ? cloudResult.data : 'undefined');
-            
+            try { window.__pushDebugLog && window.__pushDebugLog('LOAD', 'cloudResult.data=' + (cloudResult && cloudResult.data ? cloudResult.data.length : 'null') + ' totalCount=' + (cloudResult ? cloudResult.totalCount : 'null')); } catch(e) {}
+
             // 更新药品库
             if (cloudMedicines && cloudMedicines.length > 0) {
                 medicines = cloudMedicines;
             }
-            
+
             // 更新方剂库
             if (cloudFormulas) {
                 formulas = cloudFormulas;
             }
-            
+
             // 更新处方历史（最重要，优先处理）
             console.log('=== 更新处方历史 ===');
             console.log('cloudResult:', cloudResult);
@@ -3100,31 +3180,33 @@
             console.log('cloudResult.data.length:', cloudResult && cloudResult.data ? cloudResult.data.length : 'undefined');
             console.log('cloudResult.currentUsername:', cloudResult ? cloudResult.currentUsername : 'undefined');
             console.log('cloudResult.isAdmin:', cloudResult ? cloudResult.isAdmin : 'undefined');
-            
+
             if (cloudResult && cloudResult.data) {
                 console.log('cloudResult.data 类型:', Array.isArray(cloudResult.data) ? '数组' : '对象');
                 console.log('cloudResult.data 内容:', JSON.stringify(cloudResult.data).substring(0, 500));
-                
+
                 if (cloudResult.data.length > 0) {
                     console.log('currentUser.role:', currentUser ? currentUser.role : 'undefined');
                     console.log('currentUser.username:', currentUser ? currentUser.username : 'undefined');
                     console.log('cloudResult.currentUsername:', cloudResult.currentUsername);
                     console.log('cloudResult.isAdmin:', cloudResult.isAdmin);
-                    
+
                     // 使用云端返回的currentUsername来确保一致性
                     const effectiveUsername = cloudResult.currentUsername || currentUser?.username;
-                    
+
                     if (currentUser && currentUser.role === 'admin') {
                         console.log('管理员模式，显示所有处方');
                         prescriptionHistory = cloudResult.data;
+                        try { window.__pushDebugLog && window.__pushDebugLog('LOAD', '管理员模式 prescriptionHistory=' + prescriptionHistory.length); } catch(e) {}
                     } else {
                         console.log('普通用户模式，过滤处方');
                         console.log('使用用户名过滤:', effectiveUsername);
                         console.log('云端返回的处方:', cloudResult.data.map(p => ({ id: p.id, createdBy: p.createdBy })));
-                        prescriptionHistory = cloudResult.data.filter(p => 
+                        prescriptionHistory = cloudResult.data.filter(p =>
                             p.createdBy === effectiveUsername || !p.createdBy
                         );
                         console.log('过滤后处方数量:', prescriptionHistory.length);
+                        try { window.__pushDebugLog && window.__pushDebugLog('LOAD', '普通用户过滤 effectiveUser=' + effectiveUsername + ' 过滤前=' + cloudResult.data.length + ' 过滤后=' + prescriptionHistory.length, cloudResult.data.map(function(p){return {id:p.id, createdBy:p.createdBy};}).slice(0,5)); } catch(e) {}
                     }
                     
                     // 根据用户角色更新统计输入框
@@ -3148,14 +3230,17 @@
                     });
                 } else {
                     console.log('cloudResult.data 是空数组，尝试从本地备份恢复');
+                    try { window.__pushDebugLog && window.__pushDebugLog('LOAD', 'cloudResult.data 空数组，restoreFromLocalBackup'); } catch(e) {}
                     prescriptionHistory = restoreFromLocalBackup();
                 }
             } else {
                 console.log('cloudResult 或 cloudResult.data 为空，尝试从本地备份恢复');
+                try { window.__pushDebugLog && window.__pushDebugLog('LOAD', 'cloudResult 为空，restoreFromLocalBackup'); } catch(e) {}
                 prescriptionHistory = restoreFromLocalBackup();
             }
-            
+
             console.log('最终 prescriptionHistory 长度:', prescriptionHistory.length);
+            try { window.__pushDebugLog && window.__pushDebugLog('LOAD', '最终 prescriptionHistory=' + prescriptionHistory.length); } catch(e) {}
             
             // 统计当天的处方数量，更新 dailyCounter
             const today = new Date().toDateString();
