@@ -2419,8 +2419,33 @@
 
         async function initLoginDropdown() {
             const select = document.getElementById('loginUsername');
+
+            // APP 端（Capacitor）：替换为输入框，不显示用户列表，用户手动输入用户名
+            // 所有用户由管理员在云端网页端管理，APP 端不暴露用户列表
+            if (window.Capacitor) {
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = 'loginUsername';
+                input.placeholder = '请输入用户名';
+                input.setAttribute('onkeypress', "if(event.key==='Enter')handleLogin()");
+                input.className = select.className;
+                input.style.cssText = select.style.cssText;
+                input.style.width = '100%';
+                select.parentNode.replaceChild(input, select);
+
+                // 恢复记住的用户名密码
+                const rememberedUsername = localStorage.getItem('cloud_rememberedUsername') || localStorage.getItem('rememberedUsername');
+                const rememberedPassword = localStorage.getItem('cloud_rememberedPassword') || localStorage.getItem('rememberedPassword');
+                if (rememberedUsername) input.value = rememberedUsername;
+                if (rememberedPassword) {
+                    document.getElementById('loginPassword').value = rememberedPassword;
+                    document.getElementById('rememberPassword').checked = true;
+                }
+                return;
+            }
+
+            // 网页端：保持原有下拉列表逻辑（管理员在云端管理用户）
             const users = await getUsers();
-            
             select.innerHTML = '';
             users.forEach(user => {
                 const option = document.createElement('option');
@@ -2428,10 +2453,10 @@
                 option.textContent = user.username;
                 select.appendChild(option);
             });
-            
+
             const rememberedUsername = localStorage.getItem('cloud_rememberedUsername') || localStorage.getItem('rememberedUsername');
             const rememberedPassword = localStorage.getItem('cloud_rememberedPassword') || localStorage.getItem('rememberedPassword');
-            
+
             if (rememberedUsername) {
                 select.value = rememberedUsername;
             }
@@ -2507,7 +2532,7 @@
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 refreshUserInterface();
             } else {
-                errorDiv.textContent = '密码错误';
+                errorDiv.textContent = '用户名或密码错误';
                 errorDiv.style.display = 'block';
             }
         }
@@ -2839,14 +2864,24 @@
 
             if (!btn1 || !btn2) return;
 
+            // APP 端（Capacitor）：所有用户都显示"统计分析、修改密码"，不显示账户管理
+            // 所有用户管理由管理员在云端网页端完成
+            if (window.Capacitor) {
+                btn1.innerHTML = '📊 统计分析';
+                btn1.onclick = function() { showModal('analyticsModal'); };
+                btn2.innerHTML = '🔑 修改密码';
+                btn2.onclick = function() { showChangePwdModal(); };
+                return;
+            }
+
             if (currentUser && currentUser.role === 'admin') {
-                // 管理员：统计分析、账户管理
+                // 网页端管理员：统计分析、账户管理
                 btn1.innerHTML = '📊 统计分析';
                 btn1.onclick = function() { showModal('analyticsModal'); };
                 btn2.innerHTML = '👤 账户管理';
                 btn2.onclick = function() { showUserManageModal(); };
             } else {
-                // 普通用户：统计分析、修改密码
+                // 网页端普通用户：统计分析、修改密码
                 btn1.innerHTML = '📊 统计分析';
                 btn1.onclick = function() { showModal('analyticsModal'); };
                 btn2.innerHTML = '🔑 修改密码';
@@ -3961,6 +3996,12 @@
         async function init() {
             // 先初始化用户下拉框
             await initLoginDropdown();
+
+            // APP 端（Capacitor）：隐藏账户管理入口，所有用户由管理员在云端网页端管理
+            if (window.Capacitor) {
+                const userManageBtn = document.getElementById('userManageBtn');
+                if (userManageBtn) userManageBtn.style.display = 'none';
+            }
             
             // 检查是否是Electron环境
             const isElectron = window.electronAPI && window.electronAPI.isElectron;
