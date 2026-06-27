@@ -1584,6 +1584,27 @@
             return payload ? ('Basic ' + payload) : null;
         }
 
+        // ============================================================================
+        // 三级角色判定（与后端 _lib/auth.js ROLE 常量保持一致）
+        //   platform_admin : 平台总管理员（开通诊所、下发诊所管理员，不参与诊所业务）
+        //   clinic_admin    : 诊所管理员（管理本诊所医师、维护药品库/方剂库、可代他人保存处方）
+        //   doctor          : 医师（仅自己创建的处方/方剂可见）
+        // ============================================================================
+        function isPlatformAdmin(user) {
+            const u = user || currentUser;
+            return !!(u && u.role === 'platform_admin');
+        }
+
+        function isClinicAdmin(user) {
+            const u = user || currentUser;
+            return !!(u && u.role === 'clinic_admin');
+        }
+
+        function isDoctor(user) {
+            const u = user || currentUser;
+            return !!(u && u.role === 'doctor');
+        }
+
         // 兼容旧调用方式：safeBtoa(`${username}:${role}`) 已废弃
         // 所有调用点应改为 buildAuthHeader(currentUser)
         
@@ -1810,7 +1831,7 @@
                 
                 if (cloudResult && cloudResult.data && cloudResult.data.length > 0) {
                     // 更新本地数据
-                    if (currentUser.role === 'admin') {
+                    if (isClinicAdmin(currentUser)) {
                         prescriptionHistory = cloudResult.data;
                     } else {
                         prescriptionHistory = cloudResult.data.filter(p => 
@@ -1830,7 +1851,7 @@
                     if (clinicNoEl) {
                         // 生成年份后两位 + 数量(6位)的格式
                         const year = new Date().getFullYear().toString().substring(2);
-                        if (currentUser && currentUser.role === 'admin') {
+                        if (currentUser && isClinicAdmin(currentUser)) {
                             // 管理员显示全部用户处方总数
                             clinicNoEl.value = cloudResult.totalCount || (year + '000000');
                         } else {
@@ -2077,7 +2098,7 @@
         // 保存药品库到云端
         async function saveMedicinesToCloud(medicines) {
             try {
-                if (!currentUser || currentUser.role !== 'admin') {
+                if (!currentUser || currentUser.role !== 'clinic_admin') {
                     console.warn('Only admin can save medicines');
                     return false;
                 }
@@ -2442,7 +2463,7 @@
                     ...user,
                     allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
                     // 默认离线模式：管理员为both，普通用户为local
-                    allowedMode: user.allowedMode || (user.role === 'admin' ? 'both' : 'local')
+                    allowedMode: user.allowedMode || (isClinicAdmin(user) ? 'both' : 'local')
                 }));
             }
             return getDefaultUsers();
@@ -2757,7 +2778,7 @@
         }
 
         async function showUserManageModal() {
-            if (!currentUser || currentUser.role !== 'admin') {
+            if (!currentUser || currentUser.role !== 'clinic_admin') {
                 alert('只有管理员可以管理用户');
                 return;
             }
@@ -2782,15 +2803,15 @@
                     <div class="user-item">
                         <div class="user-item-info">
                             <div class="user-item-name">${user.name} (${user.username})</div>
-                            <div class="user-item-role">${user.role === 'admin' ? '管理员' : '普通用户'} <span style="color:${modeColor};font-size:11px;margin-left:6px;">[${modeText}]</span></div>
+                            <div class="user-item-role">${user.role === 'platform_admin' ? '平台总管理员' : user.role === 'clinic_admin' ? '诊所管理员' : '医师'} <span style="color:${modeColor};font-size:11px;margin-left:6px;">[${modeText}]</span></div>
                         </div>
                         <div class="user-item-actions">
                             <button class="user-item-btn btn-primary" onclick="handleEditUser('${user.username}')">编辑</button>
-                            ${user.username !== 'admin' ? (mode === 'local'
+                            ${user.username !== currentUser.username ? (mode === 'local'
                                 ? `<button class="user-item-btn" style="background:#2196f3;color:white;" onclick="toggleUserCloudMode('${user.username}')">开通云端</button>`
                                 : `<button class="user-item-btn" style="background:#ff9800;color:white;" onclick="toggleUserCloudMode('${user.username}')">关闭云端</button>`
                             ) : ''}
-                            ${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + user.username + '\')">删除</button>' : ''}
+                            ${user.username !== currentUser.username ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + user.username + '\')">删除</button>' : ''}
                         </div>
                     </div>
                 `;
@@ -2800,7 +2821,7 @@
         }
 
         async function toggleUserCloudMode(username) {
-            if (!currentUser || currentUser.role !== 'admin') {
+            if (!currentUser || currentUser.role !== 'clinic_admin') {
                 alert('只有管理员可以切换云端权限');
                 return;
             }
@@ -2912,9 +2933,9 @@
                 username: username,
                 password: password,
                 name: name,
-                role: 'user',
+                role: 'doctor',
                 allowSavePrescription: true,
-                allowedMode: 'local'
+                allowedMode: 'both'
             };
             
             users.push(newUser);
@@ -2950,7 +2971,7 @@
                 const userManageBtn = document.getElementById('userManageBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
-                if (currentUser.role === 'admin') {
+                if (isClinicAdmin(currentUser)) {
                     userManageBtn.style.display = 'block';
                     autoStartSection.style.display = 'block';
                 } else {
@@ -2980,7 +3001,7 @@
                 return;
             }
 
-            if (currentUser && currentUser.role === 'admin') {
+            if (currentUser && isClinicAdmin(currentUser)) {
                 // 网页端管理员：统计分析、账户管理
                 btn1.innerHTML = '📊 统计分析';
                 btn1.onclick = function() { showModal('analyticsModal'); };
@@ -3159,7 +3180,7 @@
             const clinicNoInput = document.getElementById('clinicNo');
             if (clinicNoInput) {
                 const year = new Date().getFullYear().toString().substring(2);
-                if (currentUser && currentUser.role === 'admin') {
+                if (currentUser && isClinicAdmin(currentUser)) {
                     // 管理员显示总数（使用本地计数）
                     clinicNoInput.value = prescriptionHistory.length.toString().padStart(6, '0');
                 } else {
@@ -3255,7 +3276,7 @@
                     // 使用云端返回的currentUsername来确保一致性
                     const effectiveUsername = cloudResult.currentUsername || currentUser?.username;
 
-                    if (currentUser && currentUser.role === 'admin') {
+                    if (currentUser && isClinicAdmin(currentUser)) {
                         console.log('管理员模式，显示所有处方');
                         prescriptionHistory = cloudResult.data;
                     } else {
@@ -3275,7 +3296,7 @@
                     if (clinicNoEl) {
                         // 生成年份后两位 + 数量(6位)的格式
                         const year = new Date().getFullYear().toString().substring(2);
-                        if (currentUser && currentUser.role === 'admin') {
+                        if (currentUser && isClinicAdmin(currentUser)) {
                             // 管理员显示全部用户处方总数
                             clinicNoEl.value = cloudResult.totalCount || (year + '000000');
                         } else {
@@ -4854,7 +4875,7 @@
         function filterPrescriptionsByPermission(prescriptions) {
             // 权限过滤：管理员看所有，普通用户只看自己的处方
             if (!currentUser) return prescriptions;
-            if (currentUser.role === 'admin') return prescriptions;
+            if (isClinicAdmin(currentUser)) return prescriptions;
             return prescriptions.filter(p => p.createdBy === currentUser.username);
         }
 
@@ -5118,7 +5139,7 @@
                 if (clinicNoEl) {
                     // 生成年份后两位 + 数量(6位)的格式
                     const year = new Date().getFullYear().toString().substring(2);
-                    if (currentUser && currentUser.role === 'admin') {
+                    if (currentUser && isClinicAdmin(currentUser)) {
                         // 管理员显示全部用户处方总数
                         clinicNoEl.value = response.nextClinicNo || (year + '000000');
                     } else {
@@ -5762,7 +5783,9 @@ IconFile=${scriptPath}`;
             }
             
             const exportUserName = userObj?.name || userObj?.username || '未知用户';
-            const userRoleDisplay = (userObj?.role === 'admin') ? '管理员' : '普通用户';
+            const userRoleDisplay = (userObj?.role === 'platform_admin') ? '平台总管理员'
+                : (userObj?.role === 'clinic_admin') ? '诊所管理员'
+                : '医师';
             
             const fileName = `网页版_${exportUserName}_${dateStr}_${timeStr}.json`;
             
@@ -7008,7 +7031,7 @@ IconFile=${scriptPath}`;
             const infoEl = document.getElementById('offline-sync-info');
             // 普通用户且纯离线模式：隐藏整个区块（不显示状态、无切换按钮）
             const isLocalNormal = currentUser
-                && currentUser.role !== 'admin'
+                && currentUser.role !== 'clinic_admin'
                 && (currentUser.allowedMode || 'both') === 'local';
             if (sectionEl) {
                 sectionEl.style.display = isLocalNormal ? 'none' : '';
