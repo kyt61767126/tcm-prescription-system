@@ -616,21 +616,33 @@
         </div>
     </div>
 
-    <div id="renameClinicModal" class="modal">
+    <div id="editClinicModal" class="modal">
         <div class="modal-content user-modal-content">
             <div class="modal-header">
-                <span>修改诊所名称</span>
-                <span class="close-btn" onclick="closeModal('renameClinicModal')">&times;</span>
+                <span>编辑诊所信息</span>
+                <span class="close-btn" onclick="closeModal('editClinicModal')">&times;</span>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>新的诊所名称</label>
-                    <input type="text" id="renameClinicInput" placeholder="请输入新的诊所名称" autocomplete="off">
+                    <label>诊所名称</label>
+                    <input type="text" id="editClinicNameInput" placeholder="诊所名称" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>诊所管理员登录账号</label>
+                    <input type="text" id="editClinicAdminUsername" placeholder="管理员登录账号（英文/拼音）" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>管理员姓名</label>
+                    <input type="text" id="editClinicAdminName" placeholder="管理员姓名（可选）" autocomplete="off">
+                </div>
+                <div class="form-group">
+                    <label>重设管理员密码（留空则不修改）</label>
+                    <input type="password" id="editClinicAdminPassword" placeholder="留空保持原密码不变" autocomplete="new-password">
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="action-btn" onclick="closeModal('renameClinicModal')">取消</button>
-                <button class="action-btn primary" onclick="confirmRenameClinic()">确定</button>
+                <button class="action-btn" onclick="closeModal('editClinicModal')">取消</button>
+                <button class="action-btn primary" onclick="confirmEditClinic()">保存</button>
             </div>
         </div>
     </div>
@@ -2925,11 +2937,11 @@
                             <div class="user-item-info" style="flex:1;min-width:200px;">
                                 <div class="user-item-name">${c.name} ${statusBadge}</div>
                                 <div class="user-item-role" style="font-size:11px;color:#666;">
-                                    ID: ${c.id} | 管理员: ${c.adminCount} | 医师: ${c.doctorCount} | 总账号: ${c.userCount} | 创建: ${created}
+                                    ID: ${c.id} | 管理员: <span style="color:#2c5530;font-weight:bold;">${c.adminUsername || '-'}</span>（${c.adminName || '-'}）| 医师: ${c.doctorCount} | 总账号: ${c.userCount} | 创建: ${created}
                                 </div>
                             </div>
                             <div class="user-item-actions">
-                                <button class="user-item-btn btn-primary" onclick="editClinicName('${c.id}','${c.name.replace(/'/g, "\\'")}')">改名</button>
+                                <button class="user-item-btn btn-primary" onclick='editClinic(${JSON.stringify({id:c.id,name:c.name,adminUsername:c.adminUsername,adminName:c.adminName})})'>编辑</button>
                                 ${toggleBtn}
                             </div>
                         </div>
@@ -3009,49 +3021,57 @@
             }
         }
 
-        // 改名临时状态（Electron 不支持 window.prompt，用自定义 modal 替代）
-        let _renameClinicCtx = null;
+        // 编辑诊所临时状态（Electron 不支持 window.prompt，用自定义 modal 替代）
+        let _editClinicCtx = null;
 
-        function editClinicName(clinicId, currentName) {
-            _renameClinicCtx = { clinicId, currentName };
-            const input = document.getElementById('renameClinicInput');
-            input.value = currentName;
-            document.getElementById('renameClinicModal').style.display = 'flex';
-            setTimeout(() => { input.focus(); input.select(); }, 100);
+        function editClinic(clinic) {
+            _editClinicCtx = clinic;
+            document.getElementById('editClinicNameInput').value = clinic.name || '';
+            document.getElementById('editClinicAdminUsername').value = clinic.adminUsername || '';
+            document.getElementById('editClinicAdminName').value = clinic.adminName || '';
+            document.getElementById('editClinicAdminPassword').value = '';
+            document.getElementById('editClinicModal').style.display = 'flex';
+            setTimeout(() => { document.getElementById('editClinicNameInput').focus(); }, 100);
         }
 
-        async function confirmRenameClinic() {
-            if (!_renameClinicCtx) return;
-            const { clinicId, currentName } = _renameClinicCtx;
-            const trimmed = document.getElementById('renameClinicInput').value.trim();
-            if (!trimmed) {
+        async function confirmEditClinic() {
+            if (!_editClinicCtx) return;
+            const clinicId = _editClinicCtx.id;
+            const name = document.getElementById('editClinicNameInput').value.trim();
+            const adminUsername = document.getElementById('editClinicAdminUsername').value.trim();
+            const adminName = document.getElementById('editClinicAdminName').value.trim();
+            const adminPassword = document.getElementById('editClinicAdminPassword').value;
+            if (!name) {
                 alert('诊所名称不能为空');
                 return;
             }
-            if (trimmed === currentName) {
-                closeModal('renameClinicModal');
-                showToast('未做修改');
+            if (!adminUsername) {
+                alert('管理员登录账号不能为空');
                 return;
             }
             try {
                 const authToken = buildAuthPayload(currentUser);
+                const body = { clinicId, name };
+                if (adminUsername !== _editClinicCtx.adminUsername) body.adminUsername = adminUsername;
+                if (adminName && adminName !== _editClinicCtx.adminName) body.adminName = adminName;
+                if (adminPassword) body.adminPassword = adminPassword;
                 const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinic=update`, {
                     method: 'POST',
                     headers: {
                         'Authorization': `Basic ${authToken}`,
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({ clinicId, name: trimmed })
+                    body: JSON.stringify(body)
                 });
                 if (resp && resp.success) {
-                    closeModal('renameClinicModal');
-                    showToast('诊所名称已更新');
+                    closeModal('editClinicModal');
+                    showToast('诊所信息已更新');
                     await loadClinicsList();
                 } else {
-                    alert('❌ 改名失败：' + (resp?.error || '未知错误'));
+                    alert('❌ 保存失败：' + (resp?.error || '未知错误'));
                 }
             } catch (e) {
-                alert('❌ 改名异常：' + e.message);
+                alert('❌ 保存异常：' + e.message);
             }
         }
 

@@ -139,12 +139,15 @@ export async function onRequest(context) {
                 return corsResponse({ success: false, error: '仅平台总管理员可查看诊所列表' }, { status: 403 });
             }
             const clinics = await loadClinics(kv);
-            // 附带每个诊所的医师数
+            // 附带每个诊所的医师数 + 管理员信息
             const enriched = [];
             for (const c of clinics) {
                 const users = await loadClinicUsers(kv, c.id);
+                const admin = users.find(u => u.role === ROLE.CLINIC_ADMIN);
                 enriched.push({
                     ...c,
+                    adminUsername: admin ? admin.username : null,
+                    adminName: admin ? admin.name : null,
                     userCount: users.length,
                     adminCount: users.filter(u => u.role === ROLE.CLINIC_ADMIN).length,
                     doctorCount: users.filter(u => u.role === ROLE.DOCTOR).length
@@ -231,6 +234,32 @@ export async function onRequest(context) {
                 if (body.status) clinics[idx].status = body.status; // active | disabled
                 clinics[idx].updatedAt = new Date().toISOString();
                 await saveClinics(kv, clinics);
+
+                // 平台总管理员可同时修改诊所管理员账号/姓名/密码
+                if (currentUser.isPlatformAdmin && (body.adminUsername || body.adminPassword || body.adminName)) {
+                    const users = await loadClinicUsers(kv, body.clinicId);
+                    const adminIdx = users.findIndex(u => u.role === ROLE.CLINIC_ADMIN);
+                    if (adminIdx >= 0) {
+                        // 改用户名：先检查全局唯一（排除自己）
+                        if (body.adminUsername && body.adminUsername !== users[adminIdx].username) {
+                            const exists = await findUserAcrossClinics(kv, body.adminUsername);
+                            if (exists) {
+                                return corsResponse({ success: false, error: '管理员用户名已被占用' }, { status: 400 });
+                            }
+                            users[adminIdx].username = body.adminUsername;
+                        }
+                        if (body.adminName) {
+                            users[adminIdx].name = body.adminName;
+                        }
+                        if (body.adminPassword) {
+                            const salt = generateSalt();
+                            users[adminIdx].passwordHash = await hashPassword(body.adminPassword, salt);
+                            users[adminIdx].salt = salt;
+                        }
+                        users[adminIdx].updatedAt = new Date().toISOString();
+                        await saveClinicUsers(kv, body.clinicId, users);
+                    }
+                }
                 return corsResponse({ success: true, message: '诊所更新成功', clinic: clinics[idx] });
             }
         }
