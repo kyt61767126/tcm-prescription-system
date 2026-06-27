@@ -692,7 +692,6 @@
         <div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div>
         <div class="tab-item" id="medicineManageBtn" onclick="showModal('medicineModal')">【药品管理】</div>
         <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
-        <div class="tab-item" onclick="showModal('statsModal')">【数据管理】</div>
         <div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div>
         <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
         <div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div>
@@ -1176,6 +1175,23 @@
                             </tbody>
                         </table>
                     </div>
+                </div>
+
+                <div style="margin-top:15px;padding-top:15px;border-top:2px solid #008000;">
+                    <h4 style="margin-bottom:10px;">🗄️ 数据备份与恢复</h4>
+                    <div style="margin-bottom:10px;display:flex;gap:10px;flex-wrap:wrap;">
+                        <button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">📥 下载数据文件</button>
+                        <button class="action-btn" onclick="copyData()" style="background:#FF9800;color:white;">📋 复制数据</button>
+                        <button class="action-btn" onclick="forceSyncUsersToCloud()" style="background:#2196F3;color:white;">☁️ 同步用户到云端</button>
+                        <button class="action-btn" onclick="importData()" style="background:#9C27B0;color:white;">📤 导入数据文件</button>
+                        <button class="action-btn" onclick="showLocalBackups()" style="background:#2196F3;color:white;">🔄 查看本地备份</button>
+                        <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button>
+                    </div>
+                    <div id="localBackupList" style="margin-bottom:10px;display:none;">
+                        <h5 style="margin-bottom:8px;color:#008000;">💾 本地备份列表（自动保存，最多10个）</h5>
+                        <div id="backupListContainer" style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:5px;"></div>
+                    </div>
+                    <div id="backupStatus" style="margin-top:10px;display:none;"></div>
                 </div>
             </div>
             <div class="modal-footer">
