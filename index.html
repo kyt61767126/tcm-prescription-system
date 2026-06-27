@@ -6742,7 +6742,46 @@ IconFile=${scriptPath}`;
             event.target.value = '';
         }
         
-        function processImportedMedicines(importedMedicines, missingPriceMedicines = []) {
+        // 自定义导入方式选择 modal（替代 prompt，兼容 Electron 桌面端）
+        function showImportModePicker(count) {
+            return new Promise((resolve) => {
+                const modalId = 'importModeModal_' + Date.now();
+                const modal = document.createElement('div');
+                modal.className = 'modal';
+                modal.id = modalId;
+                modal.style.display = 'flex';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width:420px;">
+                        <div class="modal-header">
+                            <h3>选择导入方式</h3>
+                            <span class="close-btn" data-mode="cancel">&times;</span>
+                        </div>
+                        <div class="modal-body">
+                            <p style="margin-bottom:12px;">即将导入 <strong style="color:#008000;font-size:16px;">${count}</strong> 条药品，请选择导入方式：</p>
+                            <div style="display:flex;flex-direction:column;gap:10px;">
+                                <button class="action-btn" data-mode="1" style="text-align:left;padding:10px;">1 - 追加（保留现有药品，新增导入药品）</button>
+                                <button class="action-btn" data-mode="2" style="text-align:left;padding:10px;background:#ff6b6b;color:white;">2 - 覆盖（替换现有药品，以导入为准）</button>
+                                <button class="action-btn" data-mode="3" style="text-align:left;padding:10px;background:#008000;color:white;">3 - 合并（同名覆盖，以导入为准）</button>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button class="action-btn" data-mode="cancel">取消</button>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+                const cleanup = () => { if (modal.parentNode) modal.parentNode.removeChild(modal); };
+                modal.querySelectorAll('[data-mode]').forEach(btn => {
+                    btn.onclick = () => {
+                        const mode = btn.getAttribute('data-mode');
+                        cleanup();
+                        resolve(mode === 'cancel' ? null : mode);
+                    };
+                });
+            });
+        }
+
+        async function processImportedMedicines(importedMedicines, missingPriceMedicines = []) {
             if (importedMedicines.length === 0) {
                 alert('没有导入任何药品！');
                 return;
@@ -6751,7 +6790,8 @@ IconFile=${scriptPath}`;
             const successCount = importedMedicines.length - missingPriceMedicines.length;
             const missingCount = missingPriceMedicines.length;
 
-            const action = prompt('导入方式：\n1 - 追加（保留现有药品）\n2 - 覆盖（替换现有药品，以导入为准）\n3 - 合并（同名覆盖，以导入为准）');
+            // 用自定义 modal 替代 prompt（Electron 桌面端 prompt 返回 null）
+            const action = await showImportModePicker(importedMedicines.length);
             let actionDone = false;
             let addCount = 0, updateCount = 0;
 
