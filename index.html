@@ -5438,6 +5438,24 @@
             `}).join('');
         }
 
+        async function refreshPrescriptionHistory() {
+            try {
+                const result = await getPrescriptionsFromCloud(true);
+                if (result && result.data) {
+                    prescriptionHistory = result.data;
+                    prescriptionHistory.sort((a, b) => {
+                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                        return timeB - timeA;
+                    });
+                    const filtered = filterPrescriptionsByPermission(prescriptionHistory);
+                    renderHistoryList(filtered.slice(0, 15));
+                }
+            } catch (e) {
+                console.warn('刷新处方历史失败:', e);
+            }
+        }
+
         async function deleteHistory(id) {
             // 直接执行删除（无需确认）
             executeDelete(id);
@@ -7783,6 +7801,10 @@ IconFile=${scriptPath}`;
                 console.error('syncOfflinePrescriptions 错误:', e);
             }
             updateOfflineSyncInfo();
+            // 同步完成后刷新处方历史列表，确保显示最新云端编号
+            if (typeof refreshPrescriptionHistory === 'function') {
+                refreshPrescriptionHistory();
+            }
         }
 
     document.addEventListener('DOMContentLoaded', () => {
