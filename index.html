@@ -529,21 +529,7 @@
             .prescription-paper { padding: 20mm; }
         }
     </style>
-    <!-- 引入本地 XLSX 库（用于 Excel 导入；Electron nodeIntegration 下 UMD 会导出到 module.exports，下方脚本兜底挂载到 window.XLSX） -->
-    <script src="xlsx.full.min.js"></script>
-    <script>
-        (function() {
-            try {
-                if (typeof window.XLSX === 'undefined' || typeof window.XLSX.read !== 'function') {
-                    if (typeof module !== 'undefined' && module.exports && typeof module.exports.read === 'function') {
-                        window.XLSX = module.exports;
-                    } else if (typeof exports !== 'undefined' && exports && typeof exports.read === 'function') {
-                        window.XLSX = exports;
-                    }
-                }
-            } catch (e) { console.error('XLSX window 挂载失败:', e); }
-        })();
-    </script>
+    <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
     <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjz1688</div></div></div></div></div>
@@ -1167,7 +1153,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-26-v1';
+        window.__APP_VERSION__ = '2026-06-27-v1';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
