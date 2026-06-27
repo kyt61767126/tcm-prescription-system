@@ -17,8 +17,15 @@ import {
 
 // ---------- 历史编号清洗（保留原逻辑） ----------
 function cleanHistoricalPrescriptionNo(prescription, index, dateGroups) {
+    // 优先使用云端全局编号（cloudSeq 字段，诊所全局自增）
+    if (prescription.cloudSeq && /^\d{4,8}$/.test(prescription.cloudSeq)) {
+        return prescription.cloudSeq;
+    }
     let no = prescription.outpatientNo || prescription.prescriptionNo || '';
+    // 已经是合法数字编号（6-8位）直接返回
     if (/^\d{6,8}$/.test(no)) return no;
+    // 本地临时号（LOCAL-前缀）不做清洗，保持原样由前端显示"待同步"标记
+    if (no.startsWith('LOCAL-')) return no;
 
     let timestamp = null;
     if (/^\d{10}$/.test(no)) timestamp = parseInt(no) * 1000;
