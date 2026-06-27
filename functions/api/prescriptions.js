@@ -47,6 +47,7 @@ function cleanHistoricalPrescriptionNo(prescription, index, dateGroups) {
 }
 
 // ---------- 编号序列生成（按诊所分区） ----------
+// 旧版：每医师每日独立编号（保留向后兼容，新处方不再使用）
 async function generatePrescriptionNo(kv, clinicId, username, type) {
     const now = getBeijingTime();
     const year = now.getUTCFullYear().toString().substring(2);
@@ -69,6 +70,45 @@ async function generatePrescriptionNo(kv, clinicId, username, type) {
         prescriptionNo = yymmdd + seq.toString().padStart(2, '0');
     }
     return prescriptionNo;
+}
+
+// ---------- 新版：诊所全局唯一自增编号 ----------
+// KV 键：clinic:{clinicId}:prescription_seq（整数自增）
+// 返回格式：6位填充序号，如 "000001"、"000002"
+// 同一诊所所有医师共用一套连续递增编号，不同诊所完全隔离
+async function generateClinicGlobalSeq(kv, clinicId) {
+    const seqKey = clinicKey(clinicId, 'prescription_seq');
+    const stored = await kv.get(seqKey);
+    let seq = stored ? parseInt(stored, 10) : 0;
+    seq += 1;
+    await kv.put(seqKey, seq.toString());
+    return String(seq).padStart(6, '0');
+}
+
+// 预览下一编号（不自增）
+async function peekNextClinicGlobalSeq(kv, clinicId) {
+    const seqKey = clinicKey(clinicId, 'prescription_seq');
+    const stored = await kv.get(seqKey);
+    let seq = stored ? parseInt(stored, 10) : 0;
+    seq += 1;
+    return String(seq).padStart(6, '0');
+}
+
+// ---------- 处方去重指纹管理 ----------
+// KV 键：clinic:{clinicId}:prescription_hashes
+// 存储：{ [hash]: prescriptionId } 映射
+// 用途：离线处方重复上传时去重，避免生成重复编号
+async function getPrescriptionHashes(kv, clinicId) {
+    const key = clinicKey(clinicId, 'prescription_hashes');
+    const stored = await kv.get(key, 'json');
+    return (stored && typeof stored === 'object') ? stored : {};
+}
+
+async function savePrescriptionHash(kv, clinicId, hash, prescriptionId) {
+    const key = clinicKey(clinicId, 'prescription_hashes');
+    const hashes = await getPrescriptionHashes(kv, clinicId);
+    hashes[hash] = prescriptionId;
+    await kv.put(key, JSON.stringify(hashes));
 }
 
 async function peekNextPrescriptionNo(kv, clinicId, username, type) {
@@ -158,6 +198,43 @@ export async function onRequest(context) {
                 if (type === 'yearly') prescriptionNo = year + '000001';
                 else prescriptionNo = year + month + day + '01';
                 return corsResponse({ success: true, prescriptionNo, message: 'Using fallback number (old API)' });
+            }
+
+            // 统计看板端点（管理员专用）
+            if (url.searchParams.get('stats') === 'true') {
+                if (!currentUser.isClinicAdmin && !currentUser.isPlatformAdmin) {
+                    return corsResponse({ success: false, error: '仅管理员可查看统计' }, { status: 403 });
+                }
+                let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
+                if (!prescriptions) prescriptions = [];
+                // 统一用 cloudSeq 或 prescriptionNo 排序
+                prescriptions.sort((a, b) => {
+                    const noA = a.cloudSeq || a.prescriptionNo || '';
+                    const noB = b.cloudSeq || b.prescriptionNo || '';
+                    return noB.localeCompare(noA);
+                });
+                const now = getBeijingTime();
+                const todayStr = now.toISOString().slice(0, 10);
+                const monthStr = todayStr.slice(0, 7);
+                const doctorStats = {};
+                let todayCount = 0, monthCount = 0;
+                for (const p of prescriptions) {
+                    const pDate = (p.date || p.createdAt || '').slice(0, 10);
+                    const doctor = p.createdBy || p.doctorName || '未知';
+                    if (!doctorStats[doctor]) doctorStats[doctor] = { count: 0, todayCount: 0, monthCount: 0 };
+                    doctorStats[doctor].count++;
+                    if (pDate === todayStr) { todayCount++; doctorStats[doctor].todayCount++; }
+                    if (pDate.startsWith(monthStr)) { monthCount++; doctorStats[doctor].monthCount++; }
+                }
+                return corsResponse({
+                    success: true,
+                    stats: {
+                        total: prescriptions.length,
+                        todayCount,
+                        monthCount,
+                        doctorStats: Object.entries(doctorStats).map(([doctor, s]) => ({ doctor, ...s }))
+                    }
+                });
             }
 
             // 回收站列表
@@ -267,12 +344,30 @@ export async function onRequest(context) {
                 if (currentUser.isClinicAdmin && p.createdBy) {
                     createdBy = p.createdBy;
                 }
-                const outpatientNo = await generatePrescriptionNo(kv, clinicId, createdBy, 'daily');
+
+                // 去重检查：前端传 prescriptionHash（离线处方指纹），已存在则跳过
+                const hash = p.prescriptionHash || '';
+                if (hash) {
+                    const hashes = await getPrescriptionHashes(kv, clinicId);
+                    if (hashes[hash]) {
+                        // 重复上传，返回已有处方（不分配新编号）
+                        const existing = prescriptions.find(x => x.id.toString() === hashes[hash].toString());
+                        if (existing) {
+                            savedPrescriptions.push(existing);
+                            continue;
+                        }
+                    }
+                }
+
+                // 分配诊所全局唯一编号（同一诊所所有医师共用连续递增编号）
+                const globalSeq = await generateClinicGlobalSeq(kv, clinicId);
+                const newId = p.id || Date.now();
                 const newPrescription = {
                     ...p,
-                    id: p.id || Date.now(),
-                    prescriptionNo: outpatientNo,
-                    outpatientNo: outpatientNo,
+                    id: newId,
+                    prescriptionNo: globalSeq,
+                    outpatientNo: globalSeq,
+                    cloudSeq: globalSeq,
                     createdAt: p.createdAt || nowIso,
                     updatedAt: nowIso,
                     createdBy: createdBy,
@@ -280,6 +375,12 @@ export async function onRequest(context) {
                     userRole: currentUser.role,
                     clinicId: clinicId
                 };
+
+                // 保存处方指纹（用于后续去重）
+                if (hash) {
+                    await savePrescriptionHash(kv, clinicId, hash, newId);
+                }
+
                 savedPrescriptions.push(newPrescription);
             }
 
@@ -293,10 +394,8 @@ export async function onRequest(context) {
                 return noB.localeCompare(noA);
             });
 
-            const [nextPrescriptionNo, nextClinicNo] = await Promise.all([
-                peekNextPrescriptionNo(kv, clinicId, currentUser.username, 'daily'),
-                peekNextPrescriptionNo(kv, clinicId, currentUser.username, 'yearly')
-            ]);
+            const nextPrescriptionNo = await peekNextClinicGlobalSeq(kv, clinicId);
+            const nextClinicNo = nextPrescriptionNo; // 兼容前端字段
 
             await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
 
