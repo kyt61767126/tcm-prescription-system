@@ -1659,6 +1659,7 @@
                 const response = await fetch(url, {
                     ...options,
                     signal: controller.signal,
+                    cache: 'no-cache',
                     headers: {
                         'Content-Type': 'application/json',
                         ...options.headers
