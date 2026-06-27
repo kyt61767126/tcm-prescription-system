@@ -858,8 +858,8 @@
                     <div id="offline-sync-info" style="font-size:12px;color:#555;"></div>
                 </div>
                 <div style="margin-bottom:12px;">
-                    <label>诊所名称:</label>
-                    <input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;">
+                    <label>诊所名称 <span style="font-size:11px;color:#888;">（由平台总管理员统一设置，本端只读）</span>:</label>
+                    <input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;background:#f5f5f5;color:#666;" readonly>
                 </div>
                 <div style="margin-bottom:12px;">
                     <label>医师姓名:</label>
@@ -4523,7 +4523,7 @@
             // 批量读取本地存储配置，减少重复读取
             // 诊所名称优先从用户存储读取，未登录时从全局存储读取
             const config = {
-                clinicName: getUserItem('clinicName') || localStorage.getItem('global_clinicName') || '本能堂中医诊所',
+                clinicName: currentUser?.clinicName || getUserItem('clinicName') || localStorage.getItem('global_clinicName') || '本能堂中医诊所',
                 defaultRegFee: getUserItem('defaultRegFee') || '0',
                 defaultDose: getUserItem('defaultDose') || '7',
                 clinicDoctor: getUserItem('clinicDoctor') || currentUser?.name || currentUser?.username || '',
@@ -5755,7 +5755,6 @@
 
         async function saveSettings() {
             const newClinicName = document.getElementById('clinicName').value.trim();
-            const oldClinicName = getUserItem('clinicName') || localStorage.getItem('global_clinicName');
             setUserItem('clinicName', newClinicName);
             // 同时保存到全局存储，供未登录时（登录界面）读取
             localStorage.setItem('global_clinicName', newClinicName);
@@ -5769,32 +5768,6 @@
                 setAutoStart(true);
             } else {
                 setAutoStart(false);
-            }
-
-            // 诊所管理员修改诊所名称时同步到云端（其他诊所医师登录后自动更新）
-            if (currentUser && currentUser.clinicId && newClinicName && newClinicName !== oldClinicName) {
-                try {
-                    const authToken = buildAuthPayload(currentUser);
-                    const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinic=update`, {
-                        method: 'POST',
-                        headers: {
-                            'Authorization': `Basic ${authToken}`,
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ clinicId: currentUser.clinicId, name: newClinicName })
-                    });
-                    if (resp && resp.success) {
-                        showToast('诊所名称已同步到云端');
-                        // 同步当前用户对象的 clinicName
-                        currentUser.clinicName = newClinicName;
-                        localStorage.setItem('cloud_currentUser', JSON.stringify(currentUser));
-                    } else {
-                        showToast('诊所名称云端同步失败：' + (resp?.error || '未知错误'));
-                    }
-                } catch (e) {
-                    console.warn('诊所名称云端同步异常:', e);
-                    showToast('诊所名称云端同步异常');
-                }
             }
 
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
