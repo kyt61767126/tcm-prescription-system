@@ -1,0 +1,13 @@
+fix: 修复切换用户后基础设置医师姓名显示上一个用户的问题
+
+1. 登录成功后立即更新 defaultDoctor 和 doctorName 的 DOM 值，
+   不再等待异步 loadData 完成，避免网页版切换用户时显示上一个医师姓名
+2. 打开设置弹窗时优先从 currentUser.name 读取医师姓名，
+   避免 doctorName 为空时把只读的 defaultDoctor 也清空
+
+处方编号逻辑检查通过（无需修改）：
+- 后端 generateClinicGlobalSeq/migrate v3/cleanHistoricalPrescriptionNo
+  三处均使用 8 位 YYMMDD+2位序号格式，逻辑一致
+- 前端离线编号 LOCAL-YYMMDD-001 仅本机临时显示，
+  SyncEngine.push/pull 同步后用云端正式编号覆盖本地，
+  refreshPrescriptionHistory 同步后强制刷新历史列表

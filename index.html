@@ -2776,8 +2776,13 @@
                     setUserItem('clinicName', user.clinicName);
                 }
                 // 同步当前用户姓名到默认医师姓名（基础设置 F1）
+                // 立即更新 DOM（不等异步 loadData），避免切换用户时显示上一个医师姓名
                 if (user.name) {
                     setUserItem('clinicDoctor', user.name);
+                    const _ddEl = document.getElementById('defaultDoctor');
+                    if (_ddEl) _ddEl.value = user.name;
+                    const _dnEl = document.getElementById('doctorName');
+                    if (_dnEl) _dnEl.value = user.name;
                 }
                 
                 // 保存记住密码
@@ -7725,7 +7730,9 @@ IconFile=${scriptPath}`;
                 setTimeout(refreshAnalytics, 100);
             }
             if (modalId === 'settingsModal') {
-                document.getElementById('defaultDoctor').value = document.getElementById('doctorName').value;
+                // 优先从当前登录账户读取医师姓名（确保只读字段显示正确）
+                const _docName = (currentUser && currentUser.name) ? currentUser.name : document.getElementById('doctorName').value;
+                document.getElementById('defaultDoctor').value = _docName;
                 updateImageSavePathDisplay();
                 updateOfflineSyncInfo();
             }
