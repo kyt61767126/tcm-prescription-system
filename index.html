@@ -531,33 +531,37 @@
     </style>
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">惠康堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjz1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjz1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
     <div id="changePwdModal" class="modal">
         <div class="modal-content user-modal-content">
             <div class="modal-header">
-                <span>修改密码</span>
+                <span>修改个人信息</span>
                 <span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span>
             </div>
             <div class="modal-body">
                 <div class="form-group">
-                    <label>原密码</label>
-                    <input type="password" id="oldPwd" placeholder="请输入原密码">
+                    <label>医师姓名</label>
+                    <input type="text" id="profileName" placeholder="请输入医师姓名">
+                </div>
+                <div class="form-group">
+                    <label>原密码（修改密码时必填）</label>
+                    <input type="password" id="oldPwd" placeholder="不修改密码请留空">
                 </div>
                 <div class="form-group">
                     <label>新密码</label>
-                    <input type="password" id="newPwd" placeholder="请输入新密码">
+                    <input type="password" id="newPwd" placeholder="不修改密码请留空">
                 </div>
                 <div class="form-group">
                     <label>确认新密码</label>
-                    <input type="password" id="confirmNewPwd" placeholder="请再次输入新密码">
+                    <input type="password" id="confirmNewPwd" placeholder="再次输入新密码">
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="action-btn" onclick="closeModal('changePwdModal')">取消</button>
-                <button class="action-btn primary" onclick="handleChangePassword()">修改</button>
+                <button class="action-btn primary" onclick="handleChangeProfile()">保存</button>
             </div>
         </div>
     </div>
@@ -694,7 +698,7 @@
 
         <div class="center-panel">
             <div class="prescription-paper" id="prescriptionPaper">
-                <div class="clinic-name" id="clinicNameDisplay">惠康堂中医诊所</div>
+                <div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div>
                 <div class="prescription-title">处 方 笺</div>
                 <div class="prescription-info">
                     <div>姓名: <span id="paperName"></span></div>
@@ -2626,6 +2630,16 @@
                 localStorage.setItem('cloud_isLoggedIn', 'true');
                 sessionStorage.setItem('currentUser', userData);
                 sessionStorage.setItem('isLoggedIn', 'true');
+
+                // 同步云端诊所名称到本地，登录页下次打开自动显示
+                if (user.clinicName) {
+                    localStorage.setItem('global_clinicName', user.clinicName);
+                    setUserItem('clinicName', user.clinicName);
+                }
+                // 同步当前用户姓名到默认医师姓名（基础设置 F1）
+                if (user.name) {
+                    setUserItem('clinicDoctor', user.name);
+                }
                 
                 // 保存记住密码
                 const rememberPassword = document.getElementById('rememberPassword').checked;
@@ -2734,46 +2748,86 @@
         }
 
         function showChangePwdModal() {
+            // 自动填入当前用户姓名（编辑弹窗保留原信息以便修改）
+            document.getElementById('profileName').value = currentUser?.name || '';
             document.getElementById('oldPwd').value = '';
             document.getElementById('newPwd').value = '';
             document.getElementById('confirmNewPwd').value = '';
             document.getElementById('changePwdModal').style.display = 'flex';
         }
 
-        async function handleChangePassword() {
+        async function handleChangeProfile() {
+            const profileName = document.getElementById('profileName').value.trim();
             const oldPwd = document.getElementById('oldPwd').value;
             const newPwd = document.getElementById('newPwd').value;
             const confirmNewPwd = document.getElementById('confirmNewPwd').value;
-            
-            if (!oldPwd || !newPwd || !confirmNewPwd) {
-                alert('请填写所有字段');
+            const changePassword = !!(newPwd || oldPwd || confirmNewPwd);
+
+            // 姓名不能为空
+            if (!profileName) {
+                alert('医师姓名不能为空');
                 return;
             }
-            
-            if (newPwd !== confirmNewPwd) {
-                alert('新密码两次输入不一致');
-                return;
+
+            // 如果填了任意密码字段，则视为修改密码，需要三个字段都填
+            if (changePassword) {
+                if (!oldPwd || !newPwd || !confirmNewPwd) {
+                    alert('修改密码请填写原密码、新密码、确认新密码');
+                    return;
+                }
+                if (newPwd !== confirmNewPwd) {
+                    alert('新密码两次输入不一致');
+                    return;
+                }
             }
-            
+
             const users = await getUsers();
             const userIndex = users.findIndex(u => u.username === currentUser.username);
-            
+
             if (userIndex === -1) {
                 alert('用户不存在');
                 return;
             }
-            
-            if (users[userIndex].password !== oldPwd) {
-                alert('原密码错误');
+
+            // 修改密码时校验原密码
+            if (changePassword) {
+                if (users[userIndex].password !== oldPwd) {
+                    alert('原密码错误');
+                    return;
+                }
+                users[userIndex].password = newPwd;
+            }
+
+            // 修改医师姓名
+            const nameChanged = profileName !== users[userIndex].name;
+            if (nameChanged) {
+                users[userIndex].name = profileName;
+            }
+
+            // 没有任何变更
+            if (!changePassword && !nameChanged) {
+                alert('未做任何修改');
                 return;
             }
-            
-            users[userIndex].password = newPwd;
-            await saveUsers(users);
+
+            const saveSuccess = await saveUsers(users);
             currentUser = users[userIndex];
             localStorage.setItem('cloud_currentUser', JSON.stringify(currentUser));
-            
-            alert('密码修改成功！');
+
+            // 同步基础设置中的医师姓名
+            if (nameChanged) {
+                setUserItem('clinicDoctor', profileName);
+                const defaultDoctorEl = document.getElementById('defaultDoctor');
+                if (defaultDoctorEl) defaultDoctorEl.value = profileName;
+                const doctorNameEl = document.getElementById('doctorName');
+                if (doctorNameEl) doctorNameEl.value = profileName;
+                updateUserDisplay();
+            }
+
+            const msgs = [];
+            if (nameChanged) msgs.push('医师姓名已更新');
+            if (changePassword) msgs.push('密码修改成功');
+            alert(msgs.join('，') + '！');
             closeModal('changePwdModal');
         }
 
@@ -2911,28 +2965,30 @@
             const username = document.getElementById('newUserUsername').value.trim();
             const password = document.getElementById('newUserPassword').value;
             const name = document.getElementById('newUserName').value.trim();
-            
-            if (!username || !password || !name) {
-                alert('请填写完整信息');
+
+            if (!username || !password) {
+                alert('请填写登录账号和密码');
                 return;
             }
-            
+
             // 验证用户名是否包含中文
             if (/[\u4e00-\u9fa5]/.test(username)) {
                 alert('登录账号不能使用中文，请使用英文或拼音！\n示例：zhaoyisheng 或 doctor3');
                 return;
             }
-            
+
             const users = await getUsers();
             if (users.find(u => u.username === username)) {
                 alert('用户名已存在');
                 return;
             }
-            
+
+            // 医师姓名默认为用户名，登入后可自行修改
+            const finalName = name || username;
             const newUser = {
                 username: username,
                 password: password,
-                name: name,
+                name: finalName,
                 role: 'doctor',
                 allowSavePrescription: true,
                 allowedMode: 'both'
@@ -4216,10 +4272,10 @@
             // 批量读取本地存储配置，减少重复读取
             // 诊所名称优先从用户存储读取，未登录时从全局存储读取
             const config = {
-                clinicName: getUserItem('clinicName') || localStorage.getItem('global_clinicName') || '惠康堂中医诊所',
+                clinicName: getUserItem('clinicName') || localStorage.getItem('global_clinicName') || '本能堂中医诊所',
                 defaultRegFee: getUserItem('defaultRegFee') || '0',
                 defaultDose: getUserItem('defaultDose') || '7',
-                clinicDoctor: getUserItem('clinicDoctor') || '王桂杰',
+                clinicDoctor: getUserItem('clinicDoctor') || currentUser?.name || currentUser?.username || '',
                 autoStartEnabled: getUserItem('autoStartEnabled') === 'true'
             };
             
@@ -5236,7 +5292,7 @@
             ctx.fillRect(0, 0, width, height);
             
             // 诊所名称
-            const clinicName = document.getElementById('clinicName')?.value || '惠康堂中医诊所';
+            const clinicName = document.getElementById('clinicName')?.value || '本能堂中医诊所';
             ctx.font = 'bold 36px SimSun, serif';
             ctx.fillStyle = '#2c5530';
             ctx.textAlign = 'center';
@@ -5446,14 +5502,16 @@
             document.getElementById(id).style.display = 'none';
         }
 
-        function saveSettings() {
-            setUserItem('clinicName', document.getElementById('clinicName').value);
+        async function saveSettings() {
+            const newClinicName = document.getElementById('clinicName').value.trim();
+            const oldClinicName = getUserItem('clinicName') || localStorage.getItem('global_clinicName');
+            setUserItem('clinicName', newClinicName);
             // 同时保存到全局存储，供未登录时（登录界面）读取
-            localStorage.setItem('global_clinicName', document.getElementById('clinicName').value);
+            localStorage.setItem('global_clinicName', newClinicName);
             setUserItem('clinicDoctor', document.getElementById('defaultDoctor').value);
             setUserItem('defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             setUserItem('defaultDose', document.getElementById('defaultDose').value || '7');
-            
+
             const autoStartEnabled = document.getElementById('autoStart').checked;
             setUserItem('autoStartEnabled', autoStartEnabled ? 'true' : 'false');
             if (autoStartEnabled) {
@@ -5461,12 +5519,38 @@
             } else {
                 setAutoStart(false);
             }
-            
+
+            // 诊所管理员修改诊所名称时同步到云端（其他诊所医师登录后自动更新）
+            if (currentUser && currentUser.clinicId && newClinicName && newClinicName !== oldClinicName) {
+                try {
+                    const authToken = buildAuthPayload(currentUser);
+                    const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinic=update`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Basic ${authToken}`,
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({ clinicId: currentUser.clinicId, name: newClinicName })
+                    });
+                    if (resp && resp.success) {
+                        showToast('诊所名称已同步到云端');
+                        // 同步当前用户对象的 clinicName
+                        currentUser.clinicName = newClinicName;
+                        localStorage.setItem('cloud_currentUser', JSON.stringify(currentUser));
+                    } else {
+                        showToast('诊所名称云端同步失败：' + (resp?.error || '未知错误'));
+                    }
+                } catch (e) {
+                    console.warn('诊所名称云端同步异常:', e);
+                    showToast('诊所名称云端同步异常');
+                }
+            }
+
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
-            document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
+            document.getElementById('clinicNameDisplay').textContent = newClinicName;
             // 同步登录界面的诊所名称
             const loginClinicNameSave = document.getElementById('loginClinicName');
-            if (loginClinicNameSave) loginClinicNameSave.textContent = document.getElementById('clinicName').value;
+            if (loginClinicNameSave) loginClinicNameSave.textContent = newClinicName;
             // 同步诊疗费
             const regFeeVal = document.getElementById('defaultRegFee').value || '0';
             const regFeeInput = document.getElementById('registrationFee');

@@ -213,6 +213,20 @@ export async function onRequest(context) {
                 if (idx === -1) {
                     return corsResponse({ success: false, error: '诊所不存在' }, { status: 404 });
                 }
+                // 权限细分：
+                //   platform_admin 可改 name + status（停用/启用诊所）
+                //   clinic_admin   仅可改自己诊所的 name（不能改 status）
+                //   doctor         拒绝
+                if (currentUser.isClinicAdmin) {
+                    if (currentUser.clinicId !== body.clinicId) {
+                        return corsResponse({ success: false, error: '仅可修改本诊所名称' }, { status: 403 });
+                    }
+                    if (body.status && body.status !== clinics[idx].status) {
+                        return corsResponse({ success: false, error: '诊所状态仅平台总管理员可修改' }, { status: 403 });
+                    }
+                } else if (!currentUser.isPlatformAdmin) {
+                    return corsResponse({ success: false, error: '无权修改诊所' }, { status: 403 });
+                }
                 if (body.name) clinics[idx].name = body.name;
                 if (body.status) clinics[idx].status = body.status; // active | disabled
                 clinics[idx].updatedAt = new Date().toISOString();
