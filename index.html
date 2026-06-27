@@ -1445,18 +1445,27 @@
                 if (!currentUser) return null;
                 try { return 'Basic ' + buildAuthPayload(currentUser); } catch (e) { return null; }
             },
+            // 带超时的 fetch（防止网络卡死）
+            async _fetchWithTimeout(url, options = {}, timeout = 30000) {
+                const controller = new AbortController();
+                const timer = setTimeout(() => controller.abort(), timeout);
+                try {
+                    return await fetch(url, { ...options, signal: controller.signal });
+                } finally {
+                    clearTimeout(timer);
+                }
+            },
             async _cloudGetPrescriptions() {
                 const auth = this._authHeader();
-                // 后端按 Authorization 头过滤（普通用户只拿自己的，管理员拿全部），无需 ?user= 参数
                 const url = CLOUD_API_BASE + '/prescriptions';
-                const resp = await fetch(url, { headers: { 'Authorization': auth, 'Content-Type': 'application/json' } });
+                const resp = await this._fetchWithTimeout(url, { headers: { 'Authorization': auth, 'Content-Type': 'application/json' } });
                 if (!resp.ok) throw new Error('GET prescriptions ' + resp.status);
                 const json = await resp.json();
                 return (json && json.data) || [];
             },
             async _cloudPostPrescription(p) {
                 const auth = this._authHeader();
-                const resp = await fetch(CLOUD_API_BASE + '/prescriptions', {
+                const resp = await this._fetchWithTimeout(CLOUD_API_BASE + '/prescriptions', {
                     method: 'POST',
                     headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
                     body: JSON.stringify({ prescription: [p] })
@@ -1466,15 +1475,14 @@
             },
             async _cloudDeletePrescription(id) {
                 const auth = this._authHeader();
-                // 后端 DELETE 按 Authorization 头鉴权，不读 user 参数
                 const url = CLOUD_API_BASE + '/prescriptions?id=' + id;
-                const resp = await fetch(url, { method: 'DELETE', headers: { 'Authorization': auth } });
+                const resp = await this._fetchWithTimeout(url, { method: 'DELETE', headers: { 'Authorization': auth } });
                 if (!resp.ok) throw new Error('DELETE prescriptions ' + resp.status);
                 return true;
             },
             async _pullCache(key, url) {
                 try {
-                    const resp = await fetch(url, { headers: { 'Authorization': this._authHeader() } });
+                    const resp = await this._fetchWithTimeout(url, { headers: { 'Authorization': this._authHeader() } });
                     if (!resp.ok) return;
                     const json = await resp.json();
                     if (json && json.success && json.data) await LocalDB.setCache(key, json.data);
@@ -1521,14 +1529,11 @@
                             const localMs = new Date(p.updatedAt || 0).getTime() || 0;
                             const cloudMs = cloudP ? (new Date(cloudP.updatedAt || 0).getTime() || 0) : 0;
                             if (cloudP && cloudMs > localMs) {
-                                // 云端更新：用云端覆盖本地，标记已同步
                                 await LocalDB.upsertPrescription(cloudP, { synced: 1, deleted: 0 });
                             } else {
                                 const resp = await this._cloudPostPrescription(p);
                                 if (resp && resp.success) {
                                     const saved = resp.savedPrescription || p;
-                                    // 去重/同步场景：用云端返回的数据覆盖本地记录
-                                    // 如果云端 id 和本地不同（去重返回已有处方），保持本地 id 避免产生重复记录
                                     if (saved.id && saved.id !== p.id) {
                                         const mergedRecord = { ...saved, id: p.id };
                                         await LocalDB.upsertPrescription(mergedRecord, { synced: 1, deleted: 0 });
@@ -1549,18 +1554,32 @@
             async pull() {
                 let cloudList = [];
                 try { cloudList = await this._cloudGetPrescriptions(); } catch (e) { console.warn('pull: 拉取失败', e); return; }
+                // 优化：一次性获取本地所有处方，用 Map 缓存，避免逐条 IPC 调用
+                let localMap = new Map();
+                try {
+                    const localList = await LocalDB.getPrescriptions(currentUser.username);
+                    if (Array.isArray(localList)) {
+                        localList.forEach(p => localMap.set(p.id, p));
+                    }
+                } catch (e) { console.warn('pull: 获取本地列表失败', e); }
+                // 管理员可能需要拉取所有用户的处方（云端返回的列表取决于后端权限）
+                // 如果云端返回的处方 id 不在本地 Map 中，直接 upsert
                 for (const cp of cloudList) {
                     try {
-                        const row = await LocalDB.getPrescriptionRow(cp.id);
+                        const localP = localMap.get(cp.id);
                         const cloudMs = new Date(cp.updatedAt || 0).getTime() || 0;
-                        if (!row) {
+                        if (!localP) {
                             await LocalDB.upsertPrescription(cp, { synced: 1, deleted: 0 });
-                        } else if (row.synced === 1 && (row.updated_at_ms || 0) < cloudMs) {
-                            await LocalDB.upsertPrescription(cp, { synced: 1, deleted: 0 });
+                        } else {
+                            // 仅当本地已同步且云端更新时覆盖（不覆盖待推送的本地处方）
+                            const localMs = new Date(localP.updatedAt || 0).getTime() || 0;
+                            if (localMs < cloudMs) {
+                                await LocalDB.upsertPrescription(cp, { synced: 1, deleted: 0 });
+                            }
                         }
-                        // row.synced===0（待推送）跳过，由 push 处理
                     } catch (e) { console.warn('pull: 处方 ' + cp.id + ' 失败', e); }
                 }
+                // 缓存药品和验方（带超时，失败不阻塞）
                 await this._pullCache('medicines_all', CLOUD_API_BASE + '/medicines');
                 await this._pullCache('formulas_all', CLOUD_API_BASE + '/formulas');
             },
@@ -7740,18 +7759,28 @@ IconFile=${scriptPath}`;
                 showToast('仅双模式(both)支持同步，当前: ' + getAllowedMode());
                 return;
             }
+            // 如果 SyncEngine 已在运行，提示用户
+            if (SyncEngine._running) {
+                showToast('正在同步中，请稍候...');
+                return;
+            }
             // 显示同步中提示（不阻塞 UI）
             const syncToast = document.createElement('div');
             syncToast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1976d2;color:white;padding:15px 25px;border-radius:8px;font-size:14px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
             syncToast.textContent = '正在同步处方数据...';
             document.body.appendChild(syncToast);
             try {
-                await SyncEngine.run();
+                // 添加 60 秒超时保护，防止卡死
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('同步超时(60秒)，请检查网络')), 60000)
+                );
+                await Promise.race([SyncEngine.run(), timeoutPromise]);
                 syncToast.remove();
                 showToast('同步完成');
             } catch(e) {
                 syncToast.remove();
                 showToast('同步失败: ' + e.message);
+                console.error('syncOfflinePrescriptions 错误:', e);
             }
             updateOfflineSyncInfo();
         }
