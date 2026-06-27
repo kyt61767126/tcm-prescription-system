@@ -665,7 +665,7 @@
     <div class="top-tabs">
         <div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div>
         <div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div>
-        <div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div>
+        <div class="tab-item" id="medicineManageBtn" onclick="showModal('medicineModal')">【药品管理】</div>
         <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
         <div class="tab-item" onclick="showModal('statsModal')">【数据管理】</div>
         <div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div>
@@ -3277,6 +3277,12 @@
                 // 平台总管理员：显示平台管理按钮（不参与诊所业务，不显示账户管理/开机自启）
                 if (platformManageBtn) {
                     platformManageBtn.style.display = isPlatformAdmin(currentUser) ? 'block' : 'none';
+                }
+
+                // 药品管理：仅管理员可见（platform_admin 管理平台兜底库，clinic_admin 管理本诊所库）；普通医师只读→隐藏
+                const medicineManageBtn = document.getElementById('medicineManageBtn');
+                if (medicineManageBtn) {
+                    medicineManageBtn.style.display = (isClinicAdmin(currentUser) || isPlatformAdmin(currentUser)) ? 'block' : 'none';
                 }
 
                 // 更新手机端底部按钮
@@ -7454,6 +7460,11 @@ IconFile=${scriptPath}`;
             document.getElementById(modalId).style.display = 'flex';
             if (modalId === 'syndromeModal') renderSyndromeList();
             if (modalId === 'medicineModal') {
+                // 仅管理员可访问药品管理（普通医师隐藏 tab + 拦截 F2/手机端入口）
+                if (!isClinicAdmin(currentUser) && !isPlatformAdmin(currentUser)) {
+                    showToast('药品管理仅管理员可访问');
+                    return;
+                }
                 // 根据角色更新药品管理界面：平台兜底库 vs 本诊所药品库
                 const titleEl = document.getElementById('medicineModalTitle');
                 const tipEl = document.getElementById('medicineScopeTip');
