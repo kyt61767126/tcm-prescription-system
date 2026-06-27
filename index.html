@@ -529,6 +529,21 @@
             .prescription-paper { padding: 20mm; }
         }
     </style>
+    <!-- 引入本地 XLSX 库（用于 Excel 导入；Electron nodeIntegration 下 UMD 会导出到 module.exports，下方脚本兜底挂载到 window.XLSX） -->
+    <script src="xlsx.full.min.js"></script>
+    <script>
+        (function() {
+            try {
+                if (typeof window.XLSX === 'undefined' || typeof window.XLSX.read !== 'function') {
+                    if (typeof module !== 'undefined' && module.exports && typeof module.exports.read === 'function') {
+                        window.XLSX = module.exports;
+                    } else if (typeof exports !== 'undefined' && exports && typeof exports.read === 'function') {
+                        window.XLSX = exports;
+                    }
+                }
+            } catch (e) { console.error('XLSX window 挂载失败:', e); }
+        })();
+    </script>
 </head>
 <body>
     <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjz1688</div></div></div></div></div>
@@ -916,16 +931,18 @@
     <div class="modal" id="medicineModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>F2 药品管理</h3>
+                <h3 id="medicineModalTitle">F2 药品管理</h3>
                 <span class="close-btn" onclick="closeModal('medicineModal')">&times;</span>
             </div>
             <div class="modal-body">
+                <div id="medicineScopeTip" style="margin-bottom:8px;padding:6px 10px;border-radius:4px;font-size:12px;background:#f0f4ff;color:#333;border-left:3px solid #008000;"></div>
                 <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
                     <input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;">
                     <button class="action-btn" onclick="showAddMedicineForm()">新增药品</button>
-                    <button class="action-btn" onclick="showBatchStockForm()">批量出入库</button>
+                    <button class="action-btn" id="batchStockBtn" onclick="showBatchStockForm()">批量出入库</button>
                     <button class="action-btn" onclick="exportMedicines()">导出药品</button>
                     <button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button>
+                    <button class="action-btn" id="syncPlatformBtn" style="background:#008000;color:white;display:none;" onclick="syncFromPlatform()" title="用平台兜底库覆盖本诊所药品库（保留优先使用标记）">从平台兜底库同步</button>
                     <button class="action-btn" style="background:#27ae60;color:white;" onclick="refreshMedicineLibrary()">刷新药品库</button>
                     <button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button>
                     <input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)">
@@ -2159,10 +2176,10 @@
             return null;
         }
 
-        // 保存药品库到云端
+        // 保存药品库到云端（platform_admin→平台兜底库；clinic_admin→本诊所库）
         async function saveMedicinesToCloud(medicines) {
             try {
-                if (!currentUser || currentUser.role !== 'clinic_admin') {
+                if (!currentUser || (!isClinicAdmin(currentUser) && !isPlatformAdmin(currentUser))) {
                     console.warn('Only admin can save medicines');
                     return false;
                 }
@@ -6263,7 +6280,8 @@ IconFile=${scriptPath}`;
 
         function renderMedicineList() {
             const list = document.getElementById('medicineList');
-            const canManage = isClinicAdmin(currentUser);
+            const canManage = isClinicAdmin(currentUser) || isPlatformAdmin(currentUser);
+            const canPriority = isClinicAdmin(currentUser); // 优先使用标记仅诊所库有意义
             list.innerHTML = medicines.map((m,i) => `
                 <div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;${m.priority_use ? 'background:#fff8e1;' : ''}">
                     <div style="flex:1;">
@@ -6272,7 +6290,7 @@ IconFile=${scriptPath}`;
                         <div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${m.unit} | 库存：${m.stock || '0'}</div>
                     </div>
                     <div style="display:flex;gap:4px;align-items:flex-start;">
-                        ${canManage ? `<button class="small-btn" style="${m.priority_use ? 'background:#ff9800;color:white;' : ''}" onclick="togglePriorityUse(${i})" title="切换优先使用标记">${m.priority_use ? '取消优先' : '设为优先'}</button>` : ''}
+                        ${canPriority ? `<button class="small-btn" style="${m.priority_use ? 'background:#ff9800;color:white;' : ''}" onclick="togglePriorityUse(${i})" title="切换优先使用标记">${m.priority_use ? '取消优先' : '设为优先'}</button>` : ''}
                         ${canManage ? `<button class="small-btn" onclick="editMedicine(${i})">编辑</button>` : ''}
                         ${canManage ? `<button class="small-btn" onclick="deleteMedicine(${i})">删除</button>` : ''}
                     </div>
@@ -6307,6 +6325,42 @@ IconFile=${scriptPath}`;
                 }
             } catch (e) {
                 alert('切换异常：' + e.message);
+            }
+        }
+
+        // 从平台兜底库同步至本诊所（仅 clinic_admin），保留本诊所已设置的 priority_use 标记
+        async function syncFromPlatform() {
+            if (!isClinicAdmin(currentUser)) {
+                showToast('仅诊所管理员可同步平台兜底库');
+                return;
+            }
+            if (!confirm('确定用平台兜底库覆盖本诊所药品库吗？\n（本诊所已设置的"优先使用"标记会保留，其余字段以平台兜底库为准）')) {
+                return;
+            }
+            try {
+                const authToken = buildAuthPayload(currentUser);
+                const resp = await cloudFetch(`${CLOUD_API_BASE}/medicines?medicine=sync_platform`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({})
+                });
+                if (resp && resp.success) {
+                    medicines = resp.data || [];
+                    DataCache.invalidate('medicines');
+                    if (offlineCapable()) {
+                        try { await LocalDB.setCache('medicines_all', medicines); } catch(e) { console.warn('LocalDB medicines 同步刷新失败:', e); }
+                    }
+                    buildMedicineMap();
+                    renderMedicineList();
+                    showToast('已从平台兜底库同步 ' + medicines.length + ' 味药材');
+                } else {
+                    alert('同步失败：' + (resp?.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('同步异常：' + e.message);
             }
         }
 
@@ -6523,13 +6577,39 @@ IconFile=${scriptPath}`;
             };
         }
 
-        // 动态加载 XLSX 库（按需加载，不阻塞首屏渲染）
+        // 加载 XLSX 库（head 中已静态引入本地 xlsx.full.min.js；此函数做存在性校验 + Electron UMD 兜底挂载）
         function loadXLSX() {
             return new Promise((resolve, reject) => {
-                if (typeof XLSX !== 'undefined') { resolve(); return; }
+                // 1) 已挂载到 window.XLSX 且有 read 方法
+                if (typeof window.XLSX !== 'undefined' && typeof window.XLSX.read === 'function') {
+                    resolve(); return;
+                }
+                // 2) Electron nodeIntegration 下 xlsx UMD 可能导出到 module.exports / exports
+                try {
+                    if (typeof module !== 'undefined' && module.exports && typeof module.exports.read === 'function') {
+                        window.XLSX = module.exports; resolve(); return;
+                    }
+                    if (typeof exports !== 'undefined' && exports && typeof exports.read === 'function') {
+                        window.XLSX = exports; resolve(); return;
+                    }
+                } catch (e) {}
+                // 3) 兜底：动态加载本地 xlsx 库
                 const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js';
-                script.onload = () => resolve();
+                script.src = 'xlsx.full.min.js';
+                script.onload = () => {
+                    if (typeof window.XLSX !== 'undefined' && typeof window.XLSX.read === 'function') {
+                        resolve(); return;
+                    }
+                    try {
+                        if (typeof module !== 'undefined' && module.exports && typeof module.exports.read === 'function') {
+                            window.XLSX = module.exports; resolve(); return;
+                        }
+                        if (typeof exports !== 'undefined' && exports && typeof exports.read === 'function') {
+                            window.XLSX = exports; resolve(); return;
+                        }
+                    } catch (e) {}
+                    reject(new Error('XLSX 库加载失败'));
+                };
                 script.onerror = () => reject(new Error('XLSX 库加载失败'));
                 document.head.appendChild(script);
             });
@@ -6543,8 +6623,8 @@ IconFile=${scriptPath}`;
             const isExcel = fileName.endsWith('.xlsx') || fileName.endsWith('.xls');
             
             if (isExcel) {
-                // 动态加载 XLSX 库（按需加载，不阻塞首屏渲染）
-                if (typeof XLSX === 'undefined') {
+                // 确保 XLSX 库已加载（head 已静态引入，此处做存在性校验 + Electron UMD 兜底）
+                if (typeof window.XLSX === 'undefined' || typeof window.XLSX.read !== 'function') {
                     try {
                         await loadXLSX();
                     } catch (e) {
@@ -6553,20 +6633,20 @@ IconFile=${scriptPath}`;
                         return;
                     }
                 }
-                
+
                 // Excel 文件导入
                 const reader = new FileReader();
                 reader.onload = function(e) {
                     try {
                         const data = new Uint8Array(e.target.result);
-                        const workbook = XLSX.read(data, { type: 'array' });
-                        
+                        const workbook = window.XLSX.read(data, { type: 'array' });
+
                         // 获取第一个工作表
                         const firstSheetName = workbook.SheetNames[0];
                         const worksheet = workbook.Sheets[firstSheetName];
-                        
+
                         // 转换为 JSON
-                        const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                        const jsonData = window.XLSX.utils.sheet_to_json(worksheet, { header: 1 });
                         
                         if (jsonData.length < 2) {
                             alert('Excel文件内容为空或格式错误！');
@@ -7359,7 +7439,26 @@ IconFile=${scriptPath}`;
         function showModal(modalId) {
             document.getElementById(modalId).style.display = 'flex';
             if (modalId === 'syndromeModal') renderSyndromeList();
-            if (modalId === 'medicineModal') renderMedicineList();
+            if (modalId === 'medicineModal') {
+                // 根据角色更新药品管理界面：平台兜底库 vs 本诊所药品库
+                const titleEl = document.getElementById('medicineModalTitle');
+                const tipEl = document.getElementById('medicineScopeTip');
+                const syncBtn = document.getElementById('syncPlatformBtn');
+                if (isPlatformAdmin(currentUser)) {
+                    if (titleEl) titleEl.textContent = 'F2 平台兜底药材库管理';
+                    if (tipEl) tipEl.innerHTML = '<strong>当前作用域：平台兜底药材库</strong>（system:platform_medicines）。此库为所有诊所的默认兜底，各诊所可基于此编辑自己的药品库。';
+                    if (syncBtn) syncBtn.style.display = 'none';
+                } else if (isClinicAdmin(currentUser)) {
+                    if (titleEl) titleEl.textContent = 'F2 本诊所药品库管理';
+                    if (tipEl) tipEl.innerHTML = '<strong>当前作用域：本诊所药品库</strong>。开方优先使用本诊所库；可点击"从平台兜底库同步"用平台兜底库覆盖本库（保留优先使用标记）。';
+                    if (syncBtn) syncBtn.style.display = '';
+                } else {
+                    if (titleEl) titleEl.textContent = 'F2 药品管理';
+                    if (tipEl) tipEl.innerHTML = '';
+                    if (syncBtn) syncBtn.style.display = 'none';
+                }
+                renderMedicineList();
+            }
             if (modalId === 'formulaModal') renderFormulaList();
             if (modalId === 'caseModal') renderCaseList(prescriptionHistory);
             if (modalId === 'statsModal') updateStats();

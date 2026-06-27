@@ -1,15 +1,33 @@
 // ============================================================================
-// 药品库 API（多诊所分区版 + 优先使用标记）
+// 药品库 API（多诊所分区版 + 平台兜底 + 优先使用标记）
 // ============================================================================
+// 架构说明（用户原话）：
+//   "平台总管理员云端药物为兜底，各个诊所管理员可以编辑云端药物价格数量，
+//    优先使用诊所自己编辑后的药物"
+//
+// 数据层级：
+//   1) 平台兜底药材库  KV: system:platform_medicines
+//      - 由 platform_admin 维护（GET/POST）
+//      - 作为所有诊所的默认兜底库
+//   2) 诊所药材库      KV: clinic:{clinicId}:medicines
+//      - 由 clinic_admin 维护（GET/POST）
+//      - 开方时优先使用诊所库（覆盖平台兜底库）
+//      - 诊所首次访问且本地为空 → 从平台兜底库初始化
+//      - 诊所可主动调用 sync_platform 同步平台兜底库（保留 priority_use 标记）
+//
 // 端点契约：
-//   GET    /api/medicines                      获取本诊所药品库（需登录 + clinicId）
-//   POST   /api/medicines                      保存本诊所药品库（仅 clinic_admin）
-//   POST   /api/medicines?medicine=priority    切换药材优先使用标记（仅 clinic_admin）
+//   GET    /api/medicines                            获取药品库（platform=平台兜底, clinic=本诊所库）
+//   POST   /api/medicines                            保存药品库（platform_admin=平台兜底, clinic_admin=本诊所库）
+//   POST   /api/medicines?medicine=priority          切换药材优先使用标记（仅 clinic_admin）
+//   POST   /api/medicines?medicine=sync_platform     诊所从平台兜底库同步覆盖本地（仅 clinic_admin）
 // ============================================================================
 import {
     ROLE, clinicKey, parseAuthHeader,
     corsResponse, handleOptions, getKV
 } from '../_lib/auth.js';
+
+// 平台兜底药材库 KV 键
+const KV_PLATFORM_MEDICINES = 'system:platform_medicines';
 
 function getDefaultMedicines() {
     return [
@@ -24,6 +42,25 @@ function getDefaultMedicines() {
         { id: 9, name: "黄柏", code: "hb", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0, priority_use: false },
         { id: 10, name: "栀子", code: "zz", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0, priority_use: false }
     ];
+}
+
+// 标准化药材列表：确保每条都有 priority_use 字段
+function normalizeMedicines(list) {
+    if (!Array.isArray(list)) return [];
+    return list.map(m => ({
+        ...m,
+        priority_use: m.priority_use === undefined ? false : !!m.priority_use
+    }));
+}
+
+// 读取平台兜底库（若空则用 getDefaultMedicines 初始化）
+async function getPlatformMedicines(kv) {
+    let list = await kv.get(KV_PLATFORM_MEDICINES, 'json');
+    if (!list || !Array.isArray(list) || list.length === 0) {
+        list = getDefaultMedicines();
+        await kv.put(KV_PLATFORM_MEDICINES, JSON.stringify(list));
+    }
+    return normalizeMedicines(list);
 }
 
 export async function onRequest(context) {
@@ -45,22 +82,12 @@ export async function onRequest(context) {
         }
 
         const currentUser = parseAuthHeader(request);
-
-        // 平台总管理员不参与诊所药品库业务（仅通过平台管理后台统一下发）
-        if (currentUser && currentUser.isPlatformAdmin) {
-            return corsResponse({ success: false, error: '平台总管理员不参与诊所药品库业务' }, { status: 403 });
-        }
-
-        // 所有药品库操作都需要登录 + 属于某诊所
-        if (!currentUser || !currentUser.clinicId) {
+        if (!currentUser) {
             return corsResponse({ success: false, error: '未授权访问，请先登录' }, { status: 401 });
         }
 
-        const KV_MEDICINES_KEY = clinicKey(currentUser.clinicId, 'medicines');
-
-        // ===== 优先使用标记切换 =====
+        // ============ 子端点：?medicine=priority 切换优先使用标记（仅诊所库） ============
         if (query.get('medicine') === 'priority') {
-            // 仅 clinic_admin 可切换优先标记
             if (!currentUser.isClinicAdmin) {
                 return corsResponse({ success: false, error: '权限不足，仅诊所管理员可切换优先标记' }, { status: 403 });
             }
@@ -68,14 +95,13 @@ export async function onRequest(context) {
                 return corsResponse({ success: false, error: 'Method not allowed' }, { status: 405 });
             }
             let body;
-            try {
-                body = await request.json();
-            } catch (error) {
+            try { body = await request.json(); } catch (error) {
                 return corsResponse({ success: false, error: '请求数据格式错误' }, { status: 400 });
             }
             if (body.medicineId === undefined || body.priorityUse === undefined) {
                 return corsResponse({ success: false, error: '缺少 medicineId 或 priorityUse 参数' }, { status: 400 });
             }
+            const KV_MEDICINES_KEY = clinicKey(currentUser.clinicId, 'medicines');
             let medicines = await kv.get(KV_MEDICINES_KEY, 'json');
             if (!medicines || !Array.isArray(medicines)) {
                 return corsResponse({ success: false, error: '药品库为空' }, { status: 404 });
@@ -93,43 +119,97 @@ export async function onRequest(context) {
             });
         }
 
-        // ===== GET 获取药品库 =====
-        if (method === 'GET') {
-            let medicines = await kv.get(KV_MEDICINES_KEY, 'json');
-            if (!medicines || !Array.isArray(medicines) || medicines.length === 0) {
-                // 新诊所首次访问，初始化默认药品库
-                medicines = getDefaultMedicines();
-                await kv.put(KV_MEDICINES_KEY, JSON.stringify(medicines));
+        // ============ 子端点：?medicine=sync_platform 诊所从平台兜底库同步 ============
+        if (query.get('medicine') === 'sync_platform') {
+            if (!currentUser.isClinicAdmin) {
+                return corsResponse({ success: false, error: '权限不足，仅诊所管理员可同步平台兜底库' }, { status: 403 });
             }
-            return corsResponse({ success: true, data: medicines, count: medicines.length });
+            if (method !== 'POST' && method !== 'PUT') {
+                return corsResponse({ success: false, error: 'Method not allowed' }, { status: 405 });
+            }
+            const KV_MEDICINES_KEY = clinicKey(currentUser.clinicId, 'medicines');
+            // 读取平台兜底库
+            const platformList = await getPlatformMedicines(kv);
+            // 读取本诊所现有库（保留 priority_use 标记）
+            const clinicList = await kv.get(KV_MEDICINES_KEY, 'json');
+            const clinicArr = Array.isArray(clinicList) ? clinicList : [];
+            // 按 id+name 建立索引，保留诊所已设置的 priority_use
+            const clinicMap = new Map();
+            clinicArr.forEach(m => {
+                const key = (m.id !== undefined ? 'id:' + m.id : '') + '|name:' + (m.name || '');
+                clinicMap.set(key, !!m.priority_use);
+            });
+            // 同步平台兜底库，保留 priority_use
+            const synced = platformList.map(m => {
+                const key = (m.id !== undefined ? 'id:' + m.id : '') + '|name:' + (m.name || '');
+                const preserved = clinicMap.has(key) ? clinicMap.get(key) : !!m.priority_use;
+                return { ...m, priority_use: preserved };
+            });
+            await kv.put(KV_MEDICINES_KEY, JSON.stringify(synced));
+            return corsResponse({
+                success: true,
+                message: '已从平台兜底库同步至本诊所',
+                data: synced,
+                count: synced.length
+            });
         }
 
-        // ===== POST/PUT 保存药品库（全量覆盖） =====
+        // ============ GET 获取药品库 ============
+        if (method === 'GET') {
+            // 平台总管理员：返回平台兜底库
+            if (currentUser.isPlatformAdmin) {
+                const list = await getPlatformMedicines(kv);
+                return corsResponse({ success: true, data: list, count: list.length, scope: 'platform' });
+            }
+            // 诊所管理员/医师：返回本诊所库（若空则从平台兜底库初始化）
+            if (!currentUser.clinicId) {
+                return corsResponse({ success: false, error: '未绑定诊所' }, { status: 403 });
+            }
+            const KV_MEDICINES_KEY = clinicKey(currentUser.clinicId, 'medicines');
+            let medicines = await kv.get(KV_MEDICINES_KEY, 'json');
+            if (!medicines || !Array.isArray(medicines) || medicines.length === 0) {
+                // 从平台兜底库初始化
+                medicines = await getPlatformMedicines(kv);
+                await kv.put(KV_MEDICINES_KEY, JSON.stringify(medicines));
+            }
+            return corsResponse({ success: true, data: medicines, count: medicines.length, scope: 'clinic' });
+        }
+
+        // ============ POST/PUT 保存药品库 ============
         if (method === 'POST' || method === 'PUT') {
-            // 仅 clinic_admin 可写
-            if (!currentUser.isClinicAdmin) {
-                return corsResponse({ success: false, error: '权限不足，仅诊所管理员可管理药品库' }, { status: 403 });
+            // 权限：platform_admin 可写平台兜底库；clinic_admin 可写本诊所库
+            if (!currentUser.isPlatformAdmin && !currentUser.isClinicAdmin) {
+                return corsResponse({ success: false, error: '权限不足，仅管理员可管理药品库' }, { status: 403 });
             }
             let body;
-            try {
-                body = await request.json();
-            } catch (error) {
+            try { body = await request.json(); } catch (error) {
                 return corsResponse({ success: false, error: '请求数据格式错误' }, { status: 400 });
             }
             if (!body.medicines || !Array.isArray(body.medicines)) {
                 return corsResponse({ success: false, error: '无效的药品数据' }, { status: 400 });
             }
-            // 确保每条药材都有 priority_use 字段（兼容旧数据）
-            const normalized = body.medicines.map(m => ({
-                ...m,
-                priority_use: m.priority_use === undefined ? false : !!m.priority_use
-            }));
+            const normalized = normalizeMedicines(body.medicines);
+
+            // 平台总管理员：保存到平台兜底库
+            if (currentUser.isPlatformAdmin) {
+                await kv.put(KV_PLATFORM_MEDICINES, JSON.stringify(normalized));
+                return corsResponse({
+                    success: true,
+                    message: '平台兜底药材库保存成功',
+                    count: normalized.length,
+                    scope: 'platform'
+                });
+            }
+
+            // 诊所管理员：保存到本诊所库
+            const KV_MEDICINES_KEY = clinicKey(currentUser.clinicId, 'medicines');
             await kv.put(KV_MEDICINES_KEY, JSON.stringify(normalized));
             return corsResponse({
                 success: true,
                 message: '药品库保存成功',
                 count: normalized.length,
-                clinicId: currentUser.clinicId
+                clinicId: currentUser.clinicId,
+                scope: 'clinic'
             });
         }
 
