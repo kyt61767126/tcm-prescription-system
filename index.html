@@ -2732,6 +2732,12 @@
             sessionStorage.removeItem('currentUser');
             localStorage.removeItem('cloud_prescription_cache');
             localStorage.removeItem('cloud_prescription_cache_time');
+
+            // 清空 DOM 中的医师姓名，避免下一个登录用户看到上一个用户的姓名
+            const doctorNameEl = document.getElementById('doctorName');
+            if (doctorNameEl) doctorNameEl.value = '';
+            const defaultDoctorEl = document.getElementById('defaultDoctor');
+            if (defaultDoctorEl) defaultDoctorEl.value = '';
             
             try { if (window.DataCache && DataCache.invalidate) DataCache.invalidate(); } catch(e) {}
             
