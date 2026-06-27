@@ -589,6 +589,33 @@
         </div>
     </div>
 
+    <div id="platformManageModal" class="modal">
+        <div class="modal-content" style="max-width:850px;">
+            <div class="modal-header">
+                <span>平台管理 - 诊所管控</span>
+                <span class="close-btn" onclick="closeModal('platformManageModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div style="background:#f0f7ff;padding:12px;border:1px solid #4a90d9;border-radius:6px;margin-bottom:15px;">
+                    <div style="color:#2c5530;font-weight:bold;font-size:13px;margin-bottom:8px;">➕ 创建新诊所（同时下发首个诊所管理员账号）</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                        <input type="text" id="newClinicName" placeholder="诊所名称（如：本能堂中医诊所）" style="padding:6px;">
+                        <input type="text" id="newClinicAdminUsername" placeholder="诊所管理员登录账号（英文/拼音）" style="padding:6px;">
+                        <input type="password" id="newClinicAdminPassword" placeholder="诊所管理员密码" style="padding:6px;">
+                        <input type="text" id="newClinicAdminName" placeholder="管理员姓名（可选，默认用账号）" style="padding:6px;">
+                    </div>
+                    <button class="action-btn primary" onclick="handleCreateClinic()" style="margin-top:8px;width:100%;">创建诊所 + 下发管理员账号</button>
+                </div>
+                <div style="color:#2c5530;font-weight:bold;font-size:13px;margin-bottom:8px;">📋 已开通诊所列表</div>
+                <div id="clinicList" style="max-height:400px;overflow-y:auto;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('platformManageModal')">关闭</button>
+                <button class="action-btn primary" onclick="loadClinicsList()">刷新列表</button>
+            </div>
+        </div>
+    </div>
+
     <div class="top-tabs">
         <div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div>
         <div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div>
@@ -597,6 +624,7 @@
         <div class="tab-item" onclick="showModal('statsModal')">【数据管理】</div>
         <div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div>
         <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
+        <div class="tab-item" id="platformManageBtn" onclick="showPlatformManageModal()" style="display:none;background:#fff3cd;color:#856404;border-color:#ffc107;">【平台管理】</div>
         <div class="tab-item" onclick="showHelp()">【系统帮助】</div>
         <div class="tab-item" style="background:#ffdddd;color:#8b0000;" id="logoutBtn">【退出登录】</div>
         <div class="tab-item" onclick="showChangePwdModal()">【修改密码】</div>
@@ -2831,6 +2859,169 @@
             closeModal('changePwdModal');
         }
 
+        // ============================================================================
+        // 平台总管理员后台：诊所管控（开通/停用/改名）
+        // ============================================================================
+        async function showPlatformManageModal() {
+            if (!isPlatformAdmin(currentUser)) {
+                alert('仅平台总管理员可访问');
+                return;
+            }
+            document.getElementById('newClinicName').value = '';
+            document.getElementById('newClinicAdminUsername').value = '';
+            document.getElementById('newClinicAdminPassword').value = '';
+            document.getElementById('newClinicAdminName').value = '';
+            document.getElementById('platformManageModal').style.display = 'flex';
+            await loadClinicsList();
+        }
+
+        async function loadClinicsList() {
+            const listEl = document.getElementById('clinicList');
+            if (!listEl) return;
+            listEl.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载中...</div>';
+            try {
+                const authToken = buildAuthPayload(currentUser);
+                const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinics=true`, {
+                    headers: { 'Authorization': `Basic ${authToken}` }
+                });
+                if (!resp || !resp.success || !Array.isArray(resp.data)) {
+                    listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载失败：' + (resp?.error || '未知错误') + '</div>';
+                    return;
+                }
+                if (resp.data.length === 0) {
+                    listEl.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">暂无诊所，请使用上方表单创建</div>';
+                    return;
+                }
+                listEl.innerHTML = resp.data.map(c => {
+                    const statusBadge = c.status === 'active'
+                        ? '<span style="color:#4caf50;font-weight:bold;">●正常</span>'
+                        : '<span style="color:#dc2626;font-weight:bold;">●已停用</span>';
+                    const toggleBtn = c.status === 'active'
+                        ? `<button class="user-item-btn" style="background:#ff9800;color:white;" onclick="toggleClinicStatus('${c.id}','disabled')">停用</button>`
+                        : `<button class="user-item-btn" style="background:#4caf50;color:white;" onclick="toggleClinicStatus('${c.id}','active')">启用</button>`;
+                    const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '';
+                    return `
+                        <div class="user-item" style="flex-wrap:wrap;">
+                            <div class="user-item-info" style="flex:1;min-width:200px;">
+                                <div class="user-item-name">${c.name} ${statusBadge}</div>
+                                <div class="user-item-role" style="font-size:11px;color:#666;">
+                                    ID: ${c.id} | 管理员: ${c.adminCount} | 医师: ${c.doctorCount} | 总账号: ${c.userCount} | 创建: ${created}
+                                </div>
+                            </div>
+                            <div class="user-item-actions">
+                                <button class="user-item-btn btn-primary" onclick="editClinicName('${c.id}','${c.name.replace(/'/g, "\\'")}')">改名</button>
+                                ${toggleBtn}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载异常：' + e.message + '</div>';
+            }
+        }
+
+        async function handleCreateClinic() {
+            const clinicName = document.getElementById('newClinicName').value.trim();
+            const adminUsername = document.getElementById('newClinicAdminUsername').value.trim();
+            const adminPassword = document.getElementById('newClinicAdminPassword').value;
+            const adminName = document.getElementById('newClinicAdminName').value.trim();
+
+            if (!clinicName || !adminUsername || !adminPassword) {
+                alert('请填写诊所名称、管理员账号、管理员密码');
+                return;
+            }
+            if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
+                alert('管理员登录账号不能使用中文，请使用英文或拼音');
+                return;
+            }
+
+            try {
+                const authToken = buildAuthPayload(currentUser);
+                const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinic=create`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        clinicName,
+                        adminUsername,
+                        adminPassword,
+                        adminName: adminName || adminUsername
+                    })
+                });
+                if (resp && resp.success) {
+                    alert('✅ 诊所创建成功！\n\n诊所：' + resp.clinic.name + '\nID：' + resp.clinic.id + '\n管理员：' + resp.admin.username + '\n\n请将账号信息通知诊所管理员。');
+                    document.getElementById('newClinicName').value = '';
+                    document.getElementById('newClinicAdminUsername').value = '';
+                    document.getElementById('newClinicAdminPassword').value = '';
+                    document.getElementById('newClinicAdminName').value = '';
+                    await loadClinicsList();
+                } else {
+                    alert('❌ 创建失败：' + (resp?.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('❌ 创建异常：' + e.message);
+            }
+        }
+
+        async function toggleClinicStatus(clinicId, newStatus) {
+            const action = newStatus === 'active' ? '启用' : '停用';
+            if (!confirm('确定' + action + '该诊所？')) return;
+            try {
+                const authToken = buildAuthPayload(currentUser);
+                const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinic=update`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ clinicId, status: newStatus })
+                });
+                if (resp && resp.success) {
+                    showToast('诊所已' + action);
+                    await loadClinicsList();
+                } else {
+                    alert('❌ ' + action + '失败：' + (resp?.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('❌ ' + action + '异常：' + e.message);
+            }
+        }
+
+        async function editClinicName(clinicId, currentName) {
+            const newName = prompt('请输入新的诊所名称：', currentName);
+            if (newName === null) return;
+            const trimmed = newName.trim();
+            if (!trimmed) {
+                alert('诊所名称不能为空');
+                return;
+            }
+            if (trimmed === currentName) {
+                showToast('未做修改');
+                return;
+            }
+            try {
+                const authToken = buildAuthPayload(currentUser);
+                const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinic=update`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Basic ${authToken}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ clinicId, name: trimmed })
+                });
+                if (resp && resp.success) {
+                    showToast('诊所名称已更新');
+                    await loadClinicsList();
+                } else {
+                    alert('❌ 改名失败：' + (resp?.error || '未知错误'));
+                }
+            } catch (e) {
+                alert('❌ 改名异常：' + e.message);
+            }
+        }
+
         async function showUserManageModal() {
             if (!currentUser || currentUser.role !== 'clinic_admin') {
                 alert('只有管理员可以管理用户');
@@ -3025,14 +3216,21 @@
             if (currentUser) {
                 document.getElementById('userDisplayName').textContent = currentUser.name;
                 const userManageBtn = document.getElementById('userManageBtn');
+                const platformManageBtn = document.getElementById('platformManageBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
+                // 诊所管理员：显示账户管理 + 开机自启
                 if (isClinicAdmin(currentUser)) {
                     userManageBtn.style.display = 'block';
                     autoStartSection.style.display = 'block';
                 } else {
                     userManageBtn.style.display = 'none';
                     autoStartSection.style.display = 'none';
+                }
+
+                // 平台总管理员：显示平台管理按钮（不参与诊所业务，不显示账户管理/开机自启）
+                if (platformManageBtn) {
+                    platformManageBtn.style.display = isPlatformAdmin(currentUser) ? 'block' : 'none';
                 }
 
                 // 更新手机端底部按钮
