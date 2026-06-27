@@ -1,529 +1,230 @@
-// 用户身份验证辅助函数 - 与客户端safeBtoa对称
-function safeAtob(str) {
-    try {
-        // 先用atob解码base64得到二进制字符串
-        const decoded = atob(str);
-        // 将二进制字符串转换为字节数组
-        const bytes = [];
-        for (let i = 0; i < decoded.length; i++) {
-            bytes.push(decoded.charCodeAt(i));
-        }
-        // 将字节数组转换回字符串（假设是UTF-8编码）
-        // 处理多字节UTF-8字符
-        let result = '';
-        let i = 0;
-        while (i < bytes.length) {
-            const byte = bytes[i];
-            if (byte < 0x80) {
-                // 单字节字符（ASCII）
-                result += String.fromCharCode(byte);
-                i++;
-            } else if (byte < 0xC0) {
-                // 无效的UTF-8起始字节
-                result += String.fromCharCode(byte);
-                i++;
-            } else if (byte < 0xE0) {
-                // 2字节字符
-                if (i + 1 < bytes.length) {
-                    const charCode = ((byte & 0x1F) << 6) | (bytes[i + 1] & 0x3F);
-                    result += String.fromCharCode(charCode);
-                    i += 2;
-                } else {
-                    result += String.fromCharCode(byte);
-                    i++;
-                }
-            } else if (byte < 0xF0) {
-                // 3字节字符
-                if (i + 2 < bytes.length) {
-                    const charCode = ((byte & 0x0F) << 12) | ((bytes[i + 1] & 0x3F) << 6) | (bytes[i + 2] & 0x3F);
-                    result += String.fromCharCode(charCode);
-                    i += 3;
-                } else {
-                    result += String.fromCharCode(byte);
-                    i++;
-                }
-            } else if (byte < 0xF8) {
-                // 4字节字符
-                if (i + 3 < bytes.length) {
-                    const charCode = ((byte & 0x07) << 18) | ((bytes[i + 1] & 0x3F) << 12) | ((bytes[i + 2] & 0x3F) << 6) | (bytes[i + 3] & 0x3F);
-                    result += String.fromCharCode(charCode);
-                    i += 4;
-                } else {
-                    result += String.fromCharCode(byte);
-                    i++;
-                }
-            } else {
-                // 无效的UTF-8字节
-                result += String.fromCharCode(byte);
-                i++;
-            }
-        }
-        return result;
-    } catch (e) {
-        console.error('safeAtob error:', e);
-        return atob(str);
-    }
-}
+// ============================================================================
+// 处方 API（多诊所分区版）
+// ============================================================================
+// 端点契约：
+//   GET    /api/prescriptions                    获取处方列表（按角色过滤）
+//   GET    /api/prescriptions?trash=true         获取回收站处方
+//   POST   /api/prescriptions                    保存处方（单条或批量）
+//   DELETE /api/prescriptions?id=xxx             软删除到处方回收站
+//   DELETE /api/prescriptions?id=xxx&permanent=true  永久删除（仅回收站中）
+//   POST   /api/prescriptions?restore=true&id=xxx  从回收站恢复
+// ============================================================================
+import {
+    ROLE, clinicKey, parseAuthHeader,
+    corsResponse, handleOptions, getKV,
+    getBeijingTime, formatBeijingDateYYMMDD
+} from '../_lib/auth.js';
 
-// 获取东八区当前时间
-function getBeijingTime() {
-    const now = new Date();
-    // 转换为东八区时间
-    const beijingTime = new Date(now.getTime() + (8 * 60 * 60 * 1000));
-    return beijingTime;
-}
-
-// 格式化东八区日期为 YYMMDD
-function formatBeijingDateYYMMDD(date) {
-    const year = date.getUTCFullYear().toString().substring(2);
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const day = String(date.getUTCDate()).padStart(2, '0');
-    return year + month + day;
-}
-
-// 清洗历史异常编码 - 将时间戳格式转换为标准 YYMMDD + 序号
+// ---------- 历史编号清洗（保留原逻辑） ----------
 function cleanHistoricalPrescriptionNo(prescription, index, dateGroups) {
     let no = prescription.outpatientNo || prescription.prescriptionNo || '';
-    
-    // 如果已经是标准格式（6-8位数字），直接返回
-    if (/^\d{6,8}$/.test(no)) {
-        return no;
-    }
-    
-    // 尝试解析时间戳
+    if (/^\d{6,8}$/.test(no)) return no;
+
     let timestamp = null;
-    if (/^\d{10}$/.test(no)) {
-        timestamp = parseInt(no) * 1000;
-    } else if (/^\d{13}$/.test(no)) {
-        timestamp = parseInt(no);
-    } else if (prescription.id && /^\d{10,13}$/.test(prescription.id.toString())) {
+    if (/^\d{10}$/.test(no)) timestamp = parseInt(no) * 1000;
+    else if (/^\d{13}$/.test(no)) timestamp = parseInt(no);
+    else if (prescription.id && /^\d{10,13}$/.test(prescription.id.toString())) {
         const idStr = prescription.id.toString();
         timestamp = idStr.length === 10 ? parseInt(idStr) * 1000 : parseInt(idStr);
     } else if (prescription.createdAt) {
         timestamp = new Date(prescription.createdAt).getTime();
     }
-    
+
     if (timestamp) {
         const date = new Date(timestamp);
-        // 使用东八区时间
         const beijingDate = new Date(date.getTime() + (8 * 60 * 60 * 1000));
         const yymmdd = formatBeijingDateYYMMDD(beijingDate);
-        
-        if (!dateGroups[yymmdd]) {
-            dateGroups[yymmdd] = 0;
-        }
+        if (!dateGroups[yymmdd]) dateGroups[yymmdd] = 0;
         dateGroups[yymmdd]++;
-        
         return yymmdd + String(dateGroups[yymmdd]).padStart(2, '0');
     }
-    
-    // 都无法解析，返回默认
+
     const now = getBeijingTime();
     const yymmdd = formatBeijingDateYYMMDD(now);
-    if (!dateGroups[yymmdd]) {
-        dateGroups[yymmdd] = 0;
-    }
+    if (!dateGroups[yymmdd]) dateGroups[yymmdd] = 0;
     dateGroups[yymmdd]++;
     return yymmdd + String(dateGroups[yymmdd]).padStart(2, '0');
 }
 
-// 用户身份验证辅助函数（简化版，确保登录兼容性）
-function parseAuthHeaderSimple(request) {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-        return null;
-    }
-    
-    try {
-        if (authHeader.startsWith('Bearer ')) {
-            // 使用JSON编码的用户信息
-            const token = authHeader.substring(7);
-            // 使用 safeAtob 正确解码前端 safeBtoa 编码的中文用户名
-            const decodedToken = safeAtob(token);
-            const userInfo = JSON.parse(decodedToken);
-            return {
-                username: userInfo.username,
-                role: userInfo.role || 'user',
-                isAdmin: userInfo.role === 'admin',
-                allowSavePrescription: true
-            };
-        } else if (authHeader.startsWith('Basic ')) {
-            const base64Credentials = authHeader.substring(6);
-            // 调试日志
-            console.log('Base64 credentials:', base64Credentials);
-            // 使用 safeAtob 正确解码前端 safeBtoa 编码的中文用户名
-            const credentials = safeAtob(base64Credentials);
-            console.log('Decoded credentials:', credentials);
-            const [username, role] = credentials.split(':');
-            console.log('Parsed username:', username, 'role:', role);
-            // 简化处理：所有登录用户都能保存处方
-            return { 
-                username, 
-                role, 
-                isAdmin: role === 'admin',
-                allowSavePrescription: true
-            };
-        }
-        return null;
-    } catch (error) {
-        console.error('Auth parsing error:', error);
-        return null;
-    }
-}
-
-// 使用KV存储生成处方编号（东八区时间）
-async function generatePrescriptionNo(kv, username, type) {
+// ---------- 编号序列生成（按诊所分区） ----------
+async function generatePrescriptionNo(kv, clinicId, username, type) {
     const now = getBeijingTime();
     const year = now.getUTCFullYear().toString().substring(2);
     const yymmdd = formatBeijingDateYYMMDD(now);
-    
+
     let storageKey, seq, prescriptionNo;
-    
     if (type === 'yearly') {
-        storageKey = `seq:${username}:yearly:${year}`;
+        storageKey = clinicKey(clinicId, `seq:${username}:yearly:${year}`);
         const stored = await kv.get(storageKey);
         seq = stored ? parseInt(stored, 10) : 0;
         seq += 1;
         await kv.put(storageKey, seq.toString());
         prescriptionNo = year + seq.toString().padStart(6, '0');
     } else {
-        storageKey = `seq:${username}:daily:${yymmdd}`;
+        storageKey = clinicKey(clinicId, `seq:${username}:daily:${yymmdd}`);
         const stored = await kv.get(storageKey);
         seq = stored ? parseInt(stored, 10) : 0;
         seq += 1;
         await kv.put(storageKey, seq.toString());
         prescriptionNo = yymmdd + seq.toString().padStart(2, '0');
     }
-    
     return prescriptionNo;
 }
 
-// 获取下一个编号（不递增，用于预览，东八区时间）
-async function peekNextPrescriptionNo(kv, username, type) {
+async function peekNextPrescriptionNo(kv, clinicId, username, type) {
     const now = getBeijingTime();
     const year = now.getUTCFullYear().toString().substring(2);
     const yymmdd = formatBeijingDateYYMMDD(now);
-    
+
     let storageKey, seq, prescriptionNo;
-    
     if (type === 'yearly') {
-        storageKey = `seq:${username}:yearly:${year}`;
+        storageKey = clinicKey(clinicId, `seq:${username}:yearly:${year}`);
         const stored = await kv.get(storageKey);
         seq = stored ? parseInt(stored, 10) : 0;
         seq += 1;
         prescriptionNo = year + seq.toString().padStart(6, '0');
     } else {
-        storageKey = `seq:${username}:daily:${yymmdd}`;
+        storageKey = clinicKey(clinicId, `seq:${username}:daily:${yymmdd}`);
         const stored = await kv.get(storageKey);
         seq = stored ? parseInt(stored, 10) : 0;
         seq += 1;
         prescriptionNo = yymmdd + seq.toString().padStart(2, '0');
     }
-    
     return prescriptionNo;
 }
 
-// 获取默认药品库
+// ---------- 默认药品库（保留） ----------
 function getDefaultMedicines() {
     return [
-        { id: 1, name: "麻黄", code: "mh", unit: "g", defaultDosage: 6 },
-        { id: 2, name: "桂枝", code: "gz", unit: "g", defaultDosage: 6 },
-        { id: 3, name: "杏仁", code: "xr", unit: "g", defaultDosage: 9 },
-        { id: 4, name: "甘草", code: "gc", unit: "g", defaultDosage: 3 },
-        { id: 5, name: "石膏", code: "sg", unit: "g", defaultDosage: 15 },
-        { id: 6, name: "知母", code: "zm", unit: "g", defaultDosage: 9 },
-        { id: 7, name: "黄连", code: "hl", unit: "g", defaultDosage: 3 },
-        { id: 8, name: "黄芩", code: "hq", unit: "g", defaultDosage: 6 },
-        { id: 9, name: "黄柏", code: "hb", unit: "g", defaultDosage: 6 },
-        { id: 10, name: "栀子", code: "zz", unit: "g", defaultDosage: 6 }
+        { id: 1, name: "麻黄", code: "mh", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 },
+        { id: 2, name: "桂枝", code: "gz", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 },
+        { id: 3, name: "杏仁", code: "xr", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 },
+        { id: 4, name: "甘草", code: "gc", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 },
+        { id: 5, name: "石膏", code: "sg", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 },
+        { id: 6, name: "知母", code: "zm", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 },
+        { id: 7, name: "黄连", code: "hl", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 },
+        { id: 8, name: "黄芩", code: "hq", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 },
+        { id: 9, name: "黄柏", code: "hb", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 },
+        { id: 10, name: "栀子", code: "zz", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 }
     ];
 }
 
 export async function onRequest(context) {
-    const url = new URL(context.request.url);
-    const method = context.request.method;
-    const pathname = url.pathname;
-    
-    // 处理 CORS 预检请求
-    if (method === 'OPTIONS') {
-        return new Response(null, {
-            status: 200,
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-                'Access-Control-Max-Age': '86400'
-            }
-        });
-    }
-    
+    const { request, env } = context;
+    const url = new URL(request.url);
+    const method = request.method;
+
+    if (method === 'OPTIONS') return handleOptions();
+
     try {
-        // 支持多种KV绑定名称（Cloudflare配置中绑定名为KV）
-        const envKeys = Object.keys(context.env || {});
-        const kv = context.env.KV || 
-                   context.env.TCM_PRESCRIPTION_KV || 
-                   context.env['tcm-prescription-kv'] || 
-                   context.env['TCM-PRESCRIPTION-KV'] ||
-                   context.env.TCM_KV || 
-                   context.env.PRESCRIPTION_KV;
-        
+        const kv = getKV(env);
         if (!kv) {
-            console.error('KV binding not found. Available env keys:', envKeys);
-            return new Response(JSON.stringify({
+            return corsResponse({
                 success: false,
-                error: 'KV存储未配置。请在Cloudflare Pages设置中配置KV binding，名称为TCM_PRESCRIPTION_KV',
-                availableKeys: envKeys,
+                error: 'KV存储未配置。请在Cloudflare Pages设置中配置KV binding',
                 requireSetup: true
-            }), {
-                status: 500,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            });
+            }, { status: 500 });
         }
-        
-        // KV 存储 key 定义
-        const KV_PRESCRIPTIONS_KEY = 'prescriptions_all';
-        const KV_MEDICINES_KEY = 'medicines_all';
-        const KV_FORMULAS_KEY = 'formulas_all';
-        const KV_TRASH_KEY = 'prescriptions_trash'; // 回收站：软删除处方，可恢复
-        
-        // 解析用户身份（简化版，确保登录兼容性）
-        const currentUser = parseAuthHeaderSimple(context.request);
-        
-        // ============ 药品库 API ============
-        if (pathname.includes('/medicines')) {
-            if (method === 'GET') {
-                let medicines = await kv.get(KV_MEDICINES_KEY, 'json');
-                if (!medicines || !Array.isArray(medicines) || medicines.length === 0) {
-                    medicines = getDefaultMedicines();
-                    await kv.put(KV_MEDICINES_KEY, JSON.stringify(medicines));
-                }
-                return new Response(JSON.stringify({
-                    success: true,
-                    data: medicines
-                }), {
-                    status: 200,
-                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-                });
-            }
-            
-            if (!currentUser) {
-                return new Response(JSON.stringify({ success: false, error: '未授权访问' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-            }
-            
-            if (method === 'POST' || method === 'PUT') {
-                if (!currentUser.isAdmin) {
-                    return new Response(JSON.stringify({ success: false, error: '仅管理员可管理药品库' }), { status: 403, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-                }
-                const body = await context.request.json();
-                if (body.medicines && Array.isArray(body.medicines)) {
-                    await kv.put(KV_MEDICINES_KEY, JSON.stringify(body.medicines));
-                    return new Response(JSON.stringify({ success: true, message: '药品库保存成功' }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-                }
-                return new Response(JSON.stringify({ success: false, error: '无效的药品数据' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-            }
+
+        const currentUser = parseAuthHeader(request);
+        // 平台总管理员不归处方业务管，直接拒绝
+        if (currentUser && currentUser.isPlatformAdmin) {
+            return corsResponse({ success: false, error: '平台总管理员不参与处方业务' }, { status: 403 });
         }
-        
-        // ============ 方剂库 API ============
-        if (pathname.includes('/formulas')) {
-            if (method === 'GET') {
-                let formulas = await kv.get(KV_FORMULAS_KEY, 'json');
-                if (!formulas || !Array.isArray(formulas)) {
-                    formulas = [];
-                    await kv.put(KV_FORMULAS_KEY, JSON.stringify(formulas));
-                }
-                return new Response(JSON.stringify({
-                    success: true,
-                    data: formulas
-                }), {
-                    status: 200,
-                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-                });
-            }
-            
-            if (!currentUser) {
-                return new Response(JSON.stringify({ success: false, error: '未授权访问' }), { status: 401, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-            }
-            
-            if (method === 'POST' || method === 'PUT') {
-                const body = await context.request.json();
-                if (body.formulas && Array.isArray(body.formulas)) {
-                    const formulasWithOwner = body.formulas.map(f => ({
-                        ...f,
-                        createdBy: f.createdBy || currentUser.username,
-                        updatedAt: new Date().toISOString()
-                    }));
-                    let existingFormulas = await kv.get(KV_FORMULAS_KEY, 'json') || [];
-                    if (currentUser.isAdmin) {
-                        existingFormulas = formulasWithOwner;
-                    } else {
-                        const userFormulas = existingFormulas.filter(f => f.createdBy === currentUser.username);
-                        const otherFormulas = existingFormulas.filter(f => f.createdBy !== currentUser.username);
-                        existingFormulas = [...otherFormulas, ...formulasWithOwner.filter(f => f.createdBy === currentUser.username)];
-                    }
-                    await kv.put(KV_FORMULAS_KEY, JSON.stringify(existingFormulas));
-                    return new Response(JSON.stringify({ success: true, message: '方剂库保存成功', data: existingFormulas }), { status: 200, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-                }
-                return new Response(JSON.stringify({ success: false, error: '无效的方剂数据' }), { status: 400, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } });
-            }
-        }
-        
-        // ============ 处方 API 需要认证 ============
-        if (!currentUser) {
-            return new Response(JSON.stringify({
+
+        // 处方相关所有端点必须登录且属于某诊所
+        if (!currentUser || !currentUser.clinicId) {
+            return corsResponse({
                 success: false,
                 error: '未授权访问，请先登录',
                 requireAuth: true
-            }), {
-                status: 401,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            });
+            }, { status: 401 });
         }
-        
-        // GET - 处理旧的编号请求端点（兼容旧客户端）
+
+        const clinicId = currentUser.clinicId;
+        const KV_PRESCRIPTIONS_KEY = clinicKey(clinicId, 'prescriptions');
+        const KV_TRASH_KEY = clinicKey(clinicId, 'prescriptions_trash');
+
+        // ============ GET ============
         if (method === 'GET') {
+            // 兼容旧编号端点
             if (url.pathname.includes('/current-prescription-no') || url.pathname.includes('/next-prescription-no')) {
                 const type = url.searchParams.get('type') || 'daily';
                 const now = new Date();
                 const year = String(now.getFullYear()).slice(-2);
                 const month = String(now.getMonth() + 1).padStart(2, '0');
                 const day = String(now.getDate()).padStart(2, '0');
-                
                 let prescriptionNo;
-                if (type === 'yearly') {
-                    prescriptionNo = year + '000001';
-                } else {
-                    prescriptionNo = year + month + day + '01';
-                }
-                
-                return new Response(JSON.stringify({
-                    success: true,
-                    prescriptionNo: prescriptionNo,
-                    message: 'Using fallback number (old API)'
-                }), {
-                    status: 200,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
+                if (type === 'yearly') prescriptionNo = year + '000001';
+                else prescriptionNo = year + month + day + '01';
+                return corsResponse({ success: true, prescriptionNo, message: 'Using fallback number (old API)' });
             }
-            
-            // 回收站列表接口：GET /prescriptions?trash=true
+
+            // 回收站列表
             if (url.searchParams.get('trash') === 'true') {
                 let trash = await kv.get(KV_TRASH_KEY, 'json');
-                if (!trash || !Array.isArray(trash)) {
-                    trash = [];
-                }
-                
-                // 根据用户角色筛选回收站数据
+                if (!trash || !Array.isArray(trash)) trash = [];
                 let filteredTrash = trash;
-                if (!currentUser.isAdmin) {
+                if (currentUser.isDoctor) {
                     filteredTrash = trash.filter(p => p.createdBy === currentUser.username);
                 }
-                
-                // 按删除时间倒序排序
-                filteredTrash.sort((a, b) => {
-                    const timeA = new Date(a.deletedAt || 0).getTime();
-                    const timeB = new Date(b.deletedAt || 0).getTime();
-                    return timeB - timeA;
-                });
-                
-                return new Response(JSON.stringify({
+                filteredTrash.sort((a, b) => new Date(b.deletedAt || 0).getTime() - new Date(a.deletedAt || 0).getTime());
+                return corsResponse({
                     success: true,
                     data: filteredTrash,
                     count: filteredTrash.length,
                     userRole: currentUser.role,
                     isAdmin: currentUser.isAdmin,
                     currentUsername: currentUser.username
-                }), {
-                    status: 200,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
                 });
             }
 
             let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
-            if (!prescriptions) {
-                prescriptions = [];
-            }
-            
-            // 调试日志
-            console.log('=== GET /prescriptions ===');
-            console.log('Current user:', JSON.stringify(currentUser));
-            console.log('Total prescriptions:', prescriptions.length);
-            
-            // 根据用户角色筛选数据
+            if (!prescriptions) prescriptions = [];
+
+            // 按角色筛选：doctor 只看自己的，clinic_admin 看本诊所全部
             let filteredPrescriptions = prescriptions;
-            if (!currentUser.isAdmin) {
-                // 普通用户只能看到自己的处方
-                const userPrescriptions = prescriptions.filter(p => 
-                    p.createdBy === currentUser.username
-                );
-                console.log('User prescriptions:', userPrescriptions.length);
-                console.log('Filter by createdBy:', currentUser.username);
-                filteredPrescriptions = userPrescriptions;
-            } else {
-                console.log('Admin user, showing all prescriptions');
+            if (currentUser.isDoctor) {
+                filteredPrescriptions = prescriptions.filter(p => p.createdBy === currentUser.username);
             }
-            
-            // 按时间戳升序排序（最早的在前，确保编号按创建顺序生成）
+
+            // 编号清洗
             const sortedForSeq = [...filteredPrescriptions].sort((a, b) => {
                 const idA = typeof a.id === 'number' ? a.id : 0;
                 const idB = typeof b.id === 'number' ? b.id : 0;
                 return idA - idB;
             });
-            
-            // 清洗历史异常编码，统一为标准格式
             const dateCounter = {};
             let needsUpdate = false;
-            
             filteredPrescriptions = sortedForSeq.map((p, index) => {
                 const cleanNo = cleanHistoricalPrescriptionNo(p, index, dateCounter);
                 const currentNo = p.outpatientNo || p.prescriptionNo || '';
-                
                 if (cleanNo !== currentNo) {
                     needsUpdate = true;
-                    return {
-                        ...p,
-                        prescriptionNo: cleanNo,
-                        outpatientNo: cleanNo
-                    };
+                    return { ...p, prescriptionNo: cleanNo, outpatientNo: cleanNo };
                 }
                 return p;
             });
-            
-            // 按编号倒序排序（编号大的排在前面）
             filteredPrescriptions.sort((a, b) => {
                 const noA = a.outpatientNo || a.prescriptionNo || '';
                 const noB = b.outpatientNo || b.prescriptionNo || '';
                 return noB.localeCompare(noA);
             });
-            
-            // 如果有编码被清洗，保存回KV存储
+
             if (needsUpdate) {
                 const updatedPrescriptions = [...prescriptions];
                 filteredPrescriptions.forEach(p => {
                     const index = updatedPrescriptions.findIndex(item => item.id === p.id);
-                    if (index !== -1) {
-                        updatedPrescriptions[index] = p;
-                    }
+                    if (index !== -1) updatedPrescriptions[index] = p;
                 });
                 await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(updatedPrescriptions));
             }
-            
+
             const now = getBeijingTime();
             const year = now.getUTCFullYear().toString().substring(2);
             const formattedTotalCount = year + prescriptions.length.toString().padStart(6, '0');
-            
-            return new Response(JSON.stringify({
+
+            return corsResponse({
                 success: true,
                 data: filteredPrescriptions,
                 count: filteredPrescriptions.length,
@@ -531,76 +232,42 @@ export async function onRequest(context) {
                 userRole: currentUser.role,
                 isAdmin: currentUser.isAdmin,
                 currentUsername: currentUser.username,
+                clinicId,
                 debug: {
                     totalInKV: prescriptions.length,
                     filteredCount: filteredPrescriptions.length
                 }
-            }), {
-                status: 200,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
             });
         }
-        
-        // POST - 保存处方（支持单个或批量）
+
+        // ============ POST（保存） ============
         if (method === 'POST' && url.searchParams.get('restore') !== 'true') {
-            console.log('POST /prescriptions called');
-            console.log('Authorization header:', context.request.headers.get('Authorization'));
-            console.log('Current user:', JSON.stringify(currentUser));
-            
-            // 简化处理：移除 allowSavePrescription 检查，所有登录用户都能保存处方
-            
             let body;
             try {
-                body = await context.request.json();
-                console.log('Request body:', JSON.stringify(body).substring(0, 500));
+                body = await request.json();
             } catch (error) {
-                console.error('Failed to parse request body:', error);
-                return new Response(JSON.stringify({
-                    success: false,
-                    error: 'Failed to parse request body: ' + error.message
-                }), {
-                    status: 400,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
+                return corsResponse({ success: false, error: 'Failed to parse request body: ' + error.message }, { status: 400 });
             }
-            
             if (!body.prescription) {
-                console.error('Missing prescription data in request');
-                return new Response(JSON.stringify({
-                    success: false,
-                    error: 'Missing prescription data'
-                }), {
-                    status: 400,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
+                return corsResponse({ success: false, error: 'Missing prescription data' }, { status: 400 });
             }
-            
+
             let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
-            if (!prescriptions) {
-                prescriptions = [];
-            }
-            
+            if (!prescriptions) prescriptions = [];
+
             const now = getBeijingTime();
             const nowIso = now.toISOString();
-            
-            // 简化处理：统一处理单条和批量
-            let prescriptionList = Array.isArray(body.prescription) ? body.prescription : [body.prescription];
-            
-            // 为每个处方生成编号
+            const prescriptionList = Array.isArray(body.prescription) ? body.prescription : [body.prescription];
             const savedPrescriptions = [];
-            console.log('=== POST /prescriptions ===');
-            console.log('Current user:', JSON.stringify(currentUser));
+
             for (const p of prescriptionList) {
-                const outpatientNo = await generatePrescriptionNo(kv, currentUser.username, 'daily');
+                // clinic_admin 可代他人保存处方（批量上传场景），但 createdBy 默认还是 currentUser.username
+                // 如果 p.createdBy 已存在且 currentUser 是 clinic_admin，允许保留（批量同步场景）
+                let createdBy = currentUser.username;
+                if (currentUser.isClinicAdmin && p.createdBy) {
+                    createdBy = p.createdBy;
+                }
+                const outpatientNo = await generatePrescriptionNo(kv, clinicId, createdBy, 'daily');
                 const newPrescription = {
                     ...p,
                     id: p.id || Date.now(),
@@ -608,321 +275,136 @@ export async function onRequest(context) {
                     outpatientNo: outpatientNo,
                     createdAt: p.createdAt || nowIso,
                     updatedAt: nowIso,
-                    createdBy: currentUser.username,
-                    userId: currentUser.username,
+                    createdBy: createdBy,
+                    userId: createdBy,
                     userRole: currentUser.role,
-                    isAdmin: currentUser.isAdmin
+                    clinicId: clinicId
                 };
-                console.log('Saved prescription with createdBy:', currentUser.username);
                 savedPrescriptions.push(newPrescription);
             }
-            
-            // 合并并去重
+
+            // 合并去重
             const idMap = new Map();
-            [...prescriptions, ...savedPrescriptions].forEach(p => {
-                idMap.set(p.id, p);
-            });
+            [...prescriptions, ...savedPrescriptions].forEach(p => idMap.set(p.id, p));
             prescriptions = Array.from(idMap.values());
-            
-            // 按编号倒序排序
             prescriptions.sort((a, b) => {
                 const noA = a.outpatientNo || a.prescriptionNo || '';
                 const noB = b.outpatientNo || b.prescriptionNo || '';
                 return noB.localeCompare(noA);
             });
-            
-            // 获取下一个编号
+
             const [nextPrescriptionNo, nextClinicNo] = await Promise.all([
-                peekNextPrescriptionNo(kv, currentUser.username, 'daily'),
-                peekNextPrescriptionNo(kv, currentUser.username, 'yearly')
+                peekNextPrescriptionNo(kv, clinicId, currentUser.username, 'daily'),
+                peekNextPrescriptionNo(kv, clinicId, currentUser.username, 'yearly')
             ]);
-            
-            // 保存到 KV
-            try {
-                console.log('Saving to KV, count:', prescriptions.length);
-                await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
-                console.log('Saved to KV successfully');
-            } catch (kvError) {
-                console.error('KV put error:', kvError);
-                return new Response(JSON.stringify({
-                    success: false,
-                    error: 'Failed to save to KV: ' + kvError.message,
-                    requireSetup: true
-                }), {
-                    status: 500,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
-            }
-            
-            // 返回响应
-            const responseData = {
+
+            await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
+
+            return corsResponse({
                 success: true,
                 data: prescriptions,
                 savedPrescription: savedPrescriptions[0],
                 count: prescriptions.length,
                 message: 'Prescriptions saved successfully',
-                nextPrescriptionNo: nextPrescriptionNo,
-                nextClinicNo: nextClinicNo,
+                nextPrescriptionNo,
+                nextClinicNo,
                 userRole: currentUser.role,
-                isAdmin: currentUser.isAdmin
-            };
-            
-            return new Response(JSON.stringify(responseData), {
-                status: 200,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
+                isAdmin: currentUser.isAdmin,
+                clinicId
             });
         }
-        
-        // DELETE - 删除处方（软删除到回收站，可恢复；permanent=true 时永久删除）
+
+        // ============ DELETE ============
         if (method === 'DELETE') {
             const prescriptionId = url.searchParams.get('id');
             const isPermanent = url.searchParams.get('permanent') === 'true';
-            
             if (!prescriptionId) {
-                return new Response(JSON.stringify({
-                    success: false,
-                    error: 'Missing prescription ID'
-                }), {
-                    status: 400,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
+                return corsResponse({ success: false, error: 'Missing prescription ID' }, { status: 400 });
             }
-            
-            // 永久删除：从回收站中彻底删除（仅手动操作触发）
+
+            // 永久删除（从回收站）
             if (isPermanent) {
                 let trash = await kv.get(KV_TRASH_KEY, 'json');
-                if (!trash || !Array.isArray(trash)) {
-                    trash = [];
-                }
-                
+                if (!trash || !Array.isArray(trash)) trash = [];
                 const prescriptionToDelete = trash.find(p => p.id.toString() === prescriptionId.toString());
-                
                 if (!prescriptionToDelete) {
-                    return new Response(JSON.stringify({
-                        success: false,
-                        error: '回收站中未找到此处方'
-                    }), {
-                        status: 404,
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Access-Control-Allow-Origin': '*'
-                        }
-                    });
+                    return corsResponse({ success: false, error: '回收站中未找到此处方' }, { status: 404 });
                 }
-                
                 if (prescriptionToDelete.createdBy !== currentUser.username && !currentUser.isAdmin) {
-                    return new Response(JSON.stringify({
-                        success: false,
-                        error: '无权删除此处方，只能删除自己创建的处方'
-                    }), {
-                        status: 403,
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Access-Control-Allow-Origin': '*'
-                        }
-                    });
+                    return corsResponse({ success: false, error: '无权删除此处方' }, { status: 403 });
                 }
-                
                 trash = trash.filter(p => p.id.toString() !== prescriptionId.toString());
                 await kv.put(KV_TRASH_KEY, JSON.stringify(trash));
-                
-                return new Response(JSON.stringify({
-                    success: true,
-                    message: '处方已永久删除',
-                    deletedBy: currentUser.username
-                }), {
-                    status: 200,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
+                return corsResponse({ success: true, message: '处方已永久删除', deletedBy: currentUser.username });
             }
-            
-            // 软删除：移入回收站，可恢复
+
+            // 软删除
             let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
-            if (!prescriptions) {
-                prescriptions = [];
-            }
-            
-            // 查找要删除的处方
+            if (!prescriptions) prescriptions = [];
             const prescriptionToDelete = prescriptions.find(p => p.id.toString() === prescriptionId.toString());
-            
-            // 检查权限：只有创建者或管理员可以删除
             if (!prescriptionToDelete) {
-                return new Response(JSON.stringify({
-                    success: false,
-                    error: 'Prescription not found'
-                }), {
-                    status: 404,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
+                return corsResponse({ success: false, error: 'Prescription not found' }, { status: 404 });
             }
-            
             if (prescriptionToDelete.createdBy !== currentUser.username && !currentUser.isAdmin) {
-                return new Response(JSON.stringify({
-                    success: false,
-                    error: '无权删除此处方，只能删除自己创建的处方'
-                }), {
-                    status: 403,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
+                return corsResponse({ success: false, error: '无权删除此处方' }, { status: 403 });
             }
-            
-            // 从主列表移除
             prescriptions = prescriptions.filter(p => p.id.toString() !== prescriptionId.toString());
             await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
-            
-            // 移入回收站，记录删除时间和操作人，可恢复
+
             let trash = await kv.get(KV_TRASH_KEY, 'json');
-            if (!trash || !Array.isArray(trash)) {
-                trash = [];
-            }
+            if (!trash || !Array.isArray(trash)) trash = [];
             const nowIso = getBeijingTime().toISOString();
-            trash.unshift({
-                ...prescriptionToDelete,
-                deletedAt: nowIso,
-                deletedBy: currentUser.username
-            });
-            // 回收站最多保留 10000 条，超出按时间清理
-            if (trash.length > 10000) {
-                trash = trash.slice(0, 10000);
-            }
+            trash.unshift({ ...prescriptionToDelete, deletedAt: nowIso, deletedBy: currentUser.username });
+            if (trash.length > 10000) trash = trash.slice(0, 10000);
             await kv.put(KV_TRASH_KEY, JSON.stringify(trash));
-            
-            return new Response(JSON.stringify({
+
+            return corsResponse({
                 success: true,
                 message: '处方已移入回收站，可恢复',
                 deletedBy: currentUser.username,
                 softDeleted: true
-            }), {
-                status: 200,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
             });
         }
-        
-        // POST - 恢复回收站处方：POST /prescriptions?restore=true&id=xxx
+
+        // ============ POST ?restore=true（恢复） ============
         if (method === 'POST' && url.searchParams.get('restore') === 'true') {
             const prescriptionId = url.searchParams.get('id');
-            
             if (!prescriptionId) {
-                return new Response(JSON.stringify({
-                    success: false,
-                    error: 'Missing prescription ID'
-                }), {
-                    status: 400,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
+                return corsResponse({ success: false, error: 'Missing prescription ID' }, { status: 400 });
             }
-            
             let trash = await kv.get(KV_TRASH_KEY, 'json');
-            if (!trash || !Array.isArray(trash)) {
-                trash = [];
-            }
-            
+            if (!trash || !Array.isArray(trash)) trash = [];
             const prescriptionToRestore = trash.find(p => p.id.toString() === prescriptionId.toString());
-            
             if (!prescriptionToRestore) {
-                return new Response(JSON.stringify({
-                    success: false,
-                    error: '回收站中未找到此处方'
-                }), {
-                    status: 404,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
+                return corsResponse({ success: false, error: '回收站中未找到此处方' }, { status: 404 });
             }
-            
             if (prescriptionToRestore.createdBy !== currentUser.username && !currentUser.isAdmin) {
-                return new Response(JSON.stringify({
-                    success: false,
-                    error: '无权恢复此处方，只能恢复自己创建的处方'
-                }), {
-                    status: 403,
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    }
-                });
+                return corsResponse({ success: false, error: '无权恢复此处方' }, { status: 403 });
             }
-            
-            // 从回收站移除
             trash = trash.filter(p => p.id.toString() !== prescriptionId.toString());
             await kv.put(KV_TRASH_KEY, JSON.stringify(trash));
-            
-            // 恢复到主列表（去除删除标记字段）
+
             let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
-            if (!prescriptions) {
-                prescriptions = [];
-            }
+            if (!prescriptions) prescriptions = [];
             const { deletedAt, deletedBy, ...restoredPrescription } = prescriptionToRestore;
-            
-            // 避免重复 ID
             const exists = prescriptions.some(p => p.id.toString() === prescriptionId.toString());
-            if (!exists) {
-                prescriptions.push(restoredPrescription);
-            }
+            if (!exists) prescriptions.push(restoredPrescription);
             await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
-            
-            return new Response(JSON.stringify({
+
+            return corsResponse({
                 success: true,
                 message: '处方已恢复',
                 restoredBy: currentUser.username,
                 data: restoredPrescription
-            }), {
-                status: 200,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
             });
         }
-        
-        return new Response(JSON.stringify({
-            success: false,
-            error: 'Method not allowed'
-        }), {
-            status: 405,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
-        });
-        
+
+        return corsResponse({ success: false, error: 'Method not allowed' }, { status: 405 });
     } catch (error) {
-        console.error('KV API error:', error);
-        return new Response(JSON.stringify({
+        console.error('Prescriptions API error:', error);
+        return corsResponse({
             success: false,
             error: error.message || 'Internal server error'
-        }), {
-            status: 500,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
-        });
+        }, { status: 500 });
     }
 }

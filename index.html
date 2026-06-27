@@ -1104,34 +1104,58 @@
             DB: 'tcm_prescription',
             SECRET: 'secret',
             _ready: null,
+            _useElectron: false,  // 运行时判定：true=走 Electron IPC，false=走 Capacitor
+            // ---------- 桥选择 ----------
+            _electronBridge() {
+                try {
+                    return (window.electronAPI && window.electronAPI.localDB) ? window.electronAPI.localDB : null;
+                } catch (e) { return null; }
+            },
             _plugin() {
                 try {
                     return (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.CapacitorSQLite) || null;
                 } catch (e) { return null; }
             },
-            available() { return !!this._plugin(); },
-            ready() {
+            available() {
+                return !!(this._electronBridge() || this._plugin());
+            },
+            async ready() {
                 if (this._ready) return this._ready;
                 this._ready = (async () => {
+                    // 优先 Electron 桥（桌面端）
+                    const eBridge = this._electronBridge();
+                    if (eBridge) {
+                        try {
+                            const ok = await eBridge.ready();
+                            if (ok) {
+                                this._useElectron = true;
+                                console.log('LocalDB: 通过 Electron IPC 初始化成功');
+                                return true;
+                            }
+                        } catch (e) {
+                            console.warn('LocalDB: Electron 桥初始化失败，尝试 Capacitor', e);
+                        }
+                    }
+                    // 回退到 Capacitor 桥（APP 端）
                     const sqlite = this._plugin();
-                    if (!sqlite) { console.warn('LocalDB: CapacitorSQLite 不可用，降级纯云端'); return false; }
+                    if (!sqlite) {
+                        console.warn('LocalDB: 无可用桥（非 Electron 非 Capacitor），降级纯云端');
+                        return false;
+                    }
                     try {
-                        // 先检查 secret 是否已存储，避免重复设置报错
                         try {
                             const stored = await sqlite.isSecretStored();
                             if (!stored || !stored.result) {
                                 await sqlite.setEncryptionSecret({ passphrase: this.SECRET });
                             }
-                        } catch (e) {
-                            /* 可能已设置或方法不支持，继续尝试 */
-                        }
+                        } catch (e) { /* 可能已设置或方法不支持 */ }
                         await sqlite.createConnection({ database: this.DB, encrypted: true, mode: 'secret', version: 1 });
                         await sqlite.open({ database: this.DB });
                         await this._createTables();
-                        console.log('LocalDB: 初始化成功');
+                        console.log('LocalDB: 通过 Capacitor SQLite 初始化成功');
                         return true;
                     } catch (e) {
-                        console.error('LocalDB: 初始化失败', e);
+                        console.error('LocalDB: Capacitor 初始化失败', e);
                         this._ready = null;
                         return false;
                     }
@@ -1139,6 +1163,7 @@
                 return this._ready;
             },
             async _createTables() {
+                // 仅 Capacitor 路径需要；Electron 路径在 main.js 中已建表
                 const sqlite = this._plugin();
                 const stmts = [
                     "CREATE TABLE IF NOT EXISTS prescriptions (id INTEGER PRIMARY KEY, data TEXT NOT NULL, updated_at TEXT, updated_at_ms INTEGER, created_by TEXT, synced INTEGER DEFAULT 0, deleted INTEGER DEFAULT 0);",
@@ -1149,14 +1174,17 @@
                 ];
                 for (const s of stmts) await sqlite.execute({ database: this.DB, statements: s });
             },
-            async exec(sql) { return await this._plugin().execute({ database: this.DB, statements: sql }); },
-            async run(sql, values) { return await this._plugin().run({ database: this.DB, statement: sql, values: values || [] }); },
-            async query(sql, values) {
+            // Capacitor 底层方法（仅 _useElectron=false 时使用）
+            async _capExec(sql) { return await this._plugin().execute({ database: this.DB, statements: sql }); },
+            async _capRun(sql, values) { return await this._plugin().run({ database: this.DB, statement: sql, values: values || [] }); },
+            async _capQuery(sql, values) {
                 const r = await this._plugin().query({ database: this.DB, statement: sql, values: values || [] });
                 return r.values || [];
             },
+            // ---------- 语义方法（统一接口，运行时桥分支） ----------
             async getPrescriptions(username) {
-                const rows = await this.query('SELECT data FROM prescriptions WHERE created_by=? AND deleted=0 ORDER BY updated_at_ms DESC', [username]);
+                if (this._useElectron) return await this._electronBridge().getPrescriptions(username);
+                const rows = await this._capQuery('SELECT data FROM prescriptions WHERE created_by=? AND deleted=0 ORDER BY updated_at_ms DESC', [username]);
                 return rows.map(r => { try { return JSON.parse(r.data); } catch (e) { return null; } }).filter(Boolean);
             },
             async upsertPrescription(p, opts) {
@@ -1166,42 +1194,74 @@
                 const cb = p.createdBy || (currentUser ? currentUser.username : '');
                 const synced = (opts && opts.synced !== undefined) ? opts.synced : 0;
                 const deleted = (opts && opts.deleted !== undefined) ? opts.deleted : 0;
-                await this.run(
+                if (this._useElectron) {
+                    return await this._electronBridge().upsertPrescription({ ...p, id, updatedAt: ua, createdBy: cb }, { synced, deleted });
+                }
+                await this._capRun(
                     'INSERT OR REPLACE INTO prescriptions (id, data, updated_at, updated_at_ms, created_by, synced, deleted) VALUES (?,?,?,?,?,?,?)',
                     [id, JSON.stringify(p), ua, uaMs, cb, synced, deleted]
                 );
                 return id;
             },
             async getPrescriptionRow(id) {
-                const rows = await this.query('SELECT id, updated_at_ms, synced, deleted FROM prescriptions WHERE id=?', [id]);
+                if (this._useElectron) {
+                    // Electron 路径无此语义，组装返回
+                    return null;
+                }
+                const rows = await this._capQuery('SELECT id, updated_at_ms, synced, deleted FROM prescriptions WHERE id=?', [id]);
                 return rows[0] || null;
             },
             async getUnsyncedRows() {
-                const rows = await this.query('SELECT id, data, deleted FROM prescriptions WHERE synced=0 ORDER BY updated_at_ms ASC');
+                if (this._useElectron) {
+                    const list = await this._electronBridge().getUnsyncedPrescriptions();
+                    return (list || []).map(item => ({
+                        id: item.id,
+                        prescription: item.prescription,
+                        deleted: item.deleted ? 1 : 0
+                    }));
+                }
+                const rows = await this._capQuery('SELECT id, data, deleted FROM prescriptions WHERE synced=0 ORDER BY updated_at_ms ASC');
                 return rows.map(r => { try { return { id: r.id, prescription: JSON.parse(r.data), deleted: r.deleted }; } catch (e) { return null; } }).filter(Boolean);
             },
-            async markSynced(id) { await this.run('UPDATE prescriptions SET synced=1 WHERE id=?', [id]); },
-            async markDeleted(id) { await this.run('UPDATE prescriptions SET deleted=1, synced=0 WHERE id=?', [id]); },
+            async markSynced(id) {
+                if (this._useElectron) return await this._electronBridge().markSynced(id);
+                await this._capRun('UPDATE prescriptions SET synced=1 WHERE id=?', [id]);
+            },
+            async markDeleted(id) {
+                if (this._useElectron) return await this._electronBridge().markDeleted(id);
+                await this._capRun('UPDATE prescriptions SET deleted=1, synced=0 WHERE id=?', [id]);
+            },
             async countUnsynced() {
-                const rows = await this.query('SELECT COUNT(*) AS c FROM prescriptions WHERE synced=0');
+                if (this._useElectron) return await this._electronBridge().countUnsynced();
+                const rows = await this._capQuery('SELECT COUNT(*) AS c FROM prescriptions WHERE synced=0');
                 return (rows[0] && rows[0].c) || 0;
             },
             async setCache(key, data) {
-                await this.run('INSERT OR REPLACE INTO cache_kv (key, data, cached_at) VALUES (?,?,?)', [key, JSON.stringify(data), new Date().toISOString()]);
+                if (this._useElectron) return await this._electronBridge().setCache(key, data);
+                await this._capRun('INSERT OR REPLACE INTO cache_kv (key, data, cached_at) VALUES (?,?,?)', [key, JSON.stringify(data), new Date().toISOString()]);
             },
             async getCache(key) {
-                const rows = await this.query('SELECT data FROM cache_kv WHERE key=?', [key]);
+                if (this._useElectron) return await this._electronBridge().getCache(key);
+                const rows = await this._capQuery('SELECT data FROM cache_kv WHERE key=?', [key]);
                 if (!rows[0]) return null;
                 try { return JSON.parse(rows[0].data); } catch (e) { return null; }
             },
             async setSyncStatus(field, pending) {
+                if (this._useElectron) {
+                    const status = await this._electronBridge().getSyncStatus() || {};
+                    if (field === 'push') status.last_push = new Date().toISOString();
+                    else if (field === 'pull') status.last_pull = new Date().toISOString();
+                    status.pending_count = pending;
+                    return await this._electronBridge().setSyncStatus(status);
+                }
                 const now = new Date().toISOString();
-                await this.run('INSERT OR IGNORE INTO sync_status (id, last_push, last_pull, pending_count) VALUES (1, NULL, NULL, 0)');
-                if (field === 'push') await this.run('UPDATE sync_status SET last_push=?, pending_count=? WHERE id=1', [now, pending]);
-                else if (field === 'pull') await this.run('UPDATE sync_status SET last_pull=?, pending_count=? WHERE id=1', [now, pending]);
+                await this._capRun('INSERT OR IGNORE INTO sync_status (id, last_push, last_pull, pending_count) VALUES (1, NULL, NULL, 0)');
+                if (field === 'push') await this._capRun('UPDATE sync_status SET last_push=?, pending_count=? WHERE id=1', [now, pending]);
+                else if (field === 'pull') await this._capRun('UPDATE sync_status SET last_pull=?, pending_count=? WHERE id=1', [now, pending]);
             },
             async getSyncStatus() {
-                const rows = await this.query('SELECT last_push, last_pull, pending_count FROM sync_status WHERE id=1');
+                if (this._useElectron) return await this._electronBridge().getSyncStatus();
+                const rows = await this._capQuery('SELECT last_push, last_pull, pending_count FROM sync_status WHERE id=1');
                 return rows[0] || null;
             }
         };
@@ -1242,7 +1302,7 @@
             _timer: null,
             _authHeader() {
                 if (!currentUser) return null;
-                try { return 'Basic ' + safeBtoa(currentUser.username + ':' + (currentUser.role || 'user')); } catch (e) { return null; }
+                try { return 'Basic ' + buildAuthPayload(currentUser); } catch (e) { return null; }
             },
             async _cloudGetPrescriptions() {
                 const auth = this._authHeader();
@@ -1503,6 +1563,29 @@
                 return btoa(unescape(encodeURIComponent(str)));
             }
         }
+
+        // ============================================================================
+        // 多诊所认证：Basic auth payload 升级为 JSON
+        // payload = base64(JSON.stringify({username, role, clinicId}))
+        // 后端 _lib/auth.js 的 parseAuthHeader 仅识别此 JSON 格式
+        // ============================================================================
+        function buildAuthPayload(user) {
+            if (!user) return null;
+            const payload = {
+                username: user.username,
+                role: user.role || 'doctor',
+                clinicId: user.clinicId || null
+            };
+            return safeBtoa(JSON.stringify(payload));
+        }
+
+        function buildAuthHeader(user) {
+            const payload = buildAuthPayload(user || currentUser);
+            return payload ? ('Basic ' + payload) : null;
+        }
+
+        // 兼容旧调用方式：safeBtoa(`${username}:${role}`) 已废弃
+        // 所有调用点应改为 buildAuthHeader(currentUser)
         
         // 云端同步辅助函数 - 对用户、处方、药品、方剂API启用
         async function cloudFetch(url, options = {}) {
@@ -1637,24 +1720,13 @@
 
         // 获取默认用户列表（支持动态添加）
         function getDefaultUsers() {
-            // 尝试从本地存储读取自定义默认用户
+            // 多诊所改造后无硬编码默认账号；账号必须由平台总管理员/诊所管理员通过后台创建
+            // 从本地存储读取自定义默认用户（保留扩展能力）
             const savedDefaults = localStorage.getItem('cloud_defaultUsers');
             if (savedDefaults) {
-                try {
-                    return JSON.parse(savedDefaults);
-                } catch {
-                    console.warn('Failed to parse defaultUsers, using hardcoded defaults');
-                }
+                try { return JSON.parse(savedDefaults); } catch (e) { return []; }
             }
-            
-            // 返回硬编码的默认用户（首次使用时）
-            return [
-                {username: 'admin', password: 'admin', name: '管理员', role: 'admin', allowSavePrescription: true, allowedMode: 'both'},
-                {username: 'doctor1', password: '123456', name: '张医生', role: 'user', allowSavePrescription: true, allowedMode: 'local'},
-                {username: 'doctor2', password: '123456', name: '李医生', role: 'user', allowSavePrescription: true, allowedMode: 'local'},
-                {username: 'wangguijie', password: '123456', name: '王桂杰', role: 'user', allowSavePrescription: true, allowedMode: 'local'},
-                {username: 'wangyaoxie', password: '123456', name: '王耀燮', role: 'user', allowSavePrescription: true, allowedMode: 'local'}
-            ];
+            return [];
         }
         
         // 保存默认用户列表到本地存储
@@ -1684,7 +1756,12 @@
         // 从云端获取用户数据
         async function getUsersFromCloud() {
             try {
-                const response = await cloudFetch(`${CLOUD_API_BASE}/users`);
+                // GET /api/users 需带认证头（platform_admin / clinic_admin / doctor 均可，按角色返回可见用户）
+                const authToken = buildAuthPayload(currentUser);
+                if (!authToken) return null;
+                const response = await cloudFetch(`${CLOUD_API_BASE}/users`, {
+                    headers: { 'Authorization': `Basic ${authToken}` }
+                });
                 if (response.success && response.data) {
                     return response.data;
                 }
@@ -1698,7 +1775,7 @@
         async function saveUsersToCloud(users) {
             try {
                 // 添加认证头
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role || 'user'}`);
+                const authToken = buildAuthPayload(currentUser);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/users`, {
                     method: 'POST',
                     headers: {
@@ -1885,7 +1962,7 @@
                 console.log('请求处方API:', url);
                 
                 // 添加认证头（使用 safeBtoa 处理中文字符）
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role || 'user'}`);
+                const authToken = buildAuthPayload(currentUser);
                 const response = await cloudFetch(url, {
                     headers: {
                         'Authorization': `Basic ${authToken}`
@@ -1966,7 +2043,7 @@
                 // 添加认证头（即使GET请求不需要认证，保持一致性）
                 const options = {};
                 if (currentUser) {
-                    const authToken = safeBtoa(`${currentUser.username}:${currentUser.role || 'user'}`);
+                    const authToken = buildAuthPayload(currentUser);
                     options.headers = {
                         'Authorization': `Basic ${authToken}`
                     };
@@ -2004,7 +2081,7 @@
                     console.warn('Only admin can save medicines');
                     return false;
                 }
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = buildAuthPayload(currentUser);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/medicines`, {
                     method: 'POST',
                     headers: {
@@ -2061,7 +2138,7 @@
                 const url = `${CLOUD_API_BASE}/formulas`;
                 const options = {};
                 if (currentUser) {
-                    const authToken = safeBtoa(`${currentUser.username}:${currentUser.role || 'user'}`);
+                    const authToken = buildAuthPayload(currentUser);
                     options.headers = {
                         'Authorization': `Basic ${authToken}`
                     };
@@ -2094,7 +2171,7 @@
                     console.warn('User not logged in');
                     return false;
                 }
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = buildAuthPayload(currentUser);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/formulas`, {
                     method: 'POST',
                     headers: {
@@ -2125,7 +2202,7 @@
                 console.log('Not logged in');
                 return;
             }
-            const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+            const authToken = buildAuthPayload(currentUser);
             console.log('Testing auth with:', currentUser.username, currentUser.role);
             console.log('Auth token:', authToken);
             console.log('Decoded:', atob(authToken));
@@ -2194,7 +2271,7 @@
                 // 2) both 模式在线：直连云端，成功后回写本地 synced=1
                 if (canOffline && mode === 'both' && isOnline) {
                     try {
-                        const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                        const authToken = buildAuthPayload(currentUser);
                         const response = await fetch(`${CLOUD_API_BASE}/prescriptions`, {
                             method: 'POST',
                             headers: { 'Authorization': `Basic ${authToken}`, 'Content-Type': 'application/json' },
@@ -2278,7 +2355,7 @@
                 }
 
                 // 4) cloud 模式或非 Capacitor 环境：原纯云端逻辑
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = buildAuthPayload(currentUser);
                 const response = await fetch(`${CLOUD_API_BASE}/prescriptions`, {
                     method: 'POST',
                     headers: { 'Authorization': `Basic ${authToken}`, 'Content-Type': 'application/json' },
@@ -2325,7 +2402,7 @@
                 }
 
                 // 3) both 模式在线 / cloud 模式 / 非 Capacitor：直连云端 DELETE
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = buildAuthPayload(currentUser);
                 const url = `${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}`;
                 const response = await cloudFetch(url, {
                     method: 'DELETE',
@@ -2496,16 +2573,32 @@
             const password = document.getElementById('loginPassword').value;
             const errorDiv = document.getElementById('loginError');
             
+            if (!username) {
+                errorDiv.textContent = '请输入用户名';
+                errorDiv.style.display = 'block';
+                return;
+            }
             if (!password) {
                 errorDiv.textContent = '请输入密码';
                 errorDiv.style.display = 'block';
                 return;
             }
             
-            const users = await getUsers();
-            const user = users.find(u => u.username === username && u.password === password);
-            
-            if (user) {
+            // 调用后端登录端点：POST /api/users?login=true
+            // 后端会在所有诊所 + 平台管理员中查找并校验密码（SHA-256 + salt）
+            try {
+                const response = await fetch(`${CLOUD_API_BASE}/users?login=true`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (!data.success || !data.user) {
+                    errorDiv.textContent = data.error || '用户名或密码错误';
+                    errorDiv.style.display = 'block';
+                    return;
+                }
+                const user = data.user;
                 currentUser = user;
                 const userData = JSON.stringify(user);
                 localStorage.setItem('cloud_currentUser', userData);
@@ -2543,8 +2636,9 @@
                 await loadData();
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 refreshUserInterface();
-            } else {
-                errorDiv.textContent = '用户名或密码错误';
+            } catch (err) {
+                console.error('Login error:', err);
+                errorDiv.textContent = '登录失败：' + (err.message || '网络错误');
                 errorDiv.style.display = 'block';
             }
         }
@@ -3953,7 +4047,7 @@
                     return null;
                 }
                 
-                const authToken = safeBtoa(`${currentUser.username}:${currentUser.role}`);
+                const authToken = buildAuthPayload(currentUser);
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
                 
                 const controller = new AbortController();

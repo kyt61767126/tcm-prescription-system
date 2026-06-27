@@ -1,97 +1,15 @@
-// 用户身份验证辅助函数 - 与客户端safeBtoa对称
-function safeAtob(str) {
-    try {
-        const decoded = atob(str);
-        const bytes = [];
-        for (let i = 0; i < decoded.length; i++) {
-            bytes.push(decoded.charCodeAt(i));
-        }
-        let result = '';
-        let i = 0;
-        while (i < bytes.length) {
-            const byte = bytes[i];
-            if (byte < 0x80) {
-                result += String.fromCharCode(byte);
-                i++;
-            } else if (byte < 0xC0) {
-                result += String.fromCharCode(byte);
-                i++;
-            } else if (byte < 0xE0) {
-                if (i + 1 < bytes.length) {
-                    const charCode = ((byte & 0x1F) << 6) | (bytes[i + 1] & 0x3F);
-                    result += String.fromCharCode(charCode);
-                    i += 2;
-                } else {
-                    result += String.fromCharCode(byte);
-                    i++;
-                }
-            } else if (byte < 0xF0) {
-                if (i + 2 < bytes.length) {
-                    const charCode = ((byte & 0x0F) << 12) | ((bytes[i + 1] & 0x3F) << 6) | (bytes[i + 2] & 0x3F);
-                    result += String.fromCharCode(charCode);
-                    i += 3;
-                } else {
-                    result += String.fromCharCode(byte);
-                    i++;
-                }
-            } else if (byte < 0xF8) {
-                if (i + 3 < bytes.length) {
-                    const charCode = ((byte & 0x07) << 18) | ((bytes[i + 1] & 0x3F) << 12) | ((bytes[i + 2] & 0x3F) << 6) | (bytes[i + 3] & 0x3F);
-                    result += String.fromCharCode(charCode);
-                    i += 4;
-                } else {
-                    result += String.fromCharCode(byte);
-                    i++;
-                }
-            } else {
-                result += String.fromCharCode(byte);
-                i++;
-            }
-        }
-        return result;
-    } catch (e) {
-        console.error('safeAtob error:', e);
-        return atob(str);
-    }
-}
+// ============================================================================
+// 药品库 API（多诊所分区版）
+// ============================================================================
+// 端点契约：
+//   GET    /api/medicines              获取本诊所药品库（无需登录）
+//   POST   /api/medicines              保存本诊所药品库（仅 clinic_admin）
+// ============================================================================
+import {
+    ROLE, clinicKey, parseAuthHeader,
+    corsResponse, handleOptions, getKV
+} from '../_lib/auth.js';
 
-// 用户身份验证辅助函数
-function parseAuthHeaderSimple(request) {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-        return null;
-    }
-    
-    try {
-        if (authHeader.startsWith('Bearer ')) {
-            const token = authHeader.substring(7);
-            const decodedToken = safeAtob(token);
-            const userInfo = JSON.parse(decodedToken);
-            return {
-                username: userInfo.username,
-                role: userInfo.role || 'user',
-                isAdmin: userInfo.role === 'admin',
-                allowSavePrescription: true
-            };
-        } else if (authHeader.startsWith('Basic ')) {
-            const base64Credentials = authHeader.substring(6);
-            const credentials = safeAtob(base64Credentials);
-            const [username, role] = credentials.split(':');
-            return { 
-                username, 
-                role, 
-                isAdmin: role === 'admin',
-                allowSavePrescription: true
-            };
-        }
-        return null;
-    } catch (error) {
-        console.error('Auth parsing error:', error);
-        return null;
-    }
-}
-
-// 获取默认药品库
 function getDefaultMedicines() {
     return [
         { id: 1, name: "麻黄", code: "mh", unit: "g", costPrice: 0, price: 0, dosage: 10, stock: 0 },
@@ -108,159 +26,78 @@ function getDefaultMedicines() {
 }
 
 export async function onRequest(context) {
-    const url = new URL(context.request.url);
-    const method = context.request.method;
-    
-    if (method === 'OPTIONS') {
-        return new Response(null, {
-            status: 200,
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-                'Access-Control-Max-Age': '86400'
-            }
-        });
-    }
-    
+    const { request, env } = context;
+    const url = new URL(request.url);
+    const method = request.method;
+
+    if (method === 'OPTIONS') return handleOptions();
+
     try {
-        const envKeys = Object.keys(context.env || {});
-        const kv = context.env.KV || 
-                   context.env.TCM_PRESCRIPTION_KV || 
-                   context.env['tcm-prescription-kv'] || 
-                   context.env['TCM-PRESCRIPTION-KV'] ||
-                   context.env.TCM_KV || 
-                   context.env.PRESCRIPTION_KV;
-        
+        const kv = getKV(env);
         if (!kv) {
-            console.error('KV binding not found. Available env keys:', envKeys);
-            return new Response(JSON.stringify({
+            return corsResponse({
                 success: false,
                 error: 'KV存储未配置。请在Cloudflare Pages设置中配置KV binding',
-                availableKeys: envKeys,
                 requireSetup: true
-            }), {
-                status: 500,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            });
+            }, { status: 500 });
         }
-        
-        const KV_MEDICINES_KEY = 'medicines_all';
-        const currentUser = parseAuthHeaderSimple(context.request);
-        
-        // GET - 获取药品库（无需认证）
+
+        const currentUser = parseAuthHeader(request);
+
+        // 平台总管理员不参与诊所药品库业务
+        if (currentUser && currentUser.isPlatformAdmin) {
+            return corsResponse({ success: false, error: '平台总管理员不参与诊所药品库业务' }, { status: 403 });
+        }
+
+        // GET 需要登录 + 属于某诊所
         if (method === 'GET') {
+            if (!currentUser || !currentUser.clinicId) {
+                return corsResponse({ success: false, error: '未授权访问，请先登录' }, { status: 401 });
+            }
+            const KV_MEDICINES_KEY = clinicKey(currentUser.clinicId, 'medicines');
             let medicines = await kv.get(KV_MEDICINES_KEY, 'json');
-            console.log('GET /medicines - Retrieved from KV:', medicines ? medicines.length : 0);
-            
             if (!medicines || !Array.isArray(medicines) || medicines.length === 0) {
+                // 新诊所首次访问，初始化默认药品库
                 medicines = getDefaultMedicines();
                 await kv.put(KV_MEDICINES_KEY, JSON.stringify(medicines));
-                console.log('GET /medicines - Using default medicines');
             }
-            
-            return new Response(JSON.stringify({
-                success: true,
-                data: medicines,
-                count: medicines.length
-            }), {
-                status: 200,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            });
+            return corsResponse({ success: true, data: medicines, count: medicines.length });
         }
-        
-        // POST/PUT - 保存药品库（需要管理员认证）
+
+        // POST/PUT 仅诊所管理员可写
         if (method === 'POST' || method === 'PUT') {
-            if (!currentUser) {
-                console.warn('POST /medicines - Unauthorized');
-                return new Response(JSON.stringify({ 
-                    success: false, 
-                    error: '未授权访问，请先登录' 
-                }), { 
-                    status: 401, 
-                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-                });
+            if (!currentUser || !currentUser.clinicId) {
+                return corsResponse({ success: false, error: '未授权访问，请先登录' }, { status: 401 });
             }
-            
-            if (currentUser.role !== 'admin') {
-                console.warn('POST /medicines - Not admin:', currentUser.username);
-                return new Response(JSON.stringify({ 
-                    success: false, 
-                    error: '仅管理员可管理药品库' 
-                }), { 
-                    status: 403, 
-                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-                });
+            if (!currentUser.isClinicAdmin) {
+                return corsResponse({ success: false, error: '仅诊所管理员可管理药品库' }, { status: 403 });
             }
-            
             let body;
             try {
-                body = await context.request.json();
+                body = await request.json();
             } catch (error) {
-                console.error('POST /medicines - Failed to parse body:', error);
-                return new Response(JSON.stringify({ 
-                    success: false, 
-                    error: '请求数据格式错误' 
-                }), { 
-                    status: 400, 
-                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-                });
+                return corsResponse({ success: false, error: '请求数据格式错误' }, { status: 400 });
             }
-            
             if (!body.medicines || !Array.isArray(body.medicines)) {
-                return new Response(JSON.stringify({ 
-                    success: false, 
-                    error: '无效的药品数据' 
-                }), { 
-                    status: 400, 
-                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-                });
+                return corsResponse({ success: false, error: '无效的药品数据' }, { status: 400 });
             }
-            
-            console.log('POST /medicines - Saving', body.medicines.length, 'medicines');
+            const KV_MEDICINES_KEY = clinicKey(currentUser.clinicId, 'medicines');
             await kv.put(KV_MEDICINES_KEY, JSON.stringify(body.medicines));
-            console.log('POST /medicines - Saved successfully');
-            
-            return new Response(JSON.stringify({ 
-                success: true, 
+            return corsResponse({
+                success: true,
                 message: '药品库保存成功',
-                count: body.medicines.length
-            }), { 
-                status: 200, 
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
+                count: body.medicines.length,
+                clinicId: currentUser.clinicId
             });
         }
-        
-        return new Response(JSON.stringify({
-            success: false,
-            error: 'Method not allowed'
-        }), {
-            status: 405,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
-        });
-        
+
+        return corsResponse({ success: false, error: 'Method not allowed' }, { status: 405 });
     } catch (error) {
         console.error('Medicines API error:', error);
-        console.error('Error stack:', error.stack);
-        return new Response(JSON.stringify({
+        return corsResponse({
             success: false,
             error: error.message || 'Internal server error',
             stack: error.stack ? error.stack.split('\n').slice(0, 5).join('\n') : null
-        }), {
-            status: 500,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
-        });
+        }, { status: 500 });
     }
 }
