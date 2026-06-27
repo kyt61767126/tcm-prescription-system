@@ -579,7 +579,7 @@
                     <label>添加新用户</label>
                     <input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音">
                     <input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;">
-                    <input type="text" id="newUserName" placeholder="医师姓名，如：张医生" style="margin-top:5px;">
+                    <input type="text" id="newUserName" placeholder="医师姓名（必填，中文真实姓名）" style="margin-top:5px;">
                 </div>
             </div>
             <div class="modal-footer">
@@ -3194,6 +3194,18 @@
                 return;
             }
 
+            // 医师姓名为必填项
+            if (!name) {
+                alert('请填写医师姓名（真实中文姓名）');
+                return;
+            }
+
+            // 医师姓名必须为中文（至少2个汉字）
+            if (!/^[\u4e00-\u9fa5]{2,}$/.test(name)) {
+                alert('医师姓名必须为中文（至少2个汉字），请输入医师真实姓名');
+                return;
+            }
+
             // 验证用户名是否包含中文
             if (/[\u4e00-\u9fa5]/.test(username)) {
                 alert('登录账号不能使用中文，请使用英文或拼音！\n示例：zhaoyisheng 或 doctor3');
@@ -3206,8 +3218,8 @@
                 return;
             }
 
-            // 医师姓名默认为用户名，登入后可自行修改
-            const finalName = name || username;
+            // 医师姓名为必填中文姓名（已校验）
+            const finalName = name;
             const newUser = {
                 username: username,
                 password: password,
