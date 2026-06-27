@@ -616,6 +616,25 @@
         </div>
     </div>
 
+    <div id="renameClinicModal" class="modal">
+        <div class="modal-content user-modal-content">
+            <div class="modal-header">
+                <span>修改诊所名称</span>
+                <span class="close-btn" onclick="closeModal('renameClinicModal')">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>新的诊所名称</label>
+                    <input type="text" id="renameClinicInput" placeholder="请输入新的诊所名称" autocomplete="off">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('renameClinicModal')">取消</button>
+                <button class="action-btn primary" onclick="confirmRenameClinic()">确定</button>
+            </div>
+        </div>
+    </div>
+
     <div class="top-tabs">
         <div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div>
         <div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div>
@@ -2990,15 +3009,27 @@
             }
         }
 
-        async function editClinicName(clinicId, currentName) {
-            const newName = prompt('请输入新的诊所名称：', currentName);
-            if (newName === null) return;
-            const trimmed = newName.trim();
+        // 改名临时状态（Electron 不支持 window.prompt，用自定义 modal 替代）
+        let _renameClinicCtx = null;
+
+        function editClinicName(clinicId, currentName) {
+            _renameClinicCtx = { clinicId, currentName };
+            const input = document.getElementById('renameClinicInput');
+            input.value = currentName;
+            document.getElementById('renameClinicModal').style.display = 'flex';
+            setTimeout(() => { input.focus(); input.select(); }, 100);
+        }
+
+        async function confirmRenameClinic() {
+            if (!_renameClinicCtx) return;
+            const { clinicId, currentName } = _renameClinicCtx;
+            const trimmed = document.getElementById('renameClinicInput').value.trim();
             if (!trimmed) {
                 alert('诊所名称不能为空');
                 return;
             }
             if (trimmed === currentName) {
+                closeModal('renameClinicModal');
                 showToast('未做修改');
                 return;
             }
@@ -3013,6 +3044,7 @@
                     body: JSON.stringify({ clinicId, name: trimmed })
                 });
                 if (resp && resp.success) {
+                    closeModal('renameClinicModal');
                     showToast('诊所名称已更新');
                     await loadClinicsList();
                 } else {
