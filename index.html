@@ -7729,23 +7729,29 @@ IconFile=${scriptPath}`;
         // 手动触发离线同步（"立即同步"按钮 onclick 调用，函数名保留以兼容 HTML 绑定）
         async function syncOfflinePrescriptions() {
             if (!offlineCapable()) {
-                alert('当前环境不支持离线同步（需 Capacitor + local/both 模式）');
+                showToast('当前环境不支持离线同步');
                 return;
             }
             if (!navigator.onLine) {
-                alert('当前离线，请联网后再同步');
+                showToast('当前离线，请联网后再同步');
                 return;
             }
             if (getAllowedMode() !== 'both') {
-                alert('仅双模式(both)支持同步到云端，当前模式: ' + getAllowedMode());
+                showToast('仅双模式(both)支持同步，当前: ' + getAllowedMode());
                 return;
             }
-            alert('开始同步...');
+            // 显示同步中提示（不阻塞 UI）
+            const syncToast = document.createElement('div');
+            syncToast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#1976d2;color:white;padding:15px 25px;border-radius:8px;font-size:14px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.3);';
+            syncToast.textContent = '正在同步处方数据...';
+            document.body.appendChild(syncToast);
             try {
                 await SyncEngine.run();
-                alert('同步完成');
+                syncToast.remove();
+                showToast('同步完成');
             } catch(e) {
-                alert('同步失败: ' + e.message);
+                syncToast.remove();
+                showToast('同步失败: ' + e.message);
             }
             updateOfflineSyncInfo();
         }
