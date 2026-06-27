@@ -266,6 +266,34 @@ export async function onRequest(context) {
             let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
             if (!prescriptions) prescriptions = [];
 
+            // 一次性迁移：给所有没有 cloudSeq 的旧处方分配全局编号
+            // 按 createdAt 升序分配，确保时间越早编号越小
+            const migrateKey = clinicKey(clinicId, 'prescription_migrated');
+            const migrated = await kv.get(migrateKey);
+            if (!migrated) {
+                const noCloudSeq = prescriptions.filter(p => !p.cloudSeq);
+                if (noCloudSeq.length > 0) {
+                    // 按创建时间升序排序
+                    noCloudSeq.sort((a, b) => {
+                        const tA = new Date(a.createdAt || a.date || a.id || 0).getTime();
+                        const tB = new Date(b.createdAt || b.date || b.id || 0).getTime();
+                        return tA - tB;
+                    });
+                    // 依次分配全局编号
+                    for (const p of noCloudSeq) {
+                        const seq = await generateClinicGlobalSeq(kv, clinicId);
+                        p.cloudSeq = seq;
+                        p.prescriptionNo = seq;
+                        p.outpatientNo = seq;
+                        // 更新原数组中的对应项
+                        const idx = prescriptions.findIndex(x => x.id === p.id);
+                        if (idx >= 0) prescriptions[idx] = p;
+                    }
+                    await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
+                }
+                await kv.put(migrateKey, '1');
+            }
+
             // 按角色筛选：doctor 只看自己的，clinic_admin 看本诊所全部
             let filteredPrescriptions = prescriptions;
             if (currentUser.isDoctor) {
