@@ -1335,12 +1335,16 @@
             },
             async getUnsyncedRows() {
                 if (this._useElectron) {
+                    // Electron main.js 的 getUnsyncedPrescriptions 返回的每个 item 即处方对象本身（含注入的 deleted 标记）
                     const list = await this._electronBridge().getUnsyncedPrescriptions();
-                    return (list || []).map(item => ({
-                        id: item.id,
-                        prescription: item.prescription,
-                        deleted: item.deleted ? 1 : 0
-                    }));
+                    return (list || []).map(item => {
+                        const { deleted, ...prescription } = item;  // 剥离 deleted 标记，避免污染处方数据
+                        return {
+                            id: item.id,
+                            prescription: prescription,
+                            deleted: deleted ? 1 : 0
+                        };
+                    });
                 }
                 const rows = await this._capQuery('SELECT id, data, deleted FROM prescriptions WHERE synced=0 ORDER BY updated_at_ms ASC');
                 return rows.map(r => { try { return { id: r.id, prescription: JSON.parse(r.data), deleted: r.deleted }; } catch (e) { return null; } }).filter(Boolean);
