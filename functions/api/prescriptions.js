@@ -18,12 +18,12 @@ import {
 // ---------- 历史编号清洗（保留原逻辑） ----------
 function cleanHistoricalPrescriptionNo(prescription, index, dateGroups) {
     // 优先使用云端全局编号（cloudSeq 字段，诊所全局每日序号）
-    if (prescription.cloudSeq && /^\d{6,9}$/.test(prescription.cloudSeq)) {
+    if (prescription.cloudSeq && /^\d{6,8}$/.test(prescription.cloudSeq)) {
         return prescription.cloudSeq;
     }
     let no = prescription.outpatientNo || prescription.prescriptionNo || '';
-    // 已经是合法数字编号（6-9位）直接返回
-    if (/^\d{6,9}$/.test(no)) return no;
+    // 已经是合法数字编号（6-8位）直接返回
+    if (/^\d{6,8}$/.test(no)) return no;
     // 本地临时号（LOCAL-前缀）不做清洗，保持原样由前端显示"待同步"标记
     if (no.startsWith('LOCAL-')) return no;
 
@@ -81,8 +81,8 @@ async function generatePrescriptionNo(kv, clinicId, username, type) {
 
 // ---------- 诊所全局每日序号 ----------
 // KV 键：clinic:{clinicId}:prescription_seq:{yymmdd}（按天独立自增）
-// 返回格式：YYMMDD + 3位序号，如 "260627001"、"260627002"
-// 同一诊所所有医师共用一套每日连续编号，不同诊所完全隔离，每天从 001 重新开始
+// 返回格式：YYMMDD + 2位序号，共8位，如 "26062701"、"26062702"
+// 同一诊所所有医师共用一套每日连续编号，不同诊所完全隔离，每天从 01 重新开始
 async function generateClinicGlobalSeq(kv, clinicId) {
     const now = getBeijingTime();
     const yymmdd = formatBeijingDateYYMMDD(now);
@@ -91,7 +91,7 @@ async function generateClinicGlobalSeq(kv, clinicId) {
     let seq = stored ? parseInt(stored, 10) : 0;
     seq += 1;
     await kv.put(seqKey, seq.toString());
-    return yymmdd + String(seq).padStart(3, '0');
+    return yymmdd + String(seq).padStart(2, '0');
 }
 
 // 预览下一编号（不自增）
@@ -102,7 +102,7 @@ async function peekNextClinicGlobalSeq(kv, clinicId) {
     const stored = await kv.get(seqKey);
     let seq = stored ? parseInt(stored, 10) : 0;
     seq += 1;
-    return yymmdd + String(seq).padStart(3, '0');
+    return yymmdd + String(seq).padStart(2, '0');
 }
 
 // ---------- 处方去重指纹管理 ----------
@@ -270,19 +270,23 @@ export async function onRequest(context) {
             let prescriptions = await kv.get(KV_PRESCRIPTIONS_KEY, 'json');
             if (!prescriptions) prescriptions = [];
 
-            // 一次性迁移 v2：统一为 YYMMDD + 3位序号的每日全局编号格式
+            // 一次性迁移 v3：统一为 YYMMDD + 2位序号的每日全局编号格式（8位）
             // - 旧 6 位纯数字 cloudSeq（如 000001）重新分配
+            // - 9 位的 v2 格式（YYMMDD + 3位序号）重新分配
             // - 没有 cloudSeq 的旧数据也分配
             // 按 createdAt 升序，按天分组分配每日序号
-            const migrateKey = clinicKey(clinicId, 'prescription_migrated_v2');
+            const migrateKey = clinicKey(clinicId, 'prescription_migrated_v3');
             const migrated = await kv.get(migrateKey);
             if (!migrated) {
                 const needMigrate = prescriptions.filter(p => {
                     if (!p.cloudSeq) return true;
                     // 旧版 6 位纯数字需要重新分配
                     if (/^\d{6}$/.test(p.cloudSeq)) return true;
-                    // 已经是 YYMMDD + 序号格式的跳过
-                    return false;
+                    // 9 位的 v2 格式需要重新分配
+                    if (/^\d{9}$/.test(p.cloudSeq)) return true;
+                    // 已经是 8 位 YYMMDD + 2位序号格式的跳过
+                    if (/^\d{8}$/.test(p.cloudSeq)) return false;
+                    return true;
                 });
                 if (needMigrate.length > 0) {
                     // 按创建时间升序排序
@@ -301,7 +305,7 @@ export async function onRequest(context) {
                             String(beijingDate.getUTCDate()).padStart(2, '0');
                         if (!dailyCounters[yymmdd]) dailyCounters[yymmdd] = 0;
                         dailyCounters[yymmdd]++;
-                        const seq = yymmdd + String(dailyCounters[yymmdd]).padStart(3, '0');
+                        const seq = yymmdd + String(dailyCounters[yymmdd]).padStart(2, '0');
                         p.cloudSeq = seq;
                         p.prescriptionNo = seq;
                         p.outpatientNo = seq;
