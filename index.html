@@ -1201,6 +1201,16 @@
     </div>
 
     <script>
+        // 生产环境日志控制：URL 加 ?debug 启用 console.log，默认关闭以提升性能
+        (function() {
+            const isDebug = new URLSearchParams(window.location.search).has('debug');
+            if (!isDebug) {
+                const noop = () => {};
+                console.log = noop;
+                console.debug = noop;
+            }
+        })();
+
         let currentUser = null;
         let searchDebounceTimer = null;
 
@@ -1773,7 +1783,23 @@
 
         // 兼容旧调用方式：safeBtoa(`${username}:${role}`) 已废弃
         // 所有调用点应改为 buildAuthHeader(currentUser)
-        
+
+        // HTML 转义：防止 XSS，用于 innerHTML 拼接用户/服务器数据
+        function escapeHtml(str) {
+            if (str == null) return '';
+            return String(str).replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
+        }
+
+        // 全局错误处理：防止未捕获异常导致页面白屏
+        window.addEventListener('error', (e) => {
+            console.error('全局错误:', e.error || e.message);
+        });
+        window.addEventListener('unhandledrejection', (e) => {
+            console.error('未处理的Promise拒绝:', e.reason);
+        });
+
         // 云端同步辅助函数 - 对用户、处方、药品、方剂API启用
         async function cloudFetch(url, options = {}) {
             if (!url.includes('/users') && !url.includes('/prescriptions') && 
@@ -5401,12 +5427,12 @@
             dropdown.style.cssText = 'position:fixed;left:' + rect.left + 'px;top:' + (rect.bottom + 2) + 'px;width:' + rect.width + 'px;background:white;border:1px solid #808080;z-index:1000;box-shadow:2px 2px 5px rgba(0,0,0,0.2);max-height:150px;overflow-y:auto;';
             
             dropdown.innerHTML = patients.map(p => `
-                <div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #e0e0e0;font-size:14px;" 
-                     onmouseover="this.style.background='#e8f5e9'" 
+                <div style="padding:8px 12px;cursor:pointer;border-bottom:1px solid #e0e0e0;font-size:14px;"
+                     onmouseover="this.style.background='#e8f5e9'"
                      onmouseout="this.style.background='white'"
-                     onclick="selectPatientName('${p.patientName}')">
-                    <span style="font-weight:bold;">${p.patientName}</span>
-                    <span style="color:#666;font-size:12px;margin-left:8px;">${p.date || ''}</span>
+                     onclick="selectPatientName('${escapeHtml(p.patientName)}')">
+                    <span style="font-weight:bold;">${escapeHtml(p.patientName)}</span>
+                    <span style="color:#666;font-size:12px;margin-left:8px;">${escapeHtml(p.date || '')}</span>
                 </div>
             `).join('');
             
@@ -5496,13 +5522,13 @@
                     <div style="display:flex;justify-content:space-between;align-items:center;">
                         <div>
                             <div style="display:flex;gap:8px;align-items:center;">
-                                <div class="history-name">${p.patientName || p.name || '未知'}</div>
+                                <div class="history-name">${escapeHtml(p.patientName || p.name || '未知')}</div>
                                 <div style="font-size:10px;color:${(p.prescriptionNo || '').startsWith('LOCAL-') ? '#e65100' : '#8b0000'};font-weight:bold;">
-                                    [${p.prescriptionNo || ''}]${(p.prescriptionNo || '').startsWith('LOCAL-') ? '<span style="font-size:9px;color:#e65100;margin-left:2px;">待同步</span>' : ''}
+                                    [${escapeHtml(p.prescriptionNo || '')}]${(p.prescriptionNo || '').startsWith('LOCAL-') ? '<span style="font-size:9px;color:#e65100;margin-left:2px;">待同步</span>' : ''}
                                 </div>
                                 ${isToday ? '<div style="font-size:9px;background:#4CAF50;color:white;padding:1px 5px;border-radius:3px;">今天</div>' : ''}
                             </div>
-                            <div class="history-date">${timeDisplay} - ${p.diagnosis || ''}</div>
+                            <div class="history-date">${escapeHtml(timeDisplay)} - ${escapeHtml(p.diagnosis || '')}</div>
                         </div>
                         <button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button>
                     </div>
