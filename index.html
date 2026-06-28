@@ -2647,6 +2647,29 @@
             return getDefaultUsers();
         }
 
+        // 从云端刷新当前用户信息（特别是 allowedMode）
+        // 管理员可能在其他端修改了用户权限（如开通云端），自动登录时需同步
+        async function refreshCurrentUserFromCloud() {
+            if (!currentUser || !navigator.onLine) return;
+            try {
+                const users = await getUsers();
+                const fresh = users.find(u => u.username === currentUser.username);
+                if (fresh && fresh.allowedMode !== currentUser.allowedMode) {
+                    console.log('用户权限已更新:', currentUser.allowedMode, '->', fresh.allowedMode);
+                    currentUser.allowedMode = fresh.allowedMode;
+                    if (fresh.allowSavePrescription !== undefined) {
+                        currentUser.allowSavePrescription = fresh.allowSavePrescription;
+                    }
+                    const userData = JSON.stringify(currentUser);
+                    localStorage.setItem('cloud_currentUser', userData);
+                    sessionStorage.setItem('currentUser', userData);
+                    updateUserDisplay();
+                }
+            } catch (e) {
+                console.warn('刷新用户信息失败:', e);
+            }
+        }
+
         async function saveUsers(users) {
             const usersWithPermission = users.map(user => ({
                 ...user,
@@ -4701,6 +4724,8 @@
                         // 确保登录覆盖层隐藏
                         document.getElementById('loginOverlay').style.display = 'none';
                         updateUserDisplay();
+                        // 先从云端刷新用户权限（管理员可能已修改 allowedMode）
+                        await refreshCurrentUserFromCloud();
                         await loadData();
                         renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                         // 继续初始化界面
@@ -4823,6 +4848,8 @@
                     mainContainer.style.display = 'flex';
                 }
                 setTimeout(async () => {
+                    // 先从云端刷新用户权限（管理员可能已修改 allowedMode，如开通云端）
+                    await refreshCurrentUserFromCloud();
                     await loadData().catch(e => console.warn('Load data failed:', e));
                     if (currentUser && prescriptionHistory && prescriptionHistory.length > 0) {
                         const filtered = filterPrescriptionsByPermission(prescriptionHistory);
