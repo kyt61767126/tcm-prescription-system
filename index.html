@@ -1816,7 +1816,13 @@
                 const cleanText = text.replace(/^\uFEFF/, '').trim();
                 const data = JSON.parse(cleanText);
                 console.log('Cloud fetch response data:', data);
-                
+
+                // 云端可达，更新在线状态显示
+                if (_cloudReachable !== true) {
+                    _cloudReachable = true;
+                    updateModeStatus();
+                }
+
                 // 兼容不同的响应格式：有些API可能直接返回数组或对象，没有success字段
                 if (Array.isArray(data) || typeof data === 'object' && data !== null) {
                     // 如果是数组，包装成标准格式
@@ -1839,6 +1845,11 @@
             } catch (error) {
                 clearTimeout(timeoutId);
                 console.error('Cloud sync failed:', error.message);
+                // 云端不可达，更新离线状态显示
+                if (_cloudReachable !== false) {
+                    _cloudReachable = false;
+                    updateModeStatus();
+                }
                 return { success: false, error: error.message, fromCloud: false };
             }
         }
@@ -3468,11 +3479,22 @@
             showToast(saveSuccess ? '用户已删除并同步到云端' : '用户已删除，云端同步失败');
         }
 
+        // 云端可达性状态：null=未知，true=可达，false=不可达
+        // 由 cloudFetch 的真实成功/失败驱动，比 navigator.onLine 更准确
+        let _cloudReachable = null;
+
         // 更新在线/离线状态显示（替换原固定的"【云版】"）
+        // 优先用真实云端可达性，兜底用 navigator.onLine
         function updateModeStatus() {
             const el = document.getElementById('modeStatus');
             if (!el) return;
-            if (navigator.onLine) {
+            let online;
+            if (_cloudReachable !== null) {
+                online = _cloudReachable;
+            } else {
+                online = navigator.onLine;
+            }
+            if (online) {
                 el.textContent = '【在线】';
                 el.style.color = '#008000';
             } else {
@@ -7830,8 +7852,16 @@ IconFile=${scriptPath}`;
         }
 
         // 监听网络状态变化，实时更新"在线/离线"显示
-        window.addEventListener('online', updateModeStatus);
-        window.addEventListener('offline', updateModeStatus);
+        window.addEventListener('online', () => {
+            // 网络恢复，重置云端可达性为未知，由下次 cloudFetch 重新判断
+            _cloudReachable = null;
+            updateModeStatus();
+        });
+        window.addEventListener('offline', () => {
+            // 网络断开，云端必然不可达
+            _cloudReachable = false;
+            updateModeStatus();
+        });
         // 初始更新一次状态显示
         updateModeStatus();
     });
