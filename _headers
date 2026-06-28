@@ -1,0 +1,25 @@
+# ============================================================================
+# Cloudflare Pages 安全响应头配置
+# ============================================================================
+# 文档：https://developers.cloudflare.com/pages/configuration/headers/
+# ============================================================================
+
+# 全局安全头
+/*
+  # 防止点击劫持（不允许任何站点 iframe 嵌入）
+  X-Frame-Options: DENY
+  # 防止 MIME 类型嗅探
+  X-Content-Type-Options: nosniff
+  # 控制 Referrer 信息泄露
+  Referrer-Policy: strict-origin-when-cross-origin
+  # HSTS：强制 HTTPS（1年，含子域名）
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  # 权限策略：禁用不必要的浏览器功能
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
+  # 内容安全策略
+  Content-Security-Policy: default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://tcm-prescription-system.pages.dev https://*.cloudflareaccess.com; img-src 'self' data: blob: https:; connect-src 'self' https://tcm-prescription-system.pages.dev https://*.workers.dev; font-src 'self' data:; style-src 'self' 'unsafe-inline'; frame-ancestors 'none'
+
+# API 端点额外头
+/api/*
+  X-Content-Type-Options: nosniff
+  Cache-Control: no-store

@@ -216,10 +216,10 @@ export async function onRequest(context) {
         return corsResponse({ success: false, error: 'Method not allowed' }, { status: 405 });
     } catch (error) {
         console.error('Medicines API error:', error);
+        // 安全加固：不向客户端泄露内部错误细节和 stack
         return corsResponse({
             success: false,
-            error: error.message || 'Internal server error',
-            stack: error.stack ? error.stack.split('\n').slice(0, 5).join('\n') : null
+            error: 'Internal server error'
         }, { status: 500 });
     }
 }

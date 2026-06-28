@@ -106,14 +106,11 @@ export async function onRequest(context) {
             if (!user) {
                 return corsResponse({ success: false, error: '用户名或密码错误' }, { status: 401 });
             }
-            // 平台管理员可能未启用密码哈希（首次初始化时直接明文），双轨支持
-            let passwordOk = false;
-            if (user.passwordHash && user.salt) {
-                passwordOk = await verifyPassword(body.password, user.salt, user.passwordHash);
-            } else if (user.password) {
-                // 兼容首次初始化或旧式明文（仅设计阶段，正式部署后应全部哈希）
-                passwordOk = (user.password === body.password);
+            // 安全加固：强制密码哈希校验，不再兼容明文密码
+            if (!user.passwordHash || !user.salt) {
+                return corsResponse({ success: false, error: '账号密码格式异常，请联系管理员重置密码' }, { status: 401 });
             }
+            const passwordOk = await verifyPassword(body.password, user.salt, user.passwordHash);
             if (!passwordOk) {
                 return corsResponse({ success: false, error: '用户名或密码错误' }, { status: 401 });
             }
@@ -477,10 +474,10 @@ export async function onRequest(context) {
         return corsResponse({ success: false, error: 'Method not allowed' }, { status: 405 });
     } catch (error) {
         console.error('Users API error:', error);
+        // 安全加固：不向客户端泄露内部错误细节和 stack
         return corsResponse({
             success: false,
-            error: error.message || 'Internal server error',
-            stack: error.stack ? error.stack.split('\n').slice(0, 5).join('\n') : null
+            error: 'Internal server error'
         }, { status: 500 });
     }
 }

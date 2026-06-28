@@ -2557,12 +2557,11 @@
                 if (canOffline && mode === 'both' && isOnline) {
                     try {
                         const authToken = buildAuthPayload(currentUser);
-                        const response = await fetch(`${CLOUD_API_BASE}/prescriptions`, {
+                        const data = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`, {
                             method: 'POST',
-                            headers: { 'Authorization': `Basic ${authToken}`, 'Content-Type': 'application/json' },
+                            headers: { 'Authorization': `Basic ${authToken}` },
                             body: JSON.stringify({ prescription: arr })
                         });
-                        const data = await response.json();
                         if (data.success) {
                             // 云端返回的 savedPrescription（含 updatedAt 等）回写本地 synced=1
                             const saved = data.savedPrescription || arr[arr.length - 1];
@@ -2643,12 +2642,11 @@
 
                 // 4) cloud 模式或非 Capacitor 环境：原纯云端逻辑
                 const authToken = buildAuthPayload(currentUser);
-                const response = await fetch(`${CLOUD_API_BASE}/prescriptions`, {
+                const data = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`, {
                     method: 'POST',
-                    headers: { 'Authorization': `Basic ${authToken}`, 'Content-Type': 'application/json' },
+                    headers: { 'Authorization': `Basic ${authToken}` },
                     body: JSON.stringify({ prescription: arr })
                 });
-                const data = await response.json();
                 if (data.success) return data;
                 alert('处方保存失败：' + (data.error || '未知错误'));
                 return null;
@@ -2873,12 +2871,10 @@
             // 调用后端登录端点：POST /api/users?login=true
             // 后端会在所有诊所 + 平台管理员中查找并校验密码（SHA-256 + salt）
             try {
-                const response = await fetch(`${CLOUD_API_BASE}/users?login=true`, {
+                const data = await cloudFetch(`${CLOUD_API_BASE}/users?login=true`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
-                const data = await response.json();
                 if (!data.success || !data.user) {
                     errorDiv.textContent = data.error || '用户名或密码错误';
                     errorDiv.style.display = 'block';
@@ -4977,33 +4973,21 @@
                 
                 const authToken = buildAuthPayload(currentUser);
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
-                
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 5000);
-                
+
                 try {
-                    const response = await fetch(url, {
+                    const data = await cloudFetch(url, {
                         method: 'GET',
-                        signal: controller.signal,
-                        headers: {
-                            'Authorization': `Basic ${authToken}`,
-                            'Content-Type': 'application/json'
-                        }
+                        headers: { 'Authorization': `Basic ${authToken}` }
                     });
-                    
-                    clearTimeout(timeoutId);
-                    
-                    if (response.ok) {
-                        const data = await response.json();
-                        if (data.success && data.nextPrescriptionNo) {
-                            console.log('Got cloud prescription number:', data.nextPrescriptionNo);
-                            return data.nextPrescriptionNo;
-                        }
+
+                    if (data.success && data.nextPrescriptionNo) {
+                        console.log('Got cloud prescription number:', data.nextPrescriptionNo);
+                        return data.nextPrescriptionNo;
                     }
                 } catch (e) {
-                    clearTimeout(timeoutId);
+                    // cloudFetch 内部已处理错误，此处静默降级
                 }
-                
+
                 return null;
             } catch (error) {
                 console.warn('Failed to get cloud prescription number:', error);
