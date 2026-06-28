@@ -617,6 +617,66 @@
         </div>
     </div>
 
+    <!-- 平台总管理员处方监管弹窗 -->
+    <div id="platformPrescriptionModal" class="modal">
+        <div class="modal-content" style="max-width:1100px;">
+            <div class="modal-header">
+                <span>处方监管 — 全平台处方汇总</span>
+                <span class="close-btn" onclick="closeModal('platformPrescriptionModal')">&times;</span>
+            </div>
+            <div class="modal-body" style="padding:12px;">
+                <!-- 统计看板 -->
+                <div id="platformRxStats" style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:12px;"></div>
+
+                <!-- 筛选栏 -->
+                <div style="background:#f8f9fa;padding:10px;border-radius:6px;margin-bottom:10px;border:1px solid #e0e0e0;">
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px;">
+                        <select id="platformRxClinic" style="padding:5px;"><option value="">全部诊所</option></select>
+                        <input type="text" id="platformRxDoctor" placeholder="医师姓名/账号" style="padding:5px;">
+                        <input type="text" id="platformRxPatient" placeholder="患者姓名" style="padding:5px;">
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+                        <input type="text" id="platformRxMedicine" placeholder="药材名称" style="padding:5px;">
+                        <input type="date" id="platformRxStartDate" style="padding:5px;">
+                        <input type="date" id="platformRxEndDate" style="padding:5px;">
+                        <input type="text" id="platformRxKeyword" placeholder="综合关键词" style="padding:5px;">
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:8px;">
+                        <button class="action-btn primary" onclick="loadPlatformPrescriptions()" style="flex:1;">🔍 查询</button>
+                        <button class="action-btn" onclick="exportPlatformPrescriptions()" style="flex:1;">📥 导出报表</button>
+                        <button class="action-btn" onclick="resetPlatformRxFilters()" style="width:80px;">重置</button>
+                    </div>
+                </div>
+
+                <!-- 各诊所统计 -->
+                <div id="platformRxClinicStats" style="margin-bottom:10px;"></div>
+
+                <!-- 处方列表 -->
+                <div style="color:#2c5530;font-weight:bold;font-size:13px;margin-bottom:6px;">
+                    📋 处方列表 <span id="platformRxCount" style="color:#666;font-weight:normal;"></span>
+                </div>
+                <div id="platformRxList" style="max-height:380px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:4px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('platformPrescriptionModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 平台处方详情弹窗 -->
+    <div id="platformRxDetailModal" class="modal">
+        <div class="modal-content" style="max-width:700px;">
+            <div class="modal-header">
+                <span>处方详情</span>
+                <span class="close-btn" onclick="closeModal('platformRxDetailModal')">&times;</span>
+            </div>
+            <div class="modal-body" id="platformRxDetailBody" style="padding:15px;"></div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('platformRxDetailModal')">关闭</button>
+            </div>
+        </div>
+    </div>
+
     <div id="editClinicModal" class="modal">
         <div class="modal-content user-modal-content">
             <div class="modal-header">
@@ -696,6 +756,7 @@
         <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
         <div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div>
         <div class="tab-item" id="platformManageBtn" onclick="showPlatformManageModal()" style="display:none;background:#fff3cd;color:#856404;border-color:#ffc107;">【平台管理】</div>
+        <div class="tab-item" id="platformRxBtn" onclick="showPlatformPrescriptionModal()" style="display:none;background:#e3f2fd;color:#1565c0;border-color:#42a5f5;">【处方监管】</div>
         <div class="tab-item" onclick="showHelp()">【系统帮助】</div>
         <div class="tab-item" style="background:#ffdddd;color:#8b0000;" id="logoutBtn">【退出登录】</div>
         <div class="tab-item" onclick="showChangePwdModal()">【修改密码】</div>
@@ -3057,6 +3118,237 @@
             await loadClinicsList();
         }
 
+        // ============================================================================
+        // 平台总管理员处方监管
+        // ============================================================================
+        let _platformRxData = []; // 缓存当前查询结果
+
+        async function showPlatformPrescriptionModal() {
+            if (!isPlatformAdmin(currentUser)) {
+                showToast('仅平台总管理员可访问');
+                return;
+            }
+            document.getElementById('platformPrescriptionModal').style.display = 'flex';
+            await loadPlatformPrescriptions();
+        }
+
+        async function loadPlatformPrescriptions() {
+            const listEl = document.getElementById('platformRxList');
+            const statsEl = document.getElementById('platformRxStats');
+            const clinicStatsEl = document.getElementById('platformRxClinicStats');
+            const countEl = document.getElementById('platformRxCount');
+            if (!listEl) return;
+
+            listEl.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载中...</div>';
+            statsEl.innerHTML = '';
+            clinicStatsEl.innerHTML = '';
+
+            // 收集筛选参数
+            const params = new URLSearchParams();
+            const clinic = document.getElementById('platformRxClinic').value;
+            const doctor = document.getElementById('platformRxDoctor').value.trim();
+            const patient = document.getElementById('platformRxPatient').value.trim();
+            const medicine = document.getElementById('platformRxMedicine').value.trim();
+            const startDate = document.getElementById('platformRxStartDate').value;
+            const endDate = document.getElementById('platformRxEndDate').value;
+            const keyword = document.getElementById('platformRxKeyword').value.trim();
+            if (clinic) params.set('clinic', clinic);
+            if (doctor) params.set('doctor', doctor);
+            if (patient) params.set('patient', patient);
+            if (medicine) params.set('medicine', medicine);
+            if (startDate) params.set('startDate', startDate);
+            if (endDate) params.set('endDate', endDate);
+            if (keyword) params.set('keyword', keyword);
+            params.set('_t', Date.now());
+
+            try {
+                const authToken = buildAuthPayload(currentUser);
+                const resp = await cloudFetch(`${CLOUD_API_BASE}/platform-prescriptions?${params}`, {
+                    headers: { 'Authorization': `Basic ${authToken}` }
+                });
+                if (!resp || !resp.success) {
+                    listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载失败：' + (resp?.error || '未知错误') + '</div>';
+                    return;
+                }
+
+                _platformRxData = resp.data || [];
+
+                // 渲染统计看板
+                const s = resp.stats || {};
+                statsEl.innerHTML = [
+                    { label: '总处方', value: s.total || 0, color: '#1565c0' },
+                    { label: '今日', value: s.todayCount || 0, color: '#2e7d32' },
+                    { label: '本月', value: s.monthCount || 0, color: '#e65100' },
+                    { label: '诊所数', value: s.clinicCount || 0, color: '#6a1b9a' },
+                    { label: '医师数', value: s.doctorCount || 0, color: '#00838f' },
+                    { label: '返回条数', value: _platformRxData.length, color: '#5d4037' }
+                ].map(item => `
+                    <div style="background:${item.color};color:white;padding:8px;border-radius:6px;text-align:center;">
+                        <div style="font-size:22px;font-weight:bold;">${item.value}</div>
+                        <div style="font-size:11px;opacity:0.9;">${item.label}</div>
+                    </div>
+                `).join('');
+
+                // 渲染各诊所统计
+                if (s.clinicStats && s.clinicStats.length > 0) {
+                    clinicStatsEl.innerHTML = '<div style="color:#2c5530;font-weight:bold;font-size:12px;margin-bottom:4px;">🏥 各诊所开方量</div>' +
+                        '<div style="display:flex;flex-wrap:wrap;gap:6px;">' +
+                        s.clinicStats.map(c => `
+                            <div style="background:#e8f5e9;padding:4px 10px;border-radius:12px;font-size:11px;border:1px solid #4caf50;">
+                                ${escapeHtml(c.name)}: <b>${c.count}</b>条
+                                ${c.todayCount > 0 ? `<span style="color:#2e7d32;">(今${c.todayCount})</span>` : ''}
+                            </div>
+                        `).join('') +
+                        '</div>';
+                }
+
+                countEl.textContent = `（共 ${_platformRxData.length} 条${resp.truncated ? '，已截断' : ''}）`;
+
+                // 渲染处方列表
+                renderPlatformRxList();
+
+                // 填充诊所下拉
+                if (resp.clinics && resp.clinics.length > 0) {
+                    const sel = document.getElementById('platformRxClinic');
+                    const curVal = sel.value;
+                    sel.innerHTML = '<option value="">全部诊所</option>' +
+                        resp.clinics.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+                    sel.value = curVal;
+                }
+            } catch (e) {
+                listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载异常：' + escapeHtml(e.message) + '</div>';
+            }
+        }
+
+        function renderPlatformRxList() {
+            const listEl = document.getElementById('platformRxList');
+            if (!listEl) return;
+            if (_platformRxData.length === 0) {
+                listEl.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">暂无处方数据</div>';
+                return;
+            }
+            listEl.innerHTML = _platformRxData.map((p, i) => {
+                const dateStr = (p.date || '').slice(0, 16).replace('T', ' ');
+                const medCount = Array.isArray(p.medicines) ? p.medicines.length : 0;
+                return `
+                    <div style="padding:8px 10px;border-bottom:1px solid #e0e0e0;cursor:pointer;" onclick="viewPlatformRxDetail(${i})"
+                         onmouseover="this.style.background='#e3f2fd'" onmouseout="this.style.background='white'">
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <div style="flex:1;">
+                                <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                                    <span style="font-weight:bold;color:#1565c0;">[${escapeHtml(p.cloudSeq)}]</span>
+                                    <span style="font-weight:bold;">${escapeHtml(p.patientName)}</span>
+                                    <span style="font-size:11px;color:#666;">${escapeHtml(p.clinicName)}</span>
+                                    <span style="font-size:11px;color:#2e7d32;">${escapeHtml(p.doctorName)}</span>
+                                </div>
+                                <div style="font-size:11px;color:#888;margin-top:2px;">
+                                    ${dateStr} | ${medCount}味药 | ${escapeHtml(p.diagnosis || '无诊断')}
+                                </div>
+                            </div>
+                            ${p.fee ? `<span style="color:#e65100;font-weight:bold;font-size:12px;">¥${escapeHtml(p.fee)}</span>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function viewPlatformRxDetail(index) {
+            const p = _platformRxData[index];
+            if (!p) return;
+            const body = document.getElementById('platformRxDetailBody');
+            const dateStr = (p.date || '').replace('T', ' ').slice(0, 16);
+            const medicines = Array.isArray(p.medicines) ? p.medicines : [];
+            body.innerHTML = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div><b>编号：</b>${escapeHtml(p.cloudSeq)}</div>
+                    <div><b>诊所：</b>${escapeHtml(p.clinicName)}</div>
+                    <div><b>患者：</b>${escapeHtml(p.patientName)} ${escapeHtml(p.gender)} ${escapeHtml(p.age ? p.age + '岁' : '')}</div>
+                    <div><b>医师：</b>${escapeHtml(p.doctorName)}</div>
+                    <div><b>日期：</b>${dateStr}</div>
+                    <div><b>费用：</b>${p.fee ? '¥' + escapeHtml(p.fee) : '—'}</div>
+                </div>
+                <div style="background:#f5f5f5;padding:10px;border-radius:6px;margin-bottom:10px;">
+                    <b>辨证诊断：</b><br>${escapeHtml(p.diagnosis || '无')}
+                </div>
+                <div style="background:#e8f5e9;padding:10px;border-radius:6px;margin-bottom:10px;">
+                    <b>用药配伍（${medicines.length}味）：</b>
+                    <table style="width:100%;border-collapse:collapse;margin-top:6px;font-size:13px;">
+                        <thead>
+                            <tr style="background:#c8e6c9;">
+                                <th style="padding:4px;border:1px solid #a5d6a7;text-align:left;">药材</th>
+                                <th style="padding:4px;border:1px solid #a5d6a7;">剂量</th>
+                                <th style="padding:4px;border:1px solid #a5d6a7;">单位</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${medicines.map(m => `
+                                <tr>
+                                    <td style="padding:4px;border:1px solid #a5d6a7;">${escapeHtml(m.name || '')}</td>
+                                    <td style="padding:4px;border:1px solid #a5d6a7;text-align:center;">${escapeHtml(m.dosage || m.weight || '')}</td>
+                                    <td style="padding:4px;border:1px solid #a5d6a7;text-align:center;">${escapeHtml(m.unit || 'g')}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                <div style="background:#fff3e0;padding:10px;border-radius:6px;">
+                    <b>用法：</b>${escapeHtml(p.usage || '水煎服')}
+                    ${p.dosage ? '<br><b>剂量：</b>' + escapeHtml(p.dosage) : ''}
+                </div>
+            `;
+            document.getElementById('platformRxDetailModal').style.display = 'flex';
+        }
+
+        function resetPlatformRxFilters() {
+            document.getElementById('platformRxClinic').value = '';
+            document.getElementById('platformRxDoctor').value = '';
+            document.getElementById('platformRxPatient').value = '';
+            document.getElementById('platformRxMedicine').value = '';
+            document.getElementById('platformRxStartDate').value = '';
+            document.getElementById('platformRxEndDate').value = '';
+            document.getElementById('platformRxKeyword').value = '';
+            loadPlatformPrescriptions();
+        }
+
+        function exportPlatformPrescriptions() {
+            if (_platformRxData.length === 0) {
+                showToast('暂无数据可导出');
+                return;
+            }
+            const headers = ['编号', '诊所', '患者姓名', '性别', '年龄', '医师', '日期', '诊断', '药材', '用法', '费用'];
+            const rows = _platformRxData.map(p => {
+                const medText = Array.isArray(p.medicines)
+                    ? p.medicines.map(m => `${m.name || ''}(${m.dosage || m.weight || ''}${m.unit || 'g'})`).join(', ')
+                    : (p.medicineText || '');
+                return [
+                    p.cloudSeq || '',
+                    p.clinicName || '',
+                    p.patientName || '',
+                    p.gender || '',
+                    p.age || '',
+                    p.doctorName || '',
+                    (p.date || '').replace('T', ' ').slice(0, 16),
+                    p.diagnosis || '',
+                    medText,
+                    p.usage || '',
+                    p.fee || ''
+                ];
+            });
+            const csv = '\uFEFF' + headers.join(',') + '\n' +
+                rows.map(r => r.map(c => {
+                    const s = String(c).replace(/"/g, '""');
+                    return /[",\n]/.test(s) ? `"${s}"` : s;
+                }).join(',')).join('\n');
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `平台处方报表_${new Date().toISOString().slice(0, 10)}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
+            showToast(`已导出 ${_platformRxData.length} 条处方`);
+        }
+
         async function loadClinicsList() {
             const listEl = document.getElementById('clinicList');
             if (!listEl) return;
@@ -3576,9 +3868,13 @@
                     autoStartSection.style.display = 'none';
                 }
 
-                // 平台总管理员：显示平台管理按钮（不参与诊所业务，不显示账户管理/开机自启）
+                // 平台总管理员：显示平台管理按钮 + 处方监管按钮（不参与诊所业务，不显示账户管理/开机自启）
                 if (platformManageBtn) {
                     platformManageBtn.style.display = isPlatformAdmin(currentUser) ? 'block' : 'none';
+                }
+                const platformRxBtn = document.getElementById('platformRxBtn');
+                if (platformRxBtn) {
+                    platformRxBtn.style.display = isPlatformAdmin(currentUser) ? 'block' : 'none';
                 }
 
                 // 药品管理：仅管理员可见（platform_admin 管理平台兜底库，clinic_admin 管理本诊所库）；普通医师只读→隐藏
