@@ -700,8 +700,8 @@
         <div class="tab-item" style="background:#ffdddd;color:#8b0000;" id="logoutBtn">【退出登录】</div>
         <div class="tab-item" onclick="showChangePwdModal()">【修改密码】</div>
         <div class="tab-hint">
-            当前用户: <span style="color:#008000;font-weight:bold;" id="userDisplayName"></span> | 
-            <span style="color:#008000;font-weight:bold;">【云版】</span>
+            当前用户: <span style="color:#008000;font-weight:bold;" id="userDisplayName"></span> |
+            <span style="font-weight:bold;" id="modeStatus">【在线】</span>
         </div>
     </div>
 
@@ -3468,9 +3468,24 @@
             showToast(saveSuccess ? '用户已删除并同步到云端' : '用户已删除，云端同步失败');
         }
 
+        // 更新在线/离线状态显示（替换原固定的"【云版】"）
+        function updateModeStatus() {
+            const el = document.getElementById('modeStatus');
+            if (!el) return;
+            if (navigator.onLine) {
+                el.textContent = '【在线】';
+                el.style.color = '#008000';
+            } else {
+                el.textContent = '【离线】';
+                el.style.color = '#d32f2f';
+            }
+        }
+
         function updateUserDisplay() {
             if (currentUser) {
                 document.getElementById('userDisplayName').textContent = currentUser.name;
+                // 更新在线/离线状态显示
+                updateModeStatus();
                 const userManageBtn = document.getElementById('userManageBtn');
                 const platformManageBtn = document.getElementById('platformManageBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
@@ -7801,18 +7816,24 @@ IconFile=${scriptPath}`;
 
     document.addEventListener('DOMContentLoaded', () => {
         init();
-        
+
         // 绑定退出按钮点击事件
         const logoutBtn = document.getElementById('logoutBtn');
         if (logoutBtn) {
             logoutBtn.addEventListener('click', doLogout);
         }
-        
+
         // 绑定移动端退出按钮
         const mobileLogoutBtn = document.getElementById('mobileLogoutBtn');
         if (mobileLogoutBtn) {
             mobileLogoutBtn.addEventListener('click', doLogout);
         }
+
+        // 监听网络状态变化，实时更新"在线/离线"显示
+        window.addEventListener('online', updateModeStatus);
+        window.addEventListener('offline', updateModeStatus);
+        // 初始更新一次状态显示
+        updateModeStatus();
     });
     </script>
 </body>
