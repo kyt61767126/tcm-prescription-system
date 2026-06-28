@@ -1863,8 +1863,9 @@
 
         // 云端同步辅助函数 - 对用户、处方、药品、方剂API启用
         async function cloudFetch(url, options = {}) {
-            if (!url.includes('/users') && !url.includes('/prescriptions') && 
-                !url.includes('/medicines') && !url.includes('/formulas')) {
+            if (!url.includes('/users') && !url.includes('/prescriptions') &&
+                !url.includes('/medicines') && !url.includes('/formulas') &&
+                !url.includes('/platform-prescriptions')) {
                 return { success: false, error: 'Non-allowed API disabled', fromCloud: false };
             }
             
