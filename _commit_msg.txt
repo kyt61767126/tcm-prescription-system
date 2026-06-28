@@ -1,0 +1,7 @@
+fix: 仅离线账号(local模式)永远显示离线，不受cloudFetch成功影响
+
+问题：王耀燮(wyx)是仅离线账号(allowedMode=local)，但状态栏显示在线。
+
+根因：loadData中获取药品库/用户列表等非处方API调用走了cloudFetch且成功，把_cloudReachable设为true，覆盖了处方API的离线判断。
+
+修复：updateModeStatus首先检查getAllowedMode()，local模式直接显示离线并return，不参考_cloudReachable。这样仅离线账号无论cloudFetch是否成功都正确显示离线。

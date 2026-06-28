@@ -3487,11 +3487,18 @@
         let _cloudReachable = null;
 
         // 更新在线/离线状态显示（替换原固定的"【云版】"）
-        // 只有 cloudFetch 真正成功才显示"在线"，避免本地有网络但云端未开通时误显示
+        // "仅离线"账号永远显示离线；其他模式依据云端可达性判断
         function updateModeStatus() {
             const el = document.getElementById('modeStatus');
             if (!el) return;
-            // 严格依据云端可达性判断；null（未检测）保守按离线显示
+            // "仅离线"模式（allowedMode=local）账号不允许使用云端，永远显示离线
+            const mode = getAllowedMode();
+            if (mode === 'local') {
+                el.textContent = '【离线】';
+                el.style.color = '#d32f2f';
+                return;
+            }
+            // 其他模式严格依据云端可达性判断；null（未检测）保守按离线显示
             const online = (_cloudReachable === true);
             if (online) {
                 el.textContent = '【在线】';
