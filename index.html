@@ -738,7 +738,7 @@
                 </div>
                 <div class="patient-row">
                     <span class="patient-label">统计</span>
-                    <input type="text" id="clinicNo" class="patient-input xx-small" onkeyup="updatePrescriptionPaper()">
+                    <input type="text" id="clinicNo" class="patient-input xx-small" style="background:#f5f5f5;color:#666;" readonly>
                     <span class="patient-label">住址</span>
                     <input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;" onkeydown="handleEnterToNext(event, 'medicine_0')">
                 </div>
@@ -2016,17 +2016,10 @@
                     // 更新界面
                     const clinicNoEl = document.getElementById('clinicNo');
                     if (clinicNoEl) {
-                        // 生成年份后两位 + 数量(6位)的格式
-                        const year = new Date().getFullYear().toString().substring(2);
-                        if (currentUser && isClinicAdmin(currentUser)) {
-                            // 管理员显示全部用户处方总数
-                            clinicNoEl.value = cloudResult.totalCount || (year + '000000');
-                        } else {
-                            // 普通用户显示自己的处方数量（相同格式）
-                            clinicNoEl.value = year + prescriptionHistory.length.toString().padStart(6, '0');
-                        }
+                        // 统计编码：年(2位) + 历史处方数量(6位)，普通用户=自己，管理员=本诊所全部
+                        updateClinicNoDisplay();
                     }
-                    
+
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                     showToast('刷新成功！');
                 } else {
@@ -3708,17 +3701,8 @@
             // 同步更新 clinicNo 输入框（管理员显示总数，普通用户显示自己的数量）
             const clinicNoInput = document.getElementById('clinicNo');
             if (clinicNoInput) {
-                const year = new Date().getFullYear().toString().substring(2);
-                if (currentUser && isClinicAdmin(currentUser)) {
-                    // 管理员显示总数（使用本地计数）
-                    clinicNoInput.value = prescriptionHistory.length.toString().padStart(6, '0');
-                } else {
-                    // 普通用户显示自己的处方数量
-                    const myPrescriptions = prescriptionHistory.filter(p => 
-                        p.createdBy === currentUser.username
-                    );
-                    clinicNoInput.value = year + myPrescriptions.length.toString().padStart(6, '0');
-                }
+                // 统计编码：年(2位) + 历史处方数量(6位)，普通用户=自己，管理员=本诊所全部
+                updateClinicNoDisplay();
             }
             
             // 立即刷新历史列表
@@ -3823,17 +3807,10 @@
                     // 根据用户角色更新统计输入框
                     const clinicNoEl = document.getElementById('clinicNo');
                     if (clinicNoEl) {
-                        // 生成年份后两位 + 数量(6位)的格式
-                        const year = new Date().getFullYear().toString().substring(2);
-                        if (currentUser && isClinicAdmin(currentUser)) {
-                            // 管理员显示全部用户处方总数
-                            clinicNoEl.value = cloudResult.totalCount || (year + '000000');
-                        } else {
-                            // 普通用户显示自己的处方数量（相同格式）
-                            clinicNoEl.value = year + prescriptionHistory.length.toString().padStart(6, '0');
-                        }
+                        // 统计编码：年(2位) + 历史处方数量(6位)，普通用户=自己，管理员=本诊所全部
+                        updateClinicNoDisplay();
                     }
-                    
+
                     prescriptionHistory.sort((a, b) => {
                         const timeA = new Date(a.createdAt || a.date || 0).getTime();
                         const timeB = new Date(b.createdAt || b.date || 0).getTime();
@@ -5415,6 +5392,17 @@
             return prescriptions.filter(p => p.createdBy === currentUser.username);
         }
 
+        // 更新操作界面"统计"输入框（clinicNo）
+        // 规则：年(2位) + 历史处方数量(6位补零)，如 26000001
+        // 普通用户：统计自己历史处方数量；管理员：统计本诊所所有用户历史处方数量
+        // prescriptionHistory 已按角色过滤（普通用户=自己，管理员=本诊所全部），直接用 length
+        function updateClinicNoDisplay() {
+            const clinicNoEl = document.getElementById('clinicNo');
+            if (!clinicNoEl) return;
+            const year = new Date().getFullYear().toString().substring(2);
+            clinicNoEl.value = year + prescriptionHistory.length.toString().padStart(6, '0');
+        }
+
         function renderHistoryList(list) {
             if (!list || list.length === 0) {
                 document.getElementById('historyList').innerHTML = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
@@ -5693,15 +5681,8 @@
                 // 更新统计编号
                 const clinicNoEl = document.getElementById('clinicNo');
                 if (clinicNoEl) {
-                    // 生成年份后两位 + 数量(6位)的格式
-                    const year = new Date().getFullYear().toString().substring(2);
-                    if (currentUser && isClinicAdmin(currentUser)) {
-                        // 管理员显示全部用户处方总数
-                        clinicNoEl.value = response.nextClinicNo || (year + '000000');
-                    } else {
-                        // 普通用户显示自己的处方数量（相同格式）
-                        clinicNoEl.value = year + prescriptionHistory.length.toString().padStart(6, '0');
-                    }
+                    // 统计编码：年(2位) + 历史处方数量(6位)，普通用户=自己，管理员=本诊所全部
+                    updateClinicNoDisplay();
                 }
                 
                 // 刷新历史处方栏
@@ -7621,7 +7602,7 @@ IconFile=${scriptPath}`;
             const patients = analyzePatients();
             const visitCountFilter = document.getElementById('visitCountFilter')?.value || 'all';
             const sortOption = document.getElementById('analyticsSort')?.value || 'visitCount-desc';
-            
+
             let filteredPatients = patients;
             
             if (visitCountFilter !== 'all') {
