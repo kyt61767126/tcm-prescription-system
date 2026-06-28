@@ -3556,13 +3556,17 @@
 
             if (!btn1 || !btn2) return;
 
-            // APP 端（Capacitor）：所有用户都显示"统计分析、修改密码"，不显示账户管理
-            // 所有用户管理由管理员在云端网页端完成
+            // APP 端（Capacitor）：管理员显示"统计分析、账户管理"，普通用户显示"统计分析、修改密码"
             if (window.Capacitor) {
                 btn1.innerHTML = '📊 统计分析';
                 btn1.onclick = function() { showModal('analyticsModal'); };
-                btn2.innerHTML = '🔑 修改密码';
-                btn2.onclick = function() { showChangePwdModal(); };
+                if (isClinicAdmin(currentUser)) {
+                    btn2.innerHTML = '👤 账户管理';
+                    btn2.onclick = function() { showUserManageModal(); };
+                } else {
+                    btn2.innerHTML = '🔑 修改密码';
+                    btn2.onclick = function() { showChangePwdModal(); };
+                }
                 return;
             }
 
@@ -4675,10 +4679,11 @@
             // 先初始化用户下拉框
             await initLoginDropdown();
 
-            // APP 端（Capacitor）：隐藏账户管理入口，所有用户由管理员在云端网页端管理
+            // APP 端（Capacitor）：账户管理入口由 updateUserDisplay 根据角色控制
+            // 管理员显示（顶部tab+底部按钮），普通用户隐藏
             if (window.Capacitor) {
                 const userManageBtn = document.getElementById('userManageBtn');
-                if (userManageBtn) userManageBtn.style.display = 'none';
+                if (userManageBtn && !isClinicAdmin(currentUser)) userManageBtn.style.display = 'none';
             }
             
             // 检查是否是Electron环境
