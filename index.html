@@ -3479,21 +3479,17 @@
             showToast(saveSuccess ? '用户已删除并同步到云端' : '用户已删除，云端同步失败');
         }
 
-        // 云端可达性状态：null=未知，true=可达，false=不可达
+        // 云端可达性状态：null=未知（保守按离线显示），true=可达，false=不可达
         // 由 cloudFetch 的真实成功/失败驱动，比 navigator.onLine 更准确
         let _cloudReachable = null;
 
         // 更新在线/离线状态显示（替换原固定的"【云版】"）
-        // 优先用真实云端可达性，兜底用 navigator.onLine
+        // 只有 cloudFetch 真正成功才显示"在线"，避免本地有网络但云端未开通时误显示
         function updateModeStatus() {
             const el = document.getElementById('modeStatus');
             if (!el) return;
-            let online;
-            if (_cloudReachable !== null) {
-                online = _cloudReachable;
-            } else {
-                online = navigator.onLine;
-            }
+            // 严格依据云端可达性判断；null（未检测）保守按离线显示
+            const online = (_cloudReachable === true);
             if (online) {
                 el.textContent = '【在线】';
                 el.style.color = '#008000';
