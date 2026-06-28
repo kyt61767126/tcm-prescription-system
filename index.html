@@ -1817,10 +1817,13 @@
                 const data = JSON.parse(cleanText);
                 console.log('Cloud fetch response data:', data);
 
-                // 云端可达，更新在线状态显示
-                if (_cloudReachable !== true) {
-                    _cloudReachable = true;
-                    updateModeStatus();
+                // 云端可达性判断：HTTP 成功且业务未显式失败才算可达
+                // 避免"仅离线"账号收到 {success:false} 时误显示"在线"
+                const isReachable = !(data && data.success === false);
+                if (isReachable) {
+                    if (_cloudReachable !== true) { _cloudReachable = true; updateModeStatus(); }
+                } else {
+                    if (_cloudReachable !== false) { _cloudReachable = false; updateModeStatus(); }
                 }
 
                 // 兼容不同的响应格式：有些API可能直接返回数组或对象，没有success字段

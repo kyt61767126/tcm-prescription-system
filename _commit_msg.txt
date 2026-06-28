@@ -1,0 +1,15 @@
+fix: 修复"仅离线"账号误显示"在线"的问题
+
+问题：王耀燮(wyx)是"仅离线"账号，未开通云端功能，但状态栏
+显示"【在线】"。
+
+根因：cloudFetch 收到 HTTP 200 但 body 为 {success:false} 时，
+仍然标记 _cloudReachable=true（仅判断 HTTP 成功，未检查业务
+success 字段）。
+
+修复：cloudFetch 解析响应后，检查 data.success：
+- data.success !== false → 云端可达，显示"在线"
+- data.success === false → 云端业务不可用，显示"离线"
+
+这样"仅离线"账号调用处方 API 收到 {success:false} 时，
+状态正确显示"【离线】"。
