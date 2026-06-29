@@ -1280,7 +1280,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-29-v2';
+        window.__APP_VERSION__ = '2026-06-29-v3';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -3136,7 +3136,7 @@
                     headers: { 'Authorization': `Basic ${authToken}` }
                 });
                 if (!resp || !resp.success) {
-                    listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载失败：' + (resp?.error || '未知错误') + '</div>';
+                    listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载失败：' + escapeHtml(resp?.error || '未知错误') + '</div>';
                     return;
                 }
 
@@ -3328,7 +3328,7 @@
                     headers: { 'Authorization': `Basic ${authToken}` }
                 });
                 if (!resp || !resp.success || !Array.isArray(resp.data)) {
-                    listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载失败：' + (resp?.error || '未知错误') + '</div>';
+                    listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载失败：' + escapeHtml(resp?.error || '未知错误') + '</div>';
                     return;
                 }
                 if (resp.data.length === 0) {
@@ -3346,20 +3346,20 @@
                     return `
                         <div class="user-item" style="flex-wrap:wrap;">
                             <div class="user-item-info" style="flex:1;min-width:200px;">
-                                <div class="user-item-name">${c.name} ${statusBadge}</div>
+                                <div class="user-item-name">${escapeHtml(c.name)} ${statusBadge}</div>
                                 <div class="user-item-role" style="font-size:11px;color:#666;">
-                                    ID: ${c.id} | 管理员: <span style="color:#2c5530;font-weight:bold;">${c.adminUsername || '-'}</span>（${c.adminName || '-'}）| 医师: ${c.doctorCount} | 总账号: ${c.userCount} | 创建: ${created}
+                                    ID: ${escapeHtml(c.id)} | 管理员: <span style="color:#2c5530;font-weight:bold;">${escapeHtml(c.adminUsername || '-')}</span>（${escapeHtml(c.adminName || '-')}）| 医师: ${c.doctorCount} | 总账号: ${c.userCount} | 创建: ${escapeHtml(created)}
                                 </div>
                             </div>
                             <div class="user-item-actions">
-                                <button class="user-item-btn btn-primary" onclick='editClinic(${JSON.stringify({id:c.id,name:c.name,adminUsername:c.adminUsername,adminName:c.adminName})})'>编辑</button>
+                                <button class="user-item-btn btn-primary" onclick='editClinic(${escapeHtml(JSON.stringify({id:c.id,name:c.name,adminUsername:c.adminUsername,adminName:c.adminName}))})'>编辑</button>
                                 ${toggleBtn}
                             </div>
                         </div>
                     `;
                 }).join('');
             } catch (e) {
-                listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载异常：' + e.message + '</div>';
+                listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载异常：' + escapeHtml(e.message) + '</div>';
             }
         }
 
@@ -3530,10 +3530,10 @@
                     renderClinicPrescriptionList(resp.data);
                     const doctors = [...new Set(resp.data.map(p => p.createdBy || p.doctorName || '未知'))];
                     const select = document.getElementById('filterDoctor');
-                    select.innerHTML = '<option value="">全部医师</option>' + doctors.map(d => `<option value="${d}">${d}</option>`).join('');
+                    select.innerHTML = '<option value="">全部医师</option>' + doctors.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(d)}</option>`).join('');
                 }
             } catch (e) {
-                listEl.innerHTML = '<div style="text-align:center;color:#f44336;padding:20px;">加载失败: ' + e.message + '</div>';
+                listEl.innerHTML = '<div style="text-align:center;color:#f44336;padding:20px;">加载失败: ' + escapeHtml(e.message) + '</div>';
             }
         }
 
@@ -3556,12 +3556,12 @@
                 <div style="padding:8px 12px;border-bottom:1px solid #eee;cursor:pointer;" onclick="loadHistory(${p.id})">
                     <div style="display:flex;justify-content:space-between;">
                         <div>
-                            <span style="font-weight:bold;">${p.patientName || p.name || '未知'}</span>
-                            <span style="font-size:11px;color:${isLocal ? '#e65100' : '#8b0000'};margin-left:8px;">[${no}]${isLocal ? ' 待同步' : ''}</span>
+                            <span style="font-weight:bold;">${escapeHtml(p.patientName || p.name || '未知')}</span>
+                            <span style="font-size:11px;color:${isLocal ? '#e65100' : '#8b0000'};margin-left:8px;">[${escapeHtml(no)}]${isLocal ? ' 待同步' : ''}</span>
                         </div>
-                        <div style="font-size:11px;color:#666;">${date} | ${p.createdBy || ''}</div>
+                        <div style="font-size:11px;color:#666;">${escapeHtml(date)} | ${escapeHtml(p.createdBy || '')}</div>
                     </div>
-                    <div style="font-size:11px;color:#666;margin-top:2px;">${p.diagnosis || ''}</div>
+                    <div style="font-size:11px;color:#666;margin-top:2px;">${escapeHtml(p.diagnosis || '')}</div>
                 </div>`;
             }).join('');
         }
@@ -3615,16 +3615,16 @@
                 html += `
                     <div class="user-item">
                         <div class="user-item-info">
-                            <div class="user-item-name">${user.name} (${user.username})</div>
+                            <div class="user-item-name">${escapeHtml(user.name)} (${escapeHtml(user.username)})</div>
                             <div class="user-item-role">${user.role === 'platform_admin' ? '平台总管理员' : user.role === 'clinic_admin' ? '诊所管理员' : '医师'} <span style="color:${modeColor};font-size:11px;margin-left:6px;">[${modeText}]</span></div>
                         </div>
                         <div class="user-item-actions">
-                            <button class="user-item-btn btn-primary" onclick="handleEditUser('${user.username}')">编辑</button>
+                            <button class="user-item-btn btn-primary" onclick='handleEditUser(${escapeHtml(JSON.stringify(user.username))})'>编辑</button>
                             ${user.username !== currentUser.username ? (mode === 'local'
-                                ? `<button class="user-item-btn" style="background:#2196f3;color:white;" onclick="toggleUserCloudMode('${user.username}')">开通云端</button>`
-                                : `<button class="user-item-btn" style="background:#ff9800;color:white;" onclick="toggleUserCloudMode('${user.username}')">关闭云端</button>`
+                                ? `<button class="user-item-btn" style="background:#2196f3;color:white;" onclick='toggleUserCloudMode(${escapeHtml(JSON.stringify(user.username))})'>开通云端</button>`
+                                : `<button class="user-item-btn" style="background:#ff9800;color:white;" onclick='toggleUserCloudMode(${escapeHtml(JSON.stringify(user.username))})'>关闭云端</button>`
                             ) : ''}
-                            ${user.username !== currentUser.username ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + user.username + '\')">删除</button>' : ''}
+                            ${user.username !== currentUser.username ? `<button class="user-item-btn btn-danger" onclick='handleDeleteUser(${escapeHtml(JSON.stringify(user.username))})'>删除</button>` : ''}
                         </div>
                     </div>
                 `;
@@ -5188,7 +5188,7 @@
             tbody.innerHTML = prescriptionItems.map((item,index) => `
                 <tr>
                     <td style="text-align:center;font-size:10px;color:#666;">${index + 1}</td>
-                    <td><input type="text" value="${item.code}" id="code-input-${index}"
+                    <td><input type="text" value="${escapeHtml(item.code)}" id="code-input-${index}"
                         autocomplete="off"
                         autocapitalize="off"
                         autocorrect="off"
@@ -5201,15 +5201,15 @@
                         oninput="handleInput(event,${index},'code')"
                         enterkeyhint="next"
                         style="padding:2px;text-align:left;"></td>
-                    <td><input type="text" value="${item.name}" id="name-input-${index}"
+                    <td><input type="text" value="${escapeHtml(item.name)}" id="name-input-${index}"
                         onfocus="startSearch(event,${index},'name')"
                         onblur="tryHideSearch()"
                         onkeyup="handleSearchKey(event,${index},'name')"
                         style="padding:2px;text-align:left;"></td>
-                    <td><input type="number" value="${item.name ? item.dosage : ''}" oninput="updateDosage(${index},this.value)" style="padding:2px;"></td>
-                    <td><input type="text" value="${item.name ? item.unit : ''}" onchange="updateUnit(${index},this.value);calculateAmount()" style="padding:2px;"></td>
-                    <td><input type="text" value="${item.name ? item.price : ''}" readonly style="padding:2px;"></td>
-                    <td><input type="text" value="${item.name ? item.total : ''}" readonly style="padding:2px;"></td>
+                    <td><input type="number" value="${item.name ? escapeHtml(item.dosage) : ''}" oninput="updateDosage(${index},this.value)" style="padding:2px;"></td>
+                    <td><input type="text" value="${item.name ? escapeHtml(item.unit) : ''}" onchange="updateUnit(${index},this.value);calculateAmount()" style="padding:2px;"></td>
+                    <td><input type="text" value="${item.name ? escapeHtml(item.price) : ''}" readonly style="padding:2px;"></td>
+                    <td><input type="text" value="${item.name ? escapeHtml(item.total) : ''}" readonly style="padding:2px;"></td>
                     <td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;" onclick="deleteRow(${index})">删</button></td>
                 </tr>
             `).join('');
@@ -5510,7 +5510,7 @@
             items.forEach(item => {
                 html += `
                     <div class="prescription-line">
-                        <span>${item.name}${item.dosage}${item.unit}</span>
+                        <span>${escapeHtml(item.name)}${escapeHtml(item.dosage)}${escapeHtml(item.unit)}</span>
                     </div>
                 `;
             });
@@ -6825,8 +6825,8 @@ IconFile=${scriptPath}`;
             const list = document.getElementById('syndromeList');
             list.innerHTML = formulas.map((f,i) => `
                 <div style="padding:8px;background:#f0f0f0;border-radius:3px;cursor:pointer;" onclick="selectFormula(${i})">
-                    <div style="font-weight:bold;">${f.name}</div>
-                    <div style="font-size:11px;color:#666;">功效：${f.effect} | 主治：${f.indication}</div>
+                    <div style="font-weight:bold;">${escapeHtml(f.name)}</div>
+                    <div style="font-size:11px;color:#666;">功效：${escapeHtml(f.effect)} | 主治：${escapeHtml(f.indication)}</div>
                 </div>
             `).join('');
         }
@@ -6859,9 +6859,9 @@ IconFile=${scriptPath}`;
             list.innerHTML = medicines.map((m,i) => `
                 <div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;${m.priority_use ? 'background:#fff8e1;' : ''}">
                     <div style="flex:1;">
-                        <div style="font-weight:bold;">${m.priority_use ? '<span style="color:#e65100;" title="优先使用">★</span> ' : ''}${m.name}</div>
-                        <div style="font-size:11px;color:#666;">简码：${m.code || '无'} | 进价：${(m.costPrice !== null && m.costPrice !== undefined && m.costPrice !== '') ? m.costPrice + '元' : '<span style="color:#e74c3c;">未设置</span>'} | 单价：${m.price}元/${m.unit}</div>
-                        <div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${m.unit} | 库存：${m.stock || '0'}</div>
+                        <div style="font-weight:bold;">${m.priority_use ? '<span style="color:#e65100;" title="优先使用">★</span> ' : ''}${escapeHtml(m.name)}</div>
+                        <div style="font-size:11px;color:#666;">简码：${escapeHtml(m.code || '无')} | 进价：${(m.costPrice !== null && m.costPrice !== undefined && m.costPrice !== '') ? escapeHtml(m.costPrice) + '元' : '<span style="color:#e74c3c;">未设置</span>'} | 单价：${escapeHtml(m.price)}元/${escapeHtml(m.unit)}</div>
+                        <div style="font-size:10px;color:#999;">用量：${escapeHtml(m.dosage || '10')}${escapeHtml(m.unit)} | 库存：${escapeHtml(m.stock || '0')}</div>
                     </div>
                     <div style="display:flex;gap:4px;align-items:flex-start;">
                         ${canManage ? `<button class="small-btn" onclick="editMedicine(${i})">编辑</button>` : ''}
@@ -7464,15 +7464,15 @@ IconFile=${scriptPath}`;
                 <div style="padding:8px;background:#f0f0f0;border-radius:3px;margin-bottom:8px;">
                     <div style="display:flex;justify-content:space-between;">
                         <div>
-                            <div style="font-weight:bold;">${f.name}</div>
-                            <div style="font-size:11px;color:#666;">功效：${f.effect || '未知'}</div>
+                            <div style="font-weight:bold;">${escapeHtml(f.name)}</div>
+                            <div style="font-size:11px;color:#666;">功效：${escapeHtml(f.effect || '未知')}</div>
                         </div>
                         <div>
                             <button class="small-btn" onclick="applyFormula(${i})">调用</button>
                             <button class="small-btn" onclick="deleteFormula(${i})">删除</button>
                         </div>
                     </div>
-                    <div style="font-size:10px;color:#999;margin-top:4px;">组成：${(f.composition || []).map(c => c.name + (c.dosage || '') + 'g').join('、')}</div>
+                    <div style="font-size:10px;color:#999;margin-top:4px;">组成：${(f.composition || []).map(c => escapeHtml(c.name + (c.dosage || '') + 'g')).join('、')}</div>
                 </div>
             `).join('');
         }
@@ -7507,11 +7507,11 @@ IconFile=${scriptPath}`;
                 <div style="padding:10px;border-bottom:1px solid #d0d0d0;cursor:pointer;" onclick="loadHistory(${p.id})">
                     <div style="display:flex;justify-content:space-between;">
                         <div>
-                            <div style="font-weight:bold;">${p.patientName}</div>
-                            <div style="font-size:11px;color:#666;">${p.date} | ${p.diagnosis || '无诊断'}</div>
+                            <div style="font-weight:bold;">${escapeHtml(p.patientName)}</div>
+                            <div style="font-size:11px;color:#666;">${escapeHtml(p.date)} | ${escapeHtml(p.diagnosis || '无诊断')}</div>
                         </div>
                         <div style="text-align:right;">
-                            <div style="font-weight:bold;color:#8b0000;">¥${p.totalAmount || 0}</div>
+                            <div style="font-weight:bold;color:#8b0000;">¥${escapeHtml(p.totalAmount || 0)}</div>
                             <button class="small-btn" onclick="event.stopPropagation();deleteCase(${p.id})">删除</button>
                         </div>
                     </div>
@@ -8028,12 +8028,12 @@ IconFile=${scriptPath}`;
             if (filteredPatients.length > 0) {
                 tbody.innerHTML = filteredPatients.slice(0, 50).map(p => `
                     <tr style="hover:background:#f5f5f5;">
-                        <td style="border:1px solid #ddd;padding:6px;">${p.name}</td>
+                        <td style="border:1px solid #ddd;padding:6px;">${escapeHtml(p.name)}</td>
                         <td style="border:1px solid #ddd;padding:6px;text-align:center;">${p.visitCount}</td>
-                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${formatDate(p.firstVisit)}</td>
-                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${formatDate(p.lastVisit)}</td>
+                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${escapeHtml(formatDate(p.firstVisit))}</td>
+                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${escapeHtml(formatDate(p.lastVisit))}</td>
                         <td style="border:1px solid #ddd;padding:6px;text-align:center;">
-                            <button class="small-btn" onclick="loadPatientHistory('${p.name}')" style="padding:2px 8px;">调取处方</button>
+                            <button class="small-btn" onclick='loadPatientHistory(${escapeHtml(JSON.stringify(p.name))})' style="padding:2px 8px;">调取处方</button>
                         </td>
                     </tr>
                 `).join('');
