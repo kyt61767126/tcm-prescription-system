@@ -1110,20 +1110,20 @@
                         <button class="action-btn" onclick="smartBackup()" style="background:#4CAF50;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             💾 一键备份
                         </button>
-                        <button class="action-btn" onclick="toggleRestorePanel()" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                        <button class="action-btn" onclick="toggleRestorePanel('stats')" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             📂 恢复数据
                         </button>
                         <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             🗑️ 清空数据
                         </button>
                     </div>
-                    <div id="restorePanel" style="margin-bottom:15px;display:none;padding:15px;background:#f9f9f9;border-radius:8px;border:1px solid #ddd;">
+                    <div id="restorePanelStats" style="margin-bottom:15px;display:none;padding:15px;background:#f9f9f9;border-radius:8px;border:1px solid #ddd;">
                         <div style="margin-bottom:12px;">
                             <button class="action-btn" onclick="importData()" style="background:#9C27B0;color:white;">📤 选择文件导入</button>
                         </div>
-                        <div id="localBackupList" style="margin-top:12px;">
+                        <div class="localBackupList" style="margin-top:12px;">
                             <h5 style="margin-bottom:8px;color:#008000;">💾 本地备份列表（自动保存，最多10个）</h5>
-                            <div id="backupListContainer" style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:5px;"></div>
+                            <div class="backupListContainer" style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:5px;"></div>
                         </div>
                     </div>
                     <div id="backupStatus" style="margin-top:15px;display:none;"></div>
@@ -1236,20 +1236,20 @@
                         <button class="action-btn" onclick="smartBackup()" style="background:#4CAF50;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             💾 一键备份
                         </button>
-                        <button class="action-btn" onclick="toggleRestorePanel()" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                        <button class="action-btn" onclick="toggleRestorePanel('stats')" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             📂 恢复数据
                         </button>
                         <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             🗑️ 清空数据
                         </button>
                     </div>
-                    <div id="restorePanel" style="margin-bottom:15px;display:none;padding:15px;background:#f9f9f9;border-radius:8px;border:1px solid #ddd;">
+                    <div id="restorePanelStats" style="margin-bottom:15px;display:none;padding:15px;background:#f9f9f9;border-radius:8px;border:1px solid #ddd;">
                         <div style="margin-bottom:12px;">
                             <button class="action-btn" onclick="importData()" style="background:#9C27B0;color:white;">📤 选择文件导入</button>
                         </div>
-                        <div id="localBackupList" style="margin-top:12px;">
+                        <div class="localBackupList" style="margin-top:12px;">
                             <h5 style="margin-bottom:8px;color:#008000;">💾 本地备份列表（自动保存，最多10个）</h5>
-                            <div id="backupListContainer" style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:5px;"></div>
+                            <div class="backupListContainer" style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:5px;"></div>
                         </div>
                     </div>
                     <div id="backupStatus" style="margin-top:10px;display:none;"></div>
@@ -6600,24 +6600,32 @@ IconFile=${scriptPath}`;
             return [];
         }
 
-        function toggleRestorePanel() {
-            const panel = document.getElementById('restorePanel');
-            if (!panel) return;
+        function toggleRestorePanel(panelId) {
+            const panel = document.getElementById(panelId === 'stats' ? 'restorePanelStats' : 'restorePanel');
+            if (!panel) {
+                console.warn('toggleRestorePanel: 未找到面板元素', panelId);
+                return;
+            }
             const isVisible = panel.style.display !== 'none';
             if (isVisible) {
                 panel.style.display = 'none';
             } else {
                 panel.style.display = 'block';
-                showLocalBackups(true);
+                showLocalBackups(true, panel);
             }
         }
 
         // 显示本地备份列表
-        function showLocalBackups(silent) {
+        function showLocalBackups(silent, parentPanel) {
             try {
                 const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
-                const backupListDiv = document.getElementById('localBackupList');
-                const container = document.getElementById('backupListContainer');
+                const backupListDiv = parentPanel ? parentPanel.querySelector('.localBackupList') : document.getElementById('localBackupList');
+                const container = parentPanel ? parentPanel.querySelector('.backupListContainer') : document.getElementById('backupListContainer');
+                
+                if (!container) {
+                    console.warn('showLocalBackups: 未找到备份列表容器');
+                    return;
+                }
                 
                 if (backups.length === 0) {
                     container.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">暂无本地备份<br><span style="font-size:11px;">点击「📥 下载数据文件」或「💾 备份数据」会自动创建本地备份</span></p>';
@@ -6655,7 +6663,9 @@ IconFile=${scriptPath}`;
                     container.innerHTML = html;
                 }
                 
-                backupListDiv.style.display = 'block';
+                if (backupListDiv) {
+                    backupListDiv.style.display = 'block';
+                }
                 if (!silent) {
                     if (backups.length > 0) {
                         showToast(`📂 已加载 ${backups.length} 个本地备份\n🟢 最新备份: ${new Date(backups[0].timestamp).toLocaleString('zh-CN')}`);
