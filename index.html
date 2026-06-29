@@ -1280,7 +1280,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-29-v4';
+        window.__APP_VERSION__ = '2026-06-29-v5';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -6438,25 +6438,88 @@ IconFile=${scriptPath}`;
             }
         }
 
-        function backupData() {
-            const data = {
-                medicines: medicines,
-                formulas: formulas,
-                prescriptionHistory: prescriptionHistory,
-                dailyCounter: dailyCounter,
-                counterDate: currentPrescriptionDate
-            };
-            
-            // 同时保存到本地备份存储（安全优化：自动备份）
-            saveLocalBackup(data);
-            
-            const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = '本能数据备份_' + new Date().toLocaleDateString() + '.json';
-            a.click();
-            URL.revokeObjectURL(url);
+        function saveMedicinesToLocal() {
+            try { setUserItem('medicines', JSON.stringify(medicines)); } catch(e) { console.warn('保存药品到本地失败:', e); }
+            try { localStorage.setItem('cloud_medicines', JSON.stringify(medicines)); } catch(e) { console.warn('保存药品到cloud_medicines失败:', e); }
+        }
+        function saveFormulasToLocal() {
+            try { setUserItem('formulas', JSON.stringify(formulas)); } catch(e) { console.warn('保存方剂到本地失败:', e); }
+        }
+        function savePrescriptionHistory() {
+            try { setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory)); } catch(e) { console.warn('保存处方历史到本地失败:', e); }
+        }
+        function saveDailyCounter() {
+            try { setUserItem('dailyCounter', dailyCounter); } catch(e) { console.warn('保存日计数器失败:', e); }
+            try { setUserItem('counterDate', currentPrescriptionDate); } catch(e) { console.warn('保存计数器日期失败:', e); }
+        }
+
+        async function backupData() {
+            const rxCount = (prescriptionHistory || []).length;
+            const medCount = (medicines || []).length;
+            const formCount = (formulas || []).length;
+            const startTime = Date.now();
+            showToast('正在备份数据，请稍候...');
+            try {
+                const data = {
+                    medicines: medicines,
+                    formulas: formulas,
+                    prescriptionHistory: prescriptionHistory,
+                    dailyCounter: dailyCounter,
+                    counterDate: currentPrescriptionDate,
+                    backupTime: new Date().toISOString(),
+                    version: window.__APP_VERSION__ || 'unknown'
+                };
+                saveLocalBackup(data);
+                saveMedicinesToLocal();
+                saveFormulasToLocal();
+                savePrescriptionHistory();
+                saveDailyCounter();
+
+                let cloudResult = '本地备份成功';
+                let downloadResult = '';
+                if (currentUser && navigator.onLine) {
+                    try {
+                        const medOk = (isClinicAdmin(currentUser) || isPlatformAdmin(currentUser))
+                            ? await saveMedicinesToCloud(medicines) : true;
+                        const formOk = await saveFormulasToCloud(formulas);
+                        await SyncEngine.run();
+                        if (medOk && formOk) {
+                            cloudResult = '☁️ 云端备份成功';
+                        } else {
+                            cloudResult = '⚠️ 云端备份部分失败（药品/方剂）';
+                        }
+                    } catch (ce) {
+                        console.warn('云端备份失败:', ce);
+                        cloudResult = '⚠️ 云端备份失败（已保存本地）';
+                    }
+                }
+
+                const isAndroidApp = /Android/i.test(navigator.userAgent);
+                const isElectron = !!(window.electronAPI);
+                if (!isAndroidApp || isElectron) {
+                    try {
+                        const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+                        a.download = `中医处方备份_${ts}.json`;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        setTimeout(() => URL.revokeObjectURL(url), 2000);
+                        downloadResult = '，文件已导出';
+                    } catch (de) {
+                        console.warn('文件导出失败:', de);
+                    }
+                }
+
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                showToast(`✅ 备份成功！${cloudResult}${downloadResult}\n📋 处方 ${rxCount} 条 | 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个\n⏱ 耗时 ${elapsed} 秒`);
+            } catch (err) {
+                console.error('备份失败:', err);
+                showToast('❌ 备份失败: ' + (err.message || err));
+            }
         }
 
         // ============ 本地备份存储（安全优化） ============
@@ -6545,36 +6608,50 @@ IconFile=${scriptPath}`;
             try {
                 const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
                 if (backupIndex < 0 || backupIndex >= backups.length) {
-                    alert('无效的备份索引');
+                    showToast('❌ 无效的备份索引');
                     return;
                 }
                 
                 const backup = backups[backupIndex];
                 const dateStr = new Date(backup.timestamp).toLocaleString('zh-CN');
                 const rxCount = backup.prescriptionCount || 0;
+                const medCount = (backup.data && backup.data.medicines) ? backup.data.medicines.length : 0;
+                const formCount = (backup.data && backup.data.formulas) ? backup.data.formulas.length : 0;
+                const oldRx = (prescriptionHistory || []).length;
                 
-                if (!confirm(`确定要恢复此备份吗？\n\n备份时间: ${dateStr}\n处方数量: ${rxCount} 条\n\n恢复后将覆盖当前数据，建议先导出当前数据备份。`)) {
+                if (!confirm(`确定要恢复此备份吗？\n\n📅 备份时间: ${dateStr}\n📋 处方数量: ${rxCount} 条\n💊 药品数量: ${medCount} 种\n📖 方剂数量: ${formCount} 个\n\n恢复后将覆盖当前数据（当前有${oldRx}条处方），建议先导出当前数据备份。`)) {
                     return;
                 }
                 
+                showToast('正在恢复本地备份...');
                 if (backup.data.medicines) medicines = backup.data.medicines;
                 if (backup.data.formulas) formulas = backup.data.formulas;
                 if (backup.data.prescriptionHistory) prescriptionHistory = backup.data.prescriptionHistory;
-                if (backup.data.dailyCounter) dailyCounter = backup.data.dailyCounter;
+                if (backup.data.dailyCounter !== undefined) dailyCounter = backup.data.dailyCounter;
                 if (backup.data.counterDate) currentPrescriptionDate = backup.data.counterDate;
                 
+                buildMedicineMap();
                 saveMedicinesToLocal();
                 saveFormulasToLocal();
                 savePrescriptionHistory();
                 saveDailyCounter();
                 saveLocalBackup(getCurrentDataForBackup());
                 
-                alert(`成功恢复 ${rxCount} 条处方！`);
+                try {
+                    document.getElementById('prescriptionNo').value = generatePrescriptionNo();
+                    const pno = document.getElementById('paperClinicNo');
+                    if (pno) pno.textContent = document.getElementById('prescriptionNo').value;
+                    clearPrescription();
+                } catch(uiErr) { console.warn('重置表单失败:', uiErr); }
+                
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
+                if (typeof renderAllMedicines === 'function') renderAllMedicines();
+                if (typeof renderFormulas === 'function') renderFormulas();
                 updateStats();
+                showToast(`✅ 本地备份恢复成功！\n📅 备份时间: ${dateStr}\n📋 处方 ${rxCount} 条（原${oldRx}条）| 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个`);
             } catch (error) {
                 console.error('恢复备份失败:', error);
-                alert('恢复失败: ' + error.message);
+                showToast('❌ 恢复失败: ' + error.message);
             }
         }
 
@@ -6623,31 +6700,106 @@ IconFile=${scriptPath}`;
             }
         }
 
-        function restoreData() {
+        async function restoreData() {
             const input = document.createElement('input');
             input.type = 'file';
-            input.accept = 'application/json';
-            input.onchange = function(e) {
+            input.accept = 'application/json,.json';
+            input.onchange = async function(e) {
                 const file = e.target.files[0];
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    try {
-                        const data = JSON.parse(event.target.result);
-                        if (data.medicines) medicines = data.medicines;
-                        if (data.formulas) formulas = data.formulas;
-                        if (data.dailyCounter) dailyCounter = data.dailyCounter;
-                        if (data.counterDate) currentPrescriptionDate = data.counterDate;
-                        setUserItem('formulas', JSON.stringify(formulas));
-                        setUserItem('dailyCounter', dailyCounter);
-                        setUserItem('counterDate', currentPrescriptionDate);
-                        document.getElementById('prescriptionNo').value = generatePrescriptionNo();
-                        document.getElementById('paperClinicNo').textContent = document.getElementById('prescriptionNo').value;
-                        alert('数据恢复成功！处方历史将从云端加载。');
-                    } catch (err) {
-                        alert('数据恢复失败！');
+                if (!file) return;
+                showToast('正在读取备份文件...');
+                const startTime = Date.now();
+                try {
+                    const text = await file.text();
+                    const data = JSON.parse(text);
+                    const oldRxCount = (prescriptionHistory || []).length;
+                    const oldMedCount = (medicines || []).length;
+                    const oldFormCount = (formulas || []).length;
+                    let rxCount = 0, medCount = 0, formCount = 0;
+
+                    if (!data.medicines && !data.formulas && !data.prescriptionHistory) {
+                        showToast('❌ 备份文件格式无效，请选择正确的备份文件');
+                        return;
                     }
-                };
-                reader.readAsText(file);
+
+                    if (data.medicines && Array.isArray(data.medicines)) {
+                        medicines = data.medicines;
+                        medCount = medicines.length;
+                    }
+                    if (data.formulas && Array.isArray(data.formulas)) {
+                        formulas = data.formulas;
+                        formCount = formulas.length;
+                    }
+                    if (data.prescriptionHistory && Array.isArray(data.prescriptionHistory)) {
+                        prescriptionHistory = data.prescriptionHistory;
+                        rxCount = prescriptionHistory.length;
+                    }
+                    if (data.dailyCounter !== undefined && data.dailyCounter !== null) {
+                        dailyCounter = data.dailyCounter;
+                    }
+                    if (data.counterDate) {
+                        currentPrescriptionDate = data.counterDate;
+                    }
+
+                    saveMedicinesToLocal();
+                    saveFormulasToLocal();
+                    savePrescriptionHistory();
+                    saveDailyCounter();
+                    saveLocalBackup({
+                        medicines, formulas, prescriptionHistory, dailyCounter,
+                        counterDate: currentPrescriptionDate
+                    });
+
+                    try {
+                        document.getElementById('prescriptionNo').value = generatePrescriptionNo();
+                        const paperNo = document.getElementById('paperClinicNo');
+                        if (paperNo) paperNo.textContent = document.getElementById('prescriptionNo').value;
+                    } catch(uiErr) { console.warn('更新处方编号UI失败:', uiErr); }
+
+                    try {
+                        const filtered = filterPrescriptionsByPermission(prescriptionHistory);
+                        renderHistoryList(filtered.slice(0, historyDisplayCount));
+                        if (typeof renderAllMedicines === 'function') renderAllMedicines();
+                        if (typeof renderFormulas === 'function') renderFormulas();
+                        if (typeof updateStatistics === 'function') updateStatistics();
+                    } catch(renderErr) { console.warn('刷新界面失败:', renderErr); }
+
+                    let cloudMsg = '';
+                    if (currentUser && navigator.onLine) {
+                        showToast('正在同步到云端，请稍候...');
+                        try {
+                            const medOk = (data.medicines && (isClinicAdmin(currentUser) || isPlatformAdmin(currentUser)))
+                                ? await saveMedicinesToCloud(medicines) : true;
+                            const formOk = data.formulas ? await saveFormulasToCloud(formulas) : true;
+                            if (offlineCapable && typeof LocalDB !== 'undefined') {
+                                try {
+                                    await LocalDB.ready();
+                                    await LocalDB.setCache('medicines_all', medicines);
+                                    await LocalDB.setCache('formulas_all', formulas);
+                                } catch(le) { console.warn('LocalDB缓存写入失败:', le); }
+                            }
+                            await SyncEngine.run();
+                            if (medOk && formOk) {
+                                cloudMsg = '\n☁️ 云端同步成功';
+                            } else {
+                                cloudMsg = '\n⚠️ 云端同步部分失败（本地数据已恢复）';
+                            }
+                        } catch (ce) {
+                            console.warn('云端同步失败:', ce);
+                            cloudMsg = '\n⚠️ 云端同步失败（本地数据已恢复）';
+                        }
+                    }
+
+                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                    const backupVer = data.version ? `（备份版本: ${data.version}）` : '';
+                    const backupTime = data.backupTime ? new Date(data.backupTime).toLocaleString('zh-CN') : '';
+                    showToast(`✅ 数据恢复成功${backupVer}${backupTime ? '\n📅 备份时间: ' + backupTime : ''}\n📋 处方 ${rxCount} 条（原${oldRxCount}条）| 💊 药品 ${medCount} 种（原${oldMedCount}种）| 📖 方剂 ${formCount} 个（原${oldFormCount}个）${cloudMsg}\n⏱ 耗时 ${elapsed} 秒`);
+                } catch (err) {
+                    console.error('恢复失败:', err);
+                    showToast('❌ 数据恢复失败: ' + (err.message || '文件解析错误，请确认是有效的备份文件'));
+                } finally {
+                    input.value = '';
+                }
             };
             input.click();
         }
@@ -6675,6 +6827,7 @@ IconFile=${scriptPath}`;
         }
 
         function exportData() {
+            const startTime = Date.now();
             const now = new Date();
             const dateStr = now.getFullYear() + '-' + 
                            String(now.getMonth() + 1).padStart(2, '0') + '-' + 
@@ -6683,16 +6836,11 @@ IconFile=${scriptPath}`;
                            String(now.getMinutes()).padStart(2, '0') + '-' +
                            String(now.getSeconds()).padStart(2, '0');
             
-            // 确保获取当前登录用户信息（优先使用全局变量，其次从 localStorage 读取）
             let userObj = currentUser;
             if (!userObj) {
                 const currentUserStr = localStorage.getItem('cloud_currentUser');
                 if (currentUserStr) {
-                    try {
-                        userObj = JSON.parse(currentUserStr);
-                    } catch {
-                        userObj = null;
-                    }
+                    try { userObj = JSON.parse(currentUserStr); } catch { userObj = null; }
                 }
             }
             
@@ -6701,131 +6849,317 @@ IconFile=${scriptPath}`;
                 : (userObj?.role === 'clinic_admin') ? '诊所管理员'
                 : '医师';
             
-            const fileName = `网页版_${exportUserName}_${dateStr}_${timeStr}.json`;
+            const fileName = `中医处方备份_${dateStr}_${timeStr}.json`;
             
             const clinicName = document.getElementById('clinicName')?.value || getUserItem('clinicName') || '未知诊所';
             const doctorName = document.getElementById('defaultDoctor')?.value || getUserItem('clinicDoctor') || '未知医师';
+            const rxCount = (prescriptionHistory || []).length;
+            const medCount = (medicines || []).length;
+            const formCount = (formulas || []).length;
             
-            const data = {
-                exportInfo: {
-                    version: '本能中医处方系统 - 新版',
-                    versionCode: 'v2.0.0',
-                    versionType: '网页版',
-                    exportTime: now.toLocaleString('zh-CN'),
-                    exportTimeUTC: now.toISOString(),
-                    exportDate: dateStr,
-                    exportTimeOnly: timeStr,
-                    exportUser: exportUserName,
-                    userInfo: {
-                        username: userObj?.username || '未知',
-                        name: userObj?.name || exportUserName,
-                        role: userObj?.role || 'user',
-                        roleDisplay: userRoleDisplay
+            showToast('正在生成备份文件...');
+            try {
+                const data = {
+                    exportInfo: {
+                        version: window.__APP_VERSION__ || 'v2.0.0',
+                        versionCode: window.__APP_VERSION__ || 'v2.0.0',
+                        versionType: '网页版',
+                        exportTime: now.toLocaleString('zh-CN'),
+                        exportTimeUTC: now.toISOString(),
+                        exportUser: exportUserName,
+                        userInfo: {
+                            username: userObj?.username || '未知',
+                            name: userObj?.name || exportUserName,
+                            role: userObj?.role || 'user',
+                            roleDisplay: userRoleDisplay
+                        },
+                        clinicName: clinicName,
+                        doctorName: doctorName,
+                        exportType: 'full',
+                        formatVersion: '1.1',
+                        dataStatistics: {
+                            medicinesCount: medCount,
+                            formulasCount: formCount,
+                            prescriptionCount: rxCount
+                        },
+                        systemInfo: {
+                            platform: navigator.userAgent.includes('Android') ? 'Android' : (window.electronAPI ? 'Electron' : 'web'),
+                            lastModified: localStorage.getItem('cloud_lastModified') || now.toISOString()
+                        }
                     },
-                    clinicName: clinicName,
-                    doctorName: doctorName,
-                    exportType: 'full',
-                    formatVersion: '1.0',
-                    dataStatistics: {
-                        medicinesCount: medicines.length,
-                        formulasCount: formulas.length,
-                        prescriptionCount: prescriptionHistory.length
-                    },
-                    systemInfo: {
-                        platform: 'standalone',
-                        platformType: '网页版',
-                        lastModified: localStorage.getItem('cloud_lastModified') || now.toISOString()
-                    }
-                },
-                medicines: medicines,
-                formulas: formulas,
-                prescriptionHistory: prescriptionHistory
-            };
-            
-            // 生成 JSON 字符串
-            const jsonStr = JSON.stringify(data, null, 2);
-            
-            // 下载文件
-            const blob = new Blob([jsonStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = fileName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+                    medicines: medicines,
+                    formulas: formulas,
+                    prescriptionHistory: prescriptionHistory,
+                    dailyCounter: dailyCounter,
+                    counterDate: currentPrescriptionDate,
+                    backupTime: now.toISOString(),
+                    version: window.__APP_VERSION__
+                };
+                
+                const jsonStr = JSON.stringify(data, null, 2);
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+                
+                saveLocalBackup(data);
+                saveMedicinesToLocal();
+                saveFormulasToLocal();
+                savePrescriptionHistory();
+                saveDailyCounter();
+                
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                const sizeKB = (new Blob([jsonStr]).size / 1024).toFixed(1);
+                showToast(`✅ 数据导出成功！\n📋 处方 ${rxCount} 条 | 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个\n📁 文件: ${fileName} (${sizeKB} KB)\n👤 导出用户: ${exportUserName}(${userRoleDisplay})\n⏱ 耗时 ${elapsed} 秒`);
+            } catch (err) {
+                console.error('导出失败:', err);
+                showToast('❌ 数据导出失败: ' + (err.message || err));
+            }
         }
 
         function copyData() {
+            const rxCount = (prescriptionHistory || []).length;
+            const medCount = (medicines || []).length;
+            const formCount = (formulas || []).length;
+            showToast('正在复制数据到剪贴板...');
             const data = {
                 medicines: medicines,
                 formulas: formulas,
                 prescriptionHistory: prescriptionHistory,
-                exportTime: new Date().toLocaleString('zh-CN')
+                dailyCounter: dailyCounter,
+                counterDate: currentPrescriptionDate,
+                backupTime: new Date().toISOString(),
+                version: window.__APP_VERSION__
             };
             const jsonStr = JSON.stringify(data, null, 2);
+            const sizeKB = (new Blob([jsonStr]).size / 1024).toFixed(1);
             
-            navigator.clipboard.writeText(jsonStr).then(() => {
-                alert('数据已复制到剪贴板！\n\n下一步：\n1. 打开记事本\n2. 粘贴内容（Ctrl+V）\n3. 保存为 prescription-data.json\n4. 放到 kyt-zy 文件夹里');
-            }).catch(() => {
-                alert('复制失败，请手动复制以下数据：\n\n' + jsonStr.substring(0, 500) + '...');
-            });
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(jsonStr).then(() => {
+                    showToast(`✅ 数据已复制到剪贴板！(${sizeKB} KB)\n📋 处方 ${rxCount} 条 | 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个\n💡 提示：打开记事本粘贴(Ctrl+V)后保存为.json文件即可备份`);
+                }).catch((err) => {
+                    console.warn('Clipboard API失败，尝试备用方案:', err);
+                    fallbackCopyText(jsonStr, rxCount, medCount, formCount, sizeKB);
+                });
+            } else {
+                fallbackCopyText(jsonStr, rxCount, medCount, formCount, sizeKB);
+            }
+        }
+        function fallbackCopyText(text, rxCount, medCount, formCount, sizeKB) {
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                ta.style.position = 'fixed';
+                ta.style.left = '-9999px';
+                document.body.appendChild(ta);
+                ta.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                if (ok) {
+                    showToast(`✅ 数据已复制到剪贴板！(${sizeKB} KB)\n📋 处方 ${rxCount} 条 | 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个`);
+                } else {
+                    showToast('❌ 复制失败：浏览器不支持自动复制，请手动导出文件');
+                }
+            } catch (e) {
+                showToast('❌ 复制失败: ' + e.message);
+            }
         }
 
-        function importData() {
+        async function importData() {
             const input = document.createElement('input');
             input.type = 'file';
-            input.accept = '.json';
-            input.onchange = function(e) {
+            input.accept = 'application/json,.json';
+            input.onchange = async function(e) {
                 const file = e.target.files[0];
                 if (!file) return;
-                
-                const reader = new FileReader();
-                reader.onload = function(event) {
-                    try {
-                        const data = JSON.parse(event.target.result);
-                        if (data.medicines) medicines = data.medicines;
-                        if (data.formulas) formulas = data.formulas;
-                        
-                        buildMedicineMap();
-                        updateStats();
-                        alert('数据导入成功！处方历史将从云端加载。');
-                    } catch (error) {
-                        alert('导入失败：文件格式不正确');
+                const startTime = Date.now();
+                showToast('正在读取备份文件...');
+                try {
+                    const text = await file.text();
+                    let raw = JSON.parse(text);
+                    const data = (raw && raw.exportInfo && (raw.medicines || raw.prescriptionHistory)) ? raw : raw;
+                    
+                    const oldRx = (prescriptionHistory || []).length;
+                    const oldMed = (medicines || []).length;
+                    const oldForm = (formulas || []).length;
+                    let rxCount = 0, medCount = 0, formCount = 0;
+                    
+                    if (!data.medicines && !data.formulas && !data.prescriptionHistory) {
+                        showToast('❌ 备份文件格式无效，请选择正确的备份文件');
+                        input.value = '';
+                        return;
                     }
-                };
-                reader.readAsText(file);
+                    
+                    if (data.medicines && Array.isArray(data.medicines)) {
+                        medicines = data.medicines;
+                        medCount = medicines.length;
+                    }
+                    if (data.formulas && Array.isArray(data.formulas)) {
+                        formulas = data.formulas;
+                        formCount = formulas.length;
+                    }
+                    if (data.prescriptionHistory && Array.isArray(data.prescriptionHistory)) {
+                        prescriptionHistory = data.prescriptionHistory;
+                        rxCount = prescriptionHistory.length;
+                    }
+                    if (data.dailyCounter !== undefined && data.dailyCounter !== null) {
+                        dailyCounter = data.dailyCounter;
+                    }
+                    if (data.counterDate) {
+                        currentPrescriptionDate = data.counterDate;
+                    }
+                    
+                    buildMedicineMap();
+                    saveMedicinesToLocal();
+                    saveFormulasToLocal();
+                    savePrescriptionHistory();
+                    saveDailyCounter();
+                    saveLocalBackup({ medicines, formulas, prescriptionHistory, dailyCounter, counterDate: currentPrescriptionDate });
+                    
+                    try {
+                        document.getElementById('prescriptionNo').value = generatePrescriptionNo();
+                        const pno = document.getElementById('paperClinicNo');
+                        if (pno) pno.textContent = document.getElementById('prescriptionNo').value;
+                    } catch(uiErr) { console.warn('更新处方编号失败:', uiErr); }
+                    
+                    try {
+                        const filtered = filterPrescriptionsByPermission(prescriptionHistory);
+                        renderHistoryList(filtered.slice(0, historyDisplayCount));
+                        if (typeof renderAllMedicines === 'function') renderAllMedicines();
+                        if (typeof renderFormulas === 'function') renderFormulas();
+                        updateStats();
+                    } catch(renderErr) { console.warn('刷新界面失败:', renderErr); }
+                    
+                    let cloudMsg = '';
+                    if (currentUser && navigator.onLine) {
+                        showToast('正在同步到云端...');
+                        try {
+                            const isAdmin = isClinicAdmin(currentUser) || isPlatformAdmin(currentUser);
+                            const medOk = (data.medicines && isAdmin) ? await saveMedicinesToCloud(medicines) : true;
+                            const formOk = data.formulas ? await saveFormulasToCloud(formulas) : true;
+                            if (offlineCapable && typeof LocalDB !== 'undefined') {
+                                try {
+                                    await LocalDB.ready();
+                                    await LocalDB.setCache('medicines_all', medicines);
+                                    await LocalDB.setCache('formulas_all', formulas);
+                                } catch(le) { console.warn('LocalDB写入失败:', le); }
+                            }
+                            await SyncEngine.run();
+                            if (medOk && formOk) {
+                                cloudMsg = '\n☁️ 云端同步成功';
+                            } else {
+                                cloudMsg = '\n⚠️ 云端同步部分失败（本地数据已恢复）';
+                            }
+                        } catch (ce) {
+                            console.warn('云端同步失败:', ce);
+                            cloudMsg = '\n⚠️ 云端同步失败（本地数据已恢复）';
+                        }
+                    }
+                    
+                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                    const ver = data.version || (data.exportInfo && data.exportInfo.version) || '';
+                    const bTime = data.backupTime || (data.exportInfo && data.exportInfo.exportTimeUTC);
+                    const bTimeStr = bTime ? new Date(bTime).toLocaleString('zh-CN') : '';
+                    showToast(`✅ 数据导入成功${ver ? '（版本: '+ver+'）' : ''}${bTimeStr ? '\n📅 备份时间: '+bTimeStr : ''}\n📋 处方 ${rxCount} 条（原${oldRx}条）| 💊 药品 ${medCount} 种（原${oldMed}种）| 📖 方剂 ${formCount} 个（原${oldForm}个）${cloudMsg}\n⏱ 耗时 ${elapsed} 秒`);
+                } catch (err) {
+                    console.error('导入失败:', err);
+                    showToast('❌ 数据导入失败: ' + (err.message || '文件格式错误，请确认是有效的备份文件'));
+                } finally {
+                    input.value = '';
+                }
             };
             input.click();
         }
 
-        function clearAllData() {
-            if (!confirm('确定要清空所有数据吗？此操作不可恢复！')) return;
+        async function clearAllData() {
+            if (!confirm('⚠️ 危险操作！\n\n确定要清空所有数据吗？此操作不可恢复！\n\n建议先点击「📥 下载数据文件」备份当前数据。')) return;
+            if (!confirm('二次确认：真的要清空所有处方、药品、方剂数据吗？')) return;
             
-            localStorage.removeItem('cloud_medicines');
-            removeUserItem('formulas');
-            removeUserItem('prescriptionHistory');
-            removeUserItem('dailyCounter');
-            removeUserItem('counterDate');
+            showToast('正在清空数据...');
+            const oldRx = (prescriptionHistory || []).length;
+            const oldMed = (medicines || []).length;
+            const oldForm = (formulas || []).length;
             
-            medicines = defaultMedicines;
-            formulas = [
-                {name:'四君子汤',code:'sjzt',effect:'健脾益气',indication:'脾胃气虚证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5}]},
-                {name:'四物汤',code:'swt',effect:'补血调经',indication:'血虚证',composition:[{name:'当归',dosage:10},{name:'熟地黄',dosage:12},{name:'白芍',dosage:10},{name:'川芎',dosage:8}]},
-                {name:'八珍汤',code:'bzt',effect:'气血双补',indication:'气血两虚证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5},{name:'当归',dosage:10},{name:'川芎',dosage:8},{name:'白芍',dosage:10},{name:'熟地黄',dosage:15}]},
-                {name:'六君子汤',code:'ljzt',effect:'健脾益气化痰',indication:'脾胃气虚痰湿证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5},{name:'陈皮',dosage:5},{name:'半夏',dosage:10}]},
-                {name:'参苓白术散',code:'slbzs',effect:'健脾益气渗湿',indication:'脾虚湿盛证',composition:[{name:'人参',dosage:15},{name:'茯苓',dosage:15},{name:'白术',dosage:15},{name:'山药',dosage:15},{name:'白扁豆',dosage:12},{name:'莲子',dosage:9},{name:'薏苡仁',dosage:9},{name:'砂仁',dosage:6},{name:'桔梗',dosage:6},{name:'甘草',dosage:3}]},
-                {name:'补中益气汤',code:'bzyqt',effect:'补中益气升阳',indication:'中气下陷证',composition:[{name:'人参',dosage:10},{name:'黄芪',dosage:15},{name:'白术',dosage:10},{name:'甘草',dosage:6},{name:'当归',dosage:10},{name:'陈皮',dosage:6},{name:'升麻',dosage:6},{name:'柴胡',dosage:6}]},
-                {name:'生脉散',code:'sms',effect:'益气养阴敛汗',indication:'气阴两虚证',composition:[{name:'人参',dosage:10},{name:'麦冬',dosage:15},{name:'五味子',dosage:6}]},
-                {name:'玉屏风散',code:'ypfs',effect:'益气固表止汗',indication:'表虚自汗证',composition:[{name:'黄芪',dosage:30},{name:'白术',dosage:15},{name:'防风',dosage:6}]}
-            ];
-            prescriptionHistory = [];
-            dailyCounter = 1;
-            
-            buildMedicineMap();
-            updateStats();
-            alert('所有数据已清空，系统已恢复到初始状态');
+            try {
+                localStorage.removeItem('cloud_medicines');
+                localStorage.removeItem('cloud_prescriptionHistory');
+                localStorage.removeItem('cloud_formulas');
+                localStorage.removeItem('cloud_dailyCounter');
+                localStorage.removeItem('localBackups');
+                removeUserItem('medicines');
+                removeUserItem('formulas');
+                removeUserItem('prescriptionHistory');
+                removeUserItem('dailyCounter');
+                removeUserItem('counterDate');
+                
+                if (offlineCapable && typeof LocalDB !== 'undefined') {
+                    try {
+                        await LocalDB.ready();
+                    } catch(le) { console.warn('LocalDB ready失败:', le); }
+                }
+                
+                medicines = defaultMedicines;
+                formulas = [
+                    {name:'四君子汤',code:'sjzt',effect:'健脾益气',indication:'脾胃气虚证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5}]},
+                    {name:'四物汤',code:'swt',effect:'补血调经',indication:'血虚证',composition:[{name:'当归',dosage:10},{name:'熟地黄',dosage:12},{name:'白芍',dosage:10},{name:'川芎',dosage:8}]},
+                    {name:'八珍汤',code:'bzt',effect:'气血双补',indication:'气血两虚证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5},{name:'当归',dosage:10},{name:'川芎',dosage:8},{name:'白芍',dosage:10},{name:'熟地黄',dosage:15}]},
+                    {name:'六君子汤',code:'ljzt',effect:'健脾益气化痰',indication:'脾胃气虚痰湿证',composition:[{name:'人参',dosage:10},{name:'白术',dosage:10},{name:'茯苓',dosage:10},{name:'甘草',dosage:5},{name:'陈皮',dosage:5},{name:'半夏',dosage:10}]},
+                    {name:'参苓白术散',code:'slbzs',effect:'健脾益气渗湿',indication:'脾虚湿盛证',composition:[{name:'人参',dosage:15},{name:'茯苓',dosage:15},{name:'白术',dosage:15},{name:'山药',dosage:15},{name:'白扁豆',dosage:12},{name:'莲子',dosage:9},{name:'薏苡仁',dosage:9},{name:'砂仁',dosage:6},{name:'桔梗',dosage:6},{name:'甘草',dosage:3}]},
+                    {name:'补中益气汤',code:'bzyqt',effect:'补中益气升阳',indication:'中气下陷证',composition:[{name:'人参',dosage:10},{name:'黄芪',dosage:15},{name:'白术',dosage:10},{name:'甘草',dosage:6},{name:'当归',dosage:10},{name:'陈皮',dosage:6},{name:'升麻',dosage:6},{name:'柴胡',dosage:6}]},
+                    {name:'生脉散',code:'sms',effect:'益气养阴敛汗',indication:'气阴两虚证',composition:[{name:'人参',dosage:10},{name:'麦冬',dosage:15},{name:'五味子',dosage:6}]},
+                    {name:'玉屏风散',code:'ypfs',effect:'益气固表止汗',indication:'表虚自汗证',composition:[{name:'黄芪',dosage:30},{name:'白术',dosage:15},{name:'防风',dosage:6}]}
+                ];
+                prescriptionHistory = [];
+                dailyCounter = 1;
+                currentPrescriptionDate = new Date().toISOString().split('T')[0];
+                
+                buildMedicineMap();
+                saveMedicinesToLocal();
+                saveFormulasToLocal();
+                savePrescriptionHistory();
+                saveDailyCounter();
+                
+                try {
+                    document.getElementById('prescriptionNo').value = generatePrescriptionNo();
+                    const pno = document.getElementById('paperClinicNo');
+                    if (pno) pno.textContent = document.getElementById('prescriptionNo').value;
+                    clearPrescription();
+                } catch(uiErr) { console.warn('重置表单失败:', uiErr); }
+                
+                try {
+                    renderHistoryList([]);
+                    if (typeof renderAllMedicines === 'function') renderAllMedicines();
+                    if (typeof renderFormulas === 'function') renderFormulas();
+                    updateStats();
+                    const backupListContainer = document.getElementById('backupListContainer');
+                    if (backupListContainer) backupListContainer.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">暂无本地备份</p>';
+                } catch(renderErr) { console.warn('刷新界面失败:', renderErr); }
+                
+                let cloudMsg = '';
+                if (currentUser && navigator.onLine) {
+                    try {
+                        const isAdmin = isClinicAdmin(currentUser) || isPlatformAdmin(currentUser);
+                        if (isAdmin) {
+                            await saveMedicinesToCloud(medicines);
+                            await saveFormulasToCloud(formulas);
+                        }
+                        cloudMsg = '\n☁️ 已同步重置状态到云端';
+                    } catch(ce) {
+                        console.warn('云端同步清空状态失败:', ce);
+                        cloudMsg = '\n⚠️ 云端同步失败（本地已清空）';
+                    }
+                }
+                
+                showToast(`✅ 所有数据已清空，系统已恢复初始状态\n🗑️ 已清除: 处方 ${oldRx} 条 | 药品 ${oldMed} 种 | 方剂 ${oldForm} 个\n💊 已恢复默认药库(${medicines.length}种)和经典方剂(${formulas.length}个)${cloudMsg}`);
+            } catch (err) {
+                console.error('清空数据失败:', err);
+                showToast('❌ 清空数据失败: ' + (err.message || err));
+            }
         }
 
         function renderSyndromeList() {
