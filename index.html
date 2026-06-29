@@ -987,9 +987,9 @@
                         <button class="action-btn" onclick="selectImageSaveDirectory()" style="background:#4CAF50;color:white;">📂 设置图片保存位置</button>
                         <div id="imageSavePath" style="font-size:11px;color:#666;margin-top:4px;"></div>
                     </div>
-                    <button class="action-btn" onclick="backupData()">备份数据</button>
-                    <button class="action-btn" onclick="restoreData()">恢复数据</button>
-                    <button class="action-btn" onclick="clearAllData()" style="background:#ffdddd;">清空数据</button>
+                    <button class="action-btn" onclick="backupData()" style="background:#4CAF50;color:white;">💾 备份数据</button>
+                    <button class="action-btn" onclick="restoreData()" style="background:#9C27B0;color:white;">📤 恢复数据</button>
+                    <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1280,7 +1280,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-29-v5';
+        window.__APP_VERSION__ = '2026-06-29-v6';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -2755,22 +2755,44 @@
         async function forceSyncUsersToCloud() {
             const saved = localStorage.getItem('cloud_systemUsers');
             if (!saved) {
-                alert('本地没有用户数据！');
+                showToast('⚠️ 本地没有用户数据，无需同步\n💡 提示：添加用户后会自动同步');
                 return;
             }
             
+            let users;
             try {
-                const users = JSON.parse(saved);
+                users = JSON.parse(saved);
+            } catch(e) {
+                showToast('❌ 本地用户数据损坏，无法同步: ' + e.message);
+                return;
+            }
+            
+            const total = Array.isArray(users) ? users.length : Object.keys(users || {}).length;
+            if (total === 0) {
+                showToast('⚠️ 本地用户列表为空，无需同步');
+                return;
+            }
+            
+            if (!navigator.onLine) {
+                showToast('⚠️ 当前处于离线状态，无法同步到云端\n📱 网络恢复后会自动同步');
+                return;
+            }
+            
+            const startTime = Date.now();
+            showToast(`正在同步 ${total} 个用户到云端...`);
+            
+            try {
                 const response = await saveUsersToCloud(users);
                 
                 if (response) {
-                    alert('✅ 用户数据已成功同步到云端！\n\n现在在手机上登录也能看到这些用户了。');
+                    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                    showToast(`✅ 用户数据已同步到云端！\n👥 共同步 ${total} 个用户\n⏱ 耗时 ${elapsed} 秒\n💡 现在在手机上登录也能看到这些用户了`);
                 } else {
-                    alert('⚠️ 云端同步暂时失败\n\n原因：网络连接问题或云端服务暂时不可用\n\n本地数据不受影响，用户管理功能正常工作。\n请稍后再试或检查网络连接。');
+                    showToast('⚠️ 云端同步暂时失败\n原因：云端服务返回异常\n本地数据不受影响，用户管理功能正常工作\n请稍后再试或检查网络连接');
                 }
             } catch (e) {
                 console.error('Cloud sync error:', e);
-                alert('⚠️ 同步失败\n\n详细信息：' + e.message + '\n\n本地数据安全，可继续使用系统。');
+                showToast('⚠️ 同步失败: ' + (e.message || e) + '\n本地数据安全，可继续使用系统\n请检查网络后重试');
             }
         }
 
@@ -6528,6 +6550,8 @@ IconFile=${scriptPath}`;
                     } catch (de) {
                         console.warn('文件导出失败:', de);
                     }
+                } else {
+                    downloadResult = '（手机端已跳过文件下载，数据已保存到本地和云端）';
                 }
 
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -6577,14 +6601,14 @@ IconFile=${scriptPath}`;
         }
 
         // 显示本地备份列表
-        function showLocalBackups() {
+        function showLocalBackups(silent) {
             try {
                 const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
                 const backupListDiv = document.getElementById('localBackupList');
                 const container = document.getElementById('backupListContainer');
                 
                 if (backups.length === 0) {
-                    container.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">暂无本地备份</p>';
+                    container.innerHTML = '<p style="color:#999;text-align:center;padding:20px;">暂无本地备份<br><span style="font-size:11px;">点击「📥 下载数据文件」或「💾 备份数据」会自动创建本地备份</span></p>';
                 } else {
                     let html = '';
                     backups.forEach((backup, index) => {
@@ -6592,20 +6616,27 @@ IconFile=${scriptPath}`;
                         const dateStr = date.toLocaleString('zh-CN');
                         const rxCount = backup.prescriptionCount || 0;
                         const medCount = (backup.data && backup.data.medicines) ? backup.data.medicines.length : 0;
+                        const formCount = (backup.data && backup.data.formulas) ? backup.data.formulas.length : 0;
                         html += `
                             <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid #eee;${index === 0 ? 'background:#e8f5e9;' : ''}">
-                                <div>
+                                <div style="flex:1;">
                                     <div style="font-weight:bold;font-size:13px;color:#333;">
                                         ${index === 0 ? '🟢 最新备份 - ' : ''}${dateStr}
                                     </div>
                                     <div style="font-size:12px;color:#666;margin-top:2px;">
-                                        处方: ${rxCount} 条 | 药材: ${medCount} 味
+                                        📋 处方 ${rxCount} 条 | 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个
                                     </div>
                                 </div>
-                                <button class="action-btn" onclick="restoreFromBackup(${index})" 
-                                    style="background:#4CAF50;color:white;font-size:12px;padding:5px 10px;">
-                                    恢复此备份
-                                </button>
+                                <div style="display:flex;gap:5px;">
+                                    <button class="action-btn" onclick="restoreFromBackup(${index})" 
+                                        style="background:#4CAF50;color:white;font-size:12px;padding:5px 10px;">
+                                        恢复
+                                    </button>
+                                    <button class="action-btn" onclick="deleteLocalBackup(${index})" 
+                                        style="background:#f44336;color:white;font-size:12px;padding:5px 10px;" title="删除此备份">
+                                        🗑️
+                                    </button>
+                                </div>
                             </div>
                         `;
                     });
@@ -6613,14 +6644,44 @@ IconFile=${scriptPath}`;
                 }
                 
                 backupListDiv.style.display = 'block';
+                if (!silent) {
+                    if (backups.length > 0) {
+                        showToast(`📂 已加载 ${backups.length} 个本地备份\n🟢 最新备份: ${new Date(backups[0].timestamp).toLocaleString('zh-CN')}`);
+                    } else {
+                        showToast('📂 当前暂无本地备份\n💡 提示：点击「📥 下载数据文件」会自动创建本地备份');
+                    }
+                }
             } catch (error) {
                 console.error('显示备份列表失败:', error);
-                alert('显示备份列表失败: ' + error.message);
+                if (!silent) showToast('❌ 显示备份列表失败: ' + error.message);
+            }
+        }
+
+        function deleteLocalBackup(backupIndex) {
+            try {
+                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                if (backupIndex < 0 || backupIndex >= backups.length) {
+                    showToast('❌ 无效的备份索引');
+                    return;
+                }
+                const backup = backups[backupIndex];
+                const dateStr = new Date(backup.timestamp).toLocaleString('zh-CN');
+                const rxCount = backup.prescriptionCount || 0;
+                if (!confirm(`确定要删除此备份吗？\n\n📅 备份时间: ${dateStr}\n📋 处方数量: ${rxCount} 条\n\n删除后无法恢复。`)) {
+                    return;
+                }
+                backups.splice(backupIndex, 1);
+                localStorage.setItem('localBackups', JSON.stringify(backups));
+                showToast(`🗑️ 已删除 ${dateStr} 的备份（剩余${backups.length}个）`);
+                showLocalBackups(true);
+            } catch (error) {
+                console.error('删除备份失败:', error);
+                showToast('❌ 删除备份失败: ' + error.message);
             }
         }
 
         // 从指定备份恢复数据
-        function restoreFromBackup(backupIndex) {
+        async function restoreFromBackup(backupIndex) {
             try {
                 const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
                 if (backupIndex < 0 || backupIndex >= backups.length) {
@@ -6639,6 +6700,7 @@ IconFile=${scriptPath}`;
                     return;
                 }
                 
+                const startTime = Date.now();
                 showToast('正在恢复本地备份...');
                 if (backup.data.medicines) medicines = backup.data.medicines;
                 if (backup.data.formulas) formulas = backup.data.formulas;
@@ -6653,18 +6715,51 @@ IconFile=${scriptPath}`;
                 saveDailyCounter();
                 saveLocalBackup(getCurrentDataForBackup());
                 
+                if (offlineCapable && typeof LocalDB !== 'undefined') {
+                    try {
+                        await LocalDB.ready();
+                        await LocalDB.setCache('medicines_all', medicines);
+                        await LocalDB.setCache('formulas_all', formulas);
+                    } catch(le) { console.warn('LocalDB写入失败:', le); }
+                }
+                
                 try {
-                    document.getElementById('prescriptionNo').value = generatePrescriptionNo();
-                    const pno = document.getElementById('paperClinicNo');
-                    if (pno) pno.textContent = document.getElementById('prescriptionNo').value;
+                    const safeSet = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+                    const safeText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+                    const no = generatePrescriptionNo();
+                    safeSet('prescriptionNo', no);
+                    safeText('paperClinicNo', no);
                     clearPrescription();
                 } catch(uiErr) { console.warn('重置表单失败:', uiErr); }
                 
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
-                if (typeof renderAllMedicines === 'function') renderAllMedicines();
-                if (typeof renderFormulas === 'function') renderFormulas();
-                updateStats();
-                showToast(`✅ 本地备份恢复成功！\n📅 备份时间: ${dateStr}\n📋 处方 ${rxCount} 条（原${oldRx}条）| 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个`);
+                try {
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
+                    if (typeof renderAllMedicines === 'function') renderAllMedicines();
+                    if (typeof renderFormulas === 'function') renderFormulas();
+                    updateStats();
+                } catch(renderErr) { console.warn('刷新界面失败:', renderErr); }
+                
+                let cloudMsg = '';
+                if (currentUser && navigator.onLine) {
+                    showToast('正在同步恢复数据到云端...');
+                    try {
+                        const isAdmin = isClinicAdmin(currentUser) || isPlatformAdmin(currentUser);
+                        if (isAdmin) {
+                            await saveMedicinesToCloud(medicines);
+                            await saveFormulasToCloud(formulas);
+                        }
+                        await SyncEngine.run();
+                        cloudMsg = '\n☁️ 已同步到云端';
+                    } catch(ce) {
+                        console.warn('云端同步失败:', ce);
+                        cloudMsg = '\n⚠️ 云端同步失败（本地数据已恢复）';
+                    }
+                }
+                
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                showToast(`✅ 本地备份恢复成功！\n📅 备份时间: ${dateStr}\n📋 处方 ${rxCount} 条（原${oldRx}条）| 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个${cloudMsg}\n⏱ 耗时 ${elapsed} 秒`);
+                
+                showLocalBackups();
             } catch (error) {
                 console.error('恢复备份失败:', error);
                 showToast('❌ 恢复失败: ' + error.message);
@@ -6687,32 +6782,41 @@ IconFile=${scriptPath}`;
             try {
                 const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
                 if (backupIndex < 0 || backupIndex >= backups.length) {
-                    alert('无效的备份索引');
+                    showToast('❌ 无效的备份索引');
                     return;
                 }
                 
                 const backup = backups[backupIndex];
-                if (!confirm(`确定要回滚到 ${new Date(backup.timestamp).toLocaleString()} 的备份吗？\n当前处方数: ${(prescriptionHistory || []).length}\n备份处方数: ${backup.prescriptionCount}`)) {
+                const dateStr = new Date(backup.timestamp).toLocaleString('zh-CN');
+                if (!confirm(`确定要回滚到 ${dateStr} 的备份吗？\n当前处方数: ${(prescriptionHistory || []).length}\n备份处方数: ${backup.prescriptionCount}`)) {
                     return;
                 }
                 
+                showToast('正在回滚数据...');
                 if (backup.data.medicines) medicines = backup.data.medicines;
                 if (backup.data.formulas) formulas = backup.data.formulas;
                 if (backup.data.prescriptionHistory) prescriptionHistory = backup.data.prescriptionHistory;
-                if (backup.data.dailyCounter) dailyCounter = backup.data.dailyCounter;
+                if (backup.data.dailyCounter !== undefined) dailyCounter = backup.data.dailyCounter;
                 if (backup.data.counterDate) currentPrescriptionDate = backup.data.counterDate;
                 
-                // 保存到本地
+                buildMedicineMap();
                 saveMedicinesToLocal();
                 saveFormulasToLocal();
                 savePrescriptionHistory();
                 saveDailyCounter();
                 
-                alert('数据已成功回滚！');
+                try {
+                    clearPrescription();
+                } catch(e) { console.warn('重置表单失败:', e); }
+                
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
+                if (typeof renderAllMedicines === 'function') renderAllMedicines();
+                if (typeof renderFormulas === 'function') renderFormulas();
+                updateStats();
+                showToast(`✅ 数据已成功回滚到 ${dateStr}`);
             } catch (error) {
                 console.error('回滚失败:', error);
-                alert('回滚失败: ' + error.message);
+                showToast('❌ 回滚失败: ' + error.message);
             }
         }
 
@@ -6835,7 +6939,7 @@ IconFile=${scriptPath}`;
         function deleteCurrentCase() {
             if (!confirm('确定删除当前处方病历？')) return;
             clearPrescription();
-            alert('已清空！');
+            showToast('✅ 当前处方已清空，可开始新的开方');
         }
 
         function showHelp() {
