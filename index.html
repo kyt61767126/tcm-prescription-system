@@ -1106,33 +1106,25 @@
                 <div id="statsContent"></div>
                 <div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;">
                     <h4 style="margin-bottom:10px;">🗄️ 数据备份与恢复</h4>
-                    <div style="margin-bottom:15px;padding:10px;background:#f5f5f5;border-radius:5px;">
-                        <p style="margin:5px 0;font-size:12px;color:#333;">
-                            <strong>💡 提示：</strong>点击下方按钮可同步用户数据到云端，同步后手机端也能看到这些用户
-                        </p>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:20px;">
+                        <button class="action-btn" onclick="smartBackup()" style="background:#4CAF50;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                            💾 一键备份
+                        </button>
+                        <button class="action-btn" onclick="toggleRestorePanel()" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                            📂 恢复数据
+                        </button>
+                        <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                            🗑️ 清空数据
+                        </button>
                     </div>
-                    <div style="margin-bottom:15px;">
-                        <h5 style="margin-bottom:8px;color:#008000;">📤 备份导出</h5>
-                        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                            <button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">📥 下载数据文件</button>
-                            <button class="action-btn" onclick="copyData()" style="background:#FF9800;color:white;">📋 复制数据</button>
-                            <button class="action-btn" onclick="forceSyncUsersToCloud()" style="background:#2196F3;color:white;">☁️ 同步用户到云端</button>
+                    <div id="restorePanel" style="margin-bottom:15px;display:none;padding:15px;background:#f9f9f9;border-radius:8px;border:1px solid #ddd;">
+                        <div style="margin-bottom:12px;">
+                            <button class="action-btn" onclick="importData()" style="background:#9C27B0;color:white;">📤 选择文件导入</button>
                         </div>
-                    </div>
-                    <div style="margin-bottom:15px;">
-                        <h5 style="margin-bottom:8px;color:#008000;">📥 数据恢复</h5>
-                        <div style="display:flex;gap:10px;flex-wrap:wrap;">
-                            <button class="action-btn" onclick="importData()" style="background:#9C27B0;color:white;">📤 导入数据文件</button>
-                            <button class="action-btn" onclick="showLocalBackups()" style="background:#2196F3;color:white;">🔄 查看本地备份</button>
+                        <div id="localBackupList" style="margin-top:12px;">
+                            <h5 style="margin-bottom:8px;color:#008000;">💾 本地备份列表（自动保存，最多10个）</h5>
+                            <div id="backupListContainer" style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:5px;"></div>
                         </div>
-                    </div>
-                    <div id="localBackupList" style="margin-bottom:15px;display:none;">
-                        <h5 style="margin-bottom:8px;color:#008000;">💾 本地备份列表（自动保存，最多10个）</h5>
-                        <div id="backupListContainer" style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:5px;"></div>
-                    </div>
-                    <div style="margin-bottom:15px;">
-                        <h5 style="margin-bottom:8px;color:#f44336;">⚠️ 危险操作</h5>
-                        <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button>
                     </div>
                     <div id="backupStatus" style="margin-top:15px;display:none;"></div>
                 </div>
@@ -1240,17 +1232,25 @@
 
                 <div style="margin-top:15px;padding-top:15px;border-top:2px solid #008000;">
                     <h4 style="margin-bottom:10px;">🗄️ 数据备份与恢复</h4>
-                    <div style="margin-bottom:10px;display:flex;gap:10px;flex-wrap:wrap;">
-                        <button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">📥 下载数据文件</button>
-                        <button class="action-btn" onclick="copyData()" style="background:#FF9800;color:white;">📋 复制数据</button>
-                        <button class="action-btn" onclick="forceSyncUsersToCloud()" style="background:#2196F3;color:white;">☁️ 同步用户到云端</button>
-                        <button class="action-btn" onclick="importData()" style="background:#9C27B0;color:white;">📤 导入数据文件</button>
-                        <button class="action-btn" onclick="showLocalBackups()" style="background:#2196F3;color:white;">🔄 查看本地备份</button>
-                        <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button>
+                    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:20px;">
+                        <button class="action-btn" onclick="smartBackup()" style="background:#4CAF50;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                            💾 一键备份
+                        </button>
+                        <button class="action-btn" onclick="toggleRestorePanel()" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                            📂 恢复数据
+                        </button>
+                        <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                            🗑️ 清空数据
+                        </button>
                     </div>
-                    <div id="localBackupList" style="margin-bottom:10px;display:none;">
-                        <h5 style="margin-bottom:8px;color:#008000;">💾 本地备份列表（自动保存，最多10个）</h5>
-                        <div id="backupListContainer" style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:5px;"></div>
+                    <div id="restorePanel" style="margin-bottom:15px;display:none;padding:15px;background:#f9f9f9;border-radius:8px;border:1px solid #ddd;">
+                        <div style="margin-bottom:12px;">
+                            <button class="action-btn" onclick="importData()" style="background:#9C27B0;color:white;">📤 选择文件导入</button>
+                        </div>
+                        <div id="localBackupList" style="margin-top:12px;">
+                            <h5 style="margin-bottom:8px;color:#008000;">💾 本地备份列表（自动保存，最多10个）</h5>
+                            <div id="backupListContainer" style="max-height:200px;overflow-y:auto;border:1px solid #ddd;border-radius:4px;padding:5px;"></div>
+                        </div>
                     </div>
                     <div id="backupStatus" style="margin-top:10px;display:none;"></div>
                 </div>
@@ -1280,7 +1280,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-29-v6';
+        window.__APP_VERSION__ = '2026-06-29-v7';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -6600,6 +6600,18 @@ IconFile=${scriptPath}`;
             return [];
         }
 
+        function toggleRestorePanel() {
+            const panel = document.getElementById('restorePanel');
+            if (!panel) return;
+            const isVisible = panel.style.display !== 'none';
+            if (isVisible) {
+                panel.style.display = 'none';
+            } else {
+                panel.style.display = 'block';
+                showLocalBackups(true);
+            }
+        }
+
         // 显示本地备份列表
         function showLocalBackups(silent) {
             try {
@@ -7039,6 +7051,148 @@ IconFile=${scriptPath}`;
             } catch (err) {
                 console.error('导出失败:', err);
                 showToast('❌ 数据导出失败: ' + (err.message || err));
+            }
+        }
+
+        async function smartBackup() {
+            const startTime = Date.now();
+            const now = new Date();
+            const dateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+            const timeStr = String(now.getHours()).padStart(2, '0') + '-' + String(now.getMinutes()).padStart(2, '0') + '-' + String(now.getSeconds()).padStart(2, '0');
+            
+            let userObj = currentUser;
+            if (!userObj) {
+                const currentUserStr = localStorage.getItem('cloud_currentUser');
+                if (currentUserStr) {
+                    try { userObj = JSON.parse(currentUserStr); } catch { userObj = null; }
+                }
+            }
+            const exportUserName = userObj?.name || userObj?.username || '未知用户';
+            
+            const rxCount = (prescriptionHistory || []).length;
+            const medCount = (medicines || []).length;
+            const formCount = (formulas || []).length;
+            
+            showToast('正在执行一键备份，请稍候...');
+            try {
+                const data = {
+                    exportInfo: {
+                        version: window.__APP_VERSION__ || 'v2.0.0',
+                        versionType: '网页版',
+                        exportTime: now.toLocaleString('zh-CN'),
+                        exportTimeUTC: now.toISOString(),
+                        exportUser: exportUserName,
+                        exportType: 'full',
+                        formatVersion: '1.1',
+                        dataStatistics: { medicinesCount: medCount, formulasCount: formCount, prescriptionCount: rxCount },
+                        systemInfo: {
+                            platform: navigator.userAgent.includes('Android') ? 'Android' : (window.electronAPI ? 'Electron' : 'web'),
+                            lastModified: localStorage.getItem('cloud_lastModified') || now.toISOString()
+                        }
+                    },
+                    medicines: medicines,
+                    formulas: formulas,
+                    prescriptionHistory: prescriptionHistory,
+                    dailyCounter: dailyCounter,
+                    counterDate: currentPrescriptionDate,
+                    backupTime: now.toISOString(),
+                    version: window.__APP_VERSION__
+                };
+                
+                const jsonStr = JSON.stringify(data, null, 2);
+                const sizeKB = (new Blob([jsonStr]).size / 1024).toFixed(1);
+                const fileName = `中医处方备份_${dateStr}_${timeStr}.json`;
+                
+                saveLocalBackup(data);
+                saveMedicinesToLocal();
+                saveFormulasToLocal();
+                savePrescriptionHistory();
+                saveDailyCounter();
+                
+                let downloadResult = '';
+                const isAndroidApp = /Android/i.test(navigator.userAgent);
+                const isElectron = !!(window.electronAPI);
+                if (!isAndroidApp || isElectron) {
+                    try {
+                        const blob = new Blob([jsonStr], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = fileName;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        setTimeout(() => URL.revokeObjectURL(url), 2000);
+                        downloadResult = `📁 文件已下载: ${fileName} (${sizeKB} KB)`;
+                    } catch (de) {
+                        console.warn('文件下载失败:', de);
+                    }
+                } else {
+                    downloadResult = '（手机端已跳过文件下载）';
+                }
+                
+                let copyResult = '';
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        await navigator.clipboard.writeText(jsonStr);
+                        copyResult = '📋 已复制到剪贴板';
+                    } else {
+                        const ta = document.createElement('textarea');
+                        ta.value = jsonStr;
+                        ta.style.position = 'fixed';
+                        ta.style.left = '-9999px';
+                        document.body.appendChild(ta);
+                        ta.select();
+                        const ok = document.execCommand('copy');
+                        document.body.removeChild(ta);
+                        copyResult = ok ? '📋 已复制到剪贴板' : '';
+                    }
+                } catch (ce) {
+                    console.warn('复制失败:', ce);
+                }
+                
+                let cloudResult = '';
+                if (currentUser && navigator.onLine) {
+                    showToast('正在同步到云端...');
+                    try {
+                        const isAdmin = isClinicAdmin(currentUser) || isPlatformAdmin(currentUser);
+                        const medOk = isAdmin ? await saveMedicinesToCloud(medicines) : true;
+                        const formOk = await saveFormulasToCloud(formulas);
+                        await SyncEngine.run();
+                        
+                        const savedUsers = localStorage.getItem('cloud_systemUsers');
+                        if (savedUsers) {
+                            try {
+                                await saveUsersToCloud(JSON.parse(savedUsers));
+                            } catch(ue) { console.warn('用户同步失败:', ue); }
+                        }
+                        
+                        if (medOk && formOk) {
+                            cloudResult = '☁️ 云端同步成功';
+                        } else {
+                            cloudResult = '⚠️ 云端同步部分失败';
+                        }
+                    } catch (e) {
+                        console.warn('云端同步失败:', e);
+                        cloudResult = '⚠️ 云端同步失败（本地备份已保存）';
+                    }
+                }
+                
+                const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                const msg = [
+                    `✅ 一键备份完成！`,
+                    `📋 处方 ${rxCount} 条 | 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个`,
+                    downloadResult || '',
+                    copyResult || '',
+                    cloudResult || '',
+                    `📂 本地备份共 ${backups.length} 个`,
+                    `⏱ 耗时 ${elapsed} 秒`
+                ].filter(Boolean).join('\n');
+                showToast(msg);
+            } catch (err) {
+                console.error('一键备份失败:', err);
+                showToast('❌ 一键备份失败: ' + (err.message || err));
             }
         }
 
