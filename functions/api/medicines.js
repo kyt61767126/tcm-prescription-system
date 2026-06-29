@@ -69,7 +69,7 @@ export async function onRequest(context) {
     const method = request.method;
     const query = url.searchParams;
 
-    if (method === 'OPTIONS') return handleOptions();
+    if (method === 'OPTIONS') return handleOptions(request);
 
     try {
         const kv = getKV(env);

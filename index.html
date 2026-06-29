@@ -1280,7 +1280,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-28-v2';
+        window.__APP_VERSION__ = '2026-06-29-v1';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -2116,11 +2116,7 @@
                     });
                     
                     // 更新界面
-                    const clinicNoEl = document.getElementById('clinicNo');
-                    if (clinicNoEl) {
-                        // 统计编码：年(2位) + 历史处方数量(6位)，普通用户=自己，管理员=本诊所全部
-                        updateClinicNoDisplay();
-                    }
+                    updateClinicNoDisplay();
 
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                     showToast('刷新成功！');
@@ -2476,32 +2472,6 @@
             } catch (error) {
                 console.warn('Failed to save formulas to cloud:', error);
                 return false;
-            }
-        }
-
-        // 测试认证状态
-        async function testAuth() {
-            if (!currentUser) {
-                console.log('Not logged in');
-                return;
-            }
-            const authToken = buildAuthPayload(currentUser);
-            console.log('Testing auth with:', currentUser.username, currentUser.role);
-            console.log('Auth token:', authToken);
-            console.log('Decoded:', atob(authToken));
-            
-            try {
-                const response = await fetch(`${CLOUD_API_BASE}/prescriptions`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Basic ${authToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                console.log('Response status:', response.status);
-                console.log('Response:', await response.text());
-            } catch (e) {
-                console.error('Test auth failed:', e);
             }
         }
 
@@ -4095,13 +4065,9 @@
             // 直接从本地数组中移除被删除的处方（更可靠，避免依赖云端返回）
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             
-            // 同步更新 clinicNo 输入框（管理员显示总数，普通用户显示自己的数量）
-            const clinicNoInput = document.getElementById('clinicNo');
-            if (clinicNoInput) {
-                // 统计编码：年(2位) + 历史处方数量(6位)，普通用户=自己，管理员=本诊所全部
-                updateClinicNoDisplay();
-            }
-            
+            // 同步更新 clinicNo 输入框（updateClinicNoDisplay 内部已做空检查）
+            updateClinicNoDisplay();
+
             // 立即刷新历史列表
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
         }
@@ -4202,11 +4168,7 @@
                     }
                     
                     // 根据用户角色更新统计输入框
-                    const clinicNoEl = document.getElementById('clinicNo');
-                    if (clinicNoEl) {
-                        // 统计编码：年(2位) + 历史处方数量(6位)，普通用户=自己，管理员=本诊所全部
-                        updateClinicNoDisplay();
-                    }
+                    updateClinicNoDisplay();
 
                     prescriptionHistory.sort((a, b) => {
                         const timeA = new Date(a.createdAt || a.date || 0).getTime();
@@ -6069,12 +6031,8 @@
                 }
                 
                 // 更新统计编号
-                const clinicNoEl = document.getElementById('clinicNo');
-                if (clinicNoEl) {
-                    // 统计编码：年(2位) + 历史处方数量(6位)，普通用户=自己，管理员=本诊所全部
-                    updateClinicNoDisplay();
-                }
-                
+                updateClinicNoDisplay();
+
                 // 刷新历史处方栏
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
                 

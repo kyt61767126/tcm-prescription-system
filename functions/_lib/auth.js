@@ -143,26 +143,67 @@ export async function verifyPassword(password, salt, expectedHash) {
 }
 
 // ---------- 统一 CORS 响应头 ----------
+// 安全加固：CORS 收紧为白名单，替代通配符 '*'
+// 允许的来源：
+//   - 生产域名 tcm-prescription-system.pages.dev（含子域名）
+//   - Capacitor hybrid app（https://localhost / capacitor://localhost）
+//   - Electron 桌面端（file:// 协议，Origin 为 null 或 file://）
+//   - 本地开发（http://localhost:* / http://127.0.0.1:*）
+const ALLOWED_ORIGIN_PATTERNS = [
+    /^https:\/\/tcm-prescription-system\.pages\.dev$/i,
+    /^https:\/\/[a-z0-9-]+\.tcm-prescription-system\.pages\.dev$/i,
+    /^https:\/\/localhost(:\d+)?$/i,
+    /^http:\/\/localhost(:\d+)?$/i,
+    /^http:\/\/127\.0\.0\.1(:\d+)?$/i,
+    /^capacitor:\/\/localhost$/i,
+    /^file:\/\//i
+];
+
+// 检查 Origin 是否在白名单中；file:// 请求 Origin 可能为 null，视为可信（Electron 桌面端）
+function getAllowedOrigin(request) {
+    if (!request) return '*';
+    const origin = request.headers.get('Origin');
+    if (origin === null || origin === undefined || origin === 'null') return 'null';
+    if (ALLOWED_ORIGIN_PATTERNS.some(re => re.test(origin))) return origin;
+    return null;
+}
+
+function buildCorsHeaders(request) {
+    const allowed = getAllowedOrigin(request);
+    const headers = {
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400'
+    };
+    if (allowed) {
+        headers['Access-Control-Allow-Origin'] = allowed;
+        if (allowed !== 'null') headers['Vary'] = 'Origin';
+    }
+    return headers;
+}
+
+// 保留导出供旧代码引用（已不包含通配符 Origin）
 export const CORS_HEADERS = {
-    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Max-Age': '86400'
 };
 
-export function corsResponse(body, init = {}) {
+// request 参数可选：传入则按白名单回显 Origin，不传则放行（向后兼容）
+export function corsResponse(body, init = {}, request = null) {
+    const corsHeaders = buildCorsHeaders(request);
     return new Response(typeof body === 'string' ? body : JSON.stringify(body), {
         ...init,
         headers: {
             'Content-Type': 'application/json',
-            ...CORS_HEADERS,
+            ...corsHeaders,
             ...(init.headers || {})
         }
     });
 }
 
-export function handleOptions() {
-    return new Response(null, { status: 200, headers: CORS_HEADERS });
+export function handleOptions(request = null) {
+    return new Response(null, { status: 200, headers: buildCorsHeaders(request) });
 }
 
 // ---------- KV 绑定解析（兼容多种命名） ----------

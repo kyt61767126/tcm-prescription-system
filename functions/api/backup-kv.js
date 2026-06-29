@@ -12,7 +12,7 @@ import { corsResponse, handleOptions, getKV } from '../_lib/auth.js';
 export async function onRequest(context) {
     const { request, env } = context;
 
-    if (request.method === 'OPTIONS') return handleOptions();
+    if (request.method === 'OPTIONS') return handleOptions(request);
 
     // 密钥校验：优先从环境变量读取，通过 Authorization 头传递
     const expectedSecret = env.BACKUP_SECRET;

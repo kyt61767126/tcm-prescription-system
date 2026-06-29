@@ -62,7 +62,7 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const method = request.method;
 
-    if (method === 'OPTIONS') return handleOptions();
+    if (method === 'OPTIONS') return handleOptions(request);
 
     try {
         const kv = getKV(env);

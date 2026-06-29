@@ -165,7 +165,7 @@ export async function onRequest(context) {
     const url = new URL(request.url);
     const method = request.method;
 
-    if (method === 'OPTIONS') return handleOptions();
+    if (method === 'OPTIONS') return handleOptions(request);
 
     try {
         const kv = getKV(env);
@@ -376,6 +376,10 @@ export async function onRequest(context) {
                 isAdmin: currentUser.isAdmin,
                 currentUsername: currentUser.username,
                 clinicId,
+                // 加固9：单 KV key 体积监控，超阈值返回性能警告（25MB 上限约 25000 张，1 万张起预警）
+                performanceWarning: prescriptions.length > 10000
+                    ? `当前诊所处方总量 ${prescriptions.length} 条，建议联系平台管理员归档历史数据以维持性能`
+                    : null,
                 debug: {
                     totalInKV: prescriptions.length,
                     filteredCount: filteredPrescriptions.length
@@ -520,7 +524,14 @@ export async function onRequest(context) {
             if (!trash || !Array.isArray(trash)) trash = [];
             const nowIso = getBeijingTime().toISOString();
             trash.unshift({ ...prescriptionToDelete, deletedAt: nowIso, deletedBy: currentUser.username });
-            if (trash.length > 10000) trash = trash.slice(0, 10000);
+            // 加固9：回收站自动清理 — 超 180 天或超 5000 条的旧记录永久删除，控制单 KV key 体积
+            const SIX_MONTHS_MS = 180 * 24 * 60 * 60 * 1000;
+            const nowMs = Date.now();
+            trash = trash.filter(item => {
+                const deletedMs = new Date(item.deletedAt || 0).getTime();
+                return (nowMs - deletedMs) < SIX_MONTHS_MS;
+            });
+            if (trash.length > 5000) trash = trash.slice(0, 5000);
             await kv.put(KV_TRASH_KEY, JSON.stringify(trash));
 
             return corsResponse({
