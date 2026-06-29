@@ -1110,14 +1110,14 @@
                         <button class="action-btn" onclick="smartBackup()" style="background:#4CAF50;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             💾 一键备份
                         </button>
-                        <button class="action-btn" onclick="toggleRestorePanel('stats')" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                        <button class="action-btn" onclick="toggleRestorePanel(this)" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             📂 恢复数据
                         </button>
                         <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             🗑️ 清空数据
                         </button>
                     </div>
-                    <div id="restorePanelStats" style="margin-bottom:15px;display:none;padding:15px;background:#f9f9f9;border-radius:8px;border:1px solid #ddd;">
+                    <div class="restorePanel" style="margin-bottom:15px;display:none;padding:15px;background:#f9f9f9;border-radius:8px;border:1px solid #ddd;">
                         <div style="margin-bottom:12px;">
                             <button class="action-btn" onclick="importData()" style="background:#9C27B0;color:white;">📤 选择文件导入</button>
                         </div>
@@ -1236,14 +1236,14 @@
                         <button class="action-btn" onclick="smartBackup()" style="background:#4CAF50;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             💾 一键备份
                         </button>
-                        <button class="action-btn" onclick="toggleRestorePanel('stats')" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                        <button class="action-btn" onclick="toggleRestorePanel(this)" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             📂 恢复数据
                         </button>
                         <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             🗑️ 清空数据
                         </button>
                     </div>
-                    <div id="restorePanelStats" style="margin-bottom:15px;display:none;padding:15px;background:#f9f9f9;border-radius:8px;border:1px solid #ddd;">
+                    <div class="restorePanel" style="margin-bottom:15px;display:none;padding:15px;background:#f9f9f9;border-radius:8px;border:1px solid #ddd;">
                         <div style="margin-bottom:12px;">
                             <button class="action-btn" onclick="importData()" style="background:#9C27B0;color:white;">📤 选择文件导入</button>
                         </div>
@@ -1280,7 +1280,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-29-v8';
+        window.__APP_VERSION__ = '2026-06-29-v9';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -6600,10 +6600,15 @@ IconFile=${scriptPath}`;
             return [];
         }
 
-        function toggleRestorePanel(panelId) {
-            const panel = document.getElementById(panelId === 'stats' ? 'restorePanelStats' : 'restorePanel');
+        function toggleRestorePanel(btn) {
+            const modal = btn.closest('.modal');
+            if (!modal) {
+                console.warn('toggleRestorePanel: 未找到modal');
+                return;
+            }
+            const panel = modal.querySelector('.restorePanel');
             if (!panel) {
-                console.warn('toggleRestorePanel: 未找到面板元素', panelId);
+                console.warn('toggleRestorePanel: 未找到面板元素');
                 return;
             }
             const isVisible = panel.style.display !== 'none';
