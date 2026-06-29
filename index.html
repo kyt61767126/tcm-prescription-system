@@ -5891,19 +5891,35 @@
         }
 
         function clearPrescription() {
-            document.getElementById('patientName').value = '';
-            document.getElementById('patientAge').value = '';
-            document.getElementById('patientPhone').value = '';
-            document.getElementById('patientAddress').value = '';
-            document.getElementById('clinicNo').value = '';
-            document.getElementById('medicalHistory').value = '';
-            document.getElementById('diagnosis').value = '';
+            const safeSet = (id, val) => {
+                try { const el = document.getElementById(id); if (el) el.value = val; } catch(e) {}
+            };
+            const safeText = (id, val) => {
+                try { const el = document.getElementById(id); if (el) el.textContent = val; } catch(e) {}
+            };
+            safeSet('patientName', '');
+            safeSet('patientAge', '');
+            safeSet('patientPhone', '');
+            safeSet('patientAddress', '');
+            safeSet('clinicNo', '');
+            safeSet('medicalHistory', '');
+            safeSet('diagnosis', '');
             prescriptionItems = [];
             for (let i = 0; i < 25; i++) addEmptyRow();
-            DOM_CACHE.init();
+            try {
+                DOM_CACHE.prescriptionBody = null;
+                DOM_CACHE.medicineSearchDropdown = null;
+                DOM_CACHE.init();
+            } catch(e) { console.warn('DOM_CACHE重置失败:', e); }
             renderPrescriptionTable();
-            calculateAmount();
-            updatePrescriptionPaper();
+            try { calculateAmount(); } catch(e) { console.warn('calculateAmount失败:', e); }
+            try { updatePrescriptionPaper(); } catch(e) { console.warn('updatePrescriptionPaper失败:', e); }
+            try {
+                const no = generatePrescriptionNo();
+                safeSet('prescriptionNo', no);
+                safeText('paperClinicNo', no);
+                safeText('paperDate', new Date().toISOString().split('T')[0]);
+            } catch(e) { console.warn('更新编号失败:', e); }
         }
 
         function saveAsFormula() {
