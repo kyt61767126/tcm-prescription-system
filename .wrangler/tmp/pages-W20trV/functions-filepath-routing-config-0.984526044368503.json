@@ -1,0 +1,69 @@
+{
+  "routes": [
+    {
+      "routePath": "/api/backup-kv",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/backup-kv.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/formulas",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/formulas.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/init",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/init.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/medicines",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/medicines.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/platform-prescriptions",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/platform-prescriptions.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/prescriptions",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/prescriptions.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/restore-kv",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/restore-kv.js:onRequest"
+      ]
+    },
+    {
+      "routePath": "/api/users",
+      "mountPath": "/api",
+      "method": "",
+      "module": [
+        "api/users.js:onRequest"
+      ]
+    }
+  ],
+  "baseURL": "/"
+}
