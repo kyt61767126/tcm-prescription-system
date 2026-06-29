@@ -195,6 +195,8 @@ export async function onRequest(context) {
         const clinicId = currentUser.clinicId;
         const KV_PRESCRIPTIONS_KEY = clinicKey(clinicId, 'prescriptions');
         const KV_TRASH_KEY = clinicKey(clinicId, 'prescriptions_trash');
+        // 优化12：编号清洗幂等标记 key，POST/DELETE/RESTORE 写入处方后需删除以失效
+        const NO_CLEANED_KEY = clinicKey(clinicId, 'prescription_no_cleaned_v4');
 
         // ============ GET ============
         if (method === 'GET') {
@@ -331,37 +333,42 @@ export async function onRequest(context) {
                 filteredPrescriptions = prescriptions.filter(p => p.createdBy === currentUser.username);
             }
 
-            // 编号清洗
-            const sortedForSeq = [...filteredPrescriptions].sort((a, b) => {
-                const idA = typeof a.id === 'number' ? a.id : 0;
-                const idB = typeof b.id === 'number' ? b.id : 0;
-                return idA - idB;
-            });
-            const dateCounter = {};
-            let needsUpdate = false;
-            filteredPrescriptions = sortedForSeq.map((p, index) => {
-                const cleanNo = cleanHistoricalPrescriptionNo(p, index, dateCounter);
-                const currentNo = p.outpatientNo || p.prescriptionNo || '';
-                if (cleanNo !== currentNo) {
-                    needsUpdate = true;
-                    return { ...p, prescriptionNo: cleanNo, outpatientNo: cleanNo };
+            // 优化12：编号清洗幂等标记 — 已清洗的诊所跳过 O(n) 遍历，POST/DELETE/RESTORE 时失效
+            const noCleaned = await kv.get(NO_CLEANED_KEY);
+            if (!noCleaned) {
+                const sortedForSeq = [...filteredPrescriptions].sort((a, b) => {
+                    const idA = typeof a.id === 'number' ? a.id : 0;
+                    const idB = typeof b.id === 'number' ? b.id : 0;
+                    return idA - idB;
+                });
+                const dateCounter = {};
+                let needsUpdate = false;
+                filteredPrescriptions = sortedForSeq.map((p, index) => {
+                    const cleanNo = cleanHistoricalPrescriptionNo(p, index, dateCounter);
+                    const currentNo = p.outpatientNo || p.prescriptionNo || '';
+                    if (cleanNo !== currentNo) {
+                        needsUpdate = true;
+                        return { ...p, prescriptionNo: cleanNo, outpatientNo: cleanNo };
+                    }
+                    return p;
+                });
+                if (needsUpdate) {
+                    const updatedPrescriptions = [...prescriptions];
+                    filteredPrescriptions.forEach(p => {
+                        const index = updatedPrescriptions.findIndex(item => item.id === p.id);
+                        if (index !== -1) updatedPrescriptions[index] = p;
+                    });
+                    await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(updatedPrescriptions));
                 }
-                return p;
-            });
+                // 标记已清洗，避免下次 GET 重复遍历
+                await kv.put(NO_CLEANED_KEY, '1');
+            }
+            // 按编号倒序（轻量排序，不依赖清洗结果）
             filteredPrescriptions.sort((a, b) => {
                 const noA = a.outpatientNo || a.prescriptionNo || '';
                 const noB = b.outpatientNo || b.prescriptionNo || '';
                 return noB.localeCompare(noA);
             });
-
-            if (needsUpdate) {
-                const updatedPrescriptions = [...prescriptions];
-                filteredPrescriptions.forEach(p => {
-                    const index = updatedPrescriptions.findIndex(item => item.id === p.id);
-                    if (index !== -1) updatedPrescriptions[index] = p;
-                });
-                await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(updatedPrescriptions));
-            }
 
             const now = getBeijingTime();
             const year = now.getUTCFullYear().toString().substring(2);
@@ -468,6 +475,8 @@ export async function onRequest(context) {
             const nextClinicNo = nextPrescriptionNo; // 兼容前端字段
 
             await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
+            // 优化12：处方列表变化，失效编号清洗标记
+            await kv.delete(NO_CLEANED_KEY);
 
             return corsResponse({
                 success: true,
@@ -566,6 +575,8 @@ export async function onRequest(context) {
             const exists = prescriptions.some(p => p.id.toString() === prescriptionId.toString());
             if (!exists) prescriptions.push(restoredPrescription);
             await kv.put(KV_PRESCRIPTIONS_KEY, JSON.stringify(prescriptions));
+            // 优化12：处方列表变化，失效编号清洗标记
+            await kv.delete(NO_CLEANED_KEY);
 
             return corsResponse({
                 success: true,

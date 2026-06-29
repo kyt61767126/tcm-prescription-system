@@ -1280,7 +1280,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-29-v1';
+        window.__APP_VERSION__ = '2026-06-29-v2';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -1654,9 +1654,11 @@
                         }
                     } catch (e) { console.warn('pull: 处方 ' + cp.id + ' 失败', e); }
                 }
-                // 缓存药品和验方（带超时，失败不阻塞）
-                await this._pullCache('medicines_all', CLOUD_API_BASE + '/medicines');
-                await this._pullCache('formulas_all', CLOUD_API_BASE + '/formulas');
+                // 缓存药品和验方（并行拉取，失败不阻塞）
+                await Promise.all([
+                    this._pullCache('medicines_all', CLOUD_API_BASE + '/medicines'),
+                    this._pullCache('formulas_all', CLOUD_API_BASE + '/formulas')
+                ]);
             },
             init() {
                 if (this._inited) return;
@@ -1993,7 +1995,7 @@
                     rightPanel.style.display = 'flex';
                     rightPanel.style.flexDirection = 'column';
                     // 确保渲染历史列表
-                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                     break;
                 case 'preview':
                     centerPanel.classList.add('active');
@@ -2118,7 +2120,7 @@
                     // 更新界面
                     updateClinicNoDisplay();
 
-                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                     showToast('刷新成功！');
                 } else {
                     console.log('云端无数据，尝试从本地备份恢复');
@@ -2130,7 +2132,7 @@
                             const timeB = new Date(b.createdAt || b.date || 0).getTime();
                             return timeB - timeA;
                         });
-                        renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                        renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                         showToast('已从本地备份恢复 ' + localData.length + ' 条处方');
                     } else {
                         showToast('暂无数据');
@@ -2147,7 +2149,7 @@
                         const timeB = new Date(b.createdAt || b.date || 0).getTime();
                         return timeB - timeA;
                     });
-                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                     showToast('已从本地备份恢复 ' + localData.length + ' 条处方');
                 } else {
                     showToast('刷新失败，请重试');
@@ -2901,7 +2903,7 @@
                 updateUserDisplay();
                 errorDiv.style.display = 'none';
                 await loadData();
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                 refreshUserInterface();
             } catch (err) {
                 console.error('Login error:', err);
@@ -2962,7 +2964,7 @@
             document.getElementById('prescriptionNo').value = '';
             document.getElementById('paperClinicNo').textContent = '';
             if (prescriptionHistory.length > 0) {
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
             }
         }
 
@@ -3971,6 +3973,10 @@
         ];
 
         let prescriptionHistory = [];
+        // 优化13：前端历史处方分页 — 默认显示 15 条，点击"加载更多"追加 15 条
+        let historyDisplayCount = 15;
+        const HISTORY_PAGE_SIZE = 15;
+        let currentHistoryList = []; // 缓存当前渲染的列表，供"加载更多"使用
         let prescriptionItems = [];
         let dailyCounter = 1;
         let currentPrescriptionDate = '';
@@ -4069,7 +4075,7 @@
             updateClinicNoDisplay();
 
             // 立即刷新历史列表
-            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
         }
         
         let saveTimeout = null;
@@ -4205,7 +4211,7 @@
                 const filtered = filterPrescriptionsByPermission(prescriptionHistory);
                 console.log('过滤后处方数量:', filtered.length);
                 console.log('用户权限:', currentUser.role);
-                renderHistoryList(filtered.slice(0, 15));
+                renderHistoryList(filtered);
             } else {
                 console.log('currentUser 为空，不渲染历史列表');
             }
@@ -5004,7 +5010,7 @@
                         // 先从云端刷新用户权限（管理员可能已修改 allowedMode）
                         await refreshCurrentUserFromCloud();
                         await loadData();
-                        renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                        renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                         // 继续初始化界面
                         finishInitUI(true);
                         return;
@@ -5130,7 +5136,7 @@
                     await loadData().catch(e => console.warn('Load data failed:', e));
                     if (currentUser && prescriptionHistory && prescriptionHistory.length > 0) {
                         const filtered = filterPrescriptionsByPermission(prescriptionHistory);
-                        renderHistoryList(filtered.slice(0, 15));
+                        renderHistoryList(filtered);
                     }
                     const prescriptionNo = generatePrescriptionNo();
                     document.getElementById('prescriptionNo').value = prescriptionNo;
@@ -5760,14 +5766,19 @@
                 document.getElementById('historyList').innerHTML = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
                 return;
             }
-            
-            document.getElementById('historyList').innerHTML = list.map((p,i) => {
+
+            // 优化13：分页渲染 — 缓存当前列表供"加载更多"使用，只渲染 historyDisplayCount 条
+            currentHistoryList = list;
+            const visibleList = list.slice(0, historyDisplayCount);
+            const hasMore = list.length > historyDisplayCount;
+
+            document.getElementById('historyList').innerHTML = visibleList.map((p,i) => {
                 // 检查是否是今天的处方
                 const recordDate = new Date(p.date || p.createdAt);
                 const today = new Date();
                 const isToday = recordDate.toDateString() === today.toDateString();
                 const timeDisplay = formatHistoryTime(p.date || p.createdAt);
-                
+
                 return `
                 <div class="history-item" onclick="loadHistory(${p.id})">
                     <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -5784,7 +5795,17 @@
                         <button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button>
                     </div>
                 </div>
-            `}).join('');
+            `}).join('') + (hasMore ? `
+                <div onclick="loadMoreHistory()" style="text-align:center;padding:10px;background:#f0f7ff;color:#1976d2;cursor:pointer;font-size:12px;border-top:1px solid #e0e0e0;">
+                    加载更多（剩余 ${list.length - historyDisplayCount} 条）
+                </div>
+            ` : '');
+        }
+
+        // 优化13：加载更多历史处方（基于当前显示的列表，保留搜索/筛选状态）
+        function loadMoreHistory() {
+            historyDisplayCount += HISTORY_PAGE_SIZE;
+            renderHistoryList(currentHistoryList);
         }
 
         async function refreshPrescriptionHistory() {
@@ -5798,7 +5819,7 @@
                         return timeB - timeA;
                     });
                     const filtered = filterPrescriptionsByPermission(prescriptionHistory);
-                    renderHistoryList(filtered.slice(0, 15));
+                    renderHistoryList(filtered);
                 }
             } catch (e) {
                 console.warn('刷新处方历史失败:', e);
@@ -5859,7 +5880,7 @@
             if (!prescriptionHistory || prescriptionHistory.length === 0) {
                 return; // 无历史病历，不显示
             }
-            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
         }
 
         function clearPrescription() {
@@ -6034,7 +6055,7 @@
                 updateClinicNoDisplay();
 
                 // 刷新历史处方栏
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                 
                 // 清空姓名输入框，准备输入新处方
                 // 临时移除onkeyup事件，避免触发searchPatientsQuick清空历史列表
@@ -6045,7 +6066,7 @@
                 // 隐藏姓名下拉框
                 hidePatientNameDropdown();
                 // 重新渲染历史列表（清空输入框会触发onkeyup事件清空历史，需要重新渲染）
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                 
                 // 更新药物使用频率
                 updateMedicineFrequency(record.items);
@@ -6542,7 +6563,7 @@ IconFile=${scriptPath}`;
                 saveLocalBackup(getCurrentDataForBackup());
                 
                 alert(`成功恢复 ${rxCount} 条处方！`);
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                 updateStats();
             } catch (error) {
                 console.error('恢复备份失败:', error);
@@ -6588,7 +6609,7 @@ IconFile=${scriptPath}`;
                 saveDailyCounter();
                 
                 alert('数据已成功回滚！');
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
             } catch (error) {
                 console.error('回滚失败:', error);
                 alert('回滚失败: ' + error.message);

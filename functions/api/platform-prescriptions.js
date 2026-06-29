@@ -93,66 +93,59 @@ export async function onRequest(context) {
         const filterEndDate = url.searchParams.get('endDate') || '';
         const filterKeyword = url.searchParams.get('keyword') || '';
 
-        // 遍历所有诊所，收集处方
+        // 优化11：并行遍历所有诊所，收集处方（替代串行 for 循环）
         const allPrescriptions = [];
         const targetClinics = filterClinic
             ? clinics.filter(c => c.id === filterClinic)
             : clinics;
 
-        for (const clinic of targetClinics) {
-            try {
-                const key = clinicKey(clinic.id, 'prescriptions');
-                let prescriptions = await kv.get(key, 'json');
-                if (!prescriptions || !Array.isArray(prescriptions)) continue;
-
-                for (const p of prescriptions) {
-                    // 跳过已删除的处方
-                    if (p.deleted) continue;
-
-                    const decorated = decoratePrescription(p, clinic.name, clinic.id);
-
-                    // 筛选：医师
-                    if (filterDoctor) {
-                        const dName = (decorated.doctorName || '').toLowerCase();
-                        const dBy = (decorated.createdBy || '').toLowerCase();
-                        if (!dName.includes(filterDoctor.toLowerCase()) && !dBy.includes(filterDoctor.toLowerCase())) continue;
+        // 并行读取所有诊所的处方 KV
+        const clinicResults = await Promise.all(
+            targetClinics.map(async (clinic) => {
+                try {
+                    const key = clinicKey(clinic.id, 'prescriptions');
+                    let prescriptions = await kv.get(key, 'json');
+                    if (!prescriptions || !Array.isArray(prescriptions)) return [];
+                    const collected = [];
+                    for (const p of prescriptions) {
+                        if (p.deleted) continue;
+                        const decorated = decoratePrescription(p, clinic.name, clinic.id);
+                        if (filterDoctor) {
+                            const dName = (decorated.doctorName || '').toLowerCase();
+                            const dBy = (decorated.createdBy || '').toLowerCase();
+                            if (!dName.includes(filterDoctor.toLowerCase()) && !dBy.includes(filterDoctor.toLowerCase())) continue;
+                        }
+                        if (filterPatient) {
+                            if (!(decorated.patientName || '').includes(filterPatient)) continue;
+                        }
+                        if (filterMedicine) {
+                            if (!containsMedicine(decorated, filterMedicine)) continue;
+                        }
+                        if (filterStartDate || filterEndDate) {
+                            const pDate = (decorated.date || '').slice(0, 10);
+                            if (filterStartDate && pDate < filterStartDate) continue;
+                            if (filterEndDate && pDate > filterEndDate) continue;
+                        }
+                        if (filterKeyword) {
+                            const kw = filterKeyword.toLowerCase();
+                            const haystack = [
+                                decorated.patientName, decorated.diagnosis,
+                                decorated.doctorName, decorated.clinicName,
+                                decorated.medicineText,
+                                JSON.stringify(decorated.medicines || [])
+                            ].join(' ').toLowerCase();
+                            if (!haystack.includes(kw)) continue;
+                        }
+                        collected.push(decorated);
                     }
-
-                    // 筛选：患者姓名
-                    if (filterPatient) {
-                        if (!(decorated.patientName || '').includes(filterPatient)) continue;
-                    }
-
-                    // 筛选：药材
-                    if (filterMedicine) {
-                        if (!containsMedicine(decorated, filterMedicine)) continue;
-                    }
-
-                    // 筛选：日期范围
-                    if (filterStartDate || filterEndDate) {
-                        const pDate = (decorated.date || '').slice(0, 10);
-                        if (filterStartDate && pDate < filterStartDate) continue;
-                        if (filterEndDate && pDate > filterEndDate) continue;
-                    }
-
-                    // 筛选：综合关键词
-                    if (filterKeyword) {
-                        const kw = filterKeyword.toLowerCase();
-                        const haystack = [
-                            decorated.patientName, decorated.diagnosis,
-                            decorated.doctorName, decorated.clinicName,
-                            decorated.medicineText,
-                            JSON.stringify(decorated.medicines || [])
-                        ].join(' ').toLowerCase();
-                        if (!haystack.includes(kw)) continue;
-                    }
-
-                    allPrescriptions.push(decorated);
+                    return collected;
+                } catch (e) {
+                    console.error(`读取诊所 ${clinic.id} 处方失败:`, e);
+                    return [];
                 }
-            } catch (e) {
-                console.error(`读取诊所 ${clinic.id} 处方失败:`, e);
-            }
-        }
+            })
+        );
+        for (const list of clinicResults) allPrescriptions.push(...list);
 
         // 按日期倒序
         allPrescriptions.sort((a, b) => {
@@ -212,6 +205,6 @@ export async function onRequest(context) {
 
     } catch (e) {
         console.error('平台处方监管 API 异常:', e);
-        return corsResponse({ success: false, error: '服务器异常: ' + e.message }, { status: 500 });
+        return corsResponse({ success: false, error: 'Internal server error' }, { status: 500 });
     }
 }
