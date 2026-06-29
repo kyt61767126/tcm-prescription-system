@@ -1110,7 +1110,7 @@
                         <button class="action-btn" onclick="smartBackup()" style="background:#4CAF50;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             💾 一键备份
                         </button>
-                        <button class="action-btn" onclick="toggleRestorePanel(this)" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                        <button class="action-btn" onclick="var m=this.closest('.modal');var p=m?m.querySelector('.restorePanel'):null;if(p){p.style.display=p.style.display==='none'?'block':'none';if(p.style.display==='block'&amp;&amp;typeof showLocalBackups==='function'){showLocalBackups(true,p);}}" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             📂 恢复数据
                         </button>
                         <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
@@ -1236,7 +1236,7 @@
                         <button class="action-btn" onclick="smartBackup()" style="background:#4CAF50;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             💾 一键备份
                         </button>
-                        <button class="action-btn" onclick="toggleRestorePanel(this)" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
+                        <button class="action-btn" onclick="var m=this.closest('.modal');var p=m?m.querySelector('.restorePanel'):null;if(p){p.style.display=p.style.display==='none'?'block':'none';if(p.style.display==='block'&amp;&amp;typeof showLocalBackups==='function'){showLocalBackups(true,p);}}" style="background:#9C27B0;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             📂 恢复数据
                         </button>
                         <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
@@ -1280,7 +1280,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-29-v9';
+        window.__APP_VERSION__ = '2026-06-29-v10';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
