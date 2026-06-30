@@ -1280,7 +1280,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-29-v12';
+        window.__APP_VERSION__ = '2026-06-30-v1';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -7146,25 +7146,42 @@ IconFile=${scriptPath}`;
                 };
                 
                 const jsonStr = JSON.stringify(data, null, 2);
-                const blob = new Blob([jsonStr], { type: 'application/json' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                setTimeout(() => URL.revokeObjectURL(url), 2000);
-                
+                const sizeKB = (new Blob([jsonStr]).size / 1024).toFixed(1);
+
+                let saveLocation = '';
+                if (window.electronAPI && window.electronAPI.saveBackupFile) {
+                    try {
+                        const result = await window.electronAPI.saveBackupFile(fileName, jsonStr);
+                        if (result && result.success) {
+                            saveLocation = result.filePath || '';
+                        } else {
+                            throw new Error(result?.error || '保存失败');
+                        }
+                    } catch (e) {
+                        console.warn('Electron保存备份失败，回退浏览器下载:', e);
+                    }
+                }
+                if (!saveLocation) {
+                    const blob = new Blob([jsonStr], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 2000);
+                }
+
                 saveLocalBackup(data);
                 saveMedicinesToLocal();
                 saveFormulasToLocal();
                 savePrescriptionHistory();
                 saveDailyCounter();
-                
+
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-                const sizeKB = (new Blob([jsonStr]).size / 1024).toFixed(1);
-                showToast(`✅ 数据导出成功！\n📋 处方 ${rxCount} 条 | 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个\n📁 文件: ${fileName} (${sizeKB} KB)\n👤 导出用户: ${exportUserName}(${userRoleDisplay})\n⏱ 耗时 ${elapsed} 秒`);
+                const locationStr = saveLocation ? `📁 已保存: ${saveLocation} (${sizeKB} KB)` : `📁 文件: ${fileName} (${sizeKB} KB)`;
+                showToast(`✅ 数据导出成功！\n📋 处方 ${rxCount} 条 | 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个\n${locationStr}\n👤 导出用户: ${exportUserName}(${userRoleDisplay})\n⏱ 耗时 ${elapsed} 秒`);
             } catch (err) {
                 console.error('导出失败:', err);
                 showToast('❌ 数据导出失败: ' + (err.message || err));
@@ -7229,7 +7246,31 @@ IconFile=${scriptPath}`;
                 let downloadResult = '';
                 const isAndroidApp = /Android/i.test(navigator.userAgent);
                 const isElectron = !!(window.electronAPI);
-                if (!isAndroidApp || isElectron) {
+                // Electron 桌面端：保存到安装目录/downloads/YYYY-MM/（与图片同目录）
+                if (isElectron && window.electronAPI.saveBackupFile) {
+                    try {
+                        const result = await window.electronAPI.saveBackupFile(fileName, jsonStr);
+                        if (result && result.success) {
+                            downloadResult = `📁 已保存: ${result.filePath || fileName} (${sizeKB} KB)`;
+                        } else {
+                            throw new Error(result?.error || '保存失败');
+                        }
+                    } catch (e) {
+                        console.warn('Electron保存备份失败，回退浏览器下载:', e);
+                        try {
+                            const blob = new Blob([jsonStr], { type: 'application/json' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = fileName;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            setTimeout(() => URL.revokeObjectURL(url), 2000);
+                            downloadResult = `📁 文件已下载: ${fileName} (${sizeKB} KB)`;
+                        } catch (de) { console.warn('文件下载失败:', de); }
+                    }
+                } else if (!isAndroidApp) {
                     try {
                         const blob = new Blob([jsonStr], { type: 'application/json' });
                         const url = URL.createObjectURL(blob);
