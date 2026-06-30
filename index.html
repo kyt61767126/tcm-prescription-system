@@ -1280,7 +1280,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-06-29-v11';
+        window.__APP_VERSION__ = '2026-06-29-v12';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -1610,8 +1610,11 @@
                                 if (resp && resp.success) {
                                     const saved = resp.savedPrescription || p;
                                     if (saved.id && saved.id !== p.id) {
-                                        const mergedRecord = { ...saved, id: p.id };
-                                        await LocalDB.upsertPrescription(mergedRecord, { synced: 1, deleted: 0 });
+                                        // 云端返回的 id 与本地不同（prescriptionHash 去重命中已存在处方）
+                                        // 用云端 id 保存到本地，避免本地保留旧 id 导致 pull 时重复 upsert
+                                        await LocalDB.upsertPrescription(saved, { synced: 1, deleted: 0 });
+                                        // 标记旧本地 id 记录为已删除（INSERT OR REPLACE 不会清理不同 id 的旧记录）
+                                        try { await LocalDB.markDeleted(p.id); } catch (e) {}
                                     } else {
                                         await LocalDB.upsertPrescription(saved, { synced: 1, deleted: 0 });
                                     }
@@ -2090,10 +2093,12 @@
                 alert('请先登录！');
                 return;
             }
-            
+
             console.log('=== refreshHistory() 开始 ===');
             console.log('当前用户:', currentUser);
             showToast('正在刷新...');
+            // 重置分页计数，避免 loadMoreHistory 累加后刷新仍显示扩展条数
+            historyDisplayCount = HISTORY_PAGE_SIZE;
             
             try {
                 // 强制刷新云端数据
@@ -2115,13 +2120,22 @@
                     prescriptionHistory = filterDeletedPrescriptions(prescriptionHistory);
                     if (prescriptionHistory.length < beforeFilter) {
                         console.log(`刷新时过滤掉 ${beforeFilter - prescriptionHistory.length} 条已删除处方`);
-                        // 后台重新发送删除请求，确保云端最终一致
+                        // 重新发送删除请求，确保云端最终一致（await 等待全部完成，避免并发丢失）
                         const deletedIds = getDeletedPrescriptionIds();
                         const stillAlive = cloudResult.data.filter(p => deletedIds.includes(p.id));
                         if (stillAlive.length > 0) {
-                            stillAlive.forEach(p => {
-                                deletePrescriptionFromCloud(p.id).catch(() => {});
-                            });
+                            try {
+                                await Promise.all(stillAlive.map(p => deletePrescriptionFromCloud(p.id).catch(() => {})));
+                                console.log(`已重新发送 ${stillAlive.length} 条删除请求到云端`);
+                            } catch (e) {
+                                console.warn('重新发送删除请求失败:', e);
+                            }
+                            // 同步标记本地 SQLite 为已删除，防止 SyncEngine.push 重新推送
+                            try {
+                                if (await LocalDB.ready()) {
+                                    await Promise.all(stillAlive.map(p => LocalDB.markDeleted(p.id).catch(() => {})));
+                                }
+                            } catch (e) { console.warn('标记本地 SQLite 已删除失败:', e); }
                         }
                         // 保存过滤后的数据到本地
                         savePrescriptionHistory();
@@ -4116,6 +4130,14 @@
             // 记录已删除的处方ID，防止刷新时从云端复活
             markPrescriptionDeleted(id);
 
+            // 同步标记本地 SQLite 中该处方为已删除（deleted=1, synced=0）
+            // 这样 SyncEngine.push 会向云端补发 DELETE 请求，与 localStorage 的 deletedRxIds 协同
+            try {
+                if (await LocalDB.ready()) {
+                    await LocalDB.markDeleted(id);
+                }
+            } catch (e) { console.warn('LocalDB.markDeleted 失败:', e); }
+
             // 同步更新 clinicNo 输入框（updateClinicNoDisplay 内部已做空检查）
             updateClinicNoDisplay();
 
@@ -4164,6 +4186,9 @@
             // 启动同步引擎（幂等，仅首次执行生效；注册 online/visibilitychange/60s 定时器）
             // 必须在 currentUser 已设置后调用；loadData 所有调用点（handleLogin/init）都在 currentUser 设置之后
             try { SyncEngine.init(); } catch(e) { console.warn('SyncEngine.init 失败:', e); }
+
+            // 重置分页计数，避免上次会话 loadMoreHistory 累加残留
+            historyDisplayCount = HISTORY_PAGE_SIZE;
 
             // 注册 APP 从后台恢复回调（供 Android MainActivity.onResume 调用）
             window.__onAppResume = function() {
@@ -4230,7 +4255,27 @@
                         );
                         console.log('过滤后处方数量:', prescriptionHistory.length);
                     }
-                    
+
+                    // 过滤掉已删除的处方（防止从云端复活，与 refreshHistory 保持一致）
+                    const beforeFilterLoad = prescriptionHistory.length;
+                    prescriptionHistory = filterDeletedPrescriptions(prescriptionHistory);
+                    if (prescriptionHistory.length < beforeFilterLoad) {
+                        console.log(`loadData 过滤掉 ${beforeFilterLoad - prescriptionHistory.length} 条已删除处方`);
+                        // 后台重新发送删除请求，确保云端最终一致
+                        const deletedIdsLoad = getDeletedPrescriptionIds();
+                        const stillAliveLoad = cloudResult.data.filter(p => deletedIdsLoad.includes(p.id));
+                        if (stillAliveLoad.length > 0) {
+                            Promise.all(stillAliveLoad.map(p => deletePrescriptionFromCloud(p.id).catch(() => {})))
+                                .catch(() => {});
+                            // 同步标记本地 SQLite 为已删除，防止 SyncEngine.push 重新推送
+                            try {
+                                if (await LocalDB.ready()) {
+                                    await Promise.all(stillAliveLoad.map(p => LocalDB.markDeleted(p.id).catch(() => {})));
+                                }
+                            } catch (e) { console.warn('loadData 标记本地 SQLite 已删除失败:', e); }
+                        }
+                    }
+
                     // 根据用户角色更新统计输入框
                     updateClinicNoDisplay();
 
@@ -4241,11 +4286,11 @@
                     });
                 } else {
                     console.log('cloudResult.data 是空数组，尝试从本地备份恢复');
-                    prescriptionHistory = restoreFromLocalBackup();
+                    prescriptionHistory = filterDeletedPrescriptions(restoreFromLocalBackup());
                 }
             } else {
                 console.log('cloudResult 或 cloudResult.data 为空，尝试从本地备份恢复');
-                prescriptionHistory = restoreFromLocalBackup();
+                prescriptionHistory = filterDeletedPrescriptions(restoreFromLocalBackup());
             }
 
             console.log('最终 prescriptionHistory 长度:', prescriptionHistory.length);
@@ -8241,6 +8286,13 @@ IconFile=${scriptPath}`;
 
             // 记录已删除的处方ID
             markPrescriptionDeleted(id);
+
+            // 同步标记本地 SQLite 中该处方为已删除
+            try {
+                if (await LocalDB.ready()) {
+                    await LocalDB.markDeleted(id);
+                }
+            } catch (e) { console.warn('LocalDB.markDeleted 失败:', e); }
 
             // 刷新病历列表
             renderCaseList(prescriptionHistory);
