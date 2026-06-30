@@ -2829,18 +2829,27 @@
 
         async function initLoginDropdown() {
             const select = document.getElementById('loginUsername');
-
-            // 统一替换为输入框：用户名由管理员在云端创建，登录界面不暴露用户列表
-            // （网页端/APP端/Electron桌面端均用 input，用户手动输入用户名）
+            if (!select) return;
+            
+            const parent = select.parentNode;
+            
             const input = document.createElement('input');
             input.type = 'text';
             input.id = 'loginUsername';
             input.placeholder = '请输入用户名';
             input.setAttribute('onkeypress', "if(event.key==='Enter')handleLogin()");
-            input.className = select.className;
-            input.style.cssText = select.style.cssText;
+            input.style.flex = '0.6667';
+            input.style.padding = '6px 8px';
+            input.style.border = '1.5px solid #4a90d9';
+            input.style.borderRadius = '4px';
+            input.style.fontSize = '10px';
+            input.style.background = 'white';
+            input.style.minWidth = '66px';
             input.style.width = '100%';
-            select.parentNode.replaceChild(input, select);
+            input.style.boxSizing = 'border-box';
+            input.style.outline = 'none';
+            input.style.cursor = 'text';
+            parent.replaceChild(input, select);
 
             // 恢复记住的用户名密码
             const rememberedUsername = localStorage.getItem('cloud_rememberedUsername') || localStorage.getItem('rememberedUsername');
