@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+    <meta name="theme-color" content="#2c5530" />
+    <title>中医处方系统</title>
+    <style>
+      body { margin: 0; padding: 0; background: #e0e0e0; display: flex; align-items: center; justify-content: center; height: 100vh; font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif; }
+      .loading { text-align: center; }
+      .spinner { width: 40px; height: 40px; border: 4px solid #2c5530; border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .text { color: #666; font-size: 14px; }
+    </style>
+    <script>
+      window.location.href = 'https://tcm-prescription-system.pages.dev';
+    </script>
+  </head>
+  <body>
+    <div class="loading">
+      <div class="spinner"></div>
+      <div class="text">正在加载...</div>
+    </div>
+  </body>
+</html>

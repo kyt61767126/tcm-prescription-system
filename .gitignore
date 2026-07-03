@@ -1,0 +1,71 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Build artifacts (kept locally under dist/releases but not tracked)
+dist/releases/
+dist/assets/
+*.apk
+*.aab
+*.exe
+*.dmg
+*.zip
+*.tar.gz
+
+# 一次性修复脚本（防止误入库）
+fix*.js
+fix*.py
+fix*.ts
+
+# 临时校验/调试目录
+_apk_check/
+_apk_verify/
+
+# 敏感凭据图片
+网页版密码.png
+*密码*.png
+
+# 签名密钥（绝不入库）
+*.jks
+*.keystore
+*.p12
+*.pfx
+
+# Capacitor / Android 构建产物
+android/app/build/
+android/.gradle/
+android/captures/
+android/local.properties
+
+# Cloudflare
+.wrangler/
+
+# 归档/历史项目目录（不在本仓库跟踪范围）
+cloud_project/
+offline_project/
+旧版/
+
+# 临时验证脚本（引用了不在仓库中的目录）
+_validate_*.cjs
+_validate_*.js

@@ -1,0 +1,7 @@
+# 1.管理员身份运行PowerShell：cd C:\Users\61767\Documents\trae_projects\kyt-zy\打包-本地版
+
+# 2. 安装依赖（首次打包或依赖变更时）
+npm install
+
+# 3. 执行打包
+npm run build:win        # 仅Windows

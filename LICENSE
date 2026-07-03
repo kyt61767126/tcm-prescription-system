@@ -1,0 +1,53 @@
+版权所有 (C) 2026 本能堂中医诊所处方系统
+
+本软件及其相关源代码、文档、配置文件、界面设计、图标资源
+（统称"本软件"）的著作权及其他知识产权归作者所有。
+
+未经作者书面许可，任何人不得：
+
+1. 复制、修改、合并、翻译本软件的任何部分；
+2. 出版、发行、分发、再许可、出租、出借或销售本软件；
+3. 将本软件用于商业用途或盈利活动；
+4. 逆向工程、反编译、反汇编或以其他方式试图获取本软件源代码；
+5. 移除、更改或隐藏本软件的版权声明、商标声明或其他法律声明；
+6. 将本软件上传至任何公共代码托管平台、网盘或文件分享站点。
+
+上述限制同样适用于本软件的衍生作品。
+
+违反上述规定的行为将构成侵权，作者保留追究法律责任的权利，
+包括但不限于要求停止侵权、赔偿损失等。
+
+本软件按"原样"提供，不附带任何明示或暗示的担保，包括但不限于
+适销性、特定用途适用性和非侵权担保。在任何情况下，作者不对因
+使用或无法使用本软件而产生的任何直接、间接、附带、特殊或
+后果性损害承担责任。
+
+作者保留随时修改、更新或终止本软件及相关服务的权利。
+
+联系方式：微信号 yqjzy1688
+
+=======================================================================
+
+Copyright (C) 2026 BenNengTang TCM Prescription System
+
+All rights reserved.
+
+This software and its related source code, documentation, configuration
+files, interface design, and icon resources (collectively, "the Software")
+are protected by copyright and other intellectual property laws.
+
+Without prior written permission from the author, no person or entity
+may copy, modify, merge, publish, distribute, sublicense, rent, lease,
+sell, reverse engineer, decompile, disassemble, or otherwise use the
+Software for commercial purposes.
+
+Unauthorized copying, modification, distribution, or sale of the Software
+is strictly prohibited and will constitute an infringement, for which the
+author reserves the right to pursue legal action.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
