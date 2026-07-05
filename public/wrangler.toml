@@ -1,0 +1,6 @@
+name = "tcm-prescription-system"
+pages_build_output_dir = "."
+
+[[kv_namespaces]]
+binding = "KV"
+id = "b1ab3e4b683341958cef369fcbf94933"

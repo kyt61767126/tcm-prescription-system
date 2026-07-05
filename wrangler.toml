@@ -1,2 +1,2 @@
-name = "tcm-prescription-mobile"
-pages_build_output_dir = "./dist"
+name = "tcm-prescription-system"
+pages_build_output_dir = "public"
