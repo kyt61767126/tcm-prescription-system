@@ -1393,7 +1393,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-07-05-v3';
+        window.__APP_VERSION__ = '2026-07-06-v1';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -1969,6 +1969,13 @@
             return String(str).replace(/[&<>"']/g, ch => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
             }[ch]));
+        }
+
+        function formatPrice(val) {
+            if (val === '' || val === null || val === undefined) return '';
+            const num = parseFloat(val);
+            if (isNaN(num)) return '';
+            return num.toFixed(2);
         }
 
         // P5: 备份文件 HMAC 签名密钥（与 offline_project 保持一致）
@@ -5442,8 +5449,8 @@
                         style="padding:2px;text-align:left;"></td>
                     <td><input type="number" value="${item.name ? escapeHtml(item.dosage) : ''}" oninput="updateDosage(${index},this.value)" style="padding:2px;"></td>
                     <td><input type="text" value="${item.name ? escapeHtml(item.unit) : ''}" onchange="updateUnit(${index},this.value);calculateAmount()" style="padding:2px;"></td>
-                    <td><input type="text" value="${item.name ? escapeHtml(item.price) : ''}" readonly style="padding:2px;"></td>
-                    <td><input type="text" value="${item.name ? escapeHtml(item.total) : ''}" readonly style="padding:2px;"></td>
+                    <td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.price)) : ''}" readonly style="padding:2px;"></td>
+                    <td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.total)) : ''}" readonly style="padding:2px;"></td>
                     <td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;" onclick="deleteRow(${index})">删</button></td>
                 </tr>
             `).join('');
