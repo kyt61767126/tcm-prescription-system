@@ -64,10 +64,10 @@ export async function onRequest(context) {
             return json({ success: false, error: 'KV binding not found. Please configure TCM_PRESCRIPTION_KV.' }, 500);
         }
 
-        // ===== 登录端点 POST /users?action=login =====
+        // ===== 登录端点 POST /users?action=login 或 ?login=true =====
         // 入参: { username, password }
         // 出参: { success, token, user } - token 用于后续 Bearer 鉴权
-        if (method === 'POST' && url.searchParams.get('action') === 'login') {
+        if (method === 'POST' && (url.searchParams.get('action') === 'login' || url.searchParams.get('login') === 'true')) {
             const body = await context.request.json().catch(() => ({}));
             const { username, password } = body;
             if (!username || !password) {

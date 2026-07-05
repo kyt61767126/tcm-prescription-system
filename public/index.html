@@ -2943,10 +2943,10 @@
                 return;
             }
             
-            // 调用后端登录端点：POST /api/users?login=true
+            // 调用后端登录端点：POST /api/users?action=login
             // 后端会在所有诊所 + 平台管理员中查找并校验密码（SHA-256 + salt）
             try {
-                const data = await cloudFetch(`${CLOUD_API_BASE}/users?login=true`, {
+                const data = await cloudFetch(`${CLOUD_API_BASE}/users?action=login`, {
                     method: 'POST',
                     body: JSON.stringify({ username, password })
                 });
