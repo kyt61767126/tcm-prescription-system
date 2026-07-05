@@ -1,0 +1,49 @@
+{
+  "name": "tcm-prescription-personal",
+  "version": "1.0.0",
+  "description": "本能中医处方系统 - 个人",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "author": "王桂杰",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.benneng.prescription.personal",
+    "productName": "本能中医处方系统-个人",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "index.html",
+      "config.json",
+      "vendor/**/*",
+      "package.json",
+      "package-lock.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "publisherName": "本能堂中医诊所"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "unicode": true,
+      "include": "installer.nsh"
+    }
+  },
+  "dependencies": {
+    "fs-extra": "^11.3.5"
+  }
+}

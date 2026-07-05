@@ -1,0 +1,62 @@
+apply plugin: 'com.android.application'
+
+def signingProperties = new Properties()
+def signingPropertiesFile = file('signing.properties')
+if (signingPropertiesFile.exists()) {
+    signingProperties.load(new FileInputStream(signingPropertiesFile))
+}
+
+android {
+    namespace = "com.benneng.pres"
+    compileSdk = rootProject.ext.compileSdkVersion
+    signingConfigs {
+        release {
+            storeFile file(signingProperties['storeFile'])
+            storePassword signingProperties['storePassword']
+            keyAlias signingProperties['keyAlias']
+            keyPassword signingProperties['keyPassword']
+        }
+    }
+    defaultConfig {
+        applicationId "com.benneng.pres"
+        minSdkVersion rootProject.ext.minSdkVersion
+        targetSdkVersion rootProject.ext.targetSdkVersion
+        versionCode 1
+        versionName "1.0"
+        aaptOptions {
+            ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.map'
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            crunchPngs true
+            multiDexEnabled false
+            ndk {
+                abiFilters 'armeabi-v7a', 'arm64-v8a'
+            }
+        }
+    }
+    packagingOptions {
+        exclude 'META-INF/*.kotlin_module'
+        exclude 'META-INF/AL2.0'
+        exclude 'META-INF/LGPL2.1'
+        exclude '**/*.js.map'
+        exclude '**/*.css.map'
+    }
+    lint {
+        checkReleaseBuilds false
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation "androidx.appcompat:appcompat:$androidxAppCompatVersion"
+    implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
+}

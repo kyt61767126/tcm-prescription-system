@@ -51,20 +51,29 @@ _apk_verify/
 *.keystore
 *.p12
 *.pfx
+signing.properties
+**/signing.properties
 
-# Capacitor / Android 构建产物
+# Capacitor / Android 构建产物（覆盖根目录和子项目）
 android/app/build/
 android/.gradle/
 android/captures/
 android/local.properties
+**/android/app/build/
+**/android/.gradle/
+**/android/captures/
+**/android/local.properties
+
+# Gradle 构建产物（覆盖子项目）
+.gradle/
+**/.gradle/
+**/build/
 
 # Cloudflare
 .wrangler/
 
-# 归档/历史项目目录（不在本仓库跟踪范围）
-cloud_project/
-offline_project/
-旧版/
+# tcm-prescription-system 是 origin 仓库本身的 clone，避免循环引用
+cloud_project/tcm-prescription-system/
 
 # 临时验证脚本（引用了不在仓库中的目录）
 _validate_*.cjs

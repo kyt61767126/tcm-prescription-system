@@ -1,0 +1,53 @@
+{
+  "name": "tcm-prescription-cloud",
+  "version": "1.2.0",
+  "description": "本能中医处方系统 - 云端",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:win:portable": "electron-builder --win portable"
+  },
+  "author": "惠康堂",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.huikangtang.prescription.cloud",
+    "productName": "本能中医处方系统-云端",
+    "directories": {
+      "output": "dist"
+    },
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "files": [
+      "electron/**/*",
+      "index.html",
+      "xlsx.full.min.js",
+      "package.json",
+      "package-lock.json",
+      "**/node_modules/better-sqlite3/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "include": "installer.nsh"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.0.0",
+    "fs-extra": "^11.3.5"
+  }
+}

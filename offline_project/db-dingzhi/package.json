@@ -1,0 +1,48 @@
+{
+  "name": "tcm-prescription-custom",
+  "version": "1.0.0",
+  "description": "本能中医处方系统 - 定制",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder"
+  },
+  "author": "本能中医",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.benneng.prescription.custom",
+    "productName": "本能中医处方系统-定制",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "index.html",
+      "config.json",
+      "vendor/**/*",
+      "package.json",
+      "package-lock.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "unicode": true,
+      "include": "installer.nsh"
+    }
+  },
+  "dependencies": {
+    "fs-extra": "^11.3.5"
+  }
+}

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本能中医处方系统 - 登录</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            background: linear-gradient(180deg, #e0f4ff 0%, #c8e1f5 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .login-container {
+            width: 280px;
+            background: linear-gradient(180deg, #e0f4ff 0%, #c8e1f5 100%);
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0, 102, 204, 0.3);
+            overflow: hidden;
+            position: relative;
+            border: 2px solid #4a90d9;
+        }
+        .header-section {
+            padding: 16px 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            background: linear-gradient(180deg, #4a90d9 0%, #357abd 100%);
+            border-bottom: 1.5px solid #2962a3;
+        }
+        .system-title { font-size: 16px; font-weight: bold; color: white; text-shadow: 1px 1px 3px rgba(0,0,0,0.4); letter-spacing: 1.5px; }
+        .version-tag { font-size: 11px; font-weight: bold; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.4); }
+        .main-content {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: 16px;
+        }
+        .login-box {
+            background: rgba(255,255,255,0.95);
+            border-radius: 7px;
+            padding: 16px 18px;
+            width: 100%;
+            box-shadow: 0 3px 10px rgba(74, 144, 217, 0.3);
+            border: 1.5px solid #7ab8f5;
+        }
+        .clinic-info {
+            text-align: center;
+            padding: 10px 12px;
+            background: linear-gradient(180deg, #fff5f5 0%, #ffeaea 100%);
+            border: 1px solid #ffcccc;
+            border-radius: 4px;
+            margin-bottom: 14px;
+        }
+        .clinic-name { font-size: 13px; font-weight: bold; color: #8b0000; word-break: break-all; }
+        .login-field {
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .login-field label {
+            width: 40px;
+            font-size: 12px;
+            font-weight: bold;
+            color: #333;
+            text-align: left;
+            white-space: nowrap;
+        }
+        .login-field select, .login-field input {
+            flex: 1;
+            padding: 6px 8px;
+            border: 1.5px solid #4a90d9;
+            border-radius: 4px;
+            font-size: 12px;
+            background: white;
+            min-width: 0;
+        }
+        .login-field select:focus, .login-field input:focus {
+            border-color: #2962a3;
+            outline: none;
+            box-shadow: 0 0 5px rgba(74, 144, 217, 0.5);
+        }
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 6px;
+            margin-bottom: 12px;
+            justify-content: flex-start;
+        }
+        .remember-me input[type="checkbox"] { width: 14px; height: 14px; accent-color: #4a90d9; cursor: pointer; }
+        .remember-me label { font-size: 11px; color: #666; cursor: pointer; }
+        .login-buttons { display: flex; gap: 14px; justify-content: center; }
+        .login-btn {
+            padding: 7px 20px;
+            min-width: 70px;
+            background: linear-gradient(180deg, #6cb3f0 0%, #4a90d9 100%);
+            color: #fff;
+            border: 1.5px solid #357abd;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 1.5px 2px 4px rgba(0, 82, 152, 0.35);
+            transition: all 0.2s;
+        }
+        .login-btn:hover { background: linear-gradient(180deg, #8dc8f7 0%, #6cb3f0 100%); transform: translateY(-0.5px); }
+        .login-error {
+            color: #dc2626;
+            font-size: 11px;
+            text-align: center;
+            margin-top: 10px;
+            padding: 6px;
+            background: #fff5f5;
+            border-radius: 2px;
+            border: 1px solid #fcc;
+            display: none;
+        }
+        .footer-section {
+            padding: 8px 17px;
+            background: linear-gradient(180deg, #4a90d9 0%, #357abd 100%);
+            border-top: 1.5px solid #2962a3;
+            text-align: center;
+            font-size: 10px;
+            color: rgba(255,255,255,0.9);
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="header-section">
+            <span class="system-title">本能中医处方系统</span>
+            <span class="version-tag">【定制】</span>
+        </div>
+        <div class="main-content">
+            <div class="login-box">
+                <div class="clinic-info">
+                    <div id="clinicName" class="clinic-name">本能堂中医诊所</div>
+                </div>
+                <div class="login-field">
+                    <label>用户：</label>
+                    <select id="loginUsername"></select>
+                </div>
+                <div class="login-field">
+                    <label>密码：</label>
+                    <input type="password" id="loginPassword" placeholder="请输入密码">
+                </div>
+                <div class="remember-me">
+                    <input type="checkbox" id="rememberPassword">
+                    <label for="rememberPassword">记住密码</label>
+                </div>
+                <div class="login-buttons">
+                    <button class="login-btn" id="btnOk" type="button">确定</button>
+                    <button class="login-btn" id="btnCancel" type="button">取消</button>
+                </div>
+                <div id="loginError" class="login-error"></div>
+            </div>
+        </div>
+        <div class="footer-section">微信号: yqjzy1688</div>
+    </div>
+    <script src="login.js"></script>
+</body>
+</html>

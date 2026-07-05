@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本能中医处方系统 - 登录</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body {
+            font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            background: linear-gradient(180deg, #e0f4ff 0%, #c8e1f5 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .login-container {
+            width: 247px;
+            height: 320px;
+            background: linear-gradient(180deg, #e0f4ff 0%, #c8e1f5 100%);
+            border-radius: 8px;
+            box-shadow: 0 6px 20px rgba(0, 102, 204, 0.3);
+            overflow: hidden;
+            position: relative;
+            border: 2px solid #4a90d9;
+        }
+        
+        .bg-decoration {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 247 300"><defs><pattern id="circles" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse"><circle cx="10" cy="10" r="1.5" fill="rgba(74, 144, 217, 0.12)"/></pattern></defs><rect fill="url(%23circles)" width="247" height="300"/></svg>');
+            background-size: cover;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        .header-section {
+            position: relative;
+            z-index: 1;
+            padding: 13px 17px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+            background: linear-gradient(180deg, #4a90d9 0%, #357abd 100%);
+            border-bottom: 1.5px solid #2962a3;
+        }
+        
+        .system-title {
+            font-size: 15px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 3px rgba(0,0,0,0.4);
+            letter-spacing: 1.5px;
+        }
+        
+        .version-tag {
+            font-size: 10px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.4);
+        }
+        
+        .main-content {
+            position: relative;
+            z-index: 1;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            height: calc(100% - 52px);
+            padding: 2px 13px 0;
+        }
+        
+        .login-box {
+            background: rgba(255,255,255,0.95);
+            border-radius: 7px;
+            padding: 12px 18px 15px;
+            width: 100%;
+            max-width: 165px;
+            box-shadow: 0 3px 10px rgba(74, 144, 217, 0.3);
+            border: 1.5px solid #7ab8f5;
+        }
+
+        .clinic-info {
+            text-align: center;
+            padding: 8px 10px;
+            background: linear-gradient(180deg, #fff5f5 0%, #ffeaea 100%);
+            border: 1px solid #ffcccc;
+            border-radius: 4px;
+            margin-bottom: 13px;
+        }
+
+        .clinic-name {
+            font-size: 11px;
+            font-weight: bold;
+            color: #8b0000;
+        }
+        
+        .login-field {
+            margin-bottom: 13px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .login-field label {
+            width: 33px;
+            font-size: 10px;
+            font-weight: bold;
+            color: #333;
+            text-align: left;
+            white-space: nowrap;
+            line-height: 1.2;
+        }
+        
+        .login-field select {
+            flex: 1;
+            padding: 4px 5px;
+            border: 1.5px solid #4a90d9;
+            border-radius: 4px;
+            font-size: 9px;
+            background: white;
+            min-width: 64px;
+            max-width: 68px;
+        }
+        
+        .login-field input {
+            flex: 1;
+            padding: 4px 5px;
+            border: 1.5px solid #4a90d9;
+            border-radius: 4px;
+            font-size: 9px;
+            background: white;
+            min-width: 64px;
+            max-width: 68px;
+        }
+        
+        .login-field select:focus, .login-field input:focus {
+            border-color: #2962a3;
+            outline: none;
+            box-shadow: 0 0 5px rgba(74, 144, 217, 0.5);
+        }
+        
+        .login-buttons {
+            display: flex;
+            gap: 13px;
+            justify-content: center;
+            margin-top: 17px;
+        }
+        
+        .login-btn {
+            padding: 5px 15px;
+            min-width: 53px;
+            background: linear-gradient(180deg, #6cb3f0 0%, #4a90d9 100%);
+            color: #fff;
+            border: 1.5px solid #357abd;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 1.5px 2px 4px rgba(0, 82, 152, 0.35);
+            transition: all 0.2s;
+        }
+        
+        .login-btn:hover {
+            background: linear-gradient(180deg, #8dc8f7 0%, #6cb3f0 100%);
+            transform: translateY(-0.5px);
+        }
+        
+        .login-footer {
+            text-align: center;
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #ddd;
+            font-size: 8px;
+            color: #666;
+        }
+        
+        .remember-me {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 4px;
+            margin-top: 5px;
+            margin-left: 41px;
+        }
+        
+        .remember-me input[type="checkbox"] {
+            width: 12px;
+            height: 12px;
+            accent-color: #4a90d9;
+            cursor: pointer;
+        }
+        
+        .remember-me label {
+            font-size: 8px;
+            color: #666;
+            cursor: pointer;
+        }
+        
+        .login-error {
+            color: #dc2626;
+            font-size: 7px;
+            text-align: center;
+            margin-top: 7px;
+            padding: 4px;
+            background: #fff5f5;
+            border-radius: 2px;
+            border: 1px solid #fcc;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <div class="bg-decoration"></div>
+        
+        <div class="header-section">
+            <span class="system-title">本能中医处方系统</span>
+            <span class="version-tag">【云版】</span>
+        </div>
+        
+        <div class="main-content">
+            <div class="login-box">
+                <div class="clinic-info">
+                    <div id="clinicName" class="clinic-name">本能堂中医诊所</div>
+                </div>
+                <div class="login-field">
+                    <label>用户：</label>
+                    <input type="text" id="loginUsername" placeholder="请输入用户名">
+                </div>
+                
+                <div class="login-field">
+                    <label>密码：</label>
+                    <input type="password" id="loginPassword" placeholder="">
+                </div>
+                
+                <div class="remember-me">
+                    <input type="checkbox" id="rememberPassword">
+                    <label for="rememberPassword">记住密码</label>
+                </div>
+                
+                <div class="login-buttons">
+                    <button class="login-btn" id="loginBtn">确定</button>
+                    <button class="login-btn" id="cancelBtn">取消</button>
+                </div>
+                
+                <div id="loginError" class="login-error"></div>
+                
+                <div class="login-footer">微信号: yqjzy1688</div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 云端 API 基址（与 index.html 中保持一致）
+        const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
+
+        async function getConfigFromIndexHtml() {
+            try {
+                const result = await window.electronAPI.getIndexHtmlContent();
+                if (!result || !result.success || !result.content) return {};
+                const content = result.content;
+                const config = {};
+                const clinicNameMatch = content.match(/clinicName\s*:\s*['"]([^'"]+)['"]/);
+                if (clinicNameMatch) config.clinicName = clinicNameMatch[1];
+                return config;
+            } catch (e) {
+                console.log('读取index.html失败:', e.message);
+                return {};
+            }
+        }
+
+        async function loadClinicName() {
+            // 优先读 global_clinicName（index.html saveSettings 写入），fallback clinicName
+            const savedName = localStorage.getItem('global_clinicName') || localStorage.getItem('clinicName');
+            const config = await getConfigFromIndexHtml();
+            const clinicName = savedName || config.clinicName || '本能堂中医诊所';
+            const clinicNameElement = document.getElementById('clinicName');
+            if (clinicNameElement) clinicNameElement.textContent = clinicName;
+        }
+
+        // 恢复记住的用户名/密码
+        async function initLoginFields() {
+            const rememberedUsername = localStorage.getItem('cloud_rememberedUsername') || localStorage.getItem('rememberedUsername');
+            const rememberedPassword = localStorage.getItem('cloud_rememberedPassword') || localStorage.getItem('rememberedPassword');
+            if (rememberedUsername) {
+                document.getElementById('loginUsername').value = rememberedUsername;
+            }
+            if (rememberedPassword) {
+                document.getElementById('loginPassword').value = rememberedPassword;
+                document.getElementById('rememberPassword').checked = true;
+            }
+        }
+
+        // 调用后端登录端点：POST /api/users?login=true
+        // 后端会在所有诊所 + 平台管理员中查找并校验密码（SHA-256 + salt）
+        async function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorDiv = document.getElementById('loginError');
+
+            if (!username) {
+                errorDiv.textContent = '请输入用户名';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            if (!password) {
+                errorDiv.textContent = '请输入密码';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            errorDiv.textContent = '正在登录...';
+            errorDiv.style.display = 'block';
+            errorDiv.style.color = '#666';
+
+            try {
+                const response = await fetch(`${CLOUD_API_BASE}/users?login=true`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (!data.success || !data.user) {
+                    errorDiv.textContent = data.error || '用户名或密码错误';
+                    errorDiv.style.display = 'block';
+                    errorDiv.style.color = '#dc2626';
+                    return;
+                }
+                const user = data.user;
+                localStorage.setItem('cloud_currentUser', JSON.stringify(user));
+                localStorage.setItem('cloud_isLoggedIn', 'true');
+                localStorage.setItem('currentUser', JSON.stringify(user));
+                localStorage.setItem('isLoggedIn', 'true');
+
+                const rememberPassword = document.getElementById('rememberPassword').checked;
+                if (rememberPassword) {
+                    localStorage.setItem('cloud_rememberedPassword', password);
+                    localStorage.setItem('cloud_rememberedUsername', username);
+                    localStorage.setItem('rememberedPassword', password);
+                    localStorage.setItem('rememberedUsername', username);
+                } else {
+                    localStorage.removeItem('cloud_rememberedPassword');
+                    localStorage.removeItem('cloud_rememberedUsername');
+                    localStorage.removeItem('rememberedPassword');
+                    localStorage.removeItem('rememberedUsername');
+                }
+
+                errorDiv.textContent = '登录成功，正在打开...';
+                errorDiv.style.display = 'block';
+                errorDiv.style.color = '#4CAF50';
+
+                if (!window.electronAPI) {
+                    errorDiv.textContent = '错误：桌面环境未初始化，请重启应用';
+                    errorDiv.style.color = '#dc2626';
+                    return;
+                }
+                await window.electronAPI.loginSuccess(user);
+            } catch (err) {
+                console.error('Login error:', err);
+                errorDiv.textContent = '登录失败：' + (err.message || '网络错误');
+                errorDiv.style.display = 'block';
+                errorDiv.style.color = '#dc2626';
+            }
+        }
+
+        function handleCancel() {
+            if (window.electronAPI) {
+                window.electronAPI.loginCancel();
+            } else {
+                window.close();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // 优先绑定事件，确保输入框和按钮立即可用，不被异步 IPC 调用阻塞
+            document.getElementById('loginBtn').addEventListener('click', handleLogin);
+            document.getElementById('cancelBtn').addEventListener('click', handleCancel);
+            document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleLogin();
+            });
+            document.getElementById('loginUsername').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') document.getElementById('loginPassword').focus();
+            });
+            // 异步加载诊所名称和记住的登录信息（不阻塞界面交互）
+            loadClinicName().catch(e => console.warn('loadClinicName失败:', e));
+            initLoginFields().catch(e => console.warn('initLoginFields失败:', e));
+        });
+    </script>
+</body>
+</html>
