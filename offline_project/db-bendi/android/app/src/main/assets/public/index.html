@@ -1187,18 +1187,39 @@ let currentUser = null;
                 alert('该用户暂无处方数据');
                 return;
             }
-            
-            // 显示用户处方列表
-            let message = `用户 ${username} 的处方列表：\n\n`;
-            prescriptions.slice(0, 10).forEach((p, index) =>{
-                message += `${index + 1}. 门诊: ${p.prescriptionNo} | 患者: ${p.patientName} | 日期: ${p.date}\n`;
+
+            // 按时间倒序排序（最新的排在最上面）
+            prescriptions.sort((a, b) => (b.createdAt || b.id || 0) - (a.createdAt || a.id || 0));
+
+            // 移除已存在的 modal
+            const existing = document.getElementById('viewUserPrescriptionsModal');
+            if (existing) existing.remove();
+
+            // 构建处方列表 HTML
+            let listHtml = '';
+            prescriptions.forEach((p, index) => {
+                listHtml += '<div style="background:#f8f9fa;border-left:3px solid #2c5530;padding:10px 12px;margin-bottom:8px;border-radius:4px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+                        '<span style="font-weight:bold;color:#2c5530;">' + escapeHtml(p.prescriptionNo || '未编号') + '</span>' +
+                        '<span style="color:#666;font-size:13px;">' + escapeHtml(p.date || '') + '</span>' +
+                    '</div>' +
+                    '<div style="color:#333;font-size:14px;">患者：' + escapeHtml(p.patientName || '未填写') + '</div>' +
+                    (p.diagnosis ? '<div style="color:#555;font-size:13px;margin-top:4px;">诊断：' + escapeHtml(p.diagnosis) + '</div>' : '') +
+                '</div>';
             });
-            
-            if (prescriptions.length >10) {
-                message += `\n... 还有 ${prescriptions.length - 10} 条处方未显示`;
-            }
-            
-            alert(message);
+
+            const modal = document.createElement('div');
+            modal.id = 'viewUserPrescriptionsModal';
+            modal.className = 'modal';
+            modal.style.display = 'flex';
+            modal.innerHTML = '<div class="modal-content" style="max-width:500px;width:90%;max-height:80vh;">' +
+                '<div class="modal-header"><span>用户 ' + escapeHtml(username) + ' 的处方（共 ' + prescriptions.length + ' 条）</span>' +
+                '<span class="close-btn" onclick="document.getElementById(\'viewUserPrescriptionsModal\').remove()">&times;</span></div>' +
+                '<div class="modal-body" style="max-height:60vh;overflow-y:auto;padding:15px;">' + listHtml + '</div>' +
+                '<div class="modal-footer">' +
+                '<button class="action-btn primary" onclick="document.getElementById(\'viewUserPrescriptionsModal\').remove()">关闭</button>' +
+                '</div></div>';
+            document.body.appendChild(modal);
         }
 
         async function handleDeleteUser(username) {

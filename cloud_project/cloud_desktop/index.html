@@ -4048,7 +4048,7 @@
 
             if (!btn1 || !btn2) return;
 
-            // APP 端（Capacitor）：总管理员显示"平台管理、处方监管"，诊所管理员显示"统计分析、账户管理"，普通用户显示"统计分析、修改密码"
+            // APP 端（Capacitor）：总管理员显示"平台管理、处方监管"，诊所管理员显示"统计分析、账户管理"，普通用户只显示"统计分析"
             if (window.Capacitor) {
                 if (isPlatformAdmin(currentUser)) {
                     // 平台总管理员：平台管理 + 处方监管
@@ -4056,16 +4056,17 @@
                     btn1.onclick = function() { showPlatformManageModal(); };
                     btn2.innerHTML = '📊 处方监管';
                     btn2.onclick = function() { showPlatformPrescriptionModal(); };
+                    btn2.style.display = '';
                 } else if (isClinicAdmin(currentUser)) {
                     btn1.innerHTML = '📊 统计分析';
                     btn1.onclick = function() { showModal('analyticsModal'); };
                     btn2.innerHTML = '👤 账户管理';
                     btn2.onclick = function() { showUserManageModal(); };
+                    btn2.style.display = '';
                 } else {
                     btn1.innerHTML = '📊 统计分析';
                     btn1.onclick = function() { showModal('analyticsModal'); };
-                    btn2.innerHTML = '🔑 修改密码';
-                    btn2.onclick = function() { showChangePwdModal(); };
+                    btn2.style.display = 'none';
                 }
                 return;
             }
@@ -4076,12 +4077,12 @@
                 btn1.onclick = function() { showModal('analyticsModal'); };
                 btn2.innerHTML = '👤 账户管理';
                 btn2.onclick = function() { showUserManageModal(); };
+                btn2.style.display = '';
             } else {
-                // 网页端普通用户：统计分析、修改密码
+                // 网页端普通用户：只显示统计分析
                 btn1.innerHTML = '📊 统计分析';
                 btn1.onclick = function() { showModal('analyticsModal'); };
-                btn2.innerHTML = '🔑 修改密码';
-                btn2.onclick = function() { showChangePwdModal(); };
+                btn2.style.display = 'none';
             }
         }
 
