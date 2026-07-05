@@ -8,7 +8,6 @@ import { useAuthRedirect } from '../hooks/useAuthRedirect';
 import { CloudUser } from '../types';
 import { logger } from '../utils/logger';
 import AccountManagement from '../components/Profile/AccountManagement';
-import ChangePasswordModal from '../components/Profile/ChangePasswordModal';
 
 const Profile: React.FC = () => {
   const navigate = useNavigate();
@@ -24,7 +23,6 @@ const Profile: React.FC = () => {
   
   const [currentMode, setCurrentMode] = useState<'cloud' | 'offline'>(getAppMode());
   const [cloudUsers, setCloudUsers] = useState<CloudUser[]>([]);
-  const [showChangePwdModal, setShowChangePwdModal] = useState(false);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -253,28 +251,6 @@ const Profile: React.FC = () => {
             <span style={{ marginLeft: 'auto', color: '#ccc' }}>→</span>
           </button>
           <button
-            onClick={() => setShowChangePwdModal(true)}
-            style={{
-              width: '100%',
-              padding: '12px 15px',
-              textAlign: 'left',
-              border: 'none',
-              background: 'none',
-              cursor: 'pointer',
-              fontSize: '14px',
-              borderBottom: '1px solid #eee',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#f5f5f5'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
-          >
-            <span>🔒</span>
-            <span>修改密码</span>
-            <span style={{ marginLeft: 'auto', color: '#ccc' }}>→</span>
-          </button>
-          <button
             onClick={() => {}}
             style={{
               width: '100%',
@@ -375,12 +351,6 @@ const Profile: React.FC = () => {
         <div>中医处方系统 v1.0.0</div>
         <div style={{ marginTop: '5px' }}>云端数据安全可靠</div>
       </div>
-
-      <ChangePasswordModal
-        visible={showChangePwdModal}
-        onClose={() => setShowChangePwdModal(false)}
-        user={user}
-      />
     </div>
   );
 };
