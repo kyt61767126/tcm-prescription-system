@@ -68,7 +68,9 @@ export async function onRequest(context) {
         // 入参: { username, password }
         // 出参: { success, token, user } - token 用于后续 Bearer 鉴权
         if (method === 'POST' && (url.searchParams.get('action') === 'login' || url.searchParams.get('login') === 'true')) {
-            const body = await context.request.json().catch(() => ({}));
+            const bodyText = await context.request.text();
+            let body = {};
+            try { body = JSON.parse(bodyText); } catch (e) {}
             const { username, password } = body;
             if (!username || !password) {
                 return json({ success: false, error: '用户名或密码不能为空' }, 400);

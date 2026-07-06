@@ -134,7 +134,7 @@
         .login-btn { padding: 5px 15px; min-width: 53px; background: linear-gradient(180deg, #6cb3f0 0%, #4a90d9 100%); color: #fff; border: 1.5px solid #357abd; border-radius: 4px; font-size: 9px; font-weight: bold; cursor: pointer; box-shadow: 1.5px 2px 4px rgba(0, 82, 152, 0.35); transition: all 0.2s; }
         .login-btn:hover { background: linear-gradient(180deg, #8dc8f7 0%, #6cb3f0 100%); transform: translateY(-0.5px); }
         .login-footer { text-align: center; margin-top: 8px; font-size: 8px; color: #666; }
-        .login-error { color: #dc2626; font-size: 7px; text-align: center; margin-top: 7px; padding: 4px; background: #fff5f5; border-radius: 2px; border: 1px solid #fcc; display: none; }
+        .login-error { color: #dc2626; font-size: 14px; text-align: center; margin-top: 8px; padding: 8px; background: #fff5f5; border-radius: 4px; border: 1px solid #fcc; display: none; }
         .clinic-info { text-align: center; padding: 8px 10px; background: linear-gradient(180deg, #fff5f5 0%, #ffeaea 100%); border: 1px solid #ffcccc; border-radius: 4px; margin-bottom: 13px; }
         .clinic-info-name { font-size: 11px; font-weight: bold; color: #8b0000; margin-bottom: 2px; }
         
@@ -2931,7 +2931,7 @@
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
             const errorDiv = document.getElementById('loginError');
-            
+
             if (!username) {
                 errorDiv.textContent = '请输入用户名';
                 errorDiv.style.display = 'block';
@@ -2942,7 +2942,16 @@
                 errorDiv.style.display = 'block';
                 return;
             }
-            
+
+            // 显示加载状态
+            const loginBtn = document.querySelector('.login-btn');
+            const originalText = loginBtn ? loginBtn.textContent : '';
+            if (loginBtn) {
+                loginBtn.textContent = '登录中...';
+                loginBtn.disabled = true;
+            }
+            errorDiv.style.display = 'none';
+
             // 调用后端登录端点：POST /api/users?action=login
             // 后端会在所有诊所 + 平台管理员中查找并校验密码（SHA-256 + salt）
             try {
@@ -2953,6 +2962,10 @@
                 if (!data.success || !data.user) {
                     errorDiv.textContent = data.error || '用户名或密码错误';
                     errorDiv.style.display = 'block';
+                    if (loginBtn) {
+                        loginBtn.textContent = originalText;
+                        loginBtn.disabled = false;
+                    }
                     return;
                 }
                 const user = data.user;
@@ -3012,6 +3025,10 @@
                 console.error('Login error:', err);
                 errorDiv.textContent = '登录失败：' + (err.message || '网络错误');
                 errorDiv.style.display = 'block';
+                if (loginBtn) {
+                    loginBtn.textContent = originalText;
+                    loginBtn.disabled = false;
+                }
             }
         }
 
