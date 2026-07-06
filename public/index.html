@@ -275,13 +275,13 @@
                 font-size: 12px;
                 padding-right: 4px;
             }
-            
+
             .patient-input {
                 min-height: 32px;
                 font-size: 14px;
                 padding: 4px 6px;
             }
-            
+
             .patient-input.x-small { flex: 0 0 55px; }
             .patient-input.xx-small { flex: 0 0 90px; }
             .patient-input.xxx-small { flex: 0 0 110px; }
@@ -515,6 +515,11 @@
                 font-size: 16px;
             }
             
+            .patient-row {
+                flex-wrap: nowrap;
+                gap: 2px;
+            }
+            
             /* 患者信息栏继承768px的grid布局，仅微调 */
             .patient-input {
                 min-height: 34px;
@@ -553,6 +558,66 @@
             .center-panel { padding: 20px; }
             .prescription-paper { padding: 20mm; }
         }
+
+        /* 统计分析图表响应式优化 */
+        .analytics-charts-grid { gap: 15px; }
+        .analytics-charts-grid canvas { display: block; width: 100%; height: 220px; }
+        #medicineChart { height: 240px; }
+
+        /* 平板及以下：图表单列布局，增加高度便于阅读 */
+        @media screen and (max-width: 1024px) {
+            .analytics-charts-grid { grid-template-columns: 1fr !important; }
+            .analytics-charts-grid canvas { height: 260px; }
+            #medicineChart { height: 280px; }
+        }
+
+        /* 手机端：图表高度适中，字体清晰可读 */
+        @media screen and (max-width: 768px) {
+            .analytics-charts-grid canvas { height: 220px; }
+            #medicineChart { height: 140px; }
+            /* 月度统计报表与患者就诊列表：占满容器，边框内完整显示 */
+            .stats-table-container { max-height: none !important; overflow: hidden !important; box-sizing: border-box !important; }
+            .stats-table-container table { font-size: 10px !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; table-layout: fixed !important; }
+            .stats-table-container th, .stats-table-container td { padding: 2px 2px !important; white-space: nowrap; box-sizing: border-box !important; overflow: hidden; text-overflow: ellipsis; }
+            .stats-table-container .small-btn { padding: 1px 2px !important; font-size: 9px !important; }
+            /* 患者就诊列表：百分比列宽，总和100% */
+            .patient-visit-table th:nth-child(1), .patient-visit-table td:nth-child(1) { width: 24% !important; }
+            .patient-visit-table th:nth-child(2), .patient-visit-table td:nth-child(2) { width: 12% !important; text-align: center !important; }
+            .patient-visit-table th:nth-child(3), .patient-visit-table td:nth-child(3) { width: 22% !important; text-align: center !important; }
+            .patient-visit-table th:nth-child(4), .patient-visit-table td:nth-child(4) { width: 22% !important; text-align: center !important; }
+            .patient-visit-table th:nth-child(5), .patient-visit-table td:nth-child(5) { width: 20% !important; text-align: center !important; }
+            /* 月度统计报表：百分比列宽，总和100% */
+            .stats-table-container > table:not(.patient-visit-table) th:nth-child(1), .stats-table-container > table:not(.patient-visit-table) td:nth-child(1) { width: 14% !important; }
+            .stats-table-container > table:not(.patient-visit-table) th:nth-child(2), .stats-table-container > table:not(.patient-visit-table) td:nth-child(2) { width: 12% !important; }
+            .stats-table-container > table:not(.patient-visit-table) th:nth-child(3), .stats-table-container > table:not(.patient-visit-table) td:nth-child(3) { width: 16% !important; }
+            .stats-table-container > table:not(.patient-visit-table) th:nth-child(4), .stats-table-container > table:not(.patient-visit-table) td:nth-child(4) { width: 14% !important; }
+            .stats-table-container > table:not(.patient-visit-table) th:nth-child(5), .stats-table-container > table:not(.patient-visit-table) td:nth-child(5) { width: 14% !important; }
+            .stats-table-container > table:not(.patient-visit-table) th:nth-child(6), .stats-table-container > table:not(.patient-visit-table) td:nth-child(6) { width: 16% !important; }
+            .stats-table-container > table:not(.patient-visit-table) th:nth-child(7), .stats-table-container > table:not(.patient-visit-table) td:nth-child(7) { width: 14% !important; }
+            /* 统计卡片容器减小 padding，确保表格不超出边框 */
+            .stats-card { padding: 8px !important; box-sizing: border-box !important; }
+            .stats-table-container { padding: 0 !important; margin: 0 !important; }
+            .stats-table-container > table { border: 1px solid #ddd !important; }
+            /* 数据备份与恢复：3 个按钮一行显示 */
+            .backup-action-bar { display: grid !important; grid-template-columns: 1fr 1fr 1fr !important; gap: 6px !important; justify-content: stretch !important; }
+            .backup-action-bar .action-btn { min-width: 0 !important; padding: 8px 4px !important; font-size: 12px !important; text-align: center; }
+        }
+
+        /* 超小屏手机：药材图表略增高度避免条形挤压 */
+        @media screen and (max-width: 480px) {
+            .analytics-charts-grid canvas { height: 200px; }
+            #medicineChart { height: 160px; }
+            .backup-action-bar .action-btn { font-size: 11px !important; padding: 6px 2px !important; }
+        }
+
+        /* 药品库管理按钮手机端 2 列布局 */
+        @media screen and (max-width: 768px) {
+            .mobile-hide { display: none !important; }
+            .medicine-action-bar { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+            .medicine-action-bar #medicineSearch { grid-column: 1 / -1; min-width: 0 !important; flex: none !important; }
+            .medicine-action-bar #importMedicineFile { grid-column: 1 / -1; }
+            .medicine-action-bar .action-btn { width: 100%; box-sizing: border-box; }
+        }
     </style>
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
@@ -561,205 +626,6 @@
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
-
-    <div class="top-tabs">
-        <div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div>
-        <div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div>
-        <div class="tab-item" id="medicineManageBtn" onclick="showModal('medicineModal')">【药品管理】</div>
-        <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
-        <div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div>
-        <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
-        <div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div>
-        <div class="tab-item" id="platformManageBtn" onclick="showPlatformManageModal()" style="display:none;background:#fff3cd;color:#856404;border-color:#ffc107;">【平台管理】</div>
-        <div class="tab-item" id="platformRxBtn" onclick="showPlatformPrescriptionModal()" style="display:none;background:#e3f2fd;color:#1565c0;border-color:#42a5f5;">【处方监管】</div>
-        <div class="tab-item" onclick="showHelp()">【系统帮助】</div>
-        <div class="tab-item" style="background:#ffdddd;color:#8b0000;" id="logoutBtn">【退出登录】</div>
-        <div class="tab-hint">
-            当前用户: <span style="color:#008000;font-weight:bold;" id="userDisplayName"></span> |
-            <span style="font-weight:bold;" id="modeStatus">【在线】</span>
-        </div>
-    </div>
-
-    <div class="main-container" style="display: none;">
-        <div class="left-panel">
-            <div class="top-tabs-left">
-                <div class="tab-left-item active">填资料</div>
-                <div class="tab-left-item" onclick="loadLastHistory()">调原方</div>
-                <button class="action-btn" onclick="clearPrescription()" style="margin-left:5px;padding:2px 8px;font-size:12px;">重输</button>
-                <button class="action-btn" onclick="saveAsFormula()" style="padding:2px 8px;font-size:12px;">存验方</button>
-                <button class="action-btn" onclick="printPrescription('portrait')" style="padding:2px 8px;font-size:12px;">纵向打印</button>
-                <button class="action-btn" onclick="printPrescription('landscape')" style="padding:2px 8px;font-size:12px;">横向打印</button>
-                <button class="action-btn primary" onclick="savePrescription()" style="padding:2px 8px;font-size:12px;">保存</button>
-            </div>
-            <div class="patient-section">
-                <div class="patient-row">
-                    <span class="patient-label">门诊</span>
-                    <input type="text" id="prescriptionNo" class="patient-input name-input" readonly>
-                    <span class="patient-label">性别</span>
-                    <select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()">
-                        <option value="男">男</option>
-                        <option value="女">女</option>
-                    </select>
-                    <span class="patient-label">日期</span>
-                    <input type="text" id="visitDate" class="patient-input small" readonly>
-                </div>
-                <div class="patient-row">
-                    <span class="patient-label">姓名</span>
-                    <input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" onkeydown="handleEnterToNext(event, 'patientAge')" autocomplete="off">
-                    <span class="patient-label">年龄</span>
-                    <input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" onkeydown="handleEnterToNext(event, 'patientPhone')">
-                    <span class="patient-label">电话</span>
-                    <input type="text" id="patientPhone" class="patient-input small" onkeydown="handleEnterToNext(event, 'patientAddress')">
-                </div>
-                <div class="patient-row">
-                    <span class="patient-label">统计</span>
-                    <input type="text" id="clinicNo" class="patient-input xx-small" readonly>
-                    <span class="patient-label">住址</span>
-                    <input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;" onkeydown="handleEnterToNext(event, 'medicine_0')">
-                </div>
-            </div>
-            <div class="symptom-section">
-                <div class="history-tabs">
-                    <div class="history-tab active">病史症状</div>
-                    <div class="history-tab">修改病史</div>
-                </div>
-                <textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea>
-            </div>
-            <div class="diagnosis-section">
-                <div class="patient-row">
-                    <span class="patient-label">诊断</span>
-                    <input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()">
-                    <span class="patient-label">剂数</span>
-                    <input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')">
-                    <span style="font-size:13px;margin-right:8px;">剂</span>
-                    <span class="patient-label">医师</span>
-                    <input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;">
-                </div>
-            </div>
-            <div class="action-buttons-section">
-                <div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;">
-                    <span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span>
-                    <span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span>
-                    <span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span>
-                    <span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span>
-                </div>
-            </div>
-            <div class="medicine-section">
-                <div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">
-                    提示: 在简码栏输入简码，在药名栏输入药名
-                </div>
-                <div class="medicine-table-container">
-                    <table class="medicine-table" id="prescriptionTable">
-                        <thead>
-                            <tr>
-                                <th style="width:25px;">#</th>
-                                <th style="width:45px;">简码</th>
-                                <th style="width:90px;">药物</th>
-                                <th style="width:40px;">数量</th>
-                                <th style="width:30px;">单位</th>
-                                <th style="width:40px;">单价</th>
-                                <th style="width:45px;">合计</th>
-                                <th style="width:30px;">删</th>
-                            </tr>
-                        </thead>
-                        <tbody id="prescriptionBody">
-                        </tbody>
-                    </table>
-                </div>
-                <div class="medicine-search-dropdown" id="medicineSearchDropdown"></div>
-            </div>
-        </div>
-
-        <div class="center-panel">
-            <div class="prescription-paper" id="prescriptionPaper">
-                <div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div>
-                <div class="prescription-title">处 方 笺</div>
-                <div class="prescription-info">
-                    <div>姓名: <span id="paperName"></span></div>
-                    <div>性别: <span id="paperGender"></span></div>
-                    <div>年龄: <span id="paperAge"></span>岁</div>
-                    <div>科别: 中医内科</div>
-                    <div>门诊号: <span id="paperClinicNo"></span></div>
-                    <div>日期: <span id="paperDate"></span></div>
-                </div>
-                <div style="margin-bottom:16px; line-height:2;">
-                    <span>病史症状: <span id="paperMedicalHistory"></span></span>
-                    <div style="border-bottom:1px solid #000; margin-top:16px;"></div>
-                </div>
-                <div style="margin-bottom:0px;">
-                    <span>诊断: <span id="paperDiagnosis"></span></span>
-                    <div style="border-bottom:1px solid #000; margin-top:1px;"></div>
-                </div>
-                <div class="prescription-grid" style="margin-top:0px;">
-                    <div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;">
-                        <div class="rp-mark">RP</div>
-                        <div></div>
-                        <div class="dose-count"><span id="paperDoseCount">7</span>剂</div>
-                    </div>
-                    <div id="prescriptionLines"></div>
-                </div>
-                <div class="prescription-footer" style="margin-top:3px;">
-                    <div class="usage-text">用法: 水煎服，日一剂，早晚分服</div>
-                    <div class="signature-row">
-                        <span>医师: <span id="paperDoctor"></span>（签字）</span>
-                        <span>配方: ________ 复核: ________</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div class="right-panel">
-            <div class="history-header" style="display:flex;justify-content:space-between;align-items:center;">
-                <span>处方历史</span>
-                <button onclick="refreshHistory()" style="background:none;border:none;color:white;font-size:12px;cursor:pointer;padding:2px 4px;" title="刷新历史处方">🔄</button>
-            </div>
-            <div class="history-list" id="historyList">
-                <div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="bottom-bar">
-    </div>
-
-    <!-- 移动端底部导航 -->
-    <div class="mobile-nav" id="mobileNav">
-        <div class="mobile-nav-items">
-            <div class="mobile-nav-item active" onclick="switchMobileTab('prescription')">
-                <span class="mobile-nav-icon">📝</span>
-                <span>处方</span>
-            </div>
-            <div class="mobile-nav-item" onclick="switchMobileTab('history')">
-                <span class="mobile-nav-icon">📋</span>
-                <span>历史</span>
-            </div>
-            <div class="mobile-nav-item" onclick="switchMobileTab('preview')">
-                <span class="mobile-nav-icon">📄</span>
-                <span>预览</span>
-            </div>
-            <div class="mobile-nav-item" onclick="showModal('medicineModal')">
-                <span class="mobile-nav-icon">💊</span>
-                <span>药品</span>
-            </div>
-            <div class="mobile-nav-item" onclick="showModal('settingsModal')">
-                <span class="mobile-nav-icon">⚙️</span>
-                <span>设置</span>
-            </div>
-            <div class="mobile-nav-item" id="mobileLogoutBtn" style="color:var(--danger-color);">
-                <span class="mobile-nav-icon">🚪</span>
-                <span>退出</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- 移动端快捷操作栏 -->
-    <div class="mobile-action-bar" id="mobileActionBar">
-        <div class="action-buttons">
-            <button class="action-btn" onclick="clearPrescription()">🗑️ 清空</button>
-            <button class="action-btn primary" id="mobileActionBtn1" onclick="savePrescription()">💾 保存</button>
-            <button class="action-btn" id="mobileActionBtn2" onclick="printPrescription('portrait')">🖨️ 打印</button>
-        </div>
-    </div>
     <div id="changePwdModal" class="modal">
         <div class="modal-content user-modal-content">
             <div class="modal-header">
@@ -971,6 +837,205 @@
         </div>
     </div>
 
+    <div class="top-tabs">
+        <div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div>
+        <div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div>
+        <div class="tab-item" id="medicineManageBtn" onclick="showModal('medicineModal')">【药品管理】</div>
+        <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
+        <div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div>
+        <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
+        <div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div>
+        <div class="tab-item" id="platformManageBtn" onclick="showPlatformManageModal()" style="display:none;background:#fff3cd;color:#856404;border-color:#ffc107;">【平台管理】</div>
+        <div class="tab-item" id="platformRxBtn" onclick="showPlatformPrescriptionModal()" style="display:none;background:#e3f2fd;color:#1565c0;border-color:#42a5f5;">【处方监管】</div>
+        <div class="tab-item" onclick="showHelp()">【系统帮助】</div>
+        <div class="tab-item" style="background:#ffdddd;color:#8b0000;" id="logoutBtn">【退出登录】</div>
+        <div class="tab-hint">
+            当前用户: <span style="color:#008000;font-weight:bold;" id="userDisplayName"></span> |
+            <span style="font-weight:bold;" id="modeStatus">【在线】</span>
+        </div>
+    </div>
+
+    <div class="main-container" style="display: none;">
+        <div class="left-panel">
+            <div class="top-tabs-left">
+                <div class="tab-left-item active">填资料</div>
+                <div class="tab-left-item" onclick="loadLastHistory()">调原方</div>
+                <button class="action-btn" onclick="clearPrescription()" style="margin-left:5px;padding:2px 8px;font-size:12px;">重输</button>
+                <button class="action-btn" onclick="saveAsFormula()" style="padding:2px 8px;font-size:12px;">存验方</button>
+                <button class="action-btn" onclick="printPrescription('portrait')" style="padding:2px 8px;font-size:12px;">纵向打印</button>
+                <button class="action-btn" onclick="printPrescription('landscape')" style="padding:2px 8px;font-size:12px;">横向打印</button>
+                <button class="action-btn primary" onclick="savePrescription()" style="padding:2px 8px;font-size:12px;">保存</button>
+            </div>
+            <div class="patient-section">
+                <div class="patient-row">
+                    <span class="patient-label">门诊</span>
+                    <input type="text" id="prescriptionNo" class="patient-input name-input" readonly>
+                    <span class="patient-label">性别</span>
+                    <select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()">
+                        <option value="男">男</option>
+                        <option value="女">女</option>
+                    </select>
+                    <span class="patient-label">日期</span>
+                    <input type="text" id="visitDate" class="patient-input small" readonly>
+                </div>
+                <div class="patient-row">
+                    <span class="patient-label">姓名</span>
+                    <input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" onkeydown="handleEnterToNext(event, 'patientAge')" autocomplete="off">
+                    <span class="patient-label">年龄</span>
+                    <input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" onkeydown="handleEnterToNext(event, 'patientPhone')">
+                    <span class="patient-label">电话</span>
+                    <input type="text" id="patientPhone" class="patient-input small" onkeydown="handleEnterToNext(event, 'patientAddress')">
+                </div>
+                <div class="patient-row">
+                    <span class="patient-label">统计</span>
+                    <input type="text" id="clinicNo" class="patient-input xx-small" readonly>
+                    <span class="patient-label">住址</span>
+                    <input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;" onkeydown="handleEnterToNext(event, 'medicine_0')">
+                </div>
+            </div>
+            <div class="symptom-section">
+                <div class="history-tabs">
+                    <div class="history-tab active">病史症状</div>
+                    <div class="history-tab">修改病史</div>
+                </div>
+                <textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea>
+            </div>
+            <div class="diagnosis-section">
+                <div class="patient-row">
+                    <span class="patient-label">诊断</span>
+                    <input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()">
+                    <span class="patient-label">剂数</span>
+                    <input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')">
+                    <span style="font-size:13px;margin-right:8px;">剂</span>
+                    <span class="patient-label">医师</span>
+                    <input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;">
+                </div>
+            </div>
+            <div class="action-buttons-section">
+                <div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;">
+                    <span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span>
+                    <span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span>
+                    <span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span>
+                    <span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span>
+                </div>
+            </div>
+            <div class="medicine-section">
+                <div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">
+                    提示: 在简码栏输入简码，在药名栏输入药名
+                </div>
+                <div class="medicine-table-container">
+                    <table class="medicine-table" id="prescriptionTable">
+                        <thead>
+                            <tr>
+                                <th style="width:25px;">#</th>
+                                <th style="width:45px;">简码</th>
+                                <th style="width:90px;">药物</th>
+                                <th style="width:40px;">数量</th>
+                                <th style="width:30px;">单位</th>
+                                <th style="width:40px;">单价</th>
+                                <th style="width:45px;">合计</th>
+                                <th style="width:30px;">删</th>
+                            </tr>
+                        </thead>
+                        <tbody id="prescriptionBody">
+                        </tbody>
+                    </table>
+                </div>
+                <div class="medicine-search-dropdown" id="medicineSearchDropdown"></div>
+            </div>
+        </div>
+
+        <div class="center-panel">
+            <div class="prescription-paper" id="prescriptionPaper">
+                <div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div>
+                <div class="prescription-title">处 方 笺</div>
+                <div class="prescription-info">
+                    <div>姓名: <span id="paperName"></span></div>
+                    <div>性别: <span id="paperGender"></span></div>
+                    <div>年龄: <span id="paperAge"></span>岁</div>
+                    <div>科别: 中医内科</div>
+                    <div>门诊号: <span id="paperClinicNo"></span></div>
+                    <div>日期: <span id="paperDate"></span></div>
+                </div>
+                <div style="margin-bottom:16px; line-height:2;">
+                    <span>病史症状: <span id="paperMedicalHistory"></span></span>
+                    <div style="border-bottom:1px solid #000; margin-top:16px;"></div>
+                </div>
+                <div style="margin-bottom:0px;">
+                    <span>诊断: <span id="paperDiagnosis"></span></span>
+                    <div style="border-bottom:1px solid #000; margin-top:1px;"></div>
+                </div>
+                <div class="prescription-grid" style="margin-top:0px;">
+                    <div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;">
+                        <div class="rp-mark">RP</div>
+                        <div></div>
+                        <div class="dose-count"><span id="paperDoseCount">7</span>剂</div>
+                    </div>
+                    <div id="prescriptionLines"></div>
+                </div>
+                <div class="prescription-footer" style="margin-top:3px;">
+                    <div class="usage-text">用法: 水煎服，日一剂，早晚分服</div>
+                    <div class="signature-row">
+                        <span>医师: <span id="paperDoctor"></span>（签字）</span>
+                        <span>配方: ________ 复核: ________</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-panel">
+            <div class="history-header" style="display:flex;justify-content:space-between;align-items:center;">
+                <span>处方历史</span>
+                <button onclick="refreshHistory()" style="background:none;border:none;color:white;font-size:12px;cursor:pointer;padding:2px 4px;" title="刷新历史处方">🔄</button>
+            </div>
+            <div class="history-list" id="historyList">
+                <div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="bottom-bar">
+    </div>
+
+    <!-- 移动端底部导航 -->
+    <div class="mobile-nav" id="mobileNav">
+        <div class="mobile-nav-items">
+            <div class="mobile-nav-item active" onclick="switchMobileTab('prescription')">
+                <span class="mobile-nav-icon">📝</span>
+                <span>处方</span>
+            </div>
+            <div class="mobile-nav-item" onclick="switchMobileTab('history')">
+                <span class="mobile-nav-icon">📋</span>
+                <span>历史</span>
+            </div>
+            <div class="mobile-nav-item" onclick="switchMobileTab('preview')">
+                <span class="mobile-nav-icon">📄</span>
+                <span>预览</span>
+            </div>
+            <div class="mobile-nav-item" onclick="showModal('medicineModal')">
+                <span class="mobile-nav-icon">💊</span>
+                <span>药品</span>
+            </div>
+            <div class="mobile-nav-item" onclick="showModal('settingsModal')">
+                <span class="mobile-nav-icon">⚙️</span>
+                <span>设置</span>
+            </div>
+            <div class="mobile-nav-item" id="mobileLogoutBtn" style="color:var(--danger-color);">
+                <span class="mobile-nav-icon">🚪</span>
+                <span>退出</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- 移动端快捷操作栏 -->
+    <div class="mobile-action-bar" id="mobileActionBar">
+        <div class="action-buttons">
+            <button class="action-btn" onclick="clearPrescription()">🗑️ 清空</button>
+            <button class="action-btn primary" id="mobileActionBtn1" onclick="savePrescription()">💾 保存</button>
+            <button class="action-btn" id="mobileActionBtn2" onclick="printPrescription('portrait')">🖨️ 打印</button>
+        </div>
+    </div>
+
     <div class="modal" id="settingsModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1011,9 +1076,9 @@
                         <button class="action-btn" onclick="selectImageSaveDirectory()" style="background:#4CAF50;color:white;">📂 设置图片保存位置</button>
                         <div id="imageSavePath" style="font-size:11px;color:#666;margin-top:4px;"></div>
                     </div>
-                    <button class="action-btn" onclick="backupData()" style="background:#4CAF50;color:white;">💾 备份数据</button>
-                    <button class="action-btn" onclick="restoreData()" style="background:#9C27B0;color:white;">📤 恢复数据</button>
-                    <button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button>
+                    <button class="action-btn mobile-hide" onclick="backupData()" style="background:#4CAF50;color:white;">💾 备份数据</button>
+                    <button class="action-btn mobile-hide" onclick="restoreData()" style="background:#9C27B0;color:white;">📤 恢复数据</button>
+                    <button class="action-btn mobile-hide" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button>
                 </div>
             </div>
             <div class="modal-footer">
@@ -1046,8 +1111,8 @@
             </div>
             <div class="modal-body">
                 <div id="medicineScopeTip" style="margin-bottom:8px;padding:6px 10px;border-radius:4px;font-size:12px;background:#f0f4ff;color:#333;border-left:3px solid #008000;"></div>
-                <div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
-                    <input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" onkeyup="renderMedicineList()">
+                <div class="medicine-action-bar" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;">
                     <button class="action-btn" onclick="showAddMedicineForm()">新增药品</button>
                     <button class="action-btn" onclick="exportMedicines()">导出药品</button>
                     <button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button>
@@ -1129,7 +1194,7 @@
                 <div id="statsContent"></div>
                 <div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;">
                     <h4 style="margin-bottom:10px;">🗄️ 数据备份与恢复</h4>
-                    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:20px;">
+                    <div class="backup-action-bar" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:20px;">
                         <button class="action-btn" onclick="smartBackup()" style="background:#4CAF50;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             💾 一键备份
                         </button>
@@ -1165,7 +1230,7 @@
                 <span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span>
             </div>
             <div class="modal-body">
-                <div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;">
+                <div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:10px;">
                     <div>
                         <label>统计范围:</label>
                         <select id="analyticsRange" onchange="refreshAnalytics()">
@@ -1186,6 +1251,8 @@
                             <option value="4">4诊及以上</option>
                         </select>
                     </div>
+                </div>
+                <div style="display:flex;gap:15px;flex-wrap:wrap;align-items:center;margin-bottom:15px;">
                     <div>
                         <label>排序:</label>
                         <select id="analyticsSort" onchange="refreshAnalytics()">
@@ -1195,7 +1262,7 @@
                             <option value="lastVisit-asc">最近就诊(升序)</option>
                         </select>
                     </div>
-                    <button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button>
+                    <button class="action-btn" onclick="refreshAnalytics()" style="padding:6px 16px;">🔄 刷新数据</button>
                 </div>
 
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;">
@@ -1217,32 +1284,54 @@
                     </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">
+                <div class="analytics-charts-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:15px;">
                     <div style="background:white;border:1px solid #ddd;border-radius:8px;padding:15px;">
                         <h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4>
-                        <canvas id="visitTrendChart" height="200"></canvas>
+                        <canvas id="visitTrendChart"></canvas>
                     </div>
                     <div style="background:white;border:1px solid #ddd;border-radius:8px;padding:15px;">
                         <h4 style="margin-bottom:12px;color:#333;">🏥 病种分布</h4>
-                        <canvas id="diseaseChart" height="200"></canvas>
+                        <canvas id="diseaseChart"></canvas>
                     </div>
                 </div>
 
                 <div style="margin-top:15px;background:white;border:1px solid #ddd;border-radius:8px;padding:15px;">
                     <h4 style="margin-bottom:12px;color:#333;">💊 药材使用统计 Top 10</h4>
-                    <canvas id="medicineChart" height="200"></canvas>
+                    <canvas id="medicineChart"></canvas>
                 </div>
 
-                <div style="margin-top:15px;background:white;border:1px solid #ddd;border-radius:8px;padding:15px;">
-                    <h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4>
-                    <div style="max-height:300px;overflow:auto;">
+                <div class="stats-card" style="margin-top:15px;background:white;border:1px solid #ddd;border-radius:8px;padding:15px;">
+                    <h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4>
+                    <div class="stats-table-container" style="max-height:none;overflow:hidden;">
                         <table style="width:100%;border-collapse:collapse;font-size:12px;">
                             <thead>
                                 <tr style="background:#f5f5f5;">
-                                    <th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th>
-                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th>
-                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th>
-                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">月份</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">人次</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:right;">总收入</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:right;">诊费</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:right;">成本</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:right;">利润</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">剂数</th>
+                                </tr>
+                            </thead>
+                            <tbody id="monthlyStatsTable">
+                                <tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="stats-card" style="margin-top:15px;background:white;border:1px solid #ddd;border-radius:8px;padding:15px;">
+                    <h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4>
+                    <div class="stats-table-container" style="max-height:none;overflow:hidden;">
+                        <table class="patient-visit-table" style="width:100%;border-collapse:collapse;font-size:12px;">
+                            <thead>
+                                <tr style="background:#f5f5f5;">
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:left;">患者名</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">次数</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">首诊</th>
+                                    <th style="border:1px solid #ddd;padding:8px;text-align:center;">末诊</th>
                                     <th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th>
                                 </tr>
                             </thead>
@@ -1255,7 +1344,7 @@
 
                 <div style="margin-top:15px;padding-top:15px;border-top:2px solid #008000;">
                     <h4 style="margin-bottom:10px;">🗄️ 数据备份与恢复</h4>
-                    <div style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:20px;">
+                    <div class="backup-action-bar" style="display:flex;gap:12px;flex-wrap:wrap;justify-content:center;margin-bottom:20px;">
                         <button class="action-btn" onclick="smartBackup()" style="background:#4CAF50;color:white;font-size:14px;padding:12px 24px;min-width:140px;">
                             💾 一键备份
                         </button>
@@ -2190,11 +2279,7 @@
                     }
                     
                     // 排序
-                    prescriptionHistory.sort((a, b) => {
-                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                        return timeB - timeA;
-                    });
+                    sortPrescriptionsByTimeDesc(prescriptionHistory);
                     
                     // 更新界面
                     updateClinicNoDisplay();
@@ -2206,11 +2291,7 @@
                     const localData = filterDeletedPrescriptions(restoreFromLocalBackup());
                     if (localData.length > 0) {
                         prescriptionHistory = localData;
-                        prescriptionHistory.sort((a, b) => {
-                            const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                            const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                            return timeB - timeA;
-                        });
+                        sortPrescriptionsByTimeDesc(prescriptionHistory);
                         renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                         showToast('已从本地备份恢复 ' + localData.length + ' 条处方');
                     } else {
@@ -2223,11 +2304,7 @@
                 const localData = filterDeletedPrescriptions(restoreFromLocalBackup());
                 if (localData.length > 0) {
                     prescriptionHistory = localData;
-                    prescriptionHistory.sort((a, b) => {
-                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                        return timeB - timeA;
-                    });
+                    sortPrescriptionsByTimeDesc(prescriptionHistory);
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                     showToast('已从本地备份恢复 ' + localData.length + ' 条处方');
                 } else {
@@ -4091,14 +4168,30 @@
         const DOM_CACHE = {
             prescriptionBody: null,
             medicineSearchDropdown: null,
-            
+            prescriptionNo: null,
+            patientName: null,
+            patientGender: null,
+            patientAge: null,
+            doctorName: null,
+            registrationFee: null,
+            registrationFee2: null,
+            doseCountInput: null,
+            doseCountInput3: null,
+            loginOverlay: null,
+
             init: function() {
-                if (!this.prescriptionBody) {
-                    this.prescriptionBody = document.getElementById('prescriptionBody');
-                }
-                if (!this.medicineSearchDropdown) {
-                    this.medicineSearchDropdown = document.getElementById('medicineSearchDropdown');
-                }
+                if (!this.prescriptionBody) this.prescriptionBody = document.getElementById('prescriptionBody');
+                if (!this.medicineSearchDropdown) this.medicineSearchDropdown = document.getElementById('medicineSearchDropdown');
+                if (!this.prescriptionNo) this.prescriptionNo = document.getElementById('prescriptionNo');
+                if (!this.patientName) this.patientName = document.getElementById('patientName');
+                if (!this.patientGender) this.patientGender = document.getElementById('patientGender');
+                if (!this.patientAge) this.patientAge = document.getElementById('patientAge');
+                if (!this.doctorName) this.doctorName = document.getElementById('doctorName');
+                if (!this.registrationFee) this.registrationFee = document.getElementById('registrationFee');
+                if (!this.registrationFee2) this.registrationFee2 = document.getElementById('registrationFee2');
+                if (!this.doseCountInput) this.doseCountInput = document.getElementById('doseCountInput');
+                if (!this.doseCountInput3) this.doseCountInput3 = document.getElementById('doseCountInput3');
+                if (!this.loginOverlay) this.loginOverlay = document.getElementById('loginOverlay');
             }
         };
         
@@ -4328,11 +4421,7 @@
                     // 根据用户角色更新统计输入框
                     updateClinicNoDisplay();
 
-                    prescriptionHistory.sort((a, b) => {
-                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                        return timeB - timeA;
-                    });
+                    sortPrescriptionsByTimeDesc(prescriptionHistory);
                 } else {
                     console.log('cloudResult.data 是空数组，尝试从本地备份恢复');
                     prescriptionHistory = filterDeletedPrescriptions(restoreFromLocalBackup());
@@ -5608,9 +5697,9 @@
             
             let value = 0;
             if (sourceId === 'registrationFee') {
-                value = parseFloat(regFee1.value) || 0;
+                value = parseFloat(regFee1?.value) || 0;
             } else if (sourceId === 'registrationFee2') {
-                value = parseFloat(regFee2.value) || 0;
+                value = parseFloat(regFee2?.value) || 0;
             } else {
                 value = parseFloat(regFee2?.value || regFee1?.value || '0') || 0;
             }
@@ -5902,6 +5991,16 @@
             return prescriptions.filter(p => p.createdBy === currentUser.username);
         }
 
+        // 处方按时间倒序排序（最新在前），避免多处重复实现
+        function sortPrescriptionsByTimeDesc(list) {
+            if (!Array.isArray(list)) return list;
+            return list.sort((a, b) => {
+                const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                return timeB - timeA;
+            });
+        }
+
         // 更新操作界面"统计"输入框（clinicNo）
         // 规则：年(2位) + 历史处方数量(6位补零)，如 26000001
         // 普通用户：统计自己历史处方数量；管理员：统计本诊所所有用户历史处方数量
@@ -5942,7 +6041,7 @@
                                 </div>
                                 ${isToday ? '<div style="font-size:9px;background:#4CAF50;color:white;padding:1px 5px;border-radius:3px;">今天</div>' : ''}
                             </div>
-                            <div class="history-date">${escapeHtml(timeDisplay)} - ${escapeHtml(p.diagnosis || '')}</div>
+                            <div class="history-date">${escapeHtml(timeDisplay)} - ${escapeHtml(p.diagnosis || '')} | 诊费:${(p.registrationFee || 0).toFixed(2)}元</div>
                         </div>
                         <button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button>
                     </div>
@@ -5965,11 +6064,7 @@
                 const result = await getPrescriptionsFromCloud(true);
                 if (result && result.data) {
                     prescriptionHistory = result.data;
-                    prescriptionHistory.sort((a, b) => {
-                        const timeA = new Date(a.createdAt || a.date || 0).getTime();
-                        const timeB = new Date(b.createdAt || b.date || 0).getTime();
-                        return timeB - timeA;
-                    });
+                    sortPrescriptionsByTimeDesc(prescriptionHistory);
                     const filtered = filterPrescriptionsByPermission(prescriptionHistory);
                     renderHistoryList(filtered);
                 }
@@ -6001,6 +6096,11 @@
             const doseInput2 = document.getElementById('doseCountInput2');
             if (doseInput2) doseInput2.value = doseCount;
             document.getElementById('paperDoseCount').textContent = doseCount;
+            const regFeeVal = record.registrationFee || 0;
+            const regFeeEl = document.getElementById('registrationFee');
+            if (regFeeEl) regFeeEl.value = regFeeVal;
+            const regFeeEl2 = document.getElementById('registrationFee2');
+            if (regFeeEl2) regFeeEl2.value = regFeeVal;
             // 加载药物数据，确保所有字段都有值
             prescriptionItems = (record.items || []).map(item => ({
                 code: item.code || '',
@@ -6158,6 +6258,7 @@
             const updatedMedicineTotal = updatedItems.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
             const updatedTotalAmount = updatedMedicineTotal * doseCount + (parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0);
             
+            const registrationFee = parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0;
             const record = {
                 id: Date.now(),
                 date: document.getElementById('visitDate').value,
@@ -6172,6 +6273,7 @@
                 items: updatedItems,
                 doseCount: doseCount,
                 totalAmount: updatedTotalAmount,
+                registrationFee: registrationFee,
                 createdBy: currentUser ? currentUser.username : 'unknown',
                 createdAt: now.toISOString(),
                 updatedAt: now.toISOString()
@@ -8429,19 +8531,19 @@ IconFile=${scriptPath}`;
                 <div style="padding:15px;background:#f0f0f0;border-radius:5px;">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;">
                         <div style="text-align:center;padding:12px;background:white;border-radius:3px;">
-                            <div style="font-size:20px;font-weight:bold;color:#8b0000;">¥${totalAmount.toFixed(2)}</div>
+                            <div style="font-size:20px;font-weight:bold;color:#8b0000;">¥${Math.round(totalAmount)}</div>
                             <div style="font-size:11px;color:#666;">总收入</div>
                         </div>
                         <div style="text-align:center;padding:12px;background:white;border-radius:3px;">
-                            <div style="font-size:20px;font-weight:bold;color:#006400;">¥${totalCost.toFixed(2)}</div>
+                            <div style="font-size:20px;font-weight:bold;color:#006400;">¥${Math.round(totalCost)}</div>
                             <div style="font-size:11px;color:#666;">成本</div>
                         </div>
                         <div style="text-align:center;padding:12px;background:white;border-radius:3px;">
-                            <div style="font-size:20px;font-weight:bold;color:#000080;">¥${profit.toFixed(2)}</div>
+                            <div style="font-size:20px;font-weight:bold;color:#000080;">¥${Math.round(profit)}</div>
                             <div style="font-size:11px;color:#666;">利润</div>
                         </div>
                         <div style="text-align:center;padding:12px;background:white;border-radius:3px;">
-                            <div style="font-size:20px;font-weight:bold;color:#ff8c00;">${profitRate.toFixed(1)}%</div>
+                            <div style="font-size:20px;font-weight:bold;color:#ff8c00;">${Math.round(profitRate)}%</div>
                             <div style="font-size:11px;color:#666;">利润率</div>
                         </div>
                     </div>
@@ -8554,17 +8656,18 @@ IconFile=${scriptPath}`;
         function analyzeMedicines() {
             const filteredPrescriptions = getFilteredPrescriptions();
             const medicineMap = new Map();
-            
+
             filteredPrescriptions.forEach(p => {
-                if (p.medicines && Array.isArray(p.medicines)) {
-                    p.medicines.forEach(m => {
+                if (p.items && Array.isArray(p.items)) {
+                    const doseCount = parseFloat(p.doseCount) || 1;
+                    p.items.forEach(m => {
                         const name = m.name || m.medicineName || '未知';
                         const dosage = parseFloat(m.dosage) || 0;
-                        medicineMap.set(name, (medicineMap.get(name) || 0) + dosage);
+                        medicineMap.set(name, (medicineMap.get(name) || 0) + dosage * doseCount);
                     });
                 }
             });
-            
+
             return Array.from(medicineMap.entries())
                 .map(([name, totalDosage]) => ({ name, totalDosage }))
                 .sort((a, b) => b.totalDosage - a.totalDosage)
@@ -8598,23 +8701,43 @@ IconFile=${scriptPath}`;
             return date.toLocaleString('zh-CN');
         }
 
-        function createChart(canvasId, type, data) {
+        function createChart(canvasId, type, data, retryCount = 0) {
             const canvas = document.getElementById(canvasId);
             if (!canvas) return null;
-            
+
             const ctx = canvas.getContext('2d');
-            
+
             const dpr = window.devicePixelRatio || 1;
             const rect = canvas.getBoundingClientRect();
+
+            if (rect.width === 0 || rect.height === 0) {
+                if (retryCount < 3) {
+                    setTimeout(() => createChart(canvasId, type, data, retryCount + 1), 100);
+                }
+                return null;
+            }
+
             canvas.width = rect.width * dpr;
             canvas.height = rect.height * dpr;
             ctx.scale(dpr, dpr);
-            
+
             const width = rect.width;
             const height = rect.height;
-            
+
             ctx.clearRect(0, 0, width, height);
-            
+
+            // 响应式参数：根据屏幕宽度调整字体和 padding，提升手机端可读性
+            const isMobile = window.innerWidth < 768;
+            const isSmall = window.innerWidth < 480;
+            const labelFont = isMobile ? '12px Arial' : '10px Arial';
+            const valueFont = isMobile ? 'bold 12px Arial' : 'bold 10px Arial';
+            const axisFont = isMobile ? '11px Arial' : '10px Arial';
+            const labelMaxLen = isMobile ? (isSmall ? 3 : 4) : 5;
+            const pieLegendFont = isMobile ? '12px Arial' : '11px Arial';
+            const pieLegendMaxLen = isMobile ? (isSmall ? 5 : 7) : 7;
+            const hBarFont = isMobile ? '11px Arial' : '11px Arial';
+            const hBarLabelMaxLen = isMobile ? (isSmall ? 3 : 4) : 7;
+
             if (type === 'bar') {
                 if (!data.labels || !data.values || data.labels.length === 0) {
                     ctx.fillStyle = '#999';
@@ -8623,27 +8746,29 @@ IconFile=${scriptPath}`;
                     ctx.fillText('暂无数据', width / 2, height / 2);
                     return;
                 }
-                
-                const padding = { top: 20, right: 20, bottom: 40, left: 50 };
+
+                const padding = isMobile
+                    ? { top: 18, right: 10, bottom: 32, left: 32 }
+                    : { top: 20, right: 20, bottom: 40, left: 50 };
                 const chartWidth = width - padding.left - padding.right;
                 const chartHeight = height - padding.top - padding.bottom;
-                
+
                 const maxValue = Math.max(...data.values, 1);
-                const barWidth = Math.min(chartWidth / data.labels.length * 0.7, 30);
+                const barWidth = Math.min(chartWidth / data.labels.length * 0.7, isMobile ? 36 : 30);
                 const gap = chartWidth / data.labels.length;
-                
+
                 ctx.fillStyle = '#333';
-                ctx.font = '10px Arial';
+                ctx.font = labelFont;
                 ctx.textAlign = 'center';
                 data.labels.forEach((label, i) => {
                     const x = padding.left + i * gap + gap / 2;
-                    ctx.fillText(label.length > 6 ? label.substring(0, 5) + '...' : label, x, height - 10);
+                    ctx.fillText(label.length > labelMaxLen + 1 ? label.substring(0, labelMaxLen) + '…' : label, x, height - 10);
                 });
-                
+
                 ctx.save();
                 ctx.translate(padding.left, padding.top + chartHeight);
                 ctx.scale(1, -1);
-                
+
                 data.values.forEach((value, i) => {
                     const x = i * gap + (gap - barWidth) / 2;
                     const barHeight = (value / maxValue) * chartHeight;
@@ -8656,18 +8781,18 @@ IconFile=${scriptPath}`;
                     ctx.lineWidth = 1;
                     ctx.strokeRect(x, 0, barWidth, barHeight);
                 });
-                
+
                 ctx.restore();
-                
+
                 ctx.fillStyle = '#333';
-                ctx.font = 'bold 10px Arial';
+                ctx.font = valueFont;
                 ctx.textAlign = 'center';
                 data.values.forEach((value, i) => {
                     const x = padding.left + i * gap + gap / 2;
                     const barHeight = (value / maxValue) * chartHeight;
                     ctx.fillText(value.toString(), x, padding.top + chartHeight - barHeight - 8);
                 });
-                
+
                 ctx.strokeStyle = '#ddd';
                 ctx.lineWidth = 1;
                 for (let i = 0; i <= 4; i++) {
@@ -8676,42 +8801,45 @@ IconFile=${scriptPath}`;
                     ctx.moveTo(padding.left, y);
                     ctx.lineTo(width - padding.right, y);
                     ctx.stroke();
-                    
+
                     const value = Math.round(maxValue * (1 - i / 4));
                     ctx.fillStyle = '#666';
-                    ctx.font = '10px Arial';
+                    ctx.font = axisFont;
                     ctx.textAlign = 'right';
                     ctx.fillText(value.toString(), padding.left - 5, y + 4);
                 }
-                
+
                 ctx.strokeStyle = '#ddd';
                 ctx.beginPath();
                 ctx.moveTo(padding.left, padding.top);
                 ctx.lineTo(padding.left, height - padding.bottom);
                 ctx.stroke();
-                
+
             } else if (type === 'pie') {
-                if (!data.labels || !data.values || data.labels.length === 0) {
+                if (!data.labels || !data.values || data.values.length === 0) {
                     ctx.fillStyle = '#999';
                     ctx.font = '14px Arial';
                     ctx.textAlign = 'center';
                     ctx.fillText('暂无数据', width / 2, height / 2);
                     return;
                 }
-                
-                const centerX = width / 2;
-                const centerY = height / 2;
-                const radius = Math.min(width, height) / 2 - 20;
-                
+
+                // 手机端：饼图居中偏左，图例竖向排列在右侧；桌面端：保持原居中布局
+                const centerX = isMobile ? width * 0.38 : width / 2;
+                const centerY = isMobile ? height / 2 : height / 2;
+                const radius = isMobile
+                    ? Math.min(width * 0.35, height / 2) - 10
+                    : Math.min(width, height) / 2 - 20;
+
                 const total = data.values.reduce((a, b) => a + b, 0);
                 let startAngle = -Math.PI / 2;
-                
+
                 const colors = ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF'];
-                
+
                 data.values.forEach((value, i) => {
                     const sliceAngle = (value / total) * 2 * Math.PI;
                     const color = colors[i % colors.length];
-                    
+
                     ctx.beginPath();
                     ctx.moveTo(centerX, centerY);
                     ctx.arc(centerX, centerY, radius, startAngle, startAngle + sliceAngle);
@@ -8721,70 +8849,110 @@ IconFile=${scriptPath}`;
                     ctx.strokeStyle = '#fff';
                     ctx.lineWidth = 2;
                     ctx.stroke();
-                    
+
                     startAngle += sliceAngle;
                 });
-                
+
                 ctx.fillStyle = '#333';
-                ctx.font = '11px Arial';
+                ctx.font = pieLegendFont;
                 ctx.textAlign = 'left';
-                const legendY = 20;
-                let legendX = 20;
-                
-                data.labels.forEach((label, i) => {
-                    const color = colors[i % colors.length];
-                    const text = `${label.length > 8 ? label.substring(0, 7) + '...' : label} (${data.values[i]})`;
-                    
-                    ctx.fillStyle = color;
-                    ctx.fillRect(legendX, legendY + i * 18, 12, 12);
-                    ctx.fillStyle = '#333';
-                    ctx.fillText(text, legendX + 18, legendY + i * 18 + 10);
-                    
-                    legendX += ctx.measureText(text).width + 25;
-                    if (legendX > width - 100) {
-                        legendX = 20;
-                    }
-                });
-                
+
+                if (isMobile) {
+                    // 手机端：图例竖向排列在饼图右侧，每行一项，便于阅读
+                    const legendStartX = centerX + radius + 16;
+                    const legendStartY = Math.max(20, (height - data.labels.length * 22) / 2);
+                    data.labels.forEach((label, i) => {
+                        const color = colors[i % colors.length];
+                        const text = `${label.length > pieLegendMaxLen + 1 ? label.substring(0, pieLegendMaxLen) + '…' : label} (${data.values[i]})`;
+                        const y = legendStartY + i * 22;
+                        ctx.fillStyle = color;
+                        ctx.fillRect(legendStartX, y, 14, 14);
+                        ctx.fillStyle = '#333';
+                        ctx.fillText(text, legendStartX + 20, y + 11);
+                    });
+                } else {
+                    // 桌面端：保持原有横向布局
+                    const legendY = 20;
+                    let legendX = 20;
+                    data.labels.forEach((label, i) => {
+                        const color = colors[i % colors.length];
+                        const text = `${label.length > pieLegendMaxLen + 1 ? label.substring(0, pieLegendMaxLen) + '…' : label} (${data.values[i]})`;
+
+                        ctx.fillStyle = color;
+                        ctx.fillRect(legendX, legendY + i * 18, 12, 12);
+                        ctx.fillStyle = '#333';
+                        ctx.fillText(text, legendX + 18, legendY + i * 18 + 10);
+
+                        legendX += ctx.measureText(text).width + 25;
+                        if (legendX > width - 100) {
+                            legendX = 20;
+                        }
+                    });
+                }
+
             } else if (type === 'horizontalBar') {
-                if (!data.labels || !data.values || data.labels.length === 0) {
+                if (!data.labels || !data.values || data.values.length === 0) {
                     ctx.fillStyle = '#999';
                     ctx.font = '14px Arial';
                     ctx.textAlign = 'center';
                     ctx.fillText('暂无数据', width / 2, height / 2);
                     return;
                 }
-                
-                const padding = { top: 10, right: 80, bottom: 10, left: 80 };
+
+                // 手机端：左侧 padding 容纳药材名，右侧 padding 预留数值空间
+                const padding = isMobile
+                    ? { top: 3, right: 70, bottom: 3, left: 48 }
+                    : { top: 10, right: 80, bottom: 10, left: 80 };
                 const chartWidth = width - padding.left - padding.right;
                 const chartHeight = height - padding.top - padding.bottom;
-                
+
                 const maxValue = Math.max(...data.values, 1);
-                const barHeight = Math.min(chartHeight / data.labels.length * 0.8, 25);
+                const barHeight = Math.min(chartHeight / data.labels.length * 0.85, isMobile ? 10 : 25);
                 const gap = chartHeight / data.labels.length;
-                
+
                 const colors = ['#4CAF50', '#2196F3', '#FF9800', '#F44336', '#9C27B0', '#00BCD4', '#FFEB3B', '#E91E63', '#607D8B', '#8BC34A'];
-                
+
                 data.labels.forEach((label, i) => {
                     const y = padding.top + i * gap + (gap - barHeight) / 2;
                     const barWidth = (data.values[i] / maxValue) * chartWidth;
                     const color = colors[i % colors.length];
-                    
+
                     ctx.fillStyle = color;
                     ctx.fillRect(padding.left, y, barWidth, barHeight);
                     ctx.strokeStyle = 'rgba(0,0,0,0.2)';
                     ctx.lineWidth = 1;
                     ctx.strokeRect(padding.left, y, barWidth, barHeight);
-                    
+
                     ctx.fillStyle = '#333';
-                    ctx.font = '11px Arial';
+                    ctx.font = hBarFont;
                     ctx.textAlign = 'right';
-                    ctx.fillText(label.length > 8 ? label.substring(0, 7) + '...' : label, padding.left - 8, y + barHeight / 2 + 4);
-                    
-                    ctx.textAlign = 'left';
-                    ctx.fillText(Math.round(data.values[i]) + 'g', padding.left + barWidth + 5, y + barHeight / 2 + 4);
+                    ctx.fillText(label.length > hBarLabelMaxLen + 1 ? label.substring(0, hBarLabelMaxLen) + '…' : label, padding.left - 5, y + barHeight / 2 + 4);
+
+                    // 智能格式化数值：大数值转换为 kg
+                    const dosageValue = data.values[i];
+                    const dosageText = dosageValue >= 10000 ? Math.round(dosageValue / 1000) + 'kg' : Math.round(dosageValue) + 'g';
+                    const textWidth = ctx.measureText(dosageText).width;
+
+                    // 策略：条形足够宽时数值放条形内部（白色）；否则放右侧并确保不超出右边界
+                    if (barWidth > textWidth + 10) {
+                        ctx.textAlign = 'right';
+                        ctx.fillStyle = '#fff';
+                        ctx.fillText(dosageText, padding.left + barWidth - 3, y + barHeight / 2 + 4);
+                    } else {
+                        const textX = padding.left + barWidth + 3;
+                        if (textX + textWidth > width - 2) {
+                            // 超出右边界：改放条形内部（即使条形较短）
+                            ctx.textAlign = 'right';
+                            ctx.fillStyle = '#fff';
+                            ctx.fillText(dosageText, padding.left + Math.max(barWidth, textWidth + 5) - 3, y + barHeight / 2 + 4);
+                        } else {
+                            ctx.textAlign = 'left';
+                            ctx.fillStyle = '#333';
+                            ctx.fillText(dosageText, textX, y + barHeight / 2 + 4);
+                        }
+                    }
                 });
-                
+
                 ctx.strokeStyle = '#ddd';
                 ctx.lineWidth = 1;
                 ctx.setLineDash([5, 5]);
@@ -8799,7 +8967,53 @@ IconFile=${scriptPath}`;
             }
         }
 
+        function analyzeMonthlyStats() {
+            const statsMap = new Map();
+            const allPrescriptions = prescriptionHistory;
+            
+            allPrescriptions.forEach(p => {
+                const date = new Date(p.createdAt || p.date || 0);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+                
+                if (!statsMap.has(monthKey)) {
+                    statsMap.set(monthKey, {
+                        visits: 0,
+                        totalIncome: 0,
+                        totalRegFee: 0,
+                        totalCost: 0,
+                        totalProfit: 0,
+                        totalDoses: 0
+                    });
+                }
+                
+                const stats = statsMap.get(monthKey);
+                stats.visits++;
+                stats.totalIncome += (parseFloat(p.totalAmount) || 0) + (parseFloat(p.registrationFee) || 0);
+                stats.totalRegFee += parseFloat(p.registrationFee) || 0;
+                stats.totalDoses += parseFloat(p.doseCount) || 0;
+                
+                if (p.items && Array.isArray(p.items)) {
+                    p.items.forEach(item => {
+                        const medicine = medicines.find(m => m.name === (item.name || item.medicineName));
+                        const costPrice = parseFloat(medicine?.costPrice) || parseFloat(item.costPrice) || parseFloat(item.price) || 0;
+                        const dosage = parseFloat(item.dosage) || 0;
+                        const doseCount = parseFloat(p.doseCount) || 1;
+                        stats.totalCost += costPrice * dosage * doseCount;
+                    });
+                }
+            });
+            
+            statsMap.forEach((stats, key) => {
+                stats.totalProfit = stats.totalIncome - stats.totalCost;
+                stats.month = key.split('-')[1];
+            });
+            
+            return Array.from(statsMap.values())
+                .sort((a, b) => b.month - a.month);
+        }
+
         async function refreshAnalytics() {
+          try {
             const patients = analyzePatients();
             const visitCountFilter = document.getElementById('visitCountFilter')?.value || 'all';
             const sortOption = document.getElementById('analyticsSort')?.value || 'visitCount-desc';
@@ -8831,7 +9045,7 @@ IconFile=${scriptPath}`;
             const totalPatients = patients.length;
             const newPatients = patients.filter(p => p.visitCount === 1).length;
             const returnPatients = patients.filter(p => p.visitCount > 1).length;
-            const returnRate = totalPatients > 0 ? ((returnPatients / totalPatients) * 100).toFixed(1) : '0.0';
+            const returnRate = totalPatients > 0 ? Math.round((returnPatients / totalPatients) * 100) : 0;
             
             document.getElementById('statTotalPatients').textContent = totalPatients;
             document.getElementById('statNewPatients').textContent = newPatients;
@@ -8862,17 +9076,50 @@ IconFile=${scriptPath}`;
                     <tr style="hover:background:#f5f5f5;">
                         <td style="border:1px solid #ddd;padding:6px;">${escapeHtml(p.name)}</td>
                         <td style="border:1px solid #ddd;padding:6px;text-align:center;">${p.visitCount}</td>
-                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${escapeHtml(formatDate(p.firstVisit))}</td>
-                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${escapeHtml(formatDate(p.lastVisit))}</td>
+                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${escapeHtml(formatDate(p.firstVisit).substring(5))}</td>
+                        <td style="border:1px solid #ddd;padding:6px;text-align:center;">${escapeHtml(formatDate(p.lastVisit).substring(5))}</td>
                         <td style="border:1px solid #ddd;padding:6px;text-align:center;">
-                            <button class="small-btn" onclick='loadPatientHistory(${escapeHtml(JSON.stringify(p.name))})' style="padding:2px 8px;">调取处方</button>
+                            <button class="small-btn" onclick='loadPatientHistory(${escapeHtml(JSON.stringify(p.name))})' style="padding:2px 4px;">调取</button>
                         </td>
                     </tr>
                 `).join('');
             } else {
                 tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr>';
             }
+            
+            try {
+                const monthlyStats = analyzeMonthlyStats();
+                const monthlyStatsTbody = document.getElementById('monthlyStatsTable');
+                if (monthlyStats && monthlyStats.length > 0) {
+                    monthlyStatsTbody.innerHTML = monthlyStats.map(s => `<tr style="hover:background:#f5f5f5;"><td style="border:1px solid #ddd;padding:6px;text-align:center;">${escapeHtml(s.month)}月</td><td style="border:1px solid #ddd;padding:6px;text-align:center;">${s.visits}</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">${Math.round(s.totalIncome)}</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">${Math.round(s.totalRegFee)}</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">${Math.round(s.totalCost)}</td><td style="border:1px solid #ddd;padding:6px;text-align:right;">${Math.round(s.totalProfit)}</td><td style="border:1px solid #ddd;padding:6px;text-align:center;">${s.totalDoses}</td></tr>`).join('');
+                } else {
+                    monthlyStatsTbody.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr>';
+                }
+            } catch (e) {
+                console.warn('月度统计失败:', e);
+            }
+          } catch (e) {
+            console.error('refreshAnalytics 执行失败:', e);
+            alert('统计分析加载失败: ' + e.message);
+          }
         }
+
+        // 窗口尺寸变化时防抖重绘图表（适配手机横竖屏切换）
+        let _analyticsResizeTimer = null;
+        let _analyticsLastWidth = window.innerWidth;
+        window.addEventListener('resize', () => {
+            const currentWidth = window.innerWidth;
+            // 仅在宽度真正变化时重绘（避免移动端滚动条等因素触发）
+            if (currentWidth === _analyticsLastWidth) return;
+            _analyticsLastWidth = currentWidth;
+            if (_analyticsResizeTimer) clearTimeout(_analyticsResizeTimer);
+            _analyticsResizeTimer = setTimeout(() => {
+                const analyticsModal = document.getElementById('analyticsModal');
+                if (analyticsModal && analyticsModal.style.display === 'flex') {
+                    refreshAnalytics();
+                }
+            }, 300);
+        });
 
         function loadPatientHistory(patientName) {
             closeModal('analyticsModal');
