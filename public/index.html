@@ -134,7 +134,7 @@
         .login-btn { padding: 5px 15px; min-width: 53px; background: linear-gradient(180deg, #6cb3f0 0%, #4a90d9 100%); color: #fff; border: 1.5px solid #357abd; border-radius: 4px; font-size: 9px; font-weight: bold; cursor: pointer; box-shadow: 1.5px 2px 4px rgba(0, 82, 152, 0.35); transition: all 0.2s; }
         .login-btn:hover { background: linear-gradient(180deg, #8dc8f7 0%, #6cb3f0 100%); transform: translateY(-0.5px); }
         .login-footer { text-align: center; margin-top: 8px; font-size: 8px; color: #666; }
-        .login-error { color: #dc2626; font-size: 14px; text-align: center; margin-top: 8px; padding: 8px; background: #fff5f5; border-radius: 4px; border: 1px solid #fcc; display: none; }
+        .login-error { color: #dc2626; font-size: 7px; text-align: center; margin-top: 7px; padding: 4px; background: #fff5f5; border-radius: 2px; border: 1px solid #fcc; display: none; }
         .clinic-info { text-align: center; padding: 8px 10px; background: linear-gradient(180deg, #fff5f5 0%, #ffeaea 100%); border: 1px solid #ffcccc; border-radius: 4px; margin-bottom: 13px; }
         .clinic-info-name { font-size: 11px; font-weight: bold; color: #8b0000; margin-bottom: 2px; }
         
@@ -557,7 +557,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -2876,26 +2876,24 @@
         }
 
         async function initLoginDropdown() {
-            let input = document.getElementById('loginUsername');
+            const select = document.getElementById('loginUsername');
 
-            // 如果是 select（旧版本），替换为 input
-            if (input && input.tagName.toLowerCase() === 'select') {
-                const newInput = document.createElement('input');
-                newInput.type = 'text';
-                newInput.id = 'loginUsername';
-                newInput.placeholder = '请输入用户名';
-                newInput.setAttribute('onkeypress', "if(event.key==='Enter')handleLogin()");
-                newInput.className = input.className;
-                newInput.style.cssText = input.style.cssText;
-                newInput.style.width = '100%';
-                input.parentNode.replaceChild(newInput, input);
-                input = newInput;
-            }
+            // 统一替换为输入框：用户名由管理员在云端创建，登录界面不暴露用户列表
+            // （网页端/APP端/Electron桌面端均用 input，用户手动输入用户名）
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'loginUsername';
+            input.placeholder = '请输入用户名';
+            input.setAttribute('onkeypress', "if(event.key==='Enter')handleLogin()");
+            input.className = select.className;
+            input.style.cssText = select.style.cssText;
+            input.style.width = '100%';
+            select.parentNode.replaceChild(input, select);
 
             // 恢复记住的用户名密码
             const rememberedUsername = localStorage.getItem('cloud_rememberedUsername') || localStorage.getItem('rememberedUsername');
             const rememberedPassword = localStorage.getItem('cloud_rememberedPassword') || localStorage.getItem('rememberedPassword');
-            if (rememberedUsername && input) input.value = rememberedUsername;
+            if (rememberedUsername) input.value = rememberedUsername;
             if (rememberedPassword) {
                 document.getElementById('loginPassword').value = rememberedPassword;
                 document.getElementById('rememberPassword').checked = true;
@@ -2931,7 +2929,7 @@
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
             const errorDiv = document.getElementById('loginError');
-
+            
             if (!username) {
                 errorDiv.textContent = '请输入用户名';
                 errorDiv.style.display = 'block';
@@ -2942,30 +2940,17 @@
                 errorDiv.style.display = 'block';
                 return;
             }
-
-            // 显示加载状态
-            const loginBtn = document.querySelector('.login-btn');
-            const originalText = loginBtn ? loginBtn.textContent : '';
-            if (loginBtn) {
-                loginBtn.textContent = '登录中...';
-                loginBtn.disabled = true;
-            }
-            errorDiv.style.display = 'none';
-
-            // 调用后端登录端点：POST /api/users?action=login
+            
+            // 调用后端登录端点：POST /api/users?login=true
             // 后端会在所有诊所 + 平台管理员中查找并校验密码（SHA-256 + salt）
             try {
-                const data = await cloudFetch(`${CLOUD_API_BASE}/users?action=login`, {
+                const data = await cloudFetch(`${CLOUD_API_BASE}/users?login=true`, {
                     method: 'POST',
                     body: JSON.stringify({ username, password })
                 });
                 if (!data.success || !data.user) {
                     errorDiv.textContent = data.error || '用户名或密码错误';
                     errorDiv.style.display = 'block';
-                    if (loginBtn) {
-                        loginBtn.textContent = originalText;
-                        loginBtn.disabled = false;
-                    }
                     return;
                 }
                 const user = data.user;
@@ -3025,10 +3010,6 @@
                 console.error('Login error:', err);
                 errorDiv.textContent = '登录失败：' + (err.message || '网络错误');
                 errorDiv.style.display = 'block';
-                if (loginBtn) {
-                    loginBtn.textContent = originalText;
-                    loginBtn.disabled = false;
-                }
             }
         }
 
