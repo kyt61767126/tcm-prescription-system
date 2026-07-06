@@ -1,34 +1,9 @@
-import { hashPassword, verifyPassword, signToken, parseAuth } from './_auth.js';
-
-const KV_USERS_KEY = 'system_users';
-
-function getDefaultUsers() {
-    // 仅用于首次初始化，密码会在写入时立即哈希
-    // 首次登录后请立即修改默认密码
-    return [
-        {username: 'admin', password: 'Bnt@2026!', name: '管理员', role: 'admin', allowSavePrescription: true, allowedMode: 'both'}
-    ];
-}
-
-// 自动迁移明文密码：如果发现明文，逐个哈希后整体写回
-async function migratePlaintextPasswords(kv, users) {
-    let changed = false;
-    const migrated = [];
-    for (const u of users) {
-        if (u.password && !u.password.includes(':')) {
-            const hashed = await hashPassword(u.password);
-            migrated.push({ ...u, password: hashed });
-            changed = true;
-        } else {
-            migrated.push(u);
-        }
-    }
-    if (changed) {
-        await kv.put(KV_USERS_KEY, JSON.stringify(migrated));
-        console.log('Migrated plaintext passwords to hashed format, count:', migrated.length);
-    }
-    return migrated;
-}
+import {
+    parseAuthHeader, hashPassword, verifyPassword, signToken,
+    isPlatformAdmin, isClinicAdmin, isAdmin,
+    ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR,
+    KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS
+} from './_lib/auth.js';
 
 function corsHeaders() {
     return {
@@ -44,6 +19,100 @@ function json(data, status = 200) {
     return new Response(JSON.stringify(data), { status, headers: corsHeaders() });
 }
 
+function getKV(context) {
+    return context.env.KV ||
+           context.env.TCM_PRESCRIPTION_KV ||
+           context.env['tcm-prescription-kv'] ||
+           context.env['TCM-PRESCRIPTION-KV'] ||
+           context.env.TCM_KV ||
+           context.env.PRESCRIPTION_KV;
+}
+
+function generateId(prefix) {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    const bytes = crypto.getRandomValues(new Uint8Array(12));
+    let id = prefix + '_';
+    for (let i = 0; i < 12; i++) {
+        id += chars[bytes[i] % chars.length];
+    }
+    return id;
+}
+
+function getNowISO() {
+    return new Date().toISOString();
+}
+
+// 计算云权限快捷布尔值
+function computeCloudEnabled(user) {
+    if (user.role === ROLE_PLATFORM_ADMIN) return true;
+    return user.allowedMode === 'both' || user.allowedMode === 'cloud';
+}
+
+// 隐藏密码字段，返回安全的用户对象
+function sanitizeUser(user, clinicId, clinicName) {
+    return {
+        username: user.username,
+        name: user.name || user.username,
+        role: user.role,
+        clinicId: clinicId || user.clinicId || null,
+        clinicName: clinicName || null,
+        allowedMode: user.allowedMode || (user.role === ROLE_PLATFORM_ADMIN ? 'both' : 'local'),
+        cloudEnabled: user.cloudEnabled !== undefined ? user.cloudEnabled : computeCloudEnabled(user),
+        allowSavePrescription: user.allowSavePrescription !== undefined ? user.allowSavePrescription : true,
+        hasPassword: !!(user.passwordHash || user.password),
+        createdAt: user.createdAt,
+        updatedAt: user.updatedAt
+    };
+}
+
+// 登录：遍历 platform_admins + 所有诊所用户
+async function findUserForLogin(kv, username) {
+    // 1. 先查 platform_admins
+    const platformAdmins = await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json');
+    if (platformAdmins && Array.isArray(platformAdmins)) {
+        const found = platformAdmins.find(u => u.username === username);
+        if (found) {
+            return { user: found, clinicId: null, clinicName: null };
+        }
+    }
+
+    // 2. 查所有诊所用户
+    const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
+    if (!clinics || !Array.isArray(clinics)) {
+        return null;
+    }
+
+    for (const clinic of clinics) {
+        if (clinic.status !== 'active') continue;
+        const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
+        if (users && Array.isArray(users)) {
+            const found = users.find(u => u.username === username);
+            if (found) {
+                return { user: found, clinicId: clinic.id, clinicName: clinic.name };
+            }
+        }
+    }
+
+    return null;
+}
+
+// 获取所有诊所的用户（用于 platform_admin）
+async function getAllClinicUsers(kv) {
+    const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
+    if (!clinics || !Array.isArray(clinics)) return [];
+
+    const result = [];
+    for (const clinic of clinics) {
+        const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
+        if (users && Array.isArray(users)) {
+            users.forEach(u => {
+                result.push(sanitizeUser(u, clinic.id, clinic.name));
+            });
+        }
+    }
+    return result;
+}
+
 export async function onRequest(context) {
     const url = new URL(context.request.url);
     const method = context.request.method;
@@ -53,21 +122,13 @@ export async function onRequest(context) {
     }
 
     try {
-        const kv = context.env.KV ||
-                   context.env.TCM_PRESCRIPTION_KV ||
-                   context.env['tcm-prescription-kv'] ||
-                   context.env['TCM-PRESCRIPTION-KV'] ||
-                   context.env.TCM_KV ||
-                   context.env.PRESCRIPTION_KV;
-
+        const kv = getKV(context);
         if (!kv) {
             return json({ success: false, error: 'KV binding not found. Please configure TCM_PRESCRIPTION_KV.' }, 500);
         }
 
-        // ===== 登录端点 POST /users?action=login 或 ?login=true =====
-        // 入参: { username, password }
-        // 出参: { success, token, user } - token 用于后续 Bearer 鉴权
-        if (method === 'POST' && (url.searchParams.get('action') === 'login' || url.searchParams.get('login') === 'true')) {
+        // ===== 登录端点 POST /users?login=true =====
+        if (method === 'POST' && url.searchParams.get('login') === 'true') {
             const bodyText = await context.request.text();
             let body = {};
             try { body = JSON.parse(bodyText); } catch (e) {}
@@ -76,44 +137,31 @@ export async function onRequest(context) {
                 return json({ success: false, error: '用户名或密码不能为空' }, 400);
             }
 
-            let users = await kv.get(KV_USERS_KEY, 'json');
-            if (!users || !Array.isArray(users) || users.length === 0) {
-                users = getDefaultUsers();
-                await kv.put(KV_USERS_KEY, JSON.stringify(users));
-            }
-
-            users = await migratePlaintextPasswords(kv, users);
-            const found = users.find(u => u.username === username);
+            const found = await findUserForLogin(kv, username);
             if (!found) {
                 return json({ success: false, error: '用户名或密码错误' }, 401);
             }
 
-            const ok = await verifyPassword(password, found.password || '');
+            const { user, clinicId, clinicName } = found;
+            const ok = await verifyPassword(password, user.passwordHash, user.salt);
             if (!ok) {
                 return json({ success: false, error: '用户名或密码错误' }, 401);
             }
 
-            const isAdmin = found.role === 'admin';
-            const allowCloud = isAdmin || (found.allowCloud === true || found.allowedMode === 'both' || found.allowedMode === 'cloud');
-
-            const token = await signToken(found.username, found.role || 'user', context.env);
+            const token = await signToken({
+                username: user.username,
+                role: user.role,
+                clinicId: clinicId
+            }, context.env);
 
             return json({
                 success: true,
                 token,
-                user: {
-                    username: found.username,
-                    role: isAdmin ? 'admin' : 'user',
-                    name: found.name || found.username,
-                    allowCloud,
-                    allowedMode: found.allowedMode || (isAdmin ? 'both' : 'local')
-                }
+                user: sanitizeUser(user, clinicId, clinicName)
             });
         }
 
         // ===== 修改密码端点 POST /users?action=change-password =====
-        // 入参: { username, oldPassword, newPassword }
-        // 鉴权: Bearer token 或 Basic Auth
         if (method === 'POST' && url.searchParams.get('action') === 'change-password') {
             const body = await context.request.json().catch(() => ({}));
             const { username, oldPassword, newPassword } = body;
@@ -121,154 +169,317 @@ export async function onRequest(context) {
                 return json({ success: false, error: '参数不完整' }, 400);
             }
 
-            const currentUser = await parseAuth(context.request, context.env);
+            const currentUser = await parseAuthHeader(context.request, context.env);
             if (!currentUser || currentUser.username !== username) {
                 return json({ success: false, error: '只能修改自己的密码' }, 403);
             }
 
-            let users = await kv.get(KV_USERS_KEY, 'json');
-            if (!users || !Array.isArray(users)) {
-                users = getDefaultUsers();
-                await kv.put(KV_USERS_KEY, JSON.stringify(users));
-            }
-            users = await migratePlaintextPasswords(kv, users);
-
-            const found = users.find(u => u.username === username);
+            // 查找用户原始数据
+            const found = await findUserForLogin(kv, username);
             if (!found) {
                 return json({ success: false, error: '用户不存在' }, 404);
             }
 
-            const ok = await verifyPassword(oldPassword, found.password || '');
+            const ok = await verifyPassword(oldPassword, found.user.passwordHash, found.user.salt);
             if (!ok) {
                 return json({ success: false, error: '原密码错误' }, 401);
             }
 
-            found.password = await hashPassword(newPassword);
-            await kv.put(KV_USERS_KEY, JSON.stringify(users));
+            // 更新密码
+            const { passwordHash, salt } = await hashPassword(newPassword);
+            found.user.passwordHash = passwordHash;
+            found.user.salt = salt;
+            found.user.updatedAt = getNowISO();
+
+            // 保存回 KV
+            if (found.clinicId) {
+                const users = await kv.get(`clinic:${found.clinicId}:users`, 'json');
+                const idx = users.findIndex(u => u.username === username);
+                if (idx !== -1) {
+                    users[idx] = found.user;
+                    await kv.put(`clinic:${found.clinicId}:users`, JSON.stringify(users));
+                }
+            } else {
+                // platform_admin
+                const admins = await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json');
+                const idx = admins.findIndex(u => u.username === username);
+                if (idx !== -1) {
+                    admins[idx] = found.user;
+                    await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(admins));
+                }
+            }
 
             return json({ success: true, message: '密码修改成功' });
         }
 
-        if (method === 'GET') {
-            let users = await kv.get(KV_USERS_KEY, 'json');
-            if (!users || !Array.isArray(users) || users.length === 0) {
-                users = getDefaultUsers();
-                await kv.put(KV_USERS_KEY, JSON.stringify(users));
+        // ===== 诊所列表 GET /users?clinics=true =====
+        if (method === 'GET' && url.searchParams.get('clinics') === 'true') {
+            const currentUser = await parseAuthHeader(context.request, context.env);
+            if (!currentUser || !isPlatformAdmin(currentUser)) {
+                return json({ success: false, error: '仅平台总管理员可查看诊所列表' }, 403);
             }
 
-            // 自动迁移明文密码到哈希
-            users = await migratePlaintextPasswords(kv, users);
-
-            // 字段补全
-            let needsUpdate = false;
-            users = users.map(user => {
-                let updatedUser = { ...user };
-                if (updatedUser.allowSavePrescription === undefined) {
-                    needsUpdate = true;
-                    updatedUser.allowSavePrescription = true;
-                }
-                if (updatedUser.allowedMode === undefined) {
-                    needsUpdate = true;
-                    updatedUser.allowedMode = (updatedUser.role === 'admin') ? 'both' : 'local';
-                }
-                return updatedUser;
-            });
-            if (needsUpdate) {
-                await kv.put(KV_USERS_KEY, JSON.stringify(users));
+            const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
+            if (!clinics || !Array.isArray(clinics)) {
+                return json({ success: true, data: [] });
             }
 
-            // 返回时隐藏密码哈希
-            const sanitized = users.map(u => ({
-                username: u.username,
-                name: u.name,
-                role: u.role,
-                allowSavePrescription: u.allowSavePrescription,
-                allowedMode: u.allowedMode,
-                allowCloud: u.role === 'admin' || u.allowedMode === 'both' || u.allowedMode === 'cloud',
-                hasPassword: !!u.password
-            }));
+            const result = [];
+            for (const clinic of clinics) {
+                const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
+                const admin = users && users.find(u => u.role === ROLE_CLINIC_ADMIN);
+                const doctorCount = users ? users.filter(u => u.role === ROLE_DOCTOR).length : 0;
+                result.push({
+                    id: clinic.id,
+                    name: clinic.name,
+                    status: clinic.status,
+                    adminUsername: admin ? admin.username : '-',
+                    adminName: admin ? admin.name : '-',
+                    doctorCount,
+                    userCount: users ? users.length : 0,
+                    createdAt: clinic.createdAt
+                });
+            }
 
-            return json({ success: true, data: sanitized, count: sanitized.length });
+            return json({ success: true, data: result });
         }
 
+        // ===== 创建诊所 POST /users?clinic=create =====
+        if (method === 'POST' && url.searchParams.get('clinic') === 'create') {
+            const currentUser = await parseAuthHeader(context.request, context.env);
+            if (!currentUser || !isPlatformAdmin(currentUser)) {
+                return json({ success: false, error: '仅平台总管理员可创建诊所' }, 403);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const { clinicName, adminUsername, adminPassword, adminName } = body;
+            if (!clinicName || !adminUsername || !adminPassword) {
+                return json({ success: false, error: '请填写诊所名称、管理员账号和密码' }, 400);
+            }
+            if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
+                return json({ success: false, error: '管理员登录账号不能使用中文' }, 400);
+            }
+
+            // 检查用户名是否已存在
+            const existing = await findUserForLogin(kv, adminUsername);
+            if (existing) {
+                return json({ success: false, error: '登录账号已存在，请更换' }, 409);
+            }
+
+            const clinicId = generateId('clinic');
+            const now = getNowISO();
+            const { passwordHash, salt } = await hashPassword(adminPassword);
+
+            const clinic = {
+                id: clinicId,
+                name: clinicName,
+                status: 'active',
+                createdAt: now,
+                updatedAt: now
+            };
+
+            const adminUser = {
+                username: adminUsername,
+                name: adminName || adminUsername,
+                role: ROLE_CLINIC_ADMIN,
+                passwordHash,
+                salt,
+                allowedMode: 'both',
+                cloudEnabled: true,
+                allowSavePrescription: true,
+                createdAt: now,
+                updatedAt: now
+            };
+
+            // 保存诊所
+            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+            clinics.push(clinic);
+            await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
+
+            // 保存诊所用户
+            await kv.put(`clinic:${clinicId}:users`, JSON.stringify([adminUser]));
+
+            return json({
+                success: true,
+                clinic,
+                admin: sanitizeUser(adminUser, clinicId, clinicName)
+            });
+        }
+
+        // ===== 更新诊所 POST /users?clinic=update =====
+        if (method === 'POST' && url.searchParams.get('clinic') === 'update') {
+            const currentUser = await parseAuthHeader(context.request, context.env);
+            if (!currentUser || !isPlatformAdmin(currentUser)) {
+                return json({ success: false, error: '仅平台总管理员可更新诊所' }, 403);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const { clinicId, status, name, adminUsername, adminName, adminPassword } = body;
+            if (!clinicId) {
+                return json({ success: false, error: '缺少诊所ID' }, 400);
+            }
+
+            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+            const clinicIdx = clinics.findIndex(c => c.id === clinicId);
+            if (clinicIdx === -1) {
+                return json({ success: false, error: '诊所不存在' }, 404);
+            }
+
+            const now = getNowISO();
+
+            // 更新诊所状态或名称
+            if (status !== undefined) {
+                clinics[clinicIdx].status = status;
+            }
+            if (name !== undefined) {
+                clinics[clinicIdx].name = name;
+            }
+            clinics[clinicIdx].updatedAt = now;
+            await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
+
+            // 更新管理员信息（如果有提供）
+            if (adminUsername || adminName || adminPassword) {
+                const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
+                const adminIdx = users.findIndex(u => u.role === ROLE_CLINIC_ADMIN);
+                if (adminIdx !== -1) {
+                    if (adminUsername) users[adminIdx].username = adminUsername;
+                    if (adminName) users[adminIdx].name = adminName;
+                    if (adminPassword) {
+                        const { passwordHash, salt } = await hashPassword(adminPassword);
+                        users[adminIdx].passwordHash = passwordHash;
+                        users[adminIdx].salt = salt;
+                    }
+                    users[adminIdx].updatedAt = now;
+                    await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));
+                }
+            }
+
+            return json({ success: true, clinic: clinics[clinicIdx] });
+        }
+
+        // ===== GET 用户列表 =====
+        if (method === 'GET') {
+            const currentUser = await parseAuthHeader(context.request, context.env);
+            if (!currentUser) {
+                return json({ success: false, error: '未授权访问' }, 401);
+            }
+
+            if (isPlatformAdmin(currentUser)) {
+                // platform_admin 看所有用户
+                const allUsers = await getAllClinicUsers(kv);
+                const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+                const platformAdmins = admins.map(a => sanitizeUser(a, null, null));
+                return json({ success: true, data: [...platformAdmins, ...allUsers], count: platformAdmins.length + allUsers.length });
+            }
+
+            if (isClinicAdmin(currentUser)) {
+                // clinic_admin 看本诊所用户
+                const users = (await kv.get(`clinic:${currentUser.clinicId}:users`, 'json')) || [];
+                const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+                const clinic = clinics.find(c => c.id === currentUser.clinicId);
+                const clinicName = clinic ? clinic.name : null;
+                const data = users.map(u => sanitizeUser(u, currentUser.clinicId, clinicName));
+                return json({ success: true, data, count: data.length });
+            }
+
+            // doctor 仅看自己
+            const found = await findUserForLogin(kv, currentUser.username);
+            if (!found) {
+                return json({ success: true, data: [] });
+            }
+            return json({ success: true, data: [sanitizeUser(found.user, found.clinicId, found.clinicName)], count: 1 });
+        }
+
+        // ===== POST 保存用户列表 =====
         if (method === 'POST') {
             const body = await context.request.json().catch(() => ({}));
-
             if (!body.users || !Array.isArray(body.users)) {
                 return json({ success: false, error: 'Missing or invalid users data' }, 400);
             }
 
-            // 鉴权：支持新 Bearer token 与旧 Basic 兼容
-            const currentUser = await parseAuth(context.request, context.env);
+            const currentUser = await parseAuthHeader(context.request, context.env);
             if (!currentUser) {
                 return json({ success: false, error: 'Forbidden: 需登录身份' }, 403);
             }
 
-            const kvUsers = await migratePlaintextPasswords(kv, (await kv.get(KV_USERS_KEY, 'json') || []));
-            const kvUsersNormalized = kvUsers.map(u => ({
-                ...u,
-                allowSavePrescription: u.allowSavePrescription === undefined ? true : u.allowSavePrescription,
-                allowedMode: u.allowedMode || (u.role === 'admin' ? 'both' : 'local')
-            }));
-
-            const matched = kvUsersNormalized.find(u => u.username === currentUser.username);
-            const isAdmin = currentUser.role === 'admin' && matched && matched.role === 'admin';
-            const isSelfRegular = !isAdmin && matched && matched.username === currentUser.username;
-
-            const forbiddenResp = (msg) => json({ success: false, error: 'Forbidden: ' + msg }, 403);
-
-            if (!isAdmin && !isSelfRegular) {
-                return forbiddenResp('需管理员或本人身份');
-            }
-
-            // 普通用户：仅可修改自己的 password 字段
-            if (isSelfRegular) {
-                if (body.users.length !== kvUsersNormalized.length) {
-                    return forbiddenResp('仅可修改自己的密码，不可增删用户');
-                }
-                const keysEqualExcept = (a, b, except) => {
-                    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
-                    for (const k of keys) {
-                        if (except.includes(k)) continue;
-                        if (JSON.stringify(a[k]) !== JSON.stringify(b[k])) return false;
-                    }
-                    return true;
-                };
-                for (const bu of body.users) {
-                    const ku = kvUsersNormalized.find(u => u.username === bu.username);
-                    if (!ku) return forbiddenResp('用户列表不可变更');
-                    if (bu.username !== currentUser.username) {
-                        if (!keysEqualExcept(bu, ku, [])) return forbiddenResp('不可修改他人信息');
-                    } else {
-                        if (!keysEqualExcept(bu, ku, ['password'])) return forbiddenResp('仅可修改密码字段');
+            if (isPlatformAdmin(currentUser)) {
+                // platform_admin：可管理所有诊所
+                // 按诊所分组保存
+                const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+                for (const clinic of clinics) {
+                    const clinicUsers = body.users.filter(u => u.clinicId === clinic.id || (!u.clinicId && u.role !== ROLE_PLATFORM_ADMIN));
+                    if (clinicUsers.length > 0) {
+                        const existingUsers = (await kv.get(`clinic:${clinic.id}:users`, 'json')) || [];
+                        const savedUsers = await processUsersForSave(clinicUsers, existingUsers);
+                        await kv.put(`clinic:${clinic.id}:users`, JSON.stringify(savedUsers));
                     }
                 }
+                // 保存 platform_admins（如果有）
+                const platformAdmins = body.users.filter(u => u.role === ROLE_PLATFORM_ADMIN);
+                if (platformAdmins.length > 0) {
+                    const existingAdmins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+                    const savedAdmins = await processUsersForSave(platformAdmins, existingAdmins);
+                    await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(savedAdmins));
+                }
+                return json({ success: true, message: 'Users saved successfully', count: body.users.length });
             }
 
-            // 处理密码：明文密码入库前哈希；已是 "salt:hash" 格式保留；空保留原值
-            const usersWithPermission = [];
-            for (const user of body.users) {
-                let updatedUser = { ...user };
-                if (updatedUser.allowSavePrescription === undefined) {
-                    updatedUser.allowSavePrescription = true;
+            if (isClinicAdmin(currentUser)) {
+                // clinic_admin：仅管理本诊所
+                const clinicId = currentUser.clinicId;
+                const existingUsers = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
+
+                // 验证：不能修改为 platform_admin
+                for (const u of body.users) {
+                    if (u.role === ROLE_PLATFORM_ADMIN) {
+                        return json({ success: false, error: 'Forbidden: 不能创建平台管理员' }, 403);
+                    }
+                    if (u.clinicId && u.clinicId !== clinicId) {
+                        return json({ success: false, error: 'Forbidden: 不能修改其他诊所用户' }, 403);
+                    }
                 }
-                if (updatedUser.allowedMode === undefined) {
-                    updatedUser.allowedMode = 'both';
-                }
-                // 密码处理：明文 → 哈希；保留旧哈希；空字符串保持
-                if (updatedUser.password && !updatedUser.password.includes(':')) {
-                    updatedUser.password = await hashPassword(updatedUser.password);
-                }
-                usersWithPermission.push(updatedUser);
+
+                const savedUsers = await processUsersForSave(body.users, existingUsers);
+                await kv.put(`clinic:${clinicId}:users`, JSON.stringify(savedUsers));
+                return json({ success: true, message: 'Users saved successfully', count: body.users.length });
             }
 
-            await kv.put(KV_USERS_KEY, JSON.stringify(usersWithPermission));
+            // doctor：仅改自己密码
+            const found = await findUserForLogin(kv, currentUser.username);
+            if (!found) {
+                return json({ success: false, error: '用户不存在' }, 404);
+            }
 
-            return json({
-                success: true,
-                message: 'Users saved successfully',
-                count: body.users.length
-            });
+            // 验证：只能修改自己的密码
+            if (body.users.length !== 1 || body.users[0].username !== currentUser.username) {
+                return json({ success: false, error: 'Forbidden: 仅可修改自己的密码' }, 403);
+            }
+
+            const userBody = body.users[0];
+            if (userBody.password) {
+                const { passwordHash, salt } = await hashPassword(userBody.password);
+                found.user.passwordHash = passwordHash;
+                found.user.salt = salt;
+                found.user.updatedAt = getNowISO();
+
+                if (found.clinicId) {
+                    const users = (await kv.get(`clinic:${found.clinicId}:users`, 'json')) || [];
+                    const idx = users.findIndex(u => u.username === currentUser.username);
+                    if (idx !== -1) {
+                        users[idx] = found.user;
+                        await kv.put(`clinic:${found.clinicId}:users`, JSON.stringify(users));
+                    }
+                } else {
+                    const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+                    const idx = admins.findIndex(u => u.username === currentUser.username);
+                    if (idx !== -1) {
+                        admins[idx] = found.user;
+                        await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(admins));
+                    }
+                }
+            }
+
+            return json({ success: true, message: '密码修改成功' });
         }
 
         return json({ success: false, error: 'Method not allowed' }, 405);
@@ -279,3 +490,62 @@ export async function onRequest(context) {
     }
 }
 
+// 处理用户列表保存：明文密码哈希、保留原密码
+async function processUsersForSave(newUsers, existingUsers) {
+    const now = getNowISO();
+    const result = [];
+
+    for (const newUser of newUsers) {
+        const existing = existingUsers.find(u => u.username === newUser.username);
+        let saved;
+
+        if (existing) {
+            // 编辑已有用户
+            saved = { ...existing };
+            saved.name = newUser.name !== undefined ? newUser.name : existing.name;
+            saved.role = newUser.role !== undefined ? newUser.role : existing.role;
+            saved.allowedMode = newUser.allowedMode !== undefined ? newUser.allowedMode : (existing.allowedMode || 'local');
+            saved.cloudEnabled = newUser.cloudEnabled !== undefined ? newUser.cloudEnabled : computeCloudEnabled(saved);
+            saved.allowSavePrescription = newUser.allowSavePrescription !== undefined ? newUser.allowSavePrescription : (existing.allowSavePrescription !== undefined ? existing.allowSavePrescription : true);
+            saved.updatedAt = now;
+
+            // 密码处理
+            if (newUser.password) {
+                // 明文密码 → 哈希
+                const { passwordHash, salt } = await hashPassword(newUser.password);
+                saved.passwordHash = passwordHash;
+                saved.salt = salt;
+            } else if (newUser.passwordHash && newUser.salt) {
+                // 已有哈希 → 保留
+                saved.passwordHash = newUser.passwordHash;
+                saved.salt = newUser.salt;
+            }
+            // 否则保留 existing 的 passwordHash 和 salt
+        } else {
+            // 新增用户
+            saved = {
+                username: newUser.username,
+                name: newUser.name || newUser.username,
+                role: newUser.role || ROLE_DOCTOR,
+                allowedMode: newUser.allowedMode || 'local',
+                cloudEnabled: newUser.cloudEnabled !== undefined ? newUser.cloudEnabled : false,
+                allowSavePrescription: newUser.allowSavePrescription !== undefined ? newUser.allowSavePrescription : true,
+                createdAt: now,
+                updatedAt: now
+            };
+
+            if (newUser.password) {
+                const { passwordHash, salt } = await hashPassword(newUser.password);
+                saved.passwordHash = passwordHash;
+                saved.salt = salt;
+            } else if (newUser.passwordHash && newUser.salt) {
+                saved.passwordHash = newUser.passwordHash;
+                saved.salt = newUser.salt;
+            }
+        }
+
+        result.push(saved);
+    }
+
+    return result;
+}

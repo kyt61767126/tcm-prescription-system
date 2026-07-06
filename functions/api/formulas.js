@@ -1,157 +1,106 @@
-import { parseAuth } from './_auth.js';
+import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin } from './_lib/auth.js';
+
+function corsHeaders() {
+    return {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
+        'Access-Control-Max-Age': '86400',
+        'Content-Type': 'application/json'
+    };
+}
+
+function json(data, status = 200) {
+    return new Response(JSON.stringify(data), { status, headers: corsHeaders() });
+}
+
+function getKV(context) {
+    return context.env.KV ||
+           context.env.TCM_PRESCRIPTION_KV ||
+           context.env['tcm-prescription-kv'] ||
+           context.env['TCM-PRESCRIPTION-KV'] ||
+           context.env.TCM_KV ||
+           context.env.PRESCRIPTION_KV;
+}
 
 export async function onRequest(context) {
     const url = new URL(context.request.url);
     const method = context.request.method;
 
     if (method === 'OPTIONS') {
-        return new Response(null, {
-            status: 200,
-            headers: {
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
-                'Access-Control-Max-Age': '86400'
-            }
-        });
+        return new Response(null, { status: 200, headers: corsHeaders() });
     }
 
     try {
-        const kv = context.env.KV ||
-                   context.env.TCM_PRESCRIPTION_KV ||
-                   context.env['tcm-prescription-kv'] ||
-                   context.env['TCM-PRESCRIPTION-KV'] ||
-                   context.env.TCM_KV ||
-                   context.env.PRESCRIPTION_KV;
-
+        const kv = getKV(context);
         if (!kv) {
-            return new Response(JSON.stringify({
-                success: false,
-                error: 'KV存储未配置。请在Cloudflare Pages设置中配置KV binding',
-                requireSetup: true
-            }), {
-                status: 500,
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-            });
+            return json({ success: false, error: 'KV存储未配置', requireSetup: true }, 500);
         }
 
-        const KV_FORMULAS_KEY = 'formulas_all';
-        const currentUser = await parseAuth(context.request, context.env);
-        
-        // GET - 获取方剂库（无需认证）
+        const currentUser = await parseAuthHeader(context.request, context.env);
+
+        // 确定方剂库的 KV key
+        let formulasKey;
+        if (currentUser && currentUser.clinicId) {
+            formulasKey = `clinic:${currentUser.clinicId}:formulas`;
+        } else if (currentUser && isPlatformAdmin(currentUser)) {
+            // platform_admin 无 clinicId，用平台兜底
+            formulasKey = 'system:platform_formulas';
+        } else {
+            return json({ success: false, error: '未授权访问，请先登录' }, 401);
+        }
+
+        // GET - 获取方剂库
         if (method === 'GET') {
-            let formulas = await kv.get(KV_FORMULAS_KEY, 'json');
-            console.log('GET /formulas - Retrieved from KV:', formulas ? formulas.length : 0);
-            
+            let formulas = await kv.get(formulasKey, 'json');
             if (!formulas || !Array.isArray(formulas)) {
                 formulas = [];
-                await kv.put(KV_FORMULAS_KEY, JSON.stringify(formulas));
             }
-            
-            return new Response(JSON.stringify({
-                success: true,
-                data: formulas,
-                count: formulas.length
-            }), {
-                status: 200,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*'
-                }
-            });
+            return json({ success: true, data: formulas, count: formulas.length });
         }
-        
+
         // POST/PUT - 保存方剂库（需要认证）
         if (method === 'POST' || method === 'PUT') {
             if (!currentUser) {
-                console.warn('POST /formulas - Unauthorized');
-                return new Response(JSON.stringify({ 
-                    success: false, 
-                    error: '未授权访问，请先登录' 
-                }), { 
-                    status: 401, 
-                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-                });
+                return json({ success: false, error: '未授权访问，请先登录' }, 401);
             }
-            
+
             let body;
             try {
                 body = await context.request.json();
             } catch (error) {
-                console.error('POST /formulas - Failed to parse body:', error);
-                return new Response(JSON.stringify({ 
-                    success: false, 
-                    error: '请求数据格式错误' 
-                }), { 
-                    status: 400, 
-                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-                });
+                return json({ success: false, error: '请求数据格式错误' }, 400);
             }
-            
+
             if (!body.formulas || !Array.isArray(body.formulas)) {
-                return new Response(JSON.stringify({ 
-                    success: false, 
-                    error: '无效的方剂数据' 
-                }), { 
-                    status: 400, 
-                    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-                });
+                return json({ success: false, error: '无效的方剂数据' }, 400);
             }
-            
+
+            const nowIso = new Date().toISOString();
             const formulasWithOwner = body.formulas.map(f => ({
                 ...f,
                 createdBy: f.createdBy || currentUser.username,
-                updatedAt: new Date().toISOString()
+                updatedAt: nowIso
             }));
-            
-            let existingFormulas = await kv.get(KV_FORMULAS_KEY, 'json') || [];
-            if (currentUser.role === 'admin') {
+
+            let existingFormulas = (await kv.get(formulasKey, 'json')) || [];
+            if (isAdmin(currentUser)) {
+                // 管理员：替换整个方剂库
                 existingFormulas = formulasWithOwner;
             } else {
-                const userFormulas = existingFormulas.filter(f => f.createdBy === currentUser.username);
+                // 普通医师：仅替换自己的方剂
                 const otherFormulas = existingFormulas.filter(f => f.createdBy !== currentUser.username);
                 existingFormulas = [...otherFormulas, ...formulasWithOwner.filter(f => f.createdBy === currentUser.username)];
             }
-            
-            console.log('POST /formulas - Saving', existingFormulas.length, 'formulas');
-            await kv.put(KV_FORMULAS_KEY, JSON.stringify(existingFormulas));
-            console.log('POST /formulas - Saved successfully');
-            
-            return new Response(JSON.stringify({ 
-                success: true, 
-                message: '方剂库保存成功',
-                count: existingFormulas.length,
-                data: existingFormulas
-            }), { 
-                status: 200, 
-                headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' } 
-            });
+
+            await kv.put(formulasKey, JSON.stringify(existingFormulas));
+            return json({ success: true, message: '方剂库保存成功', data: existingFormulas, count: existingFormulas.length });
         }
-        
-        return new Response(JSON.stringify({
-            success: false,
-            error: 'Method not allowed'
-        }), {
-            status: 405,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
-        });
-        
+
+        return json({ success: false, error: 'Method not allowed' }, 405);
+
     } catch (error) {
         console.error('Formulas API error:', error);
-        console.error('Error stack:', error.stack);
-        return new Response(JSON.stringify({
-            success: false,
-            error: error.message || 'Internal server error',
-            stack: error.stack ? error.stack.split('\n').slice(0, 5).join('\n') : null
-        }), {
-            status: 500,
-            headers: {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            }
-        });
+        return json({ success: false, error: error.message || 'Internal server error' }, 500);
     }
 }
