@@ -4060,13 +4060,13 @@
                     btn2.onclick = function() { showPlatformPrescriptionModal(); };
                     btn2.style.display = '';
                 } else if (isClinicAdmin(currentUser)) {
-                    btn1.innerHTML = '📊 统计分析';
+                    btn1.innerHTML = '📊 统计';
                     btn1.onclick = function() { showModal('analyticsModal'); };
                     btn2.innerHTML = '👤 账户';
                     btn2.onclick = function() { showUserManageModal(); };
                     btn2.style.display = '';
                 } else {
-                    btn1.innerHTML = '📊 统计分析';
+                    btn1.innerHTML = '📊 统计';
                     btn1.onclick = function() { showModal('analyticsModal'); };
                     btn2.style.display = 'none';
                 }
@@ -4075,14 +4075,14 @@
 
             if (currentUser && isClinicAdmin(currentUser)) {
                 // 网页端管理员：统计分析、账户管理
-                btn1.innerHTML = '📊 统计分析';
+                btn1.innerHTML = '📊 统计';
                 btn1.onclick = function() { showModal('analyticsModal'); };
                 btn2.innerHTML = '👤 账户';
                 btn2.onclick = function() { showUserManageModal(); };
                 btn2.style.display = '';
             } else {
                 // 网页端普通用户：只显示统计分析
-                btn1.innerHTML = '📊 统计分析';
+                btn1.innerHTML = '📊 统计';
                 btn1.onclick = function() { showModal('analyticsModal'); };
                 btn2.style.display = 'none';
             }
