@@ -28,8 +28,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     // ---------- 备份数据保存（与图片同目录：安装目录/downloads/YYYY-MM/） ----------
-    saveBackupFile: (fileName, content) => {
-        return ipcRenderer.invoke('save-backup-file', fileName, content);
+    saveBackupFile: (jsonStr, fileName) => {
+        return ipcRenderer.invoke('save-backup-file', jsonStr, fileName);
     },
 
     getBackupDirectory: () => {

@@ -407,11 +407,11 @@ ipcMain.handle('save-prescription-image', async (event, imageData, fileName) => 
 });
 
 // 保存备份数据文件到与图片相同的目录（安装目录/downloads/YYYY-MM/）
-ipcMain.handle('save-backup-file', async (event, fileName, content) => {
+ipcMain.handle('save-backup-file', async (event, jsonStr, fileName) => {
     try {
         const monthDir = getCurrentMonthDirectory();
         const filePath = path.join(monthDir, fileName);
-        const buffer = Buffer.from(content, 'utf-8');
+        const buffer = Buffer.from(jsonStr, 'utf-8');
         await fs.writeFile(filePath, buffer);
         console.log('备份文件已保存:', filePath);
         return { success: true, filePath, directory: monthDir };
