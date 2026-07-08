@@ -1030,6 +1030,8 @@
     <!-- 移动端快捷操作栏 -->
     <div class="mobile-action-bar" id="mobileActionBar">
         <div class="action-buttons">
+            <button class="action-btn" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button>
+            <button class="action-btn" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button>
             <button class="action-btn" onclick="clearPrescription()">🗑️ 清空</button>
             <button class="action-btn primary" id="mobileActionBtn1" onclick="savePrescription()">💾 保存</button>
             <button class="action-btn" id="mobileActionBtn2" onclick="printPrescription('portrait')">🖨️ 打印</button>
@@ -7302,7 +7304,7 @@ IconFile=${scriptPath}`;
                 let saveLocation = '';
                 if (window.electronAPI && window.electronAPI.saveBackupFile) {
                     try {
-                        const result = await window.electronAPI.saveBackupFile(fileName, jsonStr);
+                        const result = await window.electronAPI.saveBackupFile(jsonStr, fileName);
                         if (result && result.success) {
                             saveLocation = result.filePath || '';
                         } else {
@@ -7400,7 +7402,7 @@ IconFile=${scriptPath}`;
                 // Electron 桌面端：保存到安装目录/downloads/YYYY-MM/（与图片同目录）
                 if (isElectron && window.electronAPI.saveBackupFile) {
                     try {
-                        const result = await window.electronAPI.saveBackupFile(fileName, jsonStr);
+                        const result = await window.electronAPI.saveBackupFile(jsonStr, fileName);
                         if (result && result.success) {
                             downloadResult = `📁 已保存: ${result.filePath || fileName} (${sizeKB} KB)`;
                         } else {
