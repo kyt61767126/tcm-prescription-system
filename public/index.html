@@ -6074,7 +6074,7 @@
             try {
                 const result = await window.electronAPI.findMediaFiles(patientName, prescriptionNo);
                 if (!result.success || !result.files || result.files.length === 0) {
-                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件<br><span style="font-size:11px;color:#aaa;">搜索: ' + escapeHtml(patientName) + '_' + escapeHtml(prescriptionNo) + '</span></div>';
+                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件<br><span style="font-size:11px;color:#aaa;">搜索: ' + escapeHtml(patientName) + '_' + escapeHtml(prescriptionNo) + '</span>' + (result.debug ? '<br><span style="font-size:10px;color:#ccc;word-break:break-all;">' + escapeHtml(result.debug) + '</span>' : '') + '</div>';
                     return;
                 }
                 const sorted = result.files.sort((a,b) => {
@@ -6101,50 +6101,24 @@
             if (!f) return;
             const content = document.getElementById('mediaViewerContent');
             if (!content) return;
-            if (window.__currentBlobUrl) {
-                try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
-                window.__currentBlobUrl = null;
-            }
+            var btns = '<div style="margin-top:10px;text-align:center;"><button onclick="window.electronAPI.openFile(window.__currentMediaFiles[' + idx + '].path' + (f.type === 'video' ? ', \'video/webm\'' : '') + ')" style="background:#4CAF50;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">用系统应用打开</button> <button onclick="viewMediaFilesBack()" style="background:#6c757d;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">返回列表</button></div>';
             if (f.type === 'image') {
                 content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">加载中...</div>';
                 try {
                     const result = await window.electronAPI.readFileAsBase64(f.path);
                     if (result.success && result.data) {
-                        const byteString = atob(result.data.split(',')[1]);
-                        const mimeString = result.data.split(',')[0].split(':')[1].split(';')[0];
-                        const ab = new ArrayBuffer(byteString.length);
-                        const ia = new Uint8Array(ab);
-                        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-                        const blob = new Blob([ab], { type: mimeString });
-                        const blobUrl = URL.createObjectURL(blob);
-                        window.__currentBlobUrl = blobUrl;
-                        content.innerHTML = '<div style="text-align:center;"><img src="' + blobUrl + '" style="max-width:100%;max-height:70vh;border-radius:4px;" /></div><div style="margin-top:10px;text-align:center;"><button onclick="window.electronAPI.openFile(window.__currentMediaFiles[' + idx + '].path)" style="background:#4CAF50;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">用系统应用打开</button> <button onclick="viewMediaFilesBack()" style="background:#6c757d;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">返回列表</button></div>';
+                        content.innerHTML = '<div style="text-align:center;"><img src="' + result.data + '" style="max-width:100%;max-height:70vh;border-radius:4px;" /></div>' + btns;
                     } else {
-                        content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">加载失败: ' + escapeHtml(result.error || '未知错误') + '<br><span style="font-size:11px;color:#999;">' + escapeHtml(f.path) + '</span></div>';
+                        content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">图片预览失败,请用系统应用打开</div>' + btns;
                     }
                 } catch(e) {
-                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">加载失败: ' + escapeHtml(String(e)) + '<br><span style="font-size:11px;color:#999;">' + escapeHtml(f.path) + '</span></div>';
+                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">图片预览失败,请用系统应用打开</div>' + btns;
                 }
             } else {
-                content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">加载视频中...</div>';
+                content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">已用系统应用打开视频</div>' + btns;
                 try {
-                    const result = await window.electronAPI.readFileAsBase64(f.path);
-                    if (result.success && result.data) {
-                        const byteString = atob(result.data.split(',')[1]);
-                        const mimeString = result.data.split(',')[0].split(':')[1].split(';')[0];
-                        const ab = new ArrayBuffer(byteString.length);
-                        const ia = new Uint8Array(ab);
-                        for (let i = 0; i < byteString.length; i++) ia[i] = byteString.charCodeAt(i);
-                        const blob = new Blob([ab], { type: mimeString });
-                        const blobUrl = URL.createObjectURL(blob);
-                        window.__currentBlobUrl = blobUrl;
-                        content.innerHTML = '<div style="text-align:center;"><video src="' + blobUrl + '" controls autoplay playsinline webkit-playsinline style="max-width:100%;max-height:60vh;border-radius:4px;background:#000;"></video></div><div style="margin-top:10px;text-align:center;"><button onclick="window.electronAPI.openFile(window.__currentMediaFiles[' + idx + '].path, \'video/webm\')" style="background:#4CAF50;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">用系统应用打开</button> <button onclick="viewMediaFilesBack()" style="background:#6c757d;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">返回列表</button></div>';
-                    } else {
-                        content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">视频加载失败: ' + escapeHtml(result.error || '未知错误') + '<br><span style="font-size:11px;color:#999;">' + escapeHtml(f.path) + '</span></div>';
-                    }
-                } catch(e) {
-                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">视频加载失败: ' + escapeHtml(String(e)) + '<br><span style="font-size:11px;color:#999;">' + escapeHtml(f.path) + '</span></div>';
-                }
+                    window.electronAPI.openFile(f.path, 'video/webm');
+                } catch(e) {}
             }
         }
 
