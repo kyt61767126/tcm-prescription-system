@@ -32,7 +32,9 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.File;
@@ -54,6 +56,7 @@ public class MainActivity extends AppCompatActivity {
     private static final String TAG = "TCM-Pres";
     private static final String LOCAL_INDEX = "file:///android_asset/public/index.html";
     private static final int REQ_STORAGE = 1001;
+    private static final int REQ_CAMERA = 1003;
 
     private WebView webView;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -77,9 +80,21 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
+        // Android 6.0+ 动态申请相机和麦克风权限
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                    != PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, REQ_CAMERA);
+            }
+        }
+
         // 创建 WebView 并立即配置
         webView = new WebView(this);
         setContentView(webView);
+        getWindow().setBackgroundDrawable(null);
         configureWebView();
     }
 
@@ -99,6 +114,7 @@ public class MainActivity extends AppCompatActivity {
         s.setAllowFileAccessFromFileURLs(true);
         s.setAllowUniversalAccessFromFileURLs(true);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        s.setTextZoom(100);
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
         s.setSupportMultipleWindows(true);
@@ -108,6 +124,20 @@ public class MainActivity extends AppCompatActivity {
         webView.addJavascriptInterface(new NativeBridge(), "AndroidNative");
 
         webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public void onPermissionRequest(android.webkit.PermissionRequest request) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    for (String permission : request.getResources()) {
+                        if (permission.equals(android.webkit.PermissionRequest.RESOURCE_VIDEO_CAPTURE) ||
+                            permission.equals(android.webkit.PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                            request.grant(request.getResources());
+                            return;
+                        }
+                    }
+                    request.deny();
+                }
+            }
+
             @Override
             public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
                 Context ctx = view.getContext();
@@ -266,6 +296,36 @@ public class MainActivity extends AppCompatActivity {
             "        catch(e){ resolve({success:false, error:String(e)}); }" +
             "      });" +
             "    }," +
+            "    saveVideoFile: function(arrayBuffer, fileName){" +
+            "      return new Promise(function(resolve){" +
+            "        try { var r = callNative('saveVideoFile', JSON.stringify({arrayBuffer:Array.from(arrayBuffer),fileName:fileName})); resolve(r); }" +
+            "        catch(e){ resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
+            "    getVideoDirectory: function(){" +
+            "      return new Promise(function(resolve){" +
+            "        try { var r = callNative('getVideoDirectory', '{}'); resolve(r); }" +
+            "        catch(e){ resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
+            "    findMediaFiles: function(patientName, prescriptionNo){" +
+            "      return new Promise(function(resolve){" +
+            "        try { var r = callNative('findMediaFiles', JSON.stringify({patientName:patientName,prescriptionNo:prescriptionNo})); resolve(r); }" +
+            "        catch(e){ resolve({success:false, error:String(e), files:[]}); }" +
+            "      });" +
+            "    }," +
+            "    openFile: function(filePath, mimeType){" +
+            "      return new Promise(function(resolve){" +
+            "        try { var r = callNative('openFile', JSON.stringify({filePath:filePath,mimeType:mimeType||''})); resolve(r); }" +
+            "        catch(e){ resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
+            "    readFileAsBase64: function(filePath){" +
+            "      return new Promise(function(resolve){" +
+            "        try { var r = callNative('readFileAsBase64', JSON.stringify({filePath:filePath})); resolve(r); }" +
+            "        catch(e){ resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
             "    loginSuccess: function(u){ return P({success:true}); }," +
             "    getCurrentUser: function(){ return P(null); }," +
             "    onLoginUser: function(cb){ /* no-op */ }," +
@@ -279,8 +339,15 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
+        if (webView != null) {
+            webView.evaluateJavascript("handleAndroidBack()", new ValueCallback<String>() {
+                @Override
+                public void onReceiveValue(String value) {
+                    if (value == null || value.equals("false") || value.equals("\"false\"")) {
+                        MainActivity.super.onBackPressed();
+                    }
+                }
+            });
         } else {
             super.onBackPressed();
         }
@@ -345,6 +412,19 @@ public class MainActivity extends AppCompatActivity {
                     case "savePrescriptionImage":
                         return savePrescriptionImage(args.optString("imageData", ""),
                                 args.optString("fileName", "")).toString();
+                    case "saveVideoFile":
+                        return saveVideoFile(args.optJSONArray("arrayBuffer"),
+                                args.optString("fileName", "")).toString();
+                    case "getVideoDirectory":
+                        return getVideoDirectory().toString();
+                    case "findMediaFiles":
+                        return findMediaFiles(args.optString("patientName", ""),
+                                args.optString("prescriptionNo", "")).toString();
+                    case "openFile":
+                        return openFile(args.optString("filePath", ""),
+                                args.optString("mimeType", "")).toString();
+                    case "readFileAsBase64":
+                        return readFileAsBase64(args.optString("filePath", "")).toString();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -480,6 +560,11 @@ public class MainActivity extends AppCompatActivity {
                 if (dir == null) {
                     return fail("无法创建图片目录");
                 }
+                // 按月份分类子目录，方便查阅（与桌面版保持一致）
+                dir = new File(dir, getCurrentMonthFolder());
+                if (!dir.exists() && !dir.mkdirs()) {
+                    return fail("无法创建月份目录");
+                }
                 File file = new File(dir, safeName);
                 try (FileOutputStream fos = new FileOutputStream(file)) {
                     fos.write(bytes);
@@ -494,6 +579,69 @@ public class MainActivity extends AppCompatActivity {
                 return r;
             } catch (Exception e) {
                 Log.e(TAG, "savePrescriptionImage 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 视频文件：写入 Movies/本能中医处方/ 目录
+        // ------------------------------------------------------------------
+        private JSONObject saveVideoFile(org.json.JSONArray arrayBuffer, String fileName) {
+            try {
+                byte[] bytes = new byte[arrayBuffer.length()];
+                for (int i = 0; i < arrayBuffer.length(); i++) {
+                    bytes[i] = (byte) arrayBuffer.getInt(i);
+                }
+
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "video_" + System.currentTimeMillis() + ".webm";
+                }
+                if (!safeName.endsWith(".webm")) {
+                    String base = safeName.replaceAll("\\.[^.]+$", "");
+                    safeName = base + ".webm";
+                }
+
+                File dir = getVideoDir();
+                if (dir == null) {
+                    return fail("无法创建视频目录");
+                }
+                // 按月份分类子目录，方便查阅（与桌面版保持一致）
+                dir = new File(dir, getCurrentMonthFolder());
+                if (!dir.exists() && !dir.mkdirs()) {
+                    return fail("无法创建月份目录");
+                }
+                File file = new File(dir, safeName);
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(bytes);
+                    fos.flush();
+                }
+                notifyMediaScanner(file);
+
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("filePath", file.getAbsolutePath());
+                r.put("directory", dir.getAbsolutePath());
+                r.put("fileName", safeName);
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "saveVideoFile 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 获取视频目录路径
+        // ------------------------------------------------------------------
+        private JSONObject getVideoDirectory() {
+            try {
+                File dir = getVideoDir();
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("directory", dir != null ? dir.getAbsolutePath() : "");
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "getVideoDirectory 失败", e);
                 return fail(e.getMessage());
             }
         }
@@ -531,12 +679,40 @@ public class MainActivity extends AppCompatActivity {
             return dir;
         }
 
+        private File getVideoDir() {
+            File dir;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                dir = new File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "本能中医处方");
+            } else {
+                File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                dir = new File(movies, "本能中医处方");
+            }
+            if (!dir.exists() && !dir.mkdirs()) {
+                dir = new File(getFilesDir(), "videos");
+                if (!dir.exists()) dir.mkdirs();
+            }
+            return dir;
+        }
+
+        private String getCurrentMonthFolder() {
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            int year = cal.get(java.util.Calendar.YEAR);
+            int month = cal.get(java.util.Calendar.MONTH) + 1;
+            return year + "-" + (month < 10 ? "0" + month : String.valueOf(month));
+        }
+
         private void notifyMediaScanner(File file) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                String mimeType = "application/json";
+                if (file.getName().endsWith(".png")) {
+                    mimeType = "image/png";
+                } else if (file.getName().endsWith(".webm")) {
+                    mimeType = "video/webm";
+                }
                 android.media.MediaScannerConnection.scanFile(
                         getApplicationContext(),
                         new String[]{file.getAbsolutePath()},
-                        new String[]{file.getName().endsWith(".png") ? "image/png" : "application/json"},
+                        new String[]{mimeType},
                         null);
             }
         }
@@ -554,6 +730,100 @@ public class MainActivity extends AppCompatActivity {
                 return r;
             } catch (Exception e) {
                 return new JSONObject();
+            }
+        }
+
+        private JSONObject findMediaFiles(String patientName, String prescriptionNo) {
+            try {
+                JSONArray files = new JSONArray();
+                String safeName = sanitize(patientName);
+                String safeNo = sanitize(prescriptionNo);
+                if (safeName.isEmpty()) {
+                    JSONObject result = new JSONObject();
+                    result.put("success", true);
+                    result.put("files", files);
+                    return result;
+                }
+                String prefix = safeName + "_" + safeNo;
+                scanDirForMedia(getImageDir(), prefix, files);
+                scanDirForMedia(getVideoDir(), prefix, files);
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                result.put("files", files);
+                return result;
+            } catch (Exception e) {
+                return fail("查找媒体文件失败: " + e.getMessage());
+            }
+        }
+
+        private void scanDirForMedia(File dir, String prefix, JSONArray files) {
+            if (dir == null || !dir.exists()) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    scanDirForMedia(f, prefix, files);
+                } else if (f.getName().startsWith(prefix)) {
+                    try {
+                        JSONObject fileObj = new JSONObject();
+                        fileObj.put("name", f.getName());
+                        fileObj.put("path", f.getAbsolutePath());
+                        fileObj.put("type", f.getName().endsWith(".webm") ? "video" : "image");
+                        fileObj.put("size", f.length());
+                        fileObj.put("lastModified", f.lastModified());
+                        files.put(fileObj);
+                    } catch (Exception e) {
+                        Log.e(TAG, "添加文件信息失败: " + f.getName(), e);
+                    }
+                }
+            }
+        }
+
+        private JSONObject openFile(String filePath, String mimeType) {
+            try {
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    return fail("文件不存在: " + filePath);
+                }
+                if (mimeType == null || mimeType.isEmpty()) {
+                    if (filePath.endsWith(".webm")) mimeType = "video/webm";
+                    else if (filePath.endsWith(".png")) mimeType = "image/png";
+                    else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) mimeType = "image/jpeg";
+                    else mimeType = "*/*";
+                }
+                Uri uri = FileProvider.getUriForFile(MainActivity.this,
+                        getPackageName() + ".fileprovider", file);
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(uri, mimeType);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                return result;
+            } catch (Exception e) {
+                return fail("打开文件失败: " + e.getMessage());
+            }
+        }
+
+        private JSONObject readFileAsBase64(String filePath) {
+            try {
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    return fail("文件不存在: " + filePath);
+                }
+                java.io.FileInputStream fis = new java.io.FileInputStream(file);
+                byte[] buffer = new byte[(int) file.length()];
+                fis.read(buffer);
+                fis.close();
+                String base64 = Base64.encodeToString(buffer, Base64.NO_WRAP);
+                String mimeType = filePath.endsWith(".webm") ? "video/webm" : "image/png";
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                result.put("data", "data:" + mimeType + ";base64," + base64);
+                return result;
+            } catch (Exception e) {
+                return fail("读取文件失败: " + e.getMessage());
             }
         }
     }

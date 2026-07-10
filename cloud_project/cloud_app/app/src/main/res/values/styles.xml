@@ -25,6 +25,6 @@
         <item name="android:statusBarColor">@color/statusBarColor</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <!-- 根源3: 刘海屏适配 - 不延伸到刘海区域，避免顶部被吞掉 -->
-        <item name="android:windowLayoutInDisplayCutoutMode">never</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     </style>
 </resources>

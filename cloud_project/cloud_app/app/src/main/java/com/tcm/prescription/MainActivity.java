@@ -1,14 +1,27 @@
 package com.tcm.prescription;
 
+import android.Manifest;
+import android.content.ContentValues;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.net.Uri;
 import android.net.http.SslError;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.MediaStore;
+import android.util.Base64;
+import android.util.Log;
 import android.view.Window;
 import android.view.ViewGroup;
+import android.webkit.JavascriptInterface;
 import android.webkit.JsPromptResult;
 import android.webkit.JsResult;
+import android.webkit.PermissionRequest;
 import android.webkit.SslErrorHandler;
 import android.webkit.WebChromeClient;
 import android.webkit.WebResourceError;
@@ -18,8 +31,21 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
+import android.widget.Toast;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
 
 import com.getcapacitor.BridgeActivity;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 
 public class MainActivity extends BridgeActivity {
 
@@ -33,6 +59,8 @@ public class MainActivity extends BridgeActivity {
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
+    private static final int REQ_CAMERA = 1003;
+    private static final int REQ_STORAGE = 1001;
 
     private Handler mainHandler;
     private int webViewReadyRetries = 0;
@@ -46,6 +74,26 @@ public class MainActivity extends BridgeActivity {
 
         // T5: 使用主线程 Looper 的 Handler，便于 onDestroy 统一清理
         mainHandler = new Handler(Looper.getMainLooper());
+
+        // Android 6.0+ 动态申请相机和麦克风权限（录像拍照功能需要）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                    != PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, REQ_CAMERA);
+            }
+        }
+
+        // Android 9 及以下需要 WRITE_EXTERNAL_STORAGE 权限保存文件
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_STORAGE);
+            }
+        }
 
         // 立即配置 WebView，不延迟，加快启动速度
         configureWebView();
@@ -80,12 +128,28 @@ public class MainActivity extends BridgeActivity {
         settings.setAllowUniversalAccessFromFileURLs(false);
         // 禁止 HTTPS 页面加载 HTTP 资源（防止混合内容攻击）
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        settings.setTextZoom(100);
 
         // LOAD_NO_CACHE 模式下不需要启动时清缓存，每次加载都从网络获取
         webView.clearHistory();
 
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
         webView.setWebChromeClient(new WebChromeClient() {
+            // 授权摄像头和麦克风权限（录像拍照功能需要）
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    for (String permission : request.getResources()) {
+                        if (permission.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE) ||
+                            permission.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                            request.grant(request.getResources());
+                            return;
+                        }
+                    }
+                    request.deny();
+                }
+            }
+
             @Override
             public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
                 // 创建输入框，显示默认值（原账户信息）
@@ -151,6 +215,10 @@ public class MainActivity extends BridgeActivity {
             }
         }, "AndroidAppExit");
 
+        // 注入 NativeBridge：提供 savePrescriptionImage/saveVideoFile 等原生保存能力
+        // 录像拍照功能通过此桥接将文件保存到本地文件系统（按月份分类 YYYY-MM）
+        webView.addJavascriptInterface(new NativeBridge(), "AndroidNative");
+
         webView.setWebViewClient(new WebViewClient() {
             private boolean urlChecked = false;
 
@@ -188,6 +256,9 @@ public class MainActivity extends BridgeActivity {
 
                 // 立即注入布局修正（必须最先执行）
                 injectLayoutFixScript(view);
+
+                // 注入录像拍照功能脚本（从 assets 读取 video-recorder-inject.js）
+                injectVideoRecorderScript(view);
 
                 // LOAD_NO_CACHE 模式下，每次都从网络加载最新版本，不需要版本校验 reload
                 // 彻底避免 onPageFinished 中版本不匹配触发的闪动问题
@@ -276,6 +347,29 @@ public class MainActivity extends BridgeActivity {
         webView.evaluateJavascript(js, null);
     }
 
+    /**
+     * 注入录像拍照功能脚本
+     * 从 assets/video-recorder-inject.js 读取完整脚本并注入到云端网页
+     * 脚本包含：electronAPI shim、浮动按钮、录像/拍照 overlay、本地保存逻辑
+     */
+    private void injectVideoRecorderScript(WebView webView) {
+        try {
+            InputStream is = getAssets().open("video-recorder-inject.js");
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[4096];
+            int len;
+            while ((len = is.read(buffer)) > 0) {
+                baos.write(buffer, 0, len);
+            }
+            is.close();
+            String script = baos.toString("UTF-8");
+            webView.evaluateJavascript(script, null);
+            Log.d("TCM-Pres", "录像拍照脚本注入成功，长度: " + script.length());
+        } catch (Exception e) {
+            Log.e("TCM-Pres", "录像拍照脚本注入失败", e);
+        }
+    }
+
     private boolean hasDoneFirstResume = false;
 
     @Override
@@ -337,6 +431,7 @@ public class MainActivity extends BridgeActivity {
         if (webView != null) {
             // 移除 JS Interface，防止持有 Activity 引用
             webView.removeJavascriptInterface("AndroidAppExit");
+            webView.removeJavascriptInterface("AndroidNative");
             // 从父视图移除并销毁
             ViewGroup parent = (ViewGroup) webView.getParent();
             if (parent != null) {
@@ -346,5 +441,373 @@ public class MainActivity extends BridgeActivity {
             webView.destroy();
         }
         super.onDestroy();
+    }
+
+    // ========================================================================
+    // NativeBridge：JavaScript 桥接，提供本地文件保存能力
+    // 录像拍照功能通过此桥接将文件保存到本地文件系统
+    // 保存路径：
+    //   图片：Pictures/本能中医处方/YYYY-MM/患者姓名_处方编号_photo.png
+    //   视频：Movies/本能中医处方/YYYY-MM/患者姓名_处方编号_video.webm
+    // ========================================================================
+    public class NativeBridge {
+
+        @JavascriptInterface
+        public String invoke(String name, String jsonStr) {
+            try {
+                JSONObject args = new JSONObject(jsonStr);
+                switch (name) {
+                    case "savePrescriptionImage":
+                        return savePrescriptionImage(args.optString("imageData", ""),
+                                args.optString("fileName", "")).toString();
+                    case "saveVideoFile":
+                        return saveVideoFile(args.optJSONArray("arrayBuffer"),
+                                args.optString("fileName", "")).toString();
+                    case "getVideoDirectory":
+                        return getVideoDirectory().toString();
+                    case "saveBackupFile":
+                        return saveBackupFile(args.optString("jsonStr", ""),
+                                args.optString("fileName", "")).toString();
+                    case "findMediaFiles":
+                        return findMediaFiles(args.optString("patientName", ""),
+                                args.optString("prescriptionNo", "")).toString();
+                    case "openFile":
+                        return openFile(args.optString("filePath", ""),
+                                args.optString("mimeType", "")).toString();
+                    case "readFileAsBase64":
+                        return readFileAsBase64(args.optString("filePath", "")).toString();
+                    default:
+                        return fail("unknown method: " + name).toString();
+                }
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "invoke " + name + " 失败", e);
+                return fail(e.getMessage()).toString();
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 处方图片：写入 Pictures/本能中医处方/YYYY-MM/ 目录
+        // ------------------------------------------------------------------
+        private JSONObject savePrescriptionImage(String imageData, String fileName) {
+            try {
+                String base64 = imageData;
+                if (base64.startsWith("data:image/png;base64,")) {
+                    base64 = base64.substring("data:image/png;base64,".length());
+                }
+                byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "prescription_" + System.currentTimeMillis() + ".png";
+                }
+
+                File dir = getImageDir();
+                if (dir == null) {
+                    return fail("无法创建图片目录");
+                }
+                // 按月份分类子目录，方便查阅（与桌面版保持一致）
+                dir = new File(dir, getCurrentMonthFolder());
+                if (!dir.exists() && !dir.mkdirs()) {
+                    return fail("无法创建月份目录");
+                }
+                File file = new File(dir, safeName);
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(bytes);
+                    fos.flush();
+                }
+                notifyMediaScanner(file);
+
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("filePath", file.getAbsolutePath());
+                r.put("directory", dir.getAbsolutePath());
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "savePrescriptionImage 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 视频文件：写入 Movies/本能中医处方/YYYY-MM/ 目录
+        // ------------------------------------------------------------------
+        private JSONObject saveVideoFile(org.json.JSONArray arrayBuffer, String fileName) {
+            try {
+                byte[] bytes = new byte[arrayBuffer.length()];
+                for (int i = 0; i < arrayBuffer.length(); i++) {
+                    bytes[i] = (byte) arrayBuffer.getInt(i);
+                }
+
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "video_" + System.currentTimeMillis() + ".webm";
+                }
+                if (!safeName.endsWith(".webm")) {
+                    String base = safeName.replaceAll("\\.[^.]+$", "");
+                    safeName = base + ".webm";
+                }
+
+                File dir = getVideoDir();
+                if (dir == null) {
+                    return fail("无法创建视频目录");
+                }
+                // 按月份分类子目录，方便查阅（与桌面版保持一致）
+                dir = new File(dir, getCurrentMonthFolder());
+                if (!dir.exists() && !dir.mkdirs()) {
+                    return fail("无法创建月份目录");
+                }
+                File file = new File(dir, safeName);
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(bytes);
+                    fos.flush();
+                }
+                notifyMediaScanner(file);
+
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("filePath", file.getAbsolutePath());
+                r.put("directory", dir.getAbsolutePath());
+                r.put("fileName", safeName);
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "saveVideoFile 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 获取视频目录路径
+        // ------------------------------------------------------------------
+        private JSONObject getVideoDirectory() {
+            try {
+                File dir = getVideoDir();
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("directory", dir != null ? dir.getAbsolutePath() : "");
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "getVideoDirectory 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 备份文件：写入公共 Downloads/中医处方系统/ 目录
+        // ------------------------------------------------------------------
+        private JSONObject saveBackupFile(String jsonStr, String fileName) {
+            try {
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "backup_" + System.currentTimeMillis() + ".json";
+                }
+
+                String subDir = "中医处方系统";
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
+                    values.put(MediaStore.Downloads.MIME_TYPE, "application/json");
+                    values.put(MediaStore.Downloads.RELATIVE_PATH,
+                            Environment.DIRECTORY_DOWNLOADS + "/" + subDir + "/");
+                    Uri uri = getContentResolver().insert(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) {
+                        return fail("无法创建备份文件");
+                    }
+                    try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                        if (os == null) return fail("无法打开备份文件输出流");
+                        os.write(jsonStr.getBytes("UTF-8"));
+                        os.flush();
+                    }
+                    JSONObject r = new JSONObject();
+                    r.put("success", true);
+                    r.put("fileName", safeName);
+                    r.put("filePath", "downloads/" + subDir + "/" + safeName);
+                    return r;
+                } else {
+                    File downloads = Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS);
+                    File dir = new File(downloads, subDir);
+                    if (!dir.exists() && !dir.mkdirs()) {
+                        dir = new File(getFilesDir(), "backups");
+                        if (!dir.exists()) dir.mkdirs();
+                    }
+                    File file = new File(dir, safeName);
+                    try (FileOutputStream fos = new FileOutputStream(file)) {
+                        fos.write(jsonStr.getBytes("UTF-8"));
+                        fos.flush();
+                    }
+                    notifyMediaScanner(file);
+                    JSONObject r = new JSONObject();
+                    r.put("success", true);
+                    r.put("fileName", safeName);
+                    r.put("filePath", "downloads/" + subDir + "/" + safeName);
+                    return r;
+                }
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "saveBackupFile 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 工具方法
+        // ------------------------------------------------------------------
+        private File getImageDir() {
+            File dir;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                dir = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "本能中医处方");
+            } else {
+                File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+                dir = new File(pictures, "本能中医处方");
+            }
+            if (!dir.exists() && !dir.mkdirs()) {
+                dir = new File(getFilesDir(), "prescription_images");
+                if (!dir.exists()) dir.mkdirs();
+            }
+            return dir;
+        }
+
+        private File getVideoDir() {
+            File dir;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                dir = new File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "本能中医处方");
+            } else {
+                File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                dir = new File(movies, "本能中医处方");
+            }
+            if (!dir.exists() && !dir.mkdirs()) {
+                dir = new File(getFilesDir(), "prescription_videos");
+                if (!dir.exists()) dir.mkdirs();
+            }
+            return dir;
+        }
+
+        private String getCurrentMonthFolder() {
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            int year = cal.get(java.util.Calendar.YEAR);
+            int month = cal.get(java.util.Calendar.MONTH) + 1;
+            return year + "-" + (month < 10 ? "0" + month : String.valueOf(month));
+        }
+
+        private void notifyMediaScanner(File file) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                android.media.MediaScannerConnection.scanFile(
+                        getApplicationContext(),
+                        new String[]{file.getAbsolutePath()},
+                        new String[]{file.getName().endsWith(".png") ? "image/png" : "application/json"},
+                        null);
+            }
+        }
+
+        private String sanitize(String name) {
+            if (name == null) return "";
+            return name.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+        }
+
+        private JSONObject fail(String msg) {
+            try {
+                JSONObject r = new JSONObject();
+                r.put("success", false);
+                r.put("error", msg);
+                return r;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        private JSONObject findMediaFiles(String patientName, String prescriptionNo) {
+            try {
+                JSONArray files = new JSONArray();
+                String safeName = sanitize(patientName);
+                String safeNo = sanitize(prescriptionNo);
+                if (safeName.isEmpty()) {
+                    JSONObject result = new JSONObject();
+                    result.put("success", true);
+                    result.put("files", files);
+                    return result;
+                }
+                String prefix = safeName + "_" + safeNo;
+                scanDirForMedia(getImageDir(), prefix, files);
+                scanDirForMedia(getVideoDir(), prefix, files);
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                result.put("files", files);
+                return result;
+            } catch (Exception e) {
+                return fail("查找媒体文件失败: " + e.getMessage());
+            }
+        }
+
+        private void scanDirForMedia(File dir, String prefix, JSONArray files) {
+            if (dir == null || !dir.exists()) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    scanDirForMedia(f, prefix, files);
+                } else if (f.getName().startsWith(prefix)) {
+                    try {
+                        JSONObject fileObj = new JSONObject();
+                        fileObj.put("name", f.getName());
+                        fileObj.put("path", f.getAbsolutePath());
+                        fileObj.put("type", f.getName().endsWith(".webm") ? "video" : "image");
+                        fileObj.put("size", f.length());
+                        fileObj.put("lastModified", f.lastModified());
+                        files.put(fileObj);
+                    } catch (Exception e) {
+                        Log.e("TCM-Pres", "添加文件信息失败: " + f.getName(), e);
+                    }
+                }
+            }
+        }
+
+        private JSONObject openFile(String filePath, String mimeType) {
+            try {
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    return fail("文件不存在: " + filePath);
+                }
+                if (mimeType == null || mimeType.isEmpty()) {
+                    if (filePath.endsWith(".webm")) mimeType = "video/webm";
+                    else if (filePath.endsWith(".png")) mimeType = "image/png";
+                    else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) mimeType = "image/jpeg";
+                    else mimeType = "*/*";
+                }
+                Uri uri = FileProvider.getUriForFile(MainActivity.this,
+                        getPackageName() + ".fileprovider", file);
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(uri, mimeType);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                return result;
+            } catch (Exception e) {
+                return fail("打开文件失败: " + e.getMessage());
+            }
+        }
+
+        private JSONObject readFileAsBase64(String filePath) {
+            try {
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    return fail("文件不存在: " + filePath);
+                }
+                java.io.FileInputStream fis = new java.io.FileInputStream(file);
+                byte[] buffer = new byte[(int) file.length()];
+                fis.read(buffer);
+                fis.close();
+                String base64 = Base64.encodeToString(buffer, Base64.NO_WRAP);
+                String mimeType = filePath.endsWith(".webm") ? "video/webm" : "image/png";
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                result.put("data", "data:" + mimeType + ";base64," + base64);
+                return result;
+            } catch (Exception e) {
+                return fail("读取文件失败: " + e.getMessage());
+            }
+        }
     }
 }
