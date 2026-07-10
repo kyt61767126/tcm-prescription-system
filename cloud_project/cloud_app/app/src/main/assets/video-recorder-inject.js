@@ -273,9 +273,12 @@
             prescriptionNo = (noEl.value || noEl.textContent || '').trim();
         }
 
-        var cleanName = patientName || 'unknown';
+        var sanitizeStr = function (s) {
+            return (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
+        };
+        var cleanName = sanitizeStr(patientName) || 'unknown';
 
-        var identifier = prescriptionNo;
+        var identifier = sanitizeStr(prescriptionNo);
         if (!identifier) {
             var now = new Date();
             var pad = function (n) { return String(n).padStart(2, '0'); };

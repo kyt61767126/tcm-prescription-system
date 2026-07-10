@@ -5779,9 +5779,10 @@ window.addEventListener('load', function () {
         const prescriptionNo = (document.getElementById('prescriptionNo')?.value || '').trim() || 
                                (document.getElementById('clinicNo')?.value || '').trim();
         
-        const cleanName = patientName || 'unknown';
-        
-        let identifier = prescriptionNo;
+        const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
+        const cleanName = sanitizeStr(patientName) || 'unknown';
+
+        let identifier = sanitizeStr(prescriptionNo);
         if (!identifier) {
             const now = new Date();
             const pad = n => String(n).padStart(2, '0');

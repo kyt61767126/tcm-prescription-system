@@ -740,10 +740,24 @@ public class MainActivity extends AppCompatActivity {
                 File vidDir = getVideoDir();
                 scanDirForMedia(imgDir, prefix, files);
                 scanDirForMedia(vidDir, prefix, files);
+                StringBuilder debug = new StringBuilder();
+                debug.append("prefix=").append(prefix);
+                debug.append(" | imgDir=").append(imgDir != null ? imgDir.getAbsolutePath() : "null").append(" exists=").append(imgDir != null && imgDir.exists());
+                debug.append(" | vidDir=").append(vidDir != null ? vidDir.getAbsolutePath() : "null").append(" exists=").append(vidDir != null && vidDir.exists());
+                if (imgDir != null && imgDir.exists()) {
+                    java.util.List<String> af = new java.util.ArrayList<>();
+                    collectAllFiles(imgDir, af, 10);
+                    debug.append(" | imgFiles: ").append(String.join(", ", af));
+                }
+                if (vidDir != null && vidDir.exists()) {
+                    java.util.List<String> af = new java.util.ArrayList<>();
+                    collectAllFiles(vidDir, af, 10);
+                    debug.append(" | vidFiles: ").append(String.join(", ", af));
+                }
                 JSONObject result = new JSONObject();
                 result.put("success", true);
                 result.put("files", files);
-                result.put("debug", "prefix=" + prefix + " | imgDir=" + (imgDir != null ? imgDir.getAbsolutePath() : "null") + " exists=" + (imgDir != null && imgDir.exists()) + " | vidDir=" + (vidDir != null ? vidDir.getAbsolutePath() : "null") + " exists=" + (vidDir != null && vidDir.exists()));
+                result.put("debug", debug.toString());
                 return result;
             } catch (Exception e) {
                 return fail("查找媒体文件失败: " + e.getMessage());
@@ -769,6 +783,20 @@ public class MainActivity extends AppCompatActivity {
                     } catch (Exception e) {
                         Log.e(TAG, "添加文件信息失败: " + f.getName(), e);
                     }
+                }
+            }
+        }
+
+        private void collectAllFiles(File dir, java.util.List<String> files, int max) {
+            if (dir == null || !dir.exists() || files.size() >= max) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (files.size() >= max) return;
+                if (f.isDirectory()) {
+                    collectAllFiles(f, files, max);
+                } else {
+                    files.add(f.getName());
                 }
             }
         }
