@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -42,6 +42,11 @@
             -webkit-font-smoothing: antialiased;
             -moz-osx-font-smoothing: grayscale;
             touch-action: manipulation;
+            -webkit-text-size-adjust: 100%;
+            text-size-adjust: 100%;
+            padding-top: env(safe-area-inset-top);
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
         }
         .top-tabs { background: #c0c0c0; border-bottom: 2px solid #808080; display: flex; padding: 3px 5px 0 5px; flex-wrap: wrap; align-items: center; }
         .tab-item { background: #e0e0e0; padding: 4px 15px; cursor: pointer; border: 1px solid #808080; border-bottom: none; margin-right: 2px; border-radius: 3px 3px 0 0; font-weight: bold; font-size: 12px; white-space: nowrap; }
@@ -172,7 +177,7 @@
         .btn-primary { background: #667eea; color: white; }
         
         /* 移动端底部导航 */
-        .mobile-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--secondary-bg); border-top: 2px solid var(--border-color); z-index: 200; }
+        .mobile-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--secondary-bg); border-top: 2px solid var(--border-color); z-index: 200; padding-bottom: env(safe-area-inset-bottom); }
         .mobile-nav-items { display: flex; justify-content: space-around; }
         .mobile-nav-item { flex: 1; padding: 8px 2px; text-align: center; cursor: pointer; font-size: 11px; border-right: 1px solid var(--border-color); min-height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
         .mobile-nav-item:last-child { border-right: none; }
@@ -180,7 +185,7 @@
         .mobile-nav-icon { font-size: 18px; display: block; }
         
         /* 移动端快捷操作栏 */
-        .mobile-action-bar { display: none; position: fixed; bottom: 52px; left: 0; right: 0; background: rgba(255,255,255,0.95); border-top: 1px solid var(--border-color); padding: 8px 5px; z-index: 150; }
+        .mobile-action-bar { display: none; position: fixed; bottom: calc(52px + env(safe-area-inset-bottom)); left: 0; right: 0; background: rgba(255,255,255,0.95); border-top: 1px solid var(--border-color); padding: 8px 5px; z-index: 150; }
         .mobile-action-bar .action-buttons { display: flex; justify-content: space-around; gap: 5px; }
         .mobile-action-bar .action-btn, .mobile-action-bar .btn { flex: 1; margin: 0 3px; min-height: 40px; font-size: 13px; padding: 6px 4px; white-space: nowrap; }
         
@@ -209,7 +214,7 @@
                 min-height: calc(100vh - 60px);
                 height: auto !important;
                 flex-direction: column;
-                padding-bottom: 110px;
+                padding-bottom: calc(110px + env(safe-area-inset-bottom));
                 overflow-x: hidden;
                 overflow-y: auto;
             }
@@ -6041,6 +6046,7 @@
                                 <div style="font-size:10px;color:${(p.prescriptionNo || '').startsWith('LOCAL-') ? '#e65100' : '#8b0000'};font-weight:bold;">
                                     [${escapeHtml(p.prescriptionNo || '')}]${(p.prescriptionNo || '').startsWith('LOCAL-') ? '<span style="font-size:9px;color:#e65100;margin-left:2px;">待同步</span>' : ''}
                                 </div>
+                                <button onclick="event.stopPropagation();viewMediaFiles('${escapeHtml(p.patientName || p.name || '')}','${escapeHtml(p.prescriptionNo || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button>
                                 ${isToday ? '<div style="font-size:9px;background:#4CAF50;color:white;padding:1px 5px;border-radius:3px;">今天</div>' : ''}
                             </div>
                             <div class="history-date">${escapeHtml(timeDisplay)} - ${escapeHtml(p.diagnosis || '')} | 诊费:${(p.registrationFee || 0).toFixed(2)}元</div>
@@ -6053,6 +6059,86 @@
                     加载更多（剩余 ${list.length - historyDisplayCount} 条）
                 </div>
             ` : '');
+        }
+
+        async function viewMediaFiles(patientName, prescriptionNo) {
+            if (!window.electronAPI || !window.electronAPI.findMediaFiles) {
+                showToast('媒体查看功能仅在APP中可用');
+                return;
+            }
+            const overlay = document.getElementById('mediaViewerOverlay');
+            const content = document.getElementById('mediaViewerContent');
+            if (!overlay || !content) return;
+            content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">正在查找媒体文件...</div>';
+            overlay.style.display = 'flex';
+            try {
+                const result = await window.electronAPI.findMediaFiles(patientName, prescriptionNo);
+                if (!result.success || !result.files || result.files.length === 0) {
+                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件</div>';
+                    return;
+                }
+                const sorted = result.files.sort((a,b) => {
+                    const aType = a.type === 'video' ? 1 : 0;
+                    const bType = b.type === 'video' ? 1 : 0;
+                    if (aType !== bType) return aType - bType;
+                    return (a.lastModified||0) - (b.lastModified||0);
+                });
+                window.__currentMediaFiles = sorted;
+                content.innerHTML = sorted.map((f, idx) =>
+                    '<div class="media-thumb" onclick="openMediaFile(' + idx + ')" style="display:inline-block;margin:5px;cursor:pointer;text-align:center;">' +
+                        '<div style="width:80px;height:80px;border:1px solid #ddd;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:32px;background:#f5f5f5;">' + (f.type === 'video' ? '🎥' : '📷') + '</div>' +
+                        '<div style="font-size:10px;color:#666;margin-top:4px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(f.name) + '</div>' +
+                    '</div>'
+                ).join('');
+            } catch(e) {
+                content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">查找失败: ' + escapeHtml(String(e)) + '</div>';
+            }
+        }
+
+        async function openMediaFile(idx) {
+            if (!window.electronAPI || !window.__currentMediaFiles) return;
+            const f = window.__currentMediaFiles[idx];
+            if (!f) return;
+            const content = document.getElementById('mediaViewerContent');
+            if (!content) return;
+            if (f.type === 'image') {
+                content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">加载中...</div>';
+                try {
+                    const result = await window.electronAPI.readFileAsBase64(f.path);
+                    if (result.success && result.data) {
+                        content.innerHTML = '<img src="' + result.data + '" style="max-width:100%;max-height:70vh;border-radius:4px;" /><div style="margin-top:10px;"><button onclick="window.electronAPI.openFile(window.__currentMediaFiles[' + idx + '].path)" style="background:#4CAF50;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">用系统应用打开</button> <button onclick="viewMediaFilesBack()" style="background:#6c757d;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">返回列表</button></div>';
+                    } else {
+                        content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">加载失败</div>';
+                    }
+                } catch(e) {
+                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">加载失败: ' + escapeHtml(String(e)) + '</div>';
+                }
+            } else {
+                try {
+                    await window.electronAPI.openFile(f.path, 'video/webm');
+                } catch(e) {
+                    showToast('打开视频失败: ' + String(e));
+                }
+            }
+        }
+
+        function viewMediaFilesBack() {
+            const files = window.__currentMediaFiles;
+            if (!files) return;
+            const content = document.getElementById('mediaViewerContent');
+            if (!content) return;
+            content.innerHTML = files.map((f, idx) =>
+                '<div class="media-thumb" onclick="openMediaFile(' + idx + ')" style="display:inline-block;margin:5px;cursor:pointer;text-align:center;">' +
+                    '<div style="width:80px;height:80px;border:1px solid #ddd;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:32px;background:#f5f5f5;">' + (f.type === 'video' ? '🎥' : '📷') + '</div>' +
+                    '<div style="font-size:10px;color:#666;margin-top:4px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + escapeHtml(f.name) + '</div>' +
+                '</div>'
+            ).join('');
+        }
+
+        function closeMediaViewer() {
+            const overlay = document.getElementById('mediaViewerOverlay');
+            if (overlay) overlay.style.display = 'none';
+            window.__currentMediaFiles = null;
         }
 
         // 优化13：加载更多历史处方（基于当前显示的列表，保留搜索/筛选状态）
@@ -9279,5 +9365,6 @@ IconFile=${scriptPath}`;
         updateModeStatus();
     });
     </script>
+<div id="mediaViewerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99998;align-items:center;justify-content:center;" onclick="if(event.target===this)closeMediaViewer()"><div style="background:#fff;border-radius:10px;padding:16px;width:90%;max-width:500px;max-height:80vh;overflow-y:auto;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><span style="font-size:16px;font-weight:600;color:#333;">拍照录像查看</span><button onclick="closeMediaViewer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;line-height:1;">&times;</button></div><div id="mediaViewerContent"></div></div></div>
 </body>
 </html>
