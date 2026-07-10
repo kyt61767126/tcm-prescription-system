@@ -549,7 +549,7 @@
             doctorName: '张大夫'
         };
 
-        window.__APP_VERSION__ = '2026-07-06-v1';
+        window.__APP_VERSION__ = '2026-07-11-v2';
 
         const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
 
@@ -5410,7 +5410,7 @@ window.addEventListener('load', function () {
             mediaRecorder = new MediaRecorder(mediaStream, {
                 mimeType: selectedMime || undefined,
                 videoBitsPerSecond: VIDEO_BITRATE,
-                audioBitsPerSecond: 64000
+                audioBitsPerSecond: 128000
             });
         } catch (err) {
             console.error('[视频录制] MediaRecorder 创建失败:', err);

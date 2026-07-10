@@ -594,7 +594,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // ------------------------------------------------------------------
-        // 视频文件：写入 Movies/本能中医处方/ 目录
+        // 视频文件：写入 Pictures/本能中医处方/ 目录（与图片同目录，方便导出）
         // ------------------------------------------------------------------
         private JSONObject saveVideoFile(String base64Data, String fileName) {
             try {
@@ -609,7 +609,7 @@ public class MainActivity extends AppCompatActivity {
                     safeName = base + ".webm";
                 }
 
-                File dir = getVideoDir();
+                File dir = getImageDir();
                 if (dir == null) {
                     return fail("无法创建视频目录");
                 }

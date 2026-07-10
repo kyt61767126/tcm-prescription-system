@@ -565,7 +565,7 @@ window.addEventListener('unhandledrejection', function(e) {
 });
 let currentUser = null;
 
-        window.__APP_VERSION__ = '2026-07-06-v1';
+        window.__APP_VERSION__ = '2026-07-11-v2';
 
         var IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
 
@@ -5017,10 +5017,10 @@ window.addEventListener('load', function () {
 
     // 录制参数
     const MAX_DURATION = 60;           // 最长录制秒数
-    const VIDEO_WIDTH = 640;
-    const VIDEO_HEIGHT = 480;
-    const VIDEO_FPS = 15;
-    const VIDEO_BITRATE = 500000;      // 500 kbps → 60秒约 3.75MB
+    const VIDEO_WIDTH = 1280;
+    const VIDEO_HEIGHT = 720;
+    const VIDEO_FPS = 30;
+    const VIDEO_BITRATE = 3000000;     // 3 Mbps → 60秒约 22.5MB（720p高清）
 
     let mediaStream = null;
     let mediaRecorder = null;
@@ -5284,7 +5284,7 @@ window.addEventListener('load', function () {
             mediaRecorder = new MediaRecorder(mediaStream, {
                 mimeType: selectedMime || undefined,
                 videoBitsPerSecond: VIDEO_BITRATE,
-                audioBitsPerSecond: 64000
+                audioBitsPerSecond: 128000
             });
         } catch (err) {
             console.error('[视频录制] MediaRecorder 创建失败:', err);

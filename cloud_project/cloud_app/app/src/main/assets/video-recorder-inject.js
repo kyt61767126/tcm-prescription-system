@@ -11,9 +11,9 @@
  * 注意：拍照/录像按钮由 React ActionBar 组件渲染，本脚本仅提供 overlay 和保存功能。
  * ActionBar 通过 window.openPhotoOverlay() / window.openRecordingOverlay() 调用本脚本。
  *
- * 保存路径：
- *   图片：Pictures/本能中医处方/YYYY-MM/患者姓名_处方编号_photo.png
- *   视频：Movies/本能中医处方/YYYY-MM/患者姓名_处方编号_video.webm
+ * 保存路径（图片视频统一目录，方便导出）：
+ *   Pictures/本能中医处方/YYYY-MM/患者姓名_处方编号_photo.png
+ *   Pictures/本能中医处方/YYYY-MM/患者姓名_处方编号_video.webm
  */
 (function () {
     'use strict';
@@ -123,10 +123,10 @@
     // 2. 常量与状态
     // ========================================================================
     var MAX_DURATION = 60;
-    var VIDEO_WIDTH = 640;
-    var VIDEO_HEIGHT = 480;
-    var VIDEO_FPS = 15;
-    var VIDEO_BITRATE = 500000;
+    var VIDEO_WIDTH = 1280;
+    var VIDEO_HEIGHT = 720;
+    var VIDEO_FPS = 30;
+    var VIDEO_BITRATE = 3000000;
     var mediaStream = null;
     var mediaRecorder = null;
     var recordedChunks = [];
@@ -427,7 +427,7 @@
             mediaRecorder = new MediaRecorder(mediaStream, {
                 mimeType: selectedMime || undefined,
                 videoBitsPerSecond: VIDEO_BITRATE,
-                audioBitsPerSecond: 64000
+                audioBitsPerSecond: 128000
             });
         } catch (err) {
             console.error('[视频录制] MediaRecorder 创建失败:', err);

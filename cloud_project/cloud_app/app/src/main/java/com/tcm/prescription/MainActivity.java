@@ -55,7 +55,7 @@ public class MainActivity extends BridgeActivity {
     private static final String CLOUD_URL = "https://" + CLOUD_HOST;
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
-    private static final String EXPECTED_APP_VERSION = "2026-07-11-v1";
+    private static final String EXPECTED_APP_VERSION = "2026-07-11-v2";
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
@@ -533,7 +533,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         // ------------------------------------------------------------------
-        // 视频文件：写入 Movies/本能中医处方/YYYY-MM/ 目录
+        // 视频文件：写入 Pictures/本能中医处方/YYYY-MM/ 目录（与图片同目录，方便导出）
         // ------------------------------------------------------------------
         private JSONObject saveVideoFile(String base64Data, String fileName) {
             try {
@@ -548,7 +548,7 @@ public class MainActivity extends BridgeActivity {
                     safeName = base + ".webm";
                 }
 
-                File dir = getVideoDir();
+                File dir = getImageDir();
                 if (dir == null) {
                     return fail("无法创建视频目录");
                 }
