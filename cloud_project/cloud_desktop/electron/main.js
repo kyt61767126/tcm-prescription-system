@@ -193,6 +193,49 @@ async function saveVideoFile(arrayBuffer, fileName) {
     }
 }
 
+// ★ 重命名媒体文件（处方保存后云端分配新编号时同步重命名本地文件）
+async function renameMediaFiles(patientName, oldNo, newNo) {
+    try {
+        const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
+        const cleanName = sanitizeStr(patientName);
+        const cleanOldNo = sanitizeStr(oldNo);
+        const cleanNewNo = sanitizeStr(newNo);
+        if (!cleanName || !cleanOldNo || !cleanNewNo || cleanOldNo === cleanNewNo) {
+            return { success: true, renamed: 0 };
+        }
+        const oldPrefix = `${cleanName}_${cleanOldNo}`;
+        const newPrefix = `${cleanName}_${cleanNewNo}`;
+        const downloadsDir = getDownloadsDirectory();
+        let renamed = 0;
+        let monthDirs = [];
+        try {
+            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+        } catch (e) { /* downloads目录可能不存在 */ }
+        for (const monthDir of monthDirs) {
+            let fileEntries = [];
+            try {
+                fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+            } catch (e) { continue; }
+            for (const fe of fileEntries) {
+                if (!fe.isFile()) continue;
+                const fileName = fe.name;
+                if (!fileName.includes(oldPrefix)) continue;
+                const newFileName = fileName.replace(oldPrefix, newPrefix);
+                if (newFileName === fileName) continue;
+                try {
+                    await fs.rename(path.join(monthDir, fileName), path.join(monthDir, newFileName));
+                    renamed++;
+                } catch (e) { /* 跳过无法重命名的文件 */ }
+            }
+        }
+        return { success: true, renamed };
+    } catch (error) {
+        console.error('重命名媒体文件失败:', error);
+        return { success: false, error: error.message, renamed: 0 };
+    }
+}
+
 function saveLoginState(hasLoggedIn, user = null) {
     try {
         const userDataPath = app.getPath('userData');
@@ -469,9 +512,10 @@ ipcMain.handle('get-video-directory', async () => {
 // ★ 查找媒体文件（新增）
 safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
     if (!patientName) return { success: true, files: [] };
+    const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
     const downloadsDir = getDownloadsDirectory();
     const files = [];
-    const prefix = `${patientName}_${prescriptionNo || ''}`;
+    const prefix = `${sanitizeStr(patientName)}_${sanitizeStr(prescriptionNo || '')}`;
     let monthDirs = [];
     try {
         const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
@@ -485,7 +529,7 @@ safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
         for (const fe of fileEntries) {
             if (!fe.isFile()) continue;
             const fileName = fe.name;
-            if (!fileName.startsWith(prefix)) continue;
+            if (!fileName.includes(prefix)) continue;
             const filePath = path.join(monthDir, fileName);
             try {
                 const stat = await fs.stat(filePath);
@@ -503,6 +547,11 @@ safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
     }
     return { success: true, files };
 }, { success: false, files: [] });
+
+// ★ 重命名媒体文件（新增）
+safeHandle('rename-media-files', async (event, patientName, oldNo, newNo) => {
+    return await renameMediaFiles(patientName, oldNo, newNo);
+}, { success: false, renamed: 0 });
 
 // ★ 打开文件（系统默认程序）（新增）
 safeHandle('open-file', async (event, filePath, mimeType) => {

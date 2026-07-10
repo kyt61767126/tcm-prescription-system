@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readFileAsBase64: (filePath) =>
         ipcRenderer.invoke('read-file-as-base64', filePath),
 
+    renameMediaFiles: (patientName, oldNo, newNo) =>
+        ipcRenderer.invoke('rename-media-files', patientName, oldNo, newNo),
+
     // 用户数据持久化
     saveUserData: (key, data) => ipcRenderer.invoke('save-user-data', key, data),
     getUserData: (key) => ipcRenderer.invoke('get-user-data', key),

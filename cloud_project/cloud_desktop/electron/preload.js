@@ -49,6 +49,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return ipcRenderer.invoke('read-file-as-base64', filePath);
     },
 
+    renameMediaFiles: (patientName, oldNo, newNo) => {
+        return ipcRenderer.invoke('rename-media-files', patientName, oldNo, newNo);
+    },
+
     // ---------- 备份数据保存（与图片同目录：安装目录/downloads/YYYY-MM/） ----------
     saveBackupFile: (jsonStr, fileName) => {
         return ipcRenderer.invoke('save-backup-file', jsonStr, fileName);

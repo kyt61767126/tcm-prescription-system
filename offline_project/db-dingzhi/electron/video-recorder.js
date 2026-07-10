@@ -4,8 +4,8 @@
 //  【视频录制】
 //  1. 在历史处方栏 history-header 中注入 🎥 录制按钮
 //  2. 点击弹出录制浮层：摄像头实时预览 + 开始/停止 + 倒计时
-//  3. 使用 MediaRecorder (WebM/VP9) 录制，640×480 / 15fps / 500kbps
-//  4. 单条最长 60 秒，停止后自动保存到 downloads/YYYY-MM/ 目录
+//  3. 使用 MediaRecorder (WebM/VP9) 录制，1280×720 / 30fps / 3Mbps（720p高清）
+//  4. 单条最长 60 秒，停止后自动保存到 downloads/YYYY-MM/ 目录（图片视频统一目录，方便导出）
 //  5. 视频文件名格式：video_YYYYMMDD_HHmmss.webm
 //
 //  【拍照】
@@ -696,9 +696,10 @@
         const prescriptionNo = (document.getElementById('prescriptionNo')?.value || '').trim() || 
                                (document.getElementById('clinicNo')?.value || '').trim();
         
-        const cleanName = patientName || 'unknown';
-        
-        let identifier = prescriptionNo;
+        const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
+        const cleanName = sanitizeStr(patientName) || 'unknown';
+
+        let identifier = sanitizeStr(prescriptionNo);
         if (!identifier) {
             const now = new Date();
             const pad = n => String(n).padStart(2, '0');
