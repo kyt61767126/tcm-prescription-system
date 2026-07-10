@@ -3120,10 +3120,16 @@ let currentUser = null;
                     content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">加载失败: ' + escapeHtml(String(e)) + '</div>';
                 }
             } else {
+                content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">加载视频中...</div>';
                 try {
-                    await window.electronAPI.openFile(f.path, 'video/webm');
+                    const result = await window.electronAPI.readFileAsBase64(f.path);
+                    if (result.success && result.data) {
+                        content.innerHTML = '<div style="text-align:center;"><video src="' + result.data + '" controls autoplay playsinline style="max-width:100%;max-height:60vh;border-radius:4px;background:#000;"></video><div style="margin-top:10px;"><button onclick="window.electronAPI.openFile(window.__currentMediaFiles[' + idx + '].path, \'video/webm\')" style="background:#4CAF50;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">用系统应用打开</button> <button onclick="viewMediaFilesBack()" style="background:#6c757d;color:white;padding:6px 16px;border:none;border-radius:4px;cursor:pointer;">返回列表</button></div></div>';
+                    } else {
+                        content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">视频加载失败</div>';
+                    }
                 } catch(e) {
-                    showToast('打开视频失败: ' + String(e));
+                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">视频加载失败: ' + escapeHtml(String(e)) + '</div>';
                 }
             }
         }

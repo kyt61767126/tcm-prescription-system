@@ -796,11 +796,21 @@ public class MainActivity extends BridgeActivity {
                     return fail("文件不存在: " + filePath);
                 }
                 java.io.FileInputStream fis = new java.io.FileInputStream(file);
-                byte[] buffer = new byte[(int) file.length()];
-                fis.read(buffer);
+                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = fis.read(buffer)) > 0) {
+                    baos.write(buffer, 0, len);
+                }
                 fis.close();
-                String base64 = Base64.encodeToString(buffer, Base64.NO_WRAP);
-                String mimeType = filePath.endsWith(".webm") ? "video/webm" : "image/png";
+                byte[] bytes = baos.toByteArray();
+                String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+                String mimeType;
+                if (filePath.endsWith(".webm")) mimeType = "video/webm";
+                else if (filePath.endsWith(".mp4")) mimeType = "video/mp4";
+                else if (filePath.endsWith(".png")) mimeType = "image/png";
+                else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) mimeType = "image/jpeg";
+                else mimeType = "application/octet-stream";
                 JSONObject result = new JSONObject();
                 result.put("success", true);
                 result.put("data", "data:" + mimeType + ";base64," + base64);
