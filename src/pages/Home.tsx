@@ -21,6 +21,7 @@ const Home: React.FC = () => {
   const addMedicine = usePrescriptionStore((state) => state.addMedicine);
   const updateMedicine = usePrescriptionStore((state) => state.updateMedicine);
   const removeMedicine = usePrescriptionStore((state) => state.removeMedicine);
+  const registrationFee = currentForm.registrationFee || 0;
   const setMedicines = useMedicineStore((state) => state.setMedicines);
   const setFormulas = useMedicineStore((state) => state.setFormulas);
   const medicines = useMedicineStore((state) => state.medicines);
@@ -29,7 +30,6 @@ const Home: React.FC = () => {
   const [activeHistoryTab, setActiveHistoryTab] = useState<'symptoms' | 'edit'>('symptoms');
   const [loading, setLoading] = useState(false);
   const { toastMessage, showToast } = useToast();
-  const [registrationFee, setRegistrationFee] = useState(0);
   const [doseCount, setDoseCount] = useState(7);
 
   useEffect(() => {
@@ -56,6 +56,13 @@ const Home: React.FC = () => {
 
     loadData();
   }, [user, setMedicines, setFormulas]);
+
+  useEffect(() => {
+    if (!user) return;
+    if (user.registrationFee !== undefined && currentForm.registrationFee === 0) {
+      setFormField('registrationFee', user.registrationFee);
+    }
+  }, [user, currentForm.registrationFee, setFormField]);
 
   const handleSave = async () => {
     if (!user) return;
@@ -644,7 +651,7 @@ const Home: React.FC = () => {
           <span style={{ fontSize: '11px', whiteSpace: 'nowrap' }}>诊疗<input
             type="number"
             value={registrationFee}
-            onChange={(e) => setRegistrationFee(parseFloat(e.target.value) || 0)}
+            onChange={(e) => setFormField('registrationFee', parseFloat(e.target.value) || 0)}
             style={{ width: '45px', padding: '2px', fontSize: '12px', border: '1px solid #808080' }}
           />元</span>
           <span style={{ fontSize: '12px', fontWeight: 'bold', whiteSpace: 'nowrap' }}>总计:<span style={{ color: 'red', fontWeight: 'bold' }}>{grandTotal.toFixed(2)}</span>元</span>

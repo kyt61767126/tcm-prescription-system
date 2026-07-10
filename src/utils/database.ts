@@ -41,6 +41,7 @@ export interface DBPrescriptionInput {
   diagnosis?: string;
   medicines: unknown[];
   total_price: number;
+  registration_fee?: number;
   created_by: string;
   synced?: number;
 }
@@ -57,6 +58,7 @@ export interface DBPrescriptionRow {
   diagnosis?: string;
   medicines: unknown[];
   total_price: number;
+  registration_fee?: number;
   created_by: string;
   created_at?: string;
   synced?: number;
@@ -190,11 +192,13 @@ async function createTables() {
       diagnosis TEXT,
       medicines TEXT NOT NULL,
       total_price REAL NOT NULL,
+      registration_fee REAL DEFAULT 0,
       created_by TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
       synced INTEGER DEFAULT 0
     )
   `);
+  await db.execute(`ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS registration_fee REAL DEFAULT 0`);
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS sync_status (
@@ -254,8 +258,8 @@ export async function getAllMedicines(): Promise<DBMedicineRow[]> {
 export async function addPrescription(prescription: DBPrescriptionInput) {
   const database = await initDatabase();
   await database.run(`
-    INSERT INTO prescriptions (prescription_no, patient_name, gender, age, phone, visit_date, symptoms, diagnosis, medicines, total_price, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO prescriptions (prescription_no, patient_name, gender, age, phone, visit_date, symptoms, diagnosis, medicines, total_price, registration_fee, created_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     prescription.prescription_no,
     prescription.patient_name,
@@ -267,6 +271,7 @@ export async function addPrescription(prescription: DBPrescriptionInput) {
     prescription.diagnosis || '',
     JSON.stringify(prescription.medicines),
     prescription.total_price || 0,
+    prescription.registration_fee || 0,
     prescription.created_by
   ]);
 }

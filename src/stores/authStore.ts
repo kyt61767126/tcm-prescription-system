@@ -9,6 +9,7 @@ interface AuthStore {
   logout: () => void;
   isAdmin: () => boolean;
   setHasHydrated: (state: boolean) => void;
+  setRegistrationFee: (fee: number) => void;
 }
 
 export const useAuthStore = create<AuthStore>()(
@@ -20,6 +21,10 @@ export const useAuthStore = create<AuthStore>()(
       logout: () => set({ user: null }),
       isAdmin: () => get().user?.role === 'admin',
       setHasHydrated: (state: boolean) => set({ hasHydrated: state }),
+      setRegistrationFee: (fee: number) =>
+        set((state) => ({
+          user: state.user ? { ...state.user, registrationFee: fee } : null,
+        })),
     }),
     {
       name: 'tcm-auth',

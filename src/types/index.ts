@@ -3,6 +3,7 @@ export interface User {
   role: 'admin' | 'user';
   name: string;
   allowCloud?: boolean;
+  registrationFee?: number;
 }
 
 export interface CloudUser {
@@ -46,6 +47,7 @@ export interface Prescription {
   diagnosis: string;
   medicines: MedicineItem[];
   totalPrice: number;
+  registrationFee: number;
   createdBy: string;
   createdAt: string;
 }
@@ -72,4 +74,5 @@ export interface PrescriptionFormData {
   clinicNo?: string;
   address?: string;
   doctorName?: string;
+  registrationFee?: number;
 }

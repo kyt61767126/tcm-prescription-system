@@ -25,6 +25,7 @@ const defaultForm: PrescriptionFormData = {
   symptoms: '',
   diagnosis: '',
   medicines: [],
+  registrationFee: 0,
 };
 
 export const usePrescriptionStore = create<PrescriptionStore>()((set, get) => ({
@@ -93,6 +94,7 @@ export const usePrescriptionStore = create<PrescriptionStore>()((set, get) => ({
       diagnosis: form.diagnosis,
       medicines: form.medicines,
       totalPrice: get().getTotalPrice(),
+      registrationFee: form.registrationFee || 0,
       createdBy,
       createdAt: new Date().toISOString(),
     };

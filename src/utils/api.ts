@@ -46,6 +46,8 @@ interface RawPrescription {
   medicines?: unknown[];
   totalPrice?: number;
   total_price?: number;
+  registrationFee?: number;
+  registration_fee?: number;
   createdBy?: string;
   created_by?: string;
   createdAt?: string;
@@ -236,6 +238,7 @@ export async function savePrescription(user: User, prescription: Prescription): 
         diagnosis: prescription.diagnosis,
         medicines: prescription.medicines,
         total_price: prescription.totalPrice,
+        registration_fee: prescription.registrationFee,
         created_by: prescription.createdBy,
         synced: 0
       });
@@ -272,6 +275,7 @@ export async function savePrescription(user: User, prescription: Prescription): 
           diagnosis: prescription.diagnosis,
           medicines: prescription.medicines,
           total_price: prescription.totalPrice,
+          registration_fee: prescription.registrationFee,
           created_by: prescription.createdBy,
           synced: 1
         });
@@ -357,6 +361,7 @@ function normalizePrescriptions(rawList: RawPrescription[]): Prescription[] {
       price: typeof m.price === 'number' ? m.price : 0,
     })) : [],
     totalPrice: typeof p.totalPrice === 'number' ? p.totalPrice : (typeof p.total_price === 'number' ? p.total_price : 0),
+    registrationFee: typeof p.registrationFee === 'number' ? p.registrationFee : (typeof p.registration_fee === 'number' ? p.registration_fee : 0),
     createdBy: p.createdBy || p.created_by || '',
     createdAt: p.createdAt || p.created_at || '',
   }));
