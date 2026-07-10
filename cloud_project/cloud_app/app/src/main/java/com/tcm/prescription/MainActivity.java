@@ -55,7 +55,7 @@ public class MainActivity extends BridgeActivity {
     private static final String CLOUD_URL = "https://" + CLOUD_HOST;
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
-    private static final String EXPECTED_APP_VERSION = "2026-07-05-v3";
+    private static final String EXPECTED_APP_VERSION = "2026-07-11-v1";
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
@@ -476,6 +476,10 @@ public class MainActivity extends BridgeActivity {
                                 args.optString("mimeType", "")).toString();
                     case "readFileAsBase64":
                         return readFileAsBase64(args.optString("filePath", "")).toString();
+                    case "renameMediaFiles":
+                        return renameMediaFiles(args.optString("patientName", ""),
+                                args.optString("oldNo", ""),
+                                args.optString("newNo", "")).toString();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -846,6 +850,68 @@ public class MainActivity extends BridgeActivity {
             } catch (Exception e) {
                 return fail("读取文件失败: " + e.getMessage());
             }
+        }
+
+        private JSONObject renameMediaFiles(String patientName, String oldNo, String newNo) {
+            try {
+                String safeName = sanitize(patientName);
+                String safeOldNo = sanitize(oldNo);
+                String safeNewNo = sanitize(newNo);
+                if (safeName.isEmpty() || safeOldNo.isEmpty() || safeNewNo.isEmpty()) {
+                    return fail("参数不完整");
+                }
+                if (safeOldNo.equals(safeNewNo)) {
+                    JSONObject result = new JSONObject();
+                    result.put("success", true);
+                    result.put("renamed", 0);
+                    result.put("message", "编号相同，无需重命名");
+                    return result;
+                }
+                String oldPrefix = safeName + "_" + safeOldNo;
+                String newPrefix = safeName + "_" + safeNewNo;
+                JSONArray renamedFiles = new JSONArray();
+                int renamed = 0;
+                renamed += renameFilesInDir(getImageDir(), oldPrefix, newPrefix, renamedFiles);
+                renamed += renameFilesInDir(getVideoDir(), oldPrefix, newPrefix, renamedFiles);
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                result.put("renamed", renamed);
+                result.put("files", renamedFiles);
+                return result;
+            } catch (Exception e) {
+                return fail("重命名文件失败: " + e.getMessage());
+            }
+        }
+
+        private int renameFilesInDir(File dir, String oldPrefix, String newPrefix, JSONArray renamedFiles) {
+            if (dir == null || !dir.exists()) return 0;
+            int count = 0;
+            File[] children = dir.listFiles();
+            if (children == null) return 0;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    count += renameFilesInDir(f, oldPrefix, newPrefix, renamedFiles);
+                } else {
+                    String name = f.getName();
+                    if (name.contains(oldPrefix)) {
+                        String newName = name.replace(oldPrefix, newPrefix);
+                        File newFile = new File(f.getParent(), newName);
+                        if (f.renameTo(newFile)) {
+                            count++;
+                            try {
+                                JSONObject fileObj = new JSONObject();
+                                fileObj.put("oldName", name);
+                                fileObj.put("newName", newName);
+                                fileObj.put("path", newFile.getAbsolutePath());
+                                renamedFiles.put(fileObj);
+                            } catch (Exception e) {
+                                Log.e("TCM-Pres", "记录重命名信息失败", e);
+                            }
+                        }
+                    }
+                }
+            }
+            return count;
         }
     }
 }

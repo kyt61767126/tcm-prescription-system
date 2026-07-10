@@ -102,6 +102,14 @@
                     } catch (e) { resolve({ success: false, error: String(e) }); }
                 });
             },
+            renameMediaFiles: function (patientName, oldNo, newNo) {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('renameMediaFiles', JSON.stringify({ patientName: patientName, oldNo: oldNo, newNo: newNo }));
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e), renamed: 0 }); }
+                });
+            },
             quitApp: function () {
                 try { if (N.quitApp) N.quitApp(); } catch (e) {}
                 return P({ success: true });
