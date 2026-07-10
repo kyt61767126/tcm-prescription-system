@@ -5143,10 +5143,10 @@ window.addEventListener('load', function () {
 
     // 录制参数
     const MAX_DURATION = 60;           // 最长录制秒数
-    const VIDEO_WIDTH = 640;
-    const VIDEO_HEIGHT = 480;
-    const VIDEO_FPS = 15;
-    const VIDEO_BITRATE = 500000;      // 500 kbps → 60秒约 3.75MB
+    const VIDEO_WIDTH = 1280;
+    const VIDEO_HEIGHT = 720;
+    const VIDEO_FPS = 30;
+    const VIDEO_BITRATE = 3000000;     // 3 Mbps → 60秒约 22.5MB（720p高清）
 
     let mediaStream = null;
     let mediaRecorder = null;
