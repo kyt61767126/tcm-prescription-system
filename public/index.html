@@ -6629,8 +6629,9 @@
             const prescriptionNo = currentPrescriptionNo || record.prescriptionNo || '';
             const patientName = record.patientName || '未知';
             
-            // 生成文件名：用户名_患者名_门诊号.png
-            const fileName = `${userName}_${patientName}_${prescriptionNo}.png`;
+            // 生成文件名：患者名_门诊号_prescription.png（与拍照录像命名一致）
+            const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
+            const fileName = `${sanitizeStr(patientName)}_${sanitizeStr(prescriptionNo)}_prescription.png`;
             
             // 检查是否在 Electron 桌面环境中
             if (window.electronAPI && window.electronAPI.isElectron) {

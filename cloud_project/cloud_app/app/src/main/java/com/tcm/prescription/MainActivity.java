@@ -760,7 +760,7 @@ public class MainActivity extends BridgeActivity {
             for (File f : children) {
                 if (f.isDirectory()) {
                     scanDirForMedia(f, prefix, files);
-                } else if (f.getName().startsWith(prefix)) {
+                } else if (f.getName().contains(prefix)) {
                     try {
                         JSONObject fileObj = new JSONObject();
                         fileObj.put("name", f.getName());
