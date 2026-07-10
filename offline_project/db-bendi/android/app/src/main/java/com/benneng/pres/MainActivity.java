@@ -736,11 +736,14 @@ public class MainActivity extends AppCompatActivity {
                     return result;
                 }
                 String prefix = safeName + "_" + safeNo;
-                scanDirForMedia(getImageDir(), prefix, files);
-                scanDirForMedia(getVideoDir(), prefix, files);
+                File imgDir = getImageDir();
+                File vidDir = getVideoDir();
+                scanDirForMedia(imgDir, prefix, files);
+                scanDirForMedia(vidDir, prefix, files);
                 JSONObject result = new JSONObject();
                 result.put("success", true);
                 result.put("files", files);
+                result.put("debug", "prefix=" + prefix + " | imgDir=" + (imgDir != null ? imgDir.getAbsolutePath() : "null") + " exists=" + (imgDir != null && imgDir.exists()) + " | vidDir=" + (vidDir != null ? vidDir.getAbsolutePath() : "null") + " exists=" + (vidDir != null && vidDir.exists()));
                 return result;
             } catch (Exception e) {
                 return fail("查找媒体文件失败: " + e.getMessage());
