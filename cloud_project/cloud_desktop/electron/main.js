@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, session, shell } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
@@ -46,6 +46,10 @@ function safeHandle(channel, handler, defaultValue) {
 }
 
 app.commandLine.appendSwitch('enable-features', 'WebDialog');
+app.commandLine.appendSwitch('enable-usermedia-screen-capturing');
+app.commandLine.appendSwitch('enable-media-stream');
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+app.commandLine.appendSwitch('allow-file-access-from-files');
 
 app.on('browser-window-created', (event, window) => {
     window.webContents.on('dom-ready', () => {
@@ -156,6 +160,35 @@ async function savePrescriptionImage(imageData, fileName) {
         return { success: true, filePath, directory: monthDir };
     } catch (error) {
         console.error('保存图片失败:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+async function injectVideoRecorder(win) {
+    try {
+        const recorderPath = path.join(__dirname, 'video-recorder.js');
+        const code = await fs.readFile(recorderPath, 'utf8');
+        await win.webContents.executeJavaScript(code);
+        console.log('[视频录制] 模块注入成功');
+    } catch (e) {
+        console.error('[视频录制] 模块注入失败:', e.message);
+    }
+}
+
+async function saveVideoFile(arrayBuffer, fileName) {
+    try {
+        const monthDir = getCurrentMonthDirectory();
+        const buffer = Buffer.from(arrayBuffer);
+        if (!fileName.endsWith('.webm')) {
+            const base = fileName.replace(/\.[^.]+$/, '');
+            fileName = base + '.webm';
+        }
+        const filePath = path.join(monthDir, fileName);
+        await fs.writeFile(filePath, buffer);
+        console.log('视频已保存:', filePath);
+        return { success: true, filePath, directory: monthDir };
+    } catch (error) {
+        console.error('保存视频失败:', error);
         return { success: false, error: error.message };
     }
 }
@@ -331,6 +364,7 @@ function createMainWindow() {
                 'Content-Security-Policy': [
                     "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://tcm-prescription-system.pages.dev https://*.cloudflareaccess.com; " +
                     "img-src 'self' data: blob: https:; " +
+                    "media-src 'self' blob: https:; " +
                     "connect-src 'self' https://tcm-prescription-system.pages.dev https://*.workers.dev; " +
                     "font-src 'self' data:; " +
                     "style-src 'self' 'unsafe-inline'"
@@ -360,6 +394,7 @@ function createMainWindow() {
                 })();
             `).catch(() => {});
         }
+        injectVideoRecorder(mainWindow);
     });
     
     if (loginWindow && !loginWindow.isDestroyed()) {
@@ -379,6 +414,23 @@ app.whenReady().then(() => {
     fse.ensureDirSync(getDownloadsDirectory());
     
     sharedSession = session.fromPartition('persist:tcm-prescription-cloud');
+
+    sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
+        if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
+            callback(true);
+        } else {
+            callback(false);
+        }
+    });
+
+    if (sharedSession.setDevicePermissionHandler) {
+        sharedSession.setDevicePermissionHandler((details) => {
+            if (details.deviceType === 'videoinput' || details.deviceType === 'audioinput') {
+                return true;
+            }
+            return false;
+        });
+    }
     
     createLoginWindow();
 
@@ -404,6 +456,73 @@ app.whenReady().then(() => {
 
 ipcMain.handle('save-prescription-image', async (event, imageData, fileName) => {
     return await savePrescriptionImage(imageData, fileName);
+});
+
+ipcMain.handle('save-video-file', async (event, arrayBuffer, fileName) => {
+    return await saveVideoFile(arrayBuffer, fileName);
+});
+
+ipcMain.handle('get-video-directory', async () => {
+    return getCurrentMonthDirectory();
+});
+
+// ★ 查找媒体文件（新增）
+safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
+    if (!patientName) return { success: true, files: [] };
+    const downloadsDir = getDownloadsDirectory();
+    const files = [];
+    const prefix = `${patientName}_${prescriptionNo || ''}`;
+    let monthDirs = [];
+    try {
+        const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+        monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+    } catch (e) { /* downloads目录可能不存在 */ }
+    for (const monthDir of monthDirs) {
+        let fileEntries = [];
+        try {
+            fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+        } catch (e) { continue; }
+        for (const fe of fileEntries) {
+            if (!fe.isFile()) continue;
+            const fileName = fe.name;
+            if (!fileName.startsWith(prefix)) continue;
+            const filePath = path.join(monthDir, fileName);
+            try {
+                const stat = await fs.stat(filePath);
+                const ext = path.extname(fileName).toLowerCase();
+                const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
+                files.push({
+                    name: fileName,
+                    path: filePath,
+                    type: isVideo ? 'video' : 'image',
+                    size: stat.size,
+                    lastModified: stat.mtimeMs
+                });
+            } catch (e) { /* 跳过无法读取的文件 */ }
+        }
+    }
+    return { success: true, files };
+}, { success: false, files: [] });
+
+// ★ 打开文件（系统默认程序）（新增）
+safeHandle('open-file', async (event, filePath, mimeType) => {
+    if (!filePath) return { success: false, error: '文件路径为空' };
+    await shell.openPath(filePath);
+    return { success: true };
+});
+
+// ★ 读取文件为Base64（新增）
+safeHandle('read-file-as-base64', async (event, filePath) => {
+    if (!filePath) return { success: false, error: '文件路径为空' };
+    const buffer = await fs.readFile(filePath);
+    const ext = path.extname(filePath).toLowerCase();
+    let mimeType = 'image/png';
+    if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+    else if (ext === '.png') mimeType = 'image/png';
+    else if (ext === '.webm') mimeType = 'video/webm';
+    else if (ext === '.mp4') mimeType = 'video/mp4';
+    const base64 = buffer.toString('base64');
+    return { success: true, base64: `data:${mimeType};base64,${base64}` };
 });
 
 // 保存备份数据文件到与图片相同的目录（安装目录/downloads/YYYY-MM/）

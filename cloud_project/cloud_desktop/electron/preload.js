@@ -27,6 +27,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return ipcRenderer.invoke('select-image-save-directory');
     },
 
+    // ---------- 视频录制 ----------
+    saveVideoFile: (arrayBuffer, fileName) => {
+        return ipcRenderer.invoke('save-video-file', arrayBuffer, fileName);
+    },
+
+    getVideoDirectory: () => {
+        return ipcRenderer.invoke('get-video-directory');
+    },
+
+    // ---------- 媒体文件查看（新增） ----------
+    findMediaFiles: (patientName, prescriptionNo) => {
+        return ipcRenderer.invoke('find-media-files', patientName, prescriptionNo);
+    },
+
+    openFile: (filePath, mimeType) => {
+        return ipcRenderer.invoke('open-file', filePath, mimeType || '');
+    },
+
+    readFileAsBase64: (filePath) => {
+        return ipcRenderer.invoke('read-file-as-base64', filePath);
+    },
+
     // ---------- 备份数据保存（与图片同目录：安装目录/downloads/YYYY-MM/） ----------
     saveBackupFile: (jsonStr, fileName) => {
         return ipcRenderer.invoke('save-backup-file', jsonStr, fileName);

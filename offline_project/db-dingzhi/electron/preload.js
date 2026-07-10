@@ -1,6 +1,11 @@
 // ============================================================================
 //  preload.js - 在 contextIsolation 模式下向渲染进程暴露安全 API
 //  所有方法均通过 contextBridge 暴露，渲染进程无法直接访问 ipcRenderer/require
+//
+//  ★ 本文件基于 offline_project/db-bendi/electron/preload.js 增加：
+//    - saveVideoFile：视频文件保存（ArrayBuffer → 文件）
+//    - getVideoDirectory：获取视频保存目录
+//    - openVideoDirectory：在文件管理器中打开视频目录
 // ============================================================================
 const { contextBridge, ipcRenderer } = require('electron');
 
@@ -10,6 +15,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 处方图片保存
     savePrescriptionImage: (imageData, fileName) =>
         ipcRenderer.invoke('save-prescription-image', imageData, fileName),
+
+    // ---------- 视频录制（新增） ----------
+    saveVideoFile: (arrayBuffer, fileName) =>
+        ipcRenderer.invoke('save-video-file', arrayBuffer, fileName),
+
+    getVideoDirectory: () =>
+        ipcRenderer.invoke('get-video-directory'),
+
+    openVideoDirectory: () =>
+        ipcRenderer.invoke('open-video-directory'),
+
+    // ---------- 媒体文件查看（新增） ----------
+    findMediaFiles: (patientName, prescriptionNo) =>
+        ipcRenderer.invoke('find-media-files', patientName, prescriptionNo),
+
+    openFile: (filePath, mimeType) =>
+        ipcRenderer.invoke('open-file', filePath, mimeType || ''),
+
+    readFileAsBase64: (filePath) =>
+        ipcRenderer.invoke('read-file-as-base64', filePath),
 
     // 用户数据持久化
     saveUserData: (key, data) => ipcRenderer.invoke('save-user-data', key, data),

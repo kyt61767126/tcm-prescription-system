@@ -1,11 +1,18 @@
 // ============================================================================
-//  本能中医处方系统 - 个人版  Electron 主进程
+//  本能中医处方系统 - 本地版  Electron 主进程
 //  安全配置：contextIsolation=true / nodeIntegration=false
 //  注：未启用 sandbox，以保留原生 window.prompt/confirm/alert（业务大量使用）
 //      contextIsolation 仍确保渲染进程无法直接访问 Node API
 //  所有 API 通过 preload.js 的 contextBridge 暴露
+//
+//  ★ 本文件基于 offline_project/db-bendi/electron/main.js 增加：
+//    - session.setPermissionRequestHandler：自动授予 camera/microphone 权限
+//    - save-video-file IPC handler：视频 ArrayBuffer 写入文件
+//    - get-video-directory / open-video-directory IPC handler
+//    - dom-ready 时注入 video-recorder.js 模块
+//    - CSP 增加 media-src 'self' blob: 允许视频预览
 // ============================================================================
-const { app, BrowserWindow, ipcMain, session, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, session, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
@@ -21,6 +28,11 @@ process.on('uncaughtException', (err) => {
     console.error('[uncaughtException]', err && err.stack ? err.stack : err);
 });
 
+app.commandLine.appendSwitch('enable-usermedia-screen-capturing');
+app.commandLine.appendSwitch('enable-media-stream');
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+app.commandLine.appendSwitch('allow-file-access-from-files');
+
 // ============================================================================
 //  目录与键名工具
 // ============================================================================
@@ -29,16 +41,16 @@ function getExeDirectory() {
 }
 
 // 通用目录创建：优先 exe 同级，失败回退到 userData
+// name 参数支持绝对路径或相对路径
 function ensureDirWithFallback(name, { rethrow = false } = {}) {
-    const exeDir = getExeDirectory();
-    const targetPath = path.join(exeDir, name);
+    const targetPath = path.isAbsolute(name) ? name : path.join(getExeDirectory(), name);
     try {
         fse.ensureDirSync(targetPath);
         return targetPath;
     } catch (error) {
-        console.error(`无法在程序目录创建${name}文件夹:`, error);
+        console.error(`无法创建文件夹:`, error);
         if (rethrow) throw error;
-        const fallbackPath = path.join(app.getPath('userData'), name);
+        const fallbackPath = path.join(app.getPath('userData'), path.basename(name));
         fse.ensureDirSync(fallbackPath);
         return fallbackPath;
     }
@@ -68,9 +80,9 @@ function sanitizeKey(key) {
 }
 
 function sanitizeFileName(fileName) {
-    if (typeof fileName !== 'string') return `image_${Date.now()}.png`;
+    if (typeof fileName !== 'string') return `file_${Date.now()}.webm`;
     const base = sanitizeKey(path.basename(fileName));
-    return base || `image_${Date.now()}.png`;
+    return base || `file_${Date.now()}.webm`;
 }
 
 async function savePrescriptionImage(imageData, fileName) {
@@ -84,6 +96,30 @@ async function savePrescriptionImage(imageData, fileName) {
         return { success: true, filePath, directory: monthDir };
     } catch (error) {
         console.error('保存图片失败:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ============================================================================
+//  视频文件保存（新增）
+// ============================================================================
+async function saveVideoFile(arrayBuffer, fileName) {
+    try {
+        const monthDir = getCurrentMonthDirectory();
+        const buffer = Buffer.from(arrayBuffer);
+        const safeName = sanitizeFileName(fileName);
+        if (!safeName.endsWith('.webm')) {
+            const base = safeName.replace(/\.[^.]+$/, '');
+            const finalName = base + '.webm';
+            const filePath = path.join(monthDir, finalName);
+            await fs.writeFile(filePath, buffer);
+            return { success: true, filePath, directory: monthDir, fileName: finalName };
+        }
+        const filePath = path.join(monthDir, safeName);
+        await fs.writeFile(filePath, buffer);
+        return { success: true, filePath, directory: monthDir, fileName: safeName };
+    } catch (error) {
+        console.error('保存视频失败:', error);
         return { success: false, error: error.message };
     }
 }
@@ -104,6 +140,7 @@ async function saveLoginState(hasLoggedIn, user = null) {
 
 // ============================================================================
 //  CSP：禁止远程脚本、禁止内联事件
+//  ★ 增加 media-src 'self' blob: 允许视频录制预览
 // ============================================================================
 function installCSP(sess) {
     sess.webRequest.onHeadersReceived((details, callback) => {
@@ -112,6 +149,7 @@ function installCSP(sess) {
             "script-src 'self' 'unsafe-inline' file:",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data:",
+            "media-src 'self' blob:",          // 新增：允许 blob: 视频源
             "font-src 'self' data:",
             "connect-src 'self'",
             "object-src 'none'",
@@ -136,31 +174,10 @@ function focusWindow(win) {
 // ============================================================================
 //  窗口创建
 // ============================================================================
-function createLoginWindow() {
-    if (loginWindow && !loginWindow.isDestroyed()) {
-        focusWindow(loginWindow);
-        return;
-    }
-
-    loginWindow = new BrowserWindow({
-        width: 360,
-        height: 420,
-        resizable: false,
-        autoHideMenuBar: true,
-        center: true,
-        maximizable: false,
-        minimizable: false,
-        webPreferences: getSharedWebPrefs()
-    });
-
-    loginWindow.loadFile(path.join(__dirname, 'login.html'));
-    loginWindow.on('closed', () => { loginWindow = null; });
-}
-
 function createMainWindow() {
     if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.close();
-        mainWindow = null;
+        focusWindow(mainWindow);
+        return;
     }
 
     mainWindow = new BrowserWindow({
@@ -179,10 +196,9 @@ function createMainWindow() {
             mainWindow.webContents.send('main:login-user', currentLoggedInUser);
         }
         mainWindow.show();
-        if (loginWindow && !loginWindow.isDestroyed()) {
-            loginWindow.close();
-            loginWindow = null;
-        }
+
+        // ★ 注入视频录制模块（从同目录读取 video-recorder.js）
+        injectVideoRecorder(mainWindow);
     });
 
     mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
@@ -201,11 +217,44 @@ function getSharedWebPrefs() {
     };
 }
 
+// ============================================================================
+//  视频录制模块注入（新增）
+// ============================================================================
+async function injectVideoRecorder(win) {
+    try {
+        const recorderPath = path.join(__dirname, 'video-recorder.js');
+        const code = await fs.readFile(recorderPath, 'utf8');
+        await win.webContents.executeJavaScript(code);
+        console.log('[视频录制] 模块注入成功');
+    } catch (e) {
+        console.error('[视频录制] 模块注入失败:', e.message);
+    }
+}
+
 app.whenReady().then(() => {
     fse.ensureDirSync(getDownloadsDirectory());
 
     sharedSession = session.fromPartition(SESSION_PARTITION);
     installCSP(sharedSession);
+
+    // ★ 授予 camera/microphone 权限（视频录制所需）
+    sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
+        if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
+            callback(true);
+        } else {
+            callback(false);
+        }
+    });
+
+    // 在主窗口创建前预先授权
+    if (sharedSession.setDevicePermissionHandler) {
+        sharedSession.setDevicePermissionHandler((details) => {
+            if (details.deviceType === 'videoinput' || details.deviceType === 'audioinput') {
+                return true;
+            }
+            return false;
+        });
+    }
 
     // 处理渲染进程触发的文件下载（exportData 备份等）
     sharedSession.on('will-download', (event, item, webContents) => {
@@ -223,18 +272,15 @@ app.whenReady().then(() => {
         }
     });
 
-    createLoginWindow();
+    createMainWindow();
 
     app.on('activate', () => {
         const allWindows = BrowserWindow.getAllWindows();
         if (allWindows.length === 0) {
-            if (currentLoggedInUser) createMainWindow();
-            else createLoginWindow();
+            createMainWindow();
         } else {
             if (mainWindow && !mainWindow.isDestroyed()) {
                 focusWindow(mainWindow);
-            } else if (loginWindow && !loginWindow.isDestroyed()) {
-                focusWindow(loginWindow);
             }
         }
     });
@@ -244,6 +290,97 @@ app.whenReady().then(() => {
 //  IPC handlers
 // ============================================================================
 ipcMain.handle('save-prescription-image', (event, imageData, fileName) => savePrescriptionImage(imageData, fileName));
+
+// ★ 视频文件保存 IPC（新增）
+ipcMain.handle('save-video-file', async (event, arrayBuffer, fileName) => {
+    return await saveVideoFile(arrayBuffer, fileName);
+});
+
+// ★ 获取视频保存目录（新增）
+ipcMain.handle('get-video-directory', async () => {
+    return getCurrentMonthDirectory();
+});
+
+// ★ 在文件管理器中打开视频目录（新增）
+ipcMain.handle('open-video-directory', async () => {
+    const dir = getCurrentMonthDirectory();
+    shell.openPath(dir);
+    return { success: true, directory: dir };
+});
+
+// ★ 查找媒体文件（新增）
+ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo) => {
+    try {
+        if (!patientName) return { success: true, files: [] };
+        const downloadsDir = getDownloadsDirectory();
+        const files = [];
+        const prefix = `${patientName}_${prescriptionNo || ''}`;
+        let monthDirs = [];
+        try {
+            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+        } catch (e) { /* downloads目录可能不存在 */ }
+        for (const monthDir of monthDirs) {
+            let fileEntries = [];
+            try {
+                fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+            } catch (e) { continue; }
+            for (const fe of fileEntries) {
+                if (!fe.isFile()) continue;
+                const fileName = fe.name;
+                if (!fileName.startsWith(prefix)) continue;
+                const filePath = path.join(monthDir, fileName);
+                try {
+                    const stat = await fs.stat(filePath);
+                    const ext = path.extname(fileName).toLowerCase();
+                    const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
+                    files.push({
+                        name: fileName,
+                        path: filePath,
+                        type: isVideo ? 'video' : 'image',
+                        size: stat.size,
+                        lastModified: stat.mtimeMs
+                    });
+                } catch (e) { /* 跳过无法读取的文件 */ }
+            }
+        }
+        return { success: true, files };
+    } catch (error) {
+        console.error('查找媒体文件失败:', error);
+        return { success: false, error: error.message, files: [] };
+    }
+});
+
+// ★ 打开文件（系统默认程序）（新增）
+ipcMain.handle('open-file', async (event, filePath, mimeType) => {
+    try {
+        if (!filePath) return { success: false, error: '文件路径为空' };
+        await shell.openPath(filePath);
+        return { success: true };
+    } catch (error) {
+        console.error('打开文件失败:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+// ★ 读取文件为Base64（新增）
+ipcMain.handle('read-file-as-base64', async (event, filePath) => {
+    try {
+        if (!filePath) return { success: false, error: '文件路径为空' };
+        const buffer = await fs.readFile(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+        let mimeType = 'image/png';
+        if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+        else if (ext === '.png') mimeType = 'image/png';
+        else if (ext === '.webm') mimeType = 'video/webm';
+        else if (ext === '.mp4') mimeType = 'video/mp4';
+        const base64 = buffer.toString('base64');
+        return { success: true, base64: `data:${mimeType};base64,${base64}` };
+    } catch (error) {
+        console.error('读取文件失败:', error);
+        return { success: false, error: error.message };
+    }
+});
 
 async function saveUserData(key, data) {
     try {
@@ -302,8 +439,8 @@ ipcMain.handle('get-app-config', async () => {
     const defaults = {
         clinicName: '本能堂中医诊所',
         doctorName: '张大夫',
-        edition: 'personal',
-        productName: '本能中医处方系统-个人'
+        edition: 'local',
+        productName: '本能中医处方系统-本地'
     };
     try {
         const configPath = path.join(__dirname, '..', 'config.json');
