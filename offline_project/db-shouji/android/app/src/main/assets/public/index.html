@@ -2951,7 +2951,7 @@
             try {
                 const result = await window.electronAPI.findMediaFiles(patientName, prescriptionNo);
                 if (!result.success || !result.files || result.files.length === 0) {
-                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件</div>';
+                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件<br><span style="font-size:11px;color:#aaa;">搜索: ' + escapeHtml(patientName) + '_' + escapeHtml(prescriptionNo) + '</span></div>';
                     return;
                 }
                 const sorted = result.files.sort((a,b) => {

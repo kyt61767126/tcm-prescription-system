@@ -58,7 +58,14 @@
             saveVideoFile: function (arrayBuffer, fileName) {
                 return new Promise(function (resolve) {
                     try {
-                        var r = callNative('saveVideoFile', JSON.stringify({ arrayBuffer: Array.from(arrayBuffer), fileName: fileName }));
+                        var bytes = new Uint8Array(arrayBuffer);
+                        var chunkSize = 8192;
+                        var binary = '';
+                        for (var i = 0; i < bytes.length; i += chunkSize) {
+                            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+                        }
+                        var base64Data = btoa(binary);
+                        var r = callNative('saveVideoFile', JSON.stringify({ base64Data: base64Data, fileName: fileName }));
                         resolve(r);
                     } catch (e) { resolve({ success: false, error: String(e) }); }
                 });

@@ -461,7 +461,7 @@ public class MainActivity extends BridgeActivity {
                         return savePrescriptionImage(args.optString("imageData", ""),
                                 args.optString("fileName", "")).toString();
                     case "saveVideoFile":
-                        return saveVideoFile(args.optJSONArray("arrayBuffer"),
+                        return saveVideoFile(args.optString("base64Data", ""),
                                 args.optString("fileName", "")).toString();
                     case "getVideoDirectory":
                         return getVideoDirectory().toString();
@@ -531,12 +531,9 @@ public class MainActivity extends BridgeActivity {
         // ------------------------------------------------------------------
         // 视频文件：写入 Movies/本能中医处方/YYYY-MM/ 目录
         // ------------------------------------------------------------------
-        private JSONObject saveVideoFile(org.json.JSONArray arrayBuffer, String fileName) {
+        private JSONObject saveVideoFile(String base64Data, String fileName) {
             try {
-                byte[] bytes = new byte[arrayBuffer.length()];
-                for (int i = 0; i < arrayBuffer.length(); i++) {
-                    bytes[i] = (byte) arrayBuffer.getInt(i);
-                }
+                byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
 
                 String safeName = sanitize(fileName);
                 if (safeName.isEmpty()) {

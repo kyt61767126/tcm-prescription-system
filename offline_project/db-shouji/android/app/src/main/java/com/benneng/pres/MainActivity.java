@@ -298,7 +298,7 @@ public class MainActivity extends AppCompatActivity {
             "    }," +
             "    saveVideoFile: function(arrayBuffer, fileName){" +
             "      return new Promise(function(resolve){" +
-            "        try { var r = callNative('saveVideoFile', JSON.stringify({arrayBuffer:Array.from(arrayBuffer),fileName:fileName})); resolve(r); }" +
+            "        try { var bytes=new Uint8Array(arrayBuffer); var bin=''; for(var i=0;i<bytes.length;i+=8192){bin+=String.fromCharCode.apply(null,bytes.subarray(i,i+8192));} var r = callNative('saveVideoFile', JSON.stringify({base64Data:btoa(bin),fileName:fileName})); resolve(r); }" +
             "        catch(e){ resolve({success:false, error:String(e)}); }" +
             "      });" +
             "    }," +
@@ -413,7 +413,7 @@ public class MainActivity extends AppCompatActivity {
                         return savePrescriptionImage(args.optString("imageData", ""),
                                 args.optString("fileName", "")).toString();
                     case "saveVideoFile":
-                        return saveVideoFile(args.optJSONArray("arrayBuffer"),
+                        return saveVideoFile(args.optString("base64Data", ""),
                                 args.optString("fileName", "")).toString();
                     case "getVideoDirectory":
                         return getVideoDirectory().toString();
@@ -586,12 +586,9 @@ public class MainActivity extends AppCompatActivity {
         // ------------------------------------------------------------------
         // 视频文件：写入 Movies/本能中医处方/ 目录
         // ------------------------------------------------------------------
-        private JSONObject saveVideoFile(org.json.JSONArray arrayBuffer, String fileName) {
+        private JSONObject saveVideoFile(String base64Data, String fileName) {
             try {
-                byte[] bytes = new byte[arrayBuffer.length()];
-                for (int i = 0; i < arrayBuffer.length(); i++) {
-                    bytes[i] = (byte) arrayBuffer.getInt(i);
-                }
+                byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
 
                 String safeName = sanitize(fileName);
                 if (safeName.isEmpty()) {
