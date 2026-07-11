@@ -3069,13 +3069,13 @@ let currentUser = null;
 
         async function viewMediaFiles(patientName, prescriptionNo) {
             if (!window.electronAPI || !window.electronAPI.findMediaFiles) {
-                showToast('媒体查看功能仅在APP中可用');
+                showToast('处方查看功能仅在APP中可用');
                 return;
             }
             const overlay = document.getElementById('mediaViewerOverlay');
             const content = document.getElementById('mediaViewerContent');
             if (!overlay || !content) return;
-            content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">正在查找媒体文件...</div>';
+            content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">正在查找处方文件...</div>';
             overlay.style.display = 'flex';
             try {
                 const result = await window.electronAPI.findMediaFiles(patientName, prescriptionNo);

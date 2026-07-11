@@ -36,7 +36,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return ipcRenderer.invoke('get-video-directory');
     },
 
-    // ---------- 媒体文件查看（新增） ----------
+    // ---------- 处方文件查看（新增） ----------
     findMediaFiles: (patientName, prescriptionNo) => {
         return ipcRenderer.invoke('find-media-files', patientName, prescriptionNo);
     },

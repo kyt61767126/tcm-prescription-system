@@ -791,7 +791,7 @@
 
         const ext = type === 'video' ? 'webm' : 'jpg';
         const sub = subtype ? '_' + subtype : '';
-        return cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
+        return identifier + '_' + cleanName + '_' + type + sub + '.' + ext;
     }
 
     function updateTimer() {

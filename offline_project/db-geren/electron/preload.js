@@ -26,7 +26,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openVideoDirectory: () =>
         ipcRenderer.invoke('open-video-directory'),
 
-    // ---------- 媒体文件查看（新增） ----------
+    // ---------- 处方文件查看（新增） ----------
     findMediaFiles: (patientName, prescriptionNo) =>
         ipcRenderer.invoke('find-media-files', patientName, prescriptionNo),
 

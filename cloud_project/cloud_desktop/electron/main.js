@@ -193,7 +193,7 @@ async function saveVideoFile(arrayBuffer, fileName) {
     }
 }
 
-// ★ 重命名媒体文件（处方保存后云端分配新编号时同步重命名本地文件）
+// ★ 重命名处方文件（处方保存后云端分配新编号时同步重命名本地文件）
 async function renameMediaFiles(patientName, oldNo, newNo) {
     try {
         const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
@@ -231,7 +231,7 @@ async function renameMediaFiles(patientName, oldNo, newNo) {
         }
         return { success: true, renamed };
     } catch (error) {
-        console.error('重命名媒体文件失败:', error);
+        console.error('重命名处方文件失败:', error);
         return { success: false, error: error.message, renamed: 0 };
     }
 }
@@ -509,7 +509,7 @@ ipcMain.handle('get-video-directory', async () => {
     return getCurrentMonthDirectory();
 });
 
-// ★ 查找媒体文件（新增）
+// ★ 查找处方文件（新增）
 safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
     if (!patientName) return { success: true, files: [] };
     const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
@@ -548,7 +548,7 @@ safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
     return { success: true, files };
 }, { success: false, files: [] });
 
-// ★ 重命名媒体文件（新增）
+// ★ 重命名处方文件（新增）
 safeHandle('rename-media-files', async (event, patientName, oldNo, newNo) => {
     return await renameMediaFiles(patientName, oldNo, newNo);
 }, { success: false, renamed: 0 });

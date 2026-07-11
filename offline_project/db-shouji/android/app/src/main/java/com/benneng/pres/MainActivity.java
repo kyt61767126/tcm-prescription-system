@@ -780,7 +780,7 @@ public class MainActivity extends AppCompatActivity {
                 result.put("debug", debug.toString());
                 return result;
             } catch (Exception e) {
-                return fail("查找媒体文件失败: " + e.getMessage());
+                return fail("查找处方文件失败: " + e.getMessage());
             }
         }
 
