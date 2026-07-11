@@ -1,78 +1,78 @@
 @echo off
 chcp 65001 >nul
-title 本能中医处方系统 - 云端APP打包工具
+title TCM Prescription System - Cloud APP Packager
 
 echo ============================================
-echo   本能中医处方系统 - 云端APP打包工具
+echo   TCM Prescription System - Cloud APP Packager
 echo ============================================
 echo.
 
 set "PROJECT_DIR=%~dp0cloud_app"
 set "ANDROID_DIR=%PROJECT_DIR%"
 set "APK_OUTPUT_DIR=%ANDROID_DIR%\app\build\outputs\apk\release"
-set "FINAL_APK=%~dp0中医处方系统-云端版.apk"
+set "FINAL_APK=%~dp0TCM-Prescription-Cloud.apk"
 
 cd /d "%ANDROID_DIR%"
 
-echo [1/6] 检查环境...
+echo [1/6] Checking environment...
 if not exist "gradlew.bat" (
-    echo [错误] 未找到 gradlew.bat
-    echo   路径: %ANDROID_DIR%\gradlew.bat
+    echo [ERROR] gradlew.bat not found
+    echo   Path: %ANDROID_DIR%\gradlew.bat
     pause
     exit /b 1
 )
 if not exist "app\signing.properties" (
-    echo [错误] 未找到签名配置 signing.properties
-    echo   路径: %ANDROID_DIR%\app\signing.properties
+    echo [ERROR] signing.properties not found
+    echo   Path: %ANDROID_DIR%\app\signing.properties
     pause
     exit /b 1
 )
 if not exist "app\app-release.jks" (
-    echo [错误] 未找到签名密钥 app-release.jks
-    echo   路径: %ANDROID_DIR%\app\app-release.jks
+    echo [ERROR] app-release.jks not found
+    echo   Path: %ANDROID_DIR%\app\app-release.jks
     pause
     exit /b 1
 )
 if not exist "app\src\main\assets\capacitor.config.json" (
-    echo [错误] 未找到 Capacitor 配置文件
-    echo   路径: %ANDROID_DIR%\app\src\main\assets\capacitor.config.json
+    echo [ERROR] Capacitor config not found
+    echo   Path: %ANDROID_DIR%\app\src\main\assets\capacitor.config.json
     pause
     exit /b 1
 )
-echo [OK] 环境检查通过
+echo [OK] Environment check passed
 echo.
 
-echo [2/6] 当前配置信息...
+echo [2/6] Current configuration...
 findstr "url" "app\src\main\assets\capacitor.config.json"
 findstr "versionName" "app\build.gradle"
 echo.
 
-echo [3/6] 停止残留 Gradle 进程...
+echo [3/6] Stopping residual Gradle processes...
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
-echo [OK] 清理完成
+echo [OK] Cleanup completed
 echo.
 
-echo [4/6] 清理旧构建缓存（强制重新打包，避免 APK 时间戳不更新）...
+echo [4/6] Cleaning build cache...
 call gradlew.bat clean --no-daemon
 if errorlevel 1 (
-    echo [警告] clean 失败，继续使用增量构建
+    echo [WARN] clean failed, continuing with incremental build
 ) else (
-    echo [OK] 旧缓存已清除
+    echo [OK] Old cache cleared
 )
 echo.
 
-echo [5/6] 开始构建签名 APK...
+echo [5/6] Building signed APK...
 echo.
 call gradlew.bat assembleRelease --no-daemon
 if errorlevel 1 (
     echo.
-    echo [错误] 构建失败！请检查错误信息
+    echo [ERROR] Build failed! Please check error messages
     pause
     exit /b 1
 )
 echo.
 
-echo [6/6] 构建成功，复制 APK...
+echo [6/6] Build successful, copying APK...
 set "APK_FILE="
 if exist "%APK_OUTPUT_DIR%\app-release.apk" (
     set "APK_FILE=%APK_OUTPUT_DIR%\app-release.apk"
@@ -83,30 +83,30 @@ if exist "%APK_OUTPUT_DIR%\app-release.apk" (
 )
 
 if "%APK_FILE%"=="" (
-    echo [错误] 未找到生成的 APK 文件
-    echo   搜索目录: %APK_OUTPUT_DIR%
+    echo [ERROR] APK file not found
+    echo   Search dir: %APK_OUTPUT_DIR%
     pause
     exit /b 1
 )
 
 for %%A in ("%APK_FILE%") do (
-    echo APK 文件: %%~nxA
-    echo 文件大小: %%~zA bytes
+    echo APK File: %%~nxA
+    echo File Size: %%~zA bytes
 )
 
 copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
 if errorlevel 1 (
-    echo [警告] 复制失败，请手动从以下目录获取 APK:
+    echo [WARN] Copy failed, please manually get APK from:
     echo   %APK_OUTPUT_DIR%
 ) else (
-    echo [OK] 已复制到: %FINAL_APK%
+    echo [OK] Copied to: %FINAL_APK%
 )
 
 echo.
 echo ============================================
-echo   打包完成！
-echo   APK 路径: %FINAL_APK%
-echo   该 APK 已签名，可直接安装到手机
+echo   Packing completed!
+echo   APK Path: %FINAL_APK%
+echo   This APK is signed and ready for installation
 echo ============================================
 echo.
 pause

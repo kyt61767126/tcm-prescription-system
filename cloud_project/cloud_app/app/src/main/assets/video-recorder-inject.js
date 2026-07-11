@@ -295,7 +295,7 @@
                 pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
         }
 
-        var ext = type === 'video' ? 'webm' : 'png';
+        var ext = type === 'video' ? 'webm' : 'jpg';
         var sub = subtype ? '_' + subtype : '';
         return cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
     }
@@ -644,7 +644,7 @@
         var ctx = canvasEl.getContext('2d');
         ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
 
-        var dataUrl = canvasEl.toDataURL('image/png');
+        var dataUrl = canvasEl.toDataURL('image/jpeg', 0.8);
         capturedPhotos[currentCaptureStep - 1] = dataUrl;
 
         var flash = document.getElementById('cloudVrFlash');

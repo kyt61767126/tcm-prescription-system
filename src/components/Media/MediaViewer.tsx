@@ -17,8 +17,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [imageData, setImageData] = useState<Record<string, string>>({});
-  const [loadingImage, setLoadingImage] = useState<string | null>(null);
+  const [mediaData, setMediaData] = useState<Record<string, string>>({});
 
   const electronAPI = (window as any).electronAPI;
 
@@ -55,46 +54,38 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
     loadMediaFiles();
   }, [loadMediaFiles]);
 
-  const loadImage = useCallback(async (filePath: string) => {
-    if (imageData[filePath]) return;
-    setLoadingImage(filePath);
-    try {
-      const result = await electronAPI.readFileAsBase64(filePath);
-      if (result.success && result.data) {
-        const mime = filePath.endsWith('.png') ? 'image/png' : 'image/jpeg';
-        setImageData((prev) => ({ ...prev, [filePath]: `data:${mime};base64,${result.data}` }));
-      }
-    } catch (e) {
-      console.error('加载图片失败:', e);
-    } finally {
-      setLoadingImage(null);
-    }
-  }, [electronAPI, imageData]);
+  // Auto-load all media files when files list changes
+  useEffect(() => {
+    if (!files.length || !electronAPI?.readFileAsBase64) return;
 
-  const handleOpenVideo = useCallback(async (filePath: string) => {
-    if (!electronAPI || !electronAPI.openFile) {
-      alert('无法打开视频文件');
-      return;
-    }
-    try {
-      const result = await electronAPI.openFile(filePath, 'video/webm');
-      if (!result.success) {
-        alert('打开视频失败：' + (result.error || '未知错误'));
+    let cancelled = false;
+    const loaded = new Set<string>();
+
+    const loadAllMedia = async () => {
+      for (const file of files) {
+        if (cancelled || loaded.has(file.path)) continue;
+        loaded.add(file.path);
+        try {
+          const result = await electronAPI.readFileAsBase64(file.path);
+          if (!cancelled && result.success) {
+            const dataUrl = result.data || result.base64;
+            if (dataUrl) {
+              setMediaData(prev => ({ ...prev, [file.path]: dataUrl }));
+            }
+          }
+        } catch (e) {
+          console.error('加载媒体失败:', e);
+        }
       }
-    } catch (e) {
-      alert('打开视频失败：' + (e as Error).message);
-    }
-  }, [electronAPI]);
+    };
+
+    loadAllMedia();
+
+    return () => { cancelled = true; };
+  }, [files, electronAPI]);
 
   const isVideo = (name: string) => name.toLowerCase().endsWith('.webm') || name.toLowerCase().endsWith('.mp4');
   const isImage = (name: string) => name.toLowerCase().endsWith('.png') || name.toLowerCase().endsWith('.jpg') || name.toLowerCase().endsWith('.jpeg');
-
-  const formatFileSize = (bytes: number) => {
-    if (!bytes) return '';
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / 1024 / 1024).toFixed(2) + ' MB';
-  };
 
   const getFileLabel = (name: string) => {
     if (name.includes('tongue_front')) return '舌面图像';
@@ -104,6 +95,15 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
     return name;
   };
 
+  const formatFileSize = (bytes: number) => {
+    if (!bytes) return '';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+  };
+
+  const cols = files.length <= 1 ? 1 : files.length <= 2 ? 2 : 2;
+
   return (
     <div
       style={{
@@ -112,7 +112,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
         left: 0,
         width: '100%',
         height: '100%',
-        background: 'rgba(0,0,0,0.6)',
+        background: 'rgba(0,0,0,0.7)',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
@@ -127,13 +127,14 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
           background: '#fff',
           borderRadius: '8px',
           width: '95%',
-          maxWidth: '800px',
+          maxWidth: '700px',
           maxHeight: '90vh',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
         }}
       >
+        {/* Header */}
         <div
           style={{
             background: '#000080',
@@ -145,7 +146,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
             flexShrink: 0,
           }}
         >
-          <span>📷 媒体文件 - {patientName}</span>
+          <span style={{ fontSize: '14px' }}>📷 媒体文件 - {patientName}</span>
           <span
             onClick={onClose}
             style={{ fontSize: '24px', cursor: 'pointer', lineHeight: '1' }}
@@ -154,12 +155,16 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
           </span>
         </div>
 
+        {/* Content - no scrolling, direct display */}
         <div
           style={{
             flex: 1,
-            overflow: 'auto',
-            padding: '15px',
+            overflow: 'hidden',
+            padding: '10px',
             background: '#f5f5f5',
+            display: 'flex',
+            flexDirection: 'column',
+            minHeight: 0,
           }}
         >
           {loading ? (
@@ -190,107 +195,83 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: '12px',
+                gridTemplateColumns: `repeat(${cols}, 1fr)`,
+                gap: '8px',
+                flex: 1,
+                minHeight: 0,
               }}
             >
-              {files.map((file, index) => (
-                <div
-                  key={index}
-                  style={{
-                    background: 'white',
-                    borderRadius: '6px',
-                    overflow: 'hidden',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                    cursor: isVideo(file.name) ? 'pointer' : 'default',
-                  }}
-                  onClick={() => {
-                    if (isVideo(file.name)) handleOpenVideo(file.path);
-                  }}
-                >
+              {files.map((file, index) => {
+                const data = mediaData[file.path];
+                return (
                   <div
+                    key={index}
                     style={{
-                      width: '100%',
-                      aspectRatio: '4/3',
-                      background: '#000',
+                      background: 'white',
+                      borderRadius: '6px',
+                      overflow: 'hidden',
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      position: 'relative',
+                      flexDirection: 'column',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                      minHeight: 0,
                     }}
                   >
-                    {isImage(file.name) ? (
-                      imageData[file.path] ? (
-                        <img
-                          src={imageData[file.path]}
-                          alt={file.name}
-                          style={{ width: '100%', height: '100%', objectFit: 'contain' }}
-                        />
-                      ) : loadingImage === file.path ? (
-                        <div style={{ color: '#fff', fontSize: '12px' }}>加载中...</div>
-                      ) : (
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            loadImage(file.path);
-                          }}
-                          style={{
-                            color: '#fff',
-                            fontSize: '12px',
-                            cursor: 'pointer',
-                            padding: '8px 16px',
-                            background: 'rgba(255,255,255,0.2)',
-                            borderRadius: '4px',
-                          }}
-                        >
-                          📷 点击加载图片
-                        </div>
-                      )
-                    ) : isVideo(file.name) ? (
-                      <>
-                        <div style={{ fontSize: '48px' }}>🎬</div>
-                        <div
-                          style={{
-                            position: 'absolute',
-                            bottom: '8px',
-                            right: '8px',
-                            background: 'rgba(0,0,0,0.7)',
-                            color: '#fff',
-                            padding: '2px 8px',
-                            borderRadius: '4px',
-                            fontSize: '11px',
-                          }}
-                        >
-                          ▶ 点击播放
-                        </div>
-                      </>
-                    ) : (
-                      <div style={{ fontSize: '32px' }}>📄</div>
-                    )}
-                  </div>
-                  <div
-                    style={{
-                      padding: '6px 8px',
-                      fontSize: '11px',
-                      color: '#666',
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>
+                    <div
+                      style={{
+                        fontSize: '11px',
+                        fontWeight: 'bold',
+                        padding: '3px 8px',
+                        background: '#f0f0f0',
+                        color: '#333',
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
                       {getFileLabel(file.name)}
+                      {file.size ? ` (${formatFileSize(file.size)})` : ''}
                     </div>
-                    {file.size ? (
-                      <div style={{ color: '#999' }}>{formatFileSize(file.size)}</div>
-                    ) : null}
+                    <div
+                      style={{
+                        flex: 1,
+                        background: '#000',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minHeight: 0,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {data ? (
+                        isImage(file.name) ? (
+                          <img
+                            src={data}
+                            alt={file.name}
+                            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                          />
+                        ) : isVideo(file.name) ? (
+                          <video
+                            src={data}
+                            controls
+                            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                          />
+                        ) : null
+                      ) : (
+                        <div style={{ color: '#fff', fontSize: '12px' }}>加载中...</div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
+        {/* Footer */}
         <div
           style={{
-            padding: '10px 15px',
+            padding: '8px 15px',
             background: '#e0e0e0',
             display: 'flex',
             justifyContent: 'space-between',

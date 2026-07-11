@@ -566,7 +566,7 @@
         ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
 
         // 保存当前照片数据
-        const dataUrl = canvasEl.toDataURL('image/png');
+        const dataUrl = canvasEl.toDataURL('image/jpeg', 0.8);
         capturedPhotos[currentCaptureStep - 1] = dataUrl;
 
         // 闪光效果
@@ -708,7 +708,7 @@
                          pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
         }
 
-        const ext = type === 'video' ? 'webm' : 'png';
+        const ext = type === 'video' ? 'webm' : 'jpg';
         const sub = subtype ? '_' + subtype : '';
         return cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
     }

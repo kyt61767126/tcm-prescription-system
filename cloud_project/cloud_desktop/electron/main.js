@@ -150,7 +150,7 @@ async function savePrescriptionImage(imageData, fileName) {
     try {
         const monthDir = getCurrentMonthDirectory();
         
-        const base64Data = imageData.replace(/^data:image\/png;base64,/, '');
+        const base64Data = imageData.replace(/^data:image\/[a-z]+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
         
         const filePath = path.join(monthDir, fileName);
