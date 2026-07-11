@@ -31,6 +31,9 @@ import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
+import android.widget.ProgressBar;
+import android.widget.RelativeLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import androidx.core.app.ActivityCompat;
@@ -55,7 +58,7 @@ public class MainActivity extends BridgeActivity {
     private static final String CLOUD_URL = "https://" + CLOUD_HOST;
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
-    private static final String EXPECTED_APP_VERSION = "2026-07-11-v2";
+    private static final String EXPECTED_APP_VERSION = "2026-07-11-v3";
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
@@ -64,6 +67,8 @@ public class MainActivity extends BridgeActivity {
 
     private Handler mainHandler;
     private int webViewReadyRetries = 0;
+    private RelativeLayout loadingLayout;
+    private TextView loadingText;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -102,12 +107,48 @@ public class MainActivity extends BridgeActivity {
     private void configureWebView() {
         WebView webView = this.getBridge().getWebView();
         if (webView == null) {
-            // T1: 加最大重试次数，避免 WebView 一直为 null 时无限循环
             webViewReadyRetries++;
             if (webViewReadyRetries <= MAX_WEBVIEW_READY_RETRIES) {
                 mainHandler.postDelayed(this::configureWebView, WEBVIEW_READY_DELAY_MS);
             }
             return;
+        }
+
+        // 创建加载进度布局（覆盖在 WebView 上方，加载完成后隐藏）
+        if (loadingLayout == null) {
+            loadingLayout = new RelativeLayout(this);
+            loadingLayout.setLayoutParams(new ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            ));
+            loadingLayout.setBackgroundColor(0xFFFFFFFF);
+
+            ProgressBar progressBar = new ProgressBar(this);
+            RelativeLayout.LayoutParams pbParams = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT
+            );
+            pbParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
+            pbParams.topMargin = dpToPx(180);
+            loadingLayout.addView(progressBar, pbParams);
+
+            loadingText = new TextView(this);
+            loadingText.setText("正在加载云端处方系统...");
+            loadingText.setTextSize(15);
+            loadingText.setTextColor(0xFF666666);
+            RelativeLayout.LayoutParams tvParams = new RelativeLayout.LayoutParams(
+                RelativeLayout.LayoutParams.WRAP_CONTENT,
+                RelativeLayout.LayoutParams.WRAP_CONTENT
+            );
+            tvParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
+            tvParams.topMargin = dpToPx(240);
+            loadingLayout.addView(loadingText, tvParams);
+
+            // 将加载布局添加到 WebView 的父视图
+            ViewGroup rootView = (ViewGroup) webView.getParent();
+            if (rootView != null) {
+                rootView.addView(loadingLayout);
+            }
         }
 
         WebSettings settings = webView.getSettings();
@@ -235,10 +276,13 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
+                // 显示加载进度
+                if (loadingLayout != null) {
+                    loadingLayout.setVisibility(View.VISIBLE);
+                }
                 // S3: 检查加载的URL是否是云端URL（允许带查询参数）
                 if (!urlChecked && url != null && !url.contains(CLOUD_HOST)) {
                     urlChecked = true;
-                    // 加载的不是云端URL，强制加载云端URL（带时间戳绕过缓存）
                     mainHandler.postDelayed(() -> {
                         view.loadUrl(CLOUD_URL + "?" + System.currentTimeMillis());
                     }, 100);
@@ -248,6 +292,13 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                // 隐藏加载进度布局（延迟200ms确保页面渲染完成）
+                mainHandler.postDelayed(() -> {
+                    if (loadingLayout != null) {
+                        loadingLayout.setVisibility(View.GONE);
+                    }
+                }, 200);
+
                 // 注入状态栏高度（CSS px），供布局修正使用
                 int statusBarHeightPx = getStatusBarHeightPx();
                 float density = getResources().getDisplayMetrics().density;
@@ -259,10 +310,6 @@ public class MainActivity extends BridgeActivity {
 
                 // 注入录像拍照功能脚本（从 assets 读取 video-recorder-inject.js）
                 injectVideoRecorderScript(view);
-
-                // LOAD_NO_CACHE 模式下，每次都从网络加载最新版本，不需要版本校验 reload
-                // 彻底避免 onPageFinished 中版本不匹配触发的闪动问题
-                // 离线逻辑已迁移至云端网页 index.html（LocalDB + SyncEngine），原生层不再注入离线脚本
             }
 
             // T3: 网络错误处理，避免白屏
@@ -313,6 +360,14 @@ public class MainActivity extends BridgeActivity {
             "<button onclick=\"location.href='" + CLOUD_URL + "?t=' + Date.now()\">重新加载</button>" +
             "</body></html>";
         webView.loadDataWithBaseURL(CLOUD_URL, errorHtml, "text/html", "UTF-8", null);
+    }
+
+    /**
+     * dp 转 px
+     */
+    private int dpToPx(int dp) {
+        float density = getResources().getDisplayMetrics().density;
+        return (int) (dp * density + 0.5f);
     }
 
     /**
