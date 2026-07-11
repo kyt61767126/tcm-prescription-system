@@ -6232,22 +6232,14 @@
                     view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
                 });
             } else if (isVid) {
-                window.electronAPI.readFileAsBase64(f.path).then(function(result) {
-                    if (result.success && (result.data || result.base64)) {
-                        var src = result.data || result.base64;
-                        view.innerHTML = '';
-                        var video = document.createElement('video');
-                        video.src = src;
-                        video.controls = true;
-                        video.playsInline = true;
-                        video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
-                        view.appendChild(video);
-                    } else {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
+                window.electronAPI.openFile(f.path).then(function(result) {
+                    if (!result.success) {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">无法打开视频文件</div>';
                     }
                 }).catch(function() {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">打开视频失败</div>';
                 });
+                view.innerHTML = '<div style="color:#fff;font-size:14px;text-align:center;padding:20px;">正在用系统播放器打开...</div>';
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }
