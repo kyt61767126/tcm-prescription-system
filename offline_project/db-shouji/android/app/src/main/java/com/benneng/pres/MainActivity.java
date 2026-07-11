@@ -747,6 +747,7 @@ public class MainActivity extends AppCompatActivity {
         private JSONObject findMediaFiles(String patientName, String prescriptionNo) {
             try {
                 JSONArray files = new JSONArray();
+                java.util.Set<String> foundPaths = new java.util.HashSet<>();
                 String safeName = sanitize(patientName);
                 String safeNo = sanitize(prescriptionNo);
                 if (safeName.isEmpty()) {
@@ -755,13 +756,14 @@ public class MainActivity extends AppCompatActivity {
                     result.put("files", files);
                     return result;
                 }
-                String prefix = safeName + "_" + safeNo;
+                String prefix1 = safeName + "_" + safeNo;
+                String prefix2 = safeNo + "_" + safeName;
                 File imgDir = getImageDir();
                 File vidDir = getVideoDir();
-                scanDirForMedia(imgDir, prefix, files);
-                scanDirForMedia(vidDir, prefix, files);
+                scanDirForMedia(imgDir, prefix1, prefix2, files, foundPaths);
+                scanDirForMedia(vidDir, prefix1, prefix2, files, foundPaths);
                 StringBuilder debug = new StringBuilder();
-                debug.append("prefix=").append(prefix);
+                debug.append("prefix1=").append(prefix1).append(" prefix2=").append(prefix2);
                 debug.append(" | imgDir=").append(imgDir != null ? imgDir.getAbsolutePath() : "null").append(" exists=").append(imgDir != null && imgDir.exists());
                 debug.append(" | vidDir=").append(vidDir != null ? vidDir.getAbsolutePath() : "null").append(" exists=").append(vidDir != null && vidDir.exists());
                 if (imgDir != null && imgDir.exists()) {
@@ -784,18 +786,21 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        private void scanDirForMedia(File dir, String prefix, JSONArray files) {
+        private void scanDirForMedia(File dir, String prefix1, String prefix2, JSONArray files, java.util.Set<String> foundPaths) {
             if (dir == null || !dir.exists()) return;
             File[] children = dir.listFiles();
             if (children == null) return;
             for (File f : children) {
                 if (f.isDirectory()) {
-                    scanDirForMedia(f, prefix, files);
-                } else if (f.getName().contains(prefix)) {
+                    scanDirForMedia(f, prefix1, prefix2, files, foundPaths);
+                } else if (f.getName().contains(prefix1) || f.getName().contains(prefix2)) {
+                    String path = f.getAbsolutePath();
+                    if (foundPaths.contains(path)) continue;
+                    foundPaths.add(path);
                     try {
                         JSONObject fileObj = new JSONObject();
                         fileObj.put("name", f.getName());
-                        fileObj.put("path", f.getAbsolutePath());
+                        fileObj.put("path", path);
                         fileObj.put("type", f.getName().endsWith(".webm") ? "video" : "image");
                         fileObj.put("size", f.length());
                         fileObj.put("lastModified", f.lastModified());

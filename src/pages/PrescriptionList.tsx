@@ -304,7 +304,7 @@ const PrescriptionList: React.FC = () => {
                     fontSize: '11px',
                     color: '#2c5530'
                   }}
-                >📷 查看媒体</button>
+                >📷 查看处方</button>
                 <button
                   onClick={() => setSelectedPrescription(null)}
                   style={{

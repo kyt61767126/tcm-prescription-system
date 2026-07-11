@@ -56,21 +56,28 @@
                 display: flex; align-items: center; justify-content: center;
             }
             .video-modal {
-                background: #fff; border-radius: 10px; padding: 20px;
-                width: 720px; max-width: 95vw; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                background: #fff; border-radius: 10px; padding: 16px;
+                width: 90vw; max-width: 640px; max-height: 90vh;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                display: flex; flex-direction: column;
+                overflow: hidden;
             }
             .video-modal-header {
-                display: flex; justify-content: space-between; align-items: center;
-                margin-bottom: 12px; font-size: 16px; font-weight: 600; color: #333;
+                position: relative;
+                margin-bottom: 10px; font-size: 16px; font-weight: 600; color: #333;
+                padding-right: 40px;
             }
             .video-close-btn {
-                background: none; border: none; font-size: 22px; cursor: pointer;
-                color: #999; line-height: 1;
+                background: rgba(0,0,0,0.5); border: none; font-size: 20px; cursor: pointer;
+                color: #fff; line-height: 1; width: 32px; height: 32px;
+                border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                position: absolute; top: 8px; right: 8px; z-index: 100;
             }
-            .video-close-btn:hover { color: #333; }
+            .video-close-btn:hover { background: rgba(0,0,0,0.7); color: #fff; }
             .video-preview-wrap {
                 position: relative; width: 100%; background: #000;
-                border-radius: 6px; overflow: hidden; aspect-ratio: 4/3;
+                border-radius: 6px; overflow: hidden;
+                flex: 1; min-height: 0;
             }
             .video-preview-wrap video {
                 width: 100%; height: 100%; object-fit: contain;
@@ -266,26 +273,51 @@
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'video-status';
 
-            const constraints = {
-                video: {
-                    width: { ideal: VIDEO_WIDTH },
-                    height: { ideal: VIDEO_HEIGHT },
-                    frameRate: { ideal: VIDEO_FPS },
-                    facingMode: currentFacingMode
+            const constraintOptions = [
+                {
+                    video: {
+                        width: { ideal: VIDEO_WIDTH },
+                        height: { ideal: VIDEO_HEIGHT },
+                        frameRate: { ideal: VIDEO_FPS }
+                    },
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
                 },
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false
+                {
+                    video: {
+                        width: { ideal: VIDEO_WIDTH },
+                        height: { ideal: VIDEO_HEIGHT }
+                    },
+                    audio: false
+                },
+                {
+                    video: true,
+                    audio: false
                 }
-            };
-            try {
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-            } catch (audioErr) {
-                console.warn('[视频录制] 音频获取失败，尝试仅视频:', audioErr);
-                constraints.audio = false;
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
+            ];
+
+            let mediaStreamResult = null;
+            let lastError = null;
+
+            for (let i = 0; i < constraintOptions.length; i++) {
+                try {
+                    console.log('[视频录制] 尝试约束组合', i + 1, constraintOptions[i]);
+                    mediaStreamResult = await navigator.mediaDevices.getUserMedia(constraintOptions[i]);
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    console.warn('[视频录制] 约束组合', i + 1, '失败:', err.message);
+                }
             }
+
+            if (!mediaStreamResult) {
+                throw lastError || new Error('无法获取摄像头权限');
+            }
+
+            mediaStream = mediaStreamResult;
 
             const videoEl = document.getElementById('videoPreview');
             videoEl.srcObject = mediaStream;
@@ -298,7 +330,14 @@
             startBtn.disabled = false;
         } catch (err) {
             console.error('[视频录制] 摄像头初始化失败:', err);
-            statusEl.textContent = '摄像头初始化失败：' + (err.message || err.name || '未知错误');
+            console.error('[视频录制] 错误详情:', err.name, err.message, err.constraint);
+            let errorMsg = '摄像头初始化失败：' + (err.message || err.name || '未知错误');
+            if (err.name === 'NotAllowedError') {
+                errorMsg = '摄像头初始化失败：请在系统设置中允许本程序访问摄像头';
+            } else if (err.name === 'NotFoundError' || err.message.includes('Could not start video source')) {
+                errorMsg = '摄像头初始化失败：未检测到摄像头或设备被其他程序占用';
+            }
+            statusEl.textContent = errorMsg;
             statusEl.className = 'video-status error';
             startBtn.disabled = true;
         }
@@ -306,7 +345,6 @@
 
     // ─── 切换摄像头 ────────────────────────────────────────
     function switchCamera() {
-        currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
         if (mediaStream) {
             mediaStream.getTracks().forEach(track => track.stop());
             mediaStream = null;
@@ -559,15 +597,47 @@
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'video-status';
 
-            mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: VIDEO_WIDTH },
-                    height: { ideal: VIDEO_HEIGHT },
-                    frameRate: { ideal: VIDEO_FPS },
-                    facingMode: currentFacingMode
+            const constraintOptions = [
+                {
+                    video: {
+                        width: { ideal: VIDEO_WIDTH },
+                        height: { ideal: VIDEO_HEIGHT },
+                        frameRate: { ideal: VIDEO_FPS }
+                    },
+                    audio: false
                 },
-                audio: false
-            });
+                {
+                    video: {
+                        width: { ideal: VIDEO_WIDTH },
+                        height: { ideal: VIDEO_HEIGHT }
+                    },
+                    audio: false
+                },
+                {
+                    video: true,
+                    audio: false
+                }
+            ];
+
+            let mediaStreamResult = null;
+            let lastError = null;
+
+            for (let i = 0; i < constraintOptions.length; i++) {
+                try {
+                    console.log('[拍照] 尝试约束组合', i + 1, constraintOptions[i]);
+                    mediaStreamResult = await navigator.mediaDevices.getUserMedia(constraintOptions[i]);
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    console.warn('[拍照] 约束组合', i + 1, '失败:', err.message);
+                }
+            }
+
+            if (!mediaStreamResult) {
+                throw lastError || new Error('无法获取摄像头权限');
+            }
+
+            mediaStream = mediaStreamResult;
 
             const videoEl = document.getElementById('videoPreview');
             videoEl.srcObject = mediaStream;
@@ -576,7 +646,13 @@
             captureBtn.disabled = false;
         } catch (err) {
             console.error('[拍照] 摄像头初始化失败:', err);
-            statusEl.textContent = '摄像头初始化失败：' + (err.message || err.name || '未知错误');
+            let errorMsg = '摄像头初始化失败：' + (err.message || err.name || '未知错误');
+            if (err.name === 'NotAllowedError') {
+                errorMsg = '摄像头初始化失败：请在系统设置中允许本程序访问摄像头';
+            } else if (err.name === 'NotFoundError' || err.message.includes('Could not start video source')) {
+                errorMsg = '摄像头初始化失败：未检测到摄像头或设备被其他程序占用';
+            }
+            statusEl.textContent = errorMsg;
             statusEl.className = 'video-status error';
             captureBtn.disabled = true;
         }
@@ -584,7 +660,6 @@
 
     // ─── 拍照切换摄像头 ────────────────────────────────────
     function switchCameraForPhoto() {
-        currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
         if (mediaStream) {
             mediaStream.getTracks().forEach(track => track.stop());
             mediaStream = null;
@@ -775,7 +850,8 @@
         patientName = patientName || (document.getElementById('paperName')?.textContent || '').trim();
 
         const prescriptionNo = (document.getElementById('prescriptionNo')?.value || '').trim() ||
-                               (document.getElementById('clinicNo')?.value || '').trim();
+                               (document.getElementById('clinicNo')?.value || '').trim() ||
+                               (document.getElementById('paperClinicNo')?.textContent || '').trim();
 
         const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
         const cleanName = sanitizeStr(patientName) || 'unknown';
@@ -789,9 +865,18 @@
                          pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
         }
 
+        window.__lastUsedMediaIdentifier = identifier;
+        window.__lastUsedMediaPatientName = cleanName;
+        try {
+            localStorage.setItem('lastUsedMediaIdentifier', identifier);
+            localStorage.setItem('lastUsedMediaPatientName', cleanName);
+        } catch (e) { /* 忽略localStorage写入错误 */ }
+
         const ext = type === 'video' ? 'webm' : 'jpg';
         const sub = subtype ? '_' + subtype : '';
-        return cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
+        const fileName = cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
+        console.log('[生成文件名] patientName:', patientName, 'cleanName:', cleanName, 'identifier:', identifier, 'fileName:', fileName);
+        return fileName;
     }
 
     function updateTimer() {

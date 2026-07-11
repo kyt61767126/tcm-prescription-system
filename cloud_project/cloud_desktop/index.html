@@ -1405,7 +1405,12 @@
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
         // allowedMode: cloud=纯云端 / local=纯离线 / both=离线优先+联网双向同步
         function getAllowedMode() {
-            return (currentUser && currentUser.allowedMode) || 'both';
+            if (!currentUser) return 'both';
+            // 统一权限：管理员永远云端，普通用户离线优先+联网同步
+            if (isClinicAdmin(currentUser) || isPlatformAdmin(currentUser)) {
+                return 'cloud';
+            }
+            return 'both';
         }
         function offlineCapable() {
             const mode = getAllowedMode();
@@ -2861,8 +2866,8 @@
                 return cloudUsers.map(user => ({
                     ...user,
                     allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
-                    // 默认离线模式：管理员为both，普通用户为local
-                    allowedMode: user.allowedMode || (isClinicAdmin(user) ? 'both' : 'local')
+                    // 统一权限：管理员为cloud（永远云端），普通用户为both（离线优先+同步）
+                    allowedMode: user.allowedMode || (isClinicAdmin(user) ? 'cloud' : 'both')
                 }));
             }
             return getDefaultUsers();
@@ -6063,18 +6068,36 @@
 
         async function viewMediaFiles(patientName, prescriptionNo) {
             if (!window.electronAPI || !window.electronAPI.findMediaFiles) {
-                showToast('媒体查看功能仅在APP中可用');
+                showToast('处方查看功能仅在APP中可用');
                 return;
             }
             const overlay = document.getElementById('mediaViewerOverlay');
             const content = document.getElementById('mediaViewerContent');
             if (!overlay || !content) return;
-            content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">正在查找媒体文件...</div>';
+            content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">正在查找处方文件...</div>';
             overlay.style.display = 'flex';
             try {
                 const result = await window.electronAPI.findMediaFiles(patientName, prescriptionNo);
                 if (!result.success || !result.files || result.files.length === 0) {
-                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件<br><span style="font-size:11px;color:#aaa;">搜索: ' + escapeHtml(patientName) + '_' + escapeHtml(prescriptionNo) + '</span>' + (result.debug ? '<br><span style="font-size:10px;color:#ccc;word-break:break-all;">' + escapeHtml(result.debug) + '</span>' : '') + '</div>';
+                    let debugInfo = '';
+                    try {
+                        const allFilesResult = await window.electronAPI.listAllMediaFiles();
+                        if (allFilesResult.success && allFilesResult.files && allFilesResult.files.length > 0) {
+                            debugInfo = '<br><br><div style="font-size:11px;text-align:left;border-top:1px dashed #333;padding-top:10px;margin-top:10px;">';
+                            debugInfo += '<div style="color:#666;margin-bottom:5px;">📁 搜索目录:</div>';
+                            allFilesResult.searchDirectories.forEach(dir => {
+                                debugInfo += '<div style="color:#444;">' + escapeHtml(dir) + '</div>';
+                            });
+                            debugInfo += '<div style="color:#666;margin-top:8px;margin-bottom:5px;">📄 磁盘上的文件:</div>';
+                            allFilesResult.files.forEach(f => {
+                                debugInfo += '<div style="color:#444;">' + escapeHtml(f.name) + '</div>';
+                            });
+                            debugInfo += '</div>';
+                        }
+                    } catch (debugErr) {
+                        console.error('获取调试信息失败:', debugErr);
+                    }
+                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件<br><span style="font-size:11px;color:#aaa;">搜索: ' + escapeHtml(patientName) + '_' + escapeHtml(prescriptionNo) + '</span>' + debugInfo + '</div>';
                     return;
                 }
                 const sorted = result.files.sort((a,b) => {
@@ -6092,10 +6115,11 @@
         }
 
         function mediaLabelOf(f) {
-            var label = '媒体';
+            var label = '处方';
             if (f.name.indexOf('tongue_front') >= 0) label = '舌面图像';
             else if (f.name.indexOf('tongue_under') >= 0) label = '舌下络脉';
-            else if (f.name.indexOf('photo') >= 0) label = '照片';
+            else if (f.name.indexOf('photo') >= 0) label = '处方';
+            else if (f.name.indexOf('prescription') >= 0) label = '处方';
             else if (f.name.indexOf('video') >= 0) label = '视频';
             return label;
         }
@@ -6128,7 +6152,7 @@
                     var active = (i === idx) ? 'background:#4CAF50;' : 'background:#444;';
                     var icon = files[i].type === 'video' ? '🎥' : '📷';
                     var shortLabel = mediaLabelOf(files[i]);
-                    shortLabel = shortLabel.indexOf('舌面') >= 0 ? '舌面' : (shortLabel.indexOf('舌下') >= 0 ? '舌下' : (shortLabel.indexOf('照片') >= 0 ? '照片' : (shortLabel.indexOf('视频') >= 0 ? '视频' : '媒体')));
+                    shortLabel = shortLabel.indexOf('舌面') >= 0 ? '舌面' : (shortLabel.indexOf('舌下') >= 0 ? '舌下' : (shortLabel.indexOf('处方') >= 0 ? '处方' : (shortLabel.indexOf('视频') >= 0 ? '视频' : '处方')));
                     html += '<div onclick="renderMediaViewerSingle(' + i + ')" style="cursor:pointer;min-width:54px;height:38px;' + active + 'color:#fff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;">' + icon + ' ' + shortLabel + '</div>';
                 }
                 html += '</div>';
@@ -6256,6 +6280,11 @@
         function closeMediaViewer() {
             const overlay = document.getElementById('mediaViewerOverlay');
             if (overlay) overlay.style.display = 'none';
+            const video = document.getElementById('mediaSingleView')?.querySelector('video');
+            if (video) {
+                video.pause();
+                video.src = '';
+            }
             if (window.__currentBlobUrl) {
                 try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
                 window.__currentBlobUrl = null;
@@ -6298,6 +6327,8 @@
             document.getElementById('patientAge').value = record.patientAge;
             document.getElementById('patientPhone').value = record.patientPhone;
             document.getElementById('patientAddress').value = record.patientAddress;
+            // 设置处方编号输入框，供拍照录像生成文件名使用
+            document.getElementById('prescriptionNo').value = record.prescriptionNo || record.clinicNo || '';
             // 统计输入框保持显示历史处方累计数量，不被打开的处方覆盖
             document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
             document.getElementById('medicalHistory').value = record.medicalHistory;
@@ -6492,7 +6523,11 @@
             };
             
             // 记录保存前的处方编号（拍照录像文件以此编号保存）
-            const oldPrescriptionNo = document.getElementById('prescriptionNo').value || '';
+            // 优先从输入框获取，其次从统计显示获取，最后从拍照录像模块获取实际使用的标识符（包括localStorage备份）
+            const oldPrescriptionNo = document.getElementById('prescriptionNo').value || 
+                                     (document.getElementById('paperClinicNo')?.textContent || '') ||
+                                     (window.__lastUsedMediaIdentifier || '') ||
+                                     (localStorage.getItem('lastUsedMediaIdentifier') || '') || '';
 
             // 统一写入云端数据库，由云端生成编号
             console.log('=== Saving prescription ===');
@@ -6563,17 +6598,25 @@
                 setTimeout(() => {
                     // 生成处方签图片并自动下载（使用云端返回的编号）
                     savePrescriptionAsImage(savedRecord, officialNo);
-                    // 云端分配的编号可能与拍照时使用的编号不同，重命名已保存的媒体文件
+                    // 云端分配的编号可能与拍照时使用的编号不同，重命名已保存的处方文件
                     if (oldPrescriptionNo && officialNo && oldPrescriptionNo !== officialNo) {
+                        console.log('[重命名检查] oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo, 'patientName:', record.patientName);
                         if (window.electronAPI && window.electronAPI.renameMediaFiles) {
                             window.electronAPI.renameMediaFiles(record.patientName, oldPrescriptionNo, officialNo)
                                 .then(r => {
+                                    console.log('[重命名结果] success:', r.success, 'renamed:', r.renamed);
                                     if (r.success && r.renamed > 0) {
-                                        console.log('已重命名 ' + r.renamed + ' 个媒体文件: ' + oldPrescriptionNo + ' → ' + officialNo);
+                                        console.log('已重命名 ' + r.renamed + ' 个处方文件: ' + oldPrescriptionNo + ' → ' + officialNo);
+                                    } else if (r.success && r.renamed === 0) {
+                                        console.warn('[重命名警告] 没有找到需要重命名的文件，请检查文件名格式');
                                     }
                                 })
-                                .catch(e => console.error('重命名媒体文件失败:', e));
+                                .catch(e => console.error('重命名处方文件失败:', e));
+                        } else {
+                            console.warn('[重命名警告] electronAPI.renameMediaFiles 不可用');
                         }
+                    } else {
+                        console.log('[重命名跳过] 条件不满足 - oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo);
                     }
                     // 保存后清空表单，方便下一次使用（跳过确认弹窗）
                     clearPrescription(true);

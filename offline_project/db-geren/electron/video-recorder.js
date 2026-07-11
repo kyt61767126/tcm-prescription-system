@@ -56,21 +56,28 @@
                 display: flex; align-items: center; justify-content: center;
             }
             .video-modal {
-                background: #fff; border-radius: 10px; padding: 20px;
-                width: 720px; max-width: 95vw; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                background: #fff; border-radius: 10px; padding: 16px;
+                width: 90vw; max-width: 640px; max-height: 90vh;
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+                display: flex; flex-direction: column;
+                overflow: hidden;
             }
             .video-modal-header {
-                display: flex; justify-content: space-between; align-items: center;
-                margin-bottom: 12px; font-size: 16px; font-weight: 600; color: #333;
+                position: relative;
+                margin-bottom: 10px; font-size: 16px; font-weight: 600; color: #333;
+                padding-right: 40px;
             }
             .video-close-btn {
-                background: none; border: none; font-size: 22px; cursor: pointer;
-                color: #999; line-height: 1;
+                background: rgba(0,0,0,0.5); border: none; font-size: 20px; cursor: pointer;
+                color: #fff; line-height: 1; width: 32px; height: 32px;
+                border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                position: absolute; top: 8px; right: 8px; z-index: 100;
             }
-            .video-close-btn:hover { color: #333; }
+            .video-close-btn:hover { background: rgba(0,0,0,0.7); color: #fff; }
             .video-preview-wrap {
                 position: relative; width: 100%; background: #000;
-                border-radius: 6px; overflow: hidden; aspect-ratio: 4/3;
+                border-radius: 6px; overflow: hidden;
+                flex: 1; min-height: 0;
             }
             .video-preview-wrap video {
                 width: 100%; height: 100%; object-fit: contain;

@@ -39,6 +39,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     renameMediaFiles: (patientName, oldNo, newNo) =>
         ipcRenderer.invoke('rename-media-files', patientName, oldNo, newNo),
 
+    deleteFile: (filePath) =>
+        ipcRenderer.invoke('delete-file', filePath),
+
     // 用户数据持久化
     saveUserData: (key, data) => ipcRenderer.invoke('save-user-data', key, data),
     getUserData: (key) => ipcRenderer.invoke('get-user-data', key),

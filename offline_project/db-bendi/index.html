@@ -3087,7 +3087,7 @@ let currentUser = null;
         }
 
         function mediaLabelOf(f) {
-            var label = '媒体';
+            var label = '处方';
             if (f.name.indexOf('tongue_front') >= 0) label = '舌面图像';
             else if (f.name.indexOf('tongue_under') >= 0) label = '舌下络脉';
             else if (f.name.indexOf('photo') >= 0) label = '照片';
@@ -3123,7 +3123,7 @@ let currentUser = null;
                     var active = (i === idx) ? 'background:#4CAF50;' : 'background:#444;';
                     var icon = files[i].type === 'video' ? '🎥' : '📷';
                     var shortLabel = mediaLabelOf(files[i]);
-                    shortLabel = shortLabel.indexOf('舌面') >= 0 ? '舌面' : (shortLabel.indexOf('舌下') >= 0 ? '舌下' : (shortLabel.indexOf('照片') >= 0 ? '照片' : (shortLabel.indexOf('视频') >= 0 ? '视频' : '媒体')));
+                    shortLabel = shortLabel.indexOf('舌面') >= 0 ? '舌面' : (shortLabel.indexOf('舌下') >= 0 ? '舌下' : (shortLabel.indexOf('照片') >= 0 ? '照片' : (shortLabel.indexOf('视频') >= 0 ? '视频' : '处方')));
                     html += '<div onclick="renderMediaViewerSingle(' + i + ')" style="cursor:pointer;min-width:54px;height:38px;' + active + 'color:#fff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;">' + icon + ' ' + shortLabel + '</div>';
                 }
                 html += '</div>';
@@ -3227,22 +3227,14 @@ let currentUser = null;
                     view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
                 });
             } else if (isVid) {
-                window.electronAPI.readFileAsBase64(f.path).then(function(result) {
-                    if (result.success && (result.data || result.base64)) {
-                        var src = result.data || result.base64;
-                        view.innerHTML = '';
-                        var video = document.createElement('video');
-                        video.src = src;
-                        video.controls = true;
-                        video.playsInline = true;
-                        video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
-                        view.appendChild(video);
-                    } else {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
+                window.electronAPI.openFile(f.path).then(function(result) {
+                    if (!result.success) {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">无法打开视频文件</div>';
                     }
                 }).catch(function() {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">打开视频失败</div>';
                 });
+                view.innerHTML = '<div style="color:#fff;font-size:14px;text-align:center;padding:20px;">正在用系统播放器打开...</div>';
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }

@@ -59,7 +59,7 @@ public class MainActivity extends BridgeActivity {
     private static final String CLOUD_URL = "https://" + CLOUD_HOST;
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
-    private static final String EXPECTED_APP_VERSION = "2026-07-11-v3";
+    private static final String EXPECTED_APP_VERSION = "2026-07-12-v1";
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
@@ -71,6 +71,9 @@ public class MainActivity extends BridgeActivity {
     private RelativeLayout loadingLayout;
     private TextView loadingText;
     private volatile String cachedVideoRecorderScript = null;
+    private boolean versionChecked = false;
+    private int versionReloadCount = 0;
+    private static final int MAX_VERSION_RELOADS = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -160,6 +163,18 @@ public class MainActivity extends BridgeActivity {
         // LOAD_DEFAULT: 使用默认缓存策略（有缓存时使用缓存，无缓存时从网络获取）
         // 结合 HTTP 缓存控制头实现高效加载，避免每次启动都重新下载所有资源
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+
+        // 版本检查：如果 APP 版本更新了，清除 WebView 缓存强制加载最新页面
+        // 这解决了用户看到旧缓存版本（如"媒体"文字未更新为"处方"）的问题
+        android.content.SharedPreferences prefs = getSharedPreferences("app_config", MODE_PRIVATE);
+        String lastVersion = prefs.getString("page_version", "");
+        if (!lastVersion.equals(EXPECTED_APP_VERSION)) {
+            Log.d("TCM-Pres", "页面版本变更: " + lastVersion + " -> " + EXPECTED_APP_VERSION + "，清除WebView缓存");
+            webView.clearCache(true);
+            // 清除 WebView 存储的数据（DOM Storage、数据库等）
+            webView.clearFormData();
+            android.webkit.WebStorage.getInstance().deleteAllData();
+        }
         // 启用硬件加速，提升页面渲染性能
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         settings.setDomStorageEnabled(true);
@@ -300,6 +315,27 @@ public class MainActivity extends BridgeActivity {
                 float density = getResources().getDisplayMetrics().density;
                 int cssPx = (int) (statusBarHeightPx / density);
                 view.evaluateJavascript("window.__STATUS_BAR_HEIGHT__ = " + cssPx + ";", null);
+
+                // 版本检查：读取页面 __APP_VERSION__，存储并与预期版本比较
+                // 若不匹配说明仍在用旧缓存，清除缓存并重载一次（MAX_VERSION_RELOADS 防止无限循环）
+                if (!versionChecked && versionReloadCount <= MAX_VERSION_RELOADS && url != null && url.contains(CLOUD_HOST)) {
+                    versionChecked = true;
+                    view.evaluateJavascript("(window.__APP_VERSION__ || 'unknown')", value -> {
+                        String pageVersion = value != null ? value.replace("\"", "") : "unknown";
+                        android.content.SharedPreferences prefs = getSharedPreferences("app_config", MODE_PRIVATE);
+                        prefs.edit().putString("page_version", pageVersion).apply();
+
+                        if (!pageVersion.equals(EXPECTED_APP_VERSION) && versionReloadCount < MAX_VERSION_RELOADS) {
+                            versionReloadCount++;
+                            Log.d("TCM-Pres", "页面版本不匹配: " + pageVersion + " != " + EXPECTED_APP_VERSION + "，清除缓存并重载 (" + versionReloadCount + "/" + MAX_VERSION_RELOADS + ")");
+                            view.clearCache(true);
+                            versionChecked = false;
+                            view.reload();
+                        } else {
+                            Log.d("TCM-Pres", "页面版本: " + pageVersion + " (expected: " + EXPECTED_APP_VERSION + ")");
+                        }
+                    });
+                }
 
                 // 先隐藏loading，让用户立即看到页面
                 mainHandler.post(() -> {

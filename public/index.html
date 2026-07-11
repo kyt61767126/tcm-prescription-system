@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Cache-Control" content="max-age=86400, must-revalidate">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>本能中医处方系统 - 云版 v2.0.1</title>
@@ -1399,7 +1399,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-07-11-v3';
+        window.__APP_VERSION__ = '2026-07-12-v1';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -6092,10 +6092,11 @@
         }
 
         function mediaLabelOf(f) {
-            var label = '媒体';
+            var label = '处方';
             if (f.name.indexOf('tongue_front') >= 0) label = '舌面图像';
             else if (f.name.indexOf('tongue_under') >= 0) label = '舌下络脉';
-            else if (f.name.indexOf('photo') >= 0) label = '照片';
+            else if (f.name.indexOf('photo') >= 0) label = '处方';
+            else if (f.name.indexOf('prescription') >= 0) label = '处方';
             else if (f.name.indexOf('video') >= 0) label = '视频';
             return label;
         }
@@ -6128,7 +6129,7 @@
                     var active = (i === idx) ? 'background:#4CAF50;' : 'background:#444;';
                     var icon = files[i].type === 'video' ? '🎥' : '📷';
                     var shortLabel = mediaLabelOf(files[i]);
-                    shortLabel = shortLabel.indexOf('舌面') >= 0 ? '舌面' : (shortLabel.indexOf('舌下') >= 0 ? '舌下' : (shortLabel.indexOf('照片') >= 0 ? '照片' : (shortLabel.indexOf('视频') >= 0 ? '视频' : '媒体')));
+                    shortLabel = shortLabel.indexOf('舌面') >= 0 ? '舌面' : (shortLabel.indexOf('舌下') >= 0 ? '舌下' : (shortLabel.indexOf('视频') >= 0 ? '视频' : '处方'));
                     html += '<div onclick="renderMediaViewerSingle(' + i + ')" style="cursor:pointer;min-width:54px;height:38px;' + active + 'color:#fff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;">' + icon + ' ' + shortLabel + '</div>';
                 }
                 html += '</div>';

@@ -203,30 +203,71 @@ async function renameMediaFiles(patientName, oldNo, newNo) {
         if (!cleanName || !cleanOldNo || !cleanNewNo || cleanOldNo === cleanNewNo) {
             return { success: true, renamed: 0 };
         }
-        const oldPrefix = `${cleanName}_${cleanOldNo}`;
-        const newPrefix = `${cleanName}_${cleanNewNo}`;
-        const downloadsDir = getDownloadsDirectory();
+        const oldPrefixes = [
+            `${cleanName}_${cleanOldNo}`,
+            `${cleanOldNo}_${cleanName}`
+        ];
+        const newPrefixes = [
+            `${cleanName}_${cleanNewNo}`,
+            `${cleanNewNo}_${cleanName}`
+        ];
+        
+        const searchDirectories = [];
+        const currentDownloadsDir = getDownloadsDirectory();
+        searchDirectories.push(currentDownloadsDir);
+        
+        const userDataDownloadsDir = path.join(app.getPath('userData'), 'downloads');
+        if (userDataDownloadsDir !== currentDownloadsDir) {
+            searchDirectories.push(userDataDownloadsDir);
+        }
+        
+        const exeDir = getExeDirectory();
+        const parentExeDir = path.dirname(exeDir);
+        const parentDownloadsDir = path.join(parentExeDir, 'downloads');
+        if (parentDownloadsDir !== currentDownloadsDir && parentDownloadsDir !== userDataDownloadsDir) {
+            searchDirectories.push(parentDownloadsDir);
+        }
+        
         let renamed = 0;
-        let monthDirs = [];
-        try {
-            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
-            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
-        } catch (e) { /* downloads目录可能不存在 */ }
-        for (const monthDir of monthDirs) {
-            let fileEntries = [];
+        
+        for (const downloadsDir of searchDirectories) {
+            let monthDirs = [];
             try {
-                fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
-            } catch (e) { continue; }
-            for (const fe of fileEntries) {
-                if (!fe.isFile()) continue;
-                const fileName = fe.name;
-                if (!fileName.includes(oldPrefix)) continue;
-                const newFileName = fileName.replace(oldPrefix, newPrefix);
-                if (newFileName === fileName) continue;
+                const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+                monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+            } catch (e) { /* downloads目录可能不存在 */ }
+            
+            for (const monthDir of monthDirs) {
+                let fileEntries = [];
                 try {
-                    await fs.rename(path.join(monthDir, fileName), path.join(monthDir, newFileName));
-                    renamed++;
-                } catch (e) { /* 跳过无法重命名的文件 */ }
+                    fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+                } catch (e) { continue; }
+                
+                for (const fe of fileEntries) {
+                    if (!fe.isFile()) continue;
+                    const fileName = fe.name;
+                    
+                    let matchedIndex = -1;
+                    for (let i = 0; i < oldPrefixes.length; i++) {
+                        if (fileName.includes(oldPrefixes[i])) {
+                            matchedIndex = i;
+                            break;
+                        }
+                    }
+                    
+                    if (matchedIndex === -1) continue;
+                    
+                    const newFileName = fileName.replace(oldPrefixes[matchedIndex], newPrefixes[matchedIndex]);
+                    if (newFileName === fileName) continue;
+                    
+                    try {
+                        await fs.rename(path.join(monthDir, fileName), path.join(monthDir, newFileName));
+                        renamed++;
+                        console.log('[重命名文件]', fileName, '->', newFileName);
+                    } catch (e) { 
+                        console.error('[重命名文件失败]', fileName, e.message);
+                    }
+                }
             }
         }
         return { success: true, renamed };
@@ -399,23 +440,6 @@ function createMainWindow() {
         return { action: 'deny' };
     });
 
-    // 安全加固：注入 CSP 头，限制资源加载来源
-    mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-        callback({
-            responseHeaders: {
-                ...details.responseHeaders,
-                'Content-Security-Policy': [
-                    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://tcm-prescription-system.pages.dev https://*.cloudflareaccess.com; " +
-                    "img-src 'self' data: blob: https:; " +
-                    "media-src 'self' blob: https:; " +
-                    "connect-src 'self' https://tcm-prescription-system.pages.dev https://*.workers.dev; " +
-                    "font-src 'self' data:; " +
-                    "style-src 'self' 'unsafe-inline'"
-                ]
-            }
-        });
-    });
-
     mainWindow.webContents.on('dom-ready', () => {
         if (currentLoggedInUser) {
             const userJson = JSON.stringify(currentLoggedInUser).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -458,7 +482,26 @@ app.whenReady().then(() => {
     
     sharedSession = session.fromPartition('persist:tcm-prescription-cloud');
 
+    // 安装 CSP
+    sharedSession.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+            responseHeaders: {
+                ...details.responseHeaders,
+                'Content-Security-Policy': [
+                    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://tcm-prescription-system.pages.dev https://*.cloudflareaccess.com; " +
+                    "img-src 'self' data: blob: https:; " +
+                    "media-src 'self' blob: data: https:; " +
+                    "connect-src 'self' https://tcm-prescription-system.pages.dev https://*.workers.dev; " +
+                    "font-src 'self' data:; " +
+                    "style-src 'self' 'unsafe-inline'"
+                ]
+            }
+        });
+    });
+
+    // 授予 camera/microphone 权限（视频录制所需）
     sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
+        console.log('[权限请求]', permission);
         if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
             callback(true);
         } else {
@@ -466,8 +509,10 @@ app.whenReady().then(() => {
         }
     });
 
+    // 在主窗口创建前预先授权设备访问
     if (sharedSession.setDevicePermissionHandler) {
         sharedSession.setDevicePermissionHandler((details) => {
+            console.log('[设备权限请求]', details);
             if (details.deviceType === 'videoinput' || details.deviceType === 'audioinput') {
                 return true;
             }
@@ -513,65 +558,256 @@ ipcMain.handle('get-video-directory', async () => {
 safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
     if (!patientName) return { success: true, files: [] };
     const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
-    const downloadsDir = getDownloadsDirectory();
-    const files = [];
-    const prefix = `${sanitizeStr(patientName)}_${sanitizeStr(prescriptionNo || '')}`;
-    let monthDirs = [];
-    try {
-        const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
-        monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
-    } catch (e) { /* downloads目录可能不存在 */ }
-    for (const monthDir of monthDirs) {
-        let fileEntries = [];
-        try {
-            fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
-        } catch (e) { continue; }
-        for (const fe of fileEntries) {
-            if (!fe.isFile()) continue;
-            const fileName = fe.name;
-            if (!fileName.includes(prefix)) continue;
-            const filePath = path.join(monthDir, fileName);
-            try {
-                const stat = await fs.stat(filePath);
-                const ext = path.extname(fileName).toLowerCase();
-                const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
-                files.push({
-                    name: fileName,
-                    path: filePath,
-                    type: isVideo ? 'video' : 'image',
-                    size: stat.size,
-                    lastModified: stat.mtimeMs
-                });
-            } catch (e) { /* 跳过无法读取的文件 */ }
+    const cleanName = sanitizeStr(patientName);
+    const identifier = sanitizeStr(prescriptionNo || '');
+    
+    const identifiers = new Set([identifier]);
+    if (identifier.startsWith('LOCAL-')) {
+        identifiers.add(identifier.replace('LOCAL-', ''));
+    } else if (identifier) {
+        identifiers.add('LOCAL-' + identifier);
+    }
+    
+    const prefixes = [];
+    for (const id of identifiers) {
+        if (id) {
+            prefixes.push(`${cleanName}_${id}`);
+            prefixes.push(`${id}_${cleanName}`);
         }
     }
+    
+    const files = [];
+    const foundPaths = new Set();
+    
+    const searchDirectories = [];
+    
+    const currentDownloadsDir = getDownloadsDirectory();
+    searchDirectories.push(currentDownloadsDir);
+    
+    const userDataDownloadsDir = path.join(app.getPath('userData'), 'downloads');
+    if (userDataDownloadsDir !== currentDownloadsDir) {
+        searchDirectories.push(userDataDownloadsDir);
+    }
+    
+    const exeDir = getExeDirectory();
+    const parentExeDir = path.dirname(exeDir);
+    const parentDownloadsDir = path.join(parentExeDir, 'downloads');
+    if (parentDownloadsDir !== currentDownloadsDir && parentDownloadsDir !== userDataDownloadsDir) {
+        searchDirectories.push(parentDownloadsDir);
+    }
+    
+    console.log('[查找文件] 患者:', cleanName, '编号:', identifier);
+    console.log('[查找文件] 搜索前缀:', prefixes);
+    console.log('[查找文件] 搜索目录:', searchDirectories);
+    
+    for (const downloadsDir of searchDirectories) {
+        let monthDirs = [];
+        try {
+            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+        } catch (e) { 
+            console.log('[查找文件] 目录不存在:', downloadsDir);
+            continue; 
+        }
+        
+        for (const monthDir of monthDirs) {
+            let fileEntries = [];
+            try {
+                fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+            } catch (e) { continue; }
+            
+            for (const fe of fileEntries) {
+                if (!fe.isFile()) continue;
+                const fileName = fe.name;
+                const matches = prefixes.some(p => fileName.includes(p));
+                if (!matches) continue;
+                const filePath = path.join(monthDir, fileName);
+                
+                if (foundPaths.has(filePath)) continue;
+                foundPaths.add(filePath);
+                
+                try {
+                    const stat = await fs.stat(filePath);
+                    const ext = path.extname(fileName).toLowerCase();
+                    const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
+                    files.push({
+                        name: fileName,
+                        path: filePath,
+                        type: isVideo ? 'video' : 'image',
+                        size: stat.size,
+                        lastModified: stat.mtimeMs
+                    });
+                    console.log('[查找文件] 找到:', fileName);
+                } catch (e) { /* 跳过无法读取的文件 */ }
+            }
+        }
+    }
+    
+    console.log('[查找文件] 共找到:', files.length, '个文件');
+    
+    if (files.length === 0 && cleanName) {
+        console.log('[查找文件] 未找到匹配文件，尝试仅按患者姓名搜索');
+        
+        const mediaKeywords = ['photo', 'video', 'prescription', 'tongue'];
+        const validExtensions = ['.jpg', '.jpeg', '.png', '.webm', '.mp4', '.avi', '.mov'];
+        
+        for (const downloadsDir of searchDirectories) {
+            let monthDirs = [];
+            try {
+                const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+                monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+            } catch (e) { continue; }
+            
+            for (const monthDir of monthDirs) {
+                let fileEntries = [];
+                try {
+                    fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+                } catch (e) { continue; }
+                
+                for (const fe of fileEntries) {
+                    if (!fe.isFile()) continue;
+                    const fileName = fe.name;
+                    const ext = path.extname(fileName).toLowerCase();
+                    
+                    if (!fileName.includes(cleanName)) continue;
+                    if (!validExtensions.includes(ext)) continue;
+                    
+                    const hasMediaKeyword = mediaKeywords.some(k => fileName.includes(k));
+                    if (!hasMediaKeyword) continue;
+                    
+                    const filePath = path.join(monthDir, fileName);
+                    
+                    if (foundPaths.has(filePath)) continue;
+                    foundPaths.add(filePath);
+                    
+                    try {
+                        const stat = await fs.stat(filePath);
+                        const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
+                        files.push({
+                            name: fileName,
+                            path: filePath,
+                            type: isVideo ? 'video' : 'image',
+                            size: stat.size,
+                            lastModified: stat.mtimeMs
+                        });
+                        console.log('[查找文件] 按姓名找到:', fileName);
+                    } catch (e) { /* 跳过无法读取的文件 */ }
+                }
+            }
+        }
+        console.log('[查找文件] 按姓名搜索后共找到:', files.length, '个文件');
+    }
+    
     return { success: true, files };
 }, { success: false, files: [] });
+
+// ★ 列出所有媒体文件（调试用）（新增）
+safeHandle('list-all-media-files', async () => {
+    const allFiles = [];
+    const searchDirectories = [];
+    
+    const currentDownloadsDir = getDownloadsDirectory();
+    searchDirectories.push(currentDownloadsDir);
+    
+    const userDataDownloadsDir = path.join(app.getPath('userData'), 'downloads');
+    if (userDataDownloadsDir !== currentDownloadsDir) {
+        searchDirectories.push(userDataDownloadsDir);
+    }
+    
+    const exeDir = getExeDirectory();
+    const parentExeDir = path.dirname(exeDir);
+    const parentDownloadsDir = path.join(parentExeDir, 'downloads');
+    if (parentDownloadsDir !== currentDownloadsDir && parentDownloadsDir !== userDataDownloadsDir) {
+        searchDirectories.push(parentDownloadsDir);
+    }
+    
+    for (const downloadsDir of searchDirectories) {
+        let monthDirs = [];
+        try {
+            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+        } catch (e) { continue; }
+        
+        for (const monthDir of monthDirs) {
+            let fileEntries = [];
+            try {
+                fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+            } catch (e) { continue; }
+            
+            for (const fe of fileEntries) {
+                if (!fe.isFile()) continue;
+                const fileName = fe.name;
+                const filePath = path.join(monthDir, fileName);
+                try {
+                    const stat = await fs.stat(filePath);
+                    allFiles.push({
+                        name: fileName,
+                        path: filePath,
+                        size: stat.size,
+                        lastModified: stat.mtimeMs
+                    });
+                } catch (e) { /* 跳过无法读取的文件 */ }
+            }
+        }
+    }
+    
+    return { success: true, files: allFiles, searchDirectories };
+}, { success: false, files: [], searchDirectories: [] });
 
 // ★ 重命名处方文件（新增）
 safeHandle('rename-media-files', async (event, patientName, oldNo, newNo) => {
     return await renameMediaFiles(patientName, oldNo, newNo);
 }, { success: false, renamed: 0 });
 
+// ★ 删除文件（新增）
+safeHandle('delete-file', async (event, filePath) => {
+    if (!filePath) return { success: false, error: '文件路径为空' };
+    await fs.unlink(filePath);
+    return { success: true };
+});
+
 // ★ 打开文件（系统默认程序）（新增）
 safeHandle('open-file', async (event, filePath, mimeType) => {
     if (!filePath) return { success: false, error: '文件路径为空' };
-    await shell.openPath(filePath);
+    const result = await shell.openPath(filePath);
+    if (result) {
+        console.error('[打开文件失败]', result);
+        return { success: false, error: result };
+    }
     return { success: true };
+});
+
+// ★ 在文件管理器中打开视频目录（新增）
+safeHandle('open-video-directory', async () => {
+    const dir = getCurrentMonthDirectory();
+    await shell.openPath(dir);
+    return { success: true, directory: dir };
 });
 
 // ★ 读取文件为Base64（新增）
 safeHandle('read-file-as-base64', async (event, filePath) => {
     if (!filePath) return { success: false, error: '文件路径为空' };
-    const buffer = await fs.readFile(filePath);
-    const ext = path.extname(filePath).toLowerCase();
-    let mimeType = 'image/png';
-    if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
-    else if (ext === '.png') mimeType = 'image/png';
-    else if (ext === '.webm') mimeType = 'video/webm';
-    else if (ext === '.mp4') mimeType = 'video/mp4';
-    const base64 = buffer.toString('base64');
-    return { success: true, base64: `data:${mimeType};base64,${base64}` };
+    try {
+        const stat = await fs.stat(filePath);
+        if (stat.size === 0) {
+            return { success: false, error: '文件为空' };
+        }
+        if (stat.size > 100 * 1024 * 1024) {
+            return { success: false, error: '文件过大（超过100MB）' };
+        }
+        const buffer = await fs.readFile(filePath);
+        const ext = path.extname(filePath).toLowerCase();
+        let mimeType = 'image/png';
+        if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+        else if (ext === '.png') mimeType = 'image/png';
+        else if (ext === '.webm') mimeType = 'video/webm';
+        else if (ext === '.mp4') mimeType = 'video/mp4';
+        const base64 = buffer.toString('base64');
+        return { success: true, base64: `data:${mimeType};base64,${base64}` };
+    } catch (error) {
+        console.error('读取文件失败:', filePath, error);
+        return { success: false, error: '读取文件失败：' + error.message };
+    }
 });
 
 // 保存备份数据文件到与图片相同的目录（安装目录/downloads/YYYY-MM/）

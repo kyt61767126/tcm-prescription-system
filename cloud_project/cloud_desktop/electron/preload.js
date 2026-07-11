@@ -36,9 +36,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return ipcRenderer.invoke('get-video-directory');
     },
 
+    openVideoDirectory: () => {
+        return ipcRenderer.invoke('open-video-directory');
+    },
+
     // ---------- 处方文件查看（新增） ----------
     findMediaFiles: (patientName, prescriptionNo) => {
         return ipcRenderer.invoke('find-media-files', patientName, prescriptionNo);
+    },
+
+    listAllMediaFiles: () => {
+        return ipcRenderer.invoke('list-all-media-files');
     },
 
     openFile: (filePath, mimeType) => {
@@ -51,6 +59,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     renameMediaFiles: (patientName, oldNo, newNo) => {
         return ipcRenderer.invoke('rename-media-files', patientName, oldNo, newNo);
+    },
+
+    deleteFile: (filePath) => {
+        return ipcRenderer.invoke('delete-file', filePath);
     },
 
     // ---------- 备份数据保存（与图片同目录：安装目录/downloads/YYYY-MM/） ----------

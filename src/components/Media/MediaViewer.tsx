@@ -18,12 +18,31 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [mediaData, setMediaData] = useState<Record<string, string>>({});
+  const [selectedFile, setSelectedFile] = useState<MediaFile | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const electronAPI = (window as any).electronAPI;
 
+  const isVideo = (name: string) => name.toLowerCase().endsWith('.webm') || name.toLowerCase().endsWith('.mp4');
+  const isImage = (name: string) => name.toLowerCase().endsWith('.png') || name.toLowerCase().endsWith('.jpg') || name.toLowerCase().endsWith('.jpeg');
+  
+  const shouldUseSystemPlayer = (file: MediaFile) => {
+    return isVideo(file.name);
+  };
+  
+  const handleVideoClick = (file: MediaFile, data: string | undefined) => {
+    if (shouldUseSystemPlayer(file)) {
+      electronAPI?.openFile(file.path);
+    } else if (data) {
+      setSelectedFile(file);
+    } else {
+      electronAPI?.openFile(file.path);
+    }
+  };
+
   const loadMediaFiles = useCallback(async () => {
     if (!electronAPI || !electronAPI.findMediaFiles) {
-      setError('媒体文件查看功能不可用（需在APP或桌面端使用）');
+      setError('处方文件查看功能不可用（需在APP或桌面端使用）');
       setLoading(false);
       return;
     }
@@ -33,9 +52,11 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
       if (result.success && result.files) {
         const sorted = [...result.files].sort((a: MediaFile, b: MediaFile) => {
           const order = (name: string) => {
-            if (name.includes('photo')) return 0;
-            if (name.includes('video')) return 1;
-            return 2;
+            if (name.includes('photo') && name.includes('tongue_front')) return 0;
+            if (name.includes('photo') && name.includes('tongue_under')) return 1;
+            if (name.includes('photo')) return 2;
+            if (name.includes('video')) return 3;
+            return 4;
           };
           return order(a.name) - order(b.name) || a.name.localeCompare(b.name);
         });
@@ -44,7 +65,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
         setFiles([]);
       }
     } catch (e) {
-      setError('加载媒体文件失败：' + (e as Error).message);
+      setError('加载处方文件失败：' + (e as Error).message);
     } finally {
       setLoading(false);
     }
@@ -54,7 +75,6 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
     loadMediaFiles();
   }, [loadMediaFiles]);
 
-  // Auto-load all media files when files list changes
   useEffect(() => {
     if (!files.length || !electronAPI?.readFileAsBase64) return;
 
@@ -65,6 +85,11 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
       for (const file of files) {
         if (cancelled || loaded.has(file.path)) continue;
         loaded.add(file.path);
+        
+        if (shouldUseSystemPlayer(file)) {
+          continue;
+        }
+        
         try {
           const result = await electronAPI.readFileAsBase64(file.path);
           if (!cancelled && result.success) {
@@ -74,7 +99,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
             }
           }
         } catch (e) {
-          console.error('加载媒体失败:', e);
+          console.error('加载处方失败:', e);
         }
       }
     };
@@ -82,10 +107,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
     loadAllMedia();
 
     return () => { cancelled = true; };
-  }, [files, electronAPI]);
-
-  const isVideo = (name: string) => name.toLowerCase().endsWith('.webm') || name.toLowerCase().endsWith('.mp4');
-  const isImage = (name: string) => name.toLowerCase().endsWith('.png') || name.toLowerCase().endsWith('.jpg') || name.toLowerCase().endsWith('.jpeg');
+  }, [files, electronAPI, shouldUseSystemPlayer]);
 
   const getFileLabel = (name: string) => {
     if (name.includes('tongue_front')) return '舌面图像';
@@ -102,7 +124,51 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
     return (bytes / 1024 / 1024).toFixed(2) + ' MB';
   };
 
-  const cols = files.length <= 1 ? 1 : files.length <= 2 ? 2 : 2;
+  const deleteFile = async (file: MediaFile) => {
+    if (!electronAPI?.deleteFile) {
+      alert('删除功能不可用');
+      return;
+    }
+    if (!confirm(`确定要删除文件 "${file.name}" 吗？`)) return;
+
+    try {
+      const result = await electronAPI.deleteFile(file.path);
+      if (result.success) {
+        setFiles(prev => prev.filter(f => f.path !== file.path));
+        setMediaData(prev => {
+          const newData = { ...prev };
+          delete newData[file.path];
+          return newData;
+        });
+      } else {
+        alert('删除失败：' + (result.error || '未知错误'));
+      }
+    } catch (e) {
+      alert('删除失败：' + (e as Error).message);
+    }
+  };
+
+  const deleteAllFiles = async () => {
+    if (files.length === 0) return;
+    if (!confirm(`确定要删除全部 ${files.length} 个处方文件吗？此操作不可撤销！`)) return;
+
+    setDeleting(true);
+    try {
+      for (const file of files) {
+        if (electronAPI?.deleteFile) {
+          await electronAPI.deleteFile(file.path);
+        }
+      }
+      setFiles([]);
+      setMediaData({});
+    } catch (e) {
+      alert('部分文件删除失败：' + (e as Error).message);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const cols = files.length <= 1 ? 1 : files.length <= 3 ? 2 : 2;
 
   return (
     <div
@@ -134,7 +200,6 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
           overflow: 'hidden',
         }}
       >
-        {/* Header */}
         <div
           style={{
             background: '#000080',
@@ -146,16 +211,15 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
             flexShrink: 0,
           }}
         >
-          <span style={{ fontSize: '14px' }}>📷 媒体文件 - {patientName}</span>
+          <span style={{ fontSize: '14px' }}>📷 处方文件 - {patientName}</span>
           <span
             onClick={onClose}
-            style={{ fontSize: '24px', cursor: 'pointer', lineHeight: '1' }}
+            style={{ fontSize: '24px', cursor: 'pointer', lineHeight: '1', padding: '0 8px' }}
           >
             ×
           </span>
         </div>
 
-        {/* Content - no scrolling, direct display */}
         <div
           style={{
             flex: 1,
@@ -180,7 +244,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
                   margin: '0 auto 16px',
                 }}
               />
-              正在加载媒体文件...
+              正在加载处方文件...
             </div>
           ) : error ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#dc3545', fontSize: '14px' }}>
@@ -189,7 +253,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
           ) : files.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px', color: '#999', fontSize: '14px' }}>
               <div style={{ fontSize: '48px', marginBottom: '12px' }}>📁</div>
-              该处方暂无媒体文件
+              该处方暂无处方文件
             </div>
           ) : (
             <div
@@ -227,10 +291,24 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
                         whiteSpace: 'nowrap',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
                       }}
                     >
-                      {getFileLabel(file.name)}
-                      {file.size ? ` (${formatFileSize(file.size)})` : ''}
+                      <span>{getFileLabel(file.name)}</span>
+                      <span
+                        onClick={() => deleteFile(file)}
+                        style={{
+                          fontSize: '14px',
+                          cursor: 'pointer',
+                          color: '#dc3545',
+                          padding: '0 4px',
+                        }}
+                        title="删除此文件"
+                      >
+                        ×
+                      </span>
                     </div>
                     <div
                       style={{
@@ -241,9 +319,25 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
                         justifyContent: 'center',
                         minHeight: 0,
                         overflow: 'hidden',
+                        cursor: 'pointer',
+                      }}
+                      onClick={() => {
+                        if (isVideo(file.name)) {
+                          handleVideoClick(file, data);
+                        } else {
+                          setSelectedFile(file);
+                        }
                       }}
                     >
-                      {data ? (
+                      {shouldUseSystemPlayer(file) ? (
+                        <div style={{ color: '#fff', fontSize: '14px', textAlign: 'center' }}>
+                          <div style={{ fontSize: '24px', marginBottom: '8px' }}>▶</div>
+                          <div>点击用系统播放器打开</div>
+                          <div style={{ fontSize: '12px', color: '#aaa', marginTop: '4px' }}>
+                            {file.size ? formatFileSize(file.size) : ''}
+                          </div>
+                        </div>
+                      ) : data ? (
                         isImage(file.name) ? (
                           <img
                             src={data}
@@ -255,11 +349,29 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
                             src={data}
                             controls
                             style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                            onError={(e: any) => {
+                              console.error('视频加载失败:', e);
+                              electronAPI?.openFile(file.path);
+                            }}
                           />
                         ) : null
                       ) : (
                         <div style={{ color: '#fff', fontSize: '12px' }}>加载中...</div>
                       )}
+                      <div
+                        style={{
+                          position: 'absolute',
+                          bottom: '4px',
+                          right: '4px',
+                          background: 'rgba(0,0,0,0.6)',
+                          color: '#fff',
+                          fontSize: '10px',
+                          padding: '2px 6px',
+                          borderRadius: '3px',
+                        }}
+                      >
+                        {file.size ? formatFileSize(file.size) : ''}
+                      </div>
                     </div>
                   </div>
                 );
@@ -268,7 +380,6 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
           )}
         </div>
 
-        {/* Footer */}
         <div
           style={{
             padding: '8px 15px',
@@ -280,9 +391,29 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
             flexShrink: 0,
           }}
         >
-          <span style={{ fontSize: '11px', color: '#666' }}>
-            {files.length > 0 ? `共 ${files.length} 个文件` : ''}
-          </span>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+            <span style={{ fontSize: '11px', color: '#666' }}>
+              {files.length > 0 ? `共 ${files.length} 个文件` : ''}
+            </span>
+            {files.length > 0 && (
+              <button
+                onClick={deleteAllFiles}
+                disabled={deleting}
+                style={{
+                  padding: '2px 10px',
+                  background: '#dc3545',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer',
+                  fontSize: '11px',
+                  fontWeight: 'bold',
+                }}
+              >
+                {deleting ? '删除中...' : '清除全部'}
+              </button>
+            )}
+          </div>
           <button
             onClick={onClose}
             style={{
@@ -298,6 +429,57 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
           </button>
         </div>
       </div>
+
+      {selectedFile && mediaData[selectedFile.path] && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'rgba(0,0,0,0.9)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 3100,
+          }}
+          onClick={() => setSelectedFile(null)}
+        >
+          <div
+            style={{
+              position: 'absolute',
+              top: '15px',
+              right: '15px',
+              color: '#fff',
+              fontSize: '32px',
+              cursor: 'pointer',
+              zIndex: 3101,
+            }}
+          >
+            ×
+          </div>
+          {isImage(selectedFile.name) ? (
+            <img
+              src={mediaData[selectedFile.path]}
+              alt={selectedFile.name}
+              style={{ maxWidth: '95%', maxHeight: '95%', objectFit: 'contain' }}
+            />
+          ) : isVideo(selectedFile.name) ? (
+            <video
+              src={mediaData[selectedFile.path]}
+              controls
+              autoPlay
+              style={{ maxWidth: '95%', maxHeight: '95%', objectFit: 'contain' }}
+              onError={(e: any) => {
+                console.error('全屏视频加载失败:', e);
+                electronAPI?.openFile(selectedFile.path);
+                setSelectedFile(null);
+              }}
+            />
+          ) : null}
+        </div>
+      )}
     </div>
   );
 };

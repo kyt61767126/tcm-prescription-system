@@ -192,7 +192,7 @@ function installCSP(sess) {
             "script-src 'self' 'unsafe-inline' file:",
             "style-src 'self' 'unsafe-inline'",
             "img-src 'self' data:",
-            "media-src 'self' blob: data:",          // 新增：允许 blob: 和 data: 视频源
+            "media-src 'self' blob:",          // 新增：允许 blob: 视频源
             "font-src 'self' data:",
             "connect-src 'self'",
             "object-src 'none'",
@@ -358,66 +358,42 @@ ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo) =>
         const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
         const cleanName = sanitizeStr(patientName);
         const identifier = sanitizeStr(prescriptionNo || '');
-        const prefix1 = `${cleanName}_${identifier}`;
-        const prefix2 = `${identifier}_${cleanName}`;
+        const downloadsDir = getDownloadsDirectory();
         const files = [];
         const foundPaths = new Set();
-        
-        const searchDirectories = [];
-        
-        const currentDownloadsDir = getDownloadsDirectory();
-        searchDirectories.push(currentDownloadsDir);
-        
-        const userDataDownloadsDir = path.join(app.getPath('userData'), 'downloads');
-        if (userDataDownloadsDir !== currentDownloadsDir) {
-            searchDirectories.push(userDataDownloadsDir);
-        }
-        
-        const exeDir = getExeDirectory();
-        const parentExeDir = path.dirname(exeDir);
-        const parentDownloadsDir = path.join(parentExeDir, 'downloads');
-        if (parentDownloadsDir !== currentDownloadsDir && parentDownloadsDir !== userDataDownloadsDir) {
-            searchDirectories.push(parentDownloadsDir);
-        }
-        
-        for (const downloadsDir of searchDirectories) {
-            let monthDirs = [];
+        const prefix1 = `${cleanName}_${identifier}`;
+        const prefix2 = `${identifier}_${cleanName}`;
+        let monthDirs = [];
+        try {
+            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+        } catch (e) { /* downloads目录可能不存在 */ }
+        for (const monthDir of monthDirs) {
+            let fileEntries = [];
             try {
-                const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
-                monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+                fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
             } catch (e) { continue; }
-            
-            for (const monthDir of monthDirs) {
-                let fileEntries = [];
+            for (const fe of fileEntries) {
+                if (!fe.isFile()) continue;
+                const fileName = fe.name;
+                if (!fileName.includes(prefix1) && !fileName.includes(prefix2)) continue;
+                const filePath = path.join(monthDir, fileName);
+                if (foundPaths.has(filePath)) continue;
+                foundPaths.add(filePath);
                 try {
-                    fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
-                } catch (e) { continue; }
-                
-                for (const fe of fileEntries) {
-                    if (!fe.isFile()) continue;
-                    const fileName = fe.name;
-                    if (!fileName.includes(prefix1) && !fileName.includes(prefix2)) continue;
-                    const filePath = path.join(monthDir, fileName);
-                    
-                    if (foundPaths.has(filePath)) continue;
-                    foundPaths.add(filePath);
-                    
-                    try {
-                        const stat = await fs.stat(filePath);
-                        const ext = path.extname(fileName).toLowerCase();
-                        const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
-                        files.push({
-                            name: fileName,
-                            path: filePath,
-                            type: isVideo ? 'video' : 'image',
-                            size: stat.size,
-                            lastModified: stat.mtimeMs
-                        });
-                    } catch (e) { /* 跳过无法读取的文件 */ }
-                }
+                    const stat = await fs.stat(filePath);
+                    const ext = path.extname(fileName).toLowerCase();
+                    const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
+                    files.push({
+                        name: fileName,
+                        path: filePath,
+                        type: isVideo ? 'video' : 'image',
+                        size: stat.size,
+                        lastModified: stat.mtimeMs
+                    });
+                } catch (e) { /* 跳过无法读取的文件 */ }
             }
         }
-        
         return { success: true, files };
     } catch (error) {
         console.error('查找处方文件失败:', error);
@@ -428,6 +404,18 @@ ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo) =>
 // ★ 重命名处方文件（新增）
 ipcMain.handle('rename-media-files', async (event, patientName, oldNo, newNo) => {
     return await renameMediaFiles(patientName, oldNo, newNo);
+});
+
+// ★ 删除文件（新增）
+ipcMain.handle('delete-file', async (event, filePath) => {
+    try {
+        if (!filePath) return { success: false, error: '文件路径为空' };
+        await fs.unlink(filePath);
+        return { success: true };
+    } catch (error) {
+        console.error('删除文件失败:', error);
+        return { success: false, error: error.message };
+    }
 });
 
 // ★ 打开文件（系统默认程序）（新增）
@@ -446,13 +434,6 @@ ipcMain.handle('open-file', async (event, filePath, mimeType) => {
 ipcMain.handle('read-file-as-base64', async (event, filePath) => {
     try {
         if (!filePath) return { success: false, error: '文件路径为空' };
-        const stat = await fs.stat(filePath);
-        if (stat.size === 0) {
-            return { success: false, error: '文件为空' };
-        }
-        if (stat.size > 100 * 1024 * 1024) {
-            return { success: false, error: '文件过大（超过100MB）' };
-        }
         const buffer = await fs.readFile(filePath);
         const ext = path.extname(filePath).toLowerCase();
         let mimeType = 'image/png';
@@ -463,8 +444,8 @@ ipcMain.handle('read-file-as-base64', async (event, filePath) => {
         const base64 = buffer.toString('base64');
         return { success: true, base64: `data:${mimeType};base64,${base64}` };
     } catch (error) {
-        console.error('读取文件失败:', filePath, error);
-        return { success: false, error: '读取文件失败：' + error.message };
+        console.error('读取文件失败:', error);
+        return { success: false, error: error.message };
     }
 });
 
