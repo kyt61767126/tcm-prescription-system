@@ -135,6 +135,21 @@
                 transition: opacity 0.15s;
             }
             .photo-flash.active { opacity: 0.8; transition: none; }
+            .photo-guide-overlay {
+                position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+                pointer-events: none; z-index: 10;
+                display: flex; align-items: center; justify-content: center;
+            }
+            .photo-guide-svg {
+                width: 80%; height: 80%;
+                opacity: 0.7;
+            }
+            .photo-guide-text {
+                position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+                background: rgba(0,0,0,0.6); color: #fff;
+                padding: 6px 16px; border-radius: 20px; font-size: 14px;
+                pointer-events: none; white-space: nowrap;
+            }
             .photo-step-indicator {
                 display: flex; justify-content: center; gap: 20px; margin-top: 12px;
             }
@@ -465,6 +480,23 @@
                     <button class="video-switch-btn" id="photoSwitchBtn" title="切换摄像头">🔄</button>
                     <canvas id="photoCanvas" style="display:none;"></canvas>
                     <div class="photo-flash" id="photoFlash"></div>
+                    <div class="photo-guide-overlay" id="photoGuideOverlay">
+                        <svg class="photo-guide-svg" id="photoGuideSvg" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet">
+                            <defs>
+                                <linearGradient id="tongueGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#ffb6c1;stop-opacity:0.6" />
+                                    <stop offset="100%" style="stop-color:#ff69b4;stop-opacity:0.6" />
+                                </linearGradient>
+                            </defs>
+                            <ellipse cx="150" cy="180" rx="60" ry="80" fill="url(#tongueGrad)" stroke="#fff" stroke-width="3"/>
+                            <line x1="150" y1="120" x2="150" y2="220" stroke="#fff" stroke-width="2" stroke-dasharray="8,4"/>
+                            <circle cx="120" cy="160" r="8" fill="#ff4444" opacity="0.8"/>
+                            <circle cx="180" cy="160" r="8" fill="#ff4444" opacity="0.8"/>
+                            <circle cx="150" cy="200" r="6" fill="#ff8888" opacity="0.8"/>
+                            <text x="150" y="270" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">伸出舌头，舌尖朝上</text>
+                        </svg>
+                        <div class="photo-guide-text" id="photoGuideText">请将舌头伸出，对准虚线位置</div>
+                    </div>
                 </div>
                 <div class="photo-step-indicator" id="photoStepIndicator">
                     <span class="step-item active">1. 采集舌面图像</span>
@@ -580,6 +612,10 @@
         videoEl.style.display = 'none';
         canvasEl.style.display = 'block';
 
+        // 隐藏示意图
+        const guideOverlay = document.getElementById('photoGuideOverlay');
+        if (guideOverlay) guideOverlay.style.display = 'none';
+
         // 更新按钮状态
         document.getElementById('photoCaptureBtn2').disabled = true;
         document.getElementById('photoRetakeBtn').disabled = false;
@@ -598,13 +634,60 @@
     }
 
     // ─── 下一步：切换到第二采集步骤 ──────────────────────
+    function updatePhotoGuide(step) {
+        const svgEl = document.getElementById('photoGuideSvg');
+        const textEl = document.getElementById('photoGuideText');
+        if (!svgEl || !textEl) return;
+
+        if (step === 1) {
+            svgEl.innerHTML = `
+                <defs>
+                    <linearGradient id="tongueGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:#ffb6c1;stop-opacity:0.6" />
+                        <stop offset="100%" style="stop-color:#ff69b4;stop-opacity:0.6" />
+                    </linearGradient>
+                </defs>
+                <ellipse cx="150" cy="180" rx="60" ry="80" fill="url(#tongueGrad)" stroke="#fff" stroke-width="3"/>
+                <line x1="150" y1="120" x2="150" y2="220" stroke="#fff" stroke-width="2" stroke-dasharray="8,4"/>
+                <circle cx="120" cy="160" r="8" fill="#ff4444" opacity="0.8"/>
+                <circle cx="180" cy="160" r="8" fill="#ff4444" opacity="0.8"/>
+                <circle cx="150" cy="200" r="6" fill="#ff8888" opacity="0.8"/>
+                <text x="150" y="270" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">伸出舌头，舌尖朝上</text>
+            `;
+            textEl.textContent = '请将舌头伸出，对准虚线位置';
+        } else {
+            svgEl.innerHTML = `
+                <defs>
+                    <linearGradient id="tongueGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:#ffb6c1;stop-opacity:0.6" />
+                        <stop offset="100%" style="stop-color:#ff69b4;stop-opacity:0.6" />
+                    </linearGradient>
+                    <linearGradient id="veinGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#ff4444;stop-opacity:0.7" />
+                        <stop offset="100%" style="stop-color:#cc0000;stop-opacity:0.7" />
+                    </linearGradient>
+                </defs>
+                <ellipse cx="150" cy="180" rx="50" ry="70" fill="url(#tongueGrad)" stroke="#fff" stroke-width="3"/>
+                <line x1="150" y1="130" x2="150" y2="230" stroke="#fff" stroke-width="2" stroke-dasharray="8,4"/>
+                <path d="M 130 150 Q 150 170 170 150" stroke="url(#veinGrad)" stroke-width="4" fill="none"/>
+                <path d="M 125 165 Q 150 185 175 165" stroke="url(#veinGrad)" stroke-width="3" fill="none"/>
+                <path d="M 135 180 Q 150 195 165 180" stroke="url(#veinGrad)" stroke-width="2" fill="none"/>
+                <text x="150" y="270" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">卷起舌头，展示舌下络脉</text>
+            `;
+            textEl.textContent = '请卷起舌头，对准虚线位置拍摄舌下';
+        }
+    }
+
     function nextCaptureStep() {
         currentCaptureStep = 2;
-        
+
         // 更新步骤指示
         const stepItems = document.querySelectorAll('.step-item');
         if (stepItems[0]) stepItems[0].classList.remove('active');
         if (stepItems[1]) stepItems[1].classList.add('active');
+
+        // 更新示意图
+        updatePhotoGuide(2);
 
         // 恢复摄像头预览
         const videoEl = document.getElementById('videoPreview');
@@ -678,6 +761,9 @@
         document.getElementById('photoRetakeBtn').disabled = true;
         document.getElementById('photoNextBtn').style.display = 'none';
         document.getElementById('photoSaveBtn').style.display = 'none';
+
+        // 显示示意图
+        updatePhotoGuide(currentCaptureStep);
 
         if (currentCaptureStep === 1) {
             setStatus('摄像头已就绪，点击"拍照"采集舌面图像', '');
