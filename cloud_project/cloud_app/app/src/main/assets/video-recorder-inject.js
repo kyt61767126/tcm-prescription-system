@@ -215,27 +215,27 @@
             .cloud-vr-preview-wrap canvas {\
                 width: 100%; height: 100%; object-fit: contain;\
             }\
-            .cloud-vr-flash {
-                position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                background: #fff; opacity: 0; pointer-events: none;
-                transition: opacity 0.15s;
-            }
-            .cloud-vr-flash.active { opacity: 0.8; transition: none; }
-            .cloud-vr-guide-overlay {
-                position: absolute; top: 0; left: 0; right: 0; bottom: 0;
-                pointer-events: none; z-index: 100;
-                display: flex; flex-direction: column; align-items: center; justify-content: center;
-            }
-            .cloud-vr-guide-svg {
-                width: 65%; max-width: 280px;
-                opacity: 0.75;
-            }
-            .cloud-vr-guide-text {
-                position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
-                background: rgba(0,0,0,0.7); color: #fff;
-                padding: 8px 20px; border-radius: 20px; font-size: 14px;
-                pointer-events: none; white-space: nowrap;
-                z-index: 101;
+            .cloud-vr-flash {\
+                position: absolute; top: 0; left: 0; right: 0; bottom: 0;\
+                background: #fff; opacity: 0; pointer-events: none;\
+                transition: opacity 0.15s;\
+            }\
+            .cloud-vr-flash.active { opacity: 0.8; transition: none; }\
+            .cloud-vr-guide-overlay {\
+                position: absolute; top: 0; left: 0; right: 0; bottom: 0;\
+                pointer-events: none; z-index: 100;\
+                display: flex; flex-direction: column; align-items: center; justify-content: center;\
+            }\
+            .cloud-vr-guide-svg {\
+                width: 65%; max-width: 280px;\
+                opacity: 0.75;\
+            }\
+            .cloud-vr-guide-text {\
+                position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);\
+                background: rgba(0,0,0,0.7); color: #fff;\
+                padding: 8px 20px; border-radius: 20px; font-size: 14px;\
+                pointer-events: none; white-space: nowrap;\
+                z-index: 101;\
             }\
             .cloud-vr-step-indicator {\
                 display: flex; justify-content: center; gap: 16px; margin-top: 10px;\
