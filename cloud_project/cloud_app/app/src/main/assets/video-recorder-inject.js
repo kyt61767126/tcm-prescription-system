@@ -24,16 +24,31 @@
     // 1. 注入 window.electronAPI shim
     // ========================================================================
     function injectElectronAPIShim() {
-        if (window.electronAPI && window.electronAPI.__injected) return;
+        if (window.electronAPI && window.electronAPI.__injected) {
+            console.log('[云端APP] electronAPI shim 已存在，跳过注入');
+            return true;
+        }
+        
         var N = window.AndroidNative;
         if (!N) {
-            console.warn('[云端APP] AndroidNative 桥接未找到，录像拍照功能不可用');
+            console.warn('[云端APP] AndroidNative 桥接未找到');
             return false;
         }
+        
+        console.log('[云端APP] AndroidNative 桥接已找到，开始构建 electronAPI shim');
+        
         function P(v) { return Promise.resolve(v); }
         function callNative(name, json) {
-            return JSON.parse(N.invoke(name, json || '{}'));
+            try {
+                var result = N.invoke(name, json || '{}');
+                console.log('[云端APP] 调用 NativeBridge.' + name + ' 返回:', result.substring(0, 200));
+                return JSON.parse(result);
+            } catch (e) {
+                console.error('[云端APP] 调用 NativeBridge.' + name + ' 失败:', e);
+                throw e;
+            }
         }
+        
         window.electronAPI = {
             __injected: true,
             isElectron: true,
@@ -110,12 +125,21 @@
                     } catch (e) { resolve({ success: false, error: String(e), renamed: 0 }); }
                 });
             },
+            deleteFile: function (filePath) {
+                return new Promise(function (resolve) {
+                    try {
+                        var r = callNative('deleteFile', JSON.stringify({ filePath: filePath }));
+                        resolve(r);
+                    } catch (e) { resolve({ success: false, error: String(e) }); }
+                });
+            },
             quitApp: function () {
                 try { if (N.quitApp) N.quitApp(); } catch (e) {}
                 return P({ success: true });
             }
         };
-        console.log('[云端APP] electronAPI shim 已注入');
+        
+        console.log('[云端APP] electronAPI shim 已成功注入');
         return true;
     }
 
@@ -150,20 +174,27 @@
                 display: flex; align-items: center; justify-content: center;\
             }\
             .cloud-vr-modal {\
-                background: #fff; border-radius: 10px; padding: 20px;\
-                width: 720px; max-width: 95vw; box-shadow: 0 8px 32px rgba(0,0,0,0.3);\
+                background: #fff; border-radius: 10px; padding: 16px;\
+                width: 90vw; max-width: 640px; max-height: 90vh;\
+                box-shadow: 0 8px 32px rgba(0,0,0,0.3);\
+                display: flex; flex-direction: column;\
+                overflow: hidden;\
             }\
             .cloud-vr-modal-header {\
-                display: flex; justify-content: space-between; align-items: center;\
-                margin-bottom: 12px; font-size: 16px; font-weight: 600; color: #333;\
+                position: relative;\
+                margin-bottom: 10px; font-size: 16px; font-weight: 600; color: #333;\
+                padding-right: 40px;\
             }\
             .cloud-vr-close-btn {\
-                background: none; border: none; font-size: 22px; cursor: pointer;\
-                color: #999; line-height: 1;\
+                background: rgba(0,0,0,0.5); border: none; font-size: 20px; cursor: pointer;\
+                color: #fff; line-height: 1; width: 32px; height: 32px;\
+                border-radius: 50%; display: flex; align-items: center; justify-content: center;\
+                position: absolute; top: 8px; right: 8px; z-index: 100;\
             }\
             .cloud-vr-preview-wrap {\
                 position: relative; width: 100%; background: #000;\
-                border-radius: 6px; overflow: hidden; aspect-ratio: 4/3;\
+                border-radius: 6px; overflow: hidden;\
+                flex: 1; min-height: 0;\
             }\
             .cloud-vr-preview-wrap video {\
                 width: 100%; height: 100%; object-fit: contain;\
@@ -311,6 +342,14 @@
                 pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
         }
 
+        // 存储使用的标识符，供处方保存后重命名使用
+        window.__lastUsedMediaIdentifier = identifier;
+        window.__lastUsedMediaPatientName = cleanName;
+        try {
+            localStorage.setItem('lastUsedMediaIdentifier', identifier);
+            localStorage.setItem('lastUsedMediaPatientName', cleanName);
+        } catch (e) { /* 忽略localStorage写入错误 */ }
+
         var ext = type === 'video' ? 'webm' : 'jpg';
         var sub = subtype ? '_' + subtype : '';
         return cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
@@ -320,6 +359,8 @@
     // 6. 录像 Overlay
     // ========================================================================
     window.openRecordingOverlay = function () {
+        // 懒加载：首次打开overlay时注入样式（避免启动时阻塞页面渲染）
+        injectStyles();
         var existing = document.getElementById('cloudVrOverlay');
         if (existing) existing.remove();
 
@@ -498,8 +539,25 @@
     }
 
     function onRecordingStop(mimeType) {
+        // 验证录制数据非空（录制时间过短可能导致 recordedChunks 为空）
+        if (!recordedChunks || recordedChunks.length === 0) {
+            setStatus('录制数据为空，请重新录制', 'error');
+            var startBtn2 = document.getElementById('cloudVrStartBtn');
+            if (startBtn2) startBtn2.disabled = false;
+            return;
+        }
+
         var blob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
         var sizeMB = (blob.size / 1024 / 1024).toFixed(2);
+
+        // 二次验证：blob 大小必须大于 1KB，否则可能是无效数据
+        if (blob.size < 1024) {
+            console.error('[视频录制] 录制数据过小: ' + blob.size + ' bytes');
+            setStatus('录制数据异常（' + blob.size + ' 字节），请重新录制', 'error');
+            var startBtn3 = document.getElementById('cloudVrStartBtn');
+            if (startBtn3) startBtn3.disabled = false;
+            return;
+        }
 
         var fileName = generateFileName('video');
 
@@ -524,7 +582,26 @@
         saveBtn.textContent = '保存中...';
 
         try {
-            var arrayBuffer = await blob.arrayBuffer();
+            // 兼容性修复：使用 FileReader 替代 blob.arrayBuffer()
+            // 旧版 Android WebView 不支持 Blob.arrayBuffer()，会抛异常导致视频无法保存
+            var arrayBuffer = await new Promise(function (resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function () { resolve(reader.result); };
+                reader.onerror = function () { reject(reader.error || new Error('FileReader 读取失败')); };
+                try {
+                    reader.readAsArrayBuffer(blob);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+
+            // 验证 arrayBuffer 有效性
+            if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+                throw new Error('视频数据为空（arrayBuffer.byteLength = 0）');
+            }
+
+            console.log('[视频录制] 视频数据读取成功，大小: ' + (arrayBuffer.byteLength / 1024 / 1024).toFixed(2) + ' MB');
+
             var result = await window.electronAPI.saveVideoFile(arrayBuffer, fileName);
 
             if (result.success) {
@@ -539,7 +616,7 @@
             }
         } catch (err) {
             console.error('[视频录制] 保存失败:', err);
-            setStatus('保存失败：' + err.message, 'error');
+            setStatus('保存失败：' + (err.message || err), 'error');
             saveBtn.disabled = false;
             saveBtn.textContent = '保存视频';
         }
@@ -549,6 +626,8 @@
     // 7. 拍照 Overlay
     // ========================================================================
     window.openPhotoOverlay = function () {
+        // 懒加载：首次打开overlay时注入样式（避免启动时阻塞页面渲染）
+        injectStyles();
         var existing = document.getElementById('cloudVrOverlay');
         if (existing) existing.remove();
 
@@ -676,7 +755,8 @@
         initCameraForPhoto();
     }
 
-    function capturePhoto() {
+    function capturePhoto(retryCount) {
+        retryCount = retryCount || 0;
         var videoEl = document.getElementById('cloudVrPreview');
         var canvasEl = document.getElementById('cloudVrPhotoCanvas');
         if (!videoEl || !canvasEl || !mediaStream) {
@@ -684,8 +764,16 @@
             return;
         }
 
-        if (!videoEl.videoWidth || !videoEl.videoHeight) {
-            setStatus('视频流尚未就绪，请稍候', 'error');
+        // 检查视频流就绪状态：readyState >= 2 (HAVE_CURRENT_DATA) 才能保证 drawImage 不绘制空帧
+        // videoWidth > 0 不代表帧数据已就绪，必须同时检查 readyState
+        if (!videoEl.videoWidth || !videoEl.videoHeight || videoEl.readyState < 2) {
+            if (retryCount < 5) {
+                setStatus('视频流正在就绪... (' + (retryCount + 1) + '/5)', '');
+                // 等待100ms后重试，让视频帧数据加载到 readyState >= 2
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 100);
+            } else {
+                setStatus('视频流未就绪，请重试', 'error');
+            }
             return;
         }
 
@@ -693,9 +781,49 @@
         canvasEl.height = videoEl.videoHeight;
 
         var ctx = canvasEl.getContext('2d');
-        ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+        if (!ctx) {
+            setStatus('Canvas 2D 上下文获取失败', 'error');
+            return;
+        }
+
+        // 先填充背景色（避免透明区域绘制失败时显示为透明/黑）
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+
+        // 再次确认 readyState >= 2（在重试等待期间状态可能变化）
+        if (videoEl.readyState < 2) {
+            if (retryCount < 5) {
+                setStatus('视频帧未就绪，重试中... (' + (retryCount + 1) + '/5)', '');
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 100);
+                return;
+            }
+            setStatus('视频帧未就绪，请重试', 'error');
+            return;
+        }
+
+        try {
+            ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+        } catch (drawErr) {
+            console.error('[拍照] drawImage 失败:', drawErr);
+            setStatus('拍照失败：' + (drawErr.message || 'drawImage异常'), 'error');
+            return;
+        }
 
         var dataUrl = canvasEl.toDataURL('image/jpeg', 0.8);
+
+        // 验证捕获的图片非空：JPEG data URL 应远大于几百字节
+        // base64 编码后最小 JPEG 也应有几百字节，过小说明是空白图像
+        if (dataUrl.length < 500) {
+            if (retryCount < 5) {
+                console.warn('[拍照] 捕获图像过小 (' + dataUrl.length + ' bytes)，重试中');
+                setStatus('图像捕获异常，重试中... (' + (retryCount + 1) + '/5)', '');
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 100);
+                return;
+            }
+            setStatus('图像捕获失败，请重试', 'error');
+            return;
+        }
+
         capturedPhotos[currentCaptureStep - 1] = dataUrl;
 
         var flash = document.getElementById('cloudVrFlash');
@@ -874,23 +1002,45 @@
     }
 
     // ========================================================================
-    // 9. 初始化（仅注入 shim 和样式，按钮由 React ActionBar 渲染）
-    // ========================================================================
-    function init() {
-        if (!injectElectronAPIShim()) {
-            setTimeout(init, 500);
-            return;
-        }
-        injectStyles();
+// 9. 初始化（仅注入 shim，样式懒加载，按钮由 React ActionBar 渲染）
+// ========================================================================
+function init() {
+    console.log('[云端APP] 录像拍照脚本开始初始化');
+
+    var nativeBridge = window.AndroidNative;
+    if (!nativeBridge) {
+        console.warn('[云端APP] AndroidNative 桥接未找到，等待500ms重试');
+        setTimeout(init, 500);
+        return;
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
+    console.log('[云端APP] AndroidNative 桥接已找到，开始注入 shim');
+
+    var shimSuccess = injectElectronAPIShim();
+    if (!shimSuccess) {
+        console.error('[云端APP] electronAPI shim 注入失败');
+        setTimeout(init, 1000);
+        return;
+    }
+
+    // 样式懒加载：移到 openRecordingOverlay / openPhotoOverlay 内首次调用时注入
+    console.log('[云端APP] 录像拍照脚本初始化完成（样式延迟到首次打开overlay时注入）');
+}
+
+function tryInit() {
+    try {
         init();
+    } catch (e) {
+        console.error('[云端APP] 录像拍照脚本初始化异常:', e);
+        setTimeout(tryInit, 1000);
     }
+}
 
-    setTimeout(init, 2000);
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryInit);
+} else {
+    tryInit();
+}
 
-    console.log('[云端APP] 录像拍照注入脚本已加载');
+console.log('[云端APP] 录像拍照注入脚本已加载');
 })();

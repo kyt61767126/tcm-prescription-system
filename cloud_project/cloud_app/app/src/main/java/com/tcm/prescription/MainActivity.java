@@ -70,6 +70,7 @@ public class MainActivity extends BridgeActivity {
     private int webViewReadyRetries = 0;
     private RelativeLayout loadingLayout;
     private TextView loadingText;
+    private volatile String cachedVideoRecorderScript = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -103,6 +104,9 @@ public class MainActivity extends BridgeActivity {
 
         // 立即配置 WebView，不延迟，加快启动速度
         configureWebView();
+
+        // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
+        preloadVideoRecorderScript();
     }
 
     private void configureWebView() {
@@ -153,9 +157,11 @@ public class MainActivity extends BridgeActivity {
         }
 
         WebSettings settings = webView.getSettings();
-        // LOAD_NO_CACHE: 不使用本地缓存，每次都从网络加载最新版本
-        // 彻底解决版本校验 reload 导致的闪动问题（用户要求一次性解决）
-        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        // LOAD_DEFAULT: 使用默认缓存策略（有缓存时使用缓存，无缓存时从网络获取）
+        // 结合 HTTP 缓存控制头实现高效加载，避免每次启动都重新下载所有资源
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+        // 启用硬件加速，提升页面渲染性能
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
         settings.setLoadWithOverviewMode(true);
@@ -277,40 +283,37 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
-                // 显示加载进度
                 if (loadingLayout != null) {
                     loadingLayout.setVisibility(View.VISIBLE);
                 }
-                // S3: 检查加载的URL是否是云端URL（允许带查询参数）
                 if (!urlChecked && url != null && !url.contains(CLOUD_HOST)) {
                     urlChecked = true;
-                    mainHandler.postDelayed(() -> {
-                        view.loadUrl(CLOUD_URL + "?" + System.currentTimeMillis());
-                    }, 100);
+                    // 立即重定向到云端URL，不延迟（不添加时间戳，允许缓存）
+                    view.loadUrl(CLOUD_URL);
                 }
             }
 
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // 隐藏加载进度布局（延迟200ms确保页面渲染完成）
-                mainHandler.postDelayed(() -> {
-                    if (loadingLayout != null) {
-                        loadingLayout.setVisibility(View.GONE);
-                    }
-                }, 200);
-
-                // 注入状态栏高度（CSS px），供布局修正使用
                 int statusBarHeightPx = getStatusBarHeightPx();
                 float density = getResources().getDisplayMetrics().density;
                 int cssPx = (int) (statusBarHeightPx / density);
                 view.evaluateJavascript("window.__STATUS_BAR_HEIGHT__ = " + cssPx + ";", null);
 
-                // 立即注入布局修正（必须最先执行）
-                injectLayoutFixScript(view);
+                // 先隐藏loading，让用户立即看到页面
+                mainHandler.post(() -> {
+                    if (loadingLayout != null) {
+                        loadingLayout.setVisibility(View.GONE);
+                    }
+                });
 
-                // 注入录像拍照功能脚本（从 assets 读取 video-recorder-inject.js）
-                injectVideoRecorderScript(view);
+                // 布局修复脚本立即注入（体积小，影响UI布局）
+                mainHandler.post(() -> injectLayoutFixScript(view));
+
+                // 录像拍照脚本延迟到页面渲染稳定后注入（避免40KB脚本同步执行阻塞UI）
+                // 300ms 是经验值：足够 React 完成首屏渲染，又不至于让用户感觉录像功能迟钝
+                mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
             }
 
             // T3: 网络错误处理，避免白屏
@@ -404,26 +407,66 @@ public class MainActivity extends BridgeActivity {
     }
 
     /**
-     * 注入录像拍照功能脚本
-     * 从 assets/video-recorder-inject.js 读取完整脚本并注入到云端网页
-     * 脚本包含：electronAPI shim、浮动按钮、录像/拍照 overlay、本地保存逻辑
+     * 预加载录像拍照脚本到内存缓存（在后台线程执行，避免阻塞UI）
+     * 首次调用会触发assets读取，后续调用直接使用缓存
      */
-    private void injectVideoRecorderScript(WebView webView) {
+    private void preloadVideoRecorderScript() {
+        if (cachedVideoRecorderScript != null) return;
+        new Thread(() -> {
+            try {
+                InputStream is = getAssets().open("video-recorder-inject.js");
+                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = is.read(buffer)) > 0) {
+                    baos.write(buffer, 0, len);
+                }
+                is.close();
+                cachedVideoRecorderScript = baos.toString("UTF-8");
+                Log.d("TCM-Pres", "录像拍照脚本预加载完成，长度: " + cachedVideoRecorderScript.length());
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "录像拍照脚本预加载失败", e);
+            }
+        }, "preload-vr-script").start();
+    }
+
+    /**
+     * 同步读取录像拍照脚本（带缓存）
+     * 优先使用预加载缓存，未命中则同步读取并缓存
+     */
+    private String getVideoRecorderScript() {
+        if (cachedVideoRecorderScript != null) return cachedVideoRecorderScript;
         try {
             InputStream is = getAssets().open("video-recorder-inject.js");
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-            byte[] buffer = new byte[4096];
+            byte[] buffer = new byte[8192];
             int len;
             while ((len = is.read(buffer)) > 0) {
                 baos.write(buffer, 0, len);
             }
             is.close();
-            String script = baos.toString("UTF-8");
-            webView.evaluateJavascript(script, null);
-            Log.d("TCM-Pres", "录像拍照脚本注入成功，长度: " + script.length());
+            cachedVideoRecorderScript = baos.toString("UTF-8");
+            Log.d("TCM-Pres", "录像拍照脚本同步加载完成，长度: " + cachedVideoRecorderScript.length());
         } catch (Exception e) {
-            Log.e("TCM-Pres", "录像拍照脚本注入失败", e);
+            Log.e("TCM-Pres", "录像拍照脚本同步加载失败", e);
+            cachedVideoRecorderScript = "";
         }
+        return cachedVideoRecorderScript;
+    }
+
+    /**
+     * 注入录像拍照功能脚本（使用内存缓存，避免每次IO）
+     * 脚本包含：electronAPI shim、录像/拍照 overlay、本地保存逻辑
+     * 注：注入逻辑采用懒加载策略，shim 立即注入，样式和按钮延迟到首次打开overlay时
+     */
+    private void injectVideoRecorderScript(WebView webView) {
+        String script = getVideoRecorderScript();
+        if (script == null || script.isEmpty()) {
+            Log.e("TCM-Pres", "录像拍照脚本为空，跳过注入");
+            return;
+        }
+        webView.evaluateJavascript(script, null);
+        Log.d("TCM-Pres", "录像拍照脚本注入成功");
     }
 
     private boolean hasDoneFirstResume = false;
@@ -434,8 +477,8 @@ public class MainActivity extends BridgeActivity {
         WebView webView = this.getBridge().getWebView();
         if (webView != null) {
             WebSettings settings = webView.getSettings();
-            // LOAD_NO_CACHE: 从后台恢复时也不使用缓存，与 onCreate 保持一致
-            settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+            // LOAD_DEFAULT: 使用缓存策略，与 onCreate 保持一致
+            settings.setCacheMode(WebSettings.LOAD_DEFAULT);
             settings.setDomStorageEnabled(true);
             settings.setDatabaseEnabled(true);
             settings.setLoadWithOverviewMode(true);
@@ -536,6 +579,8 @@ public class MainActivity extends BridgeActivity {
                         return renameMediaFiles(args.optString("patientName", ""),
                                 args.optString("oldNo", ""),
                                 args.optString("newNo", "")).toString();
+                    case "deleteFile":
+                        return deleteFile(args.optString("filePath", "")).toString();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -786,13 +831,21 @@ public class MainActivity extends BridgeActivity {
                     result.put("files", files);
                     return result;
                 }
-                String prefix = safeName + "_" + safeNo;
+                
+                String prefix1 = safeName + "_" + safeNo;
+                String prefix2 = safeNo + "_" + safeName;
+                
                 File imgDir = getImageDir();
                 File vidDir = getVideoDir();
-                scanDirForMedia(imgDir, prefix, files);
-                scanDirForMedia(vidDir, prefix, files);
+                
+                java.util.Set<String> foundPaths = new java.util.HashSet<>();
+                
+                scanDirForMediaWithPrefixes(imgDir, prefix1, prefix2, files, foundPaths);
+                scanDirForMediaWithPrefixes(vidDir, prefix1, prefix2, files, foundPaths);
+                
                 StringBuilder debug = new StringBuilder();
-                debug.append("prefix=").append(prefix);
+                debug.append("prefix1=").append(prefix1);
+                debug.append(" | prefix2=").append(prefix2);
                 debug.append(" | imgDir=").append(imgDir != null ? imgDir.getAbsolutePath() : "null").append(" exists=").append(imgDir != null && imgDir.exists());
                 debug.append(" | vidDir=").append(vidDir != null ? vidDir.getAbsolutePath() : "null").append(" exists=").append(vidDir != null && vidDir.exists());
                 if (imgDir != null && imgDir.exists()) {
@@ -833,6 +886,35 @@ public class MainActivity extends BridgeActivity {
                         files.put(fileObj);
                     } catch (Exception e) {
                         Log.e("TCM-Pres", "添加文件信息失败: " + f.getName(), e);
+                    }
+                }
+            }
+        }
+
+        private void scanDirForMediaWithPrefixes(File dir, String prefix1, String prefix2, JSONArray files, java.util.Set<String> foundPaths) {
+            if (dir == null || !dir.exists()) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    scanDirForMediaWithPrefixes(f, prefix1, prefix2, files, foundPaths);
+                } else {
+                    String fileName = f.getName();
+                    if (fileName.contains(prefix1) || fileName.contains(prefix2)) {
+                        String filePath = f.getAbsolutePath();
+                        if (foundPaths.contains(filePath)) continue;
+                        foundPaths.add(filePath);
+                        try {
+                            JSONObject fileObj = new JSONObject();
+                            fileObj.put("name", fileName);
+                            fileObj.put("path", filePath);
+                            fileObj.put("type", fileName.endsWith(".webm") ? "video" : "image");
+                            fileObj.put("size", f.length());
+                            fileObj.put("lastModified", f.lastModified());
+                            files.put(fileObj);
+                        } catch (Exception e) {
+                            Log.e("TCM-Pres", "添加文件信息失败: " + fileName, e);
+                        }
                     }
                 }
             }
@@ -925,12 +1007,15 @@ public class MainActivity extends BridgeActivity {
                     result.put("message", "编号相同，无需重命名");
                     return result;
                 }
-                String oldPrefix = safeName + "_" + safeOldNo;
-                String newPrefix = safeName + "_" + safeNewNo;
+                // 支持两种命名格式：姓名_编号 和 编号_姓名
+                String[] oldPrefixes = {safeName + "_" + safeOldNo, safeOldNo + "_" + safeName};
+                String[] newPrefixes = {safeName + "_" + safeNewNo, safeNewNo + "_" + safeName};
                 JSONArray renamedFiles = new JSONArray();
                 int renamed = 0;
-                renamed += renameFilesInDir(getImageDir(), oldPrefix, newPrefix, renamedFiles);
-                renamed += renameFilesInDir(getVideoDir(), oldPrefix, newPrefix, renamedFiles);
+                for (int i = 0; i < oldPrefixes.length; i++) {
+                    renamed += renameFilesInDir(getImageDir(), oldPrefixes[i], newPrefixes[i], renamedFiles);
+                    renamed += renameFilesInDir(getVideoDir(), oldPrefixes[i], newPrefixes[i], renamedFiles);
+                }
                 JSONObject result = new JSONObject();
                 result.put("success", true);
                 result.put("renamed", renamed);
@@ -970,6 +1055,25 @@ public class MainActivity extends BridgeActivity {
                 }
             }
             return count;
+        }
+
+        private JSONObject deleteFile(String filePath) {
+            try {
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    return fail("文件不存在: " + filePath);
+                }
+                if (file.delete()) {
+                    JSONObject result = new JSONObject();
+                    result.put("success", true);
+                    return result;
+                } else {
+                    return fail("删除文件失败");
+                }
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "deleteFile 失败", e);
+                return fail("删除文件失败: " + e.getMessage());
+            }
         }
     }
 }
