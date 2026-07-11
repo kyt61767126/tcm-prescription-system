@@ -3084,10 +3084,14 @@ let currentUser = null;
                     return;
                 }
                 const sorted = result.files.sort((a,b) => {
-                    const aType = a.type === 'video' ? 1 : 0;
-                    const bType = b.type === 'video' ? 1 : 0;
-                    if (aType !== bType) return aType - bType;
-                    return (a.lastModified||0) - (b.lastModified||0);
+                    const order = (f) => {
+                        var n = f.name || '';
+                        if (n.indexOf('prescription') >= 0 || (n.indexOf('photo') >= 0 && n.indexOf('tongue') < 0)) return 0;
+                        if (n.indexOf('tongue_front') >= 0 || n.indexOf('tongue_under') >= 0) return 1;
+                        if (n.indexOf('video') >= 0 || f.type === 'video') return 2;
+                        return 3;
+                    };
+                    return order(a) - order(b) || (a.lastModified||0) - (b.lastModified||0);
                 });
                 window.__currentMediaFiles = sorted;
                 window.__currentMediaIndex = 0;

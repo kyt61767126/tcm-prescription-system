@@ -52,11 +52,10 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
       if (result.success && result.files) {
         const sorted = [...result.files].sort((a: MediaFile, b: MediaFile) => {
           const order = (name: string) => {
-            if (name.includes('photo') && name.includes('tongue_front')) return 0;
-            if (name.includes('photo') && name.includes('tongue_under')) return 1;
-            if (name.includes('photo') || name.includes('prescription')) return 2;
-            if (name.includes('video')) return 3;
-            return 4;
+            if (name.includes('prescription') || (name.includes('photo') && !name.includes('tongue'))) return 0;
+            if (name.includes('tongue_front') || name.includes('tongue_under')) return 1;
+            if (name.includes('video')) return 2;
+            return 3;
           };
           return order(a.name) - order(b.name) || a.name.localeCompare(b.name);
         });
