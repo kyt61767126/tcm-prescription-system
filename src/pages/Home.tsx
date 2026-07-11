@@ -31,6 +31,7 @@ const Home: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const { toastMessage, showToast } = useToast();
   const [doseCount, setDoseCount] = useState(7);
+  const [doctorName, setDoctorName] = useState('');
 
   useEffect(() => {
     if (!user) return;
@@ -59,6 +60,7 @@ const Home: React.FC = () => {
 
   useEffect(() => {
     if (!user) return;
+    setDoctorName(user.name || user.username || '');
     if (user.registrationFee !== undefined && currentForm.registrationFee === 0) {
       setFormField('registrationFee', user.registrationFee);
     }
@@ -618,8 +620,8 @@ const Home: React.FC = () => {
           }}>医师</span>
           <input
             type="text"
-            value={user?.name || user?.username || ''}
-            readOnly
+            value={doctorName}
+            onChange={(e) => setDoctorName(e.target.value)}
             style={{
               width: '55px',
               minWidth: '55px',
@@ -627,10 +629,7 @@ const Home: React.FC = () => {
               border: '1px solid #808080',
               fontSize: '12px',
               minHeight: '32px',
-              boxSizing: 'border-box',
-              background: '#f5f5f5',
-              color: '#666',
-              cursor: 'not-allowed'
+              boxSizing: 'border-box'
             }}
           />
         </div>
