@@ -3193,7 +3193,8 @@
             var label = '处方';
             if (f.name.indexOf('tongue_front') >= 0) label = '舌面图像';
             else if (f.name.indexOf('tongue_under') >= 0) label = '舌下络脉';
-            else if (f.name.indexOf('photo') >= 0) label = '照片';
+            else if (f.name.indexOf('prescription') >= 0) label = '处方';
+            else if (f.name.indexOf('photo') >= 0) label = '处方';
             else if (f.name.indexOf('video') >= 0) label = '视频';
             return label;
         }
@@ -3226,7 +3227,7 @@
                     var active = (i === idx) ? 'background:#4CAF50;' : 'background:#444;';
                     var icon = files[i].type === 'video' ? '🎥' : '📷';
                     var shortLabel = mediaLabelOf(files[i]);
-                    shortLabel = shortLabel.indexOf('舌面') >= 0 ? '舌面' : (shortLabel.indexOf('舌下') >= 0 ? '舌下' : (shortLabel.indexOf('照片') >= 0 ? '照片' : (shortLabel.indexOf('视频') >= 0 ? '视频' : '处方')));
+                    shortLabel = shortLabel.indexOf('舌面') >= 0 ? '舌面' : (shortLabel.indexOf('舌下') >= 0 ? '舌下' : (shortLabel.indexOf('处方') >= 0 ? '处方' : (shortLabel.indexOf('视频') >= 0 ? '视频' : '处方')));
                     html += '<div onclick="renderMediaViewerSingle(' + i + ')" style="cursor:pointer;min-width:54px;height:38px;' + active + 'color:#fff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;">' + icon + ' ' + shortLabel + '</div>';
                 }
                 html += '</div>';

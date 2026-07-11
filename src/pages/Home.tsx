@@ -243,7 +243,7 @@ const Home: React.FC = () => {
             marginRight: '2px'
           }}
         >横向\n打印</button>
-        {(user?.allowCloud || user?.role === 'admin') && (
+        {(user?.allowCloud || user?.role === 'admin' || user?.role === 'globalAdmin') && (
           <button
             onClick={() => {
               const currentMode = getAppMode();
@@ -619,7 +619,7 @@ const Home: React.FC = () => {
           <input
             type="text"
             value={user?.name || user?.username || ''}
-            onChange={(e) => setFormField('doctorName', e.target.value)}
+            readOnly
             style={{
               width: '55px',
               minWidth: '55px',
@@ -627,7 +627,10 @@ const Home: React.FC = () => {
               border: '1px solid #808080',
               fontSize: '12px',
               minHeight: '32px',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              background: '#f5f5f5',
+              color: '#666',
+              cursor: 'not-allowed'
             }}
           />
         </div>

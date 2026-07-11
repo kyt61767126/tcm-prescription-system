@@ -18,6 +18,18 @@ import type { DBMedicine } from './database';
 
 const DEFAULT_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
 
+function mapBackendRoleToFrontend(backendRole: string): 'globalAdmin' | 'admin' | 'user' {
+  if (backendRole === 'platform_admin') return 'globalAdmin';
+  if (backendRole === 'clinic_admin') return 'admin';
+  if (backendRole === 'globalAdmin') return 'globalAdmin';
+  if (backendRole === 'admin') return 'admin';
+  return 'user';
+}
+
+function isAdminRole(role: string | undefined): boolean {
+  return role === 'admin' || role === 'globalAdmin';
+}
+
 interface RawMedicine {
   id?: number;
   name?: string;
@@ -296,7 +308,7 @@ export async function loadPrescriptions(user: User): Promise<{ success: boolean;
     try {
       await ensureDatabase();
       let data: RawPrescription[] = [];
-      if (user.role === 'admin') {
+      if (isAdminRole(user.role)) {
         data = await getLocalPrescriptions();
       } else {
         data = await getLocalPrescriptionsByUser(user.username);
@@ -311,7 +323,7 @@ export async function loadPrescriptions(user: User): Promise<{ success: boolean;
     try {
       await ensureDatabase();
       let data: RawPrescription[] = [];
-      if (user.role === 'admin') {
+      if (isAdminRole(user.role)) {
         data = await getLocalPrescriptions();
       } else {
         data = await getLocalPrescriptionsByUser(user.username);
@@ -464,7 +476,7 @@ export async function loadMedicines(): Promise<{ success: boolean; data: Medicin
 }
 
 export async function saveMedicines(user: User, medicines: Medicine[]): Promise<{ success: boolean; error?: string }> {
-  if (user.role !== 'admin') {
+  if (!isAdminRole(user.role)) {
     return { success: false, error: '仅管理员可管理药品库' };
   }
 
@@ -562,16 +574,17 @@ export async function validateLogin(username: string, password: string): Promise
         if (loginResp.success && loginResp.token && loginResp.user) {
           setAuthToken(loginResp.token);
           const u = loginResp.user;
+          const frontendRole = mapBackendRoleToFrontend(u.role);
           setUserAllowCloud(!!u.allowCloud);
           // 同步到本地数据库（哈希存储）
           try {
             await ensureDatabase();
             const { hash, salt } = await hashPassword(password);
-            await saveLocalUser(u.username, `${salt}:${hash}`, u.role, u.name || u.username, !!u.allowCloud);
+            await saveLocalUser(u.username, `${salt}:${hash}`, frontendRole, u.name || u.username, !!u.allowCloud);
           } catch (e) {
             logger.error('Failed to cache user to local DB:', e);
           }
-          return { success: true, user: u as User };
+          return { success: true, user: { ...u, role: frontendRole } as User };
         }
         // 云端明确返回失败（密码错误/用户不存在）→ 不再回退到本地，避免离线暴力破解
         if (loginResp.success === false && loginResp.error) {
@@ -588,7 +601,7 @@ export async function validateLogin(username: string, password: string): Promise
     if (localUser) {
       const ok = await verifyPassword(password, localUser.password || '');
       if (ok) {
-        const isAdmin = localUser.role === 'admin';
+        const isAdmin = isAdminRole(localUser.role);
         const allowCloud = isAdmin || localUser.allow_cloud === 1;
         // 离线登录不签发新 token，使用 Basic fallback
         setAuthToken(null);
@@ -596,7 +609,7 @@ export async function validateLogin(username: string, password: string): Promise
           success: true,
           user: {
             username: localUser.username,
-            role: isAdmin ? 'admin' : 'user',
+            role: (isAdmin ? (localUser.role === 'globalAdmin' ? 'globalAdmin' : 'admin') : 'user') as 'globalAdmin' | 'admin' | 'user',
             name: localUser.name || localUser.username,
             allowCloud: allowCloud
           } as User

@@ -166,7 +166,7 @@ const Login: React.FC = () => {
                 fontWeight: 'bold',
                 color: '#8b0000',
                 marginBottom: '2px'
-              }}>惠康堂中医诊所</div>
+              }}>{clinicName}</div>
             </div>
 
             <form onSubmit={handleSubmit}>

@@ -1,20 +1,22 @@
 export interface User {
   username: string;
-  role: 'admin' | 'user';
+  role: 'globalAdmin' | 'admin' | 'user';
   name: string;
   allowCloud?: boolean;
   registrationFee?: number;
+  clinicId?: string;
 }
 
 export interface CloudUser {
   username: string;
   name: string;
-  role: 'admin' | 'user';
+  role: 'globalAdmin' | 'admin' | 'user';
   allowSavePrescription?: boolean;
   allowedMode?: 'cloud' | 'local' | 'both';
   allowCloud?: boolean;
   hasPassword?: boolean;
   password?: string;
+  clinicId?: string;
 }
 
 export interface Medicine {

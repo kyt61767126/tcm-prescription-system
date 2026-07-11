@@ -214,7 +214,7 @@ const AccountManagement: React.FC<AccountManagementProps> = ({
             }}>
               <div>
                 <div style={{ fontWeight: 'bold', color: '#333', fontSize: '13px' }}>{cloudUser.name || cloudUser.username}</div>
-                <div style={{ fontSize: '11px', color: '#666' }}>{cloudUser.username} · {cloudUser.role === 'admin' ? '管理员' : '普通用户'}</div>
+                <div style={{ fontSize: '11px', color: '#666' }}>{cloudUser.username} · {cloudUser.role === 'globalAdmin' ? '全局管理员' : cloudUser.role === 'admin' ? '管理员' : '普通用户'}</div>
                 {cloudUser.username !== 'admin' && (
                   <div style={{ display: 'flex', alignItems: 'center', gap: '5px', marginTop: '5px' }}>
                     <span style={{ fontSize: '10px', color: '#666' }}>允许云端</span>

@@ -8,6 +8,7 @@ interface AuthStore {
   login: (user: User) => void;
   logout: () => void;
   isAdmin: () => boolean;
+  isGlobalAdmin: () => boolean;
   setHasHydrated: (state: boolean) => void;
   setRegistrationFee: (fee: number) => void;
 }
@@ -19,7 +20,11 @@ export const useAuthStore = create<AuthStore>()(
       hasHydrated: false,
       login: (user: User) => set({ user }),
       logout: () => set({ user: null }),
-      isAdmin: () => get().user?.role === 'admin',
+      isAdmin: () => {
+        const role = get().user?.role;
+        return role === 'admin' || role === 'globalAdmin';
+      },
+      isGlobalAdmin: () => get().user?.role === 'globalAdmin',
       setHasHydrated: (state: boolean) => set({ hasHydrated: state }),
       setRegistrationFee: (fee: number) =>
         set((state) => ({

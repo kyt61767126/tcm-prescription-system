@@ -54,7 +54,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
           const order = (name: string) => {
             if (name.includes('photo') && name.includes('tongue_front')) return 0;
             if (name.includes('photo') && name.includes('tongue_under')) return 1;
-            if (name.includes('photo')) return 2;
+            if (name.includes('photo') || name.includes('prescription')) return 2;
             if (name.includes('video')) return 3;
             return 4;
           };
@@ -112,9 +112,10 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
   const getFileLabel = (name: string) => {
     if (name.includes('tongue_front')) return '舌面图像';
     if (name.includes('tongue_under')) return '舌下络脉';
-    if (name.includes('photo')) return '照片';
+    if (name.includes('prescription')) return '处方';
+    if (name.includes('photo')) return '处方';
     if (name.includes('video')) return '视频';
-    return name;
+    return '处方';
   };
 
   const formatFileSize = (bytes: number) => {

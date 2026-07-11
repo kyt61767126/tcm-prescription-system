@@ -33,7 +33,7 @@ const Profile: React.FC = () => {
         setPrescriptions(result.data);
       }
 
-      if (user.role === 'admin') {
+      if (user.role === 'admin' || user.role === 'globalAdmin') {
         const usersResult = await loadCloudUsers();
         if (usersResult.success) {
           setCloudUsers(usersResult.data);
@@ -99,7 +99,7 @@ const Profile: React.FC = () => {
                 borderRadius: '4px',
                 fontSize: '11px',
                 border: '1px solid #808080'
-              }}>{user?.role === 'admin' ? '管理员' : '普通用户'}</span>
+              }}>{user?.role === 'globalAdmin' ? '全局管理员' : user?.role === 'admin' ? '管理员' : '普通用户'}</span>
               <span style={{
                 padding: '4px 8px',
                 background: '#d0d0d0',
@@ -136,7 +136,7 @@ const Profile: React.FC = () => {
         </div>
       </div>
 
-      {user?.role === 'admin' && (
+      {(user?.role === 'admin' || user?.role === 'globalAdmin') && (
         <AccountManagement
           user={user}
           cloudUsers={cloudUsers}
@@ -178,7 +178,7 @@ const Profile: React.FC = () => {
             <span>系统设置</span>
             <span style={{ marginLeft: 'auto', color: '#ccc' }}>→</span>
           </button>
-          {(user?.allowCloud || user?.role === 'admin') && (
+          {(user?.allowCloud || user?.role === 'admin' || user?.role === 'globalAdmin') && (
             <button
               onClick={handleModeSwitch}
               style={{
