@@ -73,7 +73,7 @@
                 border-radius: 6px; overflow: hidden; aspect-ratio: 4/3;
             }
             .video-preview-wrap video {
-                width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);
+                width: 100%; height: 100%; object-fit: contain;
             }
             .video-rec-indicator {
                 position: absolute; top: 10px; left: 10px;
@@ -127,7 +127,7 @@
             .photo-retake-btn { background: #ffc107; color: #333; }
             .photo-retake-btn:hover:not(:disabled) { background: #e0a800; }
             .video-preview-wrap canvas {
-                width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1);
+                width: 100%; height: 100%; object-fit: contain;
             }
             .photo-flash {
                 position: absolute; top: 0; left: 0; right: 0; bottom: 0;
@@ -135,6 +135,21 @@
                 transition: opacity 0.15s;
             }
             .photo-flash.active { opacity: 0.8; transition: none; }
+            .photo-guide-overlay {
+                position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+                pointer-events: none; z-index: 10;
+                display: flex; align-items: center; justify-content: center;
+            }
+            .photo-guide-svg {
+                width: 80%; height: 80%;
+                opacity: 0.7;
+            }
+            .photo-guide-text {
+                position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+                background: rgba(0,0,0,0.6); color: #fff;
+                padding: 6px 16px; border-radius: 20px; font-size: 14px;
+                pointer-events: none; white-space: nowrap;
+            }
             .photo-step-indicator {
                 display: flex; justify-content: center; gap: 20px; margin-top: 12px;
             }
@@ -465,6 +480,41 @@
                     <button class="video-switch-btn" id="photoSwitchBtn" title="切换摄像头">🔄</button>
                     <canvas id="photoCanvas" style="display:none;"></canvas>
                     <div class="photo-flash" id="photoFlash"></div>
+                    <div class="photo-guide-overlay" id="photoGuideOverlay">
+                        <svg class="photo-guide-svg" id="photoGuideSvg1" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+                            <defs>
+                                <linearGradient id="tg1" x1="0%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#ffb6c1;stop-opacity:0.6" />
+                                    <stop offset="100%" style="stop-color:#ff69b4;stop-opacity:0.6" />
+                                </linearGradient>
+                            </defs>
+                            <ellipse cx="150" cy="180" rx="60" ry="80" fill="url(#tg1)" stroke="#fff" stroke-width="3"/>
+                            <line x1="150" y1="120" x2="150" y2="220" stroke="#fff" stroke-width="2" stroke-dasharray="8,4"/>
+                            <circle cx="120" cy="160" r="8" fill="#ff4444" opacity="0.8"/>
+                            <circle cx="180" cy="160" r="8" fill="#ff4444" opacity="0.8"/>
+                            <circle cx="150" cy="200" r="6" fill="#ff8888" opacity="0.8"/>
+                            <text x="150" y="270" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">伸出舌头，舌尖朝上</text>
+                        </svg>
+                        <svg class="photo-guide-svg" id="photoGuideSvg2" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="display:none;">
+                            <defs>
+                                <linearGradient id="tg2" x1="0%" y1="0%" x2="0%" y2="100%">
+                                    <stop offset="0%" style="stop-color:#ffb6c1;stop-opacity:0.6" />
+                                    <stop offset="100%" style="stop-color:#ff69b4;stop-opacity:0.6" />
+                                </linearGradient>
+                                <linearGradient id="vg2" x1="0%" y1="0%" x2="100%" y2="0%">
+                                    <stop offset="0%" style="stop-color:#ff4444;stop-opacity:0.7" />
+                                    <stop offset="100%" style="stop-color:#cc0000;stop-opacity:0.7" />
+                                </linearGradient>
+                            </defs>
+                            <ellipse cx="150" cy="180" rx="50" ry="70" fill="url(#tg2)" stroke="#fff" stroke-width="3"/>
+                            <line x1="150" y1="130" x2="150" y2="230" stroke="#fff" stroke-width="2" stroke-dasharray="8,4"/>
+                            <path d="M 130 150 Q 150 170 170 150" stroke="url(#vg2)" stroke-width="4" fill="none"/>
+                            <path d="M 125 165 Q 150 185 175 165" stroke="url(#vg2)" stroke-width="3" fill="none"/>
+                            <path d="M 135 180 Q 150 195 165 180" stroke="url(#vg2)" stroke-width="2" fill="none"/>
+                            <text x="150" y="270" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">卷起舌头，展示舌下络脉</text>
+                        </svg>
+                        <div class="photo-guide-text" id="photoGuideText">请将舌头伸出，对准虚线位置</div>
+                    </div>
                 </div>
                 <div class="photo-step-indicator" id="photoStepIndicator">
                     <span class="step-item active">1. 采集舌面图像</span>
@@ -566,7 +616,7 @@
         ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
 
         // 保存当前照片数据
-        const dataUrl = canvasEl.toDataURL('image/png');
+        const dataUrl = canvasEl.toDataURL('image/jpeg', 0.8);
         capturedPhotos[currentCaptureStep - 1] = dataUrl;
 
         // 闪光效果
@@ -579,6 +629,10 @@
         // 切换显示：隐藏 video，显示 canvas
         videoEl.style.display = 'none';
         canvasEl.style.display = 'block';
+
+        // 隐藏示意图
+        const guideOverlay = document.getElementById('photoGuideOverlay');
+        if (guideOverlay) guideOverlay.style.display = 'none';
 
         // 更新按钮状态
         document.getElementById('photoCaptureBtn2').disabled = true;
@@ -598,13 +652,37 @@
     }
 
     // ─── 下一步：切换到第二采集步骤 ──────────────────────
+    function updatePhotoGuide(step) {
+        const svg1 = document.getElementById('photoGuideSvg1');
+        const svg2 = document.getElementById('photoGuideSvg2');
+        const textEl = document.getElementById('photoGuideText');
+        const overlay = document.getElementById('photoGuideOverlay');
+
+        if (overlay) overlay.style.display = 'flex';
+        if (svg1 && svg2) {
+            if (step === 1) {
+                svg1.style.display = '';
+                svg2.style.display = 'none';
+            } else {
+                svg1.style.display = 'none';
+                svg2.style.display = '';
+            }
+        }
+        if (textEl) {
+            textEl.textContent = (step === 1) ? '请将舌头伸出，对准虚线位置' : '请卷起舌头，对准虚线位置拍摄舌下';
+        }
+    }
+
     function nextCaptureStep() {
         currentCaptureStep = 2;
-        
+
         // 更新步骤指示
         const stepItems = document.querySelectorAll('.step-item');
         if (stepItems[0]) stepItems[0].classList.remove('active');
         if (stepItems[1]) stepItems[1].classList.add('active');
+
+        // 更新示意图
+        updatePhotoGuide(2);
 
         // 恢复摄像头预览
         const videoEl = document.getElementById('videoPreview');
@@ -679,6 +757,9 @@
         document.getElementById('photoNextBtn').style.display = 'none';
         document.getElementById('photoSaveBtn').style.display = 'none';
 
+        // 显示示意图
+        updatePhotoGuide(currentCaptureStep);
+
         if (currentCaptureStep === 1) {
             setStatus('摄像头已就绪，点击"拍照"采集舌面图像', '');
         } else {
@@ -708,7 +789,7 @@
                          pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
         }
 
-        const ext = type === 'video' ? 'webm' : 'png';
+        const ext = type === 'video' ? 'webm' : 'jpg';
         const sub = subtype ? '_' + subtype : '';
         return cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
     }

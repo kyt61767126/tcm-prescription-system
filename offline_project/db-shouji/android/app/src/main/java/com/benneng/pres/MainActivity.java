@@ -558,12 +558,14 @@ public class MainActivity extends AppCompatActivity {
                 String base64 = imageData;
                 if (base64.startsWith("data:image/png;base64,")) {
                     base64 = base64.substring("data:image/png;base64,".length());
+                } else if (base64.startsWith("data:image/jpeg;base64,")) {
+                    base64 = base64.substring("data:image/jpeg;base64,".length());
                 }
                 byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
 
                 String safeName = sanitize(fileName);
                 if (safeName.isEmpty()) {
-                    safeName = "prescription_" + System.currentTimeMillis() + ".png";
+                    safeName = "prescription_" + System.currentTimeMillis() + ".jpg";
                 }
 
                 File dir = getImageDir();
@@ -713,6 +715,8 @@ public class MainActivity extends AppCompatActivity {
                 String mimeType = "application/json";
                 if (file.getName().endsWith(".png")) {
                     mimeType = "image/png";
+                } else if (file.getName().endsWith(".jpg") || file.getName().endsWith(".jpeg")) {
+                    mimeType = "image/jpeg";
                 } else if (file.getName().endsWith(".webm")) {
                     mimeType = "video/webm";
                 }

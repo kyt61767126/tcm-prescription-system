@@ -28,9 +28,31 @@ export function ActionBar({ position = 'fixed' }: ActionBarProps) {
         zIndex: 150,
       };
 
+  const handlePhoto = () => {
+    const fn = (window as any).openPhotoOverlay;
+    if (typeof fn === 'function') fn();
+  };
+
+  const handleVideo = () => {
+    const fn = (window as any).openRecordingOverlay;
+    if (typeof fn === 'function') fn();
+  };
+
   return (
     <div style={wrapperStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-around', gap: '5px' }}>
+        <button
+          onClick={handlePhoto}
+          style={actionBarBtnStyle('grey')}
+        >
+          📷 拍照
+        </button>
+        <button
+          onClick={handleVideo}
+          style={actionBarBtnStyle('grey')}
+        >
+          🎥 录像
+        </button>
         <button
           onClick={() => usePrescriptionStore.getState().clearForm()}
           style={actionBarBtnStyle('grey')}
@@ -38,7 +60,7 @@ export function ActionBar({ position = 'fixed' }: ActionBarProps) {
           🗑️ 清空
         </button>
         <button
-          onClick={() => {}}
+          onClick={() => navigate('/profile')}
           style={actionBarBtnStyle('green')}
         >
           📊 统计分析

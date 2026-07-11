@@ -6,6 +6,29 @@ if (signingPropertiesFile.exists()) {
     signingProperties.load(new FileInputStream(signingPropertiesFile))
 }
 
+// 构建时间戳（北京时间），用于 APP 内显示打包时间
+def buildTimeStr() {
+    return new Date().format('yyyy-MM-dd HH:mm', TimeZone.getTimeZone('Asia/Shanghai'))
+}
+
+// 在 mergeAssets 之前生成 build-time.js 到 assets 目录
+task generateBuildTimeFile {
+    doFirst {
+        def buildTime = buildTimeStr()
+        def assetsDir = file("src/main/assets/public")
+        if (!assetsDir.exists()) assetsDir.mkdirs()
+        def buildTimeFile = new File(assetsDir, "build-time.js")
+        buildTimeFile.text = "window.BUILD_TIME = '${buildTime}';"
+        println "[build-time] 生成打包时间: ${buildTime}"
+    }
+}
+
+tasks.whenTaskAdded { task ->
+    if (task.name.startsWith('merge') && task.name.endsWith('Assets')) {
+        task.dependsOn generateBuildTimeFile
+    }
+}
+
 android {
     namespace = "com.benneng.pres"
     compileSdk = rootProject.ext.compileSdkVersion

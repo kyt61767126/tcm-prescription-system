@@ -6,6 +6,7 @@ import { formatDateTime } from '../utils/helpers';
 import { useToast } from '../hooks/useToast';
 import { Prescription } from '../types';
 import { logger } from '../utils/logger';
+import MediaViewer from '../components/Media/MediaViewer';
 
 const PrescriptionList: React.FC = () => {
   const user = useAuthRedirect();
@@ -17,6 +18,7 @@ const PrescriptionList: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPrescription, setSelectedPrescription] = useState<Prescription | null>(null);
+  const [showMediaViewer, setShowMediaViewer] = useState(false);
   const { toastMessage, showToast } = useToast();
 
   const loadPrescriptionList = useCallback(async () => {
@@ -157,7 +159,7 @@ const PrescriptionList: React.FC = () => {
                 onMouseLeave={(e) => e.currentTarget.style.background = 'white'}
               >
                 <div style={{ fontWeight: 'bold', marginBottom: '2px' }}>{prescription.patientName}</div>
-                <div style={{ fontSize: '10px', color: '#666' }}>{formatDateTime(prescription.createdAt)}</div>
+                <div style={{ fontSize: '10px', color: '#666' }}>{formatDateTime(prescription.createdAt)} | 诊费: {(prescription.registrationFee || 0).toFixed(2)}元</div>
               </div>
             ))}
           </div>
@@ -282,6 +284,7 @@ const PrescriptionList: React.FC = () => {
 
                 <div style={{ marginTop: '3px', paddingTop: '6px', borderTop: '1px solid #000', fontSize: '10px' }}>
                   <div style={{ marginBottom: '4px' }}>用法: 水煎服，日一剂，早晚分服</div>
+                  <div style={{ marginBottom: '4px', textAlign: 'right', fontWeight: 'bold' }}>诊费: {(selectedPrescription.registrationFee || 0).toFixed(2)}元</div>
                   <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '2px' }}>
                     <span>医师: <span>{selectedPrescription.createdBy || user?.name || '________'}</span>（签字）</span>
                     <span>配方: ________ 复核: ________</span>
@@ -290,6 +293,18 @@ const PrescriptionList: React.FC = () => {
               </div>
 
               <div style={{ marginTop: '15px', display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+                <button
+                  onClick={() => setShowMediaViewer(true)}
+                  style={{
+                    padding: '4px 10px',
+                    background: '#e8f5e9',
+                    border: '2px solid #808080',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    fontSize: '11px',
+                    color: '#2c5530'
+                  }}
+                >📷 查看媒体</button>
                 <button
                   onClick={() => setSelectedPrescription(null)}
                   style={{
@@ -349,6 +364,14 @@ const PrescriptionList: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showMediaViewer && selectedPrescription && (
+        <MediaViewer
+          patientName={selectedPrescription.patientName}
+          prescriptionNo={selectedPrescription.prescriptionNo}
+          onClose={() => setShowMediaViewer(false)}
+        />
       )}
     </div>
   );

@@ -166,7 +166,7 @@
                 border-radius: 6px; overflow: hidden; aspect-ratio: 4/3;\
             }\
             .cloud-vr-preview-wrap video {\
-                width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1);\
+                width: 100%; height: 100%; object-fit: contain;\
             }\
             .cloud-vr-rec-indicator {\
                 position: absolute; top: 10px; left: 10px;\
@@ -213,7 +213,7 @@
             .cloud-vr-status.error { color: #dc3545; }\
             .cloud-vr-status.success { color: #28a745; }\
             .cloud-vr-preview-wrap canvas {\
-                width: 100%; height: 100%; object-fit: contain; transform: scaleX(-1);\
+                width: 100%; height: 100%; object-fit: contain;\
             }\
             .cloud-vr-flash {\
                 position: absolute; top: 0; left: 0; right: 0; bottom: 0;\
@@ -221,6 +221,22 @@
                 transition: opacity 0.15s;\
             }\
             .cloud-vr-flash.active { opacity: 0.8; transition: none; }\
+            .cloud-vr-guide-overlay {\
+                position: absolute; top: 0; left: 0; right: 0; bottom: 0;\
+                pointer-events: none; z-index: 100;\
+                display: flex; flex-direction: column; align-items: center; justify-content: center;\
+            }\
+            .cloud-vr-guide-svg {\
+                width: 65%; max-width: 280px;\
+                opacity: 0.75;\
+            }\
+            .cloud-vr-guide-text {\
+                position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);\
+                background: rgba(0,0,0,0.7); color: #fff;\
+                padding: 8px 20px; border-radius: 20px; font-size: 14px;\
+                pointer-events: none; white-space: nowrap;\
+                z-index: 101;\
+            }\
             .cloud-vr-step-indicator {\
                 display: flex; justify-content: center; gap: 16px; margin-top: 10px;\
             }\
@@ -295,7 +311,7 @@
                 pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
         }
 
-        var ext = type === 'video' ? 'webm' : 'png';
+        var ext = type === 'video' ? 'webm' : 'jpg';
         var sub = subtype ? '_' + subtype : '';
         return cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
     }
@@ -553,6 +569,41 @@
                     <button class="cloud-vr-switch-btn" id="cloudVrSwitchBtn" title="切换摄像头">🔄</button>\
                     <canvas id="cloudVrPhotoCanvas" style="display:none;"></canvas>\
                     <div class="cloud-vr-flash" id="cloudVrFlash"></div>\
+                    <div class="cloud-vr-guide-overlay" id="cloudVrGuideOverlay">\
+                        <svg class="cloud-vr-guide-svg" id="cloudVrGuideSvg1" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">\
+                            <defs>\
+                                <linearGradient id="tg1" x1="0%" y1="0%" x2="0%" y2="100%">\
+                                    <stop offset="0%" style="stop-color:#ffb6c1;stop-opacity:0.6" />\
+                                    <stop offset="100%" style="stop-color:#ff69b4;stop-opacity:0.6" />\
+                                </linearGradient>\
+                            </defs>\
+                            <ellipse cx="150" cy="180" rx="60" ry="80" fill="url(#tg1)" stroke="#fff" stroke-width="3"/>\
+                            <line x1="150" y1="120" x2="150" y2="220" stroke="#fff" stroke-width="2" stroke-dasharray="8,4"/>\
+                            <circle cx="120" cy="160" r="8" fill="#ff4444" opacity="0.8"/>\
+                            <circle cx="180" cy="160" r="8" fill="#ff4444" opacity="0.8"/>\
+                            <circle cx="150" cy="200" r="6" fill="#ff8888" opacity="0.8"/>\
+                            <text x="150" y="270" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">伸出舌头，舌尖朝上</text>\
+                        </svg>\
+                        <svg class="cloud-vr-guide-svg" id="cloudVrGuideSvg2" viewBox="0 0 300 300" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" style="display:none;">\
+                            <defs>\
+                                <linearGradient id="tg2" x1="0%" y1="0%" x2="0%" y2="100%">\
+                                    <stop offset="0%" style="stop-color:#ffb6c1;stop-opacity:0.6" />\
+                                    <stop offset="100%" style="stop-color:#ff69b4;stop-opacity:0.6" />\
+                                </linearGradient>\
+                                <linearGradient id="vg2" x1="0%" y1="0%" x2="100%" y2="0%">\
+                                    <stop offset="0%" style="stop-color:#ff4444;stop-opacity:0.7" />\
+                                    <stop offset="100%" style="stop-color:#cc0000;stop-opacity:0.7" />\
+                                </linearGradient>\
+                            </defs>\
+                            <ellipse cx="150" cy="180" rx="50" ry="70" fill="url(#tg2)" stroke="#fff" stroke-width="3"/>\
+                            <line x1="150" y1="130" x2="150" y2="230" stroke="#fff" stroke-width="2" stroke-dasharray="8,4"/>\
+                            <path d="M 130 150 Q 150 170 170 150" stroke="url(#vg2)" stroke-width="4" fill="none"/>\
+                            <path d="M 125 165 Q 150 185 175 165" stroke="url(#vg2)" stroke-width="3" fill="none"/>\
+                            <path d="M 135 180 Q 150 195 165 180" stroke="url(#vg2)" stroke-width="2" fill="none"/>\
+                            <text x="150" y="270" text-anchor="middle" fill="#fff" font-size="14" font-weight="bold">卷起舌头，展示舌下络脉</text>\
+                        </svg>\
+                        <div class="cloud-vr-guide-text" id="cloudVrGuideText">请将舌头伸出，对准虚线位置</div>\
+                    </div>\
                 </div>\
                 <div class="cloud-vr-step-indicator">\
                     <span class="cloud-vr-step-item active" id="cloudVrStep1">1. 采集舌面图像</span>\
@@ -644,7 +695,7 @@
         var ctx = canvasEl.getContext('2d');
         ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
 
-        var dataUrl = canvasEl.toDataURL('image/png');
+        var dataUrl = canvasEl.toDataURL('image/jpeg', 0.8);
         capturedPhotos[currentCaptureStep - 1] = dataUrl;
 
         var flash = document.getElementById('cloudVrFlash');
@@ -655,6 +706,9 @@
 
         videoEl.style.display = 'none';
         canvasEl.style.display = 'block';
+
+        var guideOverlay = document.getElementById('cloudVrGuideOverlay');
+        if (guideOverlay) guideOverlay.style.display = 'none';
 
         document.getElementById('cloudVrCaptureBtn').disabled = true;
         document.getElementById('cloudVrRetakeBtn').disabled = false;
@@ -672,6 +726,27 @@
         }
     }
 
+    function updatePhotoGuide(step) {
+        var svg1 = document.getElementById('cloudVrGuideSvg1');
+        var svg2 = document.getElementById('cloudVrGuideSvg2');
+        var textEl = document.getElementById('cloudVrGuideText');
+        var overlay = document.getElementById('cloudVrGuideOverlay');
+
+        if (overlay) overlay.style.display = 'flex';
+        if (svg1 && svg2) {
+            if (step === 1) {
+                svg1.style.display = '';
+                svg2.style.display = 'none';
+            } else {
+                svg1.style.display = 'none';
+                svg2.style.display = '';
+            }
+        }
+        if (textEl) {
+            textEl.textContent = (step === 1) ? '请将舌头伸出，对准虚线位置' : '请卷起舌头，对准虚线位置拍摄舌下';
+        }
+    }
+
     function nextCaptureStep() {
         currentCaptureStep = 2;
 
@@ -679,6 +754,8 @@
         var step2 = document.getElementById('cloudVrStep2');
         if (step1) step1.classList.remove('active');
         if (step2) step2.classList.add('active');
+
+        updatePhotoGuide(2);
 
         var videoEl = document.getElementById('cloudVrPreview');
         var canvasEl = document.getElementById('cloudVrPhotoCanvas');
@@ -743,6 +820,8 @@
         document.getElementById('cloudVrRetakeBtn').disabled = true;
         document.getElementById('cloudVrNextBtn').style.display = 'none';
         document.getElementById('cloudVrPhotoSaveBtn').style.display = 'none';
+
+        updatePhotoGuide(currentCaptureStep);
 
         if (currentCaptureStep === 1) {
             setStatus('摄像头已就绪，点击"拍照"采集舌面图像', '');
