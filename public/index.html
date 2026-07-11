@@ -6063,13 +6063,13 @@
 
         async function viewMediaFiles(patientName, prescriptionNo) {
             if (!window.electronAPI || !window.electronAPI.findMediaFiles) {
-                showToast('媒体查看功能仅在APP中可用');
+                showToast('处方查看功能仅在APP中可用');
                 return;
             }
             const overlay = document.getElementById('mediaViewerOverlay');
             const content = document.getElementById('mediaViewerContent');
             if (!overlay || !content) return;
-            content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">正在查找媒体文件...</div>';
+            content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">正在查找处方文件...</div>';
             overlay.style.display = 'flex';
             try {
                 const result = await window.electronAPI.findMediaFiles(patientName, prescriptionNo);
@@ -6447,16 +6447,16 @@
                 setTimeout(() => {
                     // 生成处方签图片并自动下载（使用云端返回的编号）
                     savePrescriptionAsImage(savedRecord, officialNo);
-                    // 云端分配的编号可能与拍照时使用的编号不同，重命名已保存的媒体文件
+                    // 云端分配的编号可能与拍照时使用的编号不同，重命名已保存的处方文件
                     if (oldPrescriptionNo && officialNo && oldPrescriptionNo !== officialNo) {
                         if (window.electronAPI && window.electronAPI.renameMediaFiles) {
                             window.electronAPI.renameMediaFiles(record.patientName, oldPrescriptionNo, officialNo)
                                 .then(r => {
                                     if (r.success && r.renamed > 0) {
-                                        console.log('已重命名 ' + r.renamed + ' 个媒体文件: ' + oldPrescriptionNo + ' → ' + officialNo);
+                                        console.log('已重命名 ' + r.renamed + ' 个处方文件: ' + oldPrescriptionNo + ' → ' + officialNo);
                                     }
                                 })
-                                .catch(e => console.error('重命名媒体文件失败:', e));
+                                .catch(e => console.error('重命名处方文件失败:', e));
                         }
                     }
                     // 保存后清空表单，方便下一次使用（跳过确认弹窗）
