@@ -72,8 +72,6 @@ public class MainActivity extends BridgeActivity {
     private TextView loadingText;
     private volatile String cachedVideoRecorderScript = null;
     private boolean versionChecked = false;
-    private int versionReloadCount = 0;
-    private static final int MAX_VERSION_RELOADS = 1;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -341,24 +339,16 @@ public class MainActivity extends BridgeActivity {
                 int cssPx = (int) (statusBarHeightPx / density);
                 view.evaluateJavascript("window.__STATUS_BAR_HEIGHT__ = " + cssPx + ";", null);
 
-                // 版本检查：读取页面 __APP_VERSION__，存储并与预期版本比较
-                // 若不匹配说明仍在用旧缓存，清除缓存并重载一次（MAX_VERSION_RELOADS 防止无限循环）
-                if (!versionChecked && versionReloadCount <= MAX_VERSION_RELOADS && url != null && url.contains(CLOUD_HOST)) {
+                // 记录页面版本到本地（供下次启动时 onCreate 版本检查使用）
+                // 注意：不在onPageFinished中reload，避免双重加载导致启动变慢
+                // 版本不匹配时的清缓存在下次启动的onCreate中处理
+                if (!versionChecked && url != null && url.contains(CLOUD_HOST)) {
                     versionChecked = true;
                     view.evaluateJavascript("(window.__APP_VERSION__ || 'unknown')", value -> {
                         String pageVersion = value != null ? value.replace("\"", "") : "unknown";
                         android.content.SharedPreferences prefs = getSharedPreferences("app_config", MODE_PRIVATE);
                         prefs.edit().putString("page_version", pageVersion).apply();
-
-                        if (!pageVersion.equals(EXPECTED_APP_VERSION) && versionReloadCount < MAX_VERSION_RELOADS) {
-                            versionReloadCount++;
-                            Log.d("TCM-Pres", "页面版本不匹配: " + pageVersion + " != " + EXPECTED_APP_VERSION + "，清除缓存并重载 (" + versionReloadCount + "/" + MAX_VERSION_RELOADS + ")");
-                            view.clearCache(true);
-                            versionChecked = false;
-                            view.reload();
-                        } else {
-                            Log.d("TCM-Pres", "页面版本: " + pageVersion + " (expected: " + EXPECTED_APP_VERSION + ")");
-                        }
+                        Log.d("TCM-Pres", "页面版本: " + pageVersion + " (expected: " + EXPECTED_APP_VERSION + ")");
                     });
                 }
 
