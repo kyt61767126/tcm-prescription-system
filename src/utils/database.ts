@@ -32,6 +32,7 @@ export interface DBMedicineRow extends DBMedicine {
 
 export interface DBPrescriptionInput {
   prescription_no: string;
+  original_no?: string;
   patient_name: string;
   gender?: string;
   age?: string;
@@ -49,6 +50,7 @@ export interface DBPrescriptionInput {
 export interface DBPrescriptionRow {
   id?: number;
   prescription_no: string;
+  original_no?: string;
   patient_name: string;
   gender?: string;
   age?: string;
@@ -183,6 +185,7 @@ async function createTables() {
     CREATE TABLE IF NOT EXISTS prescriptions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       prescription_no TEXT UNIQUE NOT NULL,
+      original_no TEXT,
       patient_name TEXT NOT NULL,
       gender TEXT,
       age TEXT,
@@ -199,6 +202,7 @@ async function createTables() {
     )
   `);
   await db.execute(`ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS registration_fee REAL DEFAULT 0`);
+  await db.execute(`ALTER TABLE prescriptions ADD COLUMN IF NOT EXISTS original_no TEXT`);
 
   await db.execute(`
     CREATE TABLE IF NOT EXISTS sync_status (
@@ -258,10 +262,11 @@ export async function getAllMedicines(): Promise<DBMedicineRow[]> {
 export async function addPrescription(prescription: DBPrescriptionInput) {
   const database = await initDatabase();
   await database.run(`
-    INSERT INTO prescriptions (prescription_no, patient_name, gender, age, phone, visit_date, symptoms, diagnosis, medicines, total_price, registration_fee, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR REPLACE INTO prescriptions (prescription_no, original_no, patient_name, gender, age, phone, visit_date, symptoms, diagnosis, medicines, total_price, registration_fee, created_by, synced)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `, [
     prescription.prescription_no,
+    prescription.original_no || '',
     prescription.patient_name,
     prescription.gender || '',
     prescription.age || '',
@@ -272,7 +277,8 @@ export async function addPrescription(prescription: DBPrescriptionInput) {
     JSON.stringify(prescription.medicines),
     prescription.total_price || 0,
     prescription.registration_fee || 0,
-    prescription.created_by
+    prescription.created_by,
+    prescription.synced || 0
   ]);
 }
 

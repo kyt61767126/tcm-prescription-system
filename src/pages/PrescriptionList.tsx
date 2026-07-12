@@ -370,6 +370,7 @@ const PrescriptionList: React.FC = () => {
         <MediaViewer
           patientName={selectedPrescription.patientName}
           prescriptionNo={selectedPrescription.prescriptionNo}
+          createdAt={selectedPrescription.createdAt}
           onClose={() => setShowMediaViewer(false)}
         />
       )}

@@ -308,9 +308,9 @@ public class MainActivity extends AppCompatActivity {
             "        catch(e){ resolve({success:false, error:String(e)}); }" +
             "      });" +
             "    }," +
-            "    findMediaFiles: function(patientName, prescriptionNo){" +
+            "    findMediaFiles: function(patientName, prescriptionNo, createdAt){" +
             "      return new Promise(function(resolve){" +
-            "        try { var r = callNative('findMediaFiles', JSON.stringify({patientName:patientName,prescriptionNo:prescriptionNo})); resolve(r); }" +
+            "        try { var r = callNative('findMediaFiles', JSON.stringify({patientName:patientName,prescriptionNo:prescriptionNo,createdAt:createdAt||''})); resolve(r); }" +
             "        catch(e){ resolve({success:false, error:String(e), files:[]}); }" +
             "      });" +
             "    }," +
@@ -425,7 +425,8 @@ public class MainActivity extends AppCompatActivity {
                         return getVideoDirectory().toString();
                     case "findMediaFiles":
                         return findMediaFiles(args.optString("patientName", ""),
-                                args.optString("prescriptionNo", "")).toString();
+                                args.optString("prescriptionNo", ""),
+                                args.optString("createdAt", "")).toString();
                     case "openFile":
                         return openFile(args.optString("filePath", ""),
                                 args.optString("mimeType", "")).toString();
@@ -736,7 +737,7 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        private JSONObject findMediaFiles(String patientName, String prescriptionNo) {
+        private JSONObject findMediaFiles(String patientName, String prescriptionNo, String createdAt) {
             try {
                 JSONArray files = new JSONArray();
                 java.util.Set<String> foundPaths = new java.util.HashSet<>();
@@ -754,8 +755,15 @@ public class MainActivity extends AppCompatActivity {
                 File vidDir = getVideoDir();
                 scanDirForMedia(imgDir, prefix1, prefix2, files, foundPaths);
                 scanDirForMedia(vidDir, prefix1, prefix2, files, foundPaths);
+                // 回退策略：如果按编号未找到文件，用患者姓名+创建时间范围查找
+                if (files.length() == 0 && !createdAt.isEmpty()) {
+                    long[] timeRange = parseTimeRange(createdAt);
+                    scanDirForMediaByNameAndTime(imgDir, safeName, timeRange[0], timeRange[1], files, foundPaths);
+                    scanDirForMediaByNameAndTime(vidDir, safeName, timeRange[0], timeRange[1], files, foundPaths);
+                }
                 StringBuilder debug = new StringBuilder();
                 debug.append("prefix1=").append(prefix1).append(" prefix2=").append(prefix2);
+                debug.append(" | createdAt=").append(createdAt);
                 debug.append(" | imgDir=").append(imgDir != null ? imgDir.getAbsolutePath() : "null").append(" exists=").append(imgDir != null && imgDir.exists());
                 debug.append(" | vidDir=").append(vidDir != null ? vidDir.getAbsolutePath() : "null").append(" exists=").append(vidDir != null && vidDir.exists());
                 if (imgDir != null && imgDir.exists()) {
@@ -775,6 +783,52 @@ public class MainActivity extends AppCompatActivity {
                 return result;
             } catch (Exception e) {
                 return fail("查找处方文件失败: " + e.getMessage());
+            }
+        }
+
+        private long[] parseTimeRange(String createdAt) {
+            try {
+                String dateStr = createdAt.trim().replace('T', ' ');
+                if (dateStr.contains(".")) dateStr = dateStr.substring(0, dateStr.indexOf('.'));
+                if (dateStr.contains("Z")) dateStr = dateStr.replace("Z", "");
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US);
+                sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                java.util.Date date = sdf.parse(dateStr);
+                long time = date.getTime();
+                return new long[]{time - 24 * 60 * 60 * 1000L, time + 48 * 60 * 60 * 1000L};
+            } catch (Exception e) {
+                long now = System.currentTimeMillis();
+                return new long[]{now - 7L * 24 * 60 * 60 * 1000, now + 7L * 24 * 60 * 60 * 1000};
+            }
+        }
+
+        private void scanDirForMediaByNameAndTime(File dir, String patientName, long startTime, long endTime, JSONArray files, java.util.Set<String> foundPaths) {
+            if (dir == null || !dir.exists()) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    scanDirForMediaByNameAndTime(f, patientName, startTime, endTime, files, foundPaths);
+                } else {
+                    String fileName = f.getName();
+                    if (!fileName.contains(patientName)) continue;
+                    long lastMod = f.lastModified();
+                    if (lastMod < startTime || lastMod > endTime) continue;
+                    String filePath = f.getAbsolutePath();
+                    if (foundPaths.contains(filePath)) continue;
+                    foundPaths.add(filePath);
+                    try {
+                        JSONObject fileObj = new JSONObject();
+                        fileObj.put("name", fileName);
+                        fileObj.put("path", filePath);
+                        fileObj.put("type", fileName.endsWith(".webm") ? "video" : "image");
+                        fileObj.put("size", f.length());
+                        fileObj.put("lastModified", lastMod);
+                        files.put(fileObj);
+                    } catch (Exception e) {
+                        Log.e("TCM-Pres", "添加文件信息失败: " + fileName, e);
+                    }
+                }
             }
         }
 

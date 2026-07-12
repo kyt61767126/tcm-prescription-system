@@ -352,7 +352,7 @@ ipcMain.handle('open-video-directory', async () => {
 });
 
 // ★ 查找处方文件（新增）
-ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo) => {
+ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo, createdAt) => {
     try {
         if (!patientName) return { success: true, files: [] };
         const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
@@ -363,6 +363,19 @@ ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo) =>
         const foundPaths = new Set();
         const prefix1 = `${cleanName}_${identifier}`;
         const prefix2 = `${identifier}_${cleanName}`;
+
+        // 解析 createdAt 时间范围（±1天）
+        let startTime = 0, endTime = 0;
+        if (createdAt) {
+            try {
+                const time = new Date(createdAt).getTime();
+                if (!isNaN(time)) {
+                    startTime = time - 24 * 60 * 60 * 1000;
+                    endTime = time + 48 * 60 * 60 * 1000;
+                }
+            } catch (e) { /* 忽略解析失败 */ }
+        }
+
         let monthDirs = [];
         try {
             const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
@@ -394,6 +407,41 @@ ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo) =>
                 } catch (e) { /* 跳过无法读取的文件 */ }
             }
         }
+
+        // 回退策略：如果按编号未找到文件，用患者姓名+创建时间范围查找
+        if (files.length === 0 && cleanName) {
+            const mediaKeywords = ['photo', 'video', 'prescription', 'tongue'];
+            const validExtensions = ['.jpg', '.jpeg', '.png', '.webm', '.mp4', '.avi', '.mov'];
+            for (const monthDir of monthDirs) {
+                let fileEntries = [];
+                try {
+                    fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+                } catch (e) { continue; }
+                for (const fe of fileEntries) {
+                    if (!fe.isFile()) continue;
+                    const fileName = fe.name;
+                    const ext = path.extname(fileName).toLowerCase();
+                    if (!fileName.includes(cleanName)) continue;
+                    if (!validExtensions.includes(ext)) continue;
+                    if (!mediaKeywords.some(k => fileName.includes(k))) continue;
+                    const filePath = path.join(monthDir, fileName);
+                    if (foundPaths.has(filePath)) continue;
+                    try {
+                        const stat = await fs.stat(filePath);
+                        if (startTime > 0 && (stat.mtimeMs < startTime || stat.mtimeMs > endTime)) continue;
+                        const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
+                        files.push({
+                            name: fileName,
+                            path: filePath,
+                            type: isVideo ? 'video' : 'image',
+                            size: stat.size,
+                            lastModified: stat.mtimeMs
+                        });
+                    } catch (e) { /* 跳过无法读取的文件 */ }
+                }
+            }
+        }
+
         return { success: true, files };
     } catch (error) {
         console.error('查找处方文件失败:', error);

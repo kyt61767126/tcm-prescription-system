@@ -93,10 +93,10 @@
                     } catch (e) { resolve({ success: false, error: String(e) }); }
                 });
             },
-            findMediaFiles: function (patientName, prescriptionNo) {
+            findMediaFiles: function (patientName, prescriptionNo, createdAt) {
                 return new Promise(function (resolve) {
                     try {
-                        var r = callNative('findMediaFiles', JSON.stringify({ patientName: patientName, prescriptionNo: prescriptionNo }));
+                        var r = callNative('findMediaFiles', JSON.stringify({ patientName: patientName, prescriptionNo: prescriptionNo, createdAt: createdAt || '' }));
                         resolve(r);
                     } catch (e) { resolve({ success: false, error: String(e), files: [] }); }
                 });

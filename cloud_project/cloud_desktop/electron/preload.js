@@ -41,8 +41,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
 
     // ---------- 处方文件查看（新增） ----------
-    findMediaFiles: (patientName, prescriptionNo) => {
-        return ipcRenderer.invoke('find-media-files', patientName, prescriptionNo);
+    findMediaFiles: (patientName, prescriptionNo, createdAt) => {
+        return ipcRenderer.invoke('find-media-files', patientName, prescriptionNo, createdAt);
     },
 
     listAllMediaFiles: () => {

@@ -40,6 +40,7 @@ export interface MedicineItem {
 export interface Prescription {
   id: number;
   prescriptionNo: string;
+  originalNo?: string;
   patientName: string;
   gender: string;
   age: string;

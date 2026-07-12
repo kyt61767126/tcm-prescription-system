@@ -10,10 +10,11 @@ interface MediaFile {
 interface MediaViewerProps {
   patientName: string;
   prescriptionNo: string;
+  createdAt?: string;
   onClose: () => void;
 }
 
-const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, onClose }) => {
+const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, createdAt, onClose }) => {
   const [files, setFiles] = useState<MediaFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -48,7 +49,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
     }
 
     try {
-      const result = await electronAPI.findMediaFiles(patientName, prescriptionNo);
+      const result = await electronAPI.findMediaFiles(patientName, prescriptionNo, createdAt);
       if (result.success && result.files) {
         const sorted = [...result.files].sort((a: MediaFile, b: MediaFile) => {
           const order = (name: string) => {
@@ -68,7 +69,7 @@ const MediaViewer: React.FC<MediaViewerProps> = ({ patientName, prescriptionNo, 
     } finally {
       setLoading(false);
     }
-  }, [electronAPI, patientName, prescriptionNo]);
+  }, [electronAPI, patientName, prescriptionNo, createdAt]);
 
   useEffect(() => {
     loadMediaFiles();

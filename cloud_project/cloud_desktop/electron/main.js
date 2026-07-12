@@ -555,7 +555,7 @@ ipcMain.handle('get-video-directory', async () => {
 });
 
 // ★ 查找处方文件（新增）
-safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
+safeHandle('find-media-files', async (event, patientName, prescriptionNo, createdAt) => {
     if (!patientName) return { success: true, files: [] };
     const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
     const cleanName = sanitizeStr(patientName);
@@ -574,6 +574,17 @@ safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
             prefixes.push(`${cleanName}_${id}`);
             prefixes.push(`${id}_${cleanName}`);
         }
+    }
+    
+    // 解析 createdAt 时间范围（±1天）
+    let startTime = 0, endTime = Date.now() + 365 * 24 * 60 * 60 * 1000;
+    if (createdAt) {
+        try {
+            const createdDate = new Date(createdAt);
+            const time = createdDate.getTime();
+            startTime = time - 24 * 60 * 60 * 1000;
+            endTime = time + 48 * 60 * 60 * 1000;
+        } catch (e) { /* 解析失败用宽松范围 */ }
     }
     
     const files = [];
@@ -678,10 +689,11 @@ safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
                     const filePath = path.join(monthDir, fileName);
                     
                     if (foundPaths.has(filePath)) continue;
-                    foundPaths.add(filePath);
                     
                     try {
                         const stat = await fs.stat(filePath);
+                        // 如果有时间范围，用时间筛选
+                        if (startTime > 0 && (stat.mtimeMs < startTime || stat.mtimeMs > endTime)) continue;
                         const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
                         files.push({
                             name: fileName,
@@ -690,12 +702,12 @@ safeHandle('find-media-files', async (event, patientName, prescriptionNo) => {
                             size: stat.size,
                             lastModified: stat.mtimeMs
                         });
-                        console.log('[查找文件] 按姓名找到:', fileName);
+                        console.log('[查找文件] 按姓名+时间找到:', fileName);
                     } catch (e) { /* 跳过无法读取的文件 */ }
                 }
             }
         }
-        console.log('[查找文件] 按姓名搜索后共找到:', files.length, '个文件');
+        console.log('[查找文件] 按姓名+时间搜索后共找到:', files.length, '个文件');
     }
     
     return { success: true, files };

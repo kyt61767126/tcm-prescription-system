@@ -646,7 +646,8 @@ public class MainActivity extends BridgeActivity {
                                 args.optString("fileName", "")).toString();
                     case "findMediaFiles":
                         return findMediaFiles(args.optString("patientName", ""),
-                                args.optString("prescriptionNo", "")).toString();
+                                args.optString("prescriptionNo", ""),
+                                args.optString("createdAt", "")).toString();
                     case "openFile":
                         return openFile(args.optString("filePath", ""),
                                 args.optString("mimeType", "")).toString();
@@ -897,7 +898,7 @@ public class MainActivity extends BridgeActivity {
             }
         }
 
-        private JSONObject findMediaFiles(String patientName, String prescriptionNo) {
+        private JSONObject findMediaFiles(String patientName, String prescriptionNo, String createdAt) {
             try {
                 JSONArray files = new JSONArray();
                 String safeName = sanitize(patientName);
@@ -920,9 +921,19 @@ public class MainActivity extends BridgeActivity {
                 scanDirForMediaWithPrefixes(imgDir, prefix1, prefix2, files, foundPaths);
                 scanDirForMediaWithPrefixes(vidDir, prefix1, prefix2, files, foundPaths);
                 
+                // 回退策略：如果按编号未找到文件，用患者姓名+创建时间范围查找
+                if (files.length() == 0 && !createdAt.isEmpty()) {
+                    long[] timeRange = parseTimeRange(createdAt);
+                    long startTime = timeRange[0];
+                    long endTime = timeRange[1];
+                    scanDirForMediaByNameAndTime(imgDir, safeName, startTime, endTime, files, foundPaths);
+                    scanDirForMediaByNameAndTime(vidDir, safeName, startTime, endTime, files, foundPaths);
+                }
+                
                 StringBuilder debug = new StringBuilder();
                 debug.append("prefix1=").append(prefix1);
                 debug.append(" | prefix2=").append(prefix2);
+                debug.append(" | createdAt=").append(createdAt);
                 debug.append(" | imgDir=").append(imgDir != null ? imgDir.getAbsolutePath() : "null").append(" exists=").append(imgDir != null && imgDir.exists());
                 debug.append(" | vidDir=").append(vidDir != null ? vidDir.getAbsolutePath() : "null").append(" exists=").append(vidDir != null && vidDir.exists());
                 if (imgDir != null && imgDir.exists()) {
@@ -942,6 +953,61 @@ public class MainActivity extends BridgeActivity {
                 return result;
             } catch (Exception e) {
                 return fail("查找处方文件失败: " + e.getMessage());
+            }
+        }
+
+        // 解析 createdAt 时间字符串，返回 [startTime, endTime] 毫秒时间戳范围（当天 ±1 天）
+        private long[] parseTimeRange(String createdAt) {
+            try {
+                // 支持 ISO 格式：2026-07-12T10:30:00.000Z 或 2026-07-12 10:30:00
+                String dateStr = createdAt.trim().replace('T', ' ');
+                if (dateStr.contains(".")) dateStr = dateStr.substring(0, dateStr.indexOf('.'));
+                if (dateStr.contains("Z")) dateStr = dateStr.replace("Z", "");
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US);
+                sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                java.util.Date date = sdf.parse(dateStr);
+                long time = date.getTime();
+                // 当天 00:00 - 次日 23:59:59（±1天容错）
+                long dayStart = time - 24 * 60 * 60 * 1000L;
+                long dayEnd = time + 48 * 60 * 60 * 1000L;
+                return new long[]{dayStart, dayEnd};
+            } catch (Exception e) {
+                // 解析失败，返回宽松时间范围（前后7天）
+                long now = System.currentTimeMillis();
+                return new long[]{now - 7L * 24 * 60 * 60 * 1000, now + 7L * 24 * 60 * 60 * 1000};
+            }
+        }
+
+        // 按患者姓名和时间范围查找文件（回退策略）
+        private void scanDirForMediaByNameAndTime(File dir, String patientName, long startTime, long endTime, JSONArray files, java.util.Set<String> foundPaths) {
+            if (dir == null || !dir.exists()) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    scanDirForMediaByNameAndTime(f, patientName, startTime, endTime, files, foundPaths);
+                } else {
+                    String fileName = f.getName();
+                    // 文件名必须包含患者姓名
+                    if (!fileName.contains(patientName)) continue;
+                    // 文件修改时间必须在时间范围内
+                    long lastMod = f.lastModified();
+                    if (lastMod < startTime || lastMod > endTime) continue;
+                    String filePath = f.getAbsolutePath();
+                    if (foundPaths.contains(filePath)) continue;
+                    foundPaths.add(filePath);
+                    try {
+                        JSONObject fileObj = new JSONObject();
+                        fileObj.put("name", fileName);
+                        fileObj.put("path", filePath);
+                        fileObj.put("type", fileName.endsWith(".webm") ? "video" : "image");
+                        fileObj.put("size", f.length());
+                        fileObj.put("lastModified", lastMod);
+                        files.put(fileObj);
+                    } catch (Exception e) {
+                        Log.e("TCM-Pres", "添加文件信息失败: " + fileName, e);
+                    }
+                }
             }
         }
 

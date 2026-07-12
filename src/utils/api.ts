@@ -45,6 +45,8 @@ interface RawPrescription {
   prescriptionNo?: string;
   prescription_no?: string;
   outpatientNo?: string;
+  originalNo?: string;
+  original_no?: string;
   patientName?: string;
   patient_name?: string;
   name?: string;
@@ -241,6 +243,7 @@ export async function savePrescription(user: User, prescription: Prescription): 
       await ensureDatabase();
       await saveLocalPrescription({
         prescription_no: prescription.prescriptionNo,
+        original_no: prescription.prescriptionNo,
         patient_name: prescription.patientName,
         gender: prescription.gender,
         age: prescription.age,
@@ -276,8 +279,10 @@ export async function savePrescription(user: User, prescription: Prescription): 
     if (data && (data.success || data.fromCloud)) {
       try {
         await ensureDatabase();
+        const savedPrescriptionData = data.savedPrescription || prescription;
         await saveLocalPrescription({
-          prescription_no: prescription.prescriptionNo,
+          prescription_no: savedPrescriptionData.prescriptionNo,
+          original_no: prescription.prescriptionNo || savedPrescriptionData.originalNo || '',
           patient_name: prescription.patientName,
           gender: prescription.gender,
           age: prescription.age,
@@ -357,6 +362,7 @@ function normalizePrescriptions(rawList: RawPrescription[]): Prescription[] {
   return rawList.map((p): Prescription => ({
     id: p.id || 0,
     prescriptionNo: p.prescriptionNo || p.prescription_no || p.outpatientNo || '',
+    originalNo: p.originalNo || p.original_no || '',
     patientName: p.patientName || p.patient_name || p.name || '',
     gender: p.gender || '',
     age: p.age != null ? String(p.age) : '',
