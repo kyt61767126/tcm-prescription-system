@@ -9,7 +9,7 @@ echo.
 
 cd /d "%~dp0\android"
 
-echo [1/4] 检查环境...
+echo [1/5] 检查环境...
 if not exist "gradlew.bat" (
     echo [错误] 未找到 gradlew.bat
     pause
@@ -33,12 +33,21 @@ if not exist "app\src\main\assets\public\index.html" (
 echo [OK] 环境检查通过
 echo.
 
-echo [1.5/4] 停止残留 Gradle 进程...
+echo [1.5/5] 停止残留 Gradle 进程...
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] 清理完成
 echo.
 
-echo [2/4] 开始构建签名 APK...
+echo [2/5] 清理构建缓存...
+call gradlew.bat clean --no-daemon
+if errorlevel 1 (
+    echo [WARN] clean失败，继续增量构建
+) else (
+    echo [OK] 缓存已清理
+)
+echo.
+
+echo [3/5] 开始构建签名 APK...
 echo.
 call gradlew.bat assembleRelease --no-daemon
 if errorlevel 1 (
@@ -48,7 +57,7 @@ if errorlevel 1 (
     exit /b 1
 )
 echo.
-echo [3/4] 构建成功，定位 APK...
+echo [4/5] 构建成功，定位 APK...
 echo.
 
 set "APK_DIR=app\build\outputs\apk\release"
@@ -74,7 +83,7 @@ for %%A in ("%APK_FILE%") do (
 )
 echo.
 
-echo [4/4] 复制 APK 到打包目录...
+echo [5/5] 复制 APK 到打包目录...
 set "FINAL_APK=..\本能中医处方-本地版-v1.0.apk"
 copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
 if errorlevel 1 (

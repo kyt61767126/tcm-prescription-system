@@ -5,7 +5,7 @@ echo ============================================
 echo  本能中医处方系统-定制 打包脚本
 echo ============================================
 echo.
-echo [1/3] 检查环境...
+echo [1/5] 检查环境...
 where npm >nul 2>nul
 if errorlevel 1 (
     echo [错误] 未检测到 npm，请先安装 Node.js
@@ -14,7 +14,14 @@ if errorlevel 1 (
 )
 echo       npm OK
 echo.
-echo [2/3] 执行打包...
+echo [2/5] 配置诊所信息...
+powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
+echo.
+echo [3/5] 清理旧打包产物...
+if exist "dist" rmdir /s /q "dist"
+echo [OK] 旧产物已清理
+echo.
+echo [4/5] 执行打包...
 call npm run build
 if errorlevel 1 (
     echo.
@@ -23,7 +30,7 @@ if errorlevel 1 (
     exit /b 1
 )
 echo.
-echo [3/3] 打包完成
+echo [5/5] 打包完成
 echo 输出目录: %CD%\dist
 echo ============================================
 pause
