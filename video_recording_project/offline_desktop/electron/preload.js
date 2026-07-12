@@ -1,0 +1,54 @@
+// ============================================================================
+//  preload.js - 在 contextIsolation 模式下向渲染进程暴露安全 API
+//  所有方法均通过 contextBridge 暴露，渲染进程无法直接访问 ipcRenderer/require
+//
+//  ★ 本文件基于 offline_project/db-bendi/electron/preload.js 增加：
+//    - saveVideoFile：视频文件保存（ArrayBuffer → 文件）
+//    - getVideoDirectory：获取视频保存目录
+//    - openVideoDirectory：在文件管理器中打开视频目录
+// ============================================================================
+const { contextBridge, ipcRenderer } = require('electron');
+
+contextBridge.exposeInMainWorld('electronAPI', {
+    isElectron: true,
+
+    // 处方图片保存
+    savePrescriptionImage: (imageData, fileName) =>
+        ipcRenderer.invoke('save-prescription-image', imageData, fileName),
+
+    // ---------- 视频录制（新增） ----------
+    saveVideoFile: (arrayBuffer, fileName) =>
+        ipcRenderer.invoke('save-video-file', arrayBuffer, fileName),
+
+    getVideoDirectory: () =>
+        ipcRenderer.invoke('get-video-directory'),
+
+    openVideoDirectory: () =>
+        ipcRenderer.invoke('open-video-directory'),
+
+    // 用户数据持久化
+    saveUserData: (key, data) => ipcRenderer.invoke('save-user-data', key, data),
+    getUserData: (key) => ipcRenderer.invoke('get-user-data', key),
+
+    // 登录态
+    loginSuccess: (userData) => ipcRenderer.invoke('login-success', userData),
+    getCurrentUser: () => ipcRenderer.invoke('get-current-user'),
+
+    // 应用配置（取代旧的 get-index-html-content 正则解析）
+    getAppConfig: () => ipcRenderer.invoke('get-app-config'),
+    setAutoStart: (enabled) => ipcRenderer.invoke('set-auto-start', enabled),
+
+    // 退出
+    quitApp: () => ipcRenderer.invoke('quit-app'),
+
+    // 备份文件保存（绕过 Electron 下载机制，直接写文件）
+    saveBackupFile: (jsonStr, fileName) => ipcRenderer.invoke('save-backup-file', jsonStr, fileName),
+
+    // 主进程推送给渲染进程：登录用户信息（主窗口 dom-ready 时一次性发送）
+    onLoginUser: (callback) => {
+        const handler = (_event, user) => callback(user);
+        ipcRenderer.once('main:login-user', handler);
+    },
+
+    showMessageBox: (options) => ipcRenderer.invoke('show-message-box', options)
+});

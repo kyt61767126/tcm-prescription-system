@@ -350,7 +350,7 @@
             localStorage.setItem('lastUsedMediaPatientName', cleanName);
         } catch (e) { /* 忽略localStorage写入错误 */ }
 
-        var ext = type === 'video' ? 'webm' : 'jpg';
+        var ext = type === 'video' ? (window.__currentVideoExt || 'webm') : 'jpg';
         var sub = subtype ? '_' + subtype : '';
         return cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
     }
@@ -414,28 +414,57 @@
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'cloud-vr-status';
 
-            var constraints = {
-                video: {
-                    width: { ideal: VIDEO_WIDTH },
-                    height: { ideal: VIDEO_HEIGHT },
-                    frameRate: { ideal: VIDEO_FPS },
-                    facingMode: currentFacingMode
+            // 多级分辨率兜底：从高到低尝试不同约束组合，适配不同手机型号
+            var constraintOptions = [
+                // 1. 理想配置：720p + 指定摄像头 + 原始音频
+                {
+                    video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode },
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
                 },
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false
-                }
-            };
+                // 2. 720p + 指定摄像头 + 无音频约束
+                {
+                    video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode },
+                    audio: false
+                },
+                // 3. 720p 不指定摄像头（某些手机不支持facingMode）
+                {
+                    video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS } },
+                    audio: false
+                },
+                // 4. 480p 兜底分辨率
+                {
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+                    audio: false
+                },
+                // 5. 最简约束（最大兼容性）
+                { video: true, audio: false }
+            ];
 
-            try {
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-            } catch (audioErr) {
-                console.warn('[视频录制] 音频获取失败，尝试仅视频:', audioErr);
-                constraints.audio = false;
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-                statusEl.textContent = '注意：麦克风不可用，将录制无声视频';
+            var mediaStreamResult = null;
+            var lastError = null;
+            var usedConfig = '';
+
+            for (var i = 0; i < constraintOptions.length; i++) {
+                try {
+                    mediaStreamResult = await navigator.mediaDevices.getUserMedia(constraintOptions[i]);
+                    usedConfig = i === 0 ? '高清' : (i < 3 ? '标准' : '兼容');
+                    console.log('[视频录制] 使用约束组合', i + 1, '成功');
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    console.warn('[视频录制] 约束组合', i + 1, '失败:', err.message || err.name);
+                }
             }
+
+            if (!mediaStreamResult) {
+                // 权限被拒绝的特殊提示
+                if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
+                    throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头和麦克风权限');
+                }
+                throw lastError || new Error('无法获取摄像头权限');
+            }
+
+            mediaStream = mediaStreamResult;
 
             var videoEl = document.getElementById('cloudVrPreview');
             videoEl.srcObject = mediaStream;
@@ -466,7 +495,8 @@
 
             await new Promise(function (r) { setTimeout(r, 200); });
 
-            statusEl.textContent = '摄像头已就绪，点击"开始录制"';
+            var audioStatus = mediaStream.getAudioTracks().length > 0 ? '' : '（无声）';
+            statusEl.textContent = '摄像头已就绪' + audioStatus + '，点击"开始录制" [' + usedConfig + ']';
             startBtn.disabled = false;
         } catch (err) {
             console.error('[视频录制] 摄像头初始化失败:', err);
@@ -496,7 +526,10 @@
             'video/webm;codecs=vp8,opus',
             'video/webm;codecs=vp9',
             'video/webm;codecs=vp8',
-            'video/webm'
+            'video/webm',
+            'video/mp4;codecs=h264,aac',
+            'video/mp4;codecs=h264',
+            'video/mp4'
         ];
         var selectedMime = '';
         for (var i = 0; i < mimeTypes.length; i++) {
@@ -505,6 +538,9 @@
                 break;
             }
         }
+
+        // 根据实际mimeType设置文件扩展名（webm或mp4）
+        window.__currentVideoExt = selectedMime.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
 
         try {
             mediaRecorder = new MediaRecorder(mediaStream, {
@@ -749,21 +785,40 @@
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'cloud-vr-status';
 
-            mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: VIDEO_WIDTH },
-                    height: { ideal: VIDEO_HEIGHT },
-                    frameRate: { ideal: VIDEO_FPS },
-                    facingMode: currentFacingMode
-                },
-                audio: false
-            });
+            // 多级分辨率兜底：从高到低尝试不同约束组合，适配不同手机型号
+            var constraintOptions = [
+                { video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode }, audio: false },
+                { video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS } }, audio: false },
+                { video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }, audio: false },
+                { video: true, audio: false }
+            ];
+
+            var mediaStreamResult = null;
+            var lastError = null;
+
+            for (var i = 0; i < constraintOptions.length; i++) {
+                try {
+                    mediaStreamResult = await navigator.mediaDevices.getUserMedia(constraintOptions[i]);
+                    console.log('[拍照] 使用约束组合', i + 1, '成功');
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    console.warn('[拍照] 约束组合', i + 1, '失败:', err.message || err.name);
+                }
+            }
+
+            if (!mediaStreamResult) {
+                if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
+                    throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头权限');
+                }
+                throw lastError || new Error('无法获取摄像头权限');
+            }
+
+            mediaStream = mediaStreamResult;
 
             var videoEl = document.getElementById('cloudVrPreview');
             videoEl.srcObject = mediaStream;
 
-            // 等待视频帧数据就绪（loadeddata事件），确保drawImage不绘制空帧
-            // 这是拍照黑屏的根本原因：srcObject设置后需要等解码出第一帧才能drawImage
             statusEl.textContent = '正在初始化摄像头...';
             captureBtn.disabled = true;
 
@@ -778,7 +833,6 @@
                     resolve();
                 }, { once: true });
 
-                // 某些WebView可能不触发loadeddata，额外检查readyState
                 var checkReady = setInterval(function () {
                     if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
                         clearTimeout(timeout);
@@ -788,7 +842,6 @@
                 }, 100);
             });
 
-            // 额外等待200ms确保帧数据稳定
             await new Promise(function (r) { setTimeout(r, 200); });
 
             statusEl.textContent = '摄像头已就绪，点击"拍照"';
