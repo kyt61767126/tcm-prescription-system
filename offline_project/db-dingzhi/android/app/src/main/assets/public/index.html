@@ -3277,14 +3277,40 @@
                     view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
                 });
             } else if (isVid) {
-                window.electronAPI.openFile(f.path).then(function(result) {
-                    if (!result.success) {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">无法打开视频文件</div>';
+                view.innerHTML = '<div style="color:#fff;font-size:12px;">正在加载视频...</div>';
+                window.electronAPI.readFileAsBase64(f.path).then(function(result) {
+                    if (result.success && (result.data || result.base64)) {
+                        var src = result.data || result.base64;
+                        var byteChars = atob(src.split(',')[1]);
+                        var byteArrays = [];
+                        var chunkSize = 8192;
+                        for (var offset = 0; offset < byteChars.length; offset += chunkSize) {
+                            var chunk = byteChars.slice(offset, offset + chunkSize);
+                            var byteNumbers = new Array(chunk.length);
+                            for (var i = 0; i < chunk.length; i++) {
+                                byteNumbers[i] = chunk.charCodeAt(i);
+                            }
+                            byteArrays.push(new Uint8Array(byteNumbers));
+                        }
+                        var mimeType = src.split(':')[1].split(';')[0];
+                        var blob = new Blob(byteArrays, { type: mimeType });
+                        var blobUrl = URL.createObjectURL(blob);
+                        if (window.__currentBlobUrl) {
+                            try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
+                        }
+                        window.__currentBlobUrl = blobUrl;
+                        view.innerHTML = '';
+                        var video = document.createElement('video');
+                        video.src = blobUrl;
+                        video.controls = true;
+                        video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+                        view.appendChild(video);
+                    } else {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败</div>';
                     }
-                }).catch(function() {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">打开视频失败</div>';
+                }).catch(function(err) {
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败</div>';
                 });
-                view.innerHTML = '<div style="color:#fff;font-size:14px;text-align:center;padding:20px;">正在用系统播放器打开...</div>';
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }
@@ -5715,6 +5741,31 @@ window.addEventListener('load', function () {
 
             const videoEl = document.getElementById('videoPreview');
             videoEl.srcObject = mediaStream;
+
+            statusEl.textContent = '正在初始化摄像头...';
+            captureBtn.disabled = true;
+
+            await new Promise(function (resolve, reject) {
+                var timeout = setTimeout(function () {
+                    reject(new Error('摄像头初始化超时'));
+                }, 5000);
+
+                videoEl.addEventListener('loadeddata', function onLoaded() {
+                    clearTimeout(timeout);
+                    videoEl.removeEventListener('loadeddata', onLoaded);
+                    resolve();
+                }, { once: true });
+
+                var checkReady = setInterval(function () {
+                    if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+                        clearTimeout(timeout);
+                        clearInterval(checkReady);
+                        resolve();
+                    }
+                }, 100);
+            });
+
+            await new Promise(function (r) { setTimeout(r, 200); });
 
             statusEl.textContent = '摄像头已就绪，点击"拍照"';
             captureBtn.disabled = false;

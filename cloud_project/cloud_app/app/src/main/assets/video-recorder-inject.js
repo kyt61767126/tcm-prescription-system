@@ -440,6 +440,32 @@
             var videoEl = document.getElementById('cloudVrPreview');
             videoEl.srcObject = mediaStream;
 
+            // 等待视频帧数据就绪，确保预览画面正常显示
+            statusEl.textContent = '正在初始化摄像头...';
+            startBtn.disabled = true;
+
+            await new Promise(function (resolve, reject) {
+                var timeout = setTimeout(function () {
+                    reject(new Error('摄像头初始化超时'));
+                }, 5000);
+
+                videoEl.addEventListener('loadeddata', function onLoaded() {
+                    clearTimeout(timeout);
+                    videoEl.removeEventListener('loadeddata', onLoaded);
+                    resolve();
+                }, { once: true });
+
+                var checkReady = setInterval(function () {
+                    if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+                        clearTimeout(timeout);
+                        clearInterval(checkReady);
+                        resolve();
+                    }
+                }, 100);
+            });
+
+            await new Promise(function (r) { setTimeout(r, 200); });
+
             statusEl.textContent = '摄像头已就绪，点击"开始录制"';
             startBtn.disabled = false;
         } catch (err) {
@@ -735,6 +761,35 @@
 
             var videoEl = document.getElementById('cloudVrPreview');
             videoEl.srcObject = mediaStream;
+
+            // 等待视频帧数据就绪（loadeddata事件），确保drawImage不绘制空帧
+            // 这是拍照黑屏的根本原因：srcObject设置后需要等解码出第一帧才能drawImage
+            statusEl.textContent = '正在初始化摄像头...';
+            captureBtn.disabled = true;
+
+            await new Promise(function (resolve, reject) {
+                var timeout = setTimeout(function () {
+                    reject(new Error('摄像头初始化超时'));
+                }, 5000);
+
+                videoEl.addEventListener('loadeddata', function onLoaded() {
+                    clearTimeout(timeout);
+                    videoEl.removeEventListener('loadeddata', onLoaded);
+                    resolve();
+                }, { once: true });
+
+                // 某些WebView可能不触发loadeddata，额外检查readyState
+                var checkReady = setInterval(function () {
+                    if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+                        clearTimeout(timeout);
+                        clearInterval(checkReady);
+                        resolve();
+                    }
+                }, 100);
+            });
+
+            // 额外等待200ms确保帧数据稳定
+            await new Promise(function (r) { setTimeout(r, 200); });
 
             statusEl.textContent = '摄像头已就绪，点击"拍照"';
             captureBtn.disabled = false;

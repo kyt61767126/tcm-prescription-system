@@ -1399,7 +1399,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-07-12-v1';
+        window.__APP_VERSION__ = '2026-07-12-v2';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -6237,14 +6237,46 @@
                     view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
                 });
             } else if (isVid) {
-                window.electronAPI.openFile(f.path).then(function(result) {
-                    if (!result.success) {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">无法打开视频文件</div>';
+                // 使用内嵌video标签播放，避免系统播放器不支持WebM格式
+                view.innerHTML = '<div style="color:#fff;font-size:12px;">正在加载视频...</div>';
+                window.electronAPI.readFileAsBase64(f.path).then(function(result) {
+                    if (result.success && (result.data || result.base64)) {
+                        var src = result.data || result.base64;
+                        // 将base64 data URI转换为Blob URL，避免大文件内存问题
+                        var byteChars = atob(src.split(',')[1]);
+                        var byteArrays = [];
+                        var chunkSize = 8192;
+                        for (var offset = 0; offset < byteChars.length; offset += chunkSize) {
+                            var chunk = byteChars.slice(offset, offset + chunkSize);
+                            var byteNumbers = new Array(chunk.length);
+                            for (var i = 0; i < chunk.length; i++) {
+                                byteNumbers[i] = chunk.charCodeAt(i);
+                            }
+                            byteArrays.push(new Uint8Array(byteNumbers));
+                        }
+                        var mimeType = src.split(':')[1].split(';')[0];
+                        var blob = new Blob(byteArrays, { type: mimeType });
+                        var blobUrl = URL.createObjectURL(blob);
+
+                        // 释放之前的Blob URL
+                        if (window.__currentBlobUrl) {
+                            try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
+                        }
+                        window.__currentBlobUrl = blobUrl;
+
+                        view.innerHTML = '';
+                        var video = document.createElement('video');
+                        video.src = blobUrl;
+                        video.controls = true;
+                        video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+                        video.autoplay = false;
+                        view.appendChild(video);
+                    } else {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败</div>';
                     }
-                }).catch(function() {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">打开视频失败</div>';
+                }).catch(function(err) {
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败: ' + (err.message || err) + '</div>';
                 });
-                view.innerHTML = '<div style="color:#fff;font-size:14px;text-align:center;padding:20px;">正在用系统播放器打开...</div>';
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }
