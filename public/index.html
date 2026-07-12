@@ -911,6 +911,10 @@
                     <button class="action-btn primary" onclick="applyPrescriptionFilter()">筛选</button>
                     <button class="action-btn" onclick="resetPrescriptionFilter()">重置</button>
                 </div>
+                <div style="display:flex;gap:8px;margin-bottom:8px;align-items:center;">
+                    <button class="action-btn" id="adminSyncBtn" onclick="adminSyncOfflineData()" style="background:#1976d2;color:white;">同步离线数据</button>
+                    <span id="adminSyncStatus" style="font-size:12px;color:#666;"></span>
+                </div>
                 <div id="clinicPrescriptionList" style="max-height:400px;overflow-y:auto;border:1px solid #eee;border-radius:4px;">
                     <div style="text-align:center;color:#999;padding:20px;">加载中...</div>
                 </div>
@@ -3814,12 +3818,16 @@
                 const no = p.prescriptionNo || p.outpatientNo || '';
                 const isLocal = no.startsWith('LOCAL-');
                 const date = (p.date || p.createdAt || '').slice(0, 10);
+                const mediaCount = (p.mediaFiles || []).length;
+                const mediaBadge = mediaCount > 0
+                    ? ` <span style="font-size:11px;color:#1976d2;cursor:pointer;" onclick="event.stopPropagation();viewClinicPrescriptionMedia(${p.id})">📷🎥(${mediaCount})</span>`
+                    : '';
                 return `
                 <div style="padding:8px 12px;border-bottom:1px solid #eee;cursor:pointer;" onclick="loadHistory(${p.id})">
                     <div style="display:flex;justify-content:space-between;">
                         <div>
                             <span style="font-weight:bold;">${escapeHtml(p.patientName || p.name || '未知')}</span>
-                            <span style="font-size:11px;color:${isLocal ? '#e65100' : '#8b0000'};margin-left:8px;">[${escapeHtml(no)}]${isLocal ? ' 待同步' : ''}</span>
+                            <span style="font-size:11px;color:${isLocal ? '#e65100' : '#8b0000'};margin-left:8px;">[${escapeHtml(no)}]${isLocal ? ' 待同步' : ''}</span>${mediaBadge}
                         </div>
                         <div style="font-size:11px;color:#666;">${escapeHtml(date)} | ${escapeHtml(p.createdBy || '')}</div>
                     </div>
@@ -3850,6 +3858,130 @@
             document.getElementById('filterDoctor').value = '';
             document.getElementById('filterKeyword').value = '';
             renderClinicPrescriptionList(_clinicPrescriptionCache);
+        }
+
+        async function adminSyncOfflineData() {
+            if (!currentUser || !isAdmin(currentUser)) {
+                showToast('只有管理员可以执行同步');
+                return;
+            }
+            const statusEl = document.getElementById('adminSyncStatus');
+            const btn = document.getElementById('adminSyncBtn');
+            if (btn) btn.disabled = true;
+
+            try {
+                const localReady = await LocalDB.ready();
+                let pushedCount = 0;
+
+                if (localReady) {
+                    if (statusEl) statusEl.textContent = '正在推送本地离线数据...';
+                    try {
+                        pushedCount = await SyncEngine.push();
+                    } catch (e) { console.warn('push失败:', e); }
+
+                    if (statusEl) statusEl.textContent = '正在拉取云端数据...';
+                    try {
+                        await SyncEngine.pull();
+                    } catch (e) { console.warn('pull失败:', e); }
+                } else {
+                    if (statusEl) statusEl.textContent = '正在拉取云端数据...';
+                    try {
+                        await SyncEngine.pull();
+                    } catch (e) { console.warn('pull失败:', e); }
+                }
+
+                if (statusEl) statusEl.textContent = '正在刷新处方列表...';
+                await loadClinicPrescriptionList();
+
+                if (statusEl) {
+                    statusEl.textContent = pushedCount > 0
+                        ? `同步完成：推送 ${pushedCount} 条，已刷新列表`
+                        : '同步完成：已刷新云端数据';
+                }
+            } catch (e) {
+                console.error('adminSync失败:', e);
+                if (statusEl) statusEl.textContent = '同步失败: ' + e.message;
+            } finally {
+                if (btn) btn.disabled = false;
+                setTimeout(() => { if (statusEl) statusEl.textContent = ''; }, 5000);
+            }
+        }
+
+        async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
+            if (!window.electronAPI || !window.electronAPI.findMediaFiles) return;
+            if (!officialNo) return;
+
+            const patientName = savedRecord.patientName || '';
+            try {
+                const result = await window.electronAPI.findMediaFiles(patientName, officialNo);
+                if (result.success && result.files && result.files.length > 0) {
+                    const mediaFiles = result.files.map(f => ({
+                        name: f.name,
+                        type: f.type || (f.name.includes('video') ? 'video' : 'image'),
+                        size: f.size || 0,
+                        lastModified: f.lastModified || ''
+                    }));
+
+                    const updatedRecord = { ...savedRecord, mediaFiles };
+                    const authToken = btoa(currentUser.username + ':' + (currentUser.token || ''));
+                    await fetch(CLOUD_API_BASE + '/prescriptions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': 'Basic ' + authToken
+                        },
+                        body: JSON.stringify({ prescription: [updatedRecord] })
+                    });
+                    console.log('媒体文件元数据已更新:', mediaFiles.length, '个文件');
+                }
+            } catch (e) {
+                console.warn('收集媒体文件元数据失败:', e);
+            }
+        }
+
+        async function viewClinicPrescriptionMedia(id) {
+            const p = _clinicPrescriptionCache.find(x => x.id === id);
+            if (!p) return;
+            const mediaFiles = p.mediaFiles || [];
+
+            if (mediaFiles.length === 0) {
+                showToast('该处方无媒体文件记录');
+                return;
+            }
+
+            if (window.electronAPI && window.electronAPI.findMediaFiles) {
+                try {
+                    const result = await window.electronAPI.findMediaFiles(
+                        p.patientName || p.name || '', p.prescriptionNo || p.outpatientNo || ''
+                    );
+                    if (result.success && result.files && result.files.length > 0) {
+                        viewMediaFiles(p.patientName || p.name || '', p.prescriptionNo || p.outpatientNo || '');
+                        return;
+                    }
+                } catch (e) { console.warn('本地查找媒体文件失败:', e); }
+            }
+
+            const fileList = mediaFiles.map(f => {
+                const icon = f.type === 'video' ? '🎥' : '📷';
+                const sizeStr = f.size ? `(${(f.size / 1024).toFixed(0)}KB)` : '';
+                return `<div style="padding:4px 0;border-bottom:1px solid #eee;">
+                    <span>${icon} ${escapeHtml(f.name)} ${sizeStr}</span>
+                </div>`;
+            }).join('');
+
+            const createdBy = p.createdBy || '未知用户';
+            const modalHtml = `
+                <div style="max-width:500px;">
+                    <div style="margin-bottom:8px;color:#666;font-size:13px;">媒体文件保存在 <b>${escapeHtml(createdBy)}</b> 的本地设备上，请联系该用户获取。</div>
+                    <div style="max-height:300px;overflow-y:auto;">${fileList}</div>
+                </div>`;
+            const modal = document.getElementById('mediaInfoModal');
+            if (modal) {
+                modal.querySelector('.modal-body').innerHTML = modalHtml;
+                showModal('mediaInfoModal');
+            } else {
+                alert('媒体文件保存在 ' + createdBy + ' 的本地设备上\n\n文件列表:\n' + mediaFiles.map(f => f.name).join('\n'));
+            }
         }
 
         async function showUserManageModal() {
@@ -6687,9 +6819,17 @@
                                     if (r.success && r.renamed > 0) {
                                         console.log('已重命名 ' + r.renamed + ' 个处方文件: ' + oldPrescriptionNo + ' → ' + officialNo);
                                     }
+                                    collectAndUpdateMediaFiles(savedRecord, officialNo);
                                 })
-                                .catch(e => console.error('重命名处方文件失败:', e));
+                                .catch(e => {
+                                    console.error('重命名处方文件失败:', e);
+                                    collectAndUpdateMediaFiles(savedRecord, officialNo);
+                                });
+                        } else {
+                            collectAndUpdateMediaFiles(savedRecord, officialNo);
                         }
+                    } else {
+                        collectAndUpdateMediaFiles(savedRecord, officialNo);
                     }
                     // 保存后清空表单，方便下一次使用（跳过确认弹窗）
                     clearPrescription(true);

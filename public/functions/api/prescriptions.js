@@ -193,20 +193,42 @@ export async function onRequest(context) {
             const savedPrescriptions = [];
 
             for (const p of prescriptionList) {
-                const outpatientNo = await generatePrescriptionNo(kv, targetClinicId, currentUser.username);
-                const newPrescription = {
-                    ...p,
-                    id: p.id || Date.now(),
-                    prescriptionNo: outpatientNo,
-                    outpatientNo: outpatientNo,
-                    createdAt: p.createdAt || nowIso,
-                    updatedAt: nowIso,
-                    createdBy: currentUser.username,
-                    userId: currentUser.username,
-                    userRole: currentUser.role,
-                    isAdmin: currentUser.isAdmin
-                };
-                savedPrescriptions.push(newPrescription);
+                // 检查处方是否已存在（按id匹配）
+                const existingIdx = prescriptions.findIndex(x => x.id.toString() === (p.id || '').toString());
+                if (existingIdx >= 0) {
+                    // 已存在：保留原编号和创建者，合并新字段（如mediaFiles）
+                    const existing = prescriptions[existingIdx];
+                    const newPrescription = {
+                        ...existing,
+                        ...p,
+                        id: existing.id,
+                        prescriptionNo: existing.prescriptionNo,
+                        outpatientNo: existing.outpatientNo,
+                        createdAt: existing.createdAt,
+                        createdBy: existing.createdBy,
+                        userId: existing.userId || existing.createdBy,
+                        userRole: existing.userRole,
+                        isAdmin: existing.isAdmin,
+                        updatedAt: nowIso
+                    };
+                    savedPrescriptions.push(newPrescription);
+                } else {
+                    // 不存在：生成新编号
+                    const outpatientNo = await generatePrescriptionNo(kv, targetClinicId, currentUser.username);
+                    const newPrescription = {
+                        ...p,
+                        id: p.id || Date.now(),
+                        prescriptionNo: outpatientNo,
+                        outpatientNo: outpatientNo,
+                        createdAt: p.createdAt || nowIso,
+                        updatedAt: nowIso,
+                        createdBy: p.createdBy || currentUser.username,
+                        userId: p.createdBy || currentUser.username,
+                        userRole: p.userRole || currentUser.role,
+                        isAdmin: p.isAdmin !== undefined ? p.isAdmin : currentUser.isAdmin
+                    };
+                    savedPrescriptions.push(newPrescription);
+                }
             }
 
             // 合并并去重
