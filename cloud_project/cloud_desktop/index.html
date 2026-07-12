@@ -2042,6 +2042,11 @@
             return !!(u && u.role === 'doctor');
         }
 
+        function isAdmin(user) {
+            const u = user || currentUser;
+            return isClinicAdmin(u) || isPlatformAdmin(u);
+        }
+
         // 兼容旧调用方式：safeBtoa(`${username}:${role}`) 已废弃
         // 所有调用点应改为 buildAuthHeader(currentUser)
 
