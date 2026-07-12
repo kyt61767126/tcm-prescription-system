@@ -924,7 +924,8 @@
         <div class="tab-item" id="medicineManageBtn" onclick="showModal('medicineModal')">【药品管理】</div>
         <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
         <div class="tab-item" onclick="showModal('analyticsModal')">【统计】</div>
-        <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户】</div>
+        <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
+        <div class="tab-item" id="changePwdBtn" onclick="showModal('changePwdModal')" style="display:none;">【修改密码】</div>
         <div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div>
         <div class="tab-item" id="platformManageBtn" onclick="showPlatformManageModal()" style="display:none;background:#fff3cd;color:#856404;border-color:#ffc107;">【平台管理】</div>
         <div class="tab-item" id="platformRxBtn" onclick="showPlatformPrescriptionModal()" style="display:none;background:#e3f2fd;color:#1565c0;border-color:#42a5f5;">【处方监管】</div>
@@ -1475,7 +1476,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-07-12-v6';
+        window.__APP_VERSION__ = '2026-07-12-v7';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -4089,13 +4090,16 @@
                 const platformManageBtn = document.getElementById('platformManageBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
-                // 诊所管理员：显示账户管理 + 开机自启
+                // 诊所管理员：显示账户管理 + 开机自启；普通用户：显示修改密码
+                const changePwdBtn = document.getElementById('changePwdBtn');
                 if (isClinicAdmin(currentUser)) {
                     userManageBtn.style.display = 'block';
                     autoStartSection.style.display = 'block';
+                    if (changePwdBtn) changePwdBtn.style.display = 'none';
                 } else {
                     userManageBtn.style.display = 'none';
                     autoStartSection.style.display = 'none';
+                    if (changePwdBtn) changePwdBtn.style.display = 'block';
                 }
 
                 // 平台总管理员：显示平台管理按钮 + 处方监管按钮（不参与诊所业务，不显示账户管理/开机自启）
