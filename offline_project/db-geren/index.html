@@ -3139,6 +3139,11 @@
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
+            // 恢复历史处方的日期和医师名到输入框
+            const _visitDateEl = document.getElementById('visitDate');
+            if (_visitDateEl) _visitDateEl.value = record.date || '';
+            const _doctorNameEl = document.getElementById('doctorName');
+            if (_doctorNameEl) _doctorNameEl.value = record.doctorName || '';
             updatePrescriptionPaper();
             document.getElementById('paperDate').textContent = record.date || '';
         }

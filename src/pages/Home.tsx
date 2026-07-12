@@ -358,14 +358,15 @@ const Home: React.FC = () => {
           <input
             type="text"
             value={currentForm.visitDate || currentDate}
-            onChange={(e) => setFormField('visitDate', e.target.value)}
+            readOnly
             style={{
               flex: '0 0 110px',
               padding: '4px 4px',
               border: '1px solid #808080',
               fontSize: '12px',
               minHeight: '32px',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              backgroundColor: '#f0f0f0'
             }}
           />
         </div>
@@ -465,14 +466,15 @@ const Home: React.FC = () => {
           <input
             type="text"
             value={currentForm.clinicNo || ''}
-            onChange={(e) => setFormField('clinicNo', e.target.value)}
+            readOnly
             style={{
               flex: '0 0 80px',
               padding: '4px 4px',
               border: '1px solid #808080',
               fontSize: '12px',
               minHeight: '32px',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
+              backgroundColor: '#f0f0f0'
             }}
           />
           <span style={{
