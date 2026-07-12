@@ -623,6 +623,71 @@
             .medicine-action-bar #importMedicineFile { grid-column: 1 / -1; }
             .medicine-action-bar .action-btn { width: 100%; box-sizing: border-box; }
         }
+        /* ===== 兜底适配：不同品牌型号手机 ===== */
+        html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+        body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+
+        @media screen and (max-width: 768px) {
+            .action-btn, .login-btn, .history-tab, .mobile-nav-btn,
+            .medicine-table input, .search-item, .modal-header button,
+            .user-item, .form-group input, button { min-height: 36px; }
+            .action-btn { padding: 6px 10px; }
+            .medicine-table { font-size: 12px; }
+            .medicine-table th { font-size: 11px; padding: 4px; }
+            .medicine-table input { font-size: 12px; padding: 4px; }
+            .prescription-line { font-size: 12px; }
+            .prescription-info { font-size: 12px; }
+        }
+
+        @media screen and (max-width: 360px) {
+            .login-container { width: 95%; max-width: 280px; min-height: 360px; }
+            .header-section { padding: 15px 12px; }
+            .system-title { font-size: 16px; }
+            .version-tag { font-size: 11px; }
+            .login-box { padding: 15px 12px; }
+            .login-field { margin-bottom: 12px; gap: 6px; }
+            .login-field label { width: 38px; font-size: 12px; }
+            .login-field input, .login-field select { padding: 8px 10px; font-size: 13px; min-width: 100px; }
+            .login-buttons { gap: 12px; margin-top: 15px; }
+            .login-btn { padding: 8px 18px; min-width: 70px; font-size: 13px; }
+            .login-footer { font-size: 10px; }
+            .patient-input { min-height: 30px; font-size: 12px; padding: 3px 4px; }
+            .patient-input.x-small { flex: 0 0 45px; }
+            .patient-input.xx-small { flex: 0 0 70px; }
+            .patient-input.xxx-small { flex: 0 0 85px; }
+            .patient-input.name-input { flex: 0 0 60px; }
+            .patient-label { width: 35px; font-size: 11px; padding-right: 2px; }
+            .action-btn { padding: 4px 6px; font-size: 10px; min-height: 32px; }
+            .medicine-table { font-size: 11px; }
+            .medicine-table input { font-size: 11px; }
+            .mobile-action-bar .action-btn { min-height: 36px; font-size: 11px; padding: 4px 2px; }
+        }
+
+        @media screen and (min-width: 481px) and (max-width: 768px) {
+            .login-container { width: 80%; max-width: 380px; }
+            .patient-input { min-height: 36px; font-size: 14px; }
+            .action-btn { min-height: 40px; font-size: 12px; }
+        }
+
+        @media screen and (max-width: 768px) and (orientation: landscape) {
+            .login-container { width: 60%; max-width: 400px; min-height: 280px; }
+            .header-section { padding: 10px 15px; }
+            .main-content { padding: 10px 15px; min-height: calc(100% - 60px); }
+            .login-field { margin-bottom: 10px; }
+        }
+
+        @media screen and (max-width: 768px) {
+            .login-overlay {
+                padding-top: env(safe-area-inset-top);
+                padding-bottom: env(safe-area-inset-bottom);
+                padding-left: env(safe-area-inset-left);
+                padding-right: env(safe-area-inset-right);
+            }
+            .modal-content {
+                margin-top: env(safe-area-inset-top);
+                margin-bottom: env(safe-area-inset-bottom);
+            }
+        }
     </style>
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
