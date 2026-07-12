@@ -264,6 +264,19 @@ public class MainActivity extends BridgeActivity {
                     .show();
                 return true;
             }
+
+            // 加载进度回调：实时更新loading文字显示百分比，让用户感知加载进度
+            @Override
+            public void onProgressChanged(WebView view, int newProgress) {
+                super.onProgressChanged(view, newProgress);
+                if (loadingText != null && loadingLayout != null && loadingLayout.getVisibility() == View.VISIBLE) {
+                    if (newProgress < 100) {
+                        loadingText.setText("正在加载云端处方系统 " + newProgress + "%");
+                    } else {
+                        loadingText.setText("正在加载云端处方系统...");
+                    }
+                }
+            }
         });
 
         // 添加 JavaScript 接口，供网页调用退出 APP（点击"退出"按钮时直接返回手机主屏）
@@ -306,6 +319,18 @@ public class MainActivity extends BridgeActivity {
                     // 立即重定向到云端URL，不延迟（不添加时间戳，允许缓存）
                     view.loadUrl(CLOUD_URL);
                 }
+            }
+
+            // API 23+：页面内容首次可见时调用，比 onPageFinished 更早
+            // 此时页面已渲染出基本内容，提前隐藏loading让用户立即看到页面
+            @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                super.onPageCommitVisible(view, url);
+                mainHandler.post(() -> {
+                    if (loadingLayout != null) {
+                        loadingLayout.setVisibility(View.GONE);
+                    }
+                });
             }
 
             @Override
