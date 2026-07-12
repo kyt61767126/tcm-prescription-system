@@ -764,8 +764,15 @@ public class MainActivity extends AppCompatActivity {
                 scanDirForMedia(imgDir, prefix1, prefix2, files, foundPaths);
                 scanDirForMedia(vidDir, prefix1, prefix2, files, foundPaths);
                 // 回退策略：如果按编号未找到文件，用患者姓名+创建时间范围查找
-                if (files.length() == 0 && !createdAt.isEmpty()) {
-                    long[] timeRange = parseTimeRange(createdAt);
+                if (files.length() == 0) {
+                    long[] timeRange;
+                    if (!createdAt.isEmpty()) {
+                        timeRange = parseTimeRange(createdAt);
+                    } else {
+                        // createdAt为空，使用宽松时间范围（前后30天）
+                        long now = System.currentTimeMillis();
+                        timeRange = new long[]{now - 30L * 24 * 60 * 60 * 1000, now + 24 * 60 * 60 * 1000L};
+                    }
                     scanDirForMediaByNameAndTime(imgDir, safeName, timeRange[0], timeRange[1], files, foundPaths);
                     scanDirForMediaByNameAndTime(vidDir, safeName, timeRange[0], timeRange[1], files, foundPaths);
                 }
