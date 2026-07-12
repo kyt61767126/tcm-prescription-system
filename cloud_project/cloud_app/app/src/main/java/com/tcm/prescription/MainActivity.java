@@ -158,9 +158,6 @@ public class MainActivity extends BridgeActivity {
         }
 
         WebSettings settings = webView.getSettings();
-        // LOAD_DEFAULT: 使用默认缓存策略（有缓存时使用缓存，无缓存时从网络获取）
-        // 结合 HTTP 缓存控制头实现高效加载，避免每次启动都重新下载所有资源
-        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
 
         // 版本检查：如果 APP 版本更新了，清除 WebView 缓存强制加载最新页面
         // 这解决了用户看到旧缓存版本（如"媒体"文字未更新为"处方"）的问题
@@ -173,6 +170,11 @@ public class MainActivity extends BridgeActivity {
             webView.clearFormData();
             android.webkit.WebStorage.getInstance().deleteAllData();
         }
+
+        // LOAD_CACHE_ELSE_NETWORK: 有缓存时直接使用缓存，不发起网络请求
+        // 配合版本检查机制：版本变更时onCreate清缓存，确保更新生效
+        // 效果：版本匹配时秒开（与离线相同速度），版本变更时首次从网络加载
+        settings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
         // 启用硬件加速，提升页面渲染性能
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         settings.setDomStorageEnabled(true);
@@ -528,8 +530,8 @@ public class MainActivity extends BridgeActivity {
         WebView webView = this.getBridge().getWebView();
         if (webView != null) {
             WebSettings settings = webView.getSettings();
-            // LOAD_DEFAULT: 使用缓存策略，与 onCreate 保持一致
-            settings.setCacheMode(WebSettings.LOAD_DEFAULT);
+            // LOAD_CACHE_ELSE_NETWORK: 与 onCreate 保持一致，优先缓存秒开
+            settings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
             settings.setDomStorageEnabled(true);
             settings.setDatabaseEnabled(true);
             settings.setLoadWithOverviewMode(true);
