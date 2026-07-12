@@ -3151,6 +3151,32 @@
             el.innerHTML = list.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${p.registrationFee ? ' | 诊费:' + p.registrationFee.toFixed(2) + '元' : ''}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeHtml(p.patientName)}','${escapeHtml(p.prescriptionNo || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
         }
 
+        async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
+            if (!window.electronAPI || !window.electronAPI.findMediaFiles) return;
+            if (!officialNo) return;
+            const patientName = savedRecord.patientName || '';
+            try {
+                const result = await window.electronAPI.findMediaFiles(patientName, officialNo);
+                if (result.success && result.files && result.files.length > 0) {
+                    const mediaFiles = result.files.map(f => ({
+                        name: f.name,
+                        type: f.type || (f.name.includes('video') ? 'video' : 'image'),
+                        size: f.size || 0,
+                        lastModified: f.lastModified || ''
+                    }));
+                    const updatedRecord = { ...savedRecord, mediaFiles };
+                    await savePrescriptionToDB(updatedRecord);
+                    const idx = prescriptionHistory.findIndex(p => p.id === savedRecord.id);
+                    if (idx >= 0) {
+                        prescriptionHistory[idx] = updatedRecord;
+                    }
+                    console.log('媒体文件元数据已更新:', mediaFiles.length, '个文件');
+                }
+            } catch (e) {
+                console.warn('收集媒体文件元数据失败:', e);
+            }
+        }
+
         async function viewMediaFiles(patientName, prescriptionNo) {
             if (!window.electronAPI || !window.electronAPI.findMediaFiles) {
                 showToast('处方查看功能仅在APP中可用');
@@ -3672,6 +3698,8 @@
             
             // 生成处方签图片并自动下载
             savePrescriptionAsImage(record, newPrescriptionNo);
+            // 收集媒体文件元数据并更新处方记录
+            collectAndUpdateMediaFiles(record, newPrescriptionNo);
             // 更新药物使用频率
             updateMedicineFrequency(record.items);
             // 10. 执行重输清空表单
