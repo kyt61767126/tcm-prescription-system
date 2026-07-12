@@ -59,7 +59,7 @@ public class MainActivity extends BridgeActivity {
     private static final String CLOUD_URL = "https://" + CLOUD_HOST;
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
-    private static final String EXPECTED_APP_VERSION = "2026-07-12-v7";
+    private static final String EXPECTED_APP_VERSION = "2026-07-12-v8";
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
@@ -121,6 +121,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         // 创建加载进度布局（覆盖在 WebView 上方，加载完成后隐藏）
+        // 优化：有缓存时不显示loading，直接让WebView显示缓存内容（与离线APP相同速度）
         if (loadingLayout == null) {
             loadingLayout = new RelativeLayout(this);
             loadingLayout.setLayoutParams(new ViewGroup.LayoutParams(
@@ -154,6 +155,22 @@ public class MainActivity extends BridgeActivity {
             ViewGroup rootView = (ViewGroup) webView.getParent();
             if (rootView != null) {
                 rootView.addView(loadingLayout);
+            }
+
+            // 关键优化：检查是否有缓存
+            // 有缓存（版本匹配）→ 不显示loading，WebView直接显示缓存内容（秒开）
+            // 无缓存（首次启动/版本更新）→ 显示loading等待网络加载
+            android.content.SharedPreferences cachePrefs = getSharedPreferences("app_config", MODE_PRIVATE);
+            String cachedVersion = cachePrefs.getString("page_version", "");
+            boolean hasCache = cachedVersion.equals(EXPECTED_APP_VERSION);
+            if (hasCache) {
+                // 有缓存：直接隐藏loading，让WebView秒开
+                loadingLayout.setVisibility(View.GONE);
+                Log.d("TCM-Pres", "有缓存（版本:" + cachedVersion + "），跳过loading直接显示页面");
+            } else {
+                // 无缓存：显示loading等待加载
+                loadingLayout.setVisibility(View.VISIBLE);
+                Log.d("TCM-Pres", "无缓存（首次启动或版本更新），显示loading");
             }
         }
 
@@ -311,8 +328,15 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
-                if (loadingLayout != null) {
-                    loadingLayout.setVisibility(View.VISIBLE);
+                // 优化：有缓存时不显示loading（避免缓存加载时闪烁）
+                // 只有首次启动/版本更新（无缓存）时才显示loading
+                if (loadingLayout != null && loadingLayout.getVisibility() != View.GONE) {
+                    // 检查是否已有缓存
+                    android.content.SharedPreferences cachePrefs = getSharedPreferences("app_config", MODE_PRIVATE);
+                    String cachedVersion = cachePrefs.getString("page_version", "");
+                    if (!cachedVersion.equals(EXPECTED_APP_VERSION)) {
+                        loadingLayout.setVisibility(View.VISIBLE);
+                    }
                 }
                 if (!urlChecked && url != null && !url.contains(CLOUD_HOST)) {
                     urlChecked = true;
