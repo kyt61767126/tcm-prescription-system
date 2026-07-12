@@ -271,7 +271,7 @@
                     width: { ideal: VIDEO_WIDTH },
                     height: { ideal: VIDEO_HEIGHT },
                     frameRate: { ideal: VIDEO_FPS },
-                    facingMode: currentFacingMode
+                    facingMode: { ideal: currentFacingMode }
                 },
                 audio: {
                     echoCancellation: false,
@@ -564,7 +564,7 @@
                     width: { ideal: VIDEO_WIDTH },
                     height: { ideal: VIDEO_HEIGHT },
                     frameRate: { ideal: VIDEO_FPS },
-                    facingMode: currentFacingMode
+                    facingMode: { ideal: currentFacingMode }
                 },
                 audio: false
             });

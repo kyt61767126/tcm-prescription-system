@@ -64,9 +64,9 @@
         .patient-input { flex: 1; padding: 4px 6px; border: 1px solid #808080; font-size: 12px; min-width: 30px; height: 22px; box-sizing: border-box; }
         .patient-input.small { flex: 0 0 100px; }
         .patient-input.x-small { flex: 0 0 50px; }
-        .patient-input.xx-small { flex: 0 0 73px; }
+        .patient-input.xx-small { flex: 0 0 85px; }
         .patient-input.xxx-small { flex: 0 0 83px; }
-        .patient-input.name-input { flex: 0 0 90px; }
+        .patient-input.name-input { flex: 0 0 85px; }
         .symptom-section { background: white; padding: 4px 8px; border-bottom: 2px solid #808080; flex-shrink: 0; }
         .history-tabs { display: flex; margin-bottom: 2px; }
         .history-tab { background: #d0d0d0; padding: 2px 10px; cursor: pointer; border: 1px solid #808080; border-bottom: none; margin-right: 2px; font-size: 10px; }
@@ -288,9 +288,9 @@
             }
 
             .patient-input.x-small { flex: 0 0 55px; }
-            .patient-input.xx-small { flex: 0 0 90px; }
+            .patient-input.xx-small { flex: 0 0 85px; }
             .patient-input.xxx-small { flex: 0 0 110px; }
-            .patient-input.name-input { flex: 0 0 90px; }
+            .patient-input.name-input { flex: 0 0 85px; }
             
             /* 症状文本域 */
             .symptom-textarea {
@@ -467,7 +467,7 @@
             .patient-input.x-small { flex: 0 0 55px; }
             .patient-input.xx-small { flex: 0 0 85px; }
             .patient-input.xxx-small { flex: 0 0 80px; }
-            .patient-input.name-input { flex: 0 0 90px; }
+            .patient-input.name-input { flex: 0 0 85px; }
             #patientAddress { flex: 1 1 225px !important; }
 
             /* 诊断行内联样式覆盖（确保单行不换行） */
@@ -3243,6 +3243,12 @@
             // 处方编号先留空，保存时由云端生成
             document.getElementById('prescriptionNo').value = '';
             document.getElementById('paperClinicNo').textContent = '';
+            // 确保医师姓名默认显示当前登录医师姓名
+            const doctorNameEl = document.getElementById('doctorName');
+            if (doctorNameEl && currentUser && currentUser.name && !doctorNameEl.value) {
+                doctorNameEl.value = currentUser.name;
+            }
+            try { updatePrescriptionPaper(); } catch(e) { console.warn('updatePrescriptionPaper失败:', e); }
             if (prescriptionHistory.length > 0) {
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
             }
