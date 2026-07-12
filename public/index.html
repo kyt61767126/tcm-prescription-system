@@ -1475,7 +1475,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-07-12-v5';
+        window.__APP_VERSION__ = '2026-07-12-v6';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -4149,23 +4149,25 @@
                 } else {
                     btn1.innerHTML = '📊 统计';
                     btn1.onclick = function() { showModal('analyticsModal'); };
-                    btn2.style.display = 'none';
+                    btn2.innerHTML = '🔐 改密';
+                    btn2.onclick = function() { showModal('changePwdModal'); };
+                    btn2.style.display = '';
                 }
                 return;
             }
 
             if (currentUser && isClinicAdmin(currentUser)) {
-                // 网页端管理员：统计分析、账户管理
                 btn1.innerHTML = '📊 统计';
                 btn1.onclick = function() { showModal('analyticsModal'); };
                 btn2.innerHTML = '👤 账户';
                 btn2.onclick = function() { showUserManageModal(); };
                 btn2.style.display = '';
             } else {
-                // 网页端普通用户：只显示统计分析
                 btn1.innerHTML = '📊 统计';
                 btn1.onclick = function() { showModal('analyticsModal'); };
-                btn2.style.display = 'none';
+                btn2.innerHTML = '🔐 改密';
+                btn2.onclick = function() { showModal('changePwdModal'); };
+                btn2.style.display = '';
             }
         }
 
