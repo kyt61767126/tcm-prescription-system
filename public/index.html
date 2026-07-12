@@ -1852,6 +1852,20 @@
                             // 仅当本地已同步且云端更新时覆盖（不覆盖待推送的本地处方）
                             const localMs = new Date(localP.updatedAt || 0).getTime() || 0;
                             if (localMs < cloudMs) {
+                                // 如果云端编号与本地编号不同（云端转换了LOCAL-临时编号），重命名本地媒体文件
+                                const localNo = localP.prescriptionNo || localP.outpatientNo || '';
+                                const cloudNo = cp.prescriptionNo || cp.outpatientNo || '';
+                                if (localNo && cloudNo && localNo !== cloudNo && localNo.startsWith('LOCAL-')) {
+                                    if (window.electronAPI && window.electronAPI.renameMediaFiles) {
+                                        window.electronAPI.renameMediaFiles(localP.patientName || '', localNo, cloudNo)
+                                            .then(r => {
+                                                if (r.success && r.renamed > 0) {
+                                                    console.log('pull: 重命名媒体文件 ' + localNo + ' → ' + cloudNo + ': ' + r.renamed + ' 个');
+                                                }
+                                            })
+                                            .catch(e => console.warn('pull: 重命名媒体文件失败:', e));
+                                    }
+                                }
                                 await LocalDB.upsertPrescription(cp, { synced: 1, deleted: 0 });
                             }
                         }
