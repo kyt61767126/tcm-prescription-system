@@ -712,8 +712,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button></div></div><div id="usernameDropdownMenu" class="username-dropdown-menu"></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688 | v2.0.3</div>
-            <div id="loginDebugInfo" style="font-size:9px;color:#999;text-align:center;margin-top:4px;word-break:break-all;"></div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button></div></div><div id="usernameDropdownMenu" class="username-dropdown-menu"></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688 | v2.0.4</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -3124,20 +3123,8 @@
         };
 
         async function loadRememberedUsers() {
-            const debugEl = document.getElementById('loginDebugInfo');
-            const debugLog = function(msg) {
-                console.log('[DEBUG] ' + msg);
-                if (debugEl) { debugEl.textContent += ' | ' + msg; }
-            };
             try {
-                const hasCapacitor = !!(window.Capacitor);
-                const isNative = !!(window.Capacitor && window.Capacitor.isNative);
-                const hasPlugins = !!(window.Capacitor && window.Capacitor.Plugins);
-                const hasPreferences = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences);
-                if (debugEl) { debugEl.textContent = `C:${hasCapacitor?'Y':'N'} N:${isNative?'Y':'N'} P:${hasPlugins?'Y':'N'} Pref:${hasPreferences?'Y':'N'}`; }
-
                 const localList = await asyncStorage.get('cloud_rememberedUsers');
-                debugLog('list:' + (localList || 'empty'));
                 if (localList) {
                     try {
                         const parsed = JSON.parse(localList);
@@ -3152,7 +3139,6 @@
                             renderRememberedUsers(stringUsernames);
                             document.getElementById('loginUsername').value = stringUsernames[0];
                             document.getElementById('rememberUser').checked = true;
-                            debugLog('users:' + stringUsernames.join(','));
                             return;
                         }
                     } catch (e) {
@@ -3166,11 +3152,9 @@
                     document.getElementById('loginUsername').value = localUsername;
                     document.getElementById('rememberUser').checked = true;
                     await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(singleList));
-                    debugLog('single:' + localUsername);
                 }
             } catch (e) {
                 console.warn('loadRememberedUsers error:', e);
-                if (debugEl) { debugEl.textContent += ' ERR:' + e.message; }
             }
         }
 
@@ -3242,11 +3226,6 @@
                 await asyncStorage.set('cloud_rememberedUsername', cleanUsername);
                 await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(remembered));
                 renderRememberedUsers(remembered);
-
-                const debugEl = document.getElementById('loginDebugInfo');
-                const hasPreferences = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences);
-                if (debugEl) { debugEl.textContent = `SAVED Pref:${hasPreferences?'Y':'N'} users:${remembered.join(',')}`; }
-                console.log('[DEBUG] 保存记住的用户:', remembered, 'Pref:', hasPreferences);
             } catch (e) {
                 console.warn('保存记住的用户名失败:', e);
                 await asyncStorage.set('cloud_rememberedUsername', String(username).trim());
