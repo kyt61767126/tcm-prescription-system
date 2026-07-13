@@ -1479,7 +1479,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-07-11-v2';
+        window.__APP_VERSION__ = '2026-07-14-v1';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -4422,6 +4422,11 @@
                 document.getElementById('userDisplayName').textContent = currentUser.name;
                 // 更新在线/离线状态显示
                 updateModeStatus();
+                // 普通用户隐藏云端状态显示（modeStatusWrapper 包含 " | " 分隔符和状态文本）
+                const modeStatusWrapper = document.getElementById('modeStatusWrapper');
+                if (modeStatusWrapper) {
+                    modeStatusWrapper.style.display = (isClinicAdmin(currentUser) || isPlatformAdmin(currentUser)) ? '' : 'none';
+                }
                 const userManageBtn = document.getElementById('userManageBtn');
                 const platformManageBtn = document.getElementById('platformManageBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
@@ -9873,14 +9878,14 @@ IconFile=${scriptPath}`;
         async function updateOfflineSyncInfo() {
             const sectionEl = document.getElementById('offline-sync-section');
             const infoEl = document.getElementById('offline-sync-info');
-            // 普通用户且纯离线模式：隐藏整个区块（不显示状态、无切换按钮）
-            const isLocalNormal = currentUser
-                && currentUser.role !== 'clinic_admin'
-                && (currentUser.allowedMode || 'both') === 'local';
+            // 普通用户（非管理员）：隐藏整个区块（不显示云端同步状态、无切换按钮）
+            const isNormalUser = currentUser
+                && !isClinicAdmin(currentUser)
+                && !isPlatformAdmin(currentUser);
             if (sectionEl) {
-                sectionEl.style.display = isLocalNormal ? 'none' : '';
+                sectionEl.style.display = isNormalUser ? 'none' : '';
             }
-            if (!infoEl || isLocalNormal) return;
+            if (!infoEl || isNormalUser) return;
             const mode = (currentUser && currentUser.allowedMode) || 'both';
             const modeText = mode === 'cloud' ? '仅云端' : mode === 'local' ? '仅离线' : '双模式';
             const onlineStatus = navigator.onLine ? '在线' : '离线';
