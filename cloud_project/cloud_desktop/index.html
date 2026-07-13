@@ -3074,9 +3074,35 @@
             await loadRememberedUsers();
         }
 
-        function loadRememberedUsers() {
+        const asyncStorage = {
+            async get(key) {
+                try {
+                    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
+                        const res = await window.Capacitor.Plugins.Preferences.get({ key });
+                        return res.value;
+                    }
+                    return localStorage.getItem(key);
+                } catch (e) {
+                    console.warn('asyncStorage.get failed:', e);
+                    return null;
+                }
+            },
+            async set(key, value) {
+                try {
+                    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences) {
+                        await window.Capacitor.Plugins.Preferences.set({ key, value });
+                    } else {
+                        localStorage.setItem(key, value);
+                    }
+                } catch (e) {
+                    console.warn('asyncStorage.set failed:', e);
+                }
+            }
+        };
+
+        async function loadRememberedUsers() {
             try {
-                const localList = localStorage.getItem('cloud_rememberedUsers');
+                const localList = await asyncStorage.get('cloud_rememberedUsers');
                 if (localList) {
                     try {
                         const parsed = JSON.parse(localList);
@@ -3097,13 +3123,13 @@
                         console.warn('解析本地记住的用户名失败:', e);
                     }
                 }
-                const localUsername = localStorage.getItem('cloud_rememberedUsername');
+                const localUsername = await asyncStorage.get('cloud_rememberedUsername');
                 if (localUsername) {
                     const singleList = [localUsername];
                     renderRememberedUsers(singleList);
                     document.getElementById('loginUsername').value = localUsername;
                     document.getElementById('rememberUser').checked = true;
-                    localStorage.setItem('cloud_rememberedUsers', JSON.stringify(singleList));
+                    await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(singleList));
                 }
             } catch (e) {
                 console.warn('loadRememberedUsers error:', e);
@@ -3151,13 +3177,13 @@
             }
         });
 
-        function saveRememberedUser(username) {
+        async function saveRememberedUser(username) {
             try {
                 const cleanUsername = String(username).trim();
                 if (!cleanUsername) return;
                 
                 let remembered = [];
-                const localList = localStorage.getItem('cloud_rememberedUsers');
+                const localList = await asyncStorage.get('cloud_rememberedUsers');
                 if (localList) {
                     try {
                         const parsed = JSON.parse(localList);
@@ -3175,21 +3201,21 @@
                 remembered.unshift(cleanUsername);
                 if (remembered.length > 5) remembered = remembered.slice(0, 5);
                 
-                localStorage.setItem('cloud_rememberedUsername', cleanUsername);
-                localStorage.setItem('cloud_rememberedUsers', JSON.stringify(remembered));
+                await asyncStorage.set('cloud_rememberedUsername', cleanUsername);
+                await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(remembered));
                 renderRememberedUsers(remembered);
                 console.log('[DEBUG] 保存记住的用户:', remembered);
             } catch (e) {
                 console.warn('保存记住的用户名失败:', e);
-                localStorage.setItem('cloud_rememberedUsername', String(username).trim());
+                await asyncStorage.set('cloud_rememberedUsername', String(username).trim());
             }
         }
 
-        function removeRememberedUser(username) {
+        async function removeRememberedUser(username) {
             try {
                 const cleanUsername = String(username).trim().toLowerCase();
                 let remembered = [];
-                const localList = localStorage.getItem('cloud_rememberedUsers');
+                const localList = await asyncStorage.get('cloud_rememberedUsers');
                 if (localList) {
                     try {
                         remembered = JSON.parse(localList);
@@ -3201,7 +3227,7 @@
                 
                 remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername);
                 
-                localStorage.setItem('cloud_rememberedUsers', JSON.stringify(remembered));
+                await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(remembered));
                 renderRememberedUsers(remembered);
                 if (document.getElementById('loginUsername').value.toLowerCase() === cleanUsername) {
                     document.getElementById('loginUsername').value = remembered.length > 0 ? remembered[0] : '';
