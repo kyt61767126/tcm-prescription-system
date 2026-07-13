@@ -4393,12 +4393,6 @@
         function updateModeStatus() {
             const el = document.getElementById('modeStatus');
             if (!el) return;
-            // 普通用户（非诊所管理员）永远显示离线
-            if (currentUser && !isClinicAdmin(currentUser)) {
-                el.textContent = '【离线】';
-                el.style.color = '#d32f2f';
-                return;
-            }
             // "仅离线"模式（allowedMode=local）账号不允许使用云端，永远显示离线
             const mode = getAllowedMode();
             if (mode === 'local') {

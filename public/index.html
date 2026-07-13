@@ -4410,12 +4410,6 @@
         function updateModeStatus() {
             const el = document.getElementById('modeStatus');
             if (!el) return;
-            // 普通用户（非管理员）永远显示离线
-            if (currentUser && !isClinicAdmin(currentUser) && !isPlatformAdmin(currentUser)) {
-                el.textContent = '【离线】';
-                el.style.color = '#d32f2f';
-                return;
-            }
             const mode = getAllowedMode();
             // 仅在APP（Capacitor）环境下，'local' 模式才强制显示离线
             // 网页版没有离线功能，'local' 模式也走云端逻辑，应依据云端可达性判断
