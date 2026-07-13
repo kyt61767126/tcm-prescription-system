@@ -702,7 +702,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button></div></div><div id="usernameDropdownMenu" class="username-dropdown-menu"></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -3140,26 +3140,34 @@
             const btn = document.getElementById('usernameDropdownBtn');
             const menu = document.getElementById('usernameDropdownMenu');
             if (!btn || !menu) return;
-            
+
             if (usernames.length === 0) {
                 btn.style.display = 'none';
                 menu.style.display = 'none';
                 return;
             }
-            
-            btn.style.display = 'block';
+
+            btn.style.display = 'flex';
+            btn.textContent = '▼(' + usernames.length + ')';
             menu.innerHTML = '';
-            
+
             usernames.forEach(username => {
                 const item = document.createElement('div');
                 item.textContent = username;
-                item.onclick = function() {
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
                     document.getElementById('loginUsername').value = username;
                     document.getElementById('loginPassword').focus();
                     menu.classList.remove('show');
-                };
+                });
                 menu.appendChild(item);
             });
+
+            btn.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                menu.classList.toggle('show');
+            };
         }
 
         function toggleUsernameDropdown() {
@@ -4385,6 +4393,12 @@
         function updateModeStatus() {
             const el = document.getElementById('modeStatus');
             if (!el) return;
+            // 普通用户（非诊所管理员）永远显示离线
+            if (currentUser && !isClinicAdmin(currentUser)) {
+                el.textContent = '【离线】';
+                el.style.color = '#d32f2f';
+                return;
+            }
             // "仅离线"模式（allowedMode=local）账号不允许使用云端，永远显示离线
             const mode = getAllowedMode();
             if (mode === 'local') {
@@ -5694,10 +5708,10 @@
                 }
             }
             
-            // 桌面端（Electron）和APP端（Capacitor）：每次打开都显示登录界面，确保用户可以切换账号
+            // APP端（Capacitor）：每次打开都显示登录界面，确保用户可以切换账号
+            // 桌面端和网页端：已登录则直接进入主界面
             const isCapacitor = window.Capacitor && window.Capacitor.isNative;
-            const isElectron = window.electronAPI && window.electronAPI.isElectron;
-            if (hasValidUser && !isCapacitor && !isElectron) {
+            if (hasValidUser && !isCapacitor) {
                 document.getElementById('loginOverlay').style.display = 'none';
                 const mainContainer = document.querySelector('.main-container');
                 if (mainContainer) {
