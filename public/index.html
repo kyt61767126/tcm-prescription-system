@@ -1488,7 +1488,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-07-14-v1';
+        window.__APP_VERSION__ = '2026-07-14-v2';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -1894,10 +1894,19 @@
                 if (this._inited) return;
                 this._inited = true;
                 window.addEventListener('online', () => { setTimeout(() => SyncEngine.run(), 800); });
-                document.addEventListener('visibilitychange', () => {
-                    if (!document.hidden && navigator.onLine) SyncEngine.run();
-                });
-                this._timer = setInterval(() => { if (navigator.onLine) SyncEngine.run(); }, 60000);
+                // 根据用户角色设置同步策略：普通用户每小时同步，管理员60秒持续同步
+                const isNormalUser = currentUser && !isClinicAdmin(currentUser) && !isPlatformAdmin(currentUser);
+                const syncInterval = isNormalUser ? 3600000 : 60000;
+                if (!isNormalUser) {
+                    document.addEventListener('visibilitychange', () => {
+                        if (!document.hidden && navigator.onLine) SyncEngine.run();
+                    });
+                }
+                this._timer = setInterval(() => { if (navigator.onLine) SyncEngine.run(); }, syncInterval);
+                // 登录时立即触发一次同步
+                if (navigator.onLine) {
+                    setTimeout(() => SyncEngine.run(), 1000);
+                }
             }
         };
 
