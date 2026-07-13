@@ -703,7 +703,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"></div><div id="rememberedUsersList" style="margin-bottom:8px;display:flex;flex-wrap:gap:4px;"></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"></div><div id="rememberedUsersDropdown" style="margin-bottom:8px;"></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -3117,26 +3117,40 @@
         }
 
         function renderRememberedUsers(usernames) {
-            const container = document.getElementById('rememberedUsersList');
+            const container = document.getElementById('rememberedUsersDropdown');
             if (!container) return;
             container.innerHTML = '';
-            container.style.display = usernames.length > 0 ? 'flex' : 'none';
-            container.style.flexWrap = 'wrap';
-            container.style.gap = '4px';
+            if (usernames.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            container.style.display = 'block';
+            
+            const dropdown = document.createElement('select');
+            dropdown.id = 'rememberedUsersSelect';
+            dropdown.style.cssText = 'width:100%;padding:6px 10px;font-size:14px;border:1px solid #4caf50;border-radius:4px;background:#e8f5e9;color:#2e7d32;cursor:pointer;';
+            
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = `选择用户 (${usernames.length})`;
+            dropdown.appendChild(defaultOption);
+            
             usernames.forEach(username => {
-                const tag = document.createElement('span');
-                tag.textContent = username;
-                tag.style.cssText = 'padding:2px 8px;background:#e8f5e9;border:1px solid #4caf50;border-radius:12px;font-size:10px;color:#2e7d32;cursor:pointer;white-space:nowrap;';
-                tag.onclick = function() {
-                    document.getElementById('loginUsername').value = username;
-                    document.getElementById('loginPassword').focus();
-                };
-                tag.oncontextmenu = function(e) {
-                    e.preventDefault();
-                    removeRememberedUser(username);
-                };
-                container.appendChild(tag);
+                const option = document.createElement('option');
+                option.value = username;
+                option.textContent = username;
+                dropdown.appendChild(option);
             });
+            
+            dropdown.onchange = function() {
+                if (this.value) {
+                    document.getElementById('loginUsername').value = this.value;
+                    document.getElementById('loginPassword').focus();
+                    this.value = '';
+                }
+            };
+            
+            container.appendChild(dropdown);
         }
 
         function saveRememberedUser(username) {
