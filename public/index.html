@@ -131,11 +131,11 @@
         .login-field { margin-bottom: 13px; display: flex; align-items: center; gap: 8px; }
         .login-field label { width: 33px; font-size: 10px; font-weight: bold; color: #333; text-align: left; white-space: nowrap; line-height: 1.2; }
         .login-field input, .login-field select { flex: 0.6667; padding: 6px 8px; border: 1.5px solid #4a90d9; border-radius: 4px; font-size: 10px; background: white; min-width: 66px; }
-        .username-input-wrapper { display: flex; flex: 0.6667; min-width: 66px; }
-        .username-input-wrapper input { flex: 1; border-radius: 4px 0 0 4px; border-right: none; padding-right: 4px; }
-        .username-dropdown-btn { padding: 6px 8px; border: 1.5px solid #4a90d9; border-left: none; border-radius: 0 4px 4px 0; background: #e8f5e9; color: #4caf50; font-size: 8px; cursor: pointer; line-height: 1; }
-        .username-dropdown-btn:hover { background: #d8f0d8; }
-        .username-dropdown-menu { position: relative; z-index: 100; display: none; background: white; border: 1px solid #4a90d9; border-radius: 4px; margin-top: 2px; margin-left: 41px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-height: 150px; overflow-y: auto; }
+        .username-input-wrapper { position: relative; flex: 0.6667; min-width: 66px; }
+        .username-input-wrapper input { width: 100%; padding: 6px 24px 6px 8px; border: 1.5px solid #4a90d9; border-radius: 4px; font-size: 10px; background: white; }
+        .username-dropdown-btn { position: absolute; right: 2px; top: 50%; transform: translateY(-50%); padding: 3px 6px; border: none; background: transparent; color: #4caf50; font-size: 10px; cursor: pointer; line-height: 1; }
+        .username-dropdown-btn:hover { color: #388e3c; }
+        .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 1.5px solid #4a90d9; border-radius: 4px; top: calc(100% + 2px); left: 0; right: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-height: 150px; overflow-y: auto; }
         .username-dropdown-menu.show { display: block; }
         .username-dropdown-menu div { padding: 6px 12px; font-size: 10px; color: #333; cursor: pointer; border-bottom: 1px solid #eee; }
         .username-dropdown-menu div:last-child { border-bottom: none; }
