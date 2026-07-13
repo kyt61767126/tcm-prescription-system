@@ -1,4 +1,4 @@
-import { parseAuthHeader, isPlatformAdmin } from './_lib/auth.js';
+import { parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS } from './_lib/auth.js';
 
 function corsHeaders() {
     return {
@@ -55,7 +55,7 @@ export async function onRequest(context) {
             const endDate = url.searchParams.get('endDate') || '';
             const keyword = url.searchParams.get('keyword') || '';
 
-            const clinics = (await kv.get('system_clinics', 'json')) || [];
+            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
             let allPrescriptions = [];
 
             for (const c of clinics) {
