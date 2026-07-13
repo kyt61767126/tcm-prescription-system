@@ -127,6 +127,39 @@ export async function onRequest(context) {
             return json({ success: false, error: 'KV binding not found. Please configure TCM_PRESCRIPTION_KV.' }, 500);
         }
 
+        // ===== 初始化平台管理员 POST /users?action=bootstrap =====
+        // 仅当 system:platform_admins 为空时可用，用于创建第一个平台管理员
+        if (method === 'POST' && url.searchParams.get('action') === 'bootstrap') {
+            const body = await context.request.json().catch(() => ({}));
+            const { username, password, name } = body;
+            if (!username || !password) {
+                return json({ success: false, error: '请提供用户名和密码' }, 400);
+            }
+
+            const existingAdmins = await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json');
+            if (existingAdmins && existingAdmins.length > 0) {
+                return json({ success: false, error: '平台管理员已初始化，该接口已关闭' }, 403);
+            }
+
+            const { passwordHash, salt } = await hashPassword(password);
+            const now = getNowISO();
+            const admin = {
+                username,
+                name: name || username,
+                role: ROLE_PLATFORM_ADMIN,
+                passwordHash,
+                salt,
+                allowedMode: 'both',
+                cloudEnabled: true,
+                allowSavePrescription: true,
+                createdAt: now,
+                updatedAt: now
+            };
+
+            await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify([admin]));
+            return json({ success: true, message: '平台管理员初始化成功', admin: sanitizeUser(admin, null, null) });
+        }
+
         // ===== 登录端点 POST /users?login=true =====
         if (method === 'POST' && url.searchParams.get('login') === 'true') {
             const bodyText = await context.request.text();
