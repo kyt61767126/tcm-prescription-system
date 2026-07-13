@@ -2961,8 +2961,8 @@
                 return cloudUsers.map(user => ({
                     ...user,
                     allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
-                    // 默认离线模式：管理员为both，普通用户为local
-                    allowedMode: user.allowedMode || (isAdmin(user) ? 'both' : 'local')
+                    // 默认双模式：网页版无离线功能自动降级为纯云端，APP端支持离线+同步
+                    allowedMode: user.allowedMode || 'both'
                 }));
             }
             return getDefaultUsers();
@@ -4049,7 +4049,7 @@
         }
 
         async function toggleUserCloudMode(username) {
-            if (!currentUser || currentUser.role !== 'clinic_admin') {
+            if (!currentUser || !isAdmin(currentUser)) {
                 alert('只有管理员可以切换云端权限');
                 return;
             }
@@ -4212,13 +4212,14 @@
         let _cloudReachable = null;
 
         // 更新在线/离线状态显示（替换原固定的"【云版】"）
-        // "仅离线"账号永远显示离线；其他模式依据云端可达性判断
+        // "仅离线"账号在APP环境（Capacitor）下永远显示离线；网页版无离线功能，依据云端可达性判断
         function updateModeStatus() {
             const el = document.getElementById('modeStatus');
             if (!el) return;
-            // "仅离线"模式（allowedMode=local）账号不允许使用云端，永远显示离线
             const mode = getAllowedMode();
-            if (mode === 'local') {
+            // 仅在APP（Capacitor）环境下，'local' 模式才强制显示离线
+            // 网页版没有离线功能，'local' 模式也走云端逻辑，应依据云端可达性判断
+            if (mode === 'local' && window.Capacitor) {
                 el.textContent = '【离线】';
                 el.style.color = '#d32f2f';
                 return;

@@ -56,7 +56,7 @@ function sanitizeUser(user, clinicId, clinicName) {
         role: user.role,
         clinicId: clinicId || user.clinicId || null,
         clinicName: clinicName || null,
-        allowedMode: user.allowedMode || (user.role === ROLE_PLATFORM_ADMIN ? 'both' : 'local'),
+        allowedMode: user.allowedMode || 'both',
         cloudEnabled: user.cloudEnabled !== undefined ? user.cloudEnabled : computeCloudEnabled(user),
         allowSavePrescription: user.allowSavePrescription !== undefined ? user.allowSavePrescription : true,
         hasPassword: !!(user.passwordHash || user.password),
@@ -572,7 +572,7 @@ async function processUsersForSave(newUsers, existingUsers) {
             saved = { ...existing };
             saved.name = newUser.name !== undefined ? newUser.name : existing.name;
             saved.role = newUser.role !== undefined ? newUser.role : existing.role;
-            saved.allowedMode = newUser.allowedMode !== undefined ? newUser.allowedMode : (existing.allowedMode || 'local');
+            saved.allowedMode = newUser.allowedMode !== undefined ? newUser.allowedMode : (existing.allowedMode || 'both');
             saved.cloudEnabled = newUser.cloudEnabled !== undefined ? newUser.cloudEnabled : computeCloudEnabled(saved);
             saved.allowSavePrescription = newUser.allowSavePrescription !== undefined ? newUser.allowSavePrescription : (existing.allowSavePrescription !== undefined ? existing.allowSavePrescription : true);
             saved.updatedAt = now;
@@ -595,7 +595,7 @@ async function processUsersForSave(newUsers, existingUsers) {
                 username: newUser.username,
                 name: newUser.name || newUser.username,
                 role: newUser.role || ROLE_DOCTOR,
-                allowedMode: newUser.allowedMode || 'local',
+                allowedMode: newUser.allowedMode || 'both',
                 cloudEnabled: newUser.cloudEnabled !== undefined ? newUser.cloudEnabled : false,
                 allowSavePrescription: newUser.allowSavePrescription !== undefined ? newUser.allowSavePrescription : true,
                 createdAt: now,
