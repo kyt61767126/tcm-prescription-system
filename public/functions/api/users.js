@@ -160,6 +160,41 @@ export async function onRequest(context) {
             return json({ success: true, message: '平台管理员初始化成功', admin: sanitizeUser(admin, null, null) });
         }
 
+        // ===== 重置平台管理员密码 POST /users?action=reset-platform-admin =====
+        // 仅当 system:platform_admins 已有管理员时可用，用于重置密码
+        if (method === 'POST' && url.searchParams.get('action') === 'reset-platform-admin') {
+            const body = await context.request.json().catch(() => ({}));
+            const { username, password, name } = body;
+            if (!username || !password) {
+                return json({ success: false, error: '请提供用户名和新密码' }, 400);
+            }
+
+            const existingAdmins = await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json');
+            if (!existingAdmins || existingAdmins.length === 0) {
+                return json({ success: false, error: '平台管理员尚未初始化，请先调用 bootstrap' }, 404);
+            }
+
+            const adminIdx = existingAdmins.findIndex(u => u.username === username);
+            if (adminIdx === -1) {
+                return json({ success: false, error: '用户不存在' }, 404);
+            }
+
+            const { passwordHash, salt } = await hashPassword(password);
+            existingAdmins[adminIdx].passwordHash = passwordHash;
+            existingAdmins[adminIdx].salt = salt;
+            if (name) existingAdmins[adminIdx].name = name;
+            existingAdmins[adminIdx].updatedAt = getNowISO();
+
+            await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(existingAdmins));
+            return json({ success: true, message: '平台管理员密码已重置', admin: sanitizeUser(existingAdmins[adminIdx], null, null) });
+        }
+
+        // ===== 获取平台管理员列表 GET /users?platform-admins=true =====
+        if (method === 'GET' && url.searchParams.get('platform-admins') === 'true') {
+            const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+            return json({ success: true, data: admins.map(a => ({ username: a.username, name: a.name, role: a.role })) });
+        }
+
         // ===== 登录端点 POST /users?login=true =====
         if (method === 'POST' && url.searchParams.get('login') === 'true') {
             const bodyText = await context.request.text();
