@@ -3346,7 +3346,11 @@
                 }
                 updateUserDisplay();
                 errorDiv.style.display = 'none';
-                await loadData();
+                try {
+                    await loadData();
+                } catch (e) {
+                    console.warn('Load data failed:', e);
+                }
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                 refreshUserInterface();
             } catch (err) {
