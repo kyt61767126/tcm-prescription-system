@@ -693,7 +693,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser"><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -1476,12 +1476,7 @@
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
         // allowedMode: cloud=纯云端 / local=纯离线 / both=离线优先+联网双向同步
         function getAllowedMode() {
-            if (!currentUser) return 'both';
-            // 统一权限：管理员永远云端，普通用户离线优先+联网同步
-            if (isClinicAdmin(currentUser) || isPlatformAdmin(currentUser)) {
-                return 'cloud';
-            }
-            return 'both';
+            return (currentUser && currentUser.allowedMode) || 'both';
         }
         function offlineCapable() {
             const mode = getAllowedMode();
@@ -2956,8 +2951,7 @@
                 return cloudUsers.map(user => ({
                     ...user,
                     allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
-                    // 统一权限：管理员为cloud（永远云端），普通用户为both（离线优先+同步）
-                    allowedMode: user.allowedMode || (isClinicAdmin(user) ? 'cloud' : 'both')
+                    allowedMode: user.allowedMode || 'both'
                 }));
             }
             return getDefaultUsers();

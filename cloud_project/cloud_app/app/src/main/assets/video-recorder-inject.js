@@ -825,24 +825,31 @@
             await new Promise(function (resolve, reject) {
                 var timeout = setTimeout(function () {
                     reject(new Error('摄像头初始化超时'));
-                }, 5000);
+                }, 8000);
 
-                videoEl.addEventListener('loadeddata', function onLoaded() {
-                    clearTimeout(timeout);
-                    videoEl.removeEventListener('loadeddata', onLoaded);
-                    resolve();
-                }, { once: true });
-
-                var checkReady = setInterval(function () {
+                var frameCount = 0;
+                var checkFrames = setInterval(function () {
                     if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
-                        clearTimeout(timeout);
-                        clearInterval(checkReady);
-                        resolve();
+                        frameCount++;
+                        // 等待至少3帧数据就绪，确保第一帧不是黑屏
+                        if (frameCount >= 3) {
+                            clearTimeout(timeout);
+                            clearInterval(checkFrames);
+                            resolve();
+                        }
                     }
                 }, 100);
+
+                videoEl.addEventListener('playing', function onPlaying() {
+                    clearTimeout(timeout);
+                    clearInterval(checkFrames);
+                    videoEl.removeEventListener('playing', onPlaying);
+                    // 视频开始播放后，再等待一小段时间确保帧数据稳定
+                    setTimeout(resolve, 300);
+                }, { once: true });
             });
 
-            await new Promise(function (r) { setTimeout(r, 200); });
+            await new Promise(function (r) { setTimeout(r, 500); });
 
             statusEl.textContent = '摄像头已就绪，点击"拍照"';
             captureBtn.disabled = false;
@@ -914,6 +921,17 @@
         } catch (drawErr) {
             console.error('[拍照] drawImage 失败:', drawErr);
             setStatus('拍照失败：' + (drawErr.message || 'drawImage异常'), 'error');
+            return;
+        }
+
+        if (isBlackFrame(ctx, canvasEl.width, canvasEl.height)) {
+            if (retryCount < 5) {
+                console.warn('[拍照] 检测到黑屏帧，重试中 (' + (retryCount + 1) + '/5)');
+                setStatus('图像捕获异常，重试中... (' + (retryCount + 1) + '/5)', '');
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 150);
+                return;
+            }
+            setStatus('图像捕获失败，请重试', 'error');
             return;
         }
 
@@ -1107,6 +1125,26 @@
         if (overlay) overlay.remove();
         window.__pendingVideoBlob = null;
         window.__pendingVideoFileName = null;
+    }
+
+    function isBlackFrame(ctx, width, height) {
+        try {
+            var imageData = ctx.getImageData(0, 0, width, height);
+            var data = imageData.data;
+            var totalBrightness = 0;
+            var sampleCount = 0;
+            
+            for (var i = 0; i < data.length; i += 40) {
+                totalBrightness += (data[i] + data[i+1] + data[i+2]) / 3;
+                sampleCount++;
+            }
+            
+            var avgBrightness = totalBrightness / sampleCount;
+            return avgBrightness < 10;
+        } catch (e) {
+            console.error('[拍照] isBlackFrame 检测失败:', e);
+            return false;
+        }
     }
 
     // ========================================================================
