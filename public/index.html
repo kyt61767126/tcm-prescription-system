@@ -2962,7 +2962,7 @@
                     ...user,
                     allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
                     // 默认离线模式：管理员为both，普通用户为local
-                    allowedMode: user.allowedMode || (isClinicAdmin(user) ? 'both' : 'local')
+                    allowedMode: user.allowedMode || (isAdmin(user) ? 'both' : 'local')
                 }));
             }
             return getDefaultUsers();
