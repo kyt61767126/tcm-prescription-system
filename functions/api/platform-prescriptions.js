@@ -153,7 +153,8 @@ export async function onRequest(context) {
                 data: filtered,
                 count: filtered.length,
                 stats,
-                clinicStats
+                clinicStats,
+                clinics: clinics.map(c => ({ id: c.id, name: c.name }))
             });
         }
 
