@@ -3087,48 +3087,27 @@
             await loadRememberedUsers();
         }
 
-        async function loadRememberedUsers() {
+        function loadRememberedUsers() {
             try {
                 const localList = localStorage.getItem('cloud_rememberedUsers');
                 if (localList) {
                     try {
                         const usernames = JSON.parse(localList);
                         if (Array.isArray(usernames) && usernames.length > 0) {
-                            renderRememberedUsers(usernames);
-                            document.getElementById('loginUsername').value = usernames[0];
-                            document.getElementById('rememberUser').checked = true;
-                            return;
+                            const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u);
+                            if (stringUsernames.length > 0) {
+                                renderRememberedUsers(stringUsernames);
+                                document.getElementById('loginUsername').value = stringUsernames[0];
+                                document.getElementById('rememberUser').checked = true;
+                                return;
+                            }
                         }
                     } catch (e) {
                         console.warn('解析本地记住的用户名失败:', e);
                     }
                 }
-
-                const storedUser = localStorage.getItem('cloud_currentUser');
-                if (storedUser) {
-                    try {
-                        const user = JSON.parse(storedUser);
-                        const authToken = 'Basic ' + buildAuthPayload(user);
-                        const resp = await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
-                            headers: { 'Authorization': authToken }
-                        });
-                        if (resp.ok) {
-                            const data = await resp.json();
-                            if (data.success && data.data && Array.isArray(data.data)) {
-                                localStorage.setItem('cloud_rememberedUsers', JSON.stringify(data.data));
-                                renderRememberedUsers(data.data);
-                                if (data.data.length > 0) {
-                                    document.getElementById('loginUsername').value = data.data[0];
-                                    document.getElementById('rememberUser').checked = true;
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.warn('加载记住的用户名失败:', e);
-                    }
-                }
                 const localUsername = localStorage.getItem('cloud_rememberedUsername');
-                if (localUsername && !document.getElementById('loginUsername').value) {
+                if (localUsername) {
                     document.getElementById('loginUsername').value = localUsername;
                     document.getElementById('rememberUser').checked = true;
                 }
@@ -3160,15 +3139,10 @@
             });
         }
 
-        async function saveRememberedUser(username) {
+        function saveRememberedUser(username) {
             try {
-                const storedUser = localStorage.getItem('cloud_currentUser');
-                if (!storedUser) {
-                    localStorage.setItem('cloud_rememberedUsername', username);
-                    return;
-                }
-                const user = JSON.parse(storedUser);
-                const authToken = 'Basic ' + buildAuthPayload(user);
+                const cleanUsername = String(username).trim();
+                if (!cleanUsername) return;
                 
                 let remembered = [];
                 const localList = localStorage.getItem('cloud_rememberedUsers');
@@ -3179,62 +3153,42 @@
                         console.warn('解析本地记住的用户名失败:', e);
                     }
                 }
-                const resp = await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
-                    headers: { 'Authorization': authToken }
-                });
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (data.success && data.data && Array.isArray(data.data)) {
-                        remembered = data.data;
-                    }
-                }
+                if (!Array.isArray(remembered)) remembered = [];
                 
-                remembered = remembered.filter(u => u.toLowerCase() !== username.toLowerCase());
-                remembered.unshift(username);
+                remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
+                remembered.unshift(cleanUsername);
                 if (remembered.length > 5) remembered = remembered.slice(0, 5);
                 
-                await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
-                    method: 'POST',
-                    headers: { 'Authorization': authToken, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usernames: remembered })
-                });
-                
-                localStorage.setItem('cloud_rememberedUsername', username);
+                localStorage.setItem('cloud_rememberedUsername', cleanUsername);
                 localStorage.setItem('cloud_rememberedUsers', JSON.stringify(remembered));
                 renderRememberedUsers(remembered);
             } catch (e) {
                 console.warn('保存记住的用户名失败:', e);
-                localStorage.setItem('cloud_rememberedUsername', username);
+                localStorage.setItem('cloud_rememberedUsername', String(username).trim());
             }
         }
 
-        async function removeRememberedUser(username) {
+        function removeRememberedUser(username) {
             try {
-                const storedUser = localStorage.getItem('cloud_currentUser');
-                if (!storedUser) return;
-                const user = JSON.parse(storedUser);
-                const authToken = 'Basic ' + buildAuthPayload(user);
-                
+                const cleanUsername = String(username).trim().toLowerCase();
                 let remembered = [];
-                const resp = await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
-                    headers: { 'Authorization': authToken }
-                });
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (data.success && data.data && Array.isArray(data.data)) {
-                        remembered = data.data;
+                const localList = localStorage.getItem('cloud_rememberedUsers');
+                if (localList) {
+                    try {
+                        remembered = JSON.parse(localList);
+                    } catch (e) {
+                        console.warn('解析本地记住的用户名失败:', e);
                     }
                 }
+                if (!Array.isArray(remembered)) remembered = [];
                 
-                remembered = remembered.filter(u => u.toLowerCase() !== username.toLowerCase());
+                remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername);
                 
-                await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
-                    method: 'POST',
-                    headers: { 'Authorization': authToken, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ usernames: remembered })
-                });
-                
+                localStorage.setItem('cloud_rememberedUsers', JSON.stringify(remembered));
                 renderRememberedUsers(remembered);
+                if (document.getElementById('loginUsername').value.toLowerCase() === cleanUsername) {
+                    document.getElementById('loginUsername').value = remembered.length > 0 ? remembered[0] : '';
+                }
             } catch (e) {
                 console.warn('删除记住的用户名失败:', e);
             }
