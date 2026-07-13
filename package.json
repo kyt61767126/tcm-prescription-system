@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "build:netlify": "call build-netlify.bat",
+    "build:netlify": "node build-netlify.cjs",
     "lint": "eslint .",
     "preview": "vite preview",
     "check": "tsc -b --noEmit"
