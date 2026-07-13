@@ -240,8 +240,8 @@
                 </div>
                 
                 <div class="remember-me">
-                    <input type="checkbox" id="rememberPassword">
-                    <label for="rememberPassword">记住密码</label>
+                    <input type="checkbox" id="rememberUser">
+                    <label for="rememberUser">记住用户</label>
                 </div>
                 
                 <div class="login-buttons">
@@ -284,16 +284,12 @@
             if (clinicNameElement) clinicNameElement.textContent = clinicName;
         }
 
-        // 恢复记住的用户名/密码
+        // 恢复记住的用户名
         async function initLoginFields() {
             const rememberedUsername = localStorage.getItem('cloud_rememberedUsername') || localStorage.getItem('rememberedUsername');
-            const rememberedPassword = localStorage.getItem('cloud_rememberedPassword') || localStorage.getItem('rememberedPassword');
             if (rememberedUsername) {
                 document.getElementById('loginUsername').value = rememberedUsername;
-            }
-            if (rememberedPassword) {
-                document.getElementById('loginPassword').value = rememberedPassword;
-                document.getElementById('rememberPassword').checked = true;
+                document.getElementById('rememberUser').checked = true;
             }
         }
 
@@ -338,16 +334,12 @@
                 localStorage.setItem('currentUser', JSON.stringify(user));
                 localStorage.setItem('isLoggedIn', 'true');
 
-                const rememberPassword = document.getElementById('rememberPassword').checked;
-                if (rememberPassword) {
-                    localStorage.setItem('cloud_rememberedPassword', password);
+                const rememberUser = document.getElementById('rememberUser').checked;
+                if (rememberUser) {
                     localStorage.setItem('cloud_rememberedUsername', username);
-                    localStorage.setItem('rememberedPassword', password);
                     localStorage.setItem('rememberedUsername', username);
                 } else {
-                    localStorage.removeItem('cloud_rememberedPassword');
                     localStorage.removeItem('cloud_rememberedUsername');
-                    localStorage.removeItem('rememberedPassword');
                     localStorage.removeItem('rememberedUsername');
                 }
 

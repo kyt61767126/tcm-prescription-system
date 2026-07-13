@@ -8,7 +8,6 @@
 
     const KEY_USERS = 'local_systemUsers';
     const KEY_REMEMBER_USER = 'local_rememberedUsername';
-    const KEY_REMEMBER_PWD = 'local_rememberedPassword';
     const KEY_CLINIC_NAME = 'local_clinicName';
 
     const DEFAULT_USERS = [
@@ -108,11 +107,9 @@
             select.appendChild(opt);
         });
         const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
-        const rememberedPwd = localStorage.getItem(KEY_REMEMBER_PWD);
-        if (rememberedUser && rememberedPwd) {
+        if (rememberedUser) {
             select.value = rememberedUser;
-            $('loginPassword').value = rememberedPwd;
-            $('rememberPassword').checked = true;
+            $('rememberUser').checked = true;
         }
     }
 
@@ -144,13 +141,11 @@
         }));
         localStorage.setItem('isLoggedIn', 'true');
 
-        const remember = $('rememberPassword').checked;
+        const remember = $('rememberUser').checked;
         if (remember) {
             localStorage.setItem(KEY_REMEMBER_USER, user.username);
-            localStorage.setItem(KEY_REMEMBER_PWD, password);
         } else {
             localStorage.removeItem(KEY_REMEMBER_USER);
-            localStorage.removeItem(KEY_REMEMBER_PWD);
         }
 
         if (window.electronAPI && window.electronAPI.loginSuccess) {

@@ -6,7 +6,7 @@
     'use strict';
 
     const KEY_USERS = 'local_systemUsers';
-    const KEY_REMEMBER_PWD = 'local_rememberedPassword';
+    const KEY_REMEMBER_USER = 'local_rememberedUsername';
     const KEY_CLINIC_NAME = 'local_clinicName';
 
     const DEFAULT_USERS = [
@@ -105,11 +105,11 @@
         const doctorName = config.doctorName || (loginUserInfo ? loginUserInfo.name : '用户');
         input.value = doctorName;
 
-        // 记住密码
-        const rememberedPwd = localStorage.getItem(KEY_REMEMBER_PWD);
-        if (rememberedPwd) {
-            $('loginPassword').value = rememberedPwd;
-            $('rememberPassword').checked = true;
+        // 记住用户
+        const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
+        if (rememberedUser) {
+            $('loginUsername').value = rememberedUser;
+            $('rememberUser').checked = true;
         }
     }
 
@@ -135,11 +135,11 @@
         }));
         localStorage.setItem('isLoggedIn', 'true');
 
-        const remember = $('rememberPassword').checked;
+        const remember = $('rememberUser').checked;
         if (remember) {
-            localStorage.setItem(KEY_REMEMBER_PWD, password);
+            localStorage.setItem(KEY_REMEMBER_USER, loginUserInfo.username);
         } else {
-            localStorage.removeItem(KEY_REMEMBER_PWD);
+            localStorage.removeItem(KEY_REMEMBER_USER);
         }
 
         if (window.electronAPI && window.electronAPI.loginSuccess) {
