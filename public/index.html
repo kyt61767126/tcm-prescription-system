@@ -2958,12 +2958,18 @@
         async function getUsers() {
             const cloudUsers = await getUsersFromCloud();
             if (cloudUsers && cloudUsers.length > 0) {
-                return cloudUsers.map(user => ({
-                    ...user,
-                    allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
-                    // 默认双模式：网页版无离线功能自动降级为纯云端，APP端支持离线+同步
-                    allowedMode: user.allowedMode || 'both'
-                }));
+                return cloudUsers.map(user => {
+                    let mode = user.allowedMode;
+                    // 网页版环境下，'local' 模式自动升级为 'both'，因为网页版没有真正的离线功能
+                    if (mode === 'local' && !window.Capacitor) {
+                        mode = 'both';
+                    }
+                    return {
+                        ...user,
+                        allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
+                        allowedMode: mode || 'both'
+                    };
+                });
             }
             return getDefaultUsers();
         }
