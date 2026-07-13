@@ -3162,16 +3162,17 @@
             const btn = document.getElementById('usernameDropdownBtn');
             const menu = document.getElementById('usernameDropdownMenu');
             if (!btn || !menu) return;
-            
+
             if (usernames.length === 0) {
                 btn.style.display = 'none';
                 menu.style.display = 'none';
                 return;
             }
-            
+
             btn.style.display = 'block';
+            btn.textContent = '▼(' + usernames.length + ')';
             menu.innerHTML = '';
-            
+
             usernames.forEach(username => {
                 const item = document.createElement('div');
                 item.textContent = username;
@@ -3406,6 +3407,7 @@
                     overlay.style.display = 'flex';
                     const mainContainer = document.querySelector('.main-container');
                     if (mainContainer) mainContainer.style.display = 'none';
+                    initLoginDropdown();
                 }
             }
             return false;
