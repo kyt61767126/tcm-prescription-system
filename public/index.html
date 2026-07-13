@@ -131,6 +131,15 @@
         .login-field { margin-bottom: 13px; display: flex; align-items: center; gap: 8px; }
         .login-field label { width: 33px; font-size: 10px; font-weight: bold; color: #333; text-align: left; white-space: nowrap; line-height: 1.2; }
         .login-field input, .login-field select { flex: 0.6667; padding: 6px 8px; border: 1.5px solid #4a90d9; border-radius: 4px; font-size: 10px; background: white; min-width: 66px; }
+        .username-input-wrapper { display: flex; flex: 0.6667; min-width: 66px; }
+        .username-input-wrapper input { flex: 1; border-radius: 4px 0 0 4px; border-right: none; padding-right: 4px; }
+        .username-dropdown-btn { padding: 6px 8px; border: 1.5px solid #4a90d9; border-left: none; border-radius: 0 4px 4px 0; background: #e8f5e9; color: #4caf50; font-size: 8px; cursor: pointer; line-height: 1; }
+        .username-dropdown-btn:hover { background: #d8f0d8; }
+        .username-dropdown-menu { position: relative; z-index: 100; display: none; background: white; border: 1px solid #4a90d9; border-radius: 4px; margin-top: 2px; margin-left: 41px; box-shadow: 0 2px 8px rgba(0,0,0,0.15); max-height: 150px; overflow-y: auto; }
+        .username-dropdown-menu.show { display: block; }
+        .username-dropdown-menu div { padding: 6px 12px; font-size: 10px; color: #333; cursor: pointer; border-bottom: 1px solid #eee; }
+        .username-dropdown-menu div:last-child { border-bottom: none; }
+        .username-dropdown-menu div:hover { background: #e8f5e9; color: #4caf50; }
         .login-field input:focus, .login-field select:focus { border-color: #2962a3; outline: none; box-shadow: 0 0 5px rgba(74, 144, 217, 0.5); }
         .login-field.remember-me { justify-content: flex-start; gap: 4px; margin-bottom: 8px; margin-left: 0; }
         .login-field.remember-me input[type="checkbox"] { flex: none; width: 12px; height: 12px; accent-color: #4a90d9; cursor: pointer; margin: 0; }
@@ -703,7 +712,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"></div><div id="rememberedUsersDropdown" style="margin-bottom:8px;"></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button></div></div><div id="usernameDropdownMenu" class="username-dropdown-menu"></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -3117,41 +3126,45 @@
         }
 
         function renderRememberedUsers(usernames) {
-            const container = document.getElementById('rememberedUsersDropdown');
-            if (!container) return;
-            container.innerHTML = '';
+            const btn = document.getElementById('usernameDropdownBtn');
+            const menu = document.getElementById('usernameDropdownMenu');
+            if (!btn || !menu) return;
+            
             if (usernames.length === 0) {
-                container.style.display = 'none';
+                btn.style.display = 'none';
+                menu.style.display = 'none';
                 return;
             }
-            container.style.display = 'block';
             
-            const dropdown = document.createElement('select');
-            dropdown.id = 'rememberedUsersSelect';
-            dropdown.style.cssText = 'width:100%;padding:6px 10px;font-size:14px;border:1px solid #4caf50;border-radius:4px;background:#e8f5e9;color:#2e7d32;cursor:pointer;';
-            
-            const defaultOption = document.createElement('option');
-            defaultOption.value = '';
-            defaultOption.textContent = `选择用户 (${usernames.length})`;
-            dropdown.appendChild(defaultOption);
+            btn.style.display = 'block';
+            menu.innerHTML = '';
             
             usernames.forEach(username => {
-                const option = document.createElement('option');
-                option.value = username;
-                option.textContent = username;
-                dropdown.appendChild(option);
-            });
-            
-            dropdown.onchange = function() {
-                if (this.value) {
-                    document.getElementById('loginUsername').value = this.value;
+                const item = document.createElement('div');
+                item.textContent = username;
+                item.onclick = function() {
+                    document.getElementById('loginUsername').value = username;
                     document.getElementById('loginPassword').focus();
-                    this.value = '';
-                }
-            };
-            
-            container.appendChild(dropdown);
+                    menu.classList.remove('show');
+                };
+                menu.appendChild(item);
+            });
         }
+
+        function toggleUsernameDropdown() {
+            const menu = document.getElementById('usernameDropdownMenu');
+            if (menu) {
+                menu.classList.toggle('show');
+            }
+        }
+
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('usernameDropdownMenu');
+            const btn = document.getElementById('usernameDropdownBtn');
+            if (menu && !menu.contains(e.target) && (!btn || !btn.contains(e.target))) {
+                menu.classList.remove('show');
+            }
+        });
 
         function saveRememberedUser(username) {
             try {
