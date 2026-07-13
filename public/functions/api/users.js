@@ -550,6 +550,35 @@ export async function onRequest(context) {
             return json({ success: true, message: '密码修改成功' });
         }
 
+        // ===== 记住用户名 GET/POST /users?remembered=true =====
+        // 保存和获取用户登录时记住的用户名列表（按诊所分组）
+        if (url.searchParams.get('remembered') === 'true') {
+            const currentUser = await parseAuthHeader(context.request, context.env);
+            if (!currentUser) {
+                return json({ success: false, error: '未授权访问' }, 401);
+            }
+
+            const clinicId = currentUser.clinicId || 'platform';
+            const kvKey = `clinic:${clinicId}:remembered_users`;
+
+            if (method === 'GET') {
+                const remembered = await kv.get(kvKey, 'json');
+                return json({ success: true, data: remembered || [] });
+            }
+
+            if (method === 'POST') {
+                const body = await context.request.json().catch(() => ({}));
+                const { usernames } = body;
+                if (!Array.isArray(usernames)) {
+                    return json({ success: false, error: '参数格式错误' }, 400);
+                }
+                await kv.put(kvKey, JSON.stringify(usernames));
+                return json({ success: true, message: '记住的用户名已保存', count: usernames.length });
+            }
+
+            return json({ success: false, error: 'Method not allowed' }, 405);
+        }
+
         return json({ success: false, error: 'Method not allowed' }, 405);
 
     } catch (error) {

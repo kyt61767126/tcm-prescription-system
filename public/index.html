@@ -703,7 +703,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><select id="loginUsername"></select></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">本能中医处方系统</div><div class="version-tag">【云版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"></div><div id="rememberedUsersList" style="margin-bottom:8px;display:flex;flex-wrap:gap:4px;"></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -3071,31 +3071,147 @@
         }
 
         async function initLoginDropdown() {
-            const select = document.getElementById('loginUsername');
+            const input = document.getElementById('loginUsername');
+            if (input.tagName === 'SELECT') {
+                const newInput = document.createElement('input');
+                newInput.type = 'text';
+                newInput.id = 'loginUsername';
+                newInput.placeholder = '请输入用户名';
+                newInput.setAttribute('onkeypress', "if(event.key==='Enter')handleLogin()");
+                newInput.className = input.className;
+                newInput.style.cssText = input.style.cssText;
+                newInput.style.width = '100%';
+                input.parentNode.replaceChild(newInput, input);
+            }
 
-            // === 调试：检查 Preferences 插件 ===
-            const hasCapacitor = !!(window.Capacitor && window.Capacitor.Plugins);
-            const hasPreferences = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences);
-            console.log('[DEBUG] Capacitor:', hasCapacitor);
-            console.log('[DEBUG] Preferences:', hasPreferences);
-            
-            // 统一替换为输入框：用户名由管理员在云端创建，登录界面不暴露用户列表
-            // （网页端/APP端/Electron桌面端均用 input，用户手动输入用户名）
-            const input = document.createElement('input');
-            input.type = 'text';
-            input.id = 'loginUsername';
-            input.placeholder = '请输入用户名';
-            input.setAttribute('onkeypress', "if(event.key==='Enter')handleLogin()");
-            input.className = select.className;
-            input.style.cssText = select.style.cssText;
-            input.style.width = '100%';
-            select.parentNode.replaceChild(input, select);
+            await loadRememberedUsers();
+        }
 
-            // 恢复记住的用户名
-            const rememberedUsername = localStorage.getItem('cloud_rememberedUsername') || localStorage.getItem('rememberedUsername');
-            if (rememberedUsername) input.value = rememberedUsername;
-            if (rememberedUsername) {
-                document.getElementById('rememberUser').checked = true;
+        async function loadRememberedUsers() {
+            try {
+                const storedUser = localStorage.getItem('cloud_currentUser');
+                if (storedUser) {
+                    try {
+                        const user = JSON.parse(storedUser);
+                        const authToken = 'Basic ' + buildAuthPayload(user);
+                        const resp = await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
+                            headers: { 'Authorization': authToken }
+                        });
+                        if (resp.ok) {
+                            const data = await resp.json();
+                            if (data.success && data.data && Array.isArray(data.data)) {
+                                renderRememberedUsers(data.data);
+                                if (data.data.length > 0) {
+                                    document.getElementById('loginUsername').value = data.data[0];
+                                    document.getElementById('rememberUser').checked = true;
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('加载记住的用户名失败:', e);
+                    }
+                }
+                const localUsername = localStorage.getItem('cloud_rememberedUsername');
+                if (localUsername && !document.getElementById('loginUsername').value) {
+                    document.getElementById('loginUsername').value = localUsername;
+                    document.getElementById('rememberUser').checked = true;
+                }
+            } catch (e) {
+                console.warn('loadRememberedUsers error:', e);
+            }
+        }
+
+        function renderRememberedUsers(usernames) {
+            const container = document.getElementById('rememberedUsersList');
+            if (!container) return;
+            container.innerHTML = '';
+            container.style.display = usernames.length > 0 ? 'flex' : 'none';
+            container.style.flexWrap = 'wrap';
+            container.style.gap = '4px';
+            usernames.forEach(username => {
+                const tag = document.createElement('span');
+                tag.textContent = username;
+                tag.style.cssText = 'padding:2px 8px;background:#e8f5e9;border:1px solid #4caf50;border-radius:12px;font-size:10px;color:#2e7d32;cursor:pointer;white-space:nowrap;';
+                tag.onclick = function() {
+                    document.getElementById('loginUsername').value = username;
+                    document.getElementById('loginPassword').focus();
+                };
+                tag.oncontextmenu = function(e) {
+                    e.preventDefault();
+                    removeRememberedUser(username);
+                };
+                container.appendChild(tag);
+            });
+        }
+
+        async function saveRememberedUser(username) {
+            try {
+                const storedUser = localStorage.getItem('cloud_currentUser');
+                if (!storedUser) {
+                    localStorage.setItem('cloud_rememberedUsername', username);
+                    return;
+                }
+                const user = JSON.parse(storedUser);
+                const authToken = 'Basic ' + buildAuthPayload(user);
+                
+                let remembered = [];
+                const resp = await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
+                    headers: { 'Authorization': authToken }
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.success && data.data && Array.isArray(data.data)) {
+                        remembered = data.data;
+                    }
+                }
+                
+                remembered = remembered.filter(u => u.toLowerCase() !== username.toLowerCase());
+                remembered.unshift(username);
+                if (remembered.length > 5) remembered = remembered.slice(0, 5);
+                
+                await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
+                    method: 'POST',
+                    headers: { 'Authorization': authToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usernames: remembered })
+                });
+                
+                localStorage.setItem('cloud_rememberedUsername', username);
+                renderRememberedUsers(remembered);
+            } catch (e) {
+                console.warn('保存记住的用户名失败:', e);
+                localStorage.setItem('cloud_rememberedUsername', username);
+            }
+        }
+
+        async function removeRememberedUser(username) {
+            try {
+                const storedUser = localStorage.getItem('cloud_currentUser');
+                if (!storedUser) return;
+                const user = JSON.parse(storedUser);
+                const authToken = 'Basic ' + buildAuthPayload(user);
+                
+                let remembered = [];
+                const resp = await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
+                    headers: { 'Authorization': authToken }
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    if (data.success && data.data && Array.isArray(data.data)) {
+                        remembered = data.data;
+                    }
+                }
+                
+                remembered = remembered.filter(u => u.toLowerCase() !== username.toLowerCase());
+                
+                await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
+                    method: 'POST',
+                    headers: { 'Authorization': authToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ usernames: remembered })
+                });
+                
+                renderRememberedUsers(remembered);
+            } catch (e) {
+                console.warn('删除记住的用户名失败:', e);
             }
         }
 
@@ -3178,7 +3294,7 @@
                 // 保存记住用户
                 const rememberUser = document.getElementById('rememberUser').checked;
                 if (rememberUser) {
-                    localStorage.setItem('cloud_rememberedUsername', username);
+                    await saveRememberedUser(username);
                 } else {
                     localStorage.removeItem('cloud_rememberedUsername');
                 }
@@ -4391,12 +4507,7 @@
             
             currentUser = null;
             document.getElementById('loginOverlay').style.display = 'flex';
-            
-            const rememberedUsername = localStorage.getItem('cloud_rememberedUsername');
-            if (rememberedUsername) {
-                document.getElementById('loginUsername').value = rememberedUsername;
-                document.getElementById('rememberUser').checked = true;
-            }
+            initLoginDropdown();
         }
 
         let medicines = [];
