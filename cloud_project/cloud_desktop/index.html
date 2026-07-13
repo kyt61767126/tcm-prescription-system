@@ -3404,9 +3404,10 @@
 
         function refreshUserInterface() {
             const migrated = migrateOldData();
-            // 处方编号先留空，保存时由云端生成
-            document.getElementById('prescriptionNo').value = '';
-            document.getElementById('paperClinicNo').textContent = '';
+            // 生成处方编号
+            const prescriptionNo = generatePrescriptionNo();
+            document.getElementById('prescriptionNo').value = prescriptionNo;
+            document.getElementById('paperClinicNo').textContent = prescriptionNo;
             // 确保医师姓名默认显示当前登录医师姓名
             const doctorNameEl = document.getElementById('doctorName');
             if (doctorNameEl && currentUser && currentUser.name && !doctorNameEl.value) {
