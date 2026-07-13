@@ -3079,15 +3079,19 @@
                 const localList = localStorage.getItem('cloud_rememberedUsers');
                 if (localList) {
                     try {
-                        const usernames = JSON.parse(localList);
-                        if (Array.isArray(usernames) && usernames.length > 0) {
-                            const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u);
-                            if (stringUsernames.length > 0) {
-                                renderRememberedUsers(stringUsernames);
-                                document.getElementById('loginUsername').value = stringUsernames[0];
-                                document.getElementById('rememberUser').checked = true;
-                                return;
-                            }
+                        const parsed = JSON.parse(localList);
+                        let usernames = [];
+                        if (Array.isArray(parsed)) {
+                            usernames = parsed;
+                        } else if (typeof parsed === 'string') {
+                            usernames = [parsed];
+                        }
+                        const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u);
+                        if (stringUsernames.length > 0) {
+                            renderRememberedUsers(stringUsernames);
+                            document.getElementById('loginUsername').value = stringUsernames[0];
+                            document.getElementById('rememberUser').checked = true;
+                            return;
                         }
                     } catch (e) {
                         console.warn('解析本地记住的用户名失败:', e);
@@ -3095,8 +3099,11 @@
                 }
                 const localUsername = localStorage.getItem('cloud_rememberedUsername');
                 if (localUsername) {
+                    const singleList = [localUsername];
+                    renderRememberedUsers(singleList);
                     document.getElementById('loginUsername').value = localUsername;
                     document.getElementById('rememberUser').checked = true;
+                    localStorage.setItem('cloud_rememberedUsers', JSON.stringify(singleList));
                 }
             } catch (e) {
                 console.warn('loadRememberedUsers error:', e);
@@ -3153,12 +3160,16 @@
                 const localList = localStorage.getItem('cloud_rememberedUsers');
                 if (localList) {
                     try {
-                        remembered = JSON.parse(localList);
+                        const parsed = JSON.parse(localList);
+                        if (Array.isArray(parsed)) {
+                            remembered = parsed;
+                        } else if (typeof parsed === 'string') {
+                            remembered = [parsed];
+                        }
                     } catch (e) {
                         console.warn('解析本地记住的用户名失败:', e);
                     }
                 }
-                if (!Array.isArray(remembered)) remembered = [];
                 
                 remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
                 remembered.unshift(cleanUsername);
@@ -3167,6 +3178,7 @@
                 localStorage.setItem('cloud_rememberedUsername', cleanUsername);
                 localStorage.setItem('cloud_rememberedUsers', JSON.stringify(remembered));
                 renderRememberedUsers(remembered);
+                console.log('[DEBUG] 保存记住的用户:', remembered);
             } catch (e) {
                 console.warn('保存记住的用户名失败:', e);
                 localStorage.setItem('cloud_rememberedUsername', String(username).trim());
