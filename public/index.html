@@ -3073,6 +3073,12 @@
         async function initLoginDropdown() {
             const select = document.getElementById('loginUsername');
 
+            // === 调试：检查 Preferences 插件 ===
+            const hasCapacitor = !!(window.Capacitor && window.Capacitor.Plugins);
+            const hasPreferences = !!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.Preferences);
+            console.log('[DEBUG] Capacitor:', hasCapacitor);
+            console.log('[DEBUG] Preferences:', hasPreferences);
+            
             // 统一替换为输入框：用户名由管理员在云端创建，登录界面不暴露用户列表
             // （网页端/APP端/Electron桌面端均用 input，用户手动输入用户名）
             const input = document.createElement('input');
