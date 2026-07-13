@@ -3089,6 +3089,21 @@
 
         async function loadRememberedUsers() {
             try {
+                const localList = localStorage.getItem('cloud_rememberedUsers');
+                if (localList) {
+                    try {
+                        const usernames = JSON.parse(localList);
+                        if (Array.isArray(usernames) && usernames.length > 0) {
+                            renderRememberedUsers(usernames);
+                            document.getElementById('loginUsername').value = usernames[0];
+                            document.getElementById('rememberUser').checked = true;
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('解析本地记住的用户名失败:', e);
+                    }
+                }
+
                 const storedUser = localStorage.getItem('cloud_currentUser');
                 if (storedUser) {
                     try {
@@ -3100,6 +3115,7 @@
                         if (resp.ok) {
                             const data = await resp.json();
                             if (data.success && data.data && Array.isArray(data.data)) {
+                                localStorage.setItem('cloud_rememberedUsers', JSON.stringify(data.data));
                                 renderRememberedUsers(data.data);
                                 if (data.data.length > 0) {
                                     document.getElementById('loginUsername').value = data.data[0];
@@ -3155,6 +3171,14 @@
                 const authToken = 'Basic ' + buildAuthPayload(user);
                 
                 let remembered = [];
+                const localList = localStorage.getItem('cloud_rememberedUsers');
+                if (localList) {
+                    try {
+                        remembered = JSON.parse(localList);
+                    } catch (e) {
+                        console.warn('解析本地记住的用户名失败:', e);
+                    }
+                }
                 const resp = await fetch(`${CLOUD_API_BASE}/users?remembered=true`, {
                     headers: { 'Authorization': authToken }
                 });
@@ -3176,6 +3200,7 @@
                 });
                 
                 localStorage.setItem('cloud_rememberedUsername', username);
+                localStorage.setItem('cloud_rememberedUsers', JSON.stringify(remembered));
                 renderRememberedUsers(remembered);
             } catch (e) {
                 console.warn('保存记住的用户名失败:', e);
