@@ -5562,7 +5562,7 @@
                 clinicName: currentUser?.clinicName || getUserItem('clinicName') || localStorage.getItem('global_clinicName') || '本能堂中医诊所',
                 defaultRegFee: getUserItem('defaultRegFee') || '0',
                 defaultDose: getUserItem('defaultDose') || '7',
-                clinicDoctor: getUserItem('clinicDoctor') || currentUser?.name || currentUser?.username || '',
+                clinicDoctor: currentUser?.name || currentUser?.username || getUserItem('clinicDoctor') || '',
                 autoStartEnabled: getUserItem('autoStartEnabled') === 'true'
             };
             
