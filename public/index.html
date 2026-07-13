@@ -5604,6 +5604,8 @@
             });
             
             dailyCounter = 1;
+            const savedDailyCounter = localStorage.getItem('cloud_dailyCounter');
+            const savedCounterDate = localStorage.getItem('cloud_counterDate');
             if (savedDailyCounter && savedCounterDate) {
                 const today = new Date().toDateString();
                 if (savedCounterDate === today) {
