@@ -3338,9 +3338,10 @@
                 // 保存记住用户
                 const rememberUser = document.getElementById('rememberUser').checked;
                 if (rememberUser) {
+                    console.log('[DEBUG] 开始保存记住的用户名:', username, '用户角色:', user.role);
                     await saveRememberedUser(username);
                 } else {
-                    localStorage.removeItem('cloud_rememberedUsername');
+                    await asyncStorage.set('cloud_rememberedUsername', '');
                 }
                 
                 // 清除处方缓存，确保新用户获取自己的数据
