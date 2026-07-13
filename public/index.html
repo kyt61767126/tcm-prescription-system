@@ -4074,6 +4074,10 @@
         }
 
         async function handleEditUser(username) {
+            if (!currentUser || !isAdmin(currentUser)) {
+                alert('只有管理员可以编辑用户');
+                return;
+            }
             const users = await getUsers();
             const user = users.find(u => u.username === username);
             if (!user) return;
@@ -4136,6 +4140,10 @@
         }
 
         async function handleAddUser() {
+            if (!currentUser || !isAdmin(currentUser)) {
+                alert('只有管理员可以添加用户');
+                return;
+            }
             const username = document.getElementById('newUserUsername').value.trim();
             const password = document.getElementById('newUserPassword').value;
             const name = document.getElementById('newUserName').value.trim();
@@ -4177,7 +4185,7 @@
                 name: finalName,
                 role: 'doctor',
                 allowSavePrescription: true,
-                allowedMode: 'local'
+                allowedMode: 'both'
             };
             
             users.push(newUser);
@@ -4198,6 +4206,10 @@
         }
 
         async function handleDeleteUser(username) {
+            if (!currentUser || !isAdmin(currentUser)) {
+                alert('只有管理员可以删除用户');
+                return;
+            }
             if (!confirm('确定删除该用户？')) return;
             
             const users = await getUsers();
@@ -4244,9 +4256,9 @@
                 const platformManageBtn = document.getElementById('platformManageBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
-                // 诊所管理员：显示账户管理 + 开机自启；普通用户：显示修改密码
+                // 诊所管理员和平台总管理员：显示账户管理 + 开机自启；普通用户：显示修改密码
                 const changePwdBtn = document.getElementById('changePwdBtn');
-                if (isClinicAdmin(currentUser)) {
+                if (isAdmin(currentUser)) {
                     userManageBtn.style.display = 'block';
                     autoStartSection.style.display = 'block';
                     if (changePwdBtn) changePwdBtn.style.display = 'none';
@@ -5471,7 +5483,7 @@
             // 管理员显示（顶部tab+底部按钮），普通用户隐藏
             if (window.Capacitor) {
                 const userManageBtn = document.getElementById('userManageBtn');
-                if (userManageBtn && !isClinicAdmin(currentUser)) userManageBtn.style.display = 'none';
+                if (userManageBtn && !isAdmin(currentUser)) userManageBtn.style.display = 'none';
             }
             
             // 检查是否是Electron环境
