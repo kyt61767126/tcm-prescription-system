@@ -5665,8 +5665,10 @@
                 }
             }
             
-            // 显示相应的界面
-            if (hasValidUser) {
+            // 桌面端（Electron）和APP端（Capacitor）：每次打开都显示登录界面，确保用户可以切换账号
+            const isCapacitor = window.Capacitor && window.Capacitor.isNative;
+            const isElectron = window.electronAPI && window.electronAPI.isElectron;
+            if (hasValidUser && !isCapacitor && !isElectron) {
                 document.getElementById('loginOverlay').style.display = 'none';
                 const mainContainer = document.querySelector('.main-container');
                 if (mainContainer) {
@@ -5679,6 +5681,7 @@
                 if (mainContainer) {
                     mainContainer.style.display = 'none';
                 }
+                initLoginDropdown();
             }
             
             // 继续初始化界面

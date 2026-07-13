@@ -3371,19 +3371,16 @@
             if (window.electronAPI && window.electronAPI.logout) {
                 window.electronAPI.logout();
             } else if (window.AndroidAppExit && window.AndroidAppExit.exit) {
-                // APP端：调用 Android JavaScript Interface 直接退出到手机主屏
-                window.AndroidAppExit.exit();
-            } else {
-                // 网页端：window.close() 通常无效，延迟 100ms 后回到登录界面
-                window.close();
                 setTimeout(function() {
-                    const overlay = document.getElementById('loginOverlay');
-                    if (overlay) {
-                        overlay.style.display = 'flex';
-                        const mainContainer = document.querySelector('.main-container');
-                        if (mainContainer) mainContainer.style.display = 'none';
-                    }
+                    window.AndroidAppExit.exit();
                 }, 100);
+            } else {
+                const overlay = document.getElementById('loginOverlay');
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    const mainContainer = document.querySelector('.main-container');
+                    if (mainContainer) mainContainer.style.display = 'none';
+                }
             }
             return false;
         }
@@ -5686,8 +5683,9 @@
                 }
             }
             
-            // 显示相应的界面
-            if (hasValidUser) {
+            // APP端（Capacitor）：每次打开都显示登录界面，确保用户可以切换账号
+            const isCapacitor = window.Capacitor && window.Capacitor.isNative;
+            if (hasValidUser && !isCapacitor) {
                 document.getElementById('loginOverlay').style.display = 'none';
                 const mainContainer = document.querySelector('.main-container');
                 if (mainContainer) {
@@ -5700,6 +5698,7 @@
                 if (mainContainer) {
                     mainContainer.style.display = 'none';
                 }
+                initLoginDropdown();
             }
             
             // 继续初始化界面
