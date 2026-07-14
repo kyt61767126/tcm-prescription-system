@@ -4257,7 +4257,7 @@
 
         async function toggleUserCloudMode(username) {
             if (!currentUser || currentUser.role !== 'clinic_admin') {
-                alert('只有管理员可以切换云端权限');
+                await alert('只有管理员可以切换云端权限');
                 return;
             }
             const users = await getUsers();
@@ -4276,7 +4276,7 @@
             }
             await renderUserList();
             const modeText = newMode === 'local' ? '仅离线' : '双模式';
-            alert(saveSuccess
+            await alert(saveSuccess
                 ? `✅ 已切换为【${modeText}】\n数据已同步到云端。`
                 : `⚠️ 已切换为【${modeText}】\n云端同步失败，可在设置中手动同步。`);
         }
@@ -4285,39 +4285,39 @@
             const users = await getUsers();
             const user = users.find(u => u.username === username);
             if (!user) return;
-            
-            const newUsername = prompt('请输入新登录账户（英文或拼音）：', user.username);
+
+            const newUsername = await prompt('请输入新登录账户（英文或拼音）：', user.username);
             if (newUsername === null) return;
-            
+
             const trimmedUsername = newUsername.trim();
             if (!trimmedUsername) {
-                alert('用户名不能为空');
+                await alert('用户名不能为空');
                 return;
             }
-            
+
             if (trimmedUsername !== username) {
                 const exists = users.find(u => u.username === trimmedUsername);
                 if (exists) {
-                    alert('用户名已存在');
+                    await alert('用户名已存在');
                     return;
                 }
             }
-            
-            const newName = prompt('请输入医师姓名（中文）：', user.name);
+
+            const newName = await prompt('请输入医师姓名（中文）：', user.name);
             if (newName === null) return;
-            
+
             const trimmedName = newName.trim();
             if (!trimmedName) {
-                alert('名称不能为空');
+                await alert('名称不能为空');
                 return;
             }
-            
-            const newPassword = prompt('请输入新密码（留空则不修改）：', '');
+
+            const newPassword = await prompt('请输入新密码（留空则不修改）：', '');
 
             // 第4步：模式选择（APP离线功能）
             const currentMode = user.allowedMode || 'both';
             const modeDefault = currentMode === 'cloud' ? '2' : currentMode === 'local' ? '3' : '1';
-            const modeChoice = prompt('请选择用户使用模式（输入数字，直接点确定保持原设置）：\n1. 双模式（云端+离线）\n2. 仅云端\n3. 仅离线', modeDefault);
+            const modeChoice = await prompt('请选择用户使用模式（输入数字，直接点确定保持原设置）：\n1. 双模式（云端+离线）\n2. 仅云端\n3. 仅离线', modeDefault);
             if (modeChoice === null) return;
 
             const newMode = modeChoice.trim() === '2' ? 'cloud' : modeChoice.trim() === '3' ? 'local' : 'both';
@@ -4340,7 +4340,7 @@
             }
 
             await renderUserList();
-            alert(saveSuccess ? '✅ 用户信息修改成功！\n\n使用模式：' + modeText + '\n数据已自动同步到云端，其他设备登录也能看到此用户。' : '⚠️ 用户信息已保存到本地\n\n云端同步失败，可在设置中手动同步。');
+            await alert(saveSuccess ? '✅ 用户信息修改成功！\n\n使用模式：' + modeText + '\n数据已自动同步到云端，其他设备登录也能看到此用户。' : '⚠️ 用户信息已保存到本地\n\n云端同步失败，可在设置中手动同步。');
         }
 
         async function handleAddUser() {
@@ -4402,11 +4402,11 @@
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
             document.getElementById('newUserName').value = '';
-            alert(saveSuccess ? '✅ 用户添加成功！\n\n该用户已自动同步到云端，手机等其他设备登录也能看到此用户。' : '⚠️ 用户已添加到本地\n\n云端同步失败，可在设置中手动同步。');
+            await alert(saveSuccess ? '✅ 用户添加成功！\n\n该用户已自动同步到云端，手机等其他设备登录也能看到此用户。' : '⚠️ 用户已添加到本地\n\n云端同步失败，可在设置中手动同步。');
         }
 
         async function handleDeleteUser(username) {
-            if (!confirm('确定删除该用户？')) return;
+            if (!(await confirm('确定删除该用户？'))) return;
             
             const users = await getUsers();
             const filteredUsers = users.filter(u => u.username !== username);
