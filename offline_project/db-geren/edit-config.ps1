@@ -1,4 +1,4 @@
-﻿﻿# edit-config.ps1 - 打包前编辑诊所名和医师姓名
+# edit-config.ps1 - 打包前编辑诊所名和医师姓名
 $config = Get-Content 'config.json' -Raw -Encoding UTF8 | ConvertFrom-Json
 Write-Host "当前诊所名称: $($config.clinicName)"
 Write-Host "当前医师姓名: $($config.doctorName)"
