@@ -1488,7 +1488,7 @@
 
         // ============ APP 版本号（供原生层校验页面是否最新） ============
         // 修改云端逻辑后需同步更新此版本号，并更新 MainActivity.java 的 EXPECTED_APP_VERSION
-        window.__APP_VERSION__ = '2026-07-14-v2';
+        window.__APP_VERSION__ = '2026-07-14-v3';
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
@@ -3381,7 +3381,11 @@
                 } catch (e) {
                     console.warn('Load data failed:', e);
                 }
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
+                try {
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
+                } catch (e) {
+                    console.warn('renderHistoryList failed:', e);
+                }
                 refreshUserInterface();
             } catch (err) {
                 console.error('Login error:', err);
@@ -5826,15 +5830,23 @@
                 }
                 setTimeout(async () => {
                     // 先从云端刷新用户权限（管理员可能已修改 allowedMode，如开通云端）
-                    await refreshCurrentUserFromCloud();
+                    await refreshCurrentUserFromCloud().catch(e => console.warn('refreshCurrentUserFromCloud failed:', e));
                     await loadData().catch(e => console.warn('Load data failed:', e));
-                    if (currentUser && prescriptionHistory && prescriptionHistory.length > 0) {
-                        const filtered = filterPrescriptionsByPermission(prescriptionHistory);
-                        renderHistoryList(filtered);
+                    try {
+                        if (currentUser && prescriptionHistory && prescriptionHistory.length > 0) {
+                            const filtered = filterPrescriptionsByPermission(prescriptionHistory);
+                            renderHistoryList(filtered);
+                        }
+                    } catch (e) {
+                        console.warn('renderHistoryList failed:', e);
                     }
-                    const prescriptionNo = generatePrescriptionNo();
-                    document.getElementById('prescriptionNo').value = prescriptionNo;
-                    document.getElementById('paperClinicNo').textContent = prescriptionNo;
+                    try {
+                        const prescriptionNo = generatePrescriptionNo();
+                        document.getElementById('prescriptionNo').value = prescriptionNo;
+                        document.getElementById('paperClinicNo').textContent = prescriptionNo;
+                    } catch (e) {
+                        console.warn('generatePrescriptionNo failed:', e);
+                    }
                 }, 100);
             } else {
                 const loginOverlay = document.getElementById('loginOverlay');
