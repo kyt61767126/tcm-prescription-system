@@ -59,7 +59,7 @@ public class MainActivity extends BridgeActivity {
     private static final String CLOUD_URL = "https://" + CLOUD_HOST;
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
-    private static final String EXPECTED_APP_VERSION = "2026-07-12-v8";
+    private static final String EXPECTED_APP_VERSION = "2026-07-15-v1";
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
@@ -188,10 +188,10 @@ public class MainActivity extends BridgeActivity {
             android.webkit.WebStorage.getInstance().deleteAllData();
         }
 
-        // LOAD_CACHE_ELSE_NETWORK: 有缓存时直接使用缓存，不发起网络请求
+        // LOAD_DEFAULT: 优先使用缓存，但会向服务器验证缓存是否过期（304则用缓存，200则加载新页面）
         // 配合版本检查机制：版本变更时onCreate清缓存，确保更新生效
-        // 效果：版本匹配时秒开（与离线相同速度），版本变更时首次从网络加载
-        settings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+        // 效果：版本匹配时秒开，页面有更新时自动加载最新版本
+        settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         // 启用硬件加速，提升页面渲染性能
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         settings.setDomStorageEnabled(true);
@@ -554,8 +554,8 @@ public class MainActivity extends BridgeActivity {
         WebView webView = this.getBridge().getWebView();
         if (webView != null) {
             WebSettings settings = webView.getSettings();
-            // LOAD_CACHE_ELSE_NETWORK: 与 onCreate 保持一致，优先缓存秒开
-            settings.setCacheMode(WebSettings.LOAD_CACHE_ELSE_NETWORK);
+            // LOAD_DEFAULT: 与 onCreate 保持一致，优先缓存但向服务器验证
+            settings.setCacheMode(WebSettings.LOAD_DEFAULT);
             settings.setDomStorageEnabled(true);
             settings.setDatabaseEnabled(true);
             settings.setLoadWithOverviewMode(true);
