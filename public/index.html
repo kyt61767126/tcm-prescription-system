@@ -2981,15 +2981,10 @@
             const cloudUsers = await getUsersFromCloud();
             if (cloudUsers && cloudUsers.length > 0) {
                 return cloudUsers.map(user => {
-                    let mode = user.allowedMode;
-                    // 网页版环境下，'local' 模式自动升级为 'both'，因为网页版没有真正的离线功能
-                    if (mode === 'local' && !window.Capacitor) {
-                        mode = 'both';
-                    }
                     return {
                         ...user,
                         allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
-                        allowedMode: mode || 'both'
+                        allowedMode: user.allowedMode || 'both'
                     };
                 });
             }
@@ -3003,16 +2998,23 @@
             try {
                 const users = await getUsers();
                 const fresh = users.find(u => u.username === currentUser.username);
-                if (fresh && fresh.allowedMode !== currentUser.allowedMode) {
-                    console.log('用户权限已更新:', currentUser.allowedMode, '->', fresh.allowedMode);
-                    currentUser.allowedMode = fresh.allowedMode;
-                    if (fresh.allowSavePrescription !== undefined) {
-                        currentUser.allowSavePrescription = fresh.allowSavePrescription;
+                if (fresh) {
+                    let mode = fresh.allowedMode || 'both';
+                    // 网页/桌面版环境下，'local' 模式自动升级为 'both'（无真正离线功能）
+                    if (mode === 'local' && !window.Capacitor) {
+                        mode = 'both';
                     }
-                    const userData = JSON.stringify(currentUser);
-                    localStorage.setItem('cloud_currentUser', userData);
-                    sessionStorage.setItem('currentUser', userData);
-                    updateUserDisplay();
+                    if (mode !== currentUser.allowedMode) {
+                        console.log('用户权限已更新:', currentUser.allowedMode, '->', mode);
+                        currentUser.allowedMode = mode;
+                        if (fresh.allowSavePrescription !== undefined) {
+                            currentUser.allowSavePrescription = fresh.allowSavePrescription;
+                        }
+                        const userData = JSON.stringify(currentUser);
+                        localStorage.setItem('cloud_currentUser', userData);
+                        sessionStorage.setItem('currentUser', userData);
+                        updateUserDisplay();
+                    }
                 }
             } catch (e) {
                 console.warn('刷新用户信息失败:', e);
@@ -3328,6 +3330,10 @@
                     return;
                 }
                 const user = data.user;
+                // 网页/桌面版环境下，'local' 模式自动升级为 'both'（无真正离线功能）
+                if (user.allowedMode === 'local' && !window.Capacitor) {
+                    user.allowedMode = 'both';
+                }
                 currentUser = user;
                 const userData = JSON.stringify(user);
                 localStorage.setItem('cloud_currentUser', userData);
