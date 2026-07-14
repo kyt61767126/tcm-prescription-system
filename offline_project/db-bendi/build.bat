@@ -5,7 +5,7 @@ echo ============================================
 echo  BenNeng TCM Prescription System - Local
 echo ============================================
 echo.
-echo [1/4] Checking environment...
+echo [1/5] Checking environment...
 where npm >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] npm not found, please install Node.js first
@@ -14,11 +14,14 @@ if errorlevel 1 (
 )
 echo       npm OK
 echo.
-echo [2/4] Cleaning old build artifacts...
+echo [2/5] Configuring clinic info...
+powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
+echo.
+echo [3/5] Cleaning old build artifacts...
 if exist "dist" rmdir /s /q "dist"
 echo [OK] Old artifacts cleaned
 echo.
-echo [3/4] Running build...
+echo [4/5] Running build...
 call npm run build
 if errorlevel 1 (
     echo.
@@ -27,7 +30,7 @@ if errorlevel 1 (
     exit /b 1
 )
 echo.
-echo [4/4] Build completed
+echo [5/5] Build completed
 echo Output dir: %CD%\dist
 echo ============================================
 pause
