@@ -73,7 +73,7 @@
             text-align: left;
             white-space: nowrap;
         }
-        .login-field input {
+        .login-field select, .login-field input {
             flex: 1;
             padding: 6px 8px;
             border: 1.5px solid #4a90d9;
@@ -82,7 +82,7 @@
             background: white;
             min-width: 0;
         }
-        .login-field input:focus {
+        .login-field select:focus, .login-field input:focus {
             border-color: #2962a3;
             outline: none;
             box-shadow: 0 0 5px rgba(74, 144, 217, 0.5);
@@ -137,7 +137,7 @@
     <div class="login-container">
         <div class="header-section">
             <span class="system-title">惠康中医处方系统</span>
-            <span class="version-tag">【个人】</span>
+            <span class="version-tag">【本地】</span>
         </div>
         <div class="main-content">
             <div class="login-box">
@@ -146,13 +146,16 @@
                 </div>
                 <div class="login-field">
                     <label>用户：</label>
-                    <input type="text" id="loginUsername" readonly style="background:#f0f0f0;color:#555;cursor:default;">
+                    <select id="loginUsername"></select>
                 </div>
                 <div class="login-field">
                     <label>密码：</label>
                     <input type="password" id="loginPassword" placeholder="请输入密码">
                 </div>
-                
+                <div class="remember-me">
+                    <input type="checkbox" id="rememberUser">
+                    <label for="rememberUser">记住用户</label>
+                </div>
                 <div class="login-buttons">
                     <button class="login-btn" id="btnOk" type="button">确定</button>
                     <button class="login-btn" id="btnCancel" type="button">取消</button>
