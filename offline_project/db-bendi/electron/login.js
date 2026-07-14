@@ -1,7 +1,6 @@
 // ============================================================================
-//  login.js - 登录窗口逻辑（不依赖 nodeIntegration，通过 electronAPI 调用主进程）
-//  统一 localStorage key 前缀为 local_
-//  用户列表与诊所名通过 IPC get-app-config 读取 config.json，不再正则解析 index.html
+//  login.js - 登录窗口逻辑（本地版：多用户登录）
+//  不依赖 nodeIntegration，通过 electronAPI 调用主进程
 // ============================================================================
 (function () {
     'use strict';
@@ -53,7 +52,6 @@
         };
     }
 
-    // 一次性获取 app config（IPC 缓存，避免重复跨进程调用）
     let appConfigCache = null;
     async function getAppConfig() {
         if (appConfigCache !== null) return appConfigCache;
@@ -127,74 +125,78 @@
         $('clinicName').textContent = name || '本能堂中医诊所';
     }
 
-    // 缓存用户列表，登录时复用
-    let _users = [];
-
-    function initLoginDropdown(config) {
+    function initUserSelect(config) {
         const select = $('loginUsername');
+        select.innerHTML = '';
         const cfg = getUsersFromConfig(config);
         const stored = getUsersFromStorage();
         const users = (cfg.length > 0 || stored.length > 0)
             ? mergeUsers(cfg, stored)
             : DEFAULT_USERS.map(normalizeUser).map(u => ({ ...u, displayName: u.name || u.username }));
-        _users = users;
-        select.innerHTML = '';
-        _users.forEach(u => {
+        const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
+        users.forEach(u => {
             const opt = document.createElement('option');
             opt.value = u.username;
             opt.textContent = u.displayName;
             select.appendChild(opt);
         });
-        const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
         if (rememberedUser) {
             select.value = rememberedUser;
             $('rememberUser').checked = true;
         }
+        return users;
     }
 
     async function handleLogin() {
-        clearError();
-        const username = $('loginUsername').value;
-        const password = $('loginPassword').value;
-        if (!username) { showError('请选择用户'); return; }
-        if (!password) { showError('请输入密码'); return; }
+    clearError();
+    const username = $('loginUsername').value;
+    const password = $('loginPassword').value;
+    if (!username) { showError('请选择用户'); return; }
+    if (!password) { showError('请输入密码'); return; }
 
-        const user = _users.find(u => u.username === username);
-        if (!user) {
-            showError('用户名或密码错误');
-            return;
-        }
-        const storedPwd = user.password || '';
-        const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
-        const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
-        if (!pwdOk) {
-            showError('用户名或密码错误');
-            return;
-        }
+    const config = await getAppConfig();
+    const cfg = getUsersFromConfig(config);
+    const stored = getUsersFromStorage();
+    const users = (cfg.length > 0 || stored.length > 0)
+        ? mergeUsers(cfg, stored)
+        : DEFAULT_USERS.map(normalizeUser).map(u => ({ ...u, displayName: u.name || u.username }));
+    const user = users.find(u => u.username === username);
 
-        // 仅写入必要字段，不写入密码
-        localStorage.setItem('currentUser', JSON.stringify({
+    if (!user) {
+        showError('用户不存在');
+        return;
+    }
+
+    const storedPwd = user.password || '';
+    const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
+    const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
+    if (!pwdOk) {
+        showError('密码错误');
+        return;
+    }
+
+    localStorage.setItem('currentUser', JSON.stringify({
+        username: user.username,
+        name: user.name,
+        role: user.role || 'user'
+    }));
+    localStorage.setItem('isLoggedIn', 'true');
+
+    const remember = $('rememberUser').checked;
+    if (remember) {
+        localStorage.setItem(KEY_REMEMBER_USER, user.username);
+    } else {
+        localStorage.removeItem(KEY_REMEMBER_USER);
+    }
+
+    if (window.electronAPI && window.electronAPI.loginSuccess) {
+        await window.electronAPI.loginSuccess({
             username: user.username,
             name: user.name,
             role: user.role || 'user'
-        }));
-        localStorage.setItem('isLoggedIn', 'true');
-
-        const remember = $('rememberUser').checked;
-        if (remember) {
-            localStorage.setItem(KEY_REMEMBER_USER, user.username);
-        } else {
-            localStorage.removeItem(KEY_REMEMBER_USER);
-        }
-
-        if (window.electronAPI && window.electronAPI.loginSuccess) {
-            await window.electronAPI.loginSuccess({
-                username: user.username,
-                name: user.name,
-                role: user.role || 'user'
-            });
-        }
+        });
     }
+}
 
     function handleCancel() {
         if (window.electronAPI && window.electronAPI.quitApp) {
@@ -205,7 +207,7 @@
     document.addEventListener('DOMContentLoaded', async () => {
         const config = await getAppConfig();
         loadClinicName(config);
-        initLoginDropdown(config);
+        initUserSelect(config);
         $('btnOk').addEventListener('click', handleLogin);
         $('btnCancel').addEventListener('click', handleCancel);
         $('loginPassword').addEventListener('keydown', (e) => {
