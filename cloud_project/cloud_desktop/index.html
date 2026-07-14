@@ -4231,6 +4231,8 @@
                             <button class="user-item-btn btn-primary" onclick='handleEditUser(${escapeHtml(JSON.stringify(user.username))})'>编辑</button>
                             ${user.username !== currentUser.username ? (mode === 'local'
                                 ? `<button class="user-item-btn" style="background:#2196f3;color:white;" onclick='toggleUserCloudMode(${escapeHtml(JSON.stringify(user.username))})'>开通云端</button>`
+                                : mode === 'both'
+                                ? `<button class="user-item-btn" style="background:#2196f3;color:white;" onclick='toggleUserCloudMode(${escapeHtml(JSON.stringify(user.username))})'>改为仅云端</button>`
                                 : `<button class="user-item-btn" style="background:#ff9800;color:white;" onclick='toggleUserCloudMode(${escapeHtml(JSON.stringify(user.username))})'>关闭云端</button>`
                             ) : ''}
                             ${user.username !== currentUser.username ? `<button class="user-item-btn btn-danger" onclick='handleDeleteUser(${escapeHtml(JSON.stringify(user.username))})'>删除</button>` : ''}
@@ -4251,7 +4253,8 @@
             const user = users.find(u => u.username === username);
             if (!user) return;
             const currentMode = user.allowedMode || 'both';
-            const newMode = currentMode === 'local' ? 'both' : 'local';
+            // 三态循环切换：local → both → cloud → local
+            const newMode = currentMode === 'local' ? 'both' : currentMode === 'both' ? 'cloud' : 'local';
             user.allowedMode = newMode;
             const saveSuccess = await saveUsers(users);
             // 若改的是当前登录用户，同步本地状态
