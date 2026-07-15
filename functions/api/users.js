@@ -127,6 +127,33 @@ export async function onRequest(context) {
             return json({ success: false, error: 'KV binding not found. Please configure TCM_PRESCRIPTION_KV.' }, 500);
         }
 
+        // ===== 诊断端点 GET /users?check=username =====
+        // 用于检查用户是否存在（无需认证，仅用于诊断）
+        if (method === 'GET' && url.searchParams.get('check')) {
+            const checkUsername = url.searchParams.get('check');
+            if (!checkUsername) {
+                return json({ success: false, error: '请提供要检查的用户名' }, 400);
+            }
+
+            const found = await findUserForLogin(kv, checkUsername);
+            if (!found) {
+                return json({ success: false, error: '用户不存在', username: checkUsername });
+            }
+
+            const { user, clinicId, clinicName } = found;
+            return json({
+                success: true,
+                username: user.username,
+                name: user.name,
+                role: user.role,
+                clinicId: clinicId,
+                clinicName: clinicName,
+                hasPasswordHash: !!user.passwordHash,
+                hasSalt: !!user.salt,
+                allowedMode: user.allowedMode
+            });
+        }
+
         // ===== 初始化平台管理员 POST /users?action=bootstrap =====
         // 仅当 system:platform_admins 为空时可用，用于创建第一个平台管理员
         if (method === 'POST' && url.searchParams.get('action') === 'bootstrap') {
@@ -234,33 +261,6 @@ export async function onRequest(context) {
                 success: true,
                 token,
                 user: sanitizeUser(user, clinicId, clinicName)
-            });
-        }
-
-        // ===== 诊断端点 GET /users?check=wgj =====
-        // 用于检查用户是否存在，不验证密码（仅限平台管理员）
-        if (method === 'GET' && url.searchParams.get('check')) {
-            const checkUsername = url.searchParams.get('check');
-            if (!checkUsername) {
-                return json({ success: false, error: '请提供要检查的用户名' }, 400);
-            }
-
-            const found = await findUserForLogin(kv, checkUsername);
-            if (!found) {
-                return json({ success: false, error: '用户不存在', username: checkUsername });
-            }
-
-            const { user, clinicId, clinicName } = found;
-            return json({
-                success: true,
-                username: user.username,
-                name: user.name,
-                role: user.role,
-                clinicId: clinicId,
-                clinicName: clinicName,
-                hasPasswordHash: !!user.passwordHash,
-                hasSalt: !!user.salt,
-                allowedMode: user.allowedMode
             });
         }
 
