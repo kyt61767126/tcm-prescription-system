@@ -216,7 +216,7 @@
         const { ipcRenderer } = require('electron');
         
         const defaultUsers = [
-            { username: 'admin', password: 'Bnt@2026!', name: '管理员', role: 'admin' }
+            { username: 'admin', password: 'e2dd90d81003db4f8a62fbd96d4bb0f0c9152386d062a7cdb0b7dcf4e0a7d000', name: '管理员', role: 'admin' }
         ];
         
         async function getUsers() {
@@ -284,9 +284,41 @@
             }
             
             const users = await getUsers();
-            const user = users.find(u => u.username === username && u.password === password);
-            
-            if (user) {
+            const user = users.find(u => u.username === username);
+
+            if (!user) {
+                errorDiv.textContent = '用户不存在';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            // 密码验证：支持哈希密码（64位hex）和明文密码
+            const storedPwd = user.password || '';
+            const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
+            let pwdOk = false;
+            if (isHash) {
+                // 哈希密码：将输入密码哈希后比较
+                try {
+                    if (window.AuthCore && AuthCore.hashPassword) {
+                        pwdOk = (storedPwd === await AuthCore.hashPassword(password));
+                    } else {
+                        // fallback: crypto.subtle.digest
+                        const encoder = new TextEncoder();
+                        const data = encoder.encode('bnzc_prescription_salt_v1' + password);
+                        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                        const hashedInput = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+                        pwdOk = (storedPwd === hashedInput);
+                    }
+                } catch (e) {
+                    console.error('密码哈希化失败:', e);
+                    pwdOk = false;
+                }
+            } else {
+                // 明文密码：直接比较
+                pwdOk = (storedPwd === password);
+            }
+
+            if (pwdOk) {
                 localStorage.setItem('lastUsername', username);
                 localStorage.setItem('currentUser', JSON.stringify(user));
                 if (window.AuthCore) {
