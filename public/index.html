@@ -27,11 +27,17 @@
         
         @page { size: A5; margin: 0; }
         @media print {
-            body { background: white; }
+            body { background: white; margin: 0; padding: 0; }
             .top-tabs, .left-panel, .right-panel, .bottom-bar, .tab-left-item, .action-buttons-section, .section-hint, .patient-section, .symptom-section, .diagnosis-section, .action-buttons-section, .mobile-nav, .mobile-action-bar { display: none !important; }
             .main-container { display: block !important; height: auto !important; width: 100% !important; overflow: visible !important; }
-            .center-panel { background: white !important; padding: 0 !important; margin: 0 auto !important; width: 148mm !important; display: block !important; min-width: auto !important; }
+            .center-panel { background: white !important; padding: 0 !important; margin: 0 auto !important; width: 148mm !important; max-width: 190mm !important; display: block !important; min-width: auto !important; }
             .prescription-paper { width: 148mm !important; height: 210mm !important; padding: 15mm !important; margin: 0 auto !important; box-shadow: none !important; page-break-after: always !important; transform: none !important; }
+            @page { size: A4; margin: 10mm; }
+            .no-print, .history-header, .modal, .login-overlay { display: none !important; }
+            .prescription-paper { page-break-inside: avoid; max-width: 190mm !important; border: 1px solid #000 !important; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
+            thead { display: table-header-group; }
         }
         body { 
             font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', 'SimSun', sans-serif; 
@@ -1507,7 +1513,7 @@
         </div>
     </div>
 
-    <script src="auth-core.js"></script>`n    <script src="permission.js"></script>
+    <script src="auth-core.js"></script>`n    <script src="permission.js"></script><script src="debug-logger.js"></script>
 <script>
 if (window.Permission) {
     Permission.init().then(function() {
@@ -9971,6 +9977,7 @@ IconFile=${scriptPath}`;
 
         // 手动触发离线同步（"立即同步"按钮 onclick 调用，函数名保留以兼容 HTML 绑定）
         async function syncOfflinePrescriptions() {
+            if (window.Permission && !Permission.canSync()) { console.warn('[DBG] 当前版本不支持云端同步'); return; }
             if (!offlineCapable()) {
                 showToast('当前环境不支持离线同步');
                 return;
