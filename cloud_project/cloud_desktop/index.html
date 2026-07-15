@@ -4543,6 +4543,7 @@
         }
 
         async function checkLoginStatus() {
+            const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; try { const _ld = localStorage.getItem('user_login_data'); if (_ld) { const _lt = JSON.parse(_ld).loginTime; if (_lt && Date.now() - _lt > SESSION_TIMEOUT_MS) { localStorage.removeItem('currentUser'); localStorage.removeItem('user_login_data'); localStorage.removeItem('isLoggedIn'); } } } catch(e) {}
             const isElectron = window.electronAPI && window.electronAPI.isElectron;
             
             if (isElectron) {

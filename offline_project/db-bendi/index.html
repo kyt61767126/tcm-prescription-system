@@ -871,9 +871,9 @@ let currentUser = null;
 
         function getDefaultUsers() {
             return [
-                {username: 'admin', password: 'admin', name: '管理员', role: 'admin'},
-                {username: 'doctor1', password: '123456', name: '张医生', role: 'user'},
-                {username: 'doctor2', password: '123456', name: '李医生', role: 'user'}
+                {username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin'},
+                {username: 'doctor1', password: '6861055dc561644683c0e517c4e2eb68cfb5ba234ccc4c6da7fc78071771b1b1', name: '张医生', role: 'user'},
+                {username: 'doctor2', password: '6861055dc561644683c0e517c4e2eb68cfb5ba234ccc4c6da7fc78071771b1b1', name: '李医生', role: 'user'}
             ];
         }
 
@@ -912,6 +912,26 @@ let currentUser = null;
         }
 
         const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
+        function simpleEncrypt(text) {
+            const key = PASSWORD_SALT;
+            let result = '';
+            for (let i = 0; i < text.length; i++) {
+                result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            return 'XORv1:' + btoa(result);
+        }
+        function simpleDecrypt(stored) {
+            if (!stored || typeof stored !== 'string' || !stored.startsWith('XORv1:')) return stored;
+            try {
+                const text = atob(stored.substring(6));
+                const key = PASSWORD_SALT;
+                let result = '';
+                for (let i = 0; i < text.length; i++) {
+                    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                }
+                return result;
+            } catch(e) { return stored; }
+        }
         async function hashPassword(password) {
             if (!password) return '';
             try {
@@ -945,9 +965,10 @@ let currentUser = null;
             const saved = localStorage.getItem('local_systemUsers');
             if (saved) {
                 try {
-                    return JSON.parse(saved);
+                    const decrypted = simpleDecrypt(saved);
+                    return JSON.parse(decrypted);
                 } catch (e) {
-                    console.error('解析用户列表失败:', e);
+                    try { return JSON.parse(saved); } catch(e2) { console.error('解析用户列表失败:', e); }
                 }
             }
             return getDefaultUsers();
@@ -966,7 +987,7 @@ let currentUser = null;
         })().catch(e => console.error('密码迁移失败:', e));
 
         function saveUsers(users) {
-            localStorage.setItem('local_systemUsers', JSON.stringify(users));
+            localStorage.setItem('local_systemUsers', simpleEncrypt(JSON.stringify(users)));
         }
 
         async function handleLogin() {
@@ -1505,6 +1526,7 @@ let currentUser = null;
         }
 
         async function checkLoginStatus() {
+            const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; try { const _ld = localStorage.getItem('user_login_data'); if (_ld) { const _lt = JSON.parse(_ld).loginTime; if (_lt && Date.now() - _lt > SESSION_TIMEOUT_MS) { localStorage.removeItem('currentUser'); localStorage.removeItem('user_login_data'); localStorage.removeItem('isLoggedIn'); } } } catch(e) {}
             if (window.electronAPI) {
                 const savedUser = localStorage.getItem('currentUser');
                 if (savedUser) {

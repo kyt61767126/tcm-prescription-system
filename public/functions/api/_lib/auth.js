@@ -20,7 +20,11 @@ export const KV_SYSTEM_PLATFORM_MEDICINES = 'system:platform_medicines';
 const DEFAULT_SECRET = 'tcm-dev-insecure-secret-replace-in-prod';
 
 function getSecret(env) {
-    return env?.AUTH_SECRET || DEFAULT_SECRET;
+    const secret = env?.AUTH_SECRET || DEFAULT_SECRET;
+    if (secret === DEFAULT_SECRET) {
+        console.warn('[安全警告] AUTH_SECRET 未配置，正在使用默认不安全密钥！请在 Cloudflare Pages 后台设置环境变量 AUTH_SECRET。');
+    }
+    return secret;
 }
 
 function strToBytes(str) {

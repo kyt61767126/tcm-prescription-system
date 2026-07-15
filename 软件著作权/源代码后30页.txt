@@ -1,0 +1,1562 @@
+惠康中医诊所管理系统 - 源程序（后30页）
+
+============ 第1页 ============
+const { app, BrowserWindow, ipcMain, dialog, session, shell } = require('electron');
+const path = require('path');
+const fs = require('fs').promises;
+const fse = require('fs-extra');
+const Database = require('better-sqlite3');
+
+let mainWindow;
+let loginWindow;
+let sharedSession;
+let currentLoggedInUser = null;
+
+// 本地离线数据库（better-sqlite3），与 APP 端 SQLite 离线方案语义保持一致
+let db = null;
+
+// 全局异常处理：防止未捕获异常导致应用崩溃
+process.on('uncaughtException', (e) => {
+    console.error('未捕获异常:', e);
+});
+process.on('unhandledRejection', (e) => {
+    console.error('未处理的Promise拒绝:', e);
+});
+
+// 单例锁：防止多实例运行
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+        }
+    });
+}
+
+// 安全 IPC handler 包装器：自动捕获异常，防止渲染进程崩溃
+function safeHandle(channel, handler, defaultValue) {
+    ipcMain.handle(channel, async (event, ...args) => {
+        try {
+            return await handler(event, ...args);
+        } catch (e) {
+            console.error(`IPC ${channel} 异常:`, e);
+            return defaultValue !== undefined ? defaultValue : { success: false, error: e.message };
+        }
+    });
+}
+
+app.commandLine.appendSwitch('enable-features', 'WebDialog');
+app.commandLine.appendSwitch('enable-usermedia-screen-capturing');
+app.commandLine.appendSwitch('enable-media-stream');
+
+============ 第2页 ============
+app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
+app.commandLine.appendSwitch('allow-file-access-from-files');
+
+app.on('browser-window-created', (event, window) => {
+    window.webContents.on('dom-ready', () => {
+        window.webContents.executeJavaScript(`
+            (function() {
+                if (window.__electronDialogsInjected) return;
+                window.__electronDialogsInjected = true;
+                
+                function escapeHtml(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+                function escapeAttr(str) { return String(str).replace(/"/g, '&quot;').replace(/&/g, '&amp;'); }
+                
+                window.alert = function(message) {
+                    return new Promise((resolve) => { showElectronAlert(String(message || ''), () => resolve()); });
+                };
+                window.prompt = function(message, defaultValue) {
+                    return new Promise((resolve) => { showElectronPrompt(String(message || ''), String(defaultValue || ''), (value) => resolve(value)); });
+                };
+                window.confirm = function(message) {
+                    return new Promise((resolve) => { showElectronConfirm(String(message || ''), (result) => resolve(result)); });
+                };
+                
+                function showElectronAlert(message, callback) {
+                    const modal = document.createElement('div');
+                    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
+                    modal.innerHTML = '<div style="background:#fff;padding:20px;border-radius:8px;min-width:300px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"><div style="margin-bottom:15px;font-size:14px;color:#333;white-space:pre-wrap;">' + escapeHtml(message) + '</div><div style="text-align:right;"><button id="__alertOk" style="padding:6px 16px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;">确定</button></div></div>';
+                    document.body.appendChild(modal);
+                    document.getElementById('__alertOk').onclick = function() { modal.remove(); if (callback) callback(); };
+                }
+                function showElectronPrompt(message, defaultValue, callback) {
+                    const modal = document.createElement('div');
+                    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
+                    modal.innerHTML = '<div style="background:#fff;padding:20px;border-radius:8px;min-width:300px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"><div style="margin-bottom:15px;font-size:14px;color:#333;">' + escapeHtml(message) + '</div><input id="__promptInput" type="text" value="' + escapeAttr(defaultValue) + '" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px;box-sizing:border-box;"><div style="margin-top:15px;text-align:right;"><button id="__promptCancel" style="padding:6px 16px;margin-right:8px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">取消</button><button id="__promptOk" style="padding:6px 16px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;">确定</button></div></div>';
+                    document.body.appendChild(modal);
+                    const input = document.getElementById('__promptInput');
+                    input.focus(); input.select();
+                    document.getElementById('__promptOk').onclick = function() { const v = input.value; modal.remove(); if (callback) callback(v); };
+                    document.getElementById('__promptCancel').onclick = function() { modal.remove(); if (callback) callback(null); };
+                    input.onkeydown = function(e) { if (e.key === 'Enter') document.getElementById('__promptOk').click(); else if (e.key === 'Escape') document.getElementById('__promptCancel').click(); };
+                }
+                function showElectronConfirm(message, callback) {
+                    const modal = document.createElement('div');
+                    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
+                    modal.innerHTML = '<div style="background:#fff;padding:20px;border-radius:8px;min-width:300px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"><div style="margin-bottom:15px;font-size:14px;color:#333;white-space:pre-wrap;">' + escapeHtml(message) + '</div><div style="text-align:right;"><button id="__confirmCancel" style="padding:6px 16px;margin-right:8px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">取消</button><button id="__confirmOk" style="padding:6px 16px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;">确定</button></div></div>';
+                    document.body.appendChild(modal);
+                    document.getElementById('__confirmOk').onclick = function() { modal.remove(); if (callback) callback(true); };
+                    document.getElementById('__confirmCancel').onclick = function() { modal.remove(); if (callback) callback(false); };
+                }
+            })();
+
+============ 第3页 ============
+        `).catch(() => {});
+    });
+});
+
+function getExeDirectory() {
+    if (process.env.PORTABLE_EXECUTABLE_DIR) {
+        return process.env.PORTABLE_EXECUTABLE_DIR;
+    }
+    return path.dirname(app.getPath('exe'));
+}
+
+function getDownloadsDirectory() {
+    const exeDir = getExeDirectory();
+    const downloadsPath = path.join(exeDir, 'downloads');
+    
+    try {
+        fse.ensureDirSync(downloadsPath);
+        return downloadsPath;
+    } catch (error) {
+        console.error('无法在程序目录创建downloads文件夹:', error);
+        const userDataPath = app.getPath('userData');
+        const fallbackPath = path.join(userDataPath, 'downloads');
+        fse.ensureDirSync(fallbackPath);
+        return fallbackPath;
+    }
+}
+
+function getCurrentMonthFolder() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+}
+
+function getCurrentMonthDirectory() {
+    const downloadsDir = getDownloadsDirectory();
+    const monthFolder = getCurrentMonthFolder();
+    const monthDir = path.join(downloadsDir, monthFolder);
+    
+    try {
+        fse.ensureDirSync(monthDir);
+        return monthDir;
+    } catch (error) {
+        console.error('创建月份目录失败:', error);
+        throw error;
+    }
+}
+
+async function savePrescriptionImage(imageData, fileName) {
+    try {
+
+============ 第4页 ============
+        const monthDir = getCurrentMonthDirectory();
+        
+        const base64Data = imageData.replace(/^data:image\/[a-z]+;base64,/, '');
+        const buffer = Buffer.from(base64Data, 'base64');
+        
+        const filePath = path.join(monthDir, fileName);
+        await fs.writeFile(filePath, buffer);
+        
+        console.log('图片已保存:', filePath);
+        return { success: true, filePath, directory: monthDir };
+    } catch (error) {
+        console.error('保存图片失败:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+async function injectVideoRecorder(win) {
+    try {
+        const recorderPath = path.join(__dirname, 'video-recorder.js');
+        const code = await fs.readFile(recorderPath, 'utf8');
+        await win.webContents.executeJavaScript(code);
+        console.log('[视频录制] 模块注入成功');
+    } catch (e) {
+        console.error('[视频录制] 模块注入失败:', e.message);
+    }
+}
+
+async function saveVideoFile(arrayBuffer, fileName) {
+    try {
+        const monthDir = getCurrentMonthDirectory();
+        const buffer = Buffer.from(arrayBuffer);
+        if (!fileName.endsWith('.webm')) {
+            const base = fileName.replace(/\.[^.]+$/, '');
+            fileName = base + '.webm';
+        }
+        const filePath = path.join(monthDir, fileName);
+        await fs.writeFile(filePath, buffer);
+        console.log('视频已保存:', filePath);
+        return { success: true, filePath, directory: monthDir };
+    } catch (error) {
+        console.error('保存视频失败:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ★ 重命名处方文件（处方保存后云端分配新编号时同步重命名本地文件）
+async function renameMediaFiles(patientName, oldNo, newNo) {
+    try {
+        const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
+        const cleanName = sanitizeStr(patientName);
+
+============ 第5页 ============
+        const cleanOldNo = sanitizeStr(oldNo);
+        const cleanNewNo = sanitizeStr(newNo);
+        if (!cleanName || !cleanOldNo || !cleanNewNo || cleanOldNo === cleanNewNo) {
+            return { success: true, renamed: 0 };
+        }
+        const oldPrefixes = [
+            `${cleanName}_${cleanOldNo}`,
+            `${cleanOldNo}_${cleanName}`
+        ];
+        const newPrefixes = [
+            `${cleanName}_${cleanNewNo}`,
+            `${cleanNewNo}_${cleanName}`
+        ];
+        
+        const searchDirectories = [];
+        const currentDownloadsDir = getDownloadsDirectory();
+        searchDirectories.push(currentDownloadsDir);
+        
+        const userDataDownloadsDir = path.join(app.getPath('userData'), 'downloads');
+        if (userDataDownloadsDir !== currentDownloadsDir) {
+            searchDirectories.push(userDataDownloadsDir);
+        }
+        
+        const exeDir = getExeDirectory();
+        const parentExeDir = path.dirname(exeDir);
+        const parentDownloadsDir = path.join(parentExeDir, 'downloads');
+        if (parentDownloadsDir !== currentDownloadsDir && parentDownloadsDir !== userDataDownloadsDir) {
+            searchDirectories.push(parentDownloadsDir);
+        }
+        
+        let renamed = 0;
+        
+        for (const downloadsDir of searchDirectories) {
+            let monthDirs = [];
+            try {
+                const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+                monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+            } catch (e) { /* downloads目录可能不存在 */ }
+            
+            for (const monthDir of monthDirs) {
+                let fileEntries = [];
+                try {
+                    fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+                } catch (e) { continue; }
+                
+                for (const fe of fileEntries) {
+                    if (!fe.isFile()) continue;
+                    const fileName = fe.name;
+                    
+                    let matchedIndex = -1;
+
+============ 第6页 ============
+                    for (let i = 0; i < oldPrefixes.length; i++) {
+                        if (fileName.includes(oldPrefixes[i])) {
+                            matchedIndex = i;
+                            break;
+                        }
+                    }
+                    
+                    if (matchedIndex === -1) continue;
+                    
+                    const newFileName = fileName.replace(oldPrefixes[matchedIndex], newPrefixes[matchedIndex]);
+                    if (newFileName === fileName) continue;
+                    
+                    try {
+                        await fs.rename(path.join(monthDir, fileName), path.join(monthDir, newFileName));
+                        renamed++;
+                        console.log('[重命名文件]', fileName, '->', newFileName);
+                    } catch (e) { 
+                        console.error('[重命名文件失败]', fileName, e.message);
+                    }
+                }
+            }
+        }
+        return { success: true, renamed };
+    } catch (error) {
+        console.error('重命名处方文件失败:', error);
+        return { success: false, error: error.message, renamed: 0 };
+    }
+}
+
+function saveLoginState(hasLoggedIn, user = null) {
+    try {
+        const userDataPath = app.getPath('userData');
+        const settingsPath = path.join(userDataPath, 'login-state.json');
+        fse.writeJsonSync(settingsPath, { hasLoggedIn, user }, { spaces: 2 });
+        if (user) {
+            currentLoggedInUser = user;
+        }
+    } catch (e) {
+        console.log('保存登录状态失败:', e);
+    }
+}
+
+function restoreLoginState() {
+    try {
+        const userDataPath = app.getPath('userData');
+        const settingsPath = path.join(userDataPath, 'login-state.json');
+        if (fse.pathExistsSync(settingsPath)) {
+            const data = fse.readJsonSync(settingsPath);
+            if (data && data.hasLoggedIn && data.user) {
+                currentLoggedInUser = data.user;
+
+============ 第7页 ============
+                console.log('已恢复登录用户:', data.user.username);
+                return true;
+            }
+        }
+    } catch (e) {
+        console.log('恢复登录状态失败:', e);
+    }
+    return false;
+}
+
+// 初始化本地离线数据库（better-sqlite3），建表 SQL 与 APP 端 SQLite 完全一致
+function initDatabase() {
+    const userDataPath = app.getPath('userData');
+    const dbPath = path.join(userDataPath, 'tcm_prescription.db');
+    db = new Database(dbPath);
+    db.pragma('journal_mode = WAL');
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS prescriptions (
+          id INTEGER PRIMARY KEY,
+          data TEXT NOT NULL,
+          updated_at TEXT,
+          updated_at_ms INTEGER,
+          created_by TEXT,
+          synced INTEGER DEFAULT 0,
+          deleted INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_pres_synced ON prescriptions(synced);
+        CREATE INDEX IF NOT EXISTS idx_pres_user ON prescriptions(created_by);
+        CREATE TABLE IF NOT EXISTS cache_kv (
+          key TEXT PRIMARY KEY,
+          data TEXT NOT NULL,
+          cached_at TEXT
+        );
+        CREATE TABLE IF NOT EXISTS sync_status (
+          id INTEGER PRIMARY KEY DEFAULT 1,
+          last_push TEXT,
+          last_pull TEXT,
+          pending_count INTEGER DEFAULT 0
+        );
+    `);
+    console.log('本地离线数据库已初始化:', dbPath);
+}
+
+function createLoginWindow() {
+    if (loginWindow && !loginWindow.isDestroyed()) {
+        if (loginWindow.isMinimized()) loginWindow.restore();
+        loginWindow.focus();
+        return;
+    }
+    
+
+============ 第8页 ============
+    loginWindow = null;
+    
+    loginWindow = new BrowserWindow({
+        width: 360,
+        height: 420,
+        resizable: false,
+        autoHideMenuBar: true,
+        center: true,
+        maximizable: false,
+        minimizable: false,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js'),
+            session: sharedSession
+        }
+    });
+
+    const loginPath = path.join(__dirname, 'login.html');
+    loginWindow.loadFile(loginPath);
+
+    loginWindow.once('ready-to-show', () => {
+        loginWindow.show();
+    });
+
+    // 安全加固：登录窗口也禁止外部导航和弹窗
+    loginWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+        const parsedUrl = new URL(navigationUrl);
+        if (parsedUrl.protocol !== 'file:') {
+            event.preventDefault();
+            console.warn('登录窗口拦截外部导航:', navigationUrl);
+        }
+    });
+    loginWindow.webContents.setWindowOpenHandler(({ url }) => {
+        console.warn('登录窗口拦截弹窗:', url);
+        return { action: 'deny' };
+    });
+
+    loginWindow.on('closed', () => {
+        loginWindow = null;
+    });
+}
+
+function createMainWindow() {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.close();
+        mainWindow = null;
+    }
+    
+    mainWindow = new BrowserWindow({
+
+============ 第9页 ============
+        width: 1400,
+        height: 900,
+        autoHideMenuBar: true,
+        center: true,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload.js'),
+            session: sharedSession
+        }
+    });
+
+    const indexPath = path.join(__dirname, '..', 'index.html');
+    mainWindow.loadFile(indexPath);
+
+    mainWindow.on('closed', () => {
+        mainWindow = null;
+    });
+
+    // 生产环境安全配置：禁用开发者工具和右键菜单
+    const isDev = process.env.ELECTRON_DEV === '1' || process.defaultApp;
+    if (!isDev) {
+        mainWindow.webContents.on('devtools-opened', () => {
+            mainWindow.webContents.closeDevTools();
+        });
+        mainWindow.setMenu(null);
+    }
+
+    // 安全加固：禁止导航到外部 URL（防止钓鱼攻击）
+    mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+        const parsedUrl = new URL(navigationUrl);
+        // 仅允许 file: 协议（本地文件）
+        if (parsedUrl.protocol !== 'file:') {
+            event.preventDefault();
+            console.warn('拦截外部导航:', navigationUrl);
+        }
+    });
+
+    // 安全加固：禁止新窗口弹窗（所有 window.open 在当前窗口内打开）
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        console.warn('拦截弹窗:', url);
+        return { action: 'deny' };
+    });
+
+    mainWindow.webContents.on('dom-ready', () => {
+        if (currentLoggedInUser) {
+            const userJson = JSON.stringify(currentLoggedInUser).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            mainWindow.webContents.executeJavaScript(`
+                (function() {
+                    localStorage.setItem('cloud_currentUser', '${userJson}');
+
+============ 第10页 ============
+                    localStorage.setItem('cloud_isLoggedIn', 'true');
+                    sessionStorage.setItem('currentUser', '${userJson}');
+                    sessionStorage.setItem('isLoggedIn', 'true');
+                    if (document.getElementById('loginOverlay')) {
+                        document.getElementById('loginOverlay').style.display = 'none';
+                    }
+                    if (typeof updateUserDisplay === 'function') {
+                        try { updateUserDisplay(); } catch(e) {}
+                    }
+                    if (typeof loadData === 'function') {
+                        try { loadData(); } catch(e) {}
+                    }
+                })();
+            `).catch(() => {});
+        }
+        injectVideoRecorder(mainWindow);
+    });
+    
+    if (loginWindow && !loginWindow.isDestroyed()) {
+        loginWindow.close();
+        loginWindow = null;
+    }
+}
+
+app.whenReady().then(() => {
+    // 初始化本地离线数据库（建表，幂等）
+    try {
+        initDatabase();
+    } catch (e) {
+        console.error('初始化本地离线数据库失败:', e);
+    }
+
+    fse.ensureDirSync(getDownloadsDirectory());
+    
+    sharedSession = session.fromPartition('persist:tcm-prescription-cloud');
+
+    // 安装 CSP
+    sharedSession.webRequest.onHeadersReceived((details, callback) => {
+        callback({
+            responseHeaders: {
+                ...details.responseHeaders,
+                'Content-Security-Policy': [
+                    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://tcm-prescription-system.pages.dev https://*.cloudflareaccess.com; " +
+                    "img-src 'self' data: blob: https:; " +
+                    "media-src 'self' blob: data: https:; " +
+                    "connect-src 'self' https://tcm-prescription-system.pages.dev https://*.workers.dev; " +
+                    "font-src 'self' data:; " +
+                    "style-src 'self' 'unsafe-inline'"
+                ]
+            }
+
+============ 第11页 ============
+        });
+    });
+
+    // 授予 camera/microphone 权限（视频录制所需）
+    sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
+        console.log('[权限请求]', permission);
+        if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
+            callback(true);
+        } else {
+            callback(false);
+        }
+    });
+
+    // 在主窗口创建前预先授权设备访问
+    if (sharedSession.setDevicePermissionHandler) {
+        sharedSession.setDevicePermissionHandler((details) => {
+            console.log('[设备权限请求]', details);
+            if (details.deviceType === 'videoinput' || details.deviceType === 'audioinput') {
+                return true;
+            }
+            return false;
+        });
+    }
+    
+    createLoginWindow();
+
+    app.on('activate', () => {
+        const allWindows = BrowserWindow.getAllWindows();
+        if (allWindows.length === 0) {
+            if (currentLoggedInUser) {
+                createMainWindow();
+            } else {
+                createLoginWindow();
+            }
+        } else {
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                if (mainWindow.isMinimized()) mainWindow.restore();
+                mainWindow.focus();
+            } else if (loginWindow && !loginWindow.isDestroyed()) {
+                if (loginWindow.isMinimized()) loginWindow.restore();
+                loginWindow.focus();
+            }
+        }
+    });
+});
+
+ipcMain.handle('save-prescription-image', async (event, imageData, fileName) => {
+    return await savePrescriptionImage(imageData, fileName);
+});
+
+
+============ 第12页 ============
+ipcMain.handle('save-video-file', async (event, arrayBuffer, fileName) => {
+    return await saveVideoFile(arrayBuffer, fileName);
+});
+
+ipcMain.handle('get-video-directory', async () => {
+    return getCurrentMonthDirectory();
+});
+
+// ★ 查找处方文件（新增）
+safeHandle('find-media-files', async (event, patientName, prescriptionNo, createdAt) => {
+    if (!patientName) return { success: true, files: [] };
+    const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
+    const cleanName = sanitizeStr(patientName);
+    const identifier = sanitizeStr(prescriptionNo || '');
+    
+    const identifiers = new Set([identifier]);
+    if (identifier.startsWith('LOCAL-')) {
+        identifiers.add(identifier.replace('LOCAL-', ''));
+    } else if (identifier) {
+        identifiers.add('LOCAL-' + identifier);
+    }
+    
+    const prefixes = [];
+    for (const id of identifiers) {
+        if (id) {
+            prefixes.push(`${cleanName}_${id}`);
+            prefixes.push(`${id}_${cleanName}`);
+        }
+    }
+    
+    // 解析 createdAt 时间范围（±1天）
+    let startTime = 0, endTime = Date.now() + 365 * 24 * 60 * 60 * 1000;
+    if (createdAt) {
+        try {
+            const createdDate = new Date(createdAt);
+            const time = createdDate.getTime();
+            startTime = time - 24 * 60 * 60 * 1000;
+            endTime = time + 48 * 60 * 60 * 1000;
+        } catch (e) { /* 解析失败用宽松范围 */ }
+    }
+    
+    const files = [];
+    const foundPaths = new Set();
+    
+    const searchDirectories = [];
+    
+    const currentDownloadsDir = getDownloadsDirectory();
+    searchDirectories.push(currentDownloadsDir);
+    
+    const userDataDownloadsDir = path.join(app.getPath('userData'), 'downloads');
+
+============ 第13页 ============
+    if (userDataDownloadsDir !== currentDownloadsDir) {
+        searchDirectories.push(userDataDownloadsDir);
+    }
+    
+    const exeDir = getExeDirectory();
+    const parentExeDir = path.dirname(exeDir);
+    const parentDownloadsDir = path.join(parentExeDir, 'downloads');
+    if (parentDownloadsDir !== currentDownloadsDir && parentDownloadsDir !== userDataDownloadsDir) {
+        searchDirectories.push(parentDownloadsDir);
+    }
+    
+    console.log('[查找文件] 患者:', cleanName, '编号:', identifier);
+    console.log('[查找文件] 搜索前缀:', prefixes);
+    console.log('[查找文件] 搜索目录:', searchDirectories);
+    
+    for (const downloadsDir of searchDirectories) {
+        let monthDirs = [];
+        try {
+            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+        } catch (e) { 
+            console.log('[查找文件] 目录不存在:', downloadsDir);
+            continue; 
+        }
+        
+        for (const monthDir of monthDirs) {
+            let fileEntries = [];
+            try {
+                fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+            } catch (e) { continue; }
+            
+            for (const fe of fileEntries) {
+                if (!fe.isFile()) continue;
+                const fileName = fe.name;
+                const matches = prefixes.some(p => fileName.includes(p));
+                if (!matches) continue;
+                const filePath = path.join(monthDir, fileName);
+                
+                if (foundPaths.has(filePath)) continue;
+                foundPaths.add(filePath);
+                
+                try {
+                    const stat = await fs.stat(filePath);
+                    const ext = path.extname(fileName).toLowerCase();
+                    const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
+                    files.push({
+                        name: fileName,
+                        path: filePath,
+                        type: isVideo ? 'video' : 'image',
+                        size: stat.size,
+
+============ 第14页 ============
+        return { success: false, error: '读取文件失败：' + error.message };
+    }
+});
+
+// 保存备份数据文件到与图片相同的目录（安装目录/downloads/YYYY-MM/）
+ipcMain.handle('save-backup-file', async (event, jsonStr, fileName) => {
+    try {
+        const monthDir = getCurrentMonthDirectory();
+        const filePath = path.join(monthDir, fileName);
+        const buffer = Buffer.from(jsonStr, 'utf-8');
+        await fs.writeFile(filePath, buffer);
+        console.log('备份文件已保存:', filePath);
+        return { success: true, filePath, directory: monthDir };
+    } catch (error) {
+        console.error('保存备份文件失败:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('get-image-directory', async () => {
+    return getCurrentMonthDirectory();
+});
+
+ipcMain.handle('get-backup-directory', async () => {
+    return getCurrentMonthDirectory();
+});
+
+ipcMain.handle('open-image-directory', async () => {
+    const dir = getCurrentMonthDirectory();
+    dialog.showOpenDialog({
+        defaultPath: dir,
+        properties: ['openDirectory']
+    });
+});
+
+ipcMain.handle('open-backup-directory', async () => {
+    const dir = getCurrentMonthDirectory();
+    dialog.showOpenDialog({
+        defaultPath: dir,
+        properties: ['openDirectory']
+    });
+});
+
+// 选择图片保存目录（用户可自定义保存位置）
+ipcMain.handle('select-image-save-directory', async () => {
+    const result = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory']
+    });
+    if (!result.canceled && result.filePaths.length > 0) {
+        const selectedPath = result.filePaths[0];
+
+============ 第15页 ============
+        currentLoggedInUser = currentLoggedInUser || {};
+        // 保存到配置文件中（与用户绑定）
+        try {
+            const { app } = require('electron');
+            const configPath = path.join(app.getPath('userData'), 'image-save-config.json');
+            await fs.writeFile(configPath, JSON.stringify({ savePath: selectedPath }), 'utf-8');
+            return { success: true, path: selectedPath };
+        } catch (e) {
+            return { success: false, error: e.message };
+        }
+    }
+    return { success: false, error: '用户取消了选择' };
+});
+
+ipcMain.handle('get-downloads-root', async () => {
+    return getDownloadsDirectory();
+});
+
+ipcMain.handle('login-success', async (event, userData) => {
+    const sender = event.sender;
+    const senderWindow = BrowserWindow.fromWebContents(sender);
+    
+    saveLoginState(true, userData);
+    currentLoggedInUser = userData;
+
+    if (senderWindow === loginWindow) {
+        if (loginWindow) {
+            loginWindow.close();
+            loginWindow = null;
+        }
+        createMainWindow();
+    }
+
+    return { success: true };
+});
+
+ipcMain.handle('get-logged-in-user', async () => {
+    return currentLoggedInUser;
+});
+
+ipcMain.handle('get-index-html-content', async () => {
+    const possiblePaths = [
+        path.join(__dirname, '..', 'index.html'),
+        path.join(__dirname, 'index.html'),
+        path.join(process.resourcesPath, 'app', 'index.html')
+    ];
+    
+    for (const filePath of possiblePaths) {
+        try {
+            if (fse.pathExistsSync(filePath)) {
+
+============ 第16页 ============
+                const content = fse.readFileSync(filePath, 'utf8');
+                return { success: true, content, path: filePath };
+            }
+        } catch (e) {
+            console.log('主进程读取index.html失败:', filePath, e.message);
+        }
+    }
+    return { success: false, content: '' };
+});
+
+ipcMain.handle('login-cancel', async () => {
+    app.quit();
+    return { success: true };
+});
+
+ipcMain.handle('logout', async () => {
+    saveLoginState(false);
+    app.quit();
+    return { success: true };
+});
+
+ipcMain.handle('quit-app', async () => {
+    saveLoginState(false);
+    app.quit();
+    return { success: true };
+});
+
+// 获取数据目录（供前端读取本地文件用）
+ipcMain.handle('get-data-directory', async () => {
+    return getExeDirectory();
+});
+
+// 保存用户数据（按 key 存储，与登录用户绑定）
+ipcMain.handle('save-user-data', async (event, key, data) => {
+    try {
+        const userDataDir = path.join(app.getPath('userData'), 'user-data');
+        await fse.ensureDir(userDataDir);
+        const filePath = path.join(userDataDir, `${key}.json`);
+        await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+        return { success: true };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+// 读取用户数据（按 key 读取）
+ipcMain.handle('get-user-data', async (event, key) => {
+    try {
+        const filePath = path.join(app.getPath('userData'), 'user-data', `${key}.json`);
+        const content = await fs.readFile(filePath, 'utf-8');
+
+============ 第17页 ============
+        return JSON.parse(content);
+    } catch (e) {
+        return null;
+    }
+});
+
+// ===================== 本地离线数据库 IPC 接口 =====================
+// 与 APP 端 LocalDB 模块语义对齐（见 offline-sqlite-sync.md 4.2）
+
+// 数据库是否就绪；未初始化则尝试初始化
+safeHandle('localdb:ready', async () => {
+    if (!db) {
+        try { initDatabase(); } catch (e) { console.error('初始化数据库失败:', e); }
+    }
+    return !!db && db.open;
+}, false);
+
+// 按 created_by 查询未删除处方（data 解析后返回，按更新时间倒序）
+safeHandle('localdb:getPrescriptions', async (event, username) => {
+    if (!db) return [];
+    let rows;
+    if (username) {
+        rows = db.prepare(`SELECT data FROM prescriptions WHERE created_by = ? AND deleted = 0 ORDER BY updated_at_ms DESC`).all(username);
+    } else {
+        rows = db.prepare(`SELECT data FROM prescriptions WHERE deleted = 0 ORDER BY updated_at_ms DESC`).all();
+    }
+    return rows.map(r => {
+        try { return JSON.parse(r.data); } catch (e) { return null; }
+    }).filter(Boolean);
+}, []);
+
+// 新增/覆盖处方；opts 可指定 { synced, deleted }
+safeHandle('localdb:upsertPrescription', async (event, p, opts) => {
+    if (!db) return { success: false, error: '数据库未初始化' };
+    if (!p || p.id == null) return { success: false, error: '缺少处方 id' };
+    opts = opts || {};
+    const id = p.id;
+    const data = JSON.stringify(p);
+    const updatedAt = p.updatedAt || new Date().toISOString();
+    const updatedAtMs = (function () {
+        const t = new Date(updatedAt).getTime();
+        return isNaN(t) ? Date.now() : t;
+    })();
+    const createdBy = p.createdBy || (currentLoggedInUser && currentLoggedInUser.username) || null;
+    const synced = opts.synced ? 1 : 0;
+    const deleted = opts.deleted ? 1 : 0;
+    db.prepare(`
+        INSERT OR REPLACE INTO prescriptions (id, data, updated_at, updated_at_ms, created_by, synced, deleted)
+        VALUES (@id, @data, @updated_at, @updated_at_ms, @created_by, @synced, @deleted)
+    `).run({ id, data, updated_at: updatedAt, updated_at_ms: updatedAtMs, created_by: createdBy, synced, deleted });
+
+============ 第18页 ============
+    return { success: true };
+}, { success: false, error: '数据库异常' });
+
+// 查询所有未同步处方（含软删除 deleted=1，供同步引擎推送），按更新时间升序
+safeHandle('localdb:getUnsyncedPrescriptions', async () => {
+    if (!db) return [];
+    const rows = db.prepare(`SELECT data, deleted FROM prescriptions WHERE synced = 0 ORDER BY updated_at_ms ASC`).all();
+    return rows.map(r => {
+        try {
+            const obj = JSON.parse(r.data);
+            obj.deleted = r.deleted; // 注入 deleted 标记，便于同步引擎区分软删除
+            return obj;
+        } catch (e) { return null; }
+    }).filter(Boolean);
+}, []);
+
+// 标记某条处方已同步
+safeHandle('localdb:markSynced', async (event, id) => {
+    if (!db) return { success: false, error: '数据库未初始化' };
+    db.prepare(`UPDATE prescriptions SET synced = 1 WHERE id = ?`).run(id);
+    return { success: true };
+}, { success: false, error: '数据库异常' });
+
+// 软删除某条处方（进入待同步队列：deleted=1, synced=0）
+safeHandle('localdb:markDeleted', async (event, id) => {
+    if (!db) return { success: false, error: '数据库未初始化' };
+    db.prepare(`UPDATE prescriptions SET deleted = 1, synced = 0 WHERE id = ?`).run(id);
+    return { success: true };
+}, { success: false, error: '数据库异常' });
+
+// 统计未同步条数
+safeHandle('localdb:countUnsynced', async () => {
+    if (!db) return 0;
+    const row = db.prepare(`SELECT COUNT(*) AS count FROM prescriptions WHERE synced = 0`).get();
+    return row ? row.count : 0;
+}, 0);
+
+// 读取缓存 KV（解析 JSON 失败时回退为原始字符串）
+safeHandle('localdb:getCache', async (event, key) => {
+    if (!db || !key) return null;
+    const row = db.prepare(`SELECT data FROM cache_kv WHERE key = ?`).get(key);
+    if (!row) return null;
+    try { return JSON.parse(row.data); } catch (e) { return row.data; }
+}, null);
+
+// 写入缓存 KV
+safeHandle('localdb:setCache', async (event, key, data) => {
+    if (!db || !key) return { success: false, error: '缺少 key' };
+    const payload = typeof data === 'string' ? data : JSON.stringify(data);
+    const cachedAt = new Date().toISOString();
+
+============ 第19页 ============
+                        lastModified: stat.mtimeMs
+                    });
+                    console.log('[查找文件] 找到:', fileName);
+                } catch (e) { /* 跳过无法读取的文件 */ }
+            }
+        }
+    }
+    
+    console.log('[查找文件] 共找到:', files.length, '个文件');
+    
+    if (files.length === 0 && cleanName) {
+        console.log('[查找文件] 未找到匹配文件，尝试仅按患者姓名搜索');
+        
+        const mediaKeywords = ['photo', 'video', 'prescription', 'tongue'];
+        const validExtensions = ['.jpg', '.jpeg', '.png', '.webm', '.mp4', '.avi', '.mov'];
+        
+        for (const downloadsDir of searchDirectories) {
+            let monthDirs = [];
+            try {
+                const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+                monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+            } catch (e) { continue; }
+            
+            for (const monthDir of monthDirs) {
+                let fileEntries = [];
+                try {
+                    fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+                } catch (e) { continue; }
+                
+                for (const fe of fileEntries) {
+                    if (!fe.isFile()) continue;
+                    const fileName = fe.name;
+                    const ext = path.extname(fileName).toLowerCase();
+                    
+                    if (!fileName.includes(cleanName)) continue;
+                    if (!validExtensions.includes(ext)) continue;
+                    
+                    const hasMediaKeyword = mediaKeywords.some(k => fileName.includes(k));
+                    if (!hasMediaKeyword) continue;
+                    
+                    const filePath = path.join(monthDir, fileName);
+                    
+                    if (foundPaths.has(filePath)) continue;
+                    
+                    try {
+                        const stat = await fs.stat(filePath);
+                        // 如果有时间范围，用时间筛选
+                        if (startTime > 0 && (stat.mtimeMs < startTime || stat.mtimeMs > endTime)) continue;
+                        const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
+                        files.push({
+
+============ 第20页 ============
+                            name: fileName,
+                            path: filePath,
+                            type: isVideo ? 'video' : 'image',
+                            size: stat.size,
+                            lastModified: stat.mtimeMs
+                        });
+                        console.log('[查找文件] 按姓名+时间找到:', fileName);
+                    } catch (e) { /* 跳过无法读取的文件 */ }
+                }
+            }
+        }
+        console.log('[查找文件] 按姓名+时间搜索后共找到:', files.length, '个文件');
+    }
+    
+    return { success: true, files };
+}, { success: false, files: [] });
+
+// ★ 列出所有媒体文件（调试用）（新增）
+safeHandle('list-all-media-files', async () => {
+    const allFiles = [];
+    const searchDirectories = [];
+    
+    const currentDownloadsDir = getDownloadsDirectory();
+    searchDirectories.push(currentDownloadsDir);
+    
+    const userDataDownloadsDir = path.join(app.getPath('userData'), 'downloads');
+    if (userDataDownloadsDir !== currentDownloadsDir) {
+        searchDirectories.push(userDataDownloadsDir);
+    }
+    
+    const exeDir = getExeDirectory();
+    const parentExeDir = path.dirname(exeDir);
+    const parentDownloadsDir = path.join(parentExeDir, 'downloads');
+    if (parentDownloadsDir !== currentDownloadsDir && parentDownloadsDir !== userDataDownloadsDir) {
+        searchDirectories.push(parentDownloadsDir);
+    }
+    
+    for (const downloadsDir of searchDirectories) {
+        let monthDirs = [];
+        try {
+            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+        } catch (e) { continue; }
+        
+        for (const monthDir of monthDirs) {
+            let fileEntries = [];
+            try {
+                fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+            } catch (e) { continue; }
+            
+
+============ 第21页 ============
+            for (const fe of fileEntries) {
+                if (!fe.isFile()) continue;
+                const fileName = fe.name;
+                const filePath = path.join(monthDir, fileName);
+                try {
+                    const stat = await fs.stat(filePath);
+                    allFiles.push({
+                        name: fileName,
+                        path: filePath,
+                        size: stat.size,
+                        lastModified: stat.mtimeMs
+                    });
+                } catch (e) { /* 跳过无法读取的文件 */ }
+            }
+        }
+    }
+    
+    return { success: true, files: allFiles, searchDirectories };
+}, { success: false, files: [], searchDirectories: [] });
+
+// ★ 重命名处方文件（新增）
+safeHandle('rename-media-files', async (event, patientName, oldNo, newNo) => {
+    return await renameMediaFiles(patientName, oldNo, newNo);
+}, { success: false, renamed: 0 });
+
+// ★ 删除文件（新增）
+safeHandle('delete-file', async (event, filePath) => {
+    if (!filePath) return { success: false, error: '文件路径为空' };
+    await fs.unlink(filePath);
+    return { success: true };
+});
+
+// ★ 打开文件（系统默认程序）（新增）
+safeHandle('open-file', async (event, filePath, mimeType) => {
+    if (!filePath) return { success: false, error: '文件路径为空' };
+    const result = await shell.openPath(filePath);
+    if (result) {
+        console.error('[打开文件失败]', result);
+        return { success: false, error: result };
+    }
+    return { success: true };
+});
+
+// ★ 在文件管理器中打开视频目录（新增）
+safeHandle('open-video-directory', async () => {
+    const dir = getCurrentMonthDirectory();
+    await shell.openPath(dir);
+    return { success: true, directory: dir };
+});
+
+
+============ 第22页 ============
+        async function exportData() {
+            const now = new Date();
+            const dateStr = now.getFullYear() + '-' + 
+                           String(now.getMonth() + 1).padStart(2, '0') + '-' + 
+                           String(now.getDate()).padStart(2, '0');
+            const timeStr = String(now.getHours()).padStart(2, '0') + '-' + 
+                           String(now.getMinutes()).padStart(2, '0') + '-' +
+                           String(now.getSeconds()).padStart(2, '0');
+            
+            let userObj = currentUser;
+            if (!userObj) {
+                const currentUserStr = localStorage.getItem('local_currentUser');
+                if (currentUserStr) {
+                    try {
+                        userObj = JSON.parse(currentUserStr);
+                    } catch {
+                        userObj = null;
+                    }
+                }
+            }
+            
+            const exportUserName = userObj?.name || userObj?.username || '未知用户';
+            const userRoleDisplay = (userObj?.role === 'admin') ? '管理员' : '普通用户';
+            
+            const fileName = `本地_${exportUserName}_${dateStr}_${timeStr}.json`;
+            
+            const clinicNameVal = await getUserItem('clinicName');
+            const doctorNameVal = await getUserItem('clinicDoctor');
+            const clinicName = document.getElementById('clinicName')?.value || clinicNameVal || '未知诊所';
+            const doctorName = document.getElementById('defaultDoctor')?.value || doctorNameVal || '未知医师';
+            
+            const data = {
+                exportInfo: {
+                    version: '本能中医处方系统 - 新版',
+                    versionCode: 'v2.0.0',
+                    versionType: '本地',
+                    exportTime: now.toLocaleString('zh-CN'),
+                    exportTimeUTC: now.toISOString(),
+                    exportDate: dateStr,
+                    exportTimeOnly: timeStr,
+                    exportUser: exportUserName,
+                    userInfo: {
+                        username: userObj?.username || '未知',
+                        name: userObj?.name || exportUserName,
+                        role: userObj?.role || 'user',
+                        roleDisplay: userRoleDisplay
+                    },
+                    clinicName: clinicName,
+                    doctorName: doctorName,
+                    exportType: 'full',
+
+============ 第23页 ============
+                    formatVersion: '1.0',
+                    dataStatistics: {
+                        medicinesCount: medicines.length,
+                        formulasCount: formulas.length,
+                        prescriptionCount: prescriptionHistory.length
+                    },
+                    systemInfo: {
+                        platform: 'standalone',
+                        platformType: '本地',
+                        lastModified: localStorage.getItem('local_lastModified') || now.toISOString()
+                    }
+                },
+                medicines: medicines,
+                formulas: formulas,
+                prescriptionHistory: prescriptionHistory
+            };
+            
+            // 计算备份文件 HMAC 签名（基于紧凑 JSON，避免格式化影响）
+            const hmac = await computeBackupHmac(JSON.stringify(data));
+            if (hmac) {
+                data._hmac = hmac;
+            }
+
+            // 生成 JSON 字符串
+            const jsonStr = JSON.stringify(data, null, 2);
+
+            // 保存文件：Electron 环境用 IPC 直接写文件，浏览器用 a.click 下载
+            if (IS_ELECTRON && window.electronAPI && window.electronAPI.saveBackupFile) {
+                const result = await window.electronAPI.saveBackupFile(jsonStr, fileName);
+                if (result.success) {
+                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${result.fileName}\n\u4FDD\u5B58\u8DEF\u5F84\uFF1Adownloads/\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB`;
+                    alert(backupInfo);
+                } else {
+                    alert('备份失败：' + (result.error || '未知错误'));
+                }
+            } else {
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${fileName}\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB\n\n\u6587\u4EF6\u5C06\u4E0B\u8F7D\u5230\u6D4F\u89C8\u5668\u9ED8\u8BA4\u4E0B\u8F7D\u76EE\u5F55\uFF0C\u8BF7\u67E5\u770B\u4E0B\u8F7D\u8BB0\u5F55\uFF0C`;
+                alert(backupInfo);
+            }
+        }
+
+
+============ 第24页 ============
+        function importData() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async function(event) {
+                    try {
+                        const data = JSON.parse(event.target.result);
+
+                        // 验证 HMAC 签名（如果有）
+                        if (data._hmac) {
+                            const savedHmac = data._hmac;
+                            delete data._hmac;
+                            const computedHmac = await computeBackupHmac(JSON.stringify(data));
+                            if (savedHmac !== computedHmac) {
+                                if (!confirm('备份文件签名验证失败，文件可能已被篡改或损坏。\n是否仍要继续导入？')) {
+                                    alert('已取消导入。');
+                                    return;
+                                }
+                            }
+                        }
+                        if (data.medicines) medicines = data.medicines;
+                        if (data.formulas) formulas = data.formulas;
+
+                        if (data.prescriptionHistory && data.prescriptionHistory.length > 0) {
+                            // P7: 合并到 prescriptions store（按 id 去重，归属当前用户确保导入后可见）
+                            const allPrescriptions = await getAllPrescriptionsFromDB();
+                            const existingIds = new Set(allPrescriptions.map(p => p.id));
+                            const currentUsername = currentUser?.username || '';
+                            const newRecords = [];
+                            data.prescriptionHistory.forEach(p => {
+                                if (!existingIds.has(p.id)) {
+                                    p.createdBy = currentUsername;
+                                    newRecords.push(p);
+                                }
+                            });
+                            if (newRecords.length > 0) {
+                                await saveAllPrescriptionsToDB(newRecords).catch(e => {
+                                    console.error('导入处方到 prescriptions store 失败:', e);
+                                });
+                            }
+                        }
+
+                        localStorage.setItem('local_medicines', JSON.stringify(medicines));
+                        localStorage.setItem('local_formulas', JSON.stringify(formulas));
+
+
+============ 第25页 ============
+        const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
+        async function hashPassword(password) {
+            if (!password) return '';
+            try {
+                const encoder = new TextEncoder();
+                const data = encoder.encode(PASSWORD_SALT + password);
+                const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+                return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+            } catch (e) {
+                console.error('密码哈希化失败，使用明文:', e);
+                return password;
+            }
+        }
+        function isPasswordHashed(pwd) {
+            return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
+        }
+        async function computeBackupHmac(jsonStr) {
+            try {
+                const encoder = new TextEncoder();
+                const keyData = encoder.encode(PASSWORD_SALT);
+                const key = await crypto.subtle.importKey(
+                    'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+                );
+                const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(jsonStr));
+                return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+            } catch (e) {
+                console.error('HMAC 计算失败:', e);
+                return '';
+            }
+        }
+        function getUsers() {
+            const saved = localStorage.getItem('local_systemUsers');
+            if (saved) {
+                try {
+                    return JSON.parse(saved);
+                } catch (e) {
+                    console.error('解析用户列表失败:', e);
+                }
+            }
+            return getDefaultUsers();
+        }
+        // 启动时自动迁移明文密码为哈希
+        (async function ensurePasswordsHashed() {
+            const users = getUsers();
+            let needsMigration = false;
+            for (const u of users) {
+                if (u.password && !isPasswordHashed(u.password)) {
+                    u.password = await hashPassword(u.password);
+                    needsMigration = true;
+                }
+
+============ 第26页 ============
+            }
+            if (needsMigration) saveUsers(users);
+        })().catch(e => console.error('密码迁移失败:', e));
+
+        function saveUsers(users) {
+            localStorage.setItem('local_systemUsers', JSON.stringify(users));
+        }
+
+        async function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorDiv = document.getElementById('loginError');
+            
+            if (!username || !password) {
+                errorDiv.textContent = '请输入用户名和密码';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            
+            const users = getUsers();
+            const hashedPwd = await hashPassword(password);
+            const user = users.find(u =>u.username === username && u.password === hashedPwd);
+            
+            if (user) {
+                currentUser = user;
+                // 使用统一的 user_login_data 存储登录信息
+                const loginData = {
+                    user: user,
+                    loginTime: Date.now()
+                };
+                localStorage.setItem('user_login_data', JSON.stringify(loginData));
+                
+                const rememberUser = document.getElementById('rememberUser')?.checked;
+                if (rememberUser) {
+                    saveRememberedUser(username);
+                } else {
+                    localStorage.removeItem('local_rememberedUsername');
+                }
+                
+                document.getElementById('loginOverlay').style.display = 'none';
+                document.querySelector('.main-container').style.display = 'flex';
+                updateUserDisplay();
+                errorDiv.style.display = 'none';
+                
+                await loadData();
+                refreshUserInterface();
+
+                // 通知主进程放大窗口
+                if (window.electronAPI && window.electronAPI.loginSuccess) {
+                    try {
+
+============ 第27页 ============
+                        await window.electronAPI.loginSuccess(user);
+                    } catch (e) {
+                        console.error('通知主进程登录成功失败:', e);
+                    }
+                }
+            } else {
+                errorDiv.textContent = '用户名或密码错误';
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        window.handleLogout = async function() {
+            if (window.electronAPI && window.electronAPI.quitApp) {
+                await window.electronAPI.quitApp();
+            } else {
+                localStorage.removeItem('currentUser');
+                localStorage.removeItem('isLoggedIn');
+                localStorage.removeItem('user_login_data');
+                currentUser = null;
+                const overlay = document.getElementById('loginOverlay');
+                if (overlay) overlay.style.display = 'flex';
+                loadRememberedUsers();
+            }
+        };
+
+        window.exitApp = function() {
+            if (window.AndroidNative && window.AndroidNative.quitApp) {
+                window.AndroidNative.quitApp();
+            } else if (window.electronAPI && window.electronAPI.quitApp) {
+                window.electronAPI.quitApp();
+            } else {
+                window.close();
+            }
+        };
+
+        async function refreshUserInterface() {
+            const presNo = await generatePrescriptionNo();
+            document.getElementById('prescriptionNo').value = presNo;
+            document.getElementById('paperClinicNo').textContent = presNo;
+            // 确保医师姓名默认显示当前登录医师姓名
+            const doctorNameEl = document.getElementById('doctorName');
+            if (doctorNameEl && currentUser && currentUser.name && !doctorNameEl.value) {
+                doctorNameEl.value = currentUser.name;
+            }
+            // 统计输入框：按登入用户累计历史处方计数（管理员统计全部、普通用户统计自己的）
+            const year = String(new Date().getFullYear()).slice(-2);
+            document.getElementById('clinicNo').value = year + String(prescriptionHistory.length).padStart(6, '0');
+            if (prescriptionHistory.length >0) {
+                renderHistoryList(prescriptionHistory.slice(0, 15));
+            }
+
+============ 第28页 ============
+            }
+            
+            const users = getUsers();
+            const userIndex = users.findIndex(u =>u.username === currentUser.username);
+            
+            if (userIndex === -1) {
+                alert('用户不存在');
+                return;
+            }
+            
+            if (users[userIndex].password !== await hashPassword(oldPwd)) {
+                alert('原密码错误');
+                return;
+            }
+
+            users[userIndex].password = await hashPassword(newPwd);
+            saveUsers(users);
+            currentUser = users[userIndex];
+            localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
+            
+            alert('密码修改成功！');
+            closeModal('changePwdModal');
+        }
+
+        function showUserManageModal() {
+            if (!currentUser || currentUser.role !== 'admin') {
+                alert('只有管理员可以管理用户');
+                return;
+            }
+            
+            renderUserList();
+            document.getElementById('newUserUsername').value = '';
+            document.getElementById('newUserPassword').value = '';
+            document.getElementById('newUserName').value = '';
+            document.getElementById('userManageModal').style.display = 'flex';
+        }
+
+        function renderUserList() {
+            const users = getUsers();
+            const listDiv = document.getElementById('userList');
+            
+            let html = '';
+            users.forEach(user =>{
+                html += `<div class="user-item"><div class="user-item-info"><div class="user-item-name">${escapeHtml(user.name)} (${escapeHtml(user.username)})</div><div class="user-item-role">${user.role === 'admin' ? '管理员' : '普通用户'}</div></div><div class="user-item-actions"><button class="user-item-btn btn-primary" onclick="handleViewUserPrescriptions('${escapeJs(user.username)}')">查看处方</button><button class="user-item-btn btn-primary" onclick="handleEditUser('${escapeJs(user.username)}')">编辑</button>${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + escapeJs(user.username) + '\')">删除</button>' : ''}</div></div>`;
+            });
+            
+            listDiv.innerHTML = html || '暂无用户';
+        }
+
+        function handleEditUser(username) {
+
+============ 第29页 ============
+            const users = getUsers();
+            const user = users.find(u => u.username === username);
+            if (!user) return;
+
+            const existing = document.getElementById('editUserModal');
+            if (existing) existing.remove();
+
+            const modal = document.createElement('div');
+            modal.id = 'editUserModal';
+            modal.className = 'modal';
+            modal.style.display = 'flex';
+            modal.innerHTML = '<div class="modal-content user-modal-content">' +
+                '<div class="modal-header"><span>编辑用户</span>' +
+                '<span class="close-btn" onclick="document.getElementById(\'editUserModal\').remove()">&times;</span></div>' +
+                '<div class="modal-body">' +
+                '<div class="form-group"><label>登录账户（英文或拼音）</label>' +
+                '<input type="text" id="editUserUsername" value="' + escapeHtml(user.username) + '" placeholder="登录账号"></div>' +
+                '<div class="form-group" style="margin-top:10px;"><label>医师姓名</label>' +
+                '<input type="text" id="editUserName" value="' + escapeHtml(user.name) + '" placeholder="医师姓名"></div>' +
+                '<div class="form-group" style="margin-top:10px;"><label>新密码（留空则不修改）</label>' +
+                '<input type="password" id="editUserPassword" placeholder="留空则不修改"></div>' +
+                '<div class="form-group" style="margin-top:10px;"><label>角色</label>' +
+                '<select id="editUserRole" style="width:100%;padding:5px;">' +
+                '<option value="user"' + (user.role === 'user' ? ' selected' : '') + '>普通用户</option>' +
+                '<option value="admin"' + (user.role === 'admin' ? ' selected' : '') + '>管理员</option>' +
+                '</select></div>' +
+                '</div>' +
+                '<div class="modal-footer">' +
+                '<button class="action-btn" onclick="document.getElementById(\'editUserModal\').remove()">取消</button>' +
+                '<button class="action-btn primary" onclick="confirmEditUser(\'' + escapeJs(username) + '\')">保存</button>' +
+                '</div></div>';
+            document.body.appendChild(modal);
+        }
+
+        async function confirmEditUser(originalUsername) {
+            const newUsername = document.getElementById('editUserUsername').value.trim();
+            const newName = document.getElementById('editUserName').value.trim();
+            const newPassword = document.getElementById('editUserPassword').value;
+            const newRole = document.getElementById('editUserRole').value;
+
+            if (!newUsername) { alert('用户名不能为空'); return; }
+            if (!newName) { alert('名称不能为空'); return; }
+            if (/[\u4e00-\u9fa5]/.test(newUsername)) {
+                alert('登录账号不能使用中文，请使用英文或拼音！');
+                return;
+            }
+
+            const users = getUsers();
+            if (newUsername !== originalUsername) {
+                const exists = users.find(u => u.username === newUsername);
+
+============ 第30页 ============
+    db.prepare(`
+        INSERT OR REPLACE INTO cache_kv (key, data, cached_at) VALUES (@key, @data, @cached_at)
+    `).run({ key, data: payload, cached_at: cachedAt });
+    return { success: true };
+}, { success: false, error: '数据库异常' });
+
+// 读取同步状态
+safeHandle('localdb:getSyncStatus', async () => {
+    if (!db) return { last_push: null, last_pull: null, pending_count: 0 };
+    const row = db.prepare(`SELECT * FROM sync_status WHERE id = 1`).get();
+    if (!row) return { last_push: null, last_pull: null, pending_count: 0 };
+    return {
+        last_push: row.last_push,
+        last_pull: row.last_pull,
+        pending_count: row.pending_count
+    };
+}, { last_push: null, last_pull: null, pending_count: 0 });
+
+// 写入同步状态；pending_count 未提供时按实际未同步条数计算
+safeHandle('localdb:setSyncStatus', async (event, s) => {
+    if (!db) return { success: false, error: '数据库未初始化' };
+    s = s || {};
+    const lastPush = s.last_push || null;
+    const lastPull = s.last_pull || null;
+    let pendingCount;
+    if (typeof s.pending_count === 'number') {
+        pendingCount = s.pending_count;
+    } else {
+        const c = db.prepare(`SELECT COUNT(*) AS count FROM prescriptions WHERE synced = 0`).get();
+        pendingCount = c ? c.count : 0;
+    }
+    db.prepare(`
+        INSERT OR REPLACE INTO sync_status (id, last_push, last_pull, pending_count) VALUES (1, @last_push, @last_pull, @pending_count)
+    `).run({ last_push: lastPush, last_pull: lastPull, pending_count: pendingCount });
+    return { success: true };
+}, { success: false, error: '数据库异常' });
+
+// 退出前关闭数据库句柄
+app.on('before-quit', () => {
+    if (db) {
+        try { db.close(); } catch (e) { console.log('关闭数据库失败:', e); }
+        db = null;
+    }
+});
+
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
+});
+
