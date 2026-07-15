@@ -5,6 +5,7 @@
 (function () {
     'use strict';
 
+    // auth-core.js 兼容：若 window.AuthCore 可用则委托共享认证模块，否则使用本地实现作为 fallback
     const KEY_USERS = 'local_systemUsers';
     const KEY_REMEMBER_USER = 'local_rememberedUsername';
     const KEY_CLINIC_NAME = 'local_clinicName';
@@ -17,6 +18,7 @@
 
     const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
     async function hashPassword(password) {
+        if (window.AuthCore) return AuthCore.hashPassword(password);
         if (!password) return '';
         try {
             const encoder = new TextEncoder();
@@ -127,6 +129,13 @@
             name: loginUserInfo.name,
             role: loginUserInfo.role || 'user'
         }));
+        if (window.AuthCore) {
+            try {
+                await AuthCore.StorageAdapter.setItem('auth:currentUser', JSON.stringify({username:loginUserInfo.username, name:loginUserInfo.name, role:loginUserInfo.role||'user'}));
+                await AuthCore.StorageAdapter.setItem('auth:isLoggedIn', 'true');
+                await AuthCore.StorageAdapter.setItem('auth:loginData', JSON.stringify({loginTime: Date.now(), username:loginUserInfo.username}));
+            } catch(e) {}
+        }
         localStorage.setItem('isLoggedIn', 'true');
 
         localStorage.removeItem(KEY_REMEMBER_USER);

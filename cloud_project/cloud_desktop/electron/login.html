@@ -233,6 +233,7 @@
             color: #999;
         }
     </style>
+    <script src="auth-core.js"></script>
 </head>
 <body>
     <div class="login-container">
@@ -430,6 +431,13 @@
                 }
                 const user = data.user;
                 localStorage.setItem('cloud_currentUser', JSON.stringify(user));
+                if (window.AuthCore) {
+                    try {
+                        await AuthCore.StorageAdapter.setItem('auth:currentUser', JSON.stringify(user));
+                        await AuthCore.StorageAdapter.setItem('auth:isLoggedIn', 'true');
+                        await AuthCore.StorageAdapter.setItem('auth:loginData', JSON.stringify({loginTime: Date.now(), username: user.username}));
+                    } catch(e) { console.warn('AuthCore存储失败:', e); }
+                }
                 localStorage.setItem('cloud_isLoggedIn', 'true');
                 localStorage.setItem('currentUser', JSON.stringify(user));
                 localStorage.setItem('isLoggedIn', 'true');

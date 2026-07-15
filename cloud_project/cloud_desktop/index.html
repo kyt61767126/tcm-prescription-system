@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -1460,6 +1460,7 @@
         </div>
     </div>
 
+    <script src="auth-core.js"></script>
     <script>
         // 生产环境日志控制：URL 加 ?debug 启用 console.log，默认关闭以提升性能
         (function() {
@@ -2034,6 +2035,9 @@
         // 后端 _lib/auth.js 的 parseAuthHeader 仅识别此 JSON 格式
         // ============================================================================
         function buildAuthPayload(user) {
+            // 委托给 AuthCore 统一实现
+            if (window.AuthCore) return AuthCore.buildAuthPayload(user);
+            // 原有逻辑保留作为fallback
             if (!user) return null;
             const payload = {
                 username: user.username,
@@ -3203,32 +3207,11 @@
 
         async function saveRememberedUser(username) {
             try {
-                const cleanUsername = String(username).trim();
-                if (!cleanUsername) return;
-                
-                let remembered = [];
-                const localList = await asyncStorage.get('cloud_rememberedUsers');
-                if (localList) {
-                    try {
-                        const parsed = JSON.parse(localList);
-                        if (Array.isArray(parsed)) {
-                            remembered = parsed;
-                        } else if (typeof parsed === 'string') {
-                            remembered = [parsed];
-                        }
-                    } catch (e) {
-                        console.warn('解析本地记住的用户名失败:', e);
-                    }
-                }
-                
-                remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
-                remembered.unshift(cleanUsername);
-                if (remembered.length > 5) remembered = remembered.slice(0, 5);
-                
-                await asyncStorage.set('cloud_rememberedUsername', cleanUsername);
+                await AuthCore.saveRememberedUser(username);
+                const remembered = await AuthCore.loadRememberedUsers();
+                await asyncStorage.set('cloud_rememberedUsername', String(username).trim());
                 await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(remembered));
                 renderRememberedUsers(remembered);
-                console.log('[DEBUG] 保存记住的用户:', remembered);
             } catch (e) {
                 console.warn('保存记住的用户名失败:', e);
                 await asyncStorage.set('cloud_rememberedUsername', String(username).trim());
@@ -3302,19 +3285,14 @@
                 return;
             }
             
-            // 调用后端登录端点：POST /api/users?login=true
-            // 后端会在所有诊所 + 平台管理员中查找并校验密码（SHA-256 + salt）
             try {
-                const data = await cloudFetch(`${CLOUD_API_BASE}/users?login=true`, {
-                    method: 'POST',
-                    body: JSON.stringify({ username, password })
-                });
-                if (!data.success || !data.user) {
-                    errorDiv.textContent = data.error || '用户名或密码错误';
+                const result = await AuthCore.login(username, password, { adapter: AuthCore.cloudAdapter });
+                if (!result.success || !result.user) {
+                    errorDiv.textContent = result.error || '登录失败';
                     errorDiv.style.display = 'block';
                     return;
                 }
-                const user = data.user;
+                const user = result.user;
                 // 桌面版环境下，'local' 模式自动升级为 'both'（无真正离线功能）
                 if (user.allowedMode === 'local' && !window.Capacitor) {
                     user.allowedMode = 'both';
@@ -3393,6 +3371,9 @@
             } catch(e) {}
             
             currentUser = null;
+            if (window.AuthCore) {
+                AuthCore.logout().catch(e => console.warn('AuthCore.logout failed:', e));
+            }
             localStorage.removeItem('cloud_currentUser');
             localStorage.removeItem('cloud_isLoggedIn');
             localStorage.removeItem('currentUser');
@@ -4555,29 +4536,12 @@
         }
 
         async function checkLoginStatus() {
-            const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; try { const _ld = localStorage.getItem('user_login_data'); if (_ld) { const _lt = JSON.parse(_ld).loginTime; if (_lt && Date.now() - _lt > SESSION_TIMEOUT_MS) { localStorage.removeItem('currentUser'); localStorage.removeItem('user_login_data'); localStorage.removeItem('isLoggedIn'); } } } catch(e) {}
-            const isElectron = window.electronAPI && window.electronAPI.isElectron;
-            
-            if (isElectron) {
-                document.getElementById('loginOverlay').style.display = 'none';
-                const storedUser = localStorage.getItem('cloud_currentUser') || localStorage.getItem('currentUser');
-                if (storedUser) {
-                    try {
-                        currentUser = JSON.parse(storedUser);
-                        updateUserDisplay();
-                    } catch (e) {
-                        console.error('解析用户数据失败:', e);
-                    }
-                }
-                return;
-            }
-            
-            const storedUser = localStorage.getItem('cloud_currentUser');
-            const isLoggedIn = localStorage.getItem('cloud_isLoggedIn');
-            
-            if (storedUser && isLoggedIn === 'true') {
+            const session = await AuthCore.checkSession();
+            if (session.valid && session.user) {
                 try {
-                    currentUser = JSON.parse(storedUser);
+                    currentUser = session.user;
+                    localStorage.setItem('cloud_currentUser', JSON.stringify(session.user));
+                    localStorage.setItem('cloud_isLoggedIn', 'true');
                     document.getElementById('loginOverlay').style.display = 'none';
                     updateUserDisplay();
                     return;
@@ -4585,7 +4549,6 @@
                     console.error('解析用户数据失败:', e);
                 }
             }
-            
             currentUser = null;
             document.getElementById('loginOverlay').style.display = 'flex';
             initLoginDropdown();
