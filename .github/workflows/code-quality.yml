@@ -1,0 +1,89 @@
+name: Code Quality Check
+
+# PR 检查：验证 shared/ 源文件与分发文件一致性，防止手动修改分发文件导致不一致
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check-consistency:
+    runs-on: ubuntu-latest
+    name: 检查 shared/ 模块一致性
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify shared modules consistency
+        run: |
+          set -e
+          echo "=== 检查 shared/*.js 与分发目录的一致性 ==="
+          echo ""
+
+          TARGETS=(
+            "public"
+            "public/electron"
+            "cloud_project/cloud_desktop"
+            "cloud_project/cloud_desktop/electron"
+            "offline_project/db-bendi"
+            "offline_project/db-bendi/electron"
+            "offline_project/db-bendi/android/app/src/main/assets/public"
+            "offline_project/db-dingzhi"
+            "offline_project/db-dingzhi/electron"
+            "offline_project/db-dingzhi/android/app/src/main/assets/public"
+            "offline_project/db-geren"
+            "offline_project/db-geren/electron"
+            "offline_project/db-shouji/android/app/src/main/assets/public"
+          )
+
+          ERRORS=0
+          WARNINGS=0
+
+          for SRC in shared/*.js; do
+            [ -f "$SRC" ] || continue
+            FILENAME=$(basename "$SRC")
+            echo "检查 $FILENAME ..."
+            for TARGET in "${TARGETS[@]}"; do
+              DEST="$TARGET/$FILENAME"
+              if [ ! -f "$DEST" ]; then
+                echo "  ⚠️  缺失: $DEST"
+                WARNINGS=$((WARNINGS + 1))
+              elif ! diff -q "$SRC" "$DEST" > /dev/null 2>&1; then
+                echo "  ❌ 不一致: $DEST"
+                ERRORS=$((ERRORS + 1))
+              fi
+            done
+          done
+
+          echo ""
+          echo "=== 检查结果 ==="
+          echo "错误: $ERRORS"
+          echo "警告: $WARNINGS"
+
+          if [ "$ERRORS" -gt 0 ]; then
+            echo ""
+            echo "❌ 发现 $ERRORS 个不一致文件，请运行同步或检查 shared/ 源文件"
+            exit 1
+          fi
+
+          echo "✅ 一致性检查通过"
+
+      - name: Check for junk files
+        run: |
+          echo "=== 检查垃圾文件 ==="
+          # 检查常见的 PowerShell 误创建垃圾文件模式
+          JUNK=$(find . -maxdepth 2 -type f \( -name "rcmain*" -o -name "tem.IO*" \) 2>/dev/null || true)
+          if [ -n "$JUNK" ]; then
+            echo "❌ 发现垃圾文件:"
+            echo "$JUNK"
+            exit 1
+          fi
+          echo "✅ 未发现垃圾文件"
+
+      - name: Summary
+        run: |
+          echo "### 代码质量检查结果" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ shared/ 模块一致性检查通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ 垃圾文件检查通过" >> $GITHUB_STEP_SUMMARY
