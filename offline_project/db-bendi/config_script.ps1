@@ -1,4 +1,4 @@
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+﻿[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
@@ -59,8 +59,8 @@ Write-Host ""
 Write-Host "[2/3] 更新配置文件..."
 
 $content = [regex]::Replace($content, "clinicName:\s*'[^']*'", "clinicName: '$newClinic'")
-$content = [regex]::Replace($content, 'clinic-info-name">[^<]*<', 'clinic-info-name">' + $newClinic + '<')
-$content = [regex]::Replace($content, 'clinicNameDisplay">[^<]*<', 'clinicNameDisplay">' + $newClinic + '<')
+$content = [regex]::Replace($content, 'clinic-info-name">[^<]*<', ('clinic-info-name">' + $newClinic + '<'))
+$content = [regex]::Replace($content, 'clinicNameDisplay">[^<]*<', ('clinicNameDisplay">' + $newClinic + '<'))
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($HtmlFile, $content, $utf8NoBom)

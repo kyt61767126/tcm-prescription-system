@@ -1,7 +1,7 @@
 {
   "name": "tcm-prescription-cloud",
   "version": "1.2.0",
-  "description": "本能中医处方系统 - 云端",
+  "description": "惠康中医处方系统 - 云端",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -12,12 +12,12 @@
   "author": "惠康堂",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.3.3",
+    "electron": "^31.0.0",
     "electron-builder": "^24.9.1"
   },
   "build": {
     "appId": "com.huikangtang.prescription.cloud",
-    "productName": "本能中医处方系统-云端",
+    "productName": "惠康中医处方系统-云端",
     "directories": {
       "output": "dist"
     },
@@ -29,8 +29,8 @@
       "index.html",
       "xlsx.full.min.js",
       "package.json",
-      "package-lock.json",
-      "**/node_modules/better-sqlite3/**/*"
+      "**/node_modules/better-sqlite3/**/*",
+      "**/node_modules/fs-extra/**/*"
     ],
     "win": {
       "target": [
@@ -47,7 +47,7 @@
     }
   },
   "dependencies": {
-    "better-sqlite3": "^11.0.0",
+    "better-sqlite3": "^11.10.0",
     "fs-extra": "^11.3.5"
   }
 }

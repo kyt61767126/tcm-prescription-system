@@ -56,6 +56,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // 退出
     quitApp: () => ipcRenderer.invoke('quit-app'),
+    logout: () => ipcRenderer.invoke('logout'),
 
     // 备份文件保存（绕过 Electron 下载机制，直接写文件）
     saveBackupFile: (jsonStr, fileName) => ipcRenderer.invoke('save-backup-file', jsonStr, fileName),

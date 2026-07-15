@@ -1,4 +1,4 @@
-# edit-config.ps1 - 打包前交互式编辑诊所名称
+﻿# edit-config.ps1 - 打包前交互式编辑诊所名称
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -29,8 +29,8 @@ $config | ConvertTo-Json -Depth 10 | Set-Content 'config.json' -Encoding UTF8
 
 $html = [System.IO.File]::ReadAllText('index.html', [System.Text.Encoding]::UTF8)
 $html = $html -replace "clinicName:\s*'[^']*'", "clinicName: '$newClinic'"
-$html = $html -replace 'clinic-info-name">[^<]*<', 'clinic-info-name">' + $newClinic + '<'
-$html = $html -replace 'clinicNameDisplay">[^<]*<', 'clinicNameDisplay">' + $newClinic + '<'
+$html = $html -replace 'clinic-info-name">[^<]*<', ('clinic-info-name">' + $newClinic + '<')
+$html = $html -replace 'clinicNameDisplay">[^<]*<', ('clinicNameDisplay">' + $newClinic + '<')
 [System.IO.File]::WriteAllText('index.html', $html, [System.Text.Encoding]::UTF8)
 
 Write-Host "[OK] 配置已更新：诊所=$newClinic"

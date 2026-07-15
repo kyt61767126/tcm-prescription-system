@@ -351,8 +351,8 @@ function createLoginWindow() {
     loginWindow = null;
     
     loginWindow = new BrowserWindow({
-        width: 320,
-        height: 360,
+        width: 360,
+        height: 420,
         resizable: false,
         autoHideMenuBar: true,
         center: true,
@@ -363,12 +363,15 @@ function createLoginWindow() {
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
             session: sharedSession
-        },
-        icon: path.join(__dirname, 'icon.png')
+        }
     });
 
     const loginPath = path.join(__dirname, 'login.html');
     loginWindow.loadFile(loginPath);
+
+    loginWindow.once('ready-to-show', () => {
+        loginWindow.show();
+    });
 
     // 安全加固：登录窗口也禁止外部导航和弹窗
     loginWindow.webContents.on('will-navigate', (event, navigationUrl) => {
@@ -404,8 +407,7 @@ function createMainWindow() {
             contextIsolation: true,
             preload: path.join(__dirname, 'preload.js'),
             session: sharedSession
-        },
-        icon: path.join(__dirname, 'icon.png')
+        }
     });
 
     const indexPath = path.join(__dirname, '..', 'index.html');

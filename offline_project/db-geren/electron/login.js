@@ -101,16 +101,10 @@
         const input = $('loginUsername');
         loginUserInfo = getFirstUserFromStorage() || getFirstUserFromConfig(config) || DEFAULT_USERS[0];
 
-        // 显示医师姓名（CONFIG 优先）
         const doctorName = config.doctorName || (loginUserInfo ? loginUserInfo.name : '用户');
         input.value = doctorName;
 
-        // 记住用户
-        const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
-        if (rememberedUser) {
-            $('loginUsername').value = rememberedUser;
-            $('rememberUser').checked = true;
-        }
+        localStorage.removeItem(KEY_REMEMBER_USER);
     }
 
     async function handleLogin() {
@@ -135,12 +129,7 @@
         }));
         localStorage.setItem('isLoggedIn', 'true');
 
-        const remember = $('rememberUser').checked;
-        if (remember) {
-            localStorage.setItem(KEY_REMEMBER_USER, loginUserInfo.username);
-        } else {
-            localStorage.removeItem(KEY_REMEMBER_USER);
-        }
+        localStorage.removeItem(KEY_REMEMBER_USER);
 
         if (window.electronAPI && window.electronAPI.loginSuccess) {
             await window.electronAPI.loginSuccess({

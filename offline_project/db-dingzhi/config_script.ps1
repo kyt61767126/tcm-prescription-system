@@ -40,6 +40,13 @@ Write-Host ""
 $newClinic = Read-Host "请输入诊所名称 [$currentClinic]"
 if ([string]::IsNullOrWhiteSpace($newClinic)) { $newClinic = $currentClinic }
 
+if ([string]::IsNullOrWhiteSpace($newClinic)) {
+    Write-Host ""
+    Write-Host "[错误] 诊所名称不能为空" -ForegroundColor Red
+    Read-Host "按回车键退出"
+    exit 1
+}
+
 Write-Host ""
 Write-Host "------------------------------------------------------------"
 Write-Host "  新配置确认:"
@@ -59,8 +66,8 @@ Write-Host ""
 Write-Host "[2/3] 更新配置文件..."
 
 $content = [regex]::Replace($content, "clinicName:\s*'[^']*'", "clinicName: '$newClinic'")
-$content = [regex]::Replace($content, 'clinic-info-name">[^<]*<', 'clinic-info-name">' + $newClinic + '<')
-$content = [regex]::Replace($content, 'clinicNameDisplay">[^<]*<', 'clinicNameDisplay">' + $newClinic + '<')
+$content = [regex]::Replace($content, 'clinic-info-name">[^<]*<', ('clinic-info-name">' + $newClinic + '<'))
+$content = [regex]::Replace($content, 'clinicNameDisplay">[^<]*<', ('clinicNameDisplay">' + $newClinic + '<'))
 
 $utf8NoBom = New-Object System.Text.UTF8Encoding $false
 [System.IO.File]::WriteAllText($HtmlFile, $content, $utf8NoBom)

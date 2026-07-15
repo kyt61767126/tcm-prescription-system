@@ -1,7 +1,7 @@
 {
   "name": "tcm-prescription-local",
   "version": "1.0.0",
-  "description": "本能中医处方系统 - 本地",
+  "description": "惠康中医处方系统 - 本地",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -10,12 +10,12 @@
   "author": "本能堂",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.3.3",
+    "electron": "^31.0.0",
     "electron-builder": "^24.9.1"
   },
   "build": {
     "appId": "com.huikangtang.prescription.local",
-    "productName": "本能中医处方系统-本地",
+    "productName": "惠康中医处方系统-本地",
     "directories": {
       "output": "dist"
     },
@@ -25,8 +25,7 @@
       "login.html",
       "config.json",
       "vendor/**/*",
-      "package.json",
-      "package-lock.json"
+      "package.json"
     ],
     "win": {
       "target": [

@@ -1,11 +1,26 @@
-{
-  "clinicName": "本能堂中医诊所",
-  "doctorName": "张大夫",
-  "edition": "local",
-  "productName": "本能中医处方系统-本地",
-  "users": [
-    { "username": "admin", "password": "admin", "name": "管理员", "role": "admin" },
-    { "username": "doctor1", "password": "123456", "name": "张医生", "role": "user" },
-    { "username": "doctor2", "password": "123456", "name": "李医生", "role": "user" }
-  ]
+﻿{
+    "clinicName":  "本能堂中医诊所",
+    "doctorName":  "张大夫",
+    "edition":  "local",
+    "productName":  "惠康中医处方系统-本地",
+    "users":  [
+                  {
+                      "username":  "admin",
+                      "password":  "admin",
+                      "name":  "管理员",
+                      "role":  "admin"
+                  },
+                  {
+                      "username":  "doctor1",
+                      "password":  "123456",
+                      "name":  "张医生",
+                      "role":  "user"
+                  },
+                  {
+                      "username":  "doctor2",
+                      "password":  "123456",
+                      "name":  "李医生",
+                      "role":  "user"
+                  }
+              ]
 }

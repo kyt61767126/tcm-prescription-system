@@ -1,5 +1,5 @@
 // ============================================================================
-//  本能中医处方系统 - 本地版  Electron 主进程
+//  惠康中医处方系统 - 本地版  Electron 主进程
 //  安全配置：contextIsolation=true / nodeIntegration=false
 //  注：未启用 sandbox，以保留原生 window.prompt/confirm/alert（业务大量使用）
 //      contextIsolation 仍确保渲染进程无法直接访问 Node API
@@ -260,6 +260,38 @@ function getSharedWebPrefs() {
     };
 }
 
+function createLoginWindow() {
+    if (loginWindow && !loginWindow.isDestroyed()) {
+        focusWindow(loginWindow);
+        return;
+    }
+
+    loginWindow = new BrowserWindow({
+        width: 360,
+        height: 420,
+        resizable: false,
+        autoHideMenuBar: true,
+        center: true,
+        show: false,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            partition: SESSION_PARTITION
+        }
+    });
+
+    loginWindow.loadFile(path.join(__dirname, 'login.html'));
+
+    loginWindow.on('closed', () => {
+        loginWindow = null;
+    });
+
+    loginWindow.webContents.on('dom-ready', () => {
+        loginWindow.show();
+    });
+}
+
 // ============================================================================
 //  视频录制模块注入（新增）
 // ============================================================================
@@ -315,14 +347,16 @@ app.whenReady().then(() => {
         }
     });
 
-    createMainWindow();
+    createLoginWindow();
 
     app.on('activate', () => {
         const allWindows = BrowserWindow.getAllWindows();
         if (allWindows.length === 0) {
-            createMainWindow();
+            createLoginWindow();
         } else {
-            if (mainWindow && !mainWindow.isDestroyed()) {
+            if (loginWindow && !loginWindow.isDestroyed()) {
+                focusWindow(loginWindow);
+            } else if (mainWindow && !mainWindow.isDestroyed()) {
                 focusWindow(mainWindow);
             }
         }
@@ -535,6 +569,9 @@ ipcMain.handle('get-user-data', (event, key) => getUserData(key));
 ipcMain.handle('login-success', async (event, userData) => {
     try {
         await saveLoginState(true, userData);
+        if (loginWindow && !loginWindow.isDestroyed()) {
+            loginWindow.close();
+        }
         if (!mainWindow || mainWindow.isDestroyed()) {
             createMainWindow();
         }
@@ -555,7 +592,7 @@ ipcMain.handle('get-app-config', async () => {
         clinicName: '本能堂中医诊所',
         doctorName: '张大夫',
         edition: 'local',
-        productName: '本能中医处方系统-本地'
+        productName: '惠康中医处方系统-本地'
     };
     try {
         const configPath = path.join(__dirname, '..', 'config.json');
@@ -597,6 +634,13 @@ ipcMain.handle('save-backup-file', async (event, jsonStr, fileName) => {
 
 ipcMain.handle('quit-app', async () => {
     await saveLoginState(false);
+    app.quit();
+    return { success: true };
+});
+
+ipcMain.handle('logout', async () => {
+    await saveLoginState(false);
+    currentLoggedInUser = null;
     app.quit();
     return { success: true };
 });
