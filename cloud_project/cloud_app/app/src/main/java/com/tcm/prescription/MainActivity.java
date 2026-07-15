@@ -4,7 +4,10 @@ import android.Manifest;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.Signature;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.net.http.SslError;
@@ -50,6 +53,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 public class MainActivity extends BridgeActivity {
 
@@ -80,6 +85,12 @@ public class MainActivity extends BridgeActivity {
 
         super.onCreate(savedInstanceState);
 
+        // 签名校验：防止二次打包/篡改
+        if (!verifySignature()) {
+            finishAndRemoveTask();
+            return;
+        }
+
         // T5: 使用主线程 Looper 的 Handler，便于 onDestroy 统一清理
         mainHandler = new Handler(Looper.getMainLooper());
 
@@ -108,6 +119,69 @@ public class MainActivity extends BridgeActivity {
 
         // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
         preloadVideoRecorderScript();
+    }
+
+    // ========================================================================
+    // 签名校验（防盗：防止二次打包/篡改）
+    // ========================================================================
+
+    /**
+     * APK 签名校验
+     * 机制：首次运行锁定签名哈希，后续运行比较；支持硬编码哈希严格模式
+     * 留空 EXPECTED_HASH 则使用首次锁定模式；填入哈希则使用严格模式
+     */
+    private boolean verifySignature() {
+        try {
+            PackageInfo info = getPackageManager().getPackageInfo(
+                    getPackageName(), PackageManager.GET_SIGNATURES);
+            Signature[] signatures = info.signatures;
+            if (signatures == null || signatures.length == 0) return false;
+
+            String currentHash = sha256(signatures[0].toByteArray());
+
+            // 预期签名哈希（打包后可填入实际值实现严格模式；留空则首次锁定）
+            String expectedHash = "";
+
+            if (expectedHash.isEmpty()) {
+                // 首次锁定模式
+                SharedPreferences prefs = getSharedPreferences("app_security", MODE_PRIVATE);
+                String storedHash = prefs.getString("sign_sha256", null);
+                if (storedHash == null) {
+                    prefs.edit().putString("sign_sha256", currentHash).apply();
+                    Log.i(TAG, "签名首次锁定: " + currentHash);
+                    return true;
+                }
+                boolean valid = storedHash.equals(currentHash);
+                if (!valid) {
+                    Log.e(TAG, "签名校验失败！可能被二次打包");
+                }
+                return valid;
+            } else {
+                // 严格模式
+                boolean valid = expectedHash.equals(currentHash);
+                if (!valid) {
+                    Log.e(TAG, "签名校验失败！expected=" + expectedHash + " actual=" + currentHash);
+                }
+                return valid;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "签名校验异常", e);
+            return false;
+        }
+    }
+
+    private String sha256(byte[] data) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(data);
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            return "";
+        }
     }
 
     private void configureWebView() {
