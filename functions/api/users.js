@@ -207,12 +207,20 @@ export async function onRequest(context) {
 
             const found = await findUserForLogin(kv, username);
             if (!found) {
+                console.error('[登录失败] 用户不存在:', username);
                 return json({ success: false, error: '用户名或密码错误' }, 401);
             }
 
             const { user, clinicId, clinicName } = found;
+            
+            if (!user.passwordHash || !user.salt) {
+                console.error('[登录失败] 用户数据不完整，缺少 passwordHash 或 salt:', username);
+                return json({ success: false, error: '用户数据异常，请联系管理员' }, 500);
+            }
+
             const ok = await verifyPassword(password, user.passwordHash, user.salt);
             if (!ok) {
+                console.error('[登录失败] 密码验证失败:', username);
                 return json({ success: false, error: '用户名或密码错误' }, 401);
             }
 
@@ -226,6 +234,33 @@ export async function onRequest(context) {
                 success: true,
                 token,
                 user: sanitizeUser(user, clinicId, clinicName)
+            });
+        }
+
+        // ===== 诊断端点 GET /users?check=wgj =====
+        // 用于检查用户是否存在，不验证密码（仅限平台管理员）
+        if (method === 'GET' && url.searchParams.get('check')) {
+            const checkUsername = url.searchParams.get('check');
+            if (!checkUsername) {
+                return json({ success: false, error: '请提供要检查的用户名' }, 400);
+            }
+
+            const found = await findUserForLogin(kv, checkUsername);
+            if (!found) {
+                return json({ success: false, error: '用户不存在', username: checkUsername });
+            }
+
+            const { user, clinicId, clinicName } = found;
+            return json({
+                success: true,
+                username: user.username,
+                name: user.name,
+                role: user.role,
+                clinicId: clinicId,
+                clinicName: clinicName,
+                hasPasswordHash: !!user.passwordHash,
+                hasSalt: !!user.salt,
+                allowedMode: user.allowedMode
             });
         }
 
