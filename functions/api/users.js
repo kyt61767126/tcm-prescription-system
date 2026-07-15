@@ -150,7 +150,9 @@ export async function onRequest(context) {
                 clinicName: clinicName,
                 hasPasswordHash: !!user.passwordHash,
                 hasSalt: !!user.salt,
-                allowedMode: user.allowedMode
+                hasPasswordField: !!user.password,
+                allowedMode: user.allowedMode,
+                userKeys: Object.keys(user)
             });
         }
 
