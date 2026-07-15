@@ -1234,40 +1234,45 @@
         }
 
         async function handleChangePassword() {
-            const oldPwd = document.getElementById('oldPwd').value;
-            const newPwd = document.getElementById('newPwd').value;
-            const confirmNewPwd = document.getElementById('confirmNewPwd').value;
-            
-            if (!oldPwd || !newPwd || !confirmNewPwd) {
-                alert('请填写所有字段');
-                return;
-            }
-            
-            if (newPwd !== confirmNewPwd) {
-                alert('新密码两次输入不一致');
-                return;
-            }
-            
-            const users = getUsers();
-            const userIndex = users.findIndex(u =>u.username === currentUser.username);
-            
-            if (userIndex === -1) {
-                alert('用户不存在');
-                return;
-            }
-            
-            if (users[userIndex].password !== await hashPassword(oldPwd)) {
-                alert('原密码错误');
-                return;
-            }
+            try {
+                const oldPwd = document.getElementById('oldPwd').value;
+                const newPwd = document.getElementById('newPwd').value;
+                const confirmNewPwd = document.getElementById('confirmNewPwd').value;
+                
+                if (!oldPwd || !newPwd || !confirmNewPwd) {
+                    alert('请填写所有字段');
+                    return;
+                }
+                
+                if (newPwd !== confirmNewPwd) {
+                    alert('新密码两次输入不一致');
+                    return;
+                }
+                
+                const users = getUsers();
+                const userIndex = users.findIndex(u =>u.username === currentUser.username);
+                
+                if (userIndex === -1) {
+                    alert('用户不存在');
+                    return;
+                }
+                
+                if (users[userIndex].password !== await hashPassword(oldPwd)) {
+                    alert('原密码错误');
+                    return;
+                }
 
-            users[userIndex].password = await hashPassword(newPwd);
-            saveUsers(users);
-            currentUser = users[userIndex];
-            localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
-            
-            alert('密码修改成功！');
-            closeModal('changePwdModal');
+                users[userIndex].password = await hashPassword(newPwd);
+                saveUsers(users);
+                currentUser = users[userIndex];
+                localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
+                
+                alert('密码修改成功！');
+                closeModal('changePwdModal');
+            } catch (e) {
+                console.error('修改密码失败:', e);
+                alert('修改密码失败: ' + (e.message || '未知错误'));
+            }
         }
 
         function showUserManageModal() {
