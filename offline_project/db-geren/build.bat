@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 echo ============================================
-echo  BenNeng TCM Prescription System - Personal
+echo  惠康中医诊所管理系统 - 电脑个人定制版
 echo ============================================
 echo.
 echo [1/5] Checking environment...
@@ -15,7 +15,11 @@ if errorlevel 1 (
 echo       npm OK
 echo.
 echo [2/5] Configuring clinic info...
-powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
+if /i "%1"=="--skip-config" (
+    echo       [SKIP] --skip-config parameter detected
+) else (
+    powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
+)
 echo.
 echo [3/5] Cleaning old build artifacts...
 if exist "dist" rmdir /s /q "dist"

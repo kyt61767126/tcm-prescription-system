@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 echo ============================================
-echo  BenNeng TCM Prescription System - Custom
+echo  惠康中医诊所管理系统 - 电脑诊所定制版
 echo ============================================
 echo.
 
@@ -22,7 +22,11 @@ echo [OK] Processes cleaned
 echo.
 
 echo [3/5] Configuring clinic info...
-powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
+if /i "%1"=="--skip-config" (
+    echo       [SKIP] --skip-config parameter detected
+) else (
+    powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
+)
 echo.
 
 echo [4/5] Cleaning old build artifacts and running build...

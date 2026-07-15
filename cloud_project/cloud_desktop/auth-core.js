@@ -188,17 +188,101 @@
         }
     }
 
+    // 增强版密码哈希：加入用户名作为额外盐值
+    async function hashPasswordWithUser(password, username) {
+        if (!password) return '';
+        const userSalt = username ? (PASSWORD_SALT + ':' + username) : PASSWORD_SALT;
+        try {
+            const data = new TextEncoder().encode(userSalt + password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(hashBuffer))
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+        } catch (e) {
+            return sha256PureJS(userSalt + password);
+        }
+    }
+
     function isPasswordHashed(pwd) {
         return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
     }
 
-    async function verifyPassword(inputPassword, storedPassword) {
+    async function verifyPassword(inputPassword, storedPassword, username) {
         if (!storedPassword) return false;
         if (isPasswordHashed(storedPassword)) {
+            // 先尝试增强版哈希（含用户名盐值）
+            if (username) {
+                const enhancedHash = await hashPasswordWithUser(inputPassword, username);
+                if (storedPassword === enhancedHash) return true;
+            }
+            // 降级到旧版哈希（全局盐值）
             return storedPassword === await hashPassword(inputPassword);
         }
         // 兼容旧明文密码
         return storedPassword === inputPassword;
+    }
+
+    // 记住密码加密存储（非明文）
+    function encryptPassword(password) {
+        if (!password) return null;
+        const key = PASSWORD_SALT;
+        let result = '';
+        for (let i = 0; i < password.length; i++) {
+            result += String.fromCharCode(password.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+        }
+        return 'PWDv1:' + btoa(unescape(encodeURIComponent(result)));
+    }
+
+    function decryptPassword(stored) {
+        if (!stored || typeof stored !== 'string' || !stored.startsWith('PWDv1:')) return null;
+        try {
+            const text = decodeURIComponent(escape(atob(stored.substring(6))));
+            const key = PASSWORD_SALT;
+            let result = '';
+            for (let i = 0; i < text.length; i++) {
+                result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            return result;
+        } catch (e) {
+            console.error('密码解密失败:', e);
+            return null;
+        }
+    }
+
+    // 保存记住的密码（加密存储）
+    async function saveRememberedPassword(password) {
+        try {
+            const encrypted = encryptPassword(password);
+            if (encrypted) {
+                await StorageAdapter.setItem('auth:savedPassword', encrypted);
+            }
+        } catch (e) {
+            console.warn('保存记住密码失败:', e);
+        }
+    }
+
+    // 读取记住的密码（解密）
+    async function getRememberedPassword() {
+        try {
+            const stored = await StorageAdapter.getItem('auth:savedPassword');
+            if (!stored) return null;
+            // 兼容旧明文存储
+            if (stored.startsWith('PWDv1:')) {
+                return decryptPassword(stored);
+            }
+            return stored;
+        } catch (e) {
+            console.warn('读取记住密码失败:', e);
+            return null;
+        }
+    }
+
+    // 清除记住的密码
+    async function clearRememberedPassword() {
+        try {
+            await StorageAdapter.removeItem('auth:savedPassword');
+        } catch (e) {
+            console.warn('清除记住密码失败:', e);
+        }
     }
 
     // 用户列表加密存储（仅离线版使用，Unicode 安全）
@@ -508,10 +592,16 @@
 
         // 密码加密
         hashPassword,
+        hashPasswordWithUser,
         verifyPassword,
         isPasswordHashed,
         encryptUsers,
         decryptUsers,
+        encryptPassword,
+        decryptPassword,
+        saveRememberedPassword,
+        getRememberedPassword,
+        clearRememberedPassword,
 
         // 权限解析
         resolveAllowedMode,

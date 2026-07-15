@@ -153,7 +153,11 @@
         // 记住密码
         const rememberPassword = document.getElementById('rememberPassword');
         if (rememberPassword && rememberPassword.checked) {
-            localStorage.setItem('auth:savedPassword', password);
+            if (window.AuthCore && AuthCore.encryptPassword) {
+                localStorage.setItem('auth:savedPassword', AuthCore.encryptPassword(password));
+            } else {
+                localStorage.setItem('auth:savedPassword', password);
+            }
         } else {
             localStorage.removeItem('auth:savedPassword');
         }
@@ -178,8 +182,11 @@
         loadClinicName(config);
         initLoginField(config);
         initLoginPermissions();
-        const savedPassword = localStorage.getItem('auth:savedPassword');
+        let savedPassword = localStorage.getItem('auth:savedPassword');
         if (savedPassword) {
+            if (window.AuthCore && AuthCore.decryptPassword && savedPassword.startsWith('PWDv1:')) {
+                savedPassword = AuthCore.decryptPassword(savedPassword);
+            }
             $('loginPassword').value = savedPassword;
             const rememberPassword = document.getElementById('rememberPassword');
             if (rememberPassword) rememberPassword.checked = true;

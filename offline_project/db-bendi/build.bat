@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 echo ============================================
-echo  BenNeng TCM Prescription System - Local
+echo  惠康中医诊所管理系统 - 电脑离线诊所版
 echo ============================================
 echo.
 
@@ -22,8 +22,18 @@ taskkill /f /im "惠康中医诊所管理系统-本地版.exe" >nul 2>nul
 echo [OK] Processes cleaned
 echo.
 
-echo [3/5] Configuring clinic info...
-powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
+echo [3/5] Configuring clinic info (optional for offline version)...
+if /i "%1"=="--skip-config" (
+    echo       [SKIP] --skip-config parameter detected
+) else (
+    echo       离线诊所版全程可编辑，配置步骤可选
+    choice /C YN /M "是否修改诊所名称"
+    if errorlevel 2 (
+        echo       [SKIP] 用户选择跳过配置
+    ) else (
+        powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
+    )
+)
 echo.
 
 echo [4/5] Cleaning old build artifacts and running build...
