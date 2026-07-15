@@ -1017,55 +1017,63 @@
         }
 
         async function handleLogin() {
-            const password = document.getElementById('loginPassword').value;
-            const errorDiv = document.getElementById('loginError');
+            try {
+                const password = document.getElementById('loginPassword').value;
+                const errorDiv = document.getElementById('loginError');
 
-            if (!password) {
-                errorDiv.textContent = '请输入密码';
-                errorDiv.style.display = 'block';
-                return;
-            }
-
-            // 个人版：使用第一个用户进行认证
-            const users = getUsers();
-            const user = users[0];
-
-            if (user && user.password === await hashPassword(password)) {
-                currentUser = user;
-                // 使用统一的 user_login_data 存储登录信息
-                const loginData = {
-                    user: user,
-                    loginTime: Date.now()
-                };
-                localStorage.setItem('user_login_data', JSON.stringify(loginData));
-
-                const rememberUser = document.getElementById('rememberUser')?.checked;
-                if (rememberUser) {
-                    localStorage.setItem('local_rememberedUsername', username);
-                } else {
-                    localStorage.removeItem('local_rememberedUsername');
+                if (!password) {
+                    errorDiv.textContent = '请输入密码';
+                    errorDiv.style.display = 'block';
+                    return;
                 }
-                
-                document.getElementById('loginOverlay').style.display = 'none';
-                document.querySelector('.main-container').style.display = 'flex';
-                updateUserDisplay();
-                errorDiv.style.display = 'none';
-                
-                await loadData();
-                refreshUserInterface();
 
-                // 通知主进程放大窗口
-                if (window.electronAPI && window.electronAPI.loginSuccess) {
-                    try {
-                        await window.electronAPI.loginSuccess(user);
-                    } catch (e) {
-                        console.error('通知主进程登录成功失败:', e);
+                // 个人版：使用第一个用户进行认证
+                const users = getUsers();
+                const user = users[0];
+
+                if (user && user.password === await hashPassword(password)) {
+                    currentUser = user;
+                    // 使用统一的 user_login_data 存储登录信息
+                    const loginData = {
+                        user: user,
+                        loginTime: Date.now()
+                    };
+                    localStorage.setItem('user_login_data', JSON.stringify(loginData));
+
+                    const rememberUser = document.getElementById('rememberUser')?.checked;
+                    if (rememberUser) {
+                        localStorage.setItem('local_rememberedUsername', username);
+                    } else {
+                        localStorage.removeItem('local_rememberedUsername');
                     }
+                    
+                    document.getElementById('loginOverlay').style.display = 'none';
+                    document.querySelector('.main-container').style.display = 'flex';
+                    updateUserDisplay();
+                    errorDiv.style.display = 'none';
+                    
+                    await loadData();
+                    refreshUserInterface();
+
+                    // 通知主进程放大窗口
+                    if (window.electronAPI && window.electronAPI.loginSuccess) {
+                        try {
+                            await window.electronAPI.loginSuccess(user);
+                        } catch (e) {
+                            console.error('通知主进程登录成功失败:', e);
+                        }
+                    }
+                } else {
+                    errorDiv.textContent = '用户名或密码错误';
+                    errorDiv.style.display = 'block';
                 }
-            } else {
-                errorDiv.textContent = '用户名或密码错误';
+            } catch (e) {
+                console.error('登录失败:', e);
+                const errorDiv = document.getElementById('loginError');
+                errorDiv.textContent = '登录失败: ' + (e.message || '未知错误');
                 errorDiv.style.display = 'block';
             }
+        }
         }
 
         window.handleLogout = async function() {
@@ -1190,38 +1198,8 @@
 
         async function checkLoginStatus() {
             const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; try { const _ld = localStorage.getItem('user_login_data'); if (_ld) { const _lt = JSON.parse(_ld).loginTime; if (_lt && Date.now() - _lt > SESSION_TIMEOUT_MS) { localStorage.removeItem('currentUser'); localStorage.removeItem('user_login_data'); localStorage.removeItem('isLoggedIn'); } } } catch(e) {}
-            // 个人版：自动登录，跳过登录界面直接显示用户名
-            const savedLogin = localStorage.getItem('user_login_data');
-            if (savedLogin) {
-                try {
-                    const loginData = JSON.parse(savedLogin);
-                    if (loginData && loginData.user) {
-                        currentUser = loginData.user;
-                        document.getElementById('loginOverlay').style.display = 'none';
-                        document.querySelector('.main-container').style.display = 'flex';
-                        updateUserDisplay();
-                        await loadData();
-                        refreshUserInterface();
-                        return;
-                    }
-                } catch (e) {
-                    console.error('恢复登录状态失败:', e);
-                }
-            }
-            // 没有保存的登录数据，尝试用第一个用户自动登录
-            const users = getUsers();
-            if (users && users.length > 0) {
-                currentUser = users[0];
-                const loginData = { user: users[0], loginTime: Date.now() };
-                localStorage.setItem('user_login_data', JSON.stringify(loginData));
-                document.getElementById('loginOverlay').style.display = 'none';
-                document.querySelector('.main-container').style.display = 'flex';
-                updateUserDisplay();
-                await loadData();
-                refreshUserInterface();
-                return;
-            }
-            // 没有用户数据，显示登录界面（首次使用）
+            await loadRememberedUsers();
+            document.getElementById('loginPassword').value = '';
             document.getElementById('loginOverlay').style.display = 'flex';
             currentUser = null;
         }
