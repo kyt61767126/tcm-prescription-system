@@ -1233,43 +1233,49 @@ let currentUser = null;
         }
 
         async function confirmEditUser(originalUsername) {
-            const newUsername = document.getElementById('editUserUsername').value.trim();
-            const newName = document.getElementById('editUserName').value.trim();
-            const newPassword = document.getElementById('editUserPassword').value;
-            const newRole = document.getElementById('editUserRole').value;
+            try {
+                const newUsername = document.getElementById('editUserUsername').value.trim();
+                const newName = document.getElementById('editUserName').value.trim();
+                const newPassword = document.getElementById('editUserPassword').value;
+                const newRole = document.getElementById('editUserRole').value;
 
-            if (!newUsername) { alert('用户名不能为空'); return; }
-            if (!newName) { alert('名称不能为空'); return; }
-            if (/[\u4e00-\u9fa5]/.test(newUsername)) {
-                alert('登录账号不能使用中文，请使用英文或拼音！');
-                return;
+                if (!newUsername) { alert('用户名不能为空'); return; }
+                if (!newName) { alert('名称不能为空'); return; }
+                if (/[\u4e00-\u9fa5]/.test(newUsername)) {
+                    alert('登录账号不能使用中文，请使用英文或拼音！');
+                    return;
+                }
+
+                const users = getUsers();
+                if (newUsername !== originalUsername) {
+                    const exists = users.find(u => u.username === newUsername);
+                    if (exists) { alert('用户名已存在'); return; }
+                }
+
+                const userIndex = users.findIndex(u => u.username === originalUsername);
+                if (userIndex === -1) { alert('用户不存在'); return; }
+
+                users[userIndex].username = newUsername;
+                users[userIndex].name = newName;
+                users[userIndex].role = newRole;
+                if (newPassword.trim()) {
+                    users[userIndex].password = await hashPassword(newPassword.trim());
+                }
+                saveUsers(users);
+
+                if (currentUser && currentUser.username === originalUsername) {
+                    currentUser = users[userIndex];
+                    localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
+                    updateUserDisplay();
+                }
+
+                document.getElementById('editUserModal').remove();
+                renderUserList();
+                alert('用户编辑成功！');
+            } catch (e) {
+                console.error('编辑用户失败:', e);
+                alert('编辑用户失败: ' + (e.message || '未知错误'));
             }
-
-            const users = getUsers();
-            if (newUsername !== originalUsername) {
-                const exists = users.find(u => u.username === newUsername);
-                if (exists) { alert('用户名已存在'); return; }
-            }
-
-            const userIndex = users.findIndex(u => u.username === originalUsername);
-            if (userIndex === -1) { alert('用户不存在'); return; }
-
-            users[userIndex].username = newUsername;
-            users[userIndex].name = newName;
-            users[userIndex].role = newRole;
-            if (newPassword.trim()) {
-                users[userIndex].password = await hashPassword(newPassword.trim());
-            }
-            saveUsers(users);
-
-            if (currentUser && currentUser.username === originalUsername) {
-                currentUser = users[userIndex];
-                localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
-                updateUserDisplay();
-            }
-
-            document.getElementById('editUserModal').remove();
-            renderUserList();
         }
 
         async function handleAddUser() {
