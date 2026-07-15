@@ -3789,6 +3789,8 @@ let currentUser = null;
             updateMedicineFrequency(record.items);
             // 10. 执行重输清空表单
             clearPrescription();
+            // B1: 处方保存后自动备份
+            saveLocalBackup();
         }
 
         function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
@@ -4020,6 +4022,49 @@ let currentUser = null;
 
         function showHelp() {
             alert('惠康中医处方系统\n\n快捷键：\nF1 - 基础设置\nF2 - 药品管理\nF3 - 验方设置\nF5 - 存为验方\nF7 - 重输方药\nF8 - 打印处方\nF9 - 保存录入\nAlt+1 - 辨证选方\nAlt+9 - 复诊直调');
+        }
+
+        function saveLocalBackup() {
+            try {
+                let backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                const backup = {
+                    timestamp: new Date().toISOString(),
+                    data: {
+                        medicines: medicines || [],
+                        formulas: formulas || [],
+                        prescriptionHistory: prescriptionHistory || []
+                    },
+                    prescriptionCount: (prescriptionHistory || []).length
+                };
+                backups.unshift(backup);
+                backups = backups.slice(0, 10);
+                localStorage.setItem('localBackups', JSON.stringify(backups));
+                console.log('[Backup] 自动备份已保存, 共', backups.length, '个备份');
+            } catch (error) {
+                console.warn('[Backup] 自动备份失败:', error);
+            }
+        }
+
+        async function restoreFromBackup(backupIndex) {
+            try {
+                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                if (backupIndex < 0 || backupIndex >= backups.length) {
+                    alert('无效的备份索引'); return;
+                }
+                const backup = backups[backupIndex];
+                const dateStr = new Date(backup.timestamp).toLocaleString('zh-CN');
+                if (!confirm(`确定要恢复 ${dateStr} 的备份吗？\n\n处方数量: ${backup.prescriptionCount || 0} 条\n\n注意：恢复将覆盖当前数据！`)) return;
+                if (backup.data) {
+                    if (backup.data.medicines) { medicines = backup.data.medicines; localStorage.setItem('local_medicines', JSON.stringify(medicines)); }
+                    if (backup.data.formulas) { formulas = backup.data.formulas; localStorage.setItem('local_formulas', JSON.stringify(formulas)); }
+                    if (backup.data.prescriptionHistory) { prescriptionHistory = backup.data.prescriptionHistory; }
+                }
+                renderMedicineList(); renderPrescriptionHistory(); updateStats();
+                showToast('✅ 已从备份恢复 ' + (backup.prescriptionCount || 0) + ' 条处方');
+            } catch (error) {
+                console.error('恢复备份失败:', error);
+                showToast('❌ 恢复备份失败: ' + error.message);
+            }
         }
 
         async function exportData() {
@@ -4376,6 +4421,87 @@ let currentUser = null;
             a.click();
             URL.revokeObjectURL(url);
             showToast('药品库已导出为Excel格式！');
+        }
+
+        async function exportMedicinesToExcel() {
+            try {
+                if (typeof loadXlsxLibrary === 'function') { await loadXlsxLibrary(); }
+                if (!window.XLSX) { alert('Excel库未加载，将使用CSV格式导出'); exportMedicinesToCSV(); return; }
+                const ws = XLSX.utils.json_to_sheet(medicines.map(m => ({
+                    '名称': m.name || '', '编码': m.code || '', '单价(元)': m.price || 0,
+                    '单位': m.unit || 'g', '默认用量': m.dosage || 10
+                })));
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, '中药库');
+                const now = new Date();
+                const dateStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
+                XLSX.writeFile(wb, `中药库_${dateStr}.xlsx`);
+                showToast('✅ 中药库已导出为Excel');
+            } catch (error) {
+                console.error('Excel导出失败:', error);
+                exportMedicinesToCSV();
+            }
+        }
+
+        function exportMedicinesToCSV() {
+            let csv = '\uFEFF名称,编码,单价(元),单位,默认用量\n';
+            medicines.forEach(m => {
+                csv += `${m.name || ''},${m.code || ''},${m.price || 0},${m.unit || 'g'},${m.dosage || 10}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            const now = new Date();
+            const dateStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
+            link.download = `中药库_${dateStr}.csv`;
+            link.click();
+            showToast('✅ 中药库已导出为CSV');
+        }
+
+        async function exportPrescriptionsToExcel() {
+            try {
+                if (prescriptionHistory.length === 0) { alert('暂无处方数据'); return; }
+                if (typeof loadXlsxLibrary === 'function') { await loadXlsxLibrary(); }
+                if (!window.XLSX) { alert('Excel库未加载，将使用CSV格式导出'); exportPrescriptionsToCSV(); return; }
+                const rows = prescriptionHistory.map(p => ({
+                    '处方编号': p.id || p.prescriptionNo || '',
+                    '患者姓名': p.patientName || '',
+                    '性别': p.gender || '',
+                    '年龄': p.age || '',
+                    '诊断': p.diagnosis || '',
+                    '处方内容': (p.items || []).map(i => `${i.name} ${i.dosage}${i.unit||'g'}`).join(', '),
+                    '味数': (p.items || []).length,
+                    '总金额(元)': p.totalPrice ? p.totalPrice.toFixed(2) : '',
+                    '医师': p.doctorName || '',
+                    '日期': p.date || ''
+                }));
+                const ws = XLSX.utils.json_to_sheet(rows);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, '历史处方');
+                const now = new Date();
+                const dateStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
+                XLSX.writeFile(wb, `历史处方_${dateStr}.xlsx`);
+                showToast('✅ 历史处方已导出为Excel');
+            } catch (error) {
+                console.error('处方Excel导出失败:', error);
+                exportPrescriptionsToCSV();
+            }
+        }
+
+        function exportPrescriptionsToCSV() {
+            let csv = '\uFEFF处方编号,患者姓名,性别,年龄,诊断,处方内容,味数,总金额(元),医师,日期\n';
+            prescriptionHistory.forEach(p => {
+                const items = (p.items || []).map(i => `${i.name} ${i.dosage}${i.unit||'g'}`).join(', ');
+                csv += `${p.id || p.prescriptionNo || ''},${p.patientName || ''},${p.gender || ''},${p.age || ''},"${(p.diagnosis || '').replace(/"/g, '""')}","${items.replace(/"/g, '""')}",${(p.items||[]).length},${p.totalPrice ? p.totalPrice.toFixed(2) : ''},${p.doctorName || ''},${p.date || ''}\n`;
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            const now = new Date();
+            const dateStr = now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0');
+            link.download = `历史处方_${dateStr}.csv`;
+            link.click();
+            showToast('✅ 历史处方已导出为CSV');
         }
 
         function clearMedicineLibrary() {
