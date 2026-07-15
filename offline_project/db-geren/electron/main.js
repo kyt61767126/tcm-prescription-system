@@ -19,6 +19,7 @@ const fse = require('fs-extra');
 
 let mainWindow;
 let loginWindow;
+let packagingWindow = null;
 let sharedSession;
 let currentLoggedInUser = null;
 const SESSION_PARTITION = 'persist:tcm-prescription-personal';
@@ -604,6 +605,41 @@ ipcMain.handle('get-app-config', async () => {
         console.error('读取 config.json 失败:', e);
     }
     return { success: true, config: defaults };
+});
+
+// 打包配置页：读取 config.json
+ipcMain.handle('packaging-read-config', async () => {
+    try {
+        const configPath = path.join(__dirname, '..', 'config.json');
+        if (await fse.pathExists(configPath)) {
+            const cfg = await fse.readJson(configPath);
+            return cfg;
+        }
+        return null;
+    } catch (e) {
+        console.error('打包配置读取失败:', e);
+        return null;
+    }
+});
+
+// 打包配置页：写入 config.json
+ipcMain.handle('packaging-write-config', async (event, config) => {
+    try {
+        const configPath = path.join(__dirname, '..', 'config.json');
+        await fse.writeJson(configPath, config, { spaces: 2 });
+        return true;
+    } catch (e) {
+        console.error('打包配置写入失败:', e);
+        return false;
+    }
+});
+
+// 打包配置完成信号
+ipcMain.on('packaging-done', () => {
+    if (packagingWindow) {
+        packagingWindow.close();
+        packagingWindow = null;
+    }
 });
 
 ipcMain.handle('set-auto-start', async (event, enabled) => {
