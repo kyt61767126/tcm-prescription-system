@@ -1,7 +1,7 @@
 {
   "name": "tcm-prescription-local",
   "version": "1.0.0",
-  "description": "惠康中医处方系统 - 本地",
+  "description": "惠康中医诊所管理系统 - 本地",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -15,7 +15,7 @@
   },
   "build": {
     "appId": "com.huikangtang.prescription.local",
-    "productName": "惠康中医处方系统-本地",
+    "productName": "惠康中医诊所管理系统-本地",
     "directories": {
       "output": "dist"
     },

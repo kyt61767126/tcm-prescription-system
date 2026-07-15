@@ -263,6 +263,10 @@
                     <input type="checkbox" id="rememberUser">
                     <label for="rememberUser">记住用户</label>
                 </div>
+                <div class="login-field remember-me" id="rememberPasswordContainer" style="display:none;">
+                    <input type="checkbox" id="rememberPassword">
+                    <label for="rememberPassword">记住密码</label>
+                </div>
                 <div class="login-buttons">
                     <button class="login-btn" id="loginBtn">确定</button>
                     <button class="login-btn cancel" id="cancelBtn">取消</button>
@@ -273,7 +277,18 @@
         </div>
     </div>
     
+    <script src="permission.js"></script>
     <script>
+        // 版本权限控制
+        async function initLoginPermissions() {
+            try {
+                if (window.Permission) {
+                    await Permission.init();
+                    Permission.applyLoginPermissions();
+                }
+            } catch(e) { console.warn('Login permission init failed:', e); }
+        }
+
         const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
 
         async function getConfigFromIndexHtml() {
@@ -450,6 +465,14 @@
                     localStorage.removeItem('rememberedUsername');
                 }
 
+                // 记住密码
+                const rememberPassword = document.getElementById('rememberPassword');
+                if (rememberPassword && rememberPassword.checked) {
+                    localStorage.setItem('auth:savedPassword', password);
+                } else {
+                    localStorage.removeItem('auth:savedPassword');
+                }
+
                 errorDiv.textContent = '登录成功，正在打开...';
                 errorDiv.style.display = 'block';
                 errorDiv.style.color = '#4CAF50';
@@ -487,6 +510,13 @@
             });
             loadClinicName().catch(e => console.warn('loadClinicName失败:', e));
             initLoginFields().catch(e => console.warn('initLoginFields失败:', e));
+            initLoginPermissions();
+            const savedPassword = localStorage.getItem('auth:savedPassword');
+            if (savedPassword) {
+                document.getElementById('loginPassword').value = savedPassword;
+                const rememberPassword = document.getElementById('rememberPassword');
+                if (rememberPassword) rememberPassword.checked = true;
+            }
         });
     </script>
 </body>

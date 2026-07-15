@@ -94,6 +94,24 @@
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
             background: white;
         }
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .remember-me input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #667eea;
+            cursor: pointer;
+        }
+        .remember-me label {
+            font-size: 12px;
+            color: #666;
+            cursor: pointer;
+            font-weight: normal;
+        }
         .login-buttons {
             display: flex;
             gap: 12px;
@@ -165,6 +183,14 @@
                     <label>密码</label>
                     <input type="password" id="loginPassword" placeholder="请输入密码">
                 </div>
+                <div class="remember-me">
+                    <input type="checkbox" id="rememberUser">
+                    <label for="rememberUser">记住用户</label>
+                </div>
+                <div class="login-field remember-me" id="rememberPasswordContainer" style="display:none;">
+                    <input type="checkbox" id="rememberPassword">
+                    <label for="rememberPassword">记住密码</label>
+                </div>
                 <div class="login-buttons">
                     <button class="login-btn" onclick="handleLogin()">确定</button>
                     <button class="login-btn cancel" onclick="handleCancel()">取消</button>
@@ -175,7 +201,18 @@
         </div>
     </div>
     
+    <script src="permission.js"></script>
     <script>
+        // 版本权限控制
+        async function initLoginPermissions() {
+            try {
+                if (window.Permission) {
+                    await Permission.init();
+                    Permission.applyLoginPermissions();
+                }
+            } catch(e) { console.warn('Login permission init failed:', e); }
+        }
+
         const { ipcRenderer } = require('electron');
         
         const defaultUsers = [
@@ -260,6 +297,13 @@
                     } catch(e) { console.warn('AuthCore存储失败:', e); }
                 }
                 sessionStorage.setItem('currentUser', JSON.stringify(user));
+                // 记住密码
+                const rememberPassword = document.getElementById('rememberPassword');
+                if (rememberPassword && rememberPassword.checked) {
+                    localStorage.setItem('auth:savedPassword', password);
+                } else {
+                    localStorage.removeItem('auth:savedPassword');
+                }
                 ipcRenderer.invoke('login-success', user);
             } else {
                 errorDiv.textContent = '密码错误';
@@ -273,6 +317,13 @@
         
         document.addEventListener('DOMContentLoaded', async () => {
             await initLoginDropdown();
+            initLoginPermissions();
+            const savedPassword = localStorage.getItem('auth:savedPassword');
+            if (savedPassword) {
+                document.getElementById('loginPassword').value = savedPassword;
+                const rememberPassword = document.getElementById('rememberPassword');
+                if (rememberPassword) rememberPassword.checked = true;
+            }
             document.getElementById('loginPassword').addEventListener('keyup', (e) => {
                 if (e.key === 'Enter') {
                     handleLogin();

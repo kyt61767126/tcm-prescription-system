@@ -154,6 +154,16 @@
         }
     }
 
+    // 版本权限控制
+    async function initLoginPermissions() {
+        try {
+            if (window.Permission) {
+                await Permission.init();
+                Permission.applyLoginPermissions();
+            }
+        } catch(e) { console.warn('Login permission init failed:', e); }
+    }
+
     async function handleLogin() {
         clearError();
         const username = $('loginUsername').value;
@@ -196,6 +206,14 @@
             localStorage.removeItem(KEY_REMEMBER_USER);
         }
 
+        // 记住密码
+        const rememberPassword = document.getElementById('rememberPassword');
+        if (rememberPassword && rememberPassword.checked) {
+            localStorage.setItem('auth:savedPassword', password);
+        } else {
+            localStorage.removeItem('auth:savedPassword');
+        }
+
         if (window.electronAPI && window.electronAPI.loginSuccess) {
             await window.electronAPI.loginSuccess({
                 username: user.username,
@@ -215,6 +233,13 @@
         const config = await getAppConfig();
         loadClinicName(config);
         initLoginDropdown(config);
+        initLoginPermissions();
+        const savedPassword = localStorage.getItem('auth:savedPassword');
+        if (savedPassword) {
+            $('loginPassword').value = savedPassword;
+            const rememberPassword = document.getElementById('rememberPassword');
+            if (rememberPassword) rememberPassword.checked = true;
+        }
         $('btnOk').addEventListener('click', handleLogin);
         $('btnCancel').addEventListener('click', handleCancel);
         $('loginPassword').addEventListener('keydown', (e) => {

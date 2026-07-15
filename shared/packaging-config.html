@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>打包配置 — 惠康中医诊所管理系统</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh; display: flex; align-items: center; justify-content: center;
+        }
+        .config-container {
+            background: white; border-radius: 16px; padding: 40px;
+            width: 420px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .config-title {
+            font-size: 20px; font-weight: bold; color: #333; text-align: center; margin-bottom: 8px;
+        }
+        .config-subtitle {
+            font-size: 13px; color: #888; text-align: center; margin-bottom: 30px;
+        }
+        .form-group { margin-bottom: 20px; }
+        .form-group label {
+            display: block; font-size: 14px; color: #555; margin-bottom: 6px; font-weight: 600;
+        }
+        .form-group input {
+            width: 100%; padding: 10px 14px; border: 2px solid #e0e0e0; border-radius: 8px;
+            font-size: 15px; transition: border-color 0.3s;
+        }
+        .form-group input:focus { outline: none; border-color: #667eea; }
+        .form-group .hint { font-size: 12px; color: #999; margin-top: 4px; }
+        .edition-badge {
+            display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px;
+            font-weight: bold; margin-bottom: 20px;
+        }
+        .edition-personal { background: #e3f2fd; color: #1565c0; }
+        .edition-clinic_custom { background: #fff3e0; color: #e65100; }
+        .edition-offline { background: #e8f5e9; color: #2e7d32; }
+        .edition-cloud { background: #f3e5f5; color: #7b1fa2; }
+        .btn-row { display: flex; gap: 12px; margin-top: 30px; }
+        .btn {
+            flex: 1; padding: 12px; border: none; border-radius: 8px; font-size: 15px;
+            font-weight: 600; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.15); }
+        .btn-primary { background: linear-gradient(135deg, #667eea, #764ba2); color: white; }
+        .btn-secondary { background: #f0f0f0; color: #555; }
+        .status-msg { text-align: center; font-size: 13px; margin-top: 16px; min-height: 20px; }
+        .status-success { color: #4caf50; }
+        .status-error { color: #f44336; }
+    </style>
+</head>
+<body>
+    <div class="config-container">
+        <div class="config-title">打包配置</div>
+        <div class="config-subtitle">惠康中医诊所管理系统 — 分发前配置</div>
+        <div id="editionBadge" class="edition-badge">加载中...</div>
+
+        <div class="form-group" id="clinicNameGroup">
+            <label>诊所名称</label>
+            <input type="text" id="clinicNameInput" placeholder="请输入诊所名称">
+            <div class="hint">安装后用户无法修改</div>
+        </div>
+
+        <div class="form-group" id="doctorNameGroup" style="display:none;">
+            <label>医师姓名</label>
+            <input type="text" id="doctorNameInput" placeholder="请输入医师姓名">
+            <div class="hint">安装后用户无法修改（仅个人定制版）</div>
+        </div>
+
+        <div class="btn-row">
+            <button class="btn btn-secondary" onclick="window.close()">取消</button>
+            <button class="btn btn-primary" onclick="saveConfig()">保存并继续打包</button>
+        </div>
+        <div id="statusMsg" class="status-msg"></div>
+    </div>
+
+    <script>
+        const { ipcRenderer } = require('electron');
+        let currentConfig = null;
+
+        async function loadConfig() {
+            try {
+                currentConfig = await ipcRenderer.invoke('packaging-read-config');
+                if (!currentConfig) {
+                    document.getElementById('statusMsg').textContent = '读取配置失败';
+                    document.getElementById('statusMsg').className = 'status-msg status-error';
+                    return;
+                }
+
+                const edition = currentConfig.edition || 'cloud';
+                const badge = document.getElementById('editionBadge');
+                const labels = {
+                    'personal': { text: '电脑个人定制版', cls: 'edition-personal' },
+                    'clinic_custom': { text: '电脑诊所定制版', cls: 'edition-clinic_custom' },
+                    'offline': { text: '电脑离线诊所版', cls: 'edition-offline' },
+                    'cloud': { text: '电脑云端诊所版', cls: 'edition-cloud' }
+                };
+                const info = labels[edition] || labels.cloud;
+                badge.textContent = info.text;
+                badge.className = 'edition-badge ' + info.cls;
+
+                document.getElementById('clinicNameInput').value = currentConfig.clinicName || '';
+
+                // 个人定制版显示医师姓名输入框
+                if (edition === 'personal') {
+                    document.getElementById('doctorNameGroup').style.display = '';
+                    document.getElementById('doctorNameInput').value = currentConfig.doctorName || '';
+                }
+            } catch (e) {
+                console.error('加载配置失败:', e);
+                document.getElementById('statusMsg').textContent = '加载失败: ' + e.message;
+                document.getElementById('statusMsg').className = 'status-msg status-error';
+            }
+        }
+
+        async function saveConfig() {
+            if (!currentConfig) return;
+            const clinicName = document.getElementById('clinicNameInput').value.trim();
+            if (!clinicName) {
+                document.getElementById('statusMsg').textContent = '请输入诊所名称';
+                document.getElementById('statusMsg').className = 'status-msg status-error';
+                return;
+            }
+
+            currentConfig.clinicName = clinicName;
+            if (currentConfig.edition === 'personal') {
+                const doctorName = document.getElementById('doctorNameInput').value.trim();
+                if (!doctorName) {
+                    document.getElementById('statusMsg').textContent = '请输入医师姓名';
+                    document.getElementById('statusMsg').className = 'status-msg status-error';
+                    return;
+                }
+                currentConfig.doctorName = doctorName;
+            }
+
+            try {
+                await ipcRenderer.invoke('packaging-write-config', currentConfig);
+                document.getElementById('statusMsg').textContent = '配置已保存，继续打包...';
+                document.getElementById('statusMsg').className = 'status-msg status-success';
+                setTimeout(() => { ipcRenderer.send('packaging-done'); window.close(); }, 1000);
+            } catch (e) {
+                document.getElementById('statusMsg').textContent = '保存失败: ' + e.message;
+                document.getElementById('statusMsg').className = 'status-msg status-error';
+            }
+        }
+
+        loadConfig();
+    </script>
+</body>
+</html>

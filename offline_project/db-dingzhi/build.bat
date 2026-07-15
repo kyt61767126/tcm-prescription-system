@@ -17,7 +17,7 @@ echo       npm OK
 echo.
 
 echo [2/5] Closing remaining processes...
-taskkill /f /im "惠康中医处方系统-定制.exe" >nul 2>nul
+taskkill /f /im "惠康中医诊所管理系统-定制.exe" >nul 2>nul
 echo [OK] Processes cleaned
 echo.
 

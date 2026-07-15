@@ -114,6 +114,24 @@
             color: #888;
             cursor: default;
         }
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+        .remember-me input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            accent-color: #667eea;
+            cursor: pointer;
+        }
+        .remember-me label {
+            font-size: 12px;
+            color: #666;
+            cursor: pointer;
+            font-weight: normal;
+        }
         .login-buttons {
             display: flex;
             gap: 12px;
@@ -190,6 +208,14 @@
                     <label>密码</label>
                     <input type="password" id="loginPassword" placeholder="请输入密码">
                 </div>
+                <div class="remember-me">
+                    <input type="checkbox" id="rememberUser">
+                    <label for="rememberUser">记住用户</label>
+                </div>
+                <div class="login-field remember-me" id="rememberPasswordContainer" style="display:none;">
+                    <input type="checkbox" id="rememberPassword">
+                    <label for="rememberPassword">记住密码</label>
+                </div>
                 <div class="login-buttons">
                     <button class="login-btn" id="btnOk" type="button">确定</button>
                     <button class="login-btn cancel" id="btnCancel" type="button">取消</button>
@@ -199,6 +225,7 @@
         </div>
         <div class="footer-section">微信号: yqjzy1688</div>
     </div>
+    <script src="permission.js"></script>
     <script src="login.js"></script>
 </body>
 </html>

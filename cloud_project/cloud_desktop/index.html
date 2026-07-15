@@ -1460,7 +1460,18 @@
         </div>
     </div>
 
-    <script src="auth-core.js"></script>
+    <script src="auth-core.js"></script>`n    <script src="permission.js"></script>
+<script>
+if (window.Permission) {
+    Permission.init().then(function() {
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', function() { Permission.applyRuntimePermissions(); });
+        } else {
+            Permission.applyRuntimePermissions();
+        }
+    }).catch(function(e) { console.warn('Permission init failed:', e); });
+}
+</script>
     <script>
         // 生产环境日志控制：URL 加 ?debug 启用 console.log，默认关闭以提升性能
         (function() {

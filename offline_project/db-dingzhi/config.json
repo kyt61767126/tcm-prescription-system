@@ -1,8 +1,9 @@
 ﻿{
     "clinicName":  "本能堂中医诊所",
     "doctorName":  "李大夫",
-    "edition":  "custom",
-    "productName":  "惠康中医处方系统-定制",
+    "edition":  "clinic_custom",
+    "productName":  "惠康中医诊所管理系统",
+    "versionLabel":  "电脑诊所定制版",
     "users":  [
                   {
                       "username":  "admin",
