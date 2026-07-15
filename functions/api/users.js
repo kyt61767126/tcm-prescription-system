@@ -244,7 +244,7 @@ export async function onRequest(context) {
             
             if (!user.passwordHash || !user.salt) {
                 console.error('[登录失败] 用户数据不完整，缺少 passwordHash 或 salt:', username);
-                return json({ success: false, error: '用户数据异常，请联系管理员' }, 500);
+                return json({ success: false, error: '用户尚未设置密码，请联系管理员重置密码', code: 'NO_PASSWORD' }, 401);
             }
 
             const ok = await verifyPassword(password, user.passwordHash, user.salt);
@@ -264,6 +264,45 @@ export async function onRequest(context) {
                 token,
                 user: sanitizeUser(user, clinicId, clinicName)
             });
+        }
+
+        // ===== 公开重置密码端点 POST /users?action=reset-public =====
+        // 允许用户自行重置密码（无需认证，用于修复没有密码的用户）
+        if (method === 'POST' && url.searchParams.get('action') === 'reset-public') {
+            const body = await context.request.json().catch(() => ({}));
+            const { username, newPassword } = body;
+            if (!username || !newPassword) {
+                return json({ success: false, error: '请提供用户名和新密码' }, 400);
+            }
+
+            const found = await findUserForLogin(kv, username);
+            if (!found) {
+                return json({ success: false, error: '用户不存在' }, 404);
+            }
+
+            const { user, clinicId } = found;
+            const { passwordHash, salt } = await hashPassword(newPassword);
+            user.passwordHash = passwordHash;
+            user.salt = salt;
+            user.updatedAt = getNowISO();
+
+            if (clinicId) {
+                const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
+                const idx = users.findIndex(u => u.username === username);
+                if (idx !== -1) {
+                    users[idx] = user;
+                    await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));
+                }
+            } else {
+                const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+                const idx = admins.findIndex(u => u.username === username);
+                if (idx !== -1) {
+                    admins[idx] = user;
+                    await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(admins));
+                }
+            }
+
+            return json({ success: true, message: '密码重置成功，请使用新密码登录' });
         }
 
         // ===== 修改密码端点 POST /users?action=change-password =====
