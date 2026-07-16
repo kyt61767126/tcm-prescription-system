@@ -1573,7 +1573,7 @@ if (window.Permission) {
         });
 
         async function saveRememberedUser(username) {
-            if (window.AuthCore) { try { await AuthCore.saveRememberedUser(username); const r = await AuthCore.loadRememberedUsers(); if (typeof renderRememberedUsers === 'function') renderRememberedUsers(r); } catch(e) {} return; }
+            if (window.AuthCore) { try { await AuthCore.saveRememberedUser(username); const r = await AuthCore.loadRememberedUsers(); if (typeof renderRememberedUsers === 'function') renderRememberedUsers(r); if (Array.isArray(r) && r.length > 0) { localStorage.setItem('local_rememberedUsers', JSON.stringify(r)); localStorage.setItem('local_rememberedUsername', String(username).trim()); } return; } catch(e) { console.warn('AuthCore.saveRememberedUser 失败，回退到 localStorage:', e); } }
             try {
                 const cleanUsername = String(username).trim();
                 if (!cleanUsername) return;
