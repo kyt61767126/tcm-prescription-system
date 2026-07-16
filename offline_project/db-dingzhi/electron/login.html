@@ -9,19 +9,19 @@
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
             font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
-            overflow: hidden;
-            height: 100vh;
+            overflow: auto;
+            min-height: 100vh;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start;
         }
         .login-container {
-            width: 320px;
+            width: 340px;
             background: rgba(255, 255, 255, 0.95);
             border-radius: 12px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-            overflow: hidden;
+            overflow: visible;
             position: relative;
             backdrop-filter: blur(10px);
         }
