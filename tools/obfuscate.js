@@ -53,7 +53,15 @@ const OBFUSCATOR_CONFIG = {
         'indexedDB', 'openDatabase', 'navigator', 'location',
         'history', 'screen', 'alert', 'confirm', 'prompt',
         'capacitor', 'Capacitor', 'electronAPI', 'ipcRenderer',
-        'androidAppExit', 'AndroidAppExit'
+        'androidAppExit', 'AndroidAppExit',
+        // 业务函数名（被 inline onclick 调用，必须保留）
+        'isAdmin', 'isClinicAdmin', 'isPlatformAdmin', 'isDoctor',
+        'currentUser', 'filterPrescriptionsByPermission',
+        'openRecordingOverlay', 'openPhotoOverlay',
+        'renderHistoryList', 'savePrescription', 'printPrescription',
+        'clearPrescription', 'loadHistory', 'deleteHistory',
+        'viewMediaFiles', 'hashPassword', 'getUsers', 'saveUsers',
+        'renderUserList', 'handleAddUser', 'handleViewUserPrescriptions'
     ]
 };
 
