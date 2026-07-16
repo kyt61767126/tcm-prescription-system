@@ -1,7 +1,7 @@
 {
   "name": "tcm-prescription-custom",
   "version": "1.0.0",
-  "description": "惠康中医诊所管理系统 - 定制",
+  "description": "惠康中医定制",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -14,8 +14,8 @@
     "electron-builder": "^24.9.1"
   },
   "build": {
-    "appId": "com.benneng.prescription.custom",
-    "productName": "TCM-Prescription-Custom",
+    "appId": "com.benneng.prescription.clinic",
+    "productName": "惠康中医定制",
     "directories": {
       "output": "dist"
     },

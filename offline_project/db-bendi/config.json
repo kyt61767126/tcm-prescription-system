@@ -1,9 +1,9 @@
-﻿{
+{
     "clinicName":  "本能堂中医诊所",
     "doctorName":  "张大夫",
     "edition":  "offline",
-    "productName":  "惠康中医诊所管理系统",
-    "versionLabel":  "电脑离线诊所版",
+    "productName":  "惠康中医本地",
+    "versionLabel":  "离线桌面本地版",
     "users":  [
                   {
                       "username":  "admin",

@@ -1,5 +1,5 @@
 // ============================================================================
-//  惠康中医诊所管理系统 - 本地版  Electron 主进程
+//  惠康中医本地  Electron 主进程
 //  安全配置：contextIsolation=true / nodeIntegration=false
 //  注：未启用 sandbox，以保留原生 window.prompt/confirm/alert（业务大量使用）
 //      contextIsolation 仍确保渲染进程无法直接访问 Node API
@@ -379,7 +379,7 @@ ipcMain.handle('get-app-config', async () => {
         clinicName: '本能堂中医诊所',
         doctorName: '张大夫',
         edition: 'offline',
-        productName: '惠康中医诊所管理系统'
+        productName: '惠康中医本地'
     };
     try {
         const configPath = path.join(__dirname, '..', 'config.json');

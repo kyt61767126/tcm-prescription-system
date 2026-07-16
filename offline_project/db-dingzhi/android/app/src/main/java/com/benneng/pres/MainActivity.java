@@ -42,6 +42,7 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -67,6 +68,7 @@ public class MainActivity extends AppCompatActivity {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private ValueCallback<Uri[]> filePathCallback;
     private static final int REQ_FILE_CHOOSER = 1002;
+    private volatile String cachedVideoRecorderScript = null;
 
     // ========================================================================
     // 生命周期
@@ -107,6 +109,9 @@ public class MainActivity extends AppCompatActivity {
         setContentView(webView);
         getWindow().setBackgroundDrawable(null);
         configureWebView();
+
+        // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
+        preloadVideoRecorderScript();
     }
 
     // ========================================================================
@@ -334,6 +339,9 @@ public class MainActivity extends AppCompatActivity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 injectElectronApiShim(view);
+
+                // 延迟注入录像拍照脚本（等待页面渲染稳定）
+                mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
             }
         });
 
@@ -415,6 +423,65 @@ public class MainActivity extends AppCompatActivity {
             "  window.IS_ELECTRON = true;" +
             "})();";
         view.evaluateJavascript(js, null);
+    }
+
+    /**
+     * 预加载录像拍照脚本到内存缓存（在后台线程执行，避免阻塞UI）
+     */
+    private void preloadVideoRecorderScript() {
+        if (cachedVideoRecorderScript != null) return;
+        new Thread(() -> {
+            try {
+                InputStream is = getAssets().open("video-recorder-inject.js");
+                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = is.read(buffer)) > 0) {
+                    baos.write(buffer, 0, len);
+                }
+                is.close();
+                cachedVideoRecorderScript = baos.toString("UTF-8");
+                Log.d(TAG, "录像拍照脚本预加载完成，长度: " + cachedVideoRecorderScript.length());
+            } catch (Exception e) {
+                Log.e(TAG, "录像拍照脚本预加载失败", e);
+            }
+        }, "preload-vr-script").start();
+    }
+
+    /**
+     * 同步读取录像拍照脚本（带缓存）
+     */
+    private String getVideoRecorderScript() {
+        if (cachedVideoRecorderScript != null) return cachedVideoRecorderScript;
+        try {
+            InputStream is = getAssets().open("video-recorder-inject.js");
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int len;
+            while ((len = is.read(buffer)) > 0) {
+                baos.write(buffer, 0, len);
+            }
+            is.close();
+            cachedVideoRecorderScript = baos.toString("UTF-8");
+            Log.d(TAG, "录像拍照脚本同步加载完成，长度: " + cachedVideoRecorderScript.length());
+        } catch (Exception e) {
+            Log.e(TAG, "录像拍照脚本同步加载失败", e);
+            cachedVideoRecorderScript = "";
+        }
+        return cachedVideoRecorderScript;
+    }
+
+    /**
+     * 注入录像拍照功能脚本（使用内存缓存，避免每次IO）
+     */
+    private void injectVideoRecorderScript(WebView webView) {
+        String script = getVideoRecorderScript();
+        if (script == null || script.isEmpty()) {
+            Log.e(TAG, "录像拍照脚本为空，跳过注入");
+            return;
+        }
+        webView.evaluateJavascript(script, null);
+        Log.d(TAG, "录像拍照脚本注入成功");
     }
 
     @Override

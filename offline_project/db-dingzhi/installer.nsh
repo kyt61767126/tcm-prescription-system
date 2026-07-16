@@ -6,16 +6,16 @@
 !macro customInit
   ; 优先安装到 D 盘（如存在），否则使用上一次或系统默认 Program Files
   IfFileExists "D:\" 0 skipD
-    StrCpy $INSTDIR "D:\Program Files\惠康中医处方系统-定制版"
+    StrCpy $INSTDIR "D:\Program Files\惠康中医定制"
     Goto done
   skipD:
     ; 64 位系统使用 64 位 Program Files，32 位系统使用 32 位 Program Files
     ${If} ${RunningX64}
       ReadRegStr $0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion" "ProgramFilesDir"
-      StrCpy $INSTDIR "$0\惠康中医处方系统-定制版"
+      StrCpy $INSTDIR "$0\惠康中医定制"
     ${Else}
       ReadRegStr $0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion" "ProgramFilesDir"
-      StrCpy $INSTDIR "$0\惠康中医处方系统-定制版"
+      StrCpy $INSTDIR "$0\惠康中医定制"
     ${EndIf}
   done:
 !macroend

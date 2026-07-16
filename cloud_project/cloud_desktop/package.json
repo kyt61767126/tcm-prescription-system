@@ -1,7 +1,7 @@
 {
   "name": "tcm-prescription-cloud",
   "version": "1.2.0",
-  "description": "惠康中医诊所管理系统 - 云端",
+  "description": "惠康中医云端",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -16,8 +16,8 @@
     "electron-builder": "^24.9.1"
   },
   "build": {
-    "appId": "com.huikangtang.prescription.cloud",
-    "productName": "惠康中医诊所管理系统-云端",
+    "appId": "com.benneng.prescription.cloud",
+    "productName": "惠康中医云端",
     "directories": {
       "output": "dist"
     },

@@ -4,15 +4,23 @@
 //  【视频录制】
 //  1. 在历史处方栏 history-header 中注入 🎥 录制按钮
 //  2. 点击弹出录制浮层：摄像头实时预览 + 开始/停止 + 倒计时
-//  3. 使用 MediaRecorder (WebM/VP9) 录制，1280×720 / 30fps / 3Mbps（720p高清）
+//  3. 使用 MediaRecorder (WebM/VP9/MP4) 录制，1280×720 / 30fps / 3Mbps（720p高清）
 //  4. 单条最长 60 秒，停止后自动保存到 downloads/YYYY-MM/ 目录（图片视频统一目录，方便导出）
-//  5. 视频文件名格式：video_YYYYMMDD_HHmmss.webm
+//  5. 视频文件名格式：患者姓名_处方编号_video.webm/mp4（如：张三_26070701_video.webm）
 //
 //  【拍照】
 //  6. 在历史处方栏注入 📷 拍照按钮（与 🎥 并排）
 //  7. 点击弹出拍照浮层：摄像头实时预览 + 拍照 + 预览 + 保存/重拍
-//  8. 使用 Canvas 捕获当前帧，保存为 PNG（复用 savePrescriptionImage IPC）
-//  9. 照片文件名格式：photo_YYYYMMDD_HHmmss.png
+//  8. 使用 Canvas 捕获当前帧，保存为 JPEG（复用 savePrescriptionImage IPC）
+//  9. 照片文件名格式：患者姓名_处方编号_photo_tongue_front.jpg / photo_tongue_under.jpg
+//
+//  优化特性：
+//  - 多级分辨率兜底（适配不同手机型号）
+//  - MP4编码支持（自动检测）
+//  - 录制数据验证（非空检查、blob大小检查）
+//  - 拍照重试机制（最多5次）和黑屏帧检测
+//  - Toast提示功能
+//  - FileReader兼容性修复（替代blob.arrayBuffer()）
 //
 //  依赖：window.electronAPI.saveVideoFile / savePrescriptionImage（preload.js 暴露）
 //  兼容：Electron Chromium 内核，原生支持 getUserMedia + MediaRecorder + Canvas
@@ -20,16 +28,14 @@
 (function () {
     'use strict';
 
-    // 防止重复注入
     if (window.__videoRecorderInjected) return;
     window.__videoRecorderInjected = true;
 
-    // 录制参数
-    const MAX_DURATION = 60;           // 最长录制秒数
+    const MAX_DURATION = 60;
     const VIDEO_WIDTH = 1280;
     const VIDEO_HEIGHT = 720;
     const VIDEO_FPS = 30;
-    const VIDEO_BITRATE = 3000000;     // 3 Mbps → 60秒约 22.5MB（720p高清）
+    const VIDEO_BITRATE = 3000000;
 
     let mediaStream = null;
     let mediaRecorder = null;
@@ -37,8 +43,9 @@
     let timerInterval = null;
     let recordingStartTime = 0;
     let currentFacingMode = 'environment';
+    let currentCaptureStep = 1;
+    let capturedPhotos = [];
 
-    // ─── 样式注入 ───────────────────────────────────────────
     function injectStyles() {
         if (document.getElementById('video-recorder-styles')) return;
         const style = document.createElement('style');
@@ -169,17 +176,35 @@
             }
             .photo-next-btn { background: #28a745; color: #fff; }
             .photo-next-btn:hover:not(:disabled) { background: #218838; }
-                    `;
+            .video-toast {
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                background: rgba(0,0,0,0.85); color: #fff;
+                padding: 16px 24px; border-radius: 8px; z-index: 99999;
+                font-size: 14px; max-width: 90vw; text-align: center;
+                word-break: break-all; line-height: 1.5;
+            }
+        `;
         document.head.appendChild(style);
     }
 
-    // ─── 按钮注入 ───────────────────────────────────────────
+    function showToast(msg) {
+        var existing = document.getElementById('videoToast');
+        if (existing) existing.remove();
+        var toast = document.createElement('div');
+        toast.id = 'videoToast';
+        toast.className = 'video-toast';
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(function () {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        }, 4000);
+    }
+
     function injectButton() {
         const header = document.querySelector('.history-header');
         if (!header) return false;
         if (document.getElementById('videoRecBtn')) return true;
 
-        // 拍照按钮
         const photoBtn = document.createElement('button');
         photoBtn.id = 'photoCaptureBtn';
         photoBtn.className = 'video-rec-btn';
@@ -190,7 +215,6 @@
             openPhotoOverlay();
         };
 
-        // 录制按钮
         const videoBtn = document.createElement('button');
         videoBtn.id = 'videoRecBtn';
         videoBtn.className = 'video-rec-btn';
@@ -201,7 +225,6 @@
             openRecordingOverlay();
         };
 
-        // 插入到刷新按钮前面（📷 在 🎥 左边）
         const refreshBtn = header.querySelector('.history-refresh-btn');
         if (refreshBtn) {
             header.insertBefore(photoBtn, refreshBtn);
@@ -213,9 +236,8 @@
         return true;
     }
 
-    // ─── 录制浮层 ───────────────────────────────────────────
     function openRecordingOverlay() {
-        // 移除已有浮层
+        injectStyles();
         const existing = document.getElementById('videoOverlay');
         if (existing) existing.remove();
 
@@ -248,23 +270,19 @@
         `;
         document.body.appendChild(overlay);
 
-        // 绑定事件
         document.getElementById('videoCloseBtn').onclick = closeOverlay;
         document.getElementById('videoStartBtn').onclick = startRecording;
         document.getElementById('videoStopBtn').onclick = stopRecording;
         document.getElementById('videoSaveBtn').onclick = saveVideo;
         document.getElementById('videoSwitchBtn').onclick = switchCamera;
 
-        // 点击遮罩关闭
         overlay.onclick = function (e) {
             if (e.target === overlay) closeOverlay();
         };
 
-        // 立即启动摄像头预览
         initCamera();
     }
 
-    // ─── 摄像头初始化 ──────────────────────────────────────
     async function initCamera() {
         const statusEl = document.getElementById('videoStatus');
         const startBtn = document.getElementById('videoStartBtn');
@@ -273,35 +291,81 @@
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'video-status';
 
-            const constraints = {
-                video: {
-                    width: { ideal: VIDEO_WIDTH },
-                    height: { ideal: VIDEO_HEIGHT },
-                    frameRate: { ideal: VIDEO_FPS },
-                    facingMode: { ideal: currentFacingMode }
+            const constraintOptions = [
+                {
+                    video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode },
+                    audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
                 },
-                audio: {
-                    echoCancellation: false,
-                    noiseSuppression: false,
-                    autoGainControl: false
+                {
+                    video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode },
+                    audio: false
+                },
+                {
+                    video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS } },
+                    audio: false
+                },
+                {
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+                    audio: false
+                },
+                { video: true, audio: false }
+            ];
+
+            let mediaStreamResult = null;
+            let lastError = null;
+            let usedConfig = '';
+
+            for (let i = 0; i < constraintOptions.length; i++) {
+                try {
+                    mediaStreamResult = await navigator.mediaDevices.getUserMedia(constraintOptions[i]);
+                    usedConfig = i === 0 ? '高清' : (i < 3 ? '标准' : '兼容');
+                    console.log('[视频录制] 使用约束组合', i + 1, '成功');
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    console.warn('[视频录制] 约束组合', i + 1, '失败:', err.message || err.name);
                 }
-            };
-            try {
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
-            } catch (audioErr) {
-                console.warn('[视频录制] 音频获取失败，尝试仅视频:', audioErr);
-                constraints.audio = false;
-                mediaStream = await navigator.mediaDevices.getUserMedia(constraints);
             }
+
+            if (!mediaStreamResult) {
+                if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
+                    throw new Error('摄像头权限被拒绝，请在系统设置中允许本程序访问摄像头');
+                }
+                throw lastError || new Error('无法获取摄像头权限');
+            }
+
+            mediaStream = mediaStreamResult;
 
             const videoEl = document.getElementById('videoPreview');
             videoEl.srcObject = mediaStream;
 
-            if (mediaStream.getAudioTracks().length > 0) {
-                statusEl.textContent = '摄像头已就绪，点击"开始录制"';
-            } else {
-                statusEl.textContent = '摄像头已就绪（无音频），点击"开始录制"';
-            }
+            statusEl.textContent = '正在初始化摄像头...';
+            startBtn.disabled = true;
+
+            await new Promise(function (resolve, reject) {
+                var timeout = setTimeout(function () {
+                    reject(new Error('摄像头初始化超时'));
+                }, 5000);
+
+                videoEl.addEventListener('loadeddata', function onLoaded() {
+                    clearTimeout(timeout);
+                    videoEl.removeEventListener('loadeddata', onLoaded);
+                    resolve();
+                }, { once: true });
+
+                var checkReady = setInterval(function () {
+                    if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+                        clearTimeout(timeout);
+                        clearInterval(checkReady);
+                        resolve();
+                    }
+                }, 100);
+            });
+
+            await new Promise(function (r) { setTimeout(r, 200); });
+
+            var audioStatus = mediaStream.getAudioTracks().length > 0 ? '' : '（无声）';
+            statusEl.textContent = '摄像头已就绪' + audioStatus + '，点击"开始录制" [' + usedConfig + ']';
             startBtn.disabled = false;
         } catch (err) {
             console.error('[视频录制] 摄像头初始化失败:', err);
@@ -311,7 +375,6 @@
         }
     }
 
-    // ─── 切换摄像头 ────────────────────────────────────────
     function switchCamera() {
         currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
         if (mediaStream) {
@@ -321,20 +384,21 @@
         initCamera();
     }
 
-    // ─── 开始录制 ──────────────────────────────────────────
     function startRecording() {
         if (!mediaStream) {
             setStatus('摄像头未就绪，请重试', 'error');
             return;
         }
 
-        // 选择支持的编码格式
         const mimeTypes = [
             'video/webm;codecs=vp9,opus',
             'video/webm;codecs=vp8,opus',
             'video/webm;codecs=vp9',
             'video/webm;codecs=vp8',
-            'video/webm'
+            'video/webm',
+            'video/mp4;codecs=h264,aac',
+            'video/mp4;codecs=h264',
+            'video/mp4'
         ];
         let selectedMime = '';
         for (const mt of mimeTypes) {
@@ -343,6 +407,8 @@
                 break;
             }
         }
+
+        window.__currentVideoExt = selectedMime.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
 
         try {
             mediaRecorder = new MediaRecorder(mediaStream, {
@@ -370,11 +436,9 @@
             setStatus('录制出错：' + (e.error ? e.error.message : '未知'), 'error');
         };
 
-        // 每 1 秒收集一次数据，避免内存堆积
         mediaRecorder.start(1000);
         recordingStartTime = Date.now();
 
-        // 更新 UI
         document.getElementById('videoStartBtn').disabled = true;
         document.getElementById('videoStopBtn').disabled = false;
         document.getElementById('videoRecIndicator').classList.add('active');
@@ -382,10 +446,8 @@
 
         setStatus('录制中...', '');
 
-        // 启动计时器
         timerInterval = setInterval(updateTimer, 200);
 
-        // 最大时长自动停止
         setTimeout(function () {
             if (mediaRecorder && mediaRecorder.state === 'recording') {
                 stopRecording();
@@ -393,7 +455,6 @@
         }, MAX_DURATION * 1000);
     }
 
-    // ─── 停止录制 ──────────────────────────────────────────
     function stopRecording() {
         if (mediaRecorder && mediaRecorder.state === 'recording') {
             mediaRecorder.stop();
@@ -407,15 +468,27 @@
         document.getElementById('videoRecIndicator').classList.remove('active');
     }
 
-    // ─── 录制停止回调 ──────────────────────────────────────
     function onRecordingStop(mimeType) {
-        const blob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
-        const sizeMB = (blob.size / 1024 / 1024).toFixed(2);
+        if (!recordedChunks || recordedChunks.length === 0) {
+            setStatus('录制数据为空，请重新录制', 'error');
+            var startBtn2 = document.getElementById('videoStartBtn');
+            if (startBtn2) startBtn2.disabled = false;
+            return;
+        }
 
-        // 生成文件名：患者姓名_处方编号_video.webm（如：张三_26070701_video.webm）
-        const fileName = generateFileName('video');
+        var blob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
+        var sizeMB = (blob.size / 1024 / 1024).toFixed(2);
 
-        // 暂存 blob 供保存按钮使用
+        if (blob.size < 1024) {
+            console.error('[视频录制] 录制数据过小: ' + blob.size + ' bytes');
+            setStatus('录制数据异常（' + blob.size + ' 字节），请重新录制', 'error');
+            var startBtn3 = document.getElementById('videoStartBtn');
+            if (startBtn3) startBtn3.disabled = false;
+            return;
+        }
+
+        var fileName = generateFileName('video');
+
         window.__pendingVideoBlob = blob;
         window.__pendingVideoFileName = fileName;
 
@@ -424,7 +497,6 @@
         setTimeout(saveVideo, 300);
     }
 
-    // ─── 保存视频 ──────────────────────────────────────────
     async function saveVideo() {
         const blob = window.__pendingVideoBlob;
         const fileName = window.__pendingVideoFileName;
@@ -438,15 +510,29 @@
         saveBtn.textContent = '保存中...';
 
         try {
-            const arrayBuffer = await blob.arrayBuffer();
-            const result = await window.electronAPI.saveVideoFile(arrayBuffer, fileName);
+            var arrayBuffer = await new Promise(function (resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function () { resolve(reader.result); };
+                reader.onerror = function () { reject(reader.error || new Error('FileReader 读取失败')); };
+                try {
+                    reader.readAsArrayBuffer(blob);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+
+            if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+                throw new Error('视频数据为空（arrayBuffer.byteLength = 0）');
+            }
+
+            console.log('[视频录制] 视频数据读取成功，大小: ' + (arrayBuffer.byteLength / 1024 / 1024).toFixed(2) + ' MB');
+
+            var result = await window.electronAPI.saveVideoFile(arrayBuffer, fileName);
 
             if (result.success) {
-                setStatus('视频已保存：' + result.fileName, 'success');
-                if (typeof showToast === 'function') {
-                    showToast('视频已保存到 downloads/' + getCurrentMonthFolder() + '/' + result.fileName);
-                }
-                // 保存成功后关闭浮层
+                var savePath = result.directory || result.filePath || '';
+                setStatus('视频已保存：' + (result.fileName || fileName), 'success');
+                showToast('视频已保存到：' + savePath);
                 setTimeout(closeOverlay, 1500);
             } else {
                 setStatus('保存失败：' + (result.error || '未知错误'), 'error');
@@ -455,18 +541,14 @@
             }
         } catch (err) {
             console.error('[视频录制] 保存失败:', err);
-            setStatus('保存失败：' + err.message, 'error');
+            setStatus('保存失败：' + (err.message || err), 'error');
             saveBtn.disabled = false;
             saveBtn.textContent = '保存视频';
         }
     }
 
-    let currentCaptureStep = 1;
-    let capturedPhotos = [];
-
-    // ─── 拍照浮层 ───────────────────────────────────────────
     function openPhotoOverlay() {
-        // 移除已有浮层（包括录制浮层）
+        injectStyles();
         const existing = document.getElementById('videoOverlay');
         if (existing) existing.remove();
 
@@ -540,7 +622,6 @@
         `;
         document.body.appendChild(overlay);
 
-        // 绑定事件
         document.getElementById('videoCloseBtn').onclick = closeOverlay;
         document.getElementById('photoCaptureBtn2').onclick = capturePhoto;
         document.getElementById('photoSaveBtn').onclick = savePhoto;
@@ -548,16 +629,13 @@
         document.getElementById('photoSwitchBtn').onclick = switchCameraForPhoto;
         document.getElementById('photoNextBtn').onclick = nextCaptureStep;
 
-        // 点击遮罩关闭
         overlay.onclick = function (e) {
             if (e.target === overlay) closeOverlay();
         };
 
-        // 启动摄像头（拍照不需要音频）
         initCameraForPhoto();
     }
 
-    // ─── 拍照用摄像头初始化（无音频） ─────────────────────
     async function initCameraForPhoto() {
         const statusEl = document.getElementById('videoStatus');
         const captureBtn = document.getElementById('photoCaptureBtn2');
@@ -566,18 +644,68 @@
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'video-status';
 
-            mediaStream = await navigator.mediaDevices.getUserMedia({
-                video: {
-                    width: { ideal: VIDEO_WIDTH },
-                    height: { ideal: VIDEO_HEIGHT },
-                    frameRate: { ideal: VIDEO_FPS },
-                    facingMode: { ideal: currentFacingMode }
-                },
-                audio: false
-            });
+            const constraintOptions = [
+                { video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode }, audio: false },
+                { video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS } }, audio: false },
+                { video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }, audio: false },
+                { video: true, audio: false }
+            ];
+
+            let mediaStreamResult = null;
+            let lastError = null;
+
+            for (let i = 0; i < constraintOptions.length; i++) {
+                try {
+                    mediaStreamResult = await navigator.mediaDevices.getUserMedia(constraintOptions[i]);
+                    console.log('[拍照] 使用约束组合', i + 1, '成功');
+                    break;
+                } catch (err) {
+                    lastError = err;
+                    console.warn('[拍照] 约束组合', i + 1, '失败:', err.message || err.name);
+                }
+            }
+
+            if (!mediaStreamResult) {
+                if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
+                    throw new Error('摄像头权限被拒绝，请在系统设置中允许本程序访问摄像头');
+                }
+                throw lastError || new Error('无法获取摄像头权限');
+            }
+
+            mediaStream = mediaStreamResult;
 
             const videoEl = document.getElementById('videoPreview');
             videoEl.srcObject = mediaStream;
+
+            statusEl.textContent = '正在初始化摄像头...';
+            captureBtn.disabled = true;
+
+            await new Promise(function (resolve, reject) {
+                var timeout = setTimeout(function () {
+                    reject(new Error('摄像头初始化超时'));
+                }, 8000);
+
+                var frameCount = 0;
+                var checkFrames = setInterval(function () {
+                    if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
+                        frameCount++;
+                        if (frameCount >= 3) {
+                            clearTimeout(timeout);
+                            clearInterval(checkFrames);
+                            resolve();
+                        }
+                    }
+                }, 100);
+
+                videoEl.addEventListener('playing', function onPlaying() {
+                    clearTimeout(timeout);
+                    clearInterval(checkFrames);
+                    videoEl.removeEventListener('playing', onPlaying);
+                    setTimeout(resolve, 300);
+                }, { once: true });
+            });
+
+            await new Promise(function (r) { setTimeout(r, 500); });
 
             statusEl.textContent = '摄像头已就绪，点击"拍照"';
             captureBtn.disabled = false;
@@ -589,7 +717,6 @@
         }
     }
 
-    // ─── 拍照切换摄像头 ────────────────────────────────────
     function switchCameraForPhoto() {
         currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
         if (mediaStream) {
@@ -599,8 +726,8 @@
         initCameraForPhoto();
     }
 
-    // ─── 拍照：捕获当前帧到 Canvas ─────────────────────────
-    function capturePhoto() {
+    function capturePhoto(retryCount) {
+        retryCount = retryCount || 0;
         const videoEl = document.getElementById('videoPreview');
         const canvasEl = document.getElementById('photoCanvas');
         if (!videoEl || !canvasEl || !mediaStream) {
@@ -608,40 +735,84 @@
             return;
         }
 
-        // 等待 video 元素准备好
-        if (!videoEl.videoWidth || !videoEl.videoHeight) {
-            setStatus('视频流尚未就绪，请稍候', 'error');
+        if (!videoEl.videoWidth || !videoEl.videoHeight || videoEl.readyState < 2) {
+            if (retryCount < 5) {
+                setStatus('视频流正在就绪... (' + (retryCount + 1) + '/5)', '');
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 100);
+            } else {
+                setStatus('视频流未就绪，请重试', 'error');
+            }
             return;
         }
 
-        // 设置 canvas 尺寸为视频原始尺寸
         canvasEl.width = videoEl.videoWidth;
         canvasEl.height = videoEl.videoHeight;
 
-        // 绘制当前帧到 canvas
         const ctx = canvasEl.getContext('2d');
-        ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+        if (!ctx) {
+            setStatus('Canvas 2D 上下文获取失败', 'error');
+            return;
+        }
 
-        // 保存当前照片数据
-        const dataUrl = canvasEl.toDataURL('image/jpeg', 0.8);
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
+
+        if (videoEl.readyState < 2) {
+            if (retryCount < 5) {
+                setStatus('视频帧未就绪，重试中... (' + (retryCount + 1) + '/5)', '');
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 100);
+                return;
+            }
+            setStatus('视频帧未就绪，请重试', 'error');
+            return;
+        }
+
+        try {
+            ctx.drawImage(videoEl, 0, 0, canvasEl.width, canvasEl.height);
+        } catch (drawErr) {
+            console.error('[拍照] drawImage 失败:', drawErr);
+            setStatus('拍照失败：' + (drawErr.message || 'drawImage异常'), 'error');
+            return;
+        }
+
+        if (isBlackFrame(ctx, canvasEl.width, canvasEl.height)) {
+            if (retryCount < 5) {
+                console.warn('[拍照] 检测到黑屏帧，重试中 (' + (retryCount + 1) + '/5)');
+                setStatus('图像捕获异常，重试中... (' + (retryCount + 1) + '/5)', '');
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 150);
+                return;
+            }
+            setStatus('图像捕获失败，请重试', 'error');
+            return;
+        }
+
+        var dataUrl = canvasEl.toDataURL('image/jpeg', 0.8);
+
+        if (dataUrl.length < 500) {
+            if (retryCount < 5) {
+                console.warn('[拍照] 捕获图像过小 (' + dataUrl.length + ' bytes)，重试中');
+                setStatus('图像捕获异常，重试中... (' + (retryCount + 1) + '/5)', '');
+                setTimeout(function () { capturePhoto(retryCount + 1); }, 100);
+                return;
+            }
+            setStatus('图像捕获失败，请重试', 'error');
+            return;
+        }
+
         capturedPhotos[currentCaptureStep - 1] = dataUrl;
 
-        // 闪光效果
-        const flash = document.getElementById('photoFlash');
+        var flash = document.getElementById('photoFlash');
         if (flash) {
             flash.classList.add('active');
             setTimeout(function () { flash.classList.remove('active'); }, 150);
         }
 
-        // 切换显示：隐藏 video，显示 canvas
         videoEl.style.display = 'none';
         canvasEl.style.display = 'block';
 
-        // 隐藏示意图
-        const guideOverlay = document.getElementById('photoGuideOverlay');
+        var guideOverlay = document.getElementById('photoGuideOverlay');
         if (guideOverlay) guideOverlay.style.display = 'none';
 
-        // 更新按钮状态
         document.getElementById('photoCaptureBtn2').disabled = true;
         document.getElementById('photoRetakeBtn').disabled = false;
 
@@ -658,7 +829,26 @@
         }
     }
 
-    // ─── 下一步：切换到第二采集步骤 ──────────────────────
+    function isBlackFrame(ctx, width, height) {
+        try {
+            var imageData = ctx.getImageData(0, 0, width, height);
+            var data = imageData.data;
+            var totalBrightness = 0;
+            var sampleCount = 0;
+
+            for (var i = 0; i < data.length; i += 40) {
+                totalBrightness += (data[i] + data[i + 1] + data[i + 2]) / 3;
+                sampleCount++;
+            }
+
+            var avgBrightness = totalBrightness / sampleCount;
+            return avgBrightness < 10;
+        } catch (e) {
+            console.error('[拍照] isBlackFrame 检测失败:', e);
+            return false;
+        }
+    }
+
     function updatePhotoGuide(step) {
         const svg1 = document.getElementById('photoGuideSvg1');
         const svg2 = document.getElementById('photoGuideSvg2');
@@ -683,21 +873,17 @@
     function nextCaptureStep() {
         currentCaptureStep = 2;
 
-        // 更新步骤指示
         const stepItems = document.querySelectorAll('.step-item');
         if (stepItems[0]) stepItems[0].classList.remove('active');
         if (stepItems[1]) stepItems[1].classList.add('active');
 
-        // 更新示意图
         updatePhotoGuide(2);
 
-        // 恢复摄像头预览
         const videoEl = document.getElementById('videoPreview');
         const canvasEl = document.getElementById('photoCanvas');
         if (videoEl) videoEl.style.display = '';
         if (canvasEl) canvasEl.style.display = 'none';
 
-        // 更新按钮状态
         document.getElementById('photoCaptureBtn2').disabled = false;
         document.getElementById('photoNextBtn').style.display = 'none';
         document.getElementById('photoRetakeBtn').disabled = true;
@@ -705,7 +891,6 @@
         setStatus('请采集舌下络脉图像，点击"拍照"', '');
     }
 
-    // ─── 保存照片：Canvas → PNG → IPC 写文件 ──────────────
     async function savePhoto() {
         if (capturedPhotos.length === 0) {
             setStatus('没有可保存的照片', 'error');
@@ -719,25 +904,20 @@
         try {
             let successCount = 0;
             const photoTypes = ['tongue_front', 'tongue_under'];
-            
+
             for (let i = 0; i < capturedPhotos.length; i++) {
                 const dataUrl = capturedPhotos[i];
                 const fileName = generateFileName('photo', photoTypes[i]);
-                
                 const result = await window.electronAPI.savePrescriptionImage(dataUrl, fileName);
-                
+
                 if (result.success) {
                     successCount++;
-                } else {
-                    console.error('[拍照] 保存失败:', result.error);
                 }
             }
 
             if (successCount === capturedPhotos.length) {
                 setStatus('照片已全部保存', 'success');
-                if (typeof showToast === 'function') {
-                    showToast('照片已保存到 downloads/' + getCurrentMonthFolder() + '/');
-                }
+                showToast('照片已保存');
                 setTimeout(closeOverlay, 1500);
             } else {
                 setStatus('部分照片保存失败', 'error');
@@ -752,7 +932,6 @@
         }
     }
 
-    // ─── 重拍：恢复摄像头预览 ──────────────────────────────
     function retakePhoto() {
         const videoEl = document.getElementById('videoPreview');
         const canvasEl = document.getElementById('photoCanvas');
@@ -764,7 +943,6 @@
         document.getElementById('photoNextBtn').style.display = 'none';
         document.getElementById('photoSaveBtn').style.display = 'none';
 
-        // 显示示意图
         updatePhotoGuide(currentCaptureStep);
 
         if (currentCaptureStep === 1) {
@@ -774,16 +952,27 @@
         }
     }
 
-    // ─── 工具函数 ──────────────────────────────────────────
     function generateFileName(type, subtype = '') {
         let patientName = '';
-        
-        patientName = patientName || (document.getElementById('patientName')?.value || '').trim();
+
+        var nameEl = document.querySelector('input[name="patientName"], #patientName, [data-field="patientName"]');
+        if (nameEl) {
+            patientName = (nameEl.value || nameEl.textContent || '').trim();
+        }
+        if (!patientName) {
+            var nameSpan = document.querySelector('.patient-name, [data-patient-name]');
+            if (nameSpan) patientName = (nameSpan.textContent || '').trim();
+        }
         patientName = patientName || (document.getElementById('paperName')?.textContent || '').trim();
-        
-        const prescriptionNo = (document.getElementById('prescriptionNo')?.value || '').trim() || 
-                               (document.getElementById('clinicNo')?.value || '').trim();
-        
+
+        var noEl = document.querySelector('input[name="prescriptionNo"], #prescriptionNo, [data-field="prescriptionNo"]');
+        var prescriptionNo = '';
+        if (noEl) {
+            prescriptionNo = (noEl.value || noEl.textContent || '').trim();
+        }
+        prescriptionNo = prescriptionNo || (document.getElementById('clinicNo')?.value || '').trim() ||
+                         (document.getElementById('paperClinicNo')?.textContent || '').trim();
+
         const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
         const cleanName = sanitizeStr(patientName) || 'unknown';
 
@@ -791,14 +980,21 @@
         if (!identifier) {
             const now = new Date();
             const pad = n => String(n).padStart(2, '0');
-            identifier = String(now.getFullYear()).slice(-2) + 
+            identifier = String(now.getFullYear()).slice(-2) +
                          pad(now.getMonth() + 1) + pad(now.getDate()) + '_' +
                          pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
         }
 
-        const ext = type === 'video' ? 'webm' : 'jpg';
+        window.__lastUsedMediaIdentifier = identifier;
+        window.__lastUsedMediaPatientName = cleanName;
+        try {
+            localStorage.setItem('lastUsedMediaIdentifier', identifier);
+            localStorage.setItem('lastUsedMediaPatientName', cleanName);
+        } catch (e) { }
+
+        const ext = type === 'video' ? (window.__currentVideoExt || 'webm') : 'jpg';
         const sub = subtype ? '_' + subtype : '';
-        return identifier + '_' + cleanName + '_' + type + sub + '.' + ext;
+        return cleanName + '_' + identifier + '_' + type + sub + '.' + ext;
     }
 
     function updateTimer() {
@@ -829,11 +1025,9 @@
     }
 
     function closeOverlay() {
-        // 停止录制（如果进行中）
         if (mediaRecorder && mediaRecorder.state === 'recording') {
             stopRecording();
         }
-        // 释放摄像头
         if (mediaStream) {
             mediaStream.getTracks().forEach(function (t) { t.stop(); });
             mediaStream = null;
@@ -842,21 +1036,16 @@
             clearInterval(timerInterval);
             timerInterval = null;
         }
-        // 移除浮层
         const overlay = document.getElementById('videoOverlay');
         if (overlay) overlay.remove();
-        // 清理暂存
         window.__pendingVideoBlob = null;
         window.__pendingVideoFileName = null;
-        // 清理拍照状态
         currentCaptureStep = 1;
         capturedPhotos = [];
     }
 
-    // ─── 初始化 ────────────────────────────────────────────
     function init() {
         injectStyles();
-        // 尝试注入按钮，若历史栏尚未渲染则重试
         if (!injectButton()) {
             var retryCount = 0;
             var retryTimer = setInterval(function () {
