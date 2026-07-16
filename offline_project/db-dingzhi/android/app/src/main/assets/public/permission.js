@@ -68,6 +68,56 @@
             return !this.isPersonal();
         },
 
+        // ===== 基于角色的权限判断（统一入口） =====
+        // 所有角色判断都通过 AuthCore 的 isAdmin/isClinicAdmin/isPlatformAdmin
+        // 确保离线版 admin 和云端版 clinic_admin 行为一致
+
+        // 是否可以管理用户（需要管理员角色 + 非个人版）
+        canManageUsersByRole(user) {
+            if (this.isPersonal()) return false;
+            if (!user) return false;
+            if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+                return global.AuthCore.isClinicAdmin(user);
+            }
+            // 回退：直接角色比较
+            return user.role === 'admin' || user.role === 'clinic_admin';
+        },
+
+        // 是否可以修改密码（所有登录用户均可）
+        canChangePassword(user) {
+            if (this.isPersonal()) return true; // 个人版允许改密
+            return !!user;
+        },
+
+        // 是否显示账户管理按钮
+        shouldShowUserManage(user) {
+            return this.canManageUsersByRole(user);
+        },
+
+        // 是否显示修改密码按钮
+        shouldShowChangePwd(user) {
+            return this.canChangePassword(user);
+        },
+
+        // 是否显示开机自启选项
+        shouldShowAutoStart(user) {
+            if (this.isPersonal()) return false;
+            if (!user) return false;
+            if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+                return global.AuthCore.isClinicAdmin(user);
+            }
+            return user.role === 'admin' || user.role === 'clinic_admin';
+        },
+
+        // 是否可以查看所有处方（管理员可查看全部，普通用户只能查看自己的）
+        canViewAllPrescriptions(user) {
+            if (!user) return false;
+            if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+                return global.AuthCore.isClinicAdmin(user);
+            }
+            return user.role === 'admin' || user.role === 'clinic_admin';
+        },
+
         // 应用运行页权限控制
         applyRuntimePermissions() {
             const edition = this._edition;
@@ -98,12 +148,11 @@
                 });
             }
 
-            // 用户管理按钮（个人定制版隐藏）
+            // 用户管理按钮（个人定制版隐藏账户管理，但保留修改密码）
             if (edition === 'personal') {
                 const userManageBtn = document.getElementById('userManageBtn');
                 if (userManageBtn) userManageBtn.style.display = 'none';
-                const changePwdBtn = document.getElementById('changePwdBtn');
-                if (changePwdBtn) changePwdBtn.style.display = 'none';
+                // 个人版保留修改密码功能，不再隐藏 changePwdBtn
             }
 
             // 同步入口屏蔽（非云端版）

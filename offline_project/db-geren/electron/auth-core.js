@@ -320,7 +320,19 @@
 
     function isAdmin(user) {
         if (!user) return false;
-        return user.role === 'admin' || user.role === 'platform_admin';
+        // 统一管理员判断：离线版 admin + 云端版 clinic_admin + 平台 platform_admin
+        return user.role === 'admin' || user.role === 'clinic_admin' || user.role === 'platform_admin';
+    }
+
+    function isClinicAdmin(user) {
+        if (!user) return false;
+        // 诊所管理员：离线版 admin + 云端版 clinic_admin
+        return user.role === 'admin' || user.role === 'clinic_admin';
+    }
+
+    function isPlatformAdmin(user) {
+        if (!user) return false;
+        return user.role === 'platform_admin';
     }
 
     function buildAuthPayload(user) {
@@ -606,6 +618,8 @@
         // 权限解析
         resolveAllowedMode,
         isAdmin,
+        isClinicAdmin,
+        isPlatformAdmin,
         buildAuthPayload,
 
         // 会话管理
