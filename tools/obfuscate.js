@@ -145,12 +145,17 @@ function obfuscateFile(filePath, config) {
  */
 function restoreFile(filePath) {
     const bakPath = filePath + '.bak';
-    if (fs.existsSync(bakPath)) {
+    if (!fs.existsSync(bakPath)) {
+        return false;
+    }
+    try {
         fs.copyFileSync(bakPath, filePath);
         fs.unlinkSync(bakPath);
         return true;
+    } catch (e) {
+        console.error(`  [WARN] 还原失败 ${filePath}: ${e.message}`);
+        return false;
     }
-    return false;
 }
 
 // 主逻辑

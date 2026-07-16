@@ -1,4 +1,4 @@
-# edit-config.ps1 - 打包前交互式编辑诊所名称
+﻿# edit-config.ps1 - 打包前交互式编辑诊所名称
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
