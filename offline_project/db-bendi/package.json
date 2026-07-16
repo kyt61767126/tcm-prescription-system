@@ -15,7 +15,7 @@
   },
   "build": {
     "appId": "com.huikangtang.prescription.local",
-    "productName": "惠康中医诊所管理系统-本地",
+    "productName": "TCM-Prescription-Local",
     "directories": {
       "output": "dist"
     },

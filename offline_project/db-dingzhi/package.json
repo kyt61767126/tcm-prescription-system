@@ -15,7 +15,7 @@
   },
   "build": {
     "appId": "com.benneng.prescription.custom",
-    "productName": "惠康中医诊所管理系统-定制",
+    "productName": "TCM-Prescription-Custom",
     "directories": {
       "output": "dist"
     },

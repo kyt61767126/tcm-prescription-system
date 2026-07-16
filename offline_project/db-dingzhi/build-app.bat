@@ -1,63 +1,62 @@
 @echo off
-chcp 65001 >nul
-title 惠康中医诊所管理系统-定制版 - 手机APP打包工具
+title Build APP - Custom Edition
 
 echo ============================================
-echo   惠康中医诊所管理系统-定制版 - 手机APP打包工具
+echo   Build APP - Custom Edition
 echo ============================================
 echo.
 
 cd /d "%~dp0\android"
 
-echo [1/5] 检查环境...
+echo [1/5] Checking environment...
 if not exist "gradlew.bat" (
-    echo [错误] 未找到 gradlew.bat
+    echo [ERROR] gradlew.bat not found
     pause
     exit /b 1
 )
 if not exist "app\signing.properties" (
-    echo [错误] 未找到签名配置 signing.properties
+    echo [ERROR] signing.properties not found
     pause
     exit /b 1
 )
 if not exist "app\app-release.jks" (
-    echo [错误] 未找到签名密钥 app-release.jks
+    echo [ERROR] app-release.jks not found
     pause
     exit /b 1
 )
 if not exist "app\src\main\assets\public\index.html" (
-    echo [错误] 未找到页面文件 index.html
+    echo [ERROR] index.html not found
     pause
     exit /b 1
 )
-echo [OK] 环境检查通过
+echo [OK] Environment check passed
 echo.
 
-echo [1.5/5] 停止残留 Gradle 进程...
+echo [1.5/5] Stopping Gradle processes...
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
-echo [OK] 清理完成
+echo [OK] Cleanup done
 echo.
 
-echo [2/5] 清理构建缓存...
+echo [2/5] Cleaning build cache...
 call gradlew.bat clean --no-daemon
 if errorlevel 1 (
-    echo [WARN] clean失败，继续增量构建
+    echo [WARN] Clean failed, continuing with incremental build
 ) else (
-    echo [OK] 缓存已清理
+    echo [OK] Cache cleaned
 )
 echo.
 
-echo [3/5] 开始构建签名 APK...
+echo [3/5] Building signed APK...
 echo.
 call gradlew.bat assembleRelease --no-daemon
 if errorlevel 1 (
     echo.
-    echo [错误] 构建失败！请检查错误信息
+    echo [ERROR] Build failed! Please check error messages
     pause
     exit /b 1
 )
 echo.
-echo [4/5] 构建成功，定位 APK...
+echo [4/5] Build successful, locating APK...
 echo.
 
 set "APK_DIR=app\build\outputs\apk\release"
@@ -71,31 +70,31 @@ if exist "%APK_DIR%\app-release.apk" (
 )
 
 if "%APK_FILE%"=="" (
-    echo [错误] 未找到生成的 APK 文件
+    echo [ERROR] APK file not found
     pause
     exit /b 1
 )
 
 for %%A in ("%APK_FILE%") do (
-    echo APK 文件: %%~nxA
-    echo 文件大小: %%~zA bytes
-    echo 完整路径: %CD%\%%A
+    echo APK File: %%~nxA
+    echo File Size: %%~zA bytes
+    echo Full Path: %CD%\%%A
 )
 echo.
 
-echo [5/5] 复制 APK 到打包目录...
-set "FINAL_APK=..\惠康中医诊所管理系统-定制版-v1.0.apk"
+echo [5/5] Copying APK to output directory...
+set "FINAL_APK=..\app-custom-v1.0.apk"
 copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
 if errorlevel 1 (
-    echo [警告] 复制失败，请手动从 %APK_DIR% 获取 APK
+    echo [WARN] Copy failed, please manually get APK from %APK_DIR%
 ) else (
-    echo [OK] 已复制到: %CD%\%FINAL_APK%
+    echo [OK] Copied to: %CD%\%FINAL_APK%
 )
 echo.
 echo ============================================
-echo   打包完成！
-echo   APK 路径: %CD%\%FINAL_APK%
-echo   该 APK 已签名，可直接安装到手机
+echo   Build Complete!
+echo   APK Path: %CD%\%FINAL_APK%
+echo   APK is signed, ready for installation
 echo ============================================
 echo.
 pause

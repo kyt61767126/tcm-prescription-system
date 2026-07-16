@@ -1,8 +1,7 @@
-﻿@echo off
-chcp 65001 >nul
+@echo off
 cd /d "%~dp0"
 echo ============================================
-echo  惠康中医诊所管理系统 - 电脑诊所定制版
+echo  TCM Prescription System - Custom Desktop
 echo ============================================
 echo.
 
@@ -17,7 +16,7 @@ echo       npm OK
 echo.
 
 echo [2/7] Closing remaining processes...
-taskkill /f /im "惠康中医诊所管理系统-定制.exe" >nul 2>nul
+taskkill /f /im "app-custom.exe" >nul 2>nul
 echo [OK] Processes cleaned
 echo.
 

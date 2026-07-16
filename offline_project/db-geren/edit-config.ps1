@@ -1,4 +1,4 @@
-﻿# edit-config.ps1 - 打包前交互式编辑诊所名称
+# edit-config.ps1 - Interactive clinic name editor before build
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -7,21 +7,21 @@ $config = Get-Content 'config.json' -Raw -Encoding UTF8 | ConvertFrom-Json
 $currentClinic = $config.clinicName
 $currentDoctor = $config.doctorName
 
-Write-Host "当前诊所名称: $currentClinic"
-Write-Host "当前医师姓名: $currentDoctor （打包后可在程序内登录修改）"
+Write-Host "Current Clinic Name: $currentClinic"
+Write-Host "Current Doctor Name: $currentDoctor (can be changed after login)"
 Write-Host ""
-Write-Host "提示: 直接按回车保持当前值不变"
-Write-Host "说明: 个人版仅打包时编辑诊所名称；"
-Write-Host "      医师姓名由登录用户决定，支持多用户登录"
+Write-Host "Note: Press Enter to keep current value"
+Write-Host "Info: Personal Edition only edits clinic name at build time;"
+Write-Host "      Doctor name is determined by login user, supports multi-user"
 Write-Host ""
 
-$newClinic = Read-Host "请输入诊所名称 [$currentClinic]"
+$newClinic = Read-Host "Enter clinic name [$currentClinic]"
 if ([string]::IsNullOrWhiteSpace($newClinic)) { $newClinic = $currentClinic }
 
 Write-Host ""
-Write-Host "新配置确认:"
-Write-Host "  诊所名称: $newClinic"
-Write-Host "  医师姓名: 登录后自动显示（多用户登录）"
+Write-Host "New configuration:"
+Write-Host "  Clinic Name: $newClinic"
+Write-Host "  Doctor Name: Auto-display after login (multi-user)"
 Write-Host ""
 
 $config.clinicName = $newClinic
@@ -33,4 +33,4 @@ $html = $html -replace 'clinic-info-name">[^<]*<', 'clinic-info-name">' + $newCl
 $html = $html -replace 'clinicNameDisplay">[^<]*<', 'clinicNameDisplay">' + $newClinic + '<'
 [System.IO.File]::WriteAllText('index.html', $html, [System.Text.Encoding]::UTF8)
 
-Write-Host "[OK] 配置已更新：诊所=$newClinic"
+Write-Host "[OK] Configuration updated: Clinic=$newClinic"
