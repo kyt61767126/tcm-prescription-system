@@ -1,8 +1,8 @@
 @echo off
-title 惠康中医定制 - 离线APP版
+title Huikang TCM Custom - Offline APP Build
 
 echo ============================================
-echo   惠康中医定制 - 离线APP版
+echo   Huikang TCM Custom - Offline APP
 echo ============================================
 echo.
 

@@ -8,75 +8,87 @@ set "ANDROID_ASSETS=%~dp0android\app\src\main\assets"
 
 echo.
 echo ================================================================
-echo  离线项目三端同步 - db-bendi (本地版)
+echo  Sync to APP - Local Edition
 echo ================================================================
-echo  源目录: %SRC%
-echo  Android 目标目录: %ANDROID_PUBLIC%
+echo  Source: %SRC%
+echo  Android Target: %ANDROID_PUBLIC%
 echo.
 
 if not exist "%ANDROID_PUBLIC%" (
-    echo [警告] Android 目标目录不存在: %ANDROID_PUBLIC%
-    echo        可能该版本不支持 Android 打包，跳过同步
+    echo [WARN] Android target directory not found: %ANDROID_PUBLIC%
+    echo        Android packaging may not be supported, skip sync
     pause
     exit /b 0
 )
 
-echo [1/4] 同步 index.html ...
+echo [1/5] Syncing config.json ...
+if exist "%SRC%config.json" (
+    copy /Y "%SRC%config.json" "%ANDROID_PUBLIC%\config.json" >nul
+    if errorlevel 1 (
+        echo [WARN] Failed to sync config.json
+    ) else (
+        echo       config.json synced
+    )
+) else (
+    echo [SKIP] config.json not found
+)
+
+echo [2/5] Syncing index.html ...
 copy /Y "%SRC%index.html" "%ANDROID_PUBLIC%\index.html" >nul
 if errorlevel 1 (
-    echo [错误] index.html 同步失败
+    echo [ERROR] Failed to sync index.html
     pause
     exit /b 1
 )
-echo       index.html 已同步
+echo       index.html synced
 
-echo [2/4] 同步 vendor/xlsx.full.min.js ...
+echo [3/5] Syncing vendor/xlsx.full.min.js ...
 if exist "%SRC%vendor\xlsx.full.min.js" (
     if not exist "%ANDROID_PUBLIC%\vendor" mkdir "%ANDROID_PUBLIC%\vendor" >nul
     copy /Y "%SRC%vendor\xlsx.full.min.js" "%ANDROID_PUBLIC%\vendor\xlsx.full.min.js" >nul
     if errorlevel 1 (
-        echo [警告] xlsx.full.min.js 同步失败，继续
+        echo [WARN] Failed to sync xlsx.full.min.js, continue
     ) else (
-        echo       xlsx.full.min.js 已同步
+        echo       xlsx.full.min.js synced
     )
 ) else (
-    echo [跳过] vendor/xlsx.full.min.js 不存在
+    echo [SKIP] vendor/xlsx.full.min.js not found
 )
 
-echo [3/4] 同步核心 JS 模块...
+echo [4/5] Syncing core JS modules...
 set "MODULES=auth-core.js db-adapter.js debug-logger.js medicine-dict.js patient-archive.js performance-utils.js permission.js prescription-core.js print-utils.js"
 for %%m in (%MODULES%) do (
     if exist "%SRC%%%m" (
         copy /Y "%SRC%%%m" "%ANDROID_PUBLIC%\%%m" >nul
         if errorlevel 1 (
-            echo [警告] %%m 同步失败，继续
+            echo [WARN] Failed to sync %%m, continue
         ) else (
-            echo       %%m 已同步
+            echo       %%m synced
         )
     ) else (
-        echo [跳过] %%m 不存在
+        echo [SKIP] %%m not found
     )
 )
 
-echo [4/4] 同步录像拍照脚本 video-recorder-inject.js ...
+echo [5/5] Syncing video-recorder-inject.js ...
 if exist "%SRC%video-recorder-inject.js" (
     copy /Y "%SRC%video-recorder-inject.js" "%ANDROID_ASSETS%\video-recorder-inject.js" >nul
     if errorlevel 1 (
-        echo [警告] video-recorder-inject.js 同步失败
+        echo [WARN] Failed to sync video-recorder-inject.js
     ) else (
-        echo       video-recorder-inject.js 已同步
+        echo       video-recorder-inject.js synced
     )
 ) else (
-    echo [跳过] video-recorder-inject.js 不存在于源目录
+    echo [SKIP] video-recorder-inject.js not found in source
 )
 
 echo.
 echo ================================================================
-echo  同步完成
+echo  Sync completed
 echo ================================================================
 echo.
-echo  下一步：
-echo   - 运行 build-app.bat 打包 APK
-echo   - 或进入 android 目录执行 gradlew assembleRelease 打包
+echo  Next Steps:
+echo   - Run build-app.bat to build APK
+echo   - Or run gradlew assembleRelease in android directory
 echo.
 pause

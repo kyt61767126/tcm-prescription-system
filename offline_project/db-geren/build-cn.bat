@@ -1,8 +1,8 @@
 @echo off
-title 惠康中医个人 - 离线桌面版
+title Huikang TCM Personal - Offline Desktop Build
 
 echo ============================================
-echo  惠康中医个人 - 离线桌面版
+echo  Huikang TCM Personal - Offline Desktop
 echo ============================================
 echo.
 

@@ -2,7 +2,7 @@
 chcp 65001 >nul
 cd /d "%~dp0"
 echo ============================================
-echo  惠康中医云端 - 云端桌面版
+echo  Huikang TCM Cloud - Desktop Build
 echo ============================================
 echo.
 echo [1/6] Checking environment...
@@ -17,7 +17,7 @@ echo.
 
 echo [2/6] Closing remaining processes...
 taskkill /F /IM electron.exe >nul 2>&1
-taskkill /F /IM "BenNeng*.exe" >nul 2>&1
+taskkill /F /IM "HuikangTCM*.exe" >nul 2>&1
 echo [OK] Processes cleaned
 timeout /t 2 /nobreak >nul
 echo.

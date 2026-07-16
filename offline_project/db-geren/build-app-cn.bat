@@ -1,8 +1,8 @@
 @echo off
-title 惠康中医个人 - 离线APP版
+title Huikang TCM Personal - Offline APP Build
 
 echo ============================================
-echo   惠康中医个人 - 离线APP版
+echo   Huikang TCM Personal - Offline APP
 echo ============================================
 echo.
 
@@ -132,7 +132,7 @@ set "CLINIC_NAME=%CLINIC_NAME:,=%"
 if not "%CLINIC_NAME%"=="" (
     set "FINAL_APK=..\app-%CLINIC_NAME%-v%VERSION_STR%.apk"
 ) else (
-    set "FINAL_APK=..\app-custom-v%VERSION_STR%.apk"
+    set "FINAL_APK=..\app-personal-v%VERSION_STR%.apk"
 )
 
 copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
