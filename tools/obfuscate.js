@@ -84,7 +84,7 @@ const DISTRIBUTION_DIRS = [
     'offline_project/db-geren/electron',
     'offline_project/db-bendi/android/app/src/main/assets/public',
     'offline_project/db-dingzhi/android/app/src/main/assets/public',
-    'offline_project/db-shouji/android/app/src/main/assets/public'
+    'offline_project/db-geren/android/app/src/main/assets/public'
 ];
 
 // 额外需要混淆的文件（各目录中的 login.js, main.js, preload.js）

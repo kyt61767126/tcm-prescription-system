@@ -34,7 +34,7 @@ jobs:
             "offline_project/db-dingzhi/android/app/src/main/assets/public"
             "offline_project/db-geren"
             "offline_project/db-geren/electron"
-            "offline_project/db-shouji/android/app/src/main/assets/public"
+            "offline_project/db-geren/android/app/src/main/assets/public"
           )
 
           ERRORS=0
