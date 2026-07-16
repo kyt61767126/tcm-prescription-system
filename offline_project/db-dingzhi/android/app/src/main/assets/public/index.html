@@ -1375,7 +1375,9 @@ if (window.Permission) {
         }
 
         function showUserManageModal() {
-            if (!currentUser || currentUser.role !== 'admin') {
+            if (!currentUser) return;
+            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+            if (!canManage) {
                 alert('只有管理员可以管理用户');
                 return;
             }
@@ -1598,18 +1600,14 @@ if (window.Permission) {
                 const mobileChangePwdBtn = document.getElementById('mobileChangePwdBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
-                // 定制版：始终显示用户管理按钮（桌面端+移动端）
-                userManageBtn.style.display = 'block';
+                const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+                const canChangePwd = (window.Permission && Permission.shouldShowChangePwd) ? Permission.shouldShowChangePwd(currentUser) : true;
+                const canAutoStart = (window.Permission && Permission.shouldShowAutoStart) ? Permission.shouldShowAutoStart(currentUser) : (currentUser.role === 'admin');
 
-                if (currentUser.role === 'admin') {
-                    autoStartSection.style.display = 'block';
-                    if (mobileUserManageBtn) mobileUserManageBtn.style.display = 'inline-flex';
-                    if (mobileChangePwdBtn) mobileChangePwdBtn.style.display = 'inline-flex';
-                } else {
-                    autoStartSection.style.display = 'none';
-                    if (mobileUserManageBtn) mobileUserManageBtn.style.display = 'inline-flex';
-                    if (mobileChangePwdBtn) mobileChangePwdBtn.style.display = 'inline-flex';
-                }
+                if (userManageBtn) userManageBtn.style.display = canManage ? 'block' : 'none';
+                if (mobileUserManageBtn) mobileUserManageBtn.style.display = canManage ? 'inline-flex' : 'none';
+                if (mobileChangePwdBtn) mobileChangePwdBtn.style.display = canChangePwd ? 'inline-flex' : 'none';
+                if (autoStartSection) autoStartSection.style.display = canAutoStart ? 'block' : 'none';
             }
         }
         

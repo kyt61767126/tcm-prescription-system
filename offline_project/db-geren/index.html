@@ -1202,14 +1202,13 @@ if (window.Permission) {
                 const changePwdBtn = document.getElementById('changePwdBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
-                userManageBtn.style.display = 'none';
-                changePwdBtn.style.display = 'block';
+                const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : false;
+                const canChangePwd = (window.Permission && Permission.shouldShowChangePwd) ? Permission.shouldShowChangePwd(currentUser) : true;
+                const canAutoStart = (window.Permission && Permission.shouldShowAutoStart) ? Permission.shouldShowAutoStart(currentUser) : (currentUser.role === 'admin');
 
-                if (currentUser.role === 'admin') {
-                    autoStartSection.style.display = 'block';
-                } else {
-                    autoStartSection.style.display = 'none';
-                }
+                if (userManageBtn) userManageBtn.style.display = canManage ? 'block' : 'none';
+                if (changePwdBtn) changePwdBtn.style.display = canChangePwd ? 'block' : 'none';
+                if (autoStartSection) autoStartSection.style.display = canAutoStart ? 'block' : 'none';
             }
         }
         

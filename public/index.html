@@ -4539,9 +4539,9 @@ if (window.Permission) {
                 const platformManageBtn = document.getElementById('platformManageBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
-                // 诊所管理员和平台总管理员：显示账户管理 + 开机自启；普通用户：显示修改密码
+                // 诊所管理员：显示账户管理 + 开机自启；普通用户：显示修改密码
                 const changePwdBtn = document.getElementById('changePwdBtn');
-                if (isAdmin(currentUser)) {
+                if (isClinicAdmin(currentUser)) {
                     userManageBtn.style.display = 'block';
                     autoStartSection.style.display = 'block';
                     if (changePwdBtn) changePwdBtn.style.display = 'none';
