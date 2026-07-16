@@ -125,7 +125,7 @@ set "VERSION_STR=%VERSION_STR: =%"
 set "VERSION_STR=%VERSION_STR:"=%"
 if "%VERSION_STR%"=="" set "VERSION_STR=1.0"
 
-set "FINAL_APK=%~dp0%PRODUCT_NAME%-v%VERSION_STR%.apk"
+set "FINAL_APK=%~dp0%PRODUCT_NAME%.apk"
 
 copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
 if errorlevel 1 (

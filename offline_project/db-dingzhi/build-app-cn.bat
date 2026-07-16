@@ -126,7 +126,7 @@ for /f "delims=" %%p in ('powershell -NoProfile -Command "(Get-Content '..\confi
     set "PRODUCT_NAME=%%p"
 )
 if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=HuikangTCM-Custom"
-set "FINAL_APK=..\%PRODUCT_NAME%-v%VERSION_STR%.apk"
+set "FINAL_APK=..\%PRODUCT_NAME%.apk"
 
 copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
 if errorlevel 1 (
