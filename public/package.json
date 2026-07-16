@@ -1,7 +1,7 @@
 {
   "name": "tcm-prescription-system",
   "version": "1.0.0",
-  "description": "惠康堂中医处方系统 - 桌面版",
+  "description": "惠康中医云端",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",

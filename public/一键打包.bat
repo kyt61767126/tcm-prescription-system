@@ -1,21 +1,20 @@
 @echo off
-chcp 65001
-title 打包脚本
+title HuikangTCM Cloud - One Click Build
 echo ==============================================
-echo     惠康堂中医处方系统 - 一键打包
+echo   HuikangTCM Cloud - One Click Build
 echo ==============================================
 echo.
-echo 正在执行打包...
+echo Building...
 echo.
 
 cd /d "%~dp0"
 
-echo 1. 执行 npm run build...
+echo 1. Running npm run build...
 call npm run build
 
 echo.
 echo ==============================================
-echo 打包完成！
-echo 输出目录: %~dp0dist\
+echo Build completed!
+echo Output: %~dp0dist\
 echo ==============================================
 pause
