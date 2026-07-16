@@ -22,17 +22,11 @@ taskkill /f /im "惠康中医诊所管理系统-本地版.exe" >nul 2>nul
 echo [OK] Processes cleaned
 echo.
 
-echo [3/7] Configuring clinic info (optional for offline version)...
+echo [3/7] Configuring clinic info...
 if /i "%1"=="--skip-config" (
     echo       [SKIP] --skip-config parameter detected
 ) else (
-    echo       离线诊所版全程可编辑，配置步骤可选
-    choice /C YN /M "是否修改诊所名称"
-    if errorlevel 2 (
-        echo       [SKIP] 用户选择跳过配置
-    ) else (
-        powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
-    )
+    powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
 )
 echo.
 
