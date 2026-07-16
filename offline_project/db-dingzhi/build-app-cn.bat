@@ -121,19 +121,12 @@ set "VERSION_STR=%VERSION_STR: =%"
 set "VERSION_STR=%VERSION_STR:"=%"
 if "%VERSION_STR%"=="" set "VERSION_STR=1.0"
 
-set "CLINIC_NAME="
-for /f "tokens=2 delims=:" %%c in ('findstr "clinicName" "..\config.json"') do (
-    set "CLINIC_NAME=%%c"
+set "PRODUCT_NAME="
+for /f "delims=" %%p in ('powershell -NoProfile -Command "(Get-Content '..\config.json' -Encoding UTF8 -Raw | ConvertFrom-Json).productName"') do (
+    set "PRODUCT_NAME=%%p"
 )
-set "CLINIC_NAME=%CLINIC_NAME: =%"
-set "CLINIC_NAME=%CLINIC_NAME:"=%"
-set "CLINIC_NAME=%CLINIC_NAME:,=%"
-
-if not "%CLINIC_NAME%"=="" (
-    set "FINAL_APK=..\app-%CLINIC_NAME%-v%VERSION_STR%.apk"
-) else (
-    set "FINAL_APK=..\app-custom-v%VERSION_STR%.apk"
-)
+if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=HuikangTCM-Custom"
+set "FINAL_APK=..\%PRODUCT_NAME%-v%VERSION_STR%.apk"
 
 copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
 if errorlevel 1 (

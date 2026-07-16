@@ -10,7 +10,6 @@ echo.
 set "PROJECT_DIR=%~dp0cloud_app"
 set "ANDROID_DIR=%PROJECT_DIR%"
 set "APK_OUTPUT_DIR=%ANDROID_DIR%\app\build\outputs\apk\release"
-set "FINAL_APK=%~dp0TCM-Prescription-Cloud.apk"
 
 cd /d "%ANDROID_DIR%"
 
@@ -110,6 +109,23 @@ for %%A in ("%APK_FILE%") do (
     echo APK File: %%~nxA
     echo File Size: %%~zA bytes
 )
+
+echo [6.5/6] Reading product name and version...
+set "PRODUCT_NAME="
+for /f "delims=" %%p in ('powershell -NoProfile -Command "(Get-Content '..\cloud_desktop\package.json' -Encoding UTF8 -Raw | ConvertFrom-Json).build.productName"') do (
+    set "PRODUCT_NAME=%%p"
+)
+if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=HuikangTCM-Cloud"
+
+set "VERSION_STR="
+for /f "tokens=2 delims=:" %%v in ('findstr "versionName" "app\build.gradle"') do (
+    set "VERSION_STR=%%v"
+)
+set "VERSION_STR=%VERSION_STR: =%"
+set "VERSION_STR=%VERSION_STR:"=%"
+if "%VERSION_STR%"=="" set "VERSION_STR=1.0"
+
+set "FINAL_APK=%~dp0%PRODUCT_NAME%-v%VERSION_STR%.apk"
 
 copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
 if errorlevel 1 (
