@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">本能中医处方-个人版</string>
+    <string name="title_activity_main">本能中医处方-个人版</string>
+    <string name="package_name">com.benneng.pres.personal</string>
+    <string name="custom_url_scheme">com.benneng.pres.personal</string>
+</resources>
