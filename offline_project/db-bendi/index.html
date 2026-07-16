@@ -1448,6 +1448,27 @@ let currentUser = null;
 
         async function loadRememberedUsers() {
             try {
+                // 优先使用 AuthCore（统一存储适配器）
+                if (window.AuthCore && AuthCore.loadRememberedUsers) {
+                    try {
+                        const authList = await AuthCore.loadRememberedUsers();
+                        if (Array.isArray(authList) && authList.length > 0) {
+                            const stringUsernames = authList.map(u => String(u).trim()).filter(u => u);
+                            if (stringUsernames.length > 0) {
+                                renderRememberedUsers(stringUsernames);
+                                document.getElementById('loginUsername').value = stringUsernames[0];
+                                document.getElementById('rememberUser').checked = true;
+                                // 同步到 localStorage 作为备份
+                                localStorage.setItem('local_rememberedUsers', JSON.stringify(stringUsernames));
+                                localStorage.setItem('local_rememberedUsername', stringUsernames[0]);
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('AuthCore.loadRememberedUsers 失败，回退到 localStorage:', e);
+                    }
+                }
+                // 回退：从 localStorage 读取
                 const localList = localStorage.getItem('local_rememberedUsers');
                 if (localList) {
                     try {
