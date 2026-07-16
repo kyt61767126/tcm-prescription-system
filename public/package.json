@@ -17,7 +17,7 @@
   },
   "build": {
     "appId": "com.huikangtang.prescription",
-    "productName": "惠康堂中医处方系统",
+    "productName": "惠康中医云端",
     "directories": {
       "output": "dist"
     },
