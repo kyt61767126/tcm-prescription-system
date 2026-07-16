@@ -351,8 +351,8 @@ function createLoginWindow() {
     loginWindow = null;
     
     loginWindow = new BrowserWindow({
-        width: 380,
-        height: 540,
+        width: 260,
+        height: 360,
         resizable: false,
         autoHideMenuBar: true,
         center: true,

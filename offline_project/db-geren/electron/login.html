@@ -17,10 +17,10 @@
             align-items: flex-start;
         }
         .login-container {
-            width: 340px;
+            width: 230px;
             background: rgba(255, 255, 255, 0.95);
-            border-radius: 12px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.3);
             overflow: visible;
             position: relative;
             backdrop-filter: blur(10px);
@@ -35,78 +35,78 @@
         .header-section {
             position: relative;
             z-index: 1;
-            padding: 20px 24px;
+            padding: 12px 16px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            gap: 8px;
+            gap: 5px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         .system-title {
-            font-size: 18px;
+            font-size: 13px;
             font-weight: bold;
             color: white;
             text-shadow: 0 2px 4px rgba(0,0,0,0.2);
-            letter-spacing: 2px;
+            letter-spacing: 1px;
         }
         .version-tag {
-            font-size: 12px;
+            font-size: 9px;
             font-weight: bold;
             color: rgba(255,255,255,0.9);
             background: rgba(255,255,255,0.2);
-            padding: 2px 10px;
-            border-radius: 10px;
+            padding: 1px 7px;
+            border-radius: 7px;
         }
         .main-content {
             position: relative;
             z-index: 1;
-            padding: 24px;
+            padding: 14px;
         }
         .login-box {
             background: white;
-            border-radius: 10px;
-            padding: 20px;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15);
+            border-radius: 7px;
+            padding: 14px;
+            box-shadow: 0 3px 10px rgba(102, 126, 234, 0.15);
             border: 1px solid rgba(102, 126, 234, 0.2);
         }
         .clinic-info {
             text-align: center;
-            padding: 12px;
+            padding: 8px;
             background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%);
             border: 1px solid #ffcccc;
-            border-radius: 6px;
-            margin-bottom: 20px;
+            border-radius: 4px;
+            margin-bottom: 12px;
         }
         .clinic-name {
-            font-size: 14px;
+            font-size: 11px;
             font-weight: bold;
             color: #8b0000;
             word-break: break-all;
         }
         .login-field {
-            margin-bottom: 18px;
+            margin-bottom: 12px;
             display: flex;
             flex-direction: column;
-            gap: 6px;
+            gap: 4px;
         }
         .login-field label {
-            font-size: 12px;
+            font-size: 10px;
             font-weight: bold;
             color: #555;
         }
         .login-field input {
             width: 100%;
-            padding: 10px 12px;
+            padding: 6px 8px;
             border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 13px;
+            border-radius: 5px;
+            font-size: 11px;
             background: #fafafa;
             transition: all 0.2s;
         }
         .login-field input:focus {
             border-color: #667eea;
             outline: none;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
             background: white;
         }
         .login-field input.readonly {
@@ -117,42 +117,42 @@
         .remember-me {
             display: flex;
             align-items: center;
-            gap: 8px;
-            margin-bottom: 20px;
+            gap: 5px;
+            margin-bottom: 12px;
         }
         .remember-me input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
+            width: 13px;
+            height: 13px;
             accent-color: #667eea;
             cursor: pointer;
         }
         .remember-me label {
-            font-size: 12px;
+            font-size: 10px;
             color: #666;
             cursor: pointer;
             font-weight: normal;
         }
         .login-buttons {
             display: flex;
-            gap: 12px;
-            margin-top: 8px;
+            gap: 8px;
+            margin-top: 5px;
         }
         .login-btn {
             flex: 1;
-            padding: 10px;
+            padding: 7px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: #fff;
             border: none;
-            border-radius: 8px;
-            font-size: 13px;
+            border-radius: 5px;
+            font-size: 11px;
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
             transition: all 0.2s;
         }
         .login-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
         }
         .login-btn:active {
             transform: translateY(0);
@@ -160,30 +160,30 @@
         .login-btn.cancel {
             background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
             color: #555;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
         }
         .login-btn.cancel:hover {
-            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         }
         .login-error {
             color: #dc2626;
-            font-size: 11px;
+            font-size: 9px;
             text-align: center;
-            margin-top: 12px;
-            padding: 8px;
+            margin-top: 8px;
+            padding: 5px;
             background: #fff5f5;
-            border-radius: 4px;
+            border-radius: 3px;
             border: 1px solid #fcc;
             display: none;
         }
         .footer-section {
             position: relative;
             z-index: 1;
-            padding: 12px 24px;
+            padding: 8px 14px;
             background: #f5f5f5;
             border-top: 1px solid #e0e0e0;
             text-align: center;
-            font-size: 10px;
+            font-size: 8px;
             color: #999;
         }
     </style>
