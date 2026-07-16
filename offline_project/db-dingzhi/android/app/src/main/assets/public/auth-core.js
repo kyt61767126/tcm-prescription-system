@@ -405,9 +405,12 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
-                const data = await response.json();
-                if (!data.success || !data.user) {
-                    return { success: false, error: data.error || '用户名或密码错误' };
+                // cloudFetch 返回已解析的 JS 对象，原生 fetch 返回 Response 对象
+                const data = (response && typeof response.json === 'function')
+                    ? await response.json()
+                    : response;
+                if (!data || !data.success || !data.user) {
+                    return { success: false, error: (data && data.error) || '用户名或密码错误' };
                 }
                 return { success: true, user: data.user };
             } catch (e) {
