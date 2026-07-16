@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+﻿<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -2857,6 +2857,31 @@ let currentUser = null;
         function addEmptyRow() {
             prescriptionItems.push(createEmptyMedicine());
         }
+
+        // 药物表格防火墙 - 防止优化导致药物栏不显示
+        function __medicineTableFirewall() {
+            try {
+                if (typeof DOM_CACHE === 'undefined' || !DOM_CACHE) return;
+                if (typeof DOM_CACHE.init === 'function') DOM_CACHE.init();
+                var tbody = DOM_CACHE.prescriptionBody;
+                if (!tbody) return;
+                if (typeof prescriptionItems === 'undefined' || !prescriptionItems || prescriptionItems.length === 0) {
+                    if (typeof createEmptyMedicine === 'function') {
+                        prescriptionItems = [];
+                        for (var i = 0; i < 3; i++) prescriptionItems.push(createEmptyMedicine());
+                    }
+                }
+                if (prescriptionItems && prescriptionItems.length > 0 && (!tbody.innerHTML || tbody.children.length === 0)) {
+                    if (typeof renderPrescriptionTable === 'function') {
+                        renderPrescriptionTable();
+                        console.log('[防火墙] 药物表格已自动渲染');
+                    }
+                }
+            } catch(e) { console.error('[防火墙] 异常:', e); }
+        }
+        setTimeout(__medicineTableFirewall, 500);
+        setTimeout(__medicineTableFirewall, 2000);
+        setTimeout(__medicineTableFirewall, 5000);
 
         function renderPrescriptionTable() {
             if (!DOM_CACHE.prescriptionBody) {

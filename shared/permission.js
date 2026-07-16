@@ -83,10 +83,15 @@
             return user.role === 'admin' || user.role === 'clinic_admin';
         },
 
-        // 是否可以修改密码（所有登录用户均可）
+        // 是否可以修改密码（个人版所有用户均可；非个人版仅普通用户可修改密码，管理员使用账户管理）
         canChangePassword(user) {
             if (this.isPersonal()) return true; // 个人版允许改密
-            return !!user;
+            if (!user) return false;
+            // 非个人版：管理员不显示修改密码（由账户管理覆盖），普通用户显示修改密码
+            if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+                return !global.AuthCore.isClinicAdmin(user);
+            }
+            return user.role !== 'admin' && user.role !== 'clinic_admin';
         },
 
         // 是否显示账户管理按钮

@@ -3036,6 +3036,31 @@ if (window.Permission) {
             prescriptionItems.push(createEmptyMedicine());
         }
 
+        // 药物表格防火墙 - 防止优化导致药物栏不显示
+        function __medicineTableFirewall() {
+            try {
+                if (typeof DOM_CACHE === 'undefined' || !DOM_CACHE) return;
+                if (typeof DOM_CACHE.init === 'function') DOM_CACHE.init();
+                var tbody = DOM_CACHE.prescriptionBody;
+                if (!tbody) return;
+                if (typeof prescriptionItems === 'undefined' || !prescriptionItems || prescriptionItems.length === 0) {
+                    if (typeof createEmptyMedicine === 'function') {
+                        prescriptionItems = [];
+                        for (var i = 0; i < 3; i++) prescriptionItems.push(createEmptyMedicine());
+                    }
+                }
+                if (prescriptionItems && prescriptionItems.length > 0 && (!tbody.innerHTML || tbody.children.length === 0)) {
+                    if (typeof renderPrescriptionTable === 'function') {
+                        renderPrescriptionTable();
+                        console.log('[防火墙] 药物表格已自动渲染');
+                    }
+                }
+            } catch(e) { console.error('[防火墙] 异常:', e); }
+        }
+        setTimeout(__medicineTableFirewall, 500);
+        setTimeout(__medicineTableFirewall, 2000);
+        setTimeout(__medicineTableFirewall, 5000);
+
         function renderPrescriptionTable() {
             if (!DOM_CACHE.prescriptionBody) {
                 DOM_CACHE.init();
