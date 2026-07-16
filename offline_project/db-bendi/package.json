@@ -25,7 +25,16 @@
       "login.html",
       "config.json",
       "vendor/**/*",
-      "package.json"
+      "package.json",
+      "auth-core.js",
+      "permission.js",
+      "debug-logger.js",
+      "print-utils.js",
+      "medicine-dict.js",
+      "db-adapter.js",
+      "performance-utils.js",
+      "prescription-core.js",
+      "patient-archive.js"
     ],
     "win": {
       "target": [
