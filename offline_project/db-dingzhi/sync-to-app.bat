@@ -57,6 +57,17 @@ if exist "%SRC%vendor\xlsx.full.min.js" (
     echo [跳过] vendor/xlsx.full.min.js 不存在
 )
 
+echo [3/3] 同步 shared/ 共享模块...
+set "SHARED_DIR=%~dp0..\..\shared"
+if exist "%SHARED_DIR%\auth-core.js" (
+    copy /Y "%SHARED_DIR%\auth-core.js" "%ANDROID_PUBLIC%\auth-core.js" >nul
+    echo       auth-core.js 已同步
+)
+if exist "%SHARED_DIR%\permission.js" (
+    copy /Y "%SHARED_DIR%\permission.js" "%ANDROID_PUBLIC%\permission.js" >nul
+    echo       permission.js 已同步
+)
+
 echo.
 echo ================================================================
 echo  同步完成

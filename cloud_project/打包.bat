@@ -42,7 +42,24 @@ if not exist "app\src\main\assets\capacitor.config.json" (
 echo [OK] Environment check passed
 echo.
 
-echo [2/6] Current configuration...
+echo [2/6] Syncing shared files...
+set "SHARED_DIR=%~dp0..\shared"
+set "ASSETS_PUBLIC=%ANDROID_DIR%\app\src\main\assets\public"
+if exist "%SHARED_DIR%\auth-core.js" (
+    copy /Y "%SHARED_DIR%\auth-core.js" "%ASSETS_PUBLIC%\auth-core.js" >nul
+    echo [OK] auth-core.js synced
+) else (
+    echo [WARN] shared\auth-core.js not found
+)
+if exist "%SHARED_DIR%\permission.js" (
+    copy /Y "%SHARED_DIR%\permission.js" "%ASSETS_PUBLIC%\permission.js" >nul
+    echo [OK] permission.js synced
+) else (
+    echo [WARN] shared\permission.js not found
+)
+echo.
+
+echo [2.5/6] Current configuration...
 findstr "url" "app\src\main\assets\capacitor.config.json"
 findstr "versionName" "app\build.gradle"
 echo.
