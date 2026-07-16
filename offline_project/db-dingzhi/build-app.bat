@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
-title 本能中医处方-定制 - 手机APP打包工具
+title 惠康中医诊所管理系统-定制版 - 手机APP打包工具
 
 echo ============================================
-echo   本能中医处方-定制 - 手机APP打包工具
+echo   惠康中医诊所管理系统-定制版 - 手机APP打包工具
 echo ============================================
 echo.
 
@@ -84,7 +84,7 @@ for %%A in ("%APK_FILE%") do (
 echo.
 
 echo [5/5] 复制 APK 到打包目录...
-set "FINAL_APK=..\本能中医处方-定制版-v1.0.apk"
+set "FINAL_APK=..\惠康中医诊所管理系统-定制版-v1.0.apk"
 copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
 if errorlevel 1 (
     echo [警告] 复制失败，请手动从 %APK_DIR% 获取 APK

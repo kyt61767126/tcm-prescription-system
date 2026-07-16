@@ -6,15 +6,13 @@ REM ============================================================
 REM  离线项目三端同步脚本 - db-bendi (本地版)
 REM
 REM  使用场景：
-REM    修改 db-bendi/index.html 后，运行此脚本同步到 Android APP。
+REM    修改 db-bendi/index.html 或其他模块后，运行此脚本同步到 Android APP。
 REM    同步完成后可直接运行 build-app.bat 打包 APK。
 REM
 REM  同步内容：
 REM    1. index.html -> android/app/src/main/assets/public/index.html
 REM    2. vendor/xlsx.full.min.js -> android/app/src/main/assets/public/vendor/xlsx.full.min.js
-REM
-REM  使用方法：
-REM    双击运行，或命令行执行 sync-to-app.bat
+REM    3. 所有核心 JS 模块同步到 android/app/src/main/assets/public/
 REM ============================================================
 
 set "SRC=%~dp0"
@@ -35,7 +33,7 @@ if not exist "%ANDROID_PUBLIC%" (
     exit /b 0
 )
 
-echo [1/2] 同步 index.html ...
+echo [1/3] 同步 index.html ...
 copy /Y "%SRC%index.html" "%ANDROID_PUBLIC%\index.html" >nul
 if errorlevel 1 (
     echo [错误] index.html 同步失败
@@ -44,7 +42,7 @@ if errorlevel 1 (
 )
 echo       index.html 已同步
 
-echo [2/2] 同步 vendor/xlsx.full.min.js ...
+echo [2/3] 同步 vendor/xlsx.full.min.js ...
 if exist "%SRC%vendor\xlsx.full.min.js" (
     if not exist "%ANDROID_PUBLIC%\vendor" mkdir "%ANDROID_PUBLIC%\vendor" >nul
     copy /Y "%SRC%vendor\xlsx.full.min.js" "%ANDROID_PUBLIC%\vendor\xlsx.full.min.js" >nul
@@ -57,15 +55,19 @@ if exist "%SRC%vendor\xlsx.full.min.js" (
     echo [跳过] vendor/xlsx.full.min.js 不存在
 )
 
-echo [3/3] 同步 shared/ 共享模块...
-set "SHARED_DIR=%~dp0..\..\shared"
-if exist "%SHARED_DIR%\auth-core.js" (
-    copy /Y "%SHARED_DIR%\auth-core.js" "%ANDROID_PUBLIC%\auth-core.js" >nul
-    echo       auth-core.js 已同步
-)
-if exist "%SHARED_DIR%\permission.js" (
-    copy /Y "%SHARED_DIR%\permission.js" "%ANDROID_PUBLIC%\permission.js" >nul
-    echo       permission.js 已同步
+echo [3/3] 同步核心 JS 模块...
+set "MODULES=auth-core.js db-adapter.js debug-logger.js medicine-dict.js patient-archive.js performance-utils.js permission.js prescription-core.js print-utils.js"
+for %%m in (%MODULES%) do (
+    if exist "%SRC%%%m" (
+        copy /Y "%SRC%%%m" "%ANDROID_PUBLIC%\%%m" >nul
+        if errorlevel 1 (
+            echo [警告] %%m 同步失败，继续
+        ) else (
+            echo       %%m 已同步
+        )
+    ) else (
+        echo [跳过] %%m 不存在
+    )
 )
 
 echo.
@@ -74,7 +76,7 @@ echo  同步完成
 echo ================================================================
 echo.
 echo  下一步：
-echo   - 进入 android 目录执行 gradlew assembleRelease 打包 APK
-echo   - 或运行 build-app.bat 一键打包
+echo   - 运行 build-app.bat 打包 APK
+echo   - 或进入 android 目录执行 gradlew assembleRelease 打包
 echo.
 pause
