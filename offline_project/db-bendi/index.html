@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医诊所管理系统 - 本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+﻿<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医诊所管理系统 - 本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -1568,6 +1568,29 @@ let currentUser = null;
         async function checkLoginStatus() {
             if (window.AuthCore) { try { await AuthCore.checkSession(); } catch(e) {} }
             const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; try { const _ld = localStorage.getItem('user_login_data'); if (_ld) { const _lt = JSON.parse(_ld).loginTime; if (_lt && Date.now() - _lt > SESSION_TIMEOUT_MS) { localStorage.removeItem('currentUser'); localStorage.removeItem('user_login_data'); localStorage.removeItem('isLoggedIn'); } } } catch(e) {}
+
+            // Electron 桌面版：检查是否已通过 login.html 登录，自动登录跳过第二次登录界面
+            if (window.electronAPI && window.electronAPI.isElectron) {
+                try {
+                    const electronUser = await window.electronAPI.getCurrentUser();
+                    if (electronUser) {
+                        currentUser = electronUser;
+                        const loginData = { user: electronUser, loginTime: Date.now() };
+                        localStorage.setItem('user_login_data', JSON.stringify(loginData));
+                        localStorage.setItem('currentUser', JSON.stringify(electronUser));
+                        localStorage.setItem('isLoggedIn', 'true');
+                        document.getElementById('loginOverlay').style.display = 'none';
+                        document.querySelector('.main-container').style.display = 'flex';
+                        updateUserDisplay();
+                        await loadData();
+                        refreshUserInterface();
+                        return;
+                    }
+                } catch(e) {
+                    console.error('Electron自动登录失败:', e);
+                }
+            }
+
             await loadRememberedUsers();
             document.getElementById('loginPassword').value = '';
             document.getElementById('loginOverlay').style.display = 'flex';
