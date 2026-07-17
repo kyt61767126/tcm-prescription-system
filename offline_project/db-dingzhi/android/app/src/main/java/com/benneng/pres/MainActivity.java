@@ -1219,6 +1219,21 @@ public class MainActivity extends AppCompatActivity {
                 if (!file.exists()) {
                     return fail("文件不存在: " + filePath);
                 }
+                // 路径白名单校验：只允许读取图片/视频目录下的文件
+                String canonicalPath = file.getCanonicalPath();
+                File imgDir = getImageDir();
+                File vidDir = getVideoDir();
+                String imgDirPath = imgDir != null ? imgDir.getCanonicalPath() : "";
+                String vidDirPath = vidDir != null ? vidDir.getCanonicalPath() : "";
+                boolean allowed = !imgDirPath.isEmpty() && canonicalPath.startsWith(imgDirPath);
+                if (!allowed) {
+                    allowed = !vidDirPath.isEmpty() && canonicalPath.startsWith(vidDirPath);
+                }
+                if (!allowed) {
+                    Log.w("TCM-Pres", "startReadSession 拒绝非白名单路径: " + canonicalPath);
+                    return fail("路径不在允许的目录内");
+                }
+
                 rs.fis = new java.io.FileInputStream(file);
                 rs.fileSize = file.length();
                 rs.readOffset = 0;

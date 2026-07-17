@@ -172,12 +172,13 @@
                 });
             },
             readFileAsBase64: function (filePath) {
-                // 大文件分片读取，避免 Binder 1MB 限制
+                // 统一走分片读取，避免 Binder 1MB 限制和 isCallerAllowed 误拦截
                 return new Promise(function (resolve) {
                     try {
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
                         if (!startR || !startR.success) {
-                            // 分片读取不支持，回退到原 API
+                            // startReadSession 不支持（旧 APK），回退到原 API
+                            console.warn('[云端APP] startReadSession 失败，回退原 API:', startR && startR.error);
                             var rFallback = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
                             resolve(rFallback);
                             return;
@@ -185,13 +186,6 @@
                         var sessionId = startR.sessionId;
                         var mimeType = startR.mimeType || 'application/octet-stream';
                         var fileSize = startR.fileSize || 0;
-                        // 小文件（< 512KB）走原 API 更快（避免分片开销）
-                        if (fileSize > 0 && fileSize < 512 * 1024) {
-                            callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
-                            var rSmall = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
-                            resolve(rSmall);
-                            return;
-                        }
                         console.log('[云端APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
                         var chunks = [];
 
@@ -199,6 +193,7 @@
                             var r = callNative('readNextChunk', JSON.stringify({ sessionId: sessionId }));
                             if (!r || !r.success) {
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
+                                console.error('[云端APP] readNextChunk 失败:', r && r.error);
                                 resolve(r || { success: false, error: 'readNextChunk 返回无效' });
                                 return;
                             }

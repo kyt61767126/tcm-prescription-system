@@ -765,15 +765,12 @@ public class MainActivity extends BridgeActivity {
 
         // ------------------------------------------------------------------
         // P1-6 分层校验：仅敏感操作需要来源校验
-        // 敏感：readFileAsBase64 + 分片读取（可读任意文件）、deleteFile（可删文件）
-        // 非敏感：savePrescriptionImage/saveVideoFile/saveMediaSession（只写指定目录）、findMediaFiles（按模式查找）
+        // 敏感：readFileAsBase64（旧 API，可读任意文件）、deleteFile（可删文件）
+        // 非敏感：startReadSession/readNextChunk/closeReadSession（路径白名单校验，见 startReadSession）
+        //        savePrescriptionImage/saveVideoFile/saveMediaSession（只写指定目录）、findMediaFiles（按模式查找）
         // ------------------------------------------------------------------
         private boolean isSensitiveOperation(String name) {
-            return "readFileAsBase64".equals(name)
-                    || "startReadSession".equals(name)
-                    || "readNextChunk".equals(name)
-                    || "closeReadSession".equals(name)
-                    || "deleteFile".equals(name);
+            return "readFileAsBase64".equals(name) || "deleteFile".equals(name);
         }
 
         // ------------------------------------------------------------------
@@ -1389,6 +1386,22 @@ public class MainActivity extends BridgeActivity {
                 if (!file.exists()) {
                     return fail("文件不存在: " + filePath);
                 }
+                // 路径白名单校验：只允许读取图片/视频目录下的文件
+                // 替代 isCallerAllowed 来源校验，避免 WebView URL 短暂变化导致误拦截
+                String canonicalPath = file.getCanonicalPath();
+                File imgDir = getImageDir();
+                File vidDir = getVideoDir();
+                String imgDirPath = imgDir != null ? imgDir.getCanonicalPath() : "";
+                String vidDirPath = vidDir != null ? vidDir.getCanonicalPath() : "";
+                boolean allowed = !imgDirPath.isEmpty() && canonicalPath.startsWith(imgDirPath);
+                if (!allowed) {
+                    allowed = !vidDirPath.isEmpty() && canonicalPath.startsWith(vidDirPath);
+                }
+                if (!allowed) {
+                    Log.w("TCM-Pres", "startReadSession 拒绝非白名单路径: " + canonicalPath);
+                    return fail("路径不在允许的目录内");
+                }
+
                 rs.fis = new java.io.FileInputStream(file);
                 rs.fileSize = file.length();
                 rs.readOffset = 0;
