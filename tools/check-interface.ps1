@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 #  check-interface.ps1
 #  检查界面结构是否被改动 - 对比当前 HTML body 哈希与 .interface-lock.json 基线
 #  用法: powershell -NoProfile -ExecutionPolicy Bypass -File tools\check-interface.ps1
