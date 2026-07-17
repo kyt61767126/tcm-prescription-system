@@ -23,15 +23,12 @@ android {
             storePassword System.getenv('TCM_STORE_PASSWORD') ?: signingProperties['storePassword']
             keyAlias signingProperties['keyAlias']
             keyPassword System.getenv('TCM_KEY_PASSWORD') ?: signingProperties['keyPassword']
-            // P1-9: 显式启用 APK v1/v2/v3/v4 签名方案
+            // P1-9: 显式启用 APK v1/v2 签名方案（AGP 当前版本 API）
             // v1: JAR 签名（兼容 Android 7.0 以下）
             // v2: APK Signature Scheme v2（Android 7.0+，防篡改更强）
-            // v3: APK Signature Scheme v3（Android 9+，支持密钥轮换）
-            // v4: APK Signature Scheme v4（Android 11+，支持增量安装）
-            v1SigningEnabled true
-            v2SigningEnabled true
-            v3SigningEnabled true
-            v4SigningEnabled true
+            // 注：v3/v4 签名方案在当前 AGP 版本不支持，使用默认 null 即可
+            enableV1Signing true
+            enableV2Signing true
         }
     }
     defaultConfig {
