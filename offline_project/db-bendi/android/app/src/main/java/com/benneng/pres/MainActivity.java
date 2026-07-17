@@ -566,6 +566,12 @@ public class MainActivity extends AppCompatActivity {
                                 args.optString("mimeType", "")).toString();
                     case "readFileAsBase64":
                         return readFileAsBase64(args.optString("filePath", "")).toString();
+                    case "startReadSession":
+                        return startReadSession(args.optString("filePath", "")).toString();
+                    case "readNextChunk":
+                        return readNextChunk(args.optString("sessionId", "")).toString();
+                    case "closeReadSession":
+                        return closeReadSession(args.optString("sessionId", "")).toString();
                     case "renameMediaFiles":
                         return renameMediaFiles(args.optString("patientName", ""),
                                 args.optString("oldNo", ""),
@@ -1182,6 +1188,106 @@ public class MainActivity extends AppCompatActivity {
             } catch (Exception e) {
                 return fail("读取文件失败: " + e.getMessage());
             }
+        }
+
+        // ------------------------------------------------------------------
+        // 分片读取（解决 Binder 事务 1MB 限制）
+        // 大文件读取时返回的 base64 字符串远超 1MB，必须分片读取
+        // 流程：startReadSession → 多次 readNextChunk → closeReadSession
+        // 用 session 维护 FileInputStream 和已读位置，每片 256KB 原始字节
+        // ------------------------------------------------------------------
+        private static class ReadSession {
+            java.io.FileInputStream fis;
+            long fileSize;
+            long readOffset;
+            String mimeType;
+        }
+        private final java.util.Map<String, ReadSession> readSessions = new java.util.concurrent.ConcurrentHashMap<>();
+
+        private JSONObject startReadSession(String filePath) {
+            ReadSession rs = new ReadSession();
+            try {
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    return fail("文件不存在: " + filePath);
+                }
+                rs.fis = new java.io.FileInputStream(file);
+                rs.fileSize = file.length();
+                rs.readOffset = 0;
+                if (filePath.endsWith(".webm")) rs.mimeType = "video/webm";
+                else if (filePath.endsWith(".mp4")) rs.mimeType = "video/mp4";
+                else if (filePath.endsWith(".png")) rs.mimeType = "image/png";
+                else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) rs.mimeType = "image/jpeg";
+                else rs.mimeType = "application/octet-stream";
+
+                String sessionId = "read_" + System.currentTimeMillis() + "_" + (int) (Math.random() * 100000);
+                readSessions.put(sessionId, rs);
+                Log.d("TCM-Pres", "startReadSession: sessionId=" + sessionId + ", fileSize=" + rs.fileSize + ", mime=" + rs.mimeType);
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("sessionId", sessionId);
+                r.put("fileSize", rs.fileSize);
+                r.put("mimeType", rs.mimeType);
+                return r;
+            } catch (Exception e) {
+                try { if (rs.fis != null) rs.fis.close(); } catch (Exception ignored) {}
+                return fail("启动读取会话失败: " + e.getMessage());
+            }
+        }
+
+        private JSONObject readNextChunk(String sessionId) {
+            ReadSession rs = readSessions.get(sessionId);
+            if (rs == null || rs.fis == null) {
+                return fail("无效或已关闭的读取会话: " + sessionId);
+            }
+            try {
+                int chunkLen = 256 * 1024;
+                byte[] buffer = new byte[chunkLen];
+                int read = rs.fis.read(buffer);
+                if (read < 0) {
+                    JSONObject r = new JSONObject();
+                    r.put("success", true);
+                    r.put("chunk", "");
+                    r.put("read", 0);
+                    r.put("eof", true);
+                    r.put("offset", rs.readOffset);
+                    r.put("total", rs.fileSize);
+                    return r;
+                }
+                byte[] actual;
+                if (read == chunkLen) {
+                    actual = buffer;
+                } else {
+                    actual = new byte[read];
+                    System.arraycopy(buffer, 0, actual, 0, read);
+                }
+                String chunkBase64 = Base64.encodeToString(actual, Base64.NO_WRAP);
+                rs.readOffset += read;
+                boolean eof = rs.readOffset >= rs.fileSize;
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("chunk", chunkBase64);
+                r.put("read", read);
+                r.put("eof", eof);
+                r.put("offset", rs.readOffset);
+                r.put("total", rs.fileSize);
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "readNextChunk 失败 (sessionId=" + sessionId + ")", e);
+                closeReadSession(sessionId);
+                return fail("读取分片失败: " + e.getMessage());
+            }
+        }
+
+        private JSONObject closeReadSession(String sessionId) {
+            ReadSession rs = readSessions.remove(sessionId);
+            if (rs != null) {
+                try { rs.fis.close(); } catch (Exception ignored) {}
+                Log.d("TCM-Pres", "closeReadSession: sessionId=" + sessionId + ", readOffset=" + rs.readOffset + "/" + rs.fileSize);
+            }
+            JSONObject r = new JSONObject();
+            r.put("success", true);
+            return r;
         }
 
         private JSONObject renameMediaFiles(String patientName, String oldNo, String newNo) {

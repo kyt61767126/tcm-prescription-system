@@ -172,11 +172,53 @@
                 });
             },
             readFileAsBase64: function (filePath) {
+                // 大文件分片读取，避免 Binder 1MB 限制
                 return new Promise(function (resolve) {
                     try {
-                        var r = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
-                        resolve(r);
-                    } catch (e) { resolve({ success: false, error: String(e) }); }
+                        var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
+                        if (!startR || !startR.success) {
+                            // 分片读取不支持，回退到原 API
+                            var rFallback = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
+                            resolve(rFallback);
+                            return;
+                        }
+                        var sessionId = startR.sessionId;
+                        var mimeType = startR.mimeType || 'application/octet-stream';
+                        var fileSize = startR.fileSize || 0;
+                        // 小文件（< 512KB）走原 API 更快（避免分片开销）
+                        if (fileSize > 0 && fileSize < 512 * 1024) {
+                            callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
+                            var rSmall = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
+                            resolve(rSmall);
+                            return;
+                        }
+                        console.log('[云端APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
+                        var chunks = [];
+
+                        function nextChunk() {
+                            var r = callNative('readNextChunk', JSON.stringify({ sessionId: sessionId }));
+                            if (!r || !r.success) {
+                                callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
+                                resolve(r || { success: false, error: 'readNextChunk 返回无效' });
+                                return;
+                            }
+                            if (r.chunk) {
+                                chunks.push(r.chunk);
+                            }
+                            if (r.eof) {
+                                callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
+                                var base64 = chunks.join('');
+                                var dataUrl = 'data:' + mimeType + ';base64,' + base64;
+                                console.log('[云端APP] 分片读取完成: 总长=' + base64.length);
+                                resolve({ success: true, data: dataUrl });
+                                return;
+                            }
+                            setTimeout(nextChunk, 0);
+                        }
+                        nextChunk();
+                    } catch (e) {
+                        resolve({ success: false, error: String(e) });
+                    }
                 });
             },
             renameMediaFiles: function (patientName, oldNo, newNo) {
