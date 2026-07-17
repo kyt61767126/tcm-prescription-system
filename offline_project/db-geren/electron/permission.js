@@ -184,11 +184,13 @@
                 rememberPwdContainer.style.display = this.hasRememberPassword() ? 'flex' : 'none';
             }
 
-            // 个人定制版：自动填充单一账号
+            // 个人定制版：自动填充单一账号（优先显示医师姓名，而非登录用户名admin）
             if (edition === 'personal') {
                 const usernameInput = document.getElementById('loginUsername');
                 if (usernameInput && this._config && this._config.users && this._config.users.length > 0) {
-                    usernameInput.value = this._config.users[0].username;
+                    // 优先使用 doctorName（医师姓名），其次用 users[0].name，最后才用 username
+                    const displayName = this._config.doctorName || this._config.users[0].name || this._config.users[0].username || '';
+                    usernameInput.value = displayName;
                     usernameInput.readOnly = true;
                     usernameInput.style.backgroundColor = '#f0f0f0';
                 }
