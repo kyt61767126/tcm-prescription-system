@@ -24,19 +24,12 @@
     // 1. 注入 window.electronAPI shim
     // ========================================================================
     function injectElectronAPIShim() {
-        if (window.electronAPI && window.electronAPI.__injected) {
-            console.log('[离线APP] electronAPI shim 已存在，跳过注入');
-            return true;
-        }
-        
         var N = window.AndroidNative;
         if (!N) {
             console.warn('[离线APP] AndroidNative 桥接未找到');
             return false;
         }
-        
-        console.log('[离线APP] AndroidNative 桥接已找到，开始构建 electronAPI shim');
-        
+
         function P(v) { return Promise.resolve(v); }
         function callNative(name, json) {
             try {
@@ -93,6 +86,9 @@
                 nextChunk();
             });
         }
+
+        // 保存旧引用（如果 injectElectronApiShim 已抢先注入简单版本）
+        var oldAPI = window.electronAPI;
 
         window.electronAPI = {
             __injected: true,
@@ -278,7 +274,26 @@
                 return P({ success: true });
             }
         };
-        
+
+        // 如果 injectElectronApiShim 已抢先注入了简单版本的 electronAPI，
+        // 用增强版方法覆盖关键方法（readFileAsBase64/savePrescriptionImage/saveVideoFile 等
+        // 解决"图片无法加载，视频可以播放"的问题：图片走简单版 readFileAsBase64 超出 data URL 限制
+        if (oldAPI && oldAPI.__injected) {
+            console.log('[离线APP] electronAPI 已存在（injectElectronApiShim 先注入），覆盖增强版方法到旧对象');
+            var newAPI = window.electronAPI;
+            oldAPI.savePrescriptionImage = newAPI.savePrescriptionImage;
+            oldAPI.saveVideoFile = newAPI.saveVideoFile;
+            oldAPI.readFileAsBase64 = newAPI.readFileAsBase64;
+            oldAPI.findMediaFiles = newAPI.findMediaFiles;
+            oldAPI.openFile = newAPI.openFile;
+            oldAPI.deleteFile = newAPI.deleteFile;
+            oldAPI.renameMediaFiles = newAPI.renameMediaFiles;
+            oldAPI.getVideoDirectory = newAPI.getVideoDirectory;
+            oldAPI.__videoRecorderEnhanced = true;
+            // 恢复旧对象为 electronAPI
+            window.electronAPI = oldAPI;
+        }
+
         console.log('[离线APP] electronAPI shim 已成功注入');
         return true;
     }
