@@ -1308,9 +1308,13 @@ public class MainActivity extends AppCompatActivity {
                 try { rs.fis.close(); } catch (Exception ignored) {}
                 Log.d("TCM-Pres", "closeReadSession: sessionId=" + sessionId + ", readOffset=" + rs.readOffset + "/" + rs.fileSize);
             }
-            JSONObject r = new JSONObject();
-            r.put("success", true);
-            return r;
+            try {
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                return r;
+            } catch (Exception e) {
+                return fail(e.getMessage());
+            }
         }
 
         private JSONObject renameMediaFiles(String patientName, String oldNo, String newNo) {
