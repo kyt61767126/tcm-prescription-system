@@ -982,7 +982,7 @@
         <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
         <div class="tab-item" onclick="showModal('analyticsModal')">【统计】</div>
         <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
-        <div class="tab-item" id="changePwdBtn" onclick="showModal('changePwdModal')" style="display:none;">【改密】</div>
+        <div class="tab-item" id="changePwdBtn" onclick="showModal('changePwdModal')" style="display:none;">【修改密码】</div>
         <div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div>
         <div class="tab-item" id="platformManageBtn" onclick="showPlatformManageModal()" style="display:none;background:#fff3cd;color:#856404;border-color:#ffc107;">【平台管理】</div>
         <div class="tab-item" id="platformRxBtn" onclick="showPlatformPrescriptionModal()" style="display:none;background:#e3f2fd;color:#1565c0;border-color:#42a5f5;">【处方监管】</div>
@@ -4603,7 +4603,7 @@ if (window.Permission) {
                 } else {
                     btn1.innerHTML = '📊 统计';
                     btn1.onclick = function() { showModal('analyticsModal'); };
-                    btn2.innerHTML = '🔐 改密';
+                    btn2.innerHTML = '🔐 修改密码';
                     btn2.onclick = function() { showModal('changePwdModal'); };
                     btn2.style.display = '';
                 }
@@ -4619,7 +4619,7 @@ if (window.Permission) {
             } else {
                 btn1.innerHTML = '📊 统计';
                 btn1.onclick = function() { showModal('analyticsModal'); };
-                btn2.innerHTML = '🔐 改密';
+                btn2.innerHTML = '🔐 修改密码';
                 btn2.onclick = function() { showModal('changePwdModal'); };
                 btn2.style.display = '';
             }

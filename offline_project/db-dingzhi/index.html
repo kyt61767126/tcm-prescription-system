@@ -1489,9 +1489,33 @@ if (window.Permission) {
                 if (userManageBtn) userManageBtn.style.display = canManage ? 'block' : 'none';
                 if (changePwdBtn) changePwdBtn.style.display = canChangePwd ? 'block' : 'none';
                 if (autoStartSection) autoStartSection.style.display = canAutoStart ? 'block' : 'none';
+
+                // 更新移动端底部按钮
+                updateMobileActionButtons();
             }
         }
-        
+
+        // 根据用户角色更新移动端底部按钮
+        function updateMobileActionButtons() {
+            const btn1 = document.getElementById('mobileActionBtn1');
+            const btn2 = document.getElementById('mobileActionBtn2');
+            if (!btn1 || !btn2 || !currentUser) return;
+
+            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+
+            btn1.innerHTML = '📊 统计';
+            btn1.onclick = function() { showModal('analyticsModal'); };
+
+            if (canManage) {
+                btn2.innerHTML = '👤 账户';
+                btn2.onclick = function() { showUserManageModal(); };
+            } else {
+                btn2.innerHTML = '🔐 修改密码';
+                btn2.onclick = function() { showChangePwdModal(); };
+            }
+            btn2.style.display = '';
+        }
+
         // 自动填充记住的用户名
         function initRememberedCredentials() {
             loadRememberedUsers();
