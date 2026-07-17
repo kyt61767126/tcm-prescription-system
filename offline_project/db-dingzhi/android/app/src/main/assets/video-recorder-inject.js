@@ -41,11 +41,15 @@
         function callNative(name, json) {
             try {
                 var result = N.invoke(name, json || '{}');
-                console.log('[离线APP] 调用 NativeBridge.' + name + ' 返回:', result.substring(0, 200));
+                if (typeof result !== 'string' || result.length === 0) {
+                    console.error('[离线APP] NativeBridge.' + name + ' 返回非字符串:', typeof result, result);
+                    return { success: false, error: 'NativeBridge 返回无效（Java端可能抛异常）' };
+                }
+                console.log('[离线APP] NativeBridge.' + name + ' 返回长度:', result.length);
                 return JSON.parse(result);
             } catch (e) {
-                console.error('[离线APP] 调用 NativeBridge.' + name + ' 失败:', e);
-                throw e;
+                console.error('[离线APP] NativeBridge.' + name + ' 调用异常:', e);
+                return { success: false, error: String(e) };
             }
         }
 

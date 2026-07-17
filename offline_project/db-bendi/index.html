@@ -857,6 +857,40 @@ let currentUser = null;
             }
         }
 
+        // Android 返回键处理：关闭弹窗/历史面板/中心面板，否则退出 APP
+        function handleAndroidBack() {
+            try {
+                const loginOverlay = document.getElementById('loginOverlay');
+                if (loginOverlay && loginOverlay.style.display !== 'none') {
+                    return false;
+                }
+                const openModals = document.querySelectorAll('.modal[style*="display: block"], .modal[style*="display:block"]');
+                if (openModals.length > 0) {
+                    openModals.forEach(m => m.style.display = 'none');
+                    return true;
+                }
+                const rightPanel = document.querySelector('.right-panel');
+                if (rightPanel) {
+                    const computedStyle = window.getComputedStyle(rightPanel);
+                    const isHistoryOpen = rightPanel.style.display === 'flex' ||
+                                         (rightPanel.style.display === '' && computedStyle.display === 'flex');
+                    if (isHistoryOpen) {
+                        switchMobileTab('prescription');
+                        return true;
+                    }
+                }
+                const centerPanel = document.querySelector('.center-panel');
+                if (centerPanel && centerPanel.classList.contains('active')) {
+                    switchMobileTab('prescription');
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.error('handleAndroidBack error:', e);
+                return false;
+            }
+        }
+
         // 移动端标签切换
         function switchMobileTab(tabName) {
             const leftPanel = document.querySelector('.left-panel');

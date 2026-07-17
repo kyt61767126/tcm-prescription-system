@@ -446,7 +446,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onBackPressed() {
         if (webView != null) {
-            webView.evaluateJavascript("handleAndroidBack()", new ValueCallback<String>() {
+            // 使用 typeof 检查避免 JS 函数未定义时抛 ReferenceError（导致"系统异常"提示）
+            webView.evaluateJavascript("(typeof handleAndroidBack === 'function') ? handleAndroidBack() : false", new ValueCallback<String>() {
                 @Override
                 public void onReceiveValue(String value) {
                     if (value == null || value.equals("false") || value.equals("\"false\"")) {
@@ -520,6 +521,12 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // P1-6: 分层校验 - 仅敏感操作需校验来源，保存/查找操作跳过校验
+    // startReadSession 已有路径白名单校验，无需重复校验来源
+    private boolean isSensitiveOperation(String name) {
+        return "readFileAsBase64".equals(name) || "deleteFile".equals(name);
+    }
+
     // ========================================================================
     // JavaScript 接口
     // ========================================================================
@@ -527,8 +534,9 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public String invoke(String name, String jsonStr) {
-            // P1-6: 调用来源校验，仅允许本地 assets 页面调用 NativeBridge
-            if (!isCallerAllowed()) {
+            // P1-6: 分层校验 - 仅敏感操作校验来源，保存/查找操作跳过校验
+            // 防止 WebView URL 短暂变化时误拦截保存/查找操作
+            if (isSensitiveOperation(name) && !isCallerAllowed()) {
                 Log.w(TAG, "NativeBridge.invoke 拒绝非本地调用: " + name);
                 return fail("permission denied").toString();
             }

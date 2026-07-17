@@ -894,6 +894,40 @@ if (window.Permission) {
             }
         }
 
+        // Android 返回键处理：关闭弹窗/历史面板/中心面板，否则退出 APP
+        function handleAndroidBack() {
+            try {
+                const loginOverlay = document.getElementById('loginOverlay');
+                if (loginOverlay && loginOverlay.style.display !== 'none') {
+                    return false;
+                }
+                const openModals = document.querySelectorAll('.modal[style*="display: block"], .modal[style*="display:block"]');
+                if (openModals.length > 0) {
+                    openModals.forEach(m => m.style.display = 'none');
+                    return true;
+                }
+                const rightPanel = document.querySelector('.right-panel');
+                if (rightPanel) {
+                    const computedStyle = window.getComputedStyle(rightPanel);
+                    const isHistoryOpen = rightPanel.style.display === 'flex' ||
+                                         (rightPanel.style.display === '' && computedStyle.display === 'flex');
+                    if (isHistoryOpen) {
+                        switchMobileTab('prescription');
+                        return true;
+                    }
+                }
+                const centerPanel = document.querySelector('.center-panel');
+                if (centerPanel && centerPanel.classList.contains('active')) {
+                    switchMobileTab('prescription');
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.error('handleAndroidBack error:', e);
+                return false;
+            }
+        }
+
         // 移动端标签切换
         function switchMobileTab(tabName) {
             const leftPanel = document.querySelector('.left-panel');
@@ -3485,7 +3519,7 @@ if (window.Permission) {
         function renderHistoryList(list) {
             const el = DOM_CACHE.historyList || document.getElementById('historyList');
             if (!el) return;
-            el.innerHTML = list.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${p.registrationFee ? ' | 诊费:' + p.registrationFee.toFixed(2) + '元' : ''}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeHtml(p.patientName)}','${escapeHtml(p.prescriptionNo || '')}','${escapeHtml(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
+            el.innerHTML = list.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${p.registrationFee ? ' | 诊费:' + p.registrationFee.toFixed(2) + '元' : ''}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
         }
 
         async function collectAndUpdateMediaFiles(savedRecord, officialNo) {

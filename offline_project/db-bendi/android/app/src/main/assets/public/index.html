@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -854,6 +854,40 @@ let currentUser = null;
                 });
             } catch (e) {
                 console.error('批量保存处方到 IndexedDB 失败:', e);
+            }
+        }
+
+        // Android 返回键处理：关闭弹窗/历史面板/中心面板，否则退出 APP
+        function handleAndroidBack() {
+            try {
+                const loginOverlay = document.getElementById('loginOverlay');
+                if (loginOverlay && loginOverlay.style.display !== 'none') {
+                    return false;
+                }
+                const openModals = document.querySelectorAll('.modal[style*="display: block"], .modal[style*="display:block"]');
+                if (openModals.length > 0) {
+                    openModals.forEach(m => m.style.display = 'none');
+                    return true;
+                }
+                const rightPanel = document.querySelector('.right-panel');
+                if (rightPanel) {
+                    const computedStyle = window.getComputedStyle(rightPanel);
+                    const isHistoryOpen = rightPanel.style.display === 'flex' ||
+                                         (rightPanel.style.display === '' && computedStyle.display === 'flex');
+                    if (isHistoryOpen) {
+                        switchMobileTab('prescription');
+                        return true;
+                    }
+                }
+                const centerPanel = document.querySelector('.center-panel');
+                if (centerPanel && centerPanel.classList.contains('active')) {
+                    switchMobileTab('prescription');
+                    return true;
+                }
+                return false;
+            } catch (e) {
+                console.error('handleAndroidBack error:', e);
+                return false;
             }
         }
 
@@ -3465,7 +3499,7 @@ let currentUser = null;
         function renderHistoryList(list) {
             const el = DOM_CACHE.historyList || document.getElementById('historyList');
             if (!el) return;
-            el.innerHTML = list.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeHtml(p.patientName)}','${escapeHtml(p.prescriptionNo || '')}','${escapeHtml(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
+            el.innerHTML = list.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
         }
 
         async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
