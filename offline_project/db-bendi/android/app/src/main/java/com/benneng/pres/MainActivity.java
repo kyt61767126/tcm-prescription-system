@@ -128,6 +128,44 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // 初始化媒体文件读取白名单：缓存所有可能的目录（外部 + 内部 fallback）
+    // 彻底解决 getExternalFilesDir 返回 null 时白名单失效的问题
+    private void initMediaWhitelist() {
+        mediaWhitelistedRoots.clear();
+        try {
+            // 外部存储目录（Android 10+）
+            File extImg = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+            if (extImg != null) {
+                File d = new File(extImg, "本能中医处方");
+                mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+            }
+            File extVid = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+            if (extVid != null) {
+                File d = new File(extVid, "本能中医处方");
+                mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+            }
+            // Android 9 及以下：外部公共目录
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                File pubImg = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+                if (pubImg != null) {
+                    File d = new File(pubImg, "本能中医处方");
+                    mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+                }
+                File pubVid = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                if (pubVid != null) {
+                    File d = new File(pubVid, "本能中医处方");
+                    mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+                }
+            }
+            // 内部 fallback 目录（getExternalFilesDir 返回 null 时使用）
+            mediaWhitelistedRoots.add(new File(getFilesDir(), "prescription_images").getCanonicalPath() + File.separator);
+            mediaWhitelistedRoots.add(new File(getFilesDir(), "prescription_videos").getCanonicalPath() + File.separator);
+            Log.i(TAG, "媒体白名单初始化完成: " + mediaWhitelistedRoots.size() + " 个根目录");
+        } catch (Exception e) {
+            Log.e(TAG, "initMediaWhitelist 失败", e);
+        }
+    }
+
     // ========================================================================
     // 签名校验（防盗：防止二次打包/篡改）
     // ========================================================================
@@ -979,44 +1017,6 @@ public class MainActivity extends AppCompatActivity {
                 if (!dir.exists()) dir.mkdirs();
             }
             return dir;
-        }
-
-        // 初始化媒体文件读取白名单：缓存所有可能的目录（外部 + 内部 fallback）
-        // 彻底解决 getExternalFilesDir 返回 null 时白名单失效的问题
-        private void initMediaWhitelist() {
-            mediaWhitelistedRoots.clear();
-            try {
-                // 外部存储目录（Android 10+）
-                File extImg = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-                if (extImg != null) {
-                    File d = new File(extImg, "本能中医处方");
-                    mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
-                }
-                File extVid = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
-                if (extVid != null) {
-                    File d = new File(extVid, "本能中医处方");
-                    mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
-                }
-                // Android 9 及以下：外部公共目录
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                    File pubImg = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-                    if (pubImg != null) {
-                        File d = new File(pubImg, "本能中医处方");
-                        mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
-                    }
-                    File pubVid = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-                    if (pubVid != null) {
-                        File d = new File(pubVid, "本能中医处方");
-                        mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
-                    }
-                }
-                // 内部 fallback 目录（getExternalFilesDir 返回 null 时使用）
-                mediaWhitelistedRoots.add(new File(getFilesDir(), "prescription_images").getCanonicalPath() + File.separator);
-                mediaWhitelistedRoots.add(new File(getFilesDir(), "prescription_videos").getCanonicalPath() + File.separator);
-                Log.i(TAG, "媒体白名单初始化完成: " + mediaWhitelistedRoots.size() + " 个根目录");
-            } catch (Exception e) {
-                Log.e(TAG, "initMediaWhitelist 失败", e);
-            }
         }
 
         // 统一路径校验：canonicalPath 必须以某个白名单根目录开头

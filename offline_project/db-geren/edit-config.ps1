@@ -1,7 +1,9 @@
-﻿# edit-config.ps1 - Interactive clinic and doctor name editor
+# edit-config.ps1 - Interactive clinic and doctor name editor
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
+# 无 BOM 的 UTF-8 编码（避免 index.html 出现 BOM 导致 "锘?!DOCTYPE" 损坏）
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 $configPath = 'config.json'
 $htmlPath = 'index.html'
@@ -61,7 +63,7 @@ if (Test-Path $htmlPath) {
     $html = $html -replace 'clinic-info-name">[^<]*<', $replace1
     $replace2 = "clinicNameDisplay`">$newClinic<"
     $html = $html -replace 'clinicNameDisplay">[^<]*<', $replace2
-    [System.IO.File]::WriteAllText($htmlPath, $html, [System.Text.Encoding]::UTF8)
+    [System.IO.File]::WriteAllText($htmlPath, $html, $utf8NoBom)
     Write-Host '[OK] index.html updated' -ForegroundColor Green
 } else {
     Write-Host '[WARN] index.html not found, skip update' -ForegroundColor Yellow
