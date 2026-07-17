@@ -700,9 +700,10 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public String invoke(String name, String jsonStr) {
-            // P1-6: 调用来源校验，仅允许云端页面调用 NativeBridge
-            // 防止 XSS 注入页面或第三方页面调用 readFileAsBase64 读取沙箱任意文件
-            if (!isCallerAllowed()) {
+            // P1-6: 调用来源校验（分层策略）
+            // 敏感读取/删除操作必须校验来源，防止 XSS 读取沙箱任意文件
+            // 保存/查找操作放宽校验，避免 WebView URL 短暂变化导致功能不可用
+            if (isSensitiveOperation(name) && !isCallerAllowed()) {
                 Log.w("TCM-Pres", "NativeBridge.invoke 拒绝非云端调用: " + name);
                 return fail("permission denied").toString();
             }
@@ -742,6 +743,15 @@ public class MainActivity extends BridgeActivity {
                 Log.e("TCM-Pres", "invoke " + name + " 失败", e);
                 return fail(e.getMessage()).toString();
             }
+        }
+
+        // ------------------------------------------------------------------
+        // P1-6 分层校验：仅敏感操作需要来源校验
+        // 敏感：readFileAsBase64（可读任意文件）、deleteFile（可删文件）
+        // 非敏感：savePrescriptionImage/saveVideoFile（只写指定目录）、findMediaFiles（按模式查找）
+        // ------------------------------------------------------------------
+        private boolean isSensitiveOperation(String name) {
+            return "readFileAsBase64".equals(name) || "deleteFile".equals(name);
         }
 
         // ------------------------------------------------------------------
@@ -800,10 +810,9 @@ public class MainActivity extends BridgeActivity {
                 if (safeName.isEmpty()) {
                     safeName = "video_" + System.currentTimeMillis() + ".webm";
                 }
-                if (!safeName.endsWith(".webm")) {
-                    String base = safeName.replaceAll("\\.[^.]+$", "");
-                    safeName = base + ".webm";
-                }
+                // 保留前端传入的原始扩展名（mp4/webm），不强制改名
+                // 前端根据设备 MediaRecorder 支持的 mimeType 决定扩展名
+                // 强制改 .webm 会导致 MP4 内容的文件扩展名不匹配，播放器无法识别
 
                 File dir = getImageDir();
                 if (dir == null) {
@@ -953,7 +962,7 @@ public class MainActivity extends BridgeActivity {
                 android.media.MediaScannerConnection.scanFile(
                         getApplicationContext(),
                         new String[]{file.getAbsolutePath()},
-                        new String[]{file.getName().endsWith(".webm") ? "video/webm" : (file.getName().endsWith(".jpg") || file.getName().endsWith(".jpeg")) ? "image/jpeg" : "image/png"},
+                        new String[]{(file.getName().endsWith(".webm") || file.getName().endsWith(".mp4")) ? (file.getName().endsWith(".mp4") ? "video/mp4" : "video/webm") : (file.getName().endsWith(".jpg") || file.getName().endsWith(".jpeg")) ? "image/jpeg" : "image/png"},
                         null);
             }
         }
@@ -1081,7 +1090,7 @@ public class MainActivity extends BridgeActivity {
                         JSONObject fileObj = new JSONObject();
                         fileObj.put("name", fileName);
                         fileObj.put("path", filePath);
-                        fileObj.put("type", fileName.endsWith(".webm") ? "video" : "image");
+                        fileObj.put("type", fileName.endsWith(".webm") || fileName.endsWith(".mp4") ? "video" : "image");
                         fileObj.put("size", f.length());
                         fileObj.put("lastModified", lastMod);
                         files.put(fileObj);
@@ -1104,7 +1113,7 @@ public class MainActivity extends BridgeActivity {
                         JSONObject fileObj = new JSONObject();
                         fileObj.put("name", f.getName());
                         fileObj.put("path", f.getAbsolutePath());
-                        fileObj.put("type", f.getName().endsWith(".webm") ? "video" : "image");
+                        fileObj.put("type", f.getName().endsWith(".webm") || f.getName().endsWith(".mp4") ? "video" : "image");
                         fileObj.put("size", f.length());
                         fileObj.put("lastModified", f.lastModified());
                         files.put(fileObj);
@@ -1132,7 +1141,7 @@ public class MainActivity extends BridgeActivity {
                             JSONObject fileObj = new JSONObject();
                             fileObj.put("name", fileName);
                             fileObj.put("path", filePath);
-                            fileObj.put("type", fileName.endsWith(".webm") ? "video" : "image");
+                            fileObj.put("type", fileName.endsWith(".webm") || fileName.endsWith(".mp4") ? "video" : "image");
                             fileObj.put("size", f.length());
                             fileObj.put("lastModified", f.lastModified());
                             files.put(fileObj);
@@ -1166,6 +1175,7 @@ public class MainActivity extends BridgeActivity {
                 }
                 if (mimeType == null || mimeType.isEmpty()) {
                     if (filePath.endsWith(".webm")) mimeType = "video/webm";
+                    else if (filePath.endsWith(".mp4")) mimeType = "video/mp4";
                     else if (filePath.endsWith(".png")) mimeType = "image/png";
                     else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) mimeType = "image/jpeg";
                     else mimeType = "*/*";

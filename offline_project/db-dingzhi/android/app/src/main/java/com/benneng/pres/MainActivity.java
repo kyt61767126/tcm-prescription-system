@@ -730,10 +730,7 @@ public class MainActivity extends AppCompatActivity {
                 if (safeName.isEmpty()) {
                     safeName = "video_" + System.currentTimeMillis() + ".webm";
                 }
-                if (!safeName.endsWith(".webm")) {
-                    String base = safeName.replaceAll("\\.[^.]+$", "");
-                    safeName = base + ".webm";
-                }
+                // 保留前端传入的原始扩展名（mp4/webm），不强制改名
 
                 File dir = getImageDir();
                 if (dir == null) {
@@ -985,7 +982,7 @@ public class MainActivity extends AppCompatActivity {
                         JSONObject fileObj = new JSONObject();
                         fileObj.put("name", f.getName());
                         fileObj.put("path", path);
-                        fileObj.put("type", f.getName().endsWith(".webm") ? "video" : "image");
+                        fileObj.put("type", f.getName().endsWith(".webm") || f.getName().endsWith(".mp4") ? "video" : "image");
                         fileObj.put("size", f.length());
                         fileObj.put("lastModified", f.lastModified());
                         files.put(fileObj);
@@ -1018,6 +1015,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 if (mimeType == null || mimeType.isEmpty()) {
                     if (filePath.endsWith(".webm")) mimeType = "video/webm";
+                    else if (filePath.endsWith(".mp4")) mimeType = "video/mp4";
                     else if (filePath.endsWith(".png")) mimeType = "image/png";
                     else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) mimeType = "image/jpeg";
                     else mimeType = "*/*";
