@@ -80,7 +80,14 @@ if "%NO_PUSH%"=="1" (
     echo.
     echo [4/4] Skipped push (--no-push)
 ) else (
-    echo [4/4] git push ...
+    echo [4/4] git pull --rebase + push ...
+    REM P1-14: push 前先 pull --rebase，避免远端有新提交时 push 失败
+    git pull --rebase origin main
+    if errorlevel 1 (
+        echo [ERROR] git pull --rebase failed, please resolve conflicts manually
+        pause
+        exit /b 1
+    )
     git push origin main
     if errorlevel 1 ( echo [ERROR] git push failed & pause & exit /b 1 )
 )

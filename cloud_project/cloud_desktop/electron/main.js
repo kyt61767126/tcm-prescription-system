@@ -176,21 +176,42 @@ function isPathAllowed(filePath) {
     }
 }
 
+// ★ 安全文件名清理：剥离目录部分，过滤危险字符，防止路径穿越
+function sanitizeFileName(fileName) {
+    if (!fileName || typeof fileName !== 'string') return '';
+    // 剥离目录部分，仅保留文件名
+    let name = path.basename(fileName);
+    // 过滤危险字符（与 renameMediaFiles 的 sanitizeStr 一致）
+    name = name.replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
+    // 防御 .. 穿越（path.basename 已剥离，但双重保险）
+    name = name.replace(/\.\./g, '_');
+    return name;
+}
+
+// ★ 安全 key 校验：仅允许字母数字下划线短横，防止 save-user-data 路径越权
+function isSafeKey(key) {
+    if (!key || typeof key !== 'string') return false;
+    return /^[a-zA-Z0-9_-]{1,64}$/.test(key);
+}
+
 async function savePrescriptionImage(imageData, fileName) {
     try {
+        const safeName = sanitizeFileName(fileName);
+        if (!safeName) return { success: false, error: '文件名无效' };
         const monthDir = getCurrentMonthDirectory();
-        
+
         const base64Data = imageData.replace(/^data:image\/[a-z]+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
-        
-        const filePath = path.join(monthDir, fileName);
+
+        const filePath = path.join(monthDir, safeName);
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
         await fs.writeFile(filePath, buffer);
-        
+
         console.log('图片已保存:', filePath);
         return { success: true, filePath, directory: monthDir };
     } catch (error) {
         console.error('保存图片失败:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: '保存图片失败' };
     }
 }
 
@@ -207,19 +228,23 @@ async function injectVideoRecorder(win) {
 
 async function saveVideoFile(arrayBuffer, fileName) {
     try {
+        const safeName = sanitizeFileName(fileName);
+        if (!safeName) return { success: false, error: '文件名无效' };
         const monthDir = getCurrentMonthDirectory();
         const buffer = Buffer.from(arrayBuffer);
-        if (!fileName.endsWith('.webm')) {
-            const base = fileName.replace(/\.[^.]+$/, '');
-            fileName = base + '.webm';
+        let finalName = safeName;
+        if (!finalName.endsWith('.webm')) {
+            const base = finalName.replace(/\.[^.]+$/, '');
+            finalName = base + '.webm';
         }
-        const filePath = path.join(monthDir, fileName);
+        const filePath = path.join(monthDir, finalName);
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
         await fs.writeFile(filePath, buffer);
         console.log('视频已保存:', filePath);
         return { success: true, filePath, directory: monthDir };
     } catch (error) {
         console.error('保存视频失败:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: '保存视频失败' };
     }
 }
 
@@ -887,15 +912,18 @@ safeHandle('read-file-as-base64', async (event, filePath) => {
 // 保存备份数据文件到与图片相同的目录（安装目录/downloads/YYYY-MM/）
 ipcMain.handle('save-backup-file', async (event, jsonStr, fileName) => {
     try {
+        const safeName = sanitizeFileName(fileName);
+        if (!safeName || !safeName.endsWith('.json')) return { success: false, error: '文件名无效（仅允许 .json）' };
         const monthDir = getCurrentMonthDirectory();
-        const filePath = path.join(monthDir, fileName);
+        const filePath = path.join(monthDir, safeName);
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
         const buffer = Buffer.from(jsonStr, 'utf-8');
         await fs.writeFile(filePath, buffer);
         console.log('备份文件已保存:', filePath);
         return { success: true, filePath, directory: monthDir };
     } catch (error) {
         console.error('保存备份文件失败:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: '保存备份文件失败' };
     }
 });
 
@@ -1015,19 +1043,21 @@ ipcMain.handle('get-data-directory', async () => {
 // 保存用户数据（按 key 存储，与登录用户绑定）
 ipcMain.handle('save-user-data', async (event, key, data) => {
     try {
+        if (!isSafeKey(key)) return { success: false, error: 'key 无效' };
         const userDataDir = path.join(app.getPath('userData'), 'user-data');
         await fse.ensureDir(userDataDir);
         const filePath = path.join(userDataDir, `${key}.json`);
         await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
         return { success: true };
     } catch (e) {
-        return { success: false, error: e.message };
+        return { success: false, error: '保存用户数据失败' };
     }
 });
 
 // 读取用户数据（按 key 读取）
 ipcMain.handle('get-user-data', async (event, key) => {
     try {
+        if (!isSafeKey(key)) return null;
         const filePath = path.join(app.getPath('userData'), 'user-data', `${key}.json`);
         const content = await fs.readFile(filePath, 'utf-8');
         return JSON.parse(content);

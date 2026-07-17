@@ -7,9 +7,27 @@
     'use strict';
 
     // ==================== 常量 ====================
+    // P1-5: 密码加密盐（混淆用，非真正加密密钥）
+    // 注意：前端 JS 无法实现真正安全的对称加密，此值仅用于阻止明文直接泄露
+    // Electron 桌面版未来应迁移到 safeStorage 系统级加密
     const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
     const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8小时
     const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
+
+    // P1-5: 运行时派生密钥（基于环境特征，降低纯源码攻击效果）
+    // 攻击者仅查看源码无法直接获得实际加密密钥
+    function _deriveRuntimeKey() {
+        const env = (typeof location !== 'undefined' && location.hostname) ? location.hostname : 'local';
+        const lang = (typeof navigator !== 'undefined' && navigator.language) ? navigator.language : '';
+        let hash = 0;
+        const src = PASSWORD_SALT + '|' + env + '|' + lang;
+        for (let i = 0; i < src.length; i++) {
+            hash = ((hash << 5) - hash) + src.charCodeAt(i);
+            hash = hash & hash;
+        }
+        return PASSWORD_SALT + '_' + Math.abs(hash).toString(36);
+    }
+    const RUNTIME_KEY = _deriveRuntimeKey();
 
     // 旧 key → 新 key 映射（自动迁移）
     const KEY_MIGRATION = {
@@ -222,30 +240,51 @@
     }
 
     // 记住密码加密存储（非明文）
+    // P1-2: PWDv2 使用运行时派生密钥（增强），PWDv1 为旧版硬编码盐（向后兼容）
     function encryptPassword(password) {
         if (!password) return null;
-        const key = PASSWORD_SALT;
+        const key = RUNTIME_KEY;
         let result = '';
         for (let i = 0; i < password.length; i++) {
             result += String.fromCharCode(password.charCodeAt(i) ^ key.charCodeAt(i % key.length));
         }
-        return 'PWDv1:' + btoa(unescape(encodeURIComponent(result)));
+        return 'PWDv2:' + btoa(unescape(encodeURIComponent(result)));
     }
 
     function decryptPassword(stored) {
-        if (!stored || typeof stored !== 'string' || !stored.startsWith('PWDv1:')) return null;
-        try {
-            const text = decodeURIComponent(escape(atob(stored.substring(6))));
-            const key = PASSWORD_SALT;
-            let result = '';
-            for (let i = 0; i < text.length; i++) {
-                result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+        if (!stored || typeof stored !== 'string') return null;
+        // P1-2: 优先尝试 PWDv2（运行时派生密钥）
+        if (stored.startsWith('PWDv2:')) {
+            try {
+                const text = decodeURIComponent(escape(atob(stored.substring(6))));
+                const key = RUNTIME_KEY;
+                let result = '';
+                for (let i = 0; i < text.length; i++) {
+                    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                }
+                return result;
+            } catch (e) {
+                console.error('密码解密失败:', e);
+                return null;
             }
-            return result;
-        } catch (e) {
-            console.error('密码解密失败:', e);
-            return null;
         }
+        // 向后兼容 PWDv1（硬编码盐）
+        if (stored.startsWith('PWDv1:')) {
+            try {
+                const text = decodeURIComponent(escape(atob(stored.substring(6))));
+                const key = PASSWORD_SALT;
+                let result = '';
+                for (let i = 0; i < text.length; i++) {
+                    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                }
+                return result;
+            } catch (e) {
+                console.error('密码解密失败:', e);
+                return null;
+            }
+        }
+        // 兼容旧明文
+        return stored;
     }
 
     // 保存记住的密码（加密存储）
@@ -286,28 +325,51 @@
     }
 
     // 用户列表加密存储（仅离线版使用，Unicode 安全）
+    // P1-2: XORv2 使用运行时派生密钥（增强），XORv1 为旧版硬编码盐（向后兼容）
     function encryptUsers(users) {
         const json = JSON.stringify(users);
+        const key = RUNTIME_KEY;
         let result = '';
         for (let i = 0; i < json.length; i++) {
-            result += String.fromCharCode(json.charCodeAt(i) ^ PASSWORD_SALT.charCodeAt(i % PASSWORD_SALT.length));
+            result += String.fromCharCode(json.charCodeAt(i) ^ key.charCodeAt(i % key.length));
         }
-        return 'XORv1:' + btoa(unescape(encodeURIComponent(result)));
+        return 'XORv2:' + btoa(unescape(encodeURIComponent(result)));
     }
 
     function decryptUsers(stored) {
-        if (!stored || typeof stored !== 'string' || !stored.startsWith('XORv1:')) return stored;
-        try {
-            const text = decodeURIComponent(escape(atob(stored.substring(6))));
-            let result = '';
-            for (let i = 0; i < text.length; i++) {
-                result += String.fromCharCode(text.charCodeAt(i) ^ PASSWORD_SALT.charCodeAt(i % PASSWORD_SALT.length));
+        if (!stored || typeof stored !== 'string') return stored;
+        // P1-2: 优先尝试 XORv2（运行时派生密钥）
+        if (stored.startsWith('XORv2:')) {
+            try {
+                const text = decodeURIComponent(escape(atob(stored.substring(6))));
+                const key = RUNTIME_KEY;
+                let result = '';
+                for (let i = 0; i < text.length; i++) {
+                    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                }
+                return JSON.parse(result);
+            } catch (e) {
+                console.error('解密用户列表失败:', e);
+                return null;
             }
-            return JSON.parse(result);
-        } catch (e) {
-            console.error('解密用户列表失败:', e);
-            return null;
         }
+        // 向后兼容 XORv1（硬编码盐）
+        if (stored.startsWith('XORv1:')) {
+            try {
+                const text = decodeURIComponent(escape(atob(stored.substring(6))));
+                const key = PASSWORD_SALT;
+                let result = '';
+                for (let i = 0; i < text.length; i++) {
+                    result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+                }
+                return JSON.parse(result);
+            } catch (e) {
+                console.error('解密用户列表失败:', e);
+                return null;
+            }
+        }
+        // 兼容旧明文 JSON
+        return stored;
     }
 
     // ==================== 权限解析层 ====================

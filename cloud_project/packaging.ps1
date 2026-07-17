@@ -1,4 +1,4 @@
-﻿# packaging.ps1 - Cloud project unified packaging tool（方案二：含防盗防破解）
+# packaging.ps1 - Cloud project unified packaging tool（方案二：含防盗防破解）
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -48,6 +48,16 @@ function Build-Desktop {
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
     & "$scriptDir\cloud_desktop\build.bat"
+    # P1-19: 检查子脚本退出码，失败时不显示"完成"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "================================================================"
+        Write-Host "  [ERROR] 桌面版打包失败！退出码: $LASTEXITCODE"
+        Write-Host "  请查看上方错误日志"
+        Write-Host "================================================================"
+        Read-Host "按回车键继续"
+        return
+    }
     Write-Host ""
     Write-Host "================================================================"
     Write-Host "  桌面版打包完成！"
@@ -75,6 +85,16 @@ function Build-App {
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
     & "$scriptDir\build-app.bat"
+    # P1-19: 检查子脚本退出码，失败时不显示"完成"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host ""
+        Write-Host "================================================================"
+        Write-Host "  [ERROR] 手机 APP 打包失败！退出码: $LASTEXITCODE"
+        Write-Host "  请查看上方错误日志"
+        Write-Host "================================================================"
+        Read-Host "按回车键继续"
+        return
+    }
     Write-Host ""
     Write-Host "================================================================"
     Write-Host "  手机 APP 打包完成！"

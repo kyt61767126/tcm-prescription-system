@@ -77,13 +77,44 @@ function getCurrentMonthDirectory() {
 
 // 校验 key/文件名防止路径穿越（统一清洗非法字符）
 function sanitizeKey(key) {
-    return String(key || '').replace(/[\\/:*?"<>|]/g, '_');
+    return String(key || '').replace(/[\\/:*?"<>|]/g, '_').replace(/\.\./g, '_');
+}
+
+// ★ 安全 key 校验：仅允许字母数字下划线短横，防止 save-user-data 路径越权
+function isSafeKey(key) {
+    if (!key || typeof key !== 'string') return false;
+    return /^[a-zA-Z0-9_-]{1,64}$/.test(key);
 }
 
 function sanitizeFileName(fileName) {
     if (typeof fileName !== 'string') return `file_${Date.now()}.webm`;
     const base = sanitizeKey(path.basename(fileName));
     return base || `file_${Date.now()}.webm`;
+}
+
+// ★ 路径白名单校验：仅允许访问 downloads 目录及其子目录下的文件
+function getAllowedRoots() {
+    const roots = new Set();
+    try { roots.add(path.resolve(getDownloadsDirectory())); } catch(e) {}
+    try { roots.add(path.resolve(app.getPath('userData'), 'downloads')); } catch(e) {}
+    return Array.from(roots);
+}
+
+function isPathAllowed(filePath) {
+    if (!filePath || typeof filePath !== 'string') return false;
+    try {
+        const resolved = path.resolve(filePath);
+        for (const root of getAllowedRoots()) {
+            const rel = path.relative(root, resolved);
+            if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+                return true;
+            }
+        }
+        console.warn('[路径校验] 拒绝访问:', filePath);
+        return false;
+    } catch (e) {
+        return false;
+    }
 }
 
 async function savePrescriptionImage(imageData, fileName) {
@@ -93,11 +124,12 @@ async function savePrescriptionImage(imageData, fileName) {
         const buffer = Buffer.from(base64Data, 'base64');
         const safeName = sanitizeFileName(fileName);
         const filePath = path.join(monthDir, safeName);
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
         await fs.writeFile(filePath, buffer);
         return { success: true, filePath, directory: monthDir };
     } catch (error) {
         console.error('保存图片失败:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: '保存图片失败' };
     }
 }
 
@@ -109,19 +141,18 @@ async function saveVideoFile(arrayBuffer, fileName) {
         const monthDir = getCurrentMonthDirectory();
         const buffer = Buffer.from(arrayBuffer);
         const safeName = sanitizeFileName(fileName);
-        if (!safeName.endsWith('.webm')) {
-            const base = safeName.replace(/\.[^.]+$/, '');
-            const finalName = base + '.webm';
-            const filePath = path.join(monthDir, finalName);
-            await fs.writeFile(filePath, buffer);
-            return { success: true, filePath, directory: monthDir, fileName: finalName };
+        let finalName = safeName;
+        if (!finalName.endsWith('.webm')) {
+            const base = finalName.replace(/\.[^.]+$/, '');
+            finalName = base + '.webm';
         }
-        const filePath = path.join(monthDir, safeName);
+        const filePath = path.join(monthDir, finalName);
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
         await fs.writeFile(filePath, buffer);
-        return { success: true, filePath, directory: monthDir, fileName: safeName };
+        return { success: true, filePath, directory: monthDir, fileName: finalName };
     } catch (error) {
         console.error('保存视频失败:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: '保存视频失败' };
     }
 }
 
@@ -534,24 +565,22 @@ ipcMain.handle('read-file-as-base64', async (event, filePath) => {
 
 async function saveUserData(key, data) {
     try {
-        const safeKey = sanitizeKey(key);
-        if (!safeKey) return { success: false, error: 'invalid key' };
-        const filePath = path.join(getDataDirectory(), safeKey + '.json');
+        if (!isSafeKey(key)) return { success: false, error: 'key 无效' };
+        const filePath = path.join(getDataDirectory(), key + '.json');
         const tmpPath = filePath + '.tmp';
         await fse.writeJson(tmpPath, data, { spaces: 2 });
         await fs.rename(tmpPath, filePath);
         return { success: true };
     } catch (error) {
         console.error('保存用户数据失败:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: '保存用户数据失败' };
     }
 }
 
 async function getUserData(key) {
     try {
-        const safeKey = sanitizeKey(key);
-        if (!safeKey) return { success: false, data: null };
-        const filePath = path.join(getDataDirectory(), safeKey + '.json');
+        if (!isSafeKey(key)) return { success: false, data: null };
+        const filePath = path.join(getDataDirectory(), key + '.json');
         if (await fse.pathExists(filePath)) {
             const data = await fse.readJson(filePath);
             return { success: true, data };
@@ -559,7 +588,7 @@ async function getUserData(key) {
         return { success: false, data: null };
     } catch (error) {
         console.error('读取用户数据失败:', error);
-        return { success: false, data: null, error: error.message };
+        return { success: false, data: null };
     }
 }
 
@@ -659,12 +688,14 @@ ipcMain.handle('set-auto-start', async (event, enabled) => {
 ipcMain.handle('save-backup-file', async (event, jsonStr, fileName) => {
     try {
         const safeName = sanitizeFileName(fileName);
+        if (!safeName.endsWith('.json')) return { success: false, error: '文件名无效（仅允许 .json）' };
         const filePath = path.join(getDownloadsDirectory(), safeName);
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
         await fs.writeFile(filePath, jsonStr, 'utf8');
         return { success: true, fileName: safeName, filePath };
     } catch (error) {
         console.error('保存备份文件失败:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: '保存备份文件失败' };
     }
 });
 

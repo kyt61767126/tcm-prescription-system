@@ -507,12 +507,31 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // ========================================================================
+    // P1-6: NativeBridge 调用来源校验，仅允许本地 assets 页面调用
+    // 防止 XSS 注入页面或第三方页面调用 readFileAsBase64 读取沙箱任意文件
+    // ========================================================================
+    private boolean isCallerAllowed() {
+        try {
+            if (webView == null) return false;
+            String url = webView.getUrl();
+            return url != null && url.startsWith("file:///android_asset/");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    // ========================================================================
     // JavaScript 接口
     // ========================================================================
     public class NativeBridge {
 
         @JavascriptInterface
         public String invoke(String name, String jsonStr) {
+            // P1-6: 调用来源校验，仅允许本地 assets 页面调用 NativeBridge
+            if (!isCallerAllowed()) {
+                Log.w(TAG, "NativeBridge.invoke 拒绝非本地调用: " + name);
+                return fail("permission denied").toString();
+            }
             try {
                 JSONObject args = new JSONObject(jsonStr);
                 switch (name) {

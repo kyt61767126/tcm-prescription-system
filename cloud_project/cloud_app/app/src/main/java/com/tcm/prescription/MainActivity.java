@@ -243,6 +243,13 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPermissionRequest(PermissionRequest request) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    // P1-10: 仅允许云端页面请求相机/麦克风权限，防止 XSS 或第三方页面获取摄像头
+                    String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
+                    if (!isCloudUrl(origin)) {
+                        Log.w(TAG, "onPermissionRequest 拒绝非云端来源: " + origin);
+                        request.deny();
+                        return;
+                    }
                     for (String permission : request.getResources()) {
                         if (permission.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE) ||
                             permission.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
@@ -341,9 +348,9 @@ public class MainActivity extends BridgeActivity {
 
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // S3: URL 白名单校验，非云端域名的导航一律拦截
+                // S3 + P1-8: URL 严格 host 校验，非云端域名一律拦截（避免 contains 子串绕过）
                 String url = request.getUrl().toString();
-                if (url.contains(CLOUD_HOST)) {
+                if (isCloudUrl(url)) {
                     return false; // 允许加载
                 }
                 return true; // 拦截非云端导航，防止重定向到钓鱼站点
@@ -362,7 +369,7 @@ public class MainActivity extends BridgeActivity {
                         loadingLayout.setVisibility(View.VISIBLE);
                     }
                 }
-                if (!urlChecked && url != null && !url.contains(CLOUD_HOST)) {
+                if (!urlChecked && url != null && !isCloudUrl(url)) {
                     urlChecked = true;
                     // 立即重定向到云端URL，不延迟（不添加时间戳，允许缓存）
                     view.loadUrl(CLOUD_URL);
@@ -398,7 +405,7 @@ public class MainActivity extends BridgeActivity {
                 // 记录页面版本到本地（供下次启动时 onCreate 版本检查使用）
                 // 注意：不在onPageFinished中reload，避免双重加载导致启动变慢
                 // 版本不匹配时的清缓存在下次启动的onCreate中处理
-                if (!versionChecked && url != null && url.contains(CLOUD_HOST)) {
+                if (!versionChecked && url != null && isCloudUrl(url)) {
                     versionChecked = true;
                     view.evaluateJavascript("(window.__APP_VERSION__ || 'unknown')", value -> {
                         String pageVersion = value != null ? value.replace("\"", "") : "unknown";
@@ -479,6 +486,35 @@ public class MainActivity extends BridgeActivity {
     private int dpToPx(int dp) {
         float density = getResources().getDisplayMetrics().density;
         return (int) (dp * density + 0.5f);
+    }
+
+    /**
+     * P1-8: 严格校验 URL 是否为云端域名（避免 contains 被子串绕过）
+     * 例：tcm-prescription-system.pages.dev.evil.com 会被 contains 误判为合法
+     */
+    private boolean isCloudUrl(String url) {
+        if (url == null) return false;
+        try {
+            String host = Uri.parse(url).getHost();
+            return CLOUD_HOST.equals(host);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * P1-6: NativeBridge 调用来源校验，仅允许云端页面调用
+     * 防止 XSS 注入页面或第三方页面调用 readFileAsBase64 读取沙箱任意文件
+     */
+    private boolean isCallerAllowed() {
+        try {
+            WebView webView = this.getBridge().getWebView();
+            if (webView == null) return false;
+            String url = webView.getUrl();
+            return isCloudUrl(url);
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     /**
@@ -664,6 +700,12 @@ public class MainActivity extends BridgeActivity {
 
         @JavascriptInterface
         public String invoke(String name, String jsonStr) {
+            // P1-6: 调用来源校验，仅允许云端页面调用 NativeBridge
+            // 防止 XSS 注入页面或第三方页面调用 readFileAsBase64 读取沙箱任意文件
+            if (!isCallerAllowed()) {
+                Log.w("TCM-Pres", "NativeBridge.invoke 拒绝非云端调用: " + name);
+                return fail("permission denied").toString();
+            }
             try {
                 JSONObject args = new JSONObject(jsonStr);
                 switch (name) {

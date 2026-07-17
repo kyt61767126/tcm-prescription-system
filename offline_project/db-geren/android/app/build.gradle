@@ -35,9 +35,16 @@ android {
     signingConfigs {
         release {
             storeFile file(signingProperties['storeFile'])
-            storePassword signingProperties['storePassword']
+            // P1-13: 签名密码优先从环境变量读取，signing.properties 作为本地 fallback
+            // 环境变量：TCM_STORE_PASSWORD / TCM_KEY_PASSWORD
+            storePassword System.getenv('TCM_STORE_PASSWORD') ?: signingProperties['storePassword']
             keyAlias signingProperties['keyAlias']
-            keyPassword signingProperties['keyPassword']
+            keyPassword System.getenv('TCM_KEY_PASSWORD') ?: signingProperties['keyPassword']
+            // P1-9: 显式启用 APK v1/v2/v3/v4 签名方案
+            v1SigningEnabled true
+            v2SigningEnabled true
+            v3SigningEnabled true
+            v4SigningEnabled true
         }
     }
     defaultConfig {

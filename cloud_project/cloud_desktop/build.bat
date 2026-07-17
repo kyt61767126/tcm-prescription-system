@@ -58,6 +58,12 @@ echo.
 
 echo Restoring original JavaScript code...
 node "%~dp0..\..\tools\obfuscate.js" restore
+if errorlevel 1 (
+    echo [ERROR] Restore failed! Source code may remain obfuscated.
+    echo Please manually run: node "%~dp0..\..\tools\obfuscate.js" restore
+    pause
+    exit /b 1
+)
 echo [OK] Original code restored
 echo.
 

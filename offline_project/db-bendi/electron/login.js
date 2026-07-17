@@ -242,7 +242,7 @@
         initLoginPermissions();
         let savedPassword = localStorage.getItem('auth:savedPassword');
         if (savedPassword) {
-            if (window.AuthCore && AuthCore.decryptPassword && savedPassword.startsWith('PWDv1:')) {
+            if (window.AuthCore && AuthCore.decryptPassword && (savedPassword.startsWith('PWDv1:') || savedPassword.startsWith('PWDv2:'))) {
                 savedPassword = AuthCore.decryptPassword(savedPassword);
             }
             $('loginPassword').value = savedPassword;
