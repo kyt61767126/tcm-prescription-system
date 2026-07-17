@@ -69,6 +69,12 @@ REM 避免 MainActivity 与 index.html 版本号不同步导致每次启动清�
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$idx=Get-Content '%~dp0cloud_desktop\index.html' -Raw -Encoding UTF8; if($idx -match \"__APP_VERSION__\s*=\s*'([^']+)'\"){ $ver=$matches[1]; $main='%ANDROID_DIR%\app\src\main\java\com\tcm\prescription\MainActivity.java'; $c=Get-Content $main -Raw -Encoding UTF8; $new=$c -replace 'EXPECTED_APP_VERSION\s*=\s*\"[^\"]*\"', \"EXPECTED_APP_VERSION = \\\"$ver\\\"\"; if($new -ne $c){ [System.IO.File]::WriteAllText($main,$new,(New-Object System.Text.UTF8Encoding $false)); Write-Host ('  [OK] MainActivity.EXPECTED_APP_VERSION = '+$ver) } else { Write-Host '  [SKIP] Already in sync' } } else { Write-Host '  [WARN] __APP_VERSION__ not found in index.html' }"
 echo.
 
+echo [2.7/6] Auto-incrementing versionCode...
+REM 自动递增 build.gradle 中的 versionCode，确保每次打包 APK versionCode 单调递增
+REM 避免 Android 系统因 versionCode 重复拒绝升级安装
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$g='%ANDROID_DIR%\app\build.gradle'; $c=Get-Content $g -Raw -Encoding UTF8; if($c -match 'versionCode\s+(\d+)'){ $old=[int]$matches[1]; $new=$old+1; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $new\"; [System.IO.File]::WriteAllText($g,$nc,(New-Object System.Text.UTF8Encoding $false)); Write-Host ('  [OK] versionCode: '+$old+' -> '+$new) } else { Write-Host '  [WARN] versionCode not found in build.gradle' }"
+echo.
+
 echo [3/6] Stopping residual Gradle processes...
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] Cleanup completed

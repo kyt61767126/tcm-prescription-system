@@ -2014,8 +2014,10 @@ if (window.Permission) {
                     device: /mobile/i.test(userAgent) ? 'mobile' : 'desktop'
                 };
                 
-                // 获取现有日志
-                let logs = JSON.parse(localStorage.getItem('cloud_loginLogs') || '[]');
+                // 获取现有日志（P1-4 修复：包裹 try-catch 防 localStorage 损坏导致登录流程中断）
+                let logs;
+                try { logs = JSON.parse(localStorage.getItem('cloud_loginLogs') || '[]'); }
+                catch(e) { console.warn('[loginLogs] JSON 解析失败，已重置:', e.message); logs = []; localStorage.removeItem('cloud_loginLogs'); }
                 logs.unshift(logEntry); // 添加到开头
                 logs = logs.slice(0, 100); // 只保留最近100条
                 localStorage.setItem('cloud_loginLogs', JSON.stringify(logs));
@@ -6924,8 +6926,9 @@ if (window.Permission) {
             const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
             const paperWidth = isLandscape ? '210mm' : '148mm';
             const paperHeight = isLandscape ? '148mm' : '210mm';
-            const newWindow = window.open('', '_blank');
-            newWindow.document.write(`<!DOCTYPE html>
+            // 改用 iframe 打印方案：绕过 Electron setWindowOpenHandler 拦截（P1-1 修复）
+            // 旧实现 window.open('', '_blank') 会被 main.js 第442行拦截返回 null，导致 .document.write 抛异常
+            const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
     <title>打印处方</title>
@@ -6949,9 +6952,41 @@ if (window.Permission) {
 <body>
     <div class="prescription-paper">${printContent}</div>
 </body>
-</html>`);
-            newWindow.document.close();
-            newWindow.print();
+</html>`;
+            // 创建隐藏 iframe 写入内容并调用打印
+            let printFrame = document.getElementById('__printFrame__');
+            if (printFrame) printFrame.remove();
+            printFrame = document.createElement('iframe');
+            printFrame.id = '__printFrame__';
+            printFrame.style.position = 'fixed';
+            printFrame.style.right = '0';
+            printFrame.style.bottom = '0';
+            printFrame.style.width = '0';
+            printFrame.style.height = '0';
+            printFrame.style.border = '0';
+            document.body.appendChild(printFrame);
+            printFrame.contentDocument.open();
+            printFrame.contentDocument.write(htmlContent);
+            printFrame.contentDocument.close();
+            // 等待 iframe 内容渲染后调用打印
+            printFrame.onload = function() {
+                try {
+                    printFrame.contentWindow.focus();
+                    printFrame.contentWindow.print();
+                } catch (e) {
+                    console.error('[print] iframe 打印失败:', e);
+                    alert('打印失败：' + e.message);
+                }
+                // 打印对话框关闭后清理 iframe
+                setTimeout(function() { if (printFrame && printFrame.parentNode) printFrame.remove(); }, 1000);
+            };
+            // 部分浏览器 onload 不触发，立即尝试一次
+            try {
+                printFrame.contentWindow.focus();
+                printFrame.contentWindow.print();
+            } catch (e) {
+                console.warn('[print] 立即打印失败，等待 onload:', e.message);
+            }
         }
 
         async function savePrescription() {
@@ -7593,7 +7628,9 @@ IconFile=${scriptPath}`;
         // ============ 本地备份存储（安全优化） ============
         function saveLocalBackup(data) {
             try {
-                let backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                let backups;
+                try { backups = JSON.parse(localStorage.getItem('localBackups') || '[]'); }
+                catch(e) { console.warn('[localBackups] JSON 解析失败，已重置:', e.message); backups = []; localStorage.removeItem('localBackups'); }
                 const backup = {
                     timestamp: new Date().toISOString(),
                     data: data,
@@ -7612,7 +7649,9 @@ IconFile=${scriptPath}`;
         // 从本地备份恢复处方数据（当云端数据不可用时）
         function restoreFromLocalBackup() {
             try {
-                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                let backups;
+                try { backups = JSON.parse(localStorage.getItem('localBackups') || '[]'); }
+                catch(e) { console.warn('[localBackups] JSON 解析失败，已重置:', e.message); backups = []; localStorage.removeItem('localBackups'); }
                 if (backups.length > 0) {
                     const latestBackup = backups[0];
                     if (latestBackup.data && latestBackup.data.prescriptionHistory && latestBackup.data.prescriptionHistory.length > 0) {
@@ -7651,7 +7690,9 @@ IconFile=${scriptPath}`;
         // 显示本地备份列表
         function showLocalBackups(silent, parentPanel) {
             try {
-                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                let backups;
+                try { backups = JSON.parse(localStorage.getItem('localBackups') || '[]'); }
+                catch(e) { console.warn('[localBackups] JSON 解析失败，已重置:', e.message); backups = []; localStorage.removeItem('localBackups'); }
                 const backupListDiv = parentPanel ? parentPanel.querySelector('.localBackupList') : document.getElementById('localBackupList');
                 const container = parentPanel ? parentPanel.querySelector('.backupListContainer') : document.getElementById('backupListContainer');
                 
@@ -7714,7 +7755,9 @@ IconFile=${scriptPath}`;
 
         function deleteLocalBackup(backupIndex) {
             try {
-                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                let backups;
+                try { backups = JSON.parse(localStorage.getItem('localBackups') || '[]'); }
+                catch(e) { console.warn('[localBackups] JSON 解析失败，已重置:', e.message); backups = []; localStorage.removeItem('localBackups'); }
                 if (backupIndex < 0 || backupIndex >= backups.length) {
                     showToast('❌ 无效的备份索引');
                     return;
@@ -7738,7 +7781,9 @@ IconFile=${scriptPath}`;
         // 从指定备份恢复数据
         async function restoreFromBackup(backupIndex) {
             try {
-                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                let backups;
+                try { backups = JSON.parse(localStorage.getItem('localBackups') || '[]'); }
+                catch(e) { console.warn('[localBackups] JSON 解析失败，已重置:', e.message); backups = []; localStorage.removeItem('localBackups'); }
                 if (backupIndex < 0 || backupIndex >= backups.length) {
                     showToast('❌ 无效的备份索引');
                     return;
@@ -7835,7 +7880,9 @@ IconFile=${scriptPath}`;
         // 一键回滚功能（安全优化）
         function rollbackToBackup(backupIndex) {
             try {
-                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                let backups;
+                try { backups = JSON.parse(localStorage.getItem('localBackups') || '[]'); }
+                catch(e) { console.warn('[localBackups] JSON 解析失败，已重置:', e.message); backups = []; localStorage.removeItem('localBackups'); }
                 if (backupIndex < 0 || backupIndex >= backups.length) {
                     showToast('❌ 无效的备份索引');
                     return;
@@ -8263,7 +8310,9 @@ IconFile=${scriptPath}`;
                 }
                 
                 const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-                const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                let backups;
+                try { backups = JSON.parse(localStorage.getItem('localBackups') || '[]'); }
+                catch(e) { console.warn('[localBackups] JSON 解析失败，已重置:', e.message); backups = []; localStorage.removeItem('localBackups'); }
                 const msg = [
                     `✅ 一键备份完成！`,
                     `📋 处方 ${rxCount} 条 | 💊 药品 ${medCount} 种 | 📖 方剂 ${formCount} 个`,

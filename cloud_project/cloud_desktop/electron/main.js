@@ -148,6 +148,34 @@ function getCurrentMonthDirectory() {
     }
 }
 
+// ★ 路径白名单校验：仅允许访问 downloads 目录及其子目录下的文件
+// 防止恶意渲染进程通过 IPC 读取/删除/打开系统任意文件（如 C:\Windows\system32）
+function getAllowedRoots() {
+    const roots = new Set();
+    try { roots.add(path.resolve(getDownloadsDirectory())); } catch(e) {}
+    try { roots.add(path.resolve(app.getPath('userData'), 'downloads')); } catch(e) {}
+    return Array.from(roots);
+}
+
+function isPathAllowed(filePath) {
+    if (!filePath || typeof filePath !== 'string') return false;
+    try {
+        const resolved = path.resolve(filePath);
+        for (const root of getAllowedRoots()) {
+            const rel = path.relative(root, resolved);
+            // 在允许目录内：相对路径不以 .. 开头，且不是绝对路径
+            if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+                return true;
+            }
+        }
+        console.warn('[路径校验] 拒绝访问:', filePath);
+        return false;
+    } catch (e) {
+        console.warn('[路径校验] 异常:', e.message);
+        return false;
+    }
+}
+
 async function savePrescriptionImage(imageData, fileName) {
     try {
         const monthDir = getCurrentMonthDirectory();
@@ -504,8 +532,33 @@ app.whenReady().then(() => {
     });
 
     // 授予 camera/microphone 权限（视频录制所需）
+    // P1-3 修复：增加 URL 来源校验，仅允许本地 file:// 和官方域名请求媒体权限
+    // 防止 XSS 注入后从非白名单来源调用 getUserMedia 访问摄像头/麦克风
+    const ALLOWED_HOSTS = ['tcm-prescription-system.pages.dev', 'localhost', '127.0.0.1'];
+    function isUrlAllowed(urlStr) {
+        if (!urlStr) return false;
+        try {
+            const u = new URL(urlStr);
+            // file:// 协议（本地加载的 index.html）始终允许
+            if (u.protocol === 'file:') return true;
+            // https 白名单域名
+            if (u.protocol === 'https:' && ALLOWED_HOSTS.includes(u.hostname)) return true;
+            // 本地开发 http
+            if (u.protocol === 'http:' && ALLOWED_HOSTS.includes(u.hostname)) return true;
+            return false;
+        } catch (e) {
+            return false;
+        }
+    }
+
     sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
-        console.log('[权限请求]', permission);
+        const url = webContents.getURL();
+        const allowed = isUrlAllowed(url);
+        console.log('[权限请求]', permission, 'from', url, '->', allowed ? '允许' : '拒绝');
+        if (!allowed) {
+            callback(false);
+            return;
+        }
         if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
             callback(true);
         } else {
@@ -516,7 +569,9 @@ app.whenReady().then(() => {
     // 在主窗口创建前预先授权设备访问
     if (sharedSession.setDevicePermissionHandler) {
         sharedSession.setDevicePermissionHandler((details) => {
-            console.log('[设备权限请求]', details);
+            const url = details.originURL ? details.originURL.toString() : '';
+            const allowed = isUrlAllowed(url);
+            if (!allowed) return false;
             if (details.deviceType === 'videoinput' || details.deviceType === 'audioinput') {
                 return true;
             }
@@ -778,6 +833,7 @@ safeHandle('rename-media-files', async (event, patientName, oldNo, newNo) => {
 // ★ 删除文件（新增）
 safeHandle('delete-file', async (event, filePath) => {
     if (!filePath) return { success: false, error: '文件路径为空' };
+    if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
     await fs.unlink(filePath);
     return { success: true };
 });
@@ -785,6 +841,7 @@ safeHandle('delete-file', async (event, filePath) => {
 // ★ 打开文件（系统默认程序）（新增）
 safeHandle('open-file', async (event, filePath, mimeType) => {
     if (!filePath) return { success: false, error: '文件路径为空' };
+    if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
     const result = await shell.openPath(filePath);
     if (result) {
         console.error('[打开文件失败]', result);
@@ -803,6 +860,7 @@ safeHandle('open-video-directory', async () => {
 // ★ 读取文件为Base64（新增）
 safeHandle('read-file-as-base64', async (event, filePath) => {
     if (!filePath) return { success: false, error: '文件路径为空' };
+    if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
     try {
         const stat = await fs.stat(filePath);
         if (stat.size === 0) {

@@ -16,7 +16,7 @@
     "electron-builder": "^24.9.1"
   },
   "build": {
-    "appId": "com.benneng.prescription.cloud",
+    "appId": "com.tcm.prescription.cloud",
     "productName": "惠康中医云端",
     "directories": {
       "output": "dist"

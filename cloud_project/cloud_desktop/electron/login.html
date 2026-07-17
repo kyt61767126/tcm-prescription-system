@@ -465,13 +465,20 @@
                     localStorage.removeItem('rememberedUsername');
                 }
 
-                // 记住密码
+                // 记住密码（P1-2 修复：移除明文密码回退分支，AuthCore 不可用时拒绝保存）
                 const rememberPassword = document.getElementById('rememberPassword');
                 if (rememberPassword && rememberPassword.checked) {
                     if (window.AuthCore && AuthCore.encryptPassword) {
                         localStorage.setItem('auth:savedPassword', AuthCore.encryptPassword(password));
                     } else {
-                        localStorage.setItem('auth:savedPassword', password);
+                        // 加密模块未就绪，不保存密码，避免明文持久化导致 XSS 泄露
+                        console.warn('[auth] AuthCore.encryptPassword 不可用，已拒绝保存密码');
+                        localStorage.removeItem('auth:savedPassword');
+                        rememberPassword.checked = false;
+                        // 不阻塞登录，仅提示用户
+                        setTimeout(function() {
+                            alert('加密模块未就绪，本次未记住密码。下次启动后会自动恢复。');
+                        }, 100);
                     }
                 } else {
                     localStorage.removeItem('auth:savedPassword');
