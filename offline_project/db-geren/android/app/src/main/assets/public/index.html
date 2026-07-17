@@ -1245,6 +1245,8 @@ if (window.Permission) {
             if (!btn1 || !btn2 || !currentUser) return;
 
             const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : false;
+            const isApp = !window.electronAPI; // 非Electron即为APP
+            const changePwdText = isApp ? '🔐 改密' : '🔐 修改密码';
 
             btn1.innerHTML = '📊 统计';
             btn1.onclick = function() { showModal('analyticsModal'); };
@@ -1253,7 +1255,7 @@ if (window.Permission) {
                 btn2.innerHTML = '👤 账户';
                 btn2.onclick = function() { showUserManageModal(); };
             } else {
-                btn2.innerHTML = '🔐 改密';
+                btn2.innerHTML = changePwdText;
                 btn2.onclick = function() { showChangePwdModal(); };
             }
             btn2.style.display = '';
