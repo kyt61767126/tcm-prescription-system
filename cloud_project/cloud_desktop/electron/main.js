@@ -539,7 +539,12 @@ app.whenReady().then(() => {
     
     sharedSession = session.fromPartition('persist:tcm-prescription-cloud');
 
-    // 安装 CSP
+    // 安装 CSP（P2-1: 收紧 Content-Security-Policy）
+    // - 增加 object-src 'none' 禁止插件加载（防 Flash/PDF 漏洞）
+    // - 增加 base-uri 'self' 防 base 标签劫持
+    // - 增加 form-action 'self' 防表单提交到第三方
+    // - 增加 frame-ancestors 'none' 防点击劫持
+    // - connect-src 收紧：移除 *.workers.dev 通配，仅允许明确域名
     sharedSession.webRequest.onHeadersReceived((details, callback) => {
         callback({
             responseHeaders: {
@@ -548,9 +553,14 @@ app.whenReady().then(() => {
                     "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://tcm-prescription-system.pages.dev https://*.cloudflareaccess.com; " +
                     "img-src 'self' data: blob: https:; " +
                     "media-src 'self' blob: data: https:; " +
-                    "connect-src 'self' https://tcm-prescription-system.pages.dev https://*.workers.dev; " +
+                    "connect-src 'self' https://tcm-prescription-system.pages.dev; " +
                     "font-src 'self' data:; " +
-                    "style-src 'self' 'unsafe-inline'"
+                    "style-src 'self' 'unsafe-inline'; " +
+                    "object-src 'none'; " +
+                    "base-uri 'self'; " +
+                    "form-action 'self'; " +
+                    "frame-ancestors 'none'; " +
+                    "worker-src 'self' blob:;"
                 ]
             }
         });

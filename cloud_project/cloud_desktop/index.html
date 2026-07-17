@@ -2150,10 +2150,8 @@ if (window.Permission) {
                 return { success: false, error: 'Non-allowed API disabled', fromCloud: false };
             }
             
-            console.log('=== Cloud Fetch ===');
-            console.log('Full URL:', url);
-            console.log('Options:', JSON.stringify(options, null, 2));
-            console.log('Has user param:', url.includes('user='));
+            // P2: 日志脱敏 - 移除生产环境敏感日志，仅保留状态码和错误信息
+            // 防止 Authorization header、用户密码、患者数据等泄露到控制台
             
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -2171,20 +2169,16 @@ if (window.Permission) {
                 
                 clearTimeout(timeoutId);
                 
-                console.log('Cloud fetch response status:', response.status);
-                
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error('Cloud fetch HTTP error:', errorText);
-                    throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+                    console.error('Cloud fetch HTTP error, status:', response.status);
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
                 const text = await response.text();
-                console.log('Cloud fetch response text (first 200 chars):', text.substring(0, 200));
                 // 清理可能的BOM字符和其他无效字符
                 const cleanText = text.replace(/^\uFEFF/, '').trim();
                 const data = JSON.parse(cleanText);
-                console.log('Cloud fetch response data:', data);
 
                 // 云端可达性判断：HTTP 成功且业务未显式失败才算可达
                 // 避免"仅离线"账号收到 {success:false} 时误显示"在线"
@@ -2355,7 +2349,7 @@ if (window.Permission) {
                     },
                     body: JSON.stringify({ users: users })
                 });
-                console.log('保存用户到云端响应:', response);
+                // P2: 日志脱敏 - 移除完整响应日志
                 return response.success;
             } catch (error) {
                 console.warn('Failed to save users to cloud:', error);
@@ -2535,7 +2529,6 @@ if (window.Permission) {
                     return null;
                 }
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
-                console.log('请求处方API:', url);
                 
                 // 添加认证头（使用 safeBtoa 处理中文字符）
                 const authToken = buildAuthPayload(currentUser);
@@ -2544,12 +2537,9 @@ if (window.Permission) {
                         'Authorization': `Basic ${authToken}`
                     }
                 });
-                console.log('处方API响应:', response);
-                console.log('云端返回的data数量:', response.data ? response.data.length : 0);
                 
                 if (response.success) {
                     if (response.data) {
-                        console.log('响应有data字段，长度:', response.data.length);
                         const result = {
                             data: response.data,
                             totalCount: response.totalCount || response.data.length
@@ -2561,18 +2551,15 @@ if (window.Permission) {
                         }
                         return result;
                     } else if (Array.isArray(response)) {
-                        console.log('响应本身是数组，长度:', response.length);
                         const result = {
                             data: response,
                             totalCount: response.length
                         };
                         DataCache.set('prescriptions', result);
                         return result;
-                    } else {
-                        console.log('响应成功但数据为空:', response);
                     }
                 } else {
-                    console.log('响应失败:', response.error);
+                    console.warn('处方API响应失败:', response.error);
                 }
             } catch (error) {
                 console.warn('Failed to get prescriptions from cloud:', error);
@@ -2614,7 +2601,6 @@ if (window.Permission) {
             try {
                 // 去掉 _t 时间戳：新鲜度由 LocalDB 缓存控制（WebView 已 LOAD_NO_CACHE）
                 const url = `${CLOUD_API_BASE}/medicines`;
-                console.log('请求药品API:', url);
                 
                 // 添加认证头（即使GET请求不需要认证，保持一致性）
                 const options = {};
@@ -2626,7 +2612,6 @@ if (window.Permission) {
                 }
                 
                 const response = await cloudFetch(url, options);
-                console.log('药品API响应:', response);
                 
                 if (response.success && response.data) {
                     // 更新缓存
@@ -3422,6 +3407,29 @@ if (window.Permission) {
             sessionStorage.removeItem('currentUser');
             localStorage.removeItem('cloud_prescription_cache');
             localStorage.removeItem('cloud_prescription_cache_time');
+
+            // P2: 登出时清理全部认证/同步相关敏感 key，仅保留非敏感配置
+            // 清除 auth:* 前缀的所有键（token、登录状态、密码记忆等）
+            const authKeys = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (k && (k.startsWith('auth:') || k.startsWith('cloud_') ||
+                          k.includes('token') || k.includes('password') ||
+                          k.includes('secret') || k.includes('session'))) {
+                    authKeys.push(k);
+                }
+            }
+            authKeys.forEach(k => localStorage.removeItem(k));
+            // 同步 sessionStorage
+            const sessAuthKeys = [];
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const k = sessionStorage.key(i);
+                if (k && (k.startsWith('auth:') || k.includes('token') ||
+                          k.includes('password') || k.includes('secret'))) {
+                    sessAuthKeys.push(k);
+                }
+            }
+            sessAuthKeys.forEach(k => sessionStorage.removeItem(k));
 
             // 清空 DOM 中的医师姓名，避免下一个登录用户看到上一个用户的姓名
             const doctorNameEl = document.getElementById('doctorName');
@@ -7067,12 +7075,7 @@ if (window.Permission) {
                                      (localStorage.getItem('lastUsedMediaIdentifier') || '') || '';
 
             // 统一写入云端数据库，由云端生成编号
-            console.log('=== Saving prescription ===');
-            console.log('Record:', JSON.stringify(record).substring(0, 200));
-            
             const response = await savePrescriptionsToCloud([record]);
-            
-            console.log('Save result:', response);
             
             if (response && response.success) {
                 // 直接使用云端返回的已保存处方（带正确的编号）
