@@ -71,6 +71,9 @@ public class MainActivity extends AppCompatActivity {
     private volatile String cachedVideoRecorderScript = null;
     // 安全防护：方案二（反调试 + 完整性校验 + 多点签名校验）
     private SecurityGuard securityGuard;
+    // 媒体文件读取白名单（启动时初始化一次，避免每次调用都做 I/O 解析）
+    // 彻底解决"加载失败"反复出现：统一路径解析，消除 getAbsolutePath vs getCanonicalPath 不一致
+    private java.util.Set<String> mediaWhitelistedRoots = new java.util.HashSet<>();
 
     // ========================================================================
     // 生命周期
@@ -112,6 +115,9 @@ public class MainActivity extends AppCompatActivity {
         setContentView(webView);
         getWindow().setBackgroundDrawable(null);
         configureWebView();
+
+        // 初始化媒体文件读取白名单（只解析一次，避免运行时 I/O 不稳定）
+        initMediaWhitelist();
 
         // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
         preloadVideoRecorderScript();
@@ -522,9 +528,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // P1-6: 分层校验 - 仅敏感操作需校验来源，保存/查找操作跳过校验
-    // startReadSession 已有路径白名单校验，无需重复校验来源
+    // readFileAsBase64 不再列为敏感操作：内部已用 isMediaPathAllowed 路径白名单校验
+    // 彻底解决"加载失败"反复出现：回退分支不再被 isCallerAllowed 误拦截
     private boolean isSensitiveOperation(String name) {
-        return "readFileAsBase64".equals(name) || "deleteFile".equals(name);
+        return "deleteFile".equals(name) || "openFile".equals(name);
     }
 
     // ========================================================================
@@ -935,14 +942,19 @@ public class MainActivity extends AppCompatActivity {
         }
 
         private File getImageDir() {
-            File dir;
+            File dir = null;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                dir = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "本能中医处方");
+                File external = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+                if (external != null) {
+                    dir = new File(external, "本能中医处方");
+                }
             } else {
                 File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-                dir = new File(pictures, "本能中医处方");
+                if (pictures != null) {
+                    dir = new File(pictures, "本能中医处方");
+                }
             }
-            if (!dir.exists() && !dir.mkdirs()) {
+            if (dir == null || (!dir.exists() && !dir.mkdirs())) {
                 dir = new File(getFilesDir(), "prescription_images");
                 if (!dir.exists()) dir.mkdirs();
             }
@@ -950,18 +962,78 @@ public class MainActivity extends AppCompatActivity {
         }
 
         private File getVideoDir() {
-            File dir;
+            File dir = null;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                dir = new File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "本能中医处方");
+                File external = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                if (external != null) {
+                    dir = new File(external, "本能中医处方");
+                }
             } else {
                 File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-                dir = new File(movies, "本能中医处方");
+                if (movies != null) {
+                    dir = new File(movies, "本能中医处方");
+                }
             }
-            if (!dir.exists() && !dir.mkdirs()) {
-                dir = new File(getFilesDir(), "videos");
+            if (dir == null || (!dir.exists() && !dir.mkdirs())) {
+                dir = new File(getFilesDir(), "prescription_videos");
                 if (!dir.exists()) dir.mkdirs();
             }
             return dir;
+        }
+
+        // 初始化媒体文件读取白名单：缓存所有可能的目录（外部 + 内部 fallback）
+        // 彻底解决 getExternalFilesDir 返回 null 时白名单失效的问题
+        private void initMediaWhitelist() {
+            mediaWhitelistedRoots.clear();
+            try {
+                // 外部存储目录（Android 10+）
+                File extImg = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+                if (extImg != null) {
+                    File d = new File(extImg, "本能中医处方");
+                    mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+                }
+                File extVid = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                if (extVid != null) {
+                    File d = new File(extVid, "本能中医处方");
+                    mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+                }
+                // Android 9 及以下：外部公共目录
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                    File pubImg = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+                    if (pubImg != null) {
+                        File d = new File(pubImg, "本能中医处方");
+                        mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+                    }
+                    File pubVid = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                    if (pubVid != null) {
+                        File d = new File(pubVid, "本能中医处方");
+                        mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+                    }
+                }
+                // 内部 fallback 目录（getExternalFilesDir 返回 null 时使用）
+                mediaWhitelistedRoots.add(new File(getFilesDir(), "prescription_images").getCanonicalPath() + File.separator);
+                mediaWhitelistedRoots.add(new File(getFilesDir(), "prescription_videos").getCanonicalPath() + File.separator);
+                Log.i(TAG, "媒体白名单初始化完成: " + mediaWhitelistedRoots.size() + " 个根目录");
+            } catch (Exception e) {
+                Log.e(TAG, "initMediaWhitelist 失败", e);
+            }
+        }
+
+        // 统一路径校验：canonicalPath 必须以某个白名单根目录开头
+        // 加 File.separator 防止 /sdcard/Foo 误匹配 /sdcard/FooBar
+        private boolean isMediaPathAllowed(String filePath) {
+            if (filePath == null || filePath.isEmpty()) return false;
+            try {
+                String canonical = new File(filePath).getCanonicalPath();
+                for (String root : mediaWhitelistedRoots) {
+                    if (canonical.startsWith(root)) return true;
+                }
+                Log.w(TAG, "isMediaPathAllowed 拒绝非白名单路径: " + canonical);
+                return false;
+            } catch (Exception e) {
+                Log.e(TAG, "isMediaPathAllowed 异常: " + filePath, e);
+                return false;
+            }
         }
 
         private String getCurrentMonthFolder() {
@@ -993,7 +1065,8 @@ public class MainActivity extends AppCompatActivity {
 
         private String sanitize(String name) {
             if (name == null) return "";
-            return name.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+            // 与 JS sanitizeStr 保持一致：先替换非法字符为 _，再删除所有空格
+            return name.replaceAll("[\\\\/:*?\"<>|]", "_").replace(" ", "").trim();
         }
 
         private JSONObject fail(String msg) {
@@ -1183,6 +1256,11 @@ public class MainActivity extends AppCompatActivity {
                 if (!file.exists()) {
                     return fail("文件不存在: " + filePath);
                 }
+                // 路径白名单校验（内部安全，不再依赖 isCallerAllowed）
+                // 彻底解决 WebView URL 短暂变化时回退分支被误拦截导致"加载失败"
+                if (!isMediaPathAllowed(filePath)) {
+                    return fail("路径不在允许的目录内");
+                }
                 java.io.FileInputStream fis = new java.io.FileInputStream(file);
                 java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
                 byte[] buffer = new byte[8192];
@@ -1229,18 +1307,8 @@ public class MainActivity extends AppCompatActivity {
                 if (!file.exists()) {
                     return fail("文件不存在: " + filePath);
                 }
-                // 路径白名单校验：只允许读取图片/视频目录下的文件
-                String canonicalPath = file.getCanonicalPath();
-                File imgDir = getImageDir();
-                File vidDir = getVideoDir();
-                String imgDirPath = imgDir != null ? imgDir.getCanonicalPath() : "";
-                String vidDirPath = vidDir != null ? vidDir.getCanonicalPath() : "";
-                boolean allowed = !imgDirPath.isEmpty() && canonicalPath.startsWith(imgDirPath);
-                if (!allowed) {
-                    allowed = !vidDirPath.isEmpty() && canonicalPath.startsWith(vidDirPath);
-                }
-                if (!allowed) {
-                    Log.w("TCM-Pres", "startReadSession 拒绝非白名单路径: " + canonicalPath);
+                // 路径白名单校验：使用预缓存的白名单（避免运行时 I/O 不稳定）
+                if (!isMediaPathAllowed(filePath)) {
                     return fail("路径不在允许的目录内");
                 }
 
@@ -1276,8 +1344,24 @@ public class MainActivity extends AppCompatActivity {
             try {
                 int chunkLen = 256 * 1024;
                 byte[] buffer = new byte[chunkLen];
-                int read = rs.fis.read(buffer);
-                if (read < 0) {
+                int totalRead = 0;
+                int retry = 0;
+                // 处理部分读取和 read==0 边缘情况，最多重试 3 次
+                // 彻底解决网络挂载存储或 FUSE 文件系统的读取不稳定问题
+                while (totalRead < chunkLen && retry < 3) {
+                    int read = rs.fis.read(buffer, totalRead, chunkLen - totalRead);
+                    if (read < 0) break;  // EOF
+                    if (read == 0) {
+                        retry++;
+                        try { Thread.sleep(10); } catch (InterruptedException ie) { break; }
+                        continue;
+                    }
+                    totalRead += read;
+                    // 已到文件末尾，不再继续读
+                    if (rs.readOffset + totalRead >= rs.fileSize) break;
+                }
+                if (totalRead == 0) {
+                    // EOF 或无数据可读
                     JSONObject r = new JSONObject();
                     r.put("success", true);
                     r.put("chunk", "");
@@ -1288,26 +1372,26 @@ public class MainActivity extends AppCompatActivity {
                     return r;
                 }
                 byte[] actual;
-                if (read == chunkLen) {
+                if (totalRead == chunkLen) {
                     actual = buffer;
                 } else {
-                    actual = new byte[read];
-                    System.arraycopy(buffer, 0, actual, 0, read);
+                    actual = new byte[totalRead];
+                    System.arraycopy(buffer, 0, actual, 0, totalRead);
                 }
                 String chunkBase64 = Base64.encodeToString(actual, Base64.NO_WRAP);
-                rs.readOffset += read;
+                rs.readOffset += totalRead;
                 boolean eof = rs.readOffset >= rs.fileSize;
                 JSONObject r = new JSONObject();
                 r.put("success", true);
                 r.put("chunk", chunkBase64);
-                r.put("read", read);
+                r.put("read", totalRead);
                 r.put("eof", eof);
                 r.put("offset", rs.readOffset);
                 r.put("total", rs.fileSize);
                 return r;
             } catch (Exception e) {
                 Log.e("TCM-Pres", "readNextChunk 失败 (sessionId=" + sessionId + ")", e);
-                closeReadSession(sessionId);
+                // 不主动 closeReadSession，让 JS 端的 closeReadSession 调用来清理
                 return fail("读取分片失败: " + e.getMessage());
             }
         }

@@ -167,14 +167,15 @@
             readFileAsBase64: function (filePath) {
                 // 统一走分片读取，避免 Binder 1MB 限制和 isCallerAllowed 误拦截
                 // 最终用 Blob URL 代替 data URL，避免大视频 data URL 超出 WebView 限制
+                // 彻底修复：每个读取请求独立管理 Blob URL，避免全局单例竞态
                 return new Promise(function (resolve) {
                     try {
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
                         if (!startR || !startR.success) {
-                            // startReadSession 不支持（旧 APK），回退到原 API
-                            console.warn('[离线APP] startReadSession 失败，回退原 API:', startR && startR.error);
-                            var rFallback = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
-                            resolve(rFallback);
+                            // 不再回退到 readFileAsBase64（Java 端已用 isMediaPathAllowed 内部校验）
+                            // 直接返回失败，让前端显示具体错误并提供重试按钮
+                            console.error('[离线APP] startReadSession 失败:', startR && startR.error);
+                            resolve({ success: false, error: 'startReadSession 失败: ' + (startR && startR.error || '未知') });
                             return;
                         }
                         var sessionId = startR.sessionId;
@@ -182,15 +183,26 @@
                         var fileSize = startR.fileSize || 0;
                         console.log('[离线APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
                         var uint8Arrays = [];
+                        var chunkRetryCount = 0;
+                        var MAX_CHUNK_RETRY = 2;
 
                         function nextChunk() {
                             var r = callNative('readNextChunk', JSON.stringify({ sessionId: sessionId }));
                             if (!r || !r.success) {
+                                // 分片读取失败重试（最多 2 次），避免单点失败导致整体失败
+                                if (chunkRetryCount < MAX_CHUNK_RETRY) {
+                                    chunkRetryCount++;
+                                    console.warn('[离线APP] readNextChunk 失败，重试 ' + chunkRetryCount + '/' + MAX_CHUNK_RETRY + ':', r && r.error);
+                                    setTimeout(nextChunk, 50);
+                                    return;
+                                }
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
-                                console.error('[离线APP] readNextChunk 失败:', r && r.error);
+                                console.error('[离线APP] readNextChunk 最终失败:', r && r.error);
                                 resolve(r || { success: false, error: 'readNextChunk 返回无效' });
                                 return;
                             }
+                            // 重置重试计数（本次成功，下次失败重新计数）
+                            chunkRetryCount = 0;
                             if (r.chunk) {
                                 // 分片解码 base64 → Uint8Array，避免大字符串 atob 内存翻倍
                                 try {
@@ -209,12 +221,26 @@
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
                                 try {
                                     var blob = new Blob(uint8Arrays, { type: mimeType });
-                                    // 清理旧 blob URL 避免内存泄漏
-                                    if (window.__currentBlobUrl) {
-                                        try { URL.revokeObjectURL(window.__currentBlobUrl); } catch (e) {}
-                                    }
                                     var blobUrl = URL.createObjectURL(blob);
-                                    window.__currentBlobUrl = blobUrl;
+                                    // 用 Map 管理所有活动的 Blob URL，避免全局单例竞态
+                                    // closeMediaViewer 时会遍历全部 revoke
+                                    if (!window.__activeBlobUrls) {
+                                        window.__activeBlobUrls = {};
+                                        window.__activeBlobUrlCount = 0;
+                                    }
+                                    var urlId = 'burl_' + Date.now() + '_' + (window.__activeBlobUrlCount++);
+                                    window.__activeBlobUrls[urlId] = blobUrl;
+                                    // 自动 GC：10 分钟后 revoke（足够用户长时间查看）
+                                    (function(id, url) {
+                                        setTimeout(function() {
+                                            try {
+                                                if (window.__activeBlobUrls && window.__activeBlobUrls[id] === url) {
+                                                    URL.revokeObjectURL(url);
+                                                    delete window.__activeBlobUrls[id];
+                                                }
+                                            } catch (e) {}
+                                        }, 10 * 60 * 1000);
+                                    })(urlId, blobUrl);
                                     console.log('[离线APP] 分片读取完成，blob URL=' + blobUrl + ', 片数=' + uint8Arrays.length + ', 总字节=' + blob.size);
                                     resolve({ success: true, data: blobUrl });
                                 } catch (e) {

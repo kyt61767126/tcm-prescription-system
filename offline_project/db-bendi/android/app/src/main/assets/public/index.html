@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+﻿<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -3654,6 +3654,14 @@ let currentUser = null;
                         img.src = src;
                         img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;transition:transform 0.08s ease-out;cursor:grab;user-select:none;-webkit-user-drag:none;will-change:transform;';
                         img.draggable = false;
+                        // 图片加载失败处理（Blob URL 失效等场景），提供重试按钮
+                        img.onerror = function() {
+                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                                '图片解码失败（可能 Blob URL 已失效）<br/>' +
+                                '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
+                                'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
+                                '</div>';
+                        };
                         view.appendChild(img);
                         var scale = 1, rot = 0, tx = 0, ty = 0;
                         function apply() { img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ') rotate(' + rot + 'deg)'; }
@@ -3698,10 +3706,22 @@ let currentUser = null;
                         }, {passive:false});
                         img.addEventListener('touchend', function() { touchState = null; });
                     } else {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
+                        // 显示具体错误原因 + 重试按钮，便于定位问题
+                        var errMsg = (result && result.error) ? result.error : '未知错误';
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                            '加载失败: ' + escapeHtml(String(errMsg)) + '<br/>' +
+                            '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
+                            'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
+                            '</div>';
+                        console.error('[媒体查看] 图片加载失败:', { filePath: f.path, error: errMsg, result: result });
                     }
-                }).catch(function() {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
+                }).catch(function(err) {
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                        '加载异常: ' + escapeHtml(String(err.message || err)) + '<br/>' +
+                        '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
+                        'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
+                        '</div>';
+                    console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
                 // 离线APP直接用系统播放器打开视频（最可靠，原生支持webm/mp4）
@@ -3742,10 +3762,20 @@ let currentUser = null;
                                         };
                                         view.appendChild(v);
                                     } else {
-                                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败</div>';
+                                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                                            '视频加载失败: ' + escapeHtml(String(r.error || '未知')) + '<br/>' +
+                                            '<button onclick="window.__tryInlinePlay()" ' +
+                                            'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
+                                            '</div>';
+                                        console.error('[媒体查看] 内嵌视频加载失败:', r);
                                     }
-                                }).catch(function() {
-                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败</div>';
+                                }).catch(function(err) {
+                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                                        '视频加载异常: ' + escapeHtml(String(err.message || err)) + '<br/>' +
+                                        '<button onclick="window.__tryInlinePlay()" ' +
+                                        'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
+                                        '</div>';
+                                    console.error('[媒体查看] 内嵌视频加载异常:', err);
                                 });
                             };
                         } else {
@@ -3761,10 +3791,20 @@ let currentUser = null;
                                     v.src = src;
                                     view.appendChild(v);
                                 } else {
-                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败: ' + (result.error || '') + '</div>';
+                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                                        '视频加载失败: ' + escapeHtml(String(r.error || result.error || '未知')) + '<br/>' +
+                                        '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
+                                        'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
+                                        '</div>';
+                                    console.error('[媒体查看] 系统播放器回退内嵌视频加载失败:', r);
                                 }
                             }).catch(function(err) {
-                                view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败: ' + (err.message || err) + '</div>';
+                                view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                                    '视频加载异常: ' + escapeHtml(String(err.message || err)) + '<br/>' +
+                                    '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
+                                    'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
+                                    '</div>';
+                                console.error('[媒体查看] 系统播放器回退内嵌视频加载异常:', err);
                             });
                         }
                     }).catch(function(err) {
@@ -3781,6 +3821,14 @@ let currentUser = null;
         function closeMediaViewer() {
             const overlay = document.getElementById('mediaViewerOverlay');
             if (overlay) overlay.style.display = 'none';
+            // 遍历所有活动的 Blob URL 全部 revoke（彻底修复：消除全局单例竞态）
+            if (window.__activeBlobUrls) {
+                Object.keys(window.__activeBlobUrls).forEach(function(id) {
+                    try { URL.revokeObjectURL(window.__activeBlobUrls[id]); } catch(e) {}
+                });
+                window.__activeBlobUrls = {};
+            }
+            // 兼容旧变量（已废弃，保留以防遗漏）
             if (window.__currentBlobUrl) {
                 try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
                 window.__currentBlobUrl = null;
