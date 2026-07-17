@@ -4,6 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <!-- P2-1: CSP 收紧 - 仅允许同源 + 云端 API + 必要 CDN，禁止内联事件/eval -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; media-src 'self' blob: data: https:; font-src 'self' data:; connect-src 'self' https://tcm-prescription-system.pages.dev https://*.pages.dev; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>惠康中医云端</title>
@@ -1786,6 +1788,12 @@ if (window.Permission) {
                 if (!currentUser) return;
                 if (getAllowedMode() !== 'both') return;       // 仅 both 模式同步
                 if (!navigator.onLine) return;
+                // P2-5: 指数退避 - 连续失败时跳过同步，避免云端不可达时频繁请求
+                // 失败次数：0-2 正常同步，3-5 延迟（2^n 秒），6+ 跳过直到下次 online 事件
+                if (this._consecutiveFailures >= 6) {
+                    console.warn('SyncEngine: 连续失败 ' + this._consecutiveFailures + ' 次，跳过本次同步（等待 online 事件重置）');
+                    return;
+                }
                 const ok = await LocalDB.ready();
                 if (!ok) return;
                 this._running = true;
@@ -1796,8 +1804,11 @@ if (window.Permission) {
                     await LocalDB.setSyncStatus('pull', pending);
                     if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
                     console.log('SyncEngine.run 完成，待同步:', pending);
+                    // 成功时重置失败计数
+                    this._consecutiveFailures = 0;
                 } catch (e) {
-                    console.warn('SyncEngine.run 出错:', e);
+                    this._consecutiveFailures++;
+                    console.warn('SyncEngine.run 出错（失败 ' + this._consecutiveFailures + ' 次）:', e);
                 } finally {
                     this._running = false;
                 }
@@ -1898,7 +1909,13 @@ if (window.Permission) {
             init() {
                 if (this._inited) return;
                 this._inited = true;
-                window.addEventListener('online', () => { setTimeout(() => SyncEngine.run(), 800); });
+                // P2-5: 离线同步优化 - 指数退避，避免网络问题时频繁重试造成云端 API 压力
+                this._consecutiveFailures = 0;
+                window.addEventListener('online', () => {
+                    // 网络恢复时重置失败计数，立即触发同步
+                    this._consecutiveFailures = 0;
+                    setTimeout(() => SyncEngine.run(), 800);
+                });
                 // 根据用户角色设置同步策略：普通用户每小时同步，管理员60秒持续同步
                 const isNormalUser = currentUser && !isClinicAdmin(currentUser) && !isPlatformAdmin(currentUser);
                 const syncInterval = isNormalUser ? 3600000 : 60000;
@@ -2365,7 +2382,7 @@ if (window.Permission) {
             }
 
             console.log('=== refreshHistory() 开始 ===');
-            console.log('当前用户:', currentUser);
+            console.log('当前用户:', currentUser ? currentUser.username : '(未登录)');
             showToast('正在刷新...');
             // 重置分页计数，避免 loadMoreHistory 累加后刷新仍显示扩展条数
             historyDisplayCount = HISTORY_PAGE_SIZE;
@@ -3021,8 +3038,9 @@ if (window.Permission) {
             }));
             
             console.log('=== 保存用户数据 ===');
-            console.log('用户列表:', usersWithPermission);
-            console.log('当前用户:', currentUser);
+            // P2-3: 日志脱敏 - 只记录用户名和数量，不输出完整用户对象（防止密码/敏感字段泄露）
+            console.log('用户数量:', usersWithPermission.length, '用户名列表:', usersWithPermission.map(u => u.username));
+            console.log('当前用户:', currentUser ? currentUser.username : '(未登录)');
             
             const cloudSuccess = await saveUsersToCloud(usersWithPermission);
             
@@ -3323,8 +3341,21 @@ if (window.Permission) {
                 if (user.allowedMode === 'local' && !window.Capacitor) {
                     user.allowedMode = 'both';
                 }
-                currentUser = user;
-                const userData = JSON.stringify(user);
+                // P2-2: login-state 精简 - 剥离可能残留的敏感字段（双重保险）
+                // auth-core 已剥离 password，但防止云端 API 误返回 passwordHash/token 等
+                const safeUser = {
+                    username: user.username,
+                    name: user.name || user.username,
+                    role: user.role,
+                    clinicId: user.clinicId || null,
+                    clinicName: user.clinicName || null,
+                    allowedMode: user.allowedMode,
+                    cloudEnabled: user.cloudEnabled !== undefined ? user.cloudEnabled : true,
+                    allowSavePrescription: user.allowSavePrescription !== undefined ? user.allowSavePrescription : true,
+                    hasPassword: !!user.hasPassword
+                };
+                currentUser = safeUser;
+                const userData = JSON.stringify(safeUser);
                 localStorage.setItem('cloud_currentUser', userData);
                 localStorage.setItem('cloud_isLoggedIn', 'true');
                 sessionStorage.setItem('currentUser', userData);
@@ -4818,7 +4849,7 @@ if (window.Permission) {
             };
 
             console.log('=== loadData() 开始 ===');
-            console.log('当前用户:', currentUser);
+            console.log('当前用户:', currentUser ? currentUser.username : '(未登录)');
 
             // 并行请求云端数据，减少加载时间
             const [cloudMedicines, cloudFormulas, cloudResult] = await Promise.all([
@@ -4827,8 +4858,9 @@ if (window.Permission) {
                 getPrescriptionsFromCloud().catch(e => { console.warn('Failed to get prescriptions:', e); return null; })
             ]);
 
-            console.log('cloudResult:', cloudResult);
-            console.log('cloudResult.data:', cloudResult ? cloudResult.data : 'undefined');
+            // P2-3: 日志脱敏 - 只记录数量和状态，不输出完整数据（防止患者信息泄露）
+            console.log('cloudResult.success:', cloudResult ? cloudResult.success : 'undefined');
+            console.log('cloudResult.data.length:', cloudResult && cloudResult.data ? cloudResult.data.length : 'undefined');
 
             // 更新药品库
             if (cloudMedicines && cloudMedicines.length > 0) {
@@ -4842,21 +4874,12 @@ if (window.Permission) {
 
             // 更新处方历史（最重要，优先处理）
             console.log('=== 更新处方历史 ===');
-            console.log('cloudResult:', cloudResult);
-            console.log('cloudResult.data:', cloudResult ? cloudResult.data : 'undefined');
             console.log('cloudResult.data.length:', cloudResult && cloudResult.data ? cloudResult.data.length : 'undefined');
-            console.log('cloudResult.currentUsername:', cloudResult ? cloudResult.currentUsername : 'undefined');
-            console.log('cloudResult.isAdmin:', cloudResult ? cloudResult.isAdmin : 'undefined');
 
             if (cloudResult && cloudResult.data) {
-                console.log('cloudResult.data 类型:', Array.isArray(cloudResult.data) ? '数组' : '对象');
-                console.log('cloudResult.data 内容:', JSON.stringify(cloudResult.data).substring(0, 500));
-
                 if (cloudResult.data.length > 0) {
                     console.log('currentUser.role:', currentUser ? currentUser.role : 'undefined');
                     console.log('currentUser.username:', currentUser ? currentUser.username : 'undefined');
-                    console.log('cloudResult.currentUsername:', cloudResult.currentUsername);
-                    console.log('cloudResult.isAdmin:', cloudResult.isAdmin);
 
                     // 使用云端返回的currentUsername来确保一致性
                     const effectiveUsername = cloudResult.currentUsername || currentUser?.username;
@@ -4867,7 +4890,8 @@ if (window.Permission) {
                     } else {
                         console.log('普通用户模式，过滤处方');
                         console.log('使用用户名过滤:', effectiveUsername);
-                        console.log('云端返回的处方:', cloudResult.data.map(p => ({ id: p.id, createdBy: p.createdBy })));
+                        // P2-3: 日志脱敏 - 只记录处方数量，不输出 id/createdBy 列表
+                        console.log('云端返回处方数量:', cloudResult.data.length);
                         // 严格过滤：普通用户只能看到自己的处方（createdBy 必须匹配）
                         // 移除 || !p.createdBy，避免无 createdBy 的处方被所有用户看到
                         prescriptionHistory = cloudResult.data.filter(p =>

@@ -16,11 +16,23 @@
 -keepattributes RuntimeInvisibleAnnotations
 
 # ============================================================================
+# P2-4: 安全混淆增强（与云端 APP 一致）
+# ============================================================================
+# 允许修改访问修饰符，增加反编译难度
+-allowaccessmodification
+
+# 合并相同的类，减少类数量
+-mergeinterfacesaggressively
+
+# 优化重载（修改方法参数类型和数量，增加混淆强度）
+-overloadaggressively
+
+# ============================================================================
 # JavaScript 接口（WebView JS 调用）
 # ============================================================================
--keepclassmembers class com.benneng.pres.** {
-    public *;
-}
+# 旧规则过度保留 public *，R8 full mode 下仅保留 @JavascriptInterface 方法即可
+# MainActivity lifecycle 方法由 Android framework 自动保留
+# SecurityGuard 单独保留，NativeBridge 的 JS 方法由下方规则覆盖
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
