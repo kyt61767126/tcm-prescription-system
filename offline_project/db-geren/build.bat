@@ -43,8 +43,8 @@ if exist "dist" (
 echo [OK] Old artifacts cleaned
 echo.
 
-echo [5/7] Obfuscating JavaScript code...
-node "%~dp0..\..\tools\obfuscate.js"
+echo [5/7] Obfuscating JavaScript code (target=geren, may take 1-2 minutes)...
+node "%~dp0..\..\tools\obfuscate.js" --target=geren
 if errorlevel 1 (
     echo [ERROR] Obfuscation failed
     pause
@@ -67,7 +67,7 @@ if errorlevel 1 (
 echo.
 
 echo Restoring original JavaScript code...
-node "%~dp0..\..\tools\obfuscate.js" restore
+node "%~dp0..\..\tools\obfuscate.js" restore --target=geren
 echo [OK] Original code restored
 echo.
 

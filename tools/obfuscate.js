@@ -78,8 +78,8 @@ const MODULE_FILES = [
     'patient-archive.js'
 ];
 
-// 分发目录（相对于项目根目录）
-const DISTRIBUTION_DIRS = [
+// 全部分发目录（相对于项目根目录）
+const ALL_DISTRIBUTION_DIRS = [
     'public',
     'public/electron',
     'cloud_project/cloud_desktop',
@@ -94,6 +94,32 @@ const DISTRIBUTION_DIRS = [
     'offline_project/db-dingzhi/android/app/src/main/assets/public',
     'offline_project/db-geren/android/app/src/main/assets/public'
 ];
+
+// 按 target 分组（用于 --target=bendi 等参数，只处理对应版本，大幅加速打包）
+const TARGET_DIRS = {
+    bendi: [
+        'offline_project/db-bendi',
+        'offline_project/db-bendi/electron',
+        'offline_project/db-bendi/android/app/src/main/assets/public'
+    ],
+    dingzhi: [
+        'offline_project/db-dingzhi',
+        'offline_project/db-dingzhi/electron',
+        'offline_project/db-dingzhi/android/app/src/main/assets/public'
+    ],
+    geren: [
+        'offline_project/db-geren',
+        'offline_project/db-geren/electron',
+        'offline_project/db-geren/android/app/src/main/assets/public'
+    ],
+    cloud: [
+        'public',
+        'public/electron',
+        'cloud_project/cloud_desktop',
+        'cloud_project/cloud_desktop/electron'
+    ],
+    all: ALL_DISTRIBUTION_DIRS
+};
 
 // 额外需要混淆的文件（各目录中的 login.js, main.js, preload.js）
 const EXTRA_FILES = {
@@ -169,14 +195,26 @@ function restoreFile(filePath) {
 // 主逻辑
 const JavaScriptObfuscator = loadObfuscator();
 const projectRoot = path.resolve(__dirname, '..');
-const mode = process.argv[2] || 'obfuscate'; // obfuscate | restore
+
+// 解析参数：支持 --target=bendi|dingzhi|geren|cloud|all 和 restore
+// 用法示例:
+//   node tools/obfuscate.js                          # 混淆全部（默认）
+//   node tools/obfuscate.js --target=bendi           # 仅混淆 bendi
+//   node tools/obfuscate.js restore                  # 还原全部
+//   node tools/obfuscate.js restore --target=bendi   # 仅还原 bendi
+const argv = process.argv.slice(2);
+const mode = argv.includes('restore') ? 'restore' : 'obfuscate';
+const targetArg = argv.find(a => a.startsWith('--target='));
+const targetName = targetArg ? targetArg.split('=')[1] : 'all';
+const targetLabel = targetName === 'all' ? '全部' : `仅 ${targetName}`;
+const DISTRIBUTION_DIRS = (TARGET_DIRS[targetName] || TARGET_DIRS.all);
 
 let successCount = 0;
 let failCount = 0;
 let skipCount = 0;
 
 console.log(`\n========================================`);
-console.log(`  JS 代码混淆工具 (${mode})`);
+console.log(`  JS 代码混淆工具 (${mode}) [${targetLabel}]`);
 console.log(`========================================\n`);
 
 if (mode === 'restore') {
@@ -212,8 +250,21 @@ if (mode === 'restore') {
     console.log(`\n还原完成: ${successCount} 个文件已恢复`);
 } else {
     // 混淆模式
-    console.log('正在混淆分发目录中的 JS 文件...\n');
+    // 先统计待处理文件总数，用于显示进度
+    let totalFiles = 0;
+    for (const dir of DISTRIBUTION_DIRS) {
+        const absDir = path.join(projectRoot, dir);
+        if (!fs.existsSync(absDir)) continue;
+        for (const modFile of MODULE_FILES) {
+            if (fs.existsSync(path.join(absDir, modFile))) totalFiles++;
+        }
+        for (const extraFile of (EXTRA_FILES[dir] || [])) {
+            if (fs.existsSync(path.join(absDir, extraFile))) totalFiles++;
+        }
+    }
+    console.log(`正在混淆分发目录中的 JS 文件（共 ${totalFiles} 个，预计 1-${Math.max(1, Math.ceil(totalFiles / 10))} 分钟）...\n`);
 
+    let processed = 0;
     for (const dir of DISTRIBUTION_DIRS) {
         const absDir = path.join(projectRoot, dir);
         if (!fs.existsSync(absDir)) {
@@ -226,8 +277,10 @@ if (mode === 'restore') {
         for (const modFile of MODULE_FILES) {
             const filePath = path.join(absDir, modFile);
             if (fs.existsSync(filePath)) {
+                processed++;
+                process.stdout.write(`  [${processed}/${totalFiles}] ${modFile} ... `);
                 if (obfuscateFile(filePath, OBFUSCATOR_CONFIG)) {
-                    console.log(`  [OK] ${modFile}`);
+                    console.log(`OK`);
                     successCount++;
                 } else {
                     failCount++;
@@ -242,8 +295,10 @@ if (mode === 'restore') {
         for (const extraFile of extras) {
             const filePath = path.join(absDir, extraFile);
             if (fs.existsSync(filePath)) {
+                processed++;
+                process.stdout.write(`  [${processed}/${totalFiles}] ${extraFile} ... `);
                 if (obfuscateFile(filePath, OBFUSCATOR_CONFIG)) {
-                    console.log(`  [OK] ${extraFile}`);
+                    console.log(`OK`);
                     successCount++;
                 } else {
                     failCount++;
@@ -258,7 +313,7 @@ if (mode === 'restore') {
     console.log(`  成功: ${successCount}  失败: ${failCount}  跳过: ${skipCount}`);
     console.log(`========================================`);
     console.log(`\n注意:`);
-    console.log(`  1. 原始文件已备份为 .bak，可用 "node tools/obfuscate.js restore" 还原`);
+    console.log(`  1. 原始文件已备份为 .bak，可用 "node tools/obfuscate.js restore --target=${targetName}" 还原`);
     console.log(`  2. 混淆后请测试功能是否正常`);
     console.log(`  3. 打包分发后，记得执行 restore 还原开发环境\n`);
 }
