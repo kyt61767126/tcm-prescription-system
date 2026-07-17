@@ -1150,6 +1150,14 @@ if (window.Permission) {
                         localStorage.removeItem('local_rememberedUsername');
                     }
                     
+                    // 个人版：记住密码功能（明文存储，离线APP本地存储）
+                    const rememberPassword = document.getElementById('rememberPassword')?.checked;
+                    if (rememberPassword) {
+                        localStorage.setItem('local_rememberedPassword', password);
+                    } else {
+                        localStorage.removeItem('local_rememberedPassword');
+                    }
+                    
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.main-container').style.display = 'flex';
                     updateUserDisplay();
@@ -1320,8 +1328,26 @@ if (window.Permission) {
         function initRememberedCredentials() {
             const rememberedUsername = localStorage.getItem('local_rememberedUsername');
             if (rememberedUsername) {
-                document.getElementById('loginUsername').value = rememberedUsername;
-                document.getElementById('rememberUser').checked = true;
+                const userInput = document.getElementById('loginUsername');
+                if (userInput) {
+                    userInput.value = rememberedUsername;
+                }
+                const rememberUserCheckbox = document.getElementById('rememberUser');
+                if (rememberUserCheckbox) {
+                    rememberUserCheckbox.checked = true;
+                }
+            }
+            // 恢复记住的密码
+            const rememberedPassword = localStorage.getItem('local_rememberedPassword');
+            if (rememberedPassword) {
+                const passwordInput = document.getElementById('loginPassword');
+                if (passwordInput) {
+                    passwordInput.value = rememberedPassword;
+                }
+                const rememberPasswordCheckbox = document.getElementById('rememberPassword');
+                if (rememberPasswordCheckbox) {
+                    rememberPasswordCheckbox.checked = true;
+                }
             }
         }
 
@@ -2539,6 +2565,8 @@ if (window.Permission) {
           try {
             populateUserList();
             checkLoginStatus().catch(e => console.warn('checkLoginStatus error:', e));
+            // 恢复记住的用户名/密码（登录界面显示后）
+            try { initRememberedCredentials(); } catch(e) { console.warn('initRememberedCredentials error:', e); }
             // 不在init中调用loadData()，因为用户还没登录
             // loadData()会在handleLogin成功后调用
             const now = new Date();
@@ -3333,111 +3361,75 @@ if (window.Permission) {
                     view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
                 });
             } else if (isVid) {
-                // 使用内嵌video标签播放，避免系统播放器不支持WebM格式
-                view.innerHTML = '<div style="color:#fff;font-size:12px;">正在加载视频...</div>';
-                window.electronAPI.readFileAsBase64(f.path).then(function(result) {
-                    if (result.success && (result.data || result.base64)) {
-                        var src = result.data || result.base64;
-                        var mimeType = src.split(':')[1].split(';')[0];
-                        var filePath = f.path;
+                // 离线APP直接用系统播放器打开视频（最可靠，原生支持webm/mp4）
+                view.innerHTML = '<div style="color:#fff;font-size:12px;">正在打开视频...</div>';
+                var filePath = f.path;
+                var mimeType = '';
+                if (filePath.endsWith('.webm')) mimeType = 'video/webm';
+                else if (filePath.endsWith('.mp4')) mimeType = 'video/mp4';
 
-                        // 释放之前的Blob URL
-                        if (window.__currentBlobUrl) {
-                            try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
-                            window.__currentBlobUrl = null;
-                        }
-
-                        view.innerHTML = '';
-                        var video = document.createElement('video');
-                        video.controls = true;
-                        video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
-                        video.autoplay = false;
-                        var loadTimeout = null;
-                        var loadedOk = false;
-
-                        // 监听加载成功
-                        video.addEventListener('loadedmetadata', function() {
-                            loadedOk = true;
-                            if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
-                        });
-
-                        // Blob URL播放失败时的回退链：Blob URL → data:URL → 系统播放器
-                        function fallbackToDataUrl() {
-                            console.warn('[视频播放] Blob URL加载失败，回退到data:URL');
-                            try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
-                            window.__currentBlobUrl = null;
-                            video.onerror = null;
-                            video.src = src;
-                            // data:URL也失败则调用系统播放器
-                            video.onerror = function() {
-                                console.warn('[视频播放] data:URL也失败，调用系统播放器');
-                                fallbackToSystemPlayer();
-                            };
-                            // data:URL也设置超时
-                            loadTimeout = setTimeout(function() {
-                                if (!loadedOk) {
-                                    console.warn('[视频播放] data:URL加载超时，调用系统播放器');
-                                    fallbackToSystemPlayer();
-                                }
-                            }, 5000);
-                        }
-
-                        function fallbackToSystemPlayer() {
-                            if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
+                if (window.electronAPI && window.electronAPI.openFile) {
+                    window.electronAPI.openFile(filePath, mimeType).then(function(result) {
+                        if (result.success) {
+                            // 系统播放器已打开，提供返回按钮
                             view.innerHTML = '<div style="text-align:center;color:#fff;padding:20px;font-size:12px;">' +
-                                '<div style="margin-bottom:10px;">内嵌播放器不支持此视频格式</div>' +
-                                '<button onclick="window.__openVideoExternally(\'' + filePath.replace(/'/g, "\\'") + '\')" ' +
-                                'style="padding:8px 16px;font-size:14px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">' +
-                                '用系统播放器打开</button></div>';
-                            window.__openVideoExternally = function(fp) {
-                                if (window.electronAPI && window.electronAPI.openFile) {
-                                    window.electronAPI.openFile(fp, mimeType).then(function(r) {
-                                        if (!r.success) {
-                                            alert('无法打开视频: ' + (r.error || '未知错误'));
-                                        }
-                                    }).catch(function(e) {
-                                        alert('打开视频失败: ' + e);
-                                    });
-                                }
+                                '<div style="margin-bottom:10px;">视频已在系统播放器中打开</div>' +
+                                '<button onclick="window.__retryVideoOpen()" ' +
+                                'style="padding:8px 16px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:8px;">' +
+                                '🔄 重新打开</button>' +
+                                '<button onclick="window.__tryInlinePlay()" ' +
+                                'style="padding:8px 16px;font-size:13px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">' +
+                                '📱 内嵌播放</button></div>';
+                            window.__retryVideoOpen = function() {
+                                window.electronAPI.openFile(filePath, mimeType);
                             };
-                        }
-
-                        video.onerror = fallbackToDataUrl;
-                        // 设置3秒超时，Blob URL未加载成功则回退
-                        loadTimeout = setTimeout(function() {
-                            if (!loadedOk) {
-                                fallbackToDataUrl();
-                            }
-                        }, 3000);
-
-                        // 尝试方式1：Blob URL
-                        try {
-                            var byteChars = atob(src.split(',')[1]);
-                            var byteArrays = [];
-                            var chunkSize = 8192;
-                            for (var offset = 0; offset < byteChars.length; offset += chunkSize) {
-                                var chunk = byteChars.slice(offset, offset + chunkSize);
-                                var byteNumbers = new Array(chunk.length);
-                                for (var i = 0; i < chunk.length; i++) {
-                                    byteNumbers[i] = chunk.charCodeAt(i);
+                            window.__tryInlinePlay = function() {
+                                // 内嵌播放：用data:URL（小视频可用）
+                                view.innerHTML = '<div style="color:#fff;font-size:12px;">正在加载视频...</div>';
+                                window.electronAPI.readFileAsBase64(filePath).then(function(r) {
+                                    if (r.success && (r.data || r.base64)) {
+                                        var src = r.data || r.base64;
+                                        view.innerHTML = '';
+                                        var v = document.createElement('video');
+                                        v.controls = true;
+                                        v.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+                                        v.src = src;
+                                        v.onerror = function() {
+                                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">内嵌播放失败，请使用系统播放器</div>';
+                                        };
+                                        view.appendChild(v);
+                                    } else {
+                                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败</div>';
+                                    }
+                                }).catch(function() {
+                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败</div>';
+                                });
+                            };
+                        } else {
+                            // 系统播放器打开失败，尝试内嵌播放
+                            view.innerHTML = '<div style="color:#fff;font-size:12px;">系统播放器不可用，尝试内嵌播放...</div>';
+                            window.electronAPI.readFileAsBase64(filePath).then(function(r) {
+                                if (r.success && (r.data || r.base64)) {
+                                    var src = r.data || r.base64;
+                                    view.innerHTML = '';
+                                    var v = document.createElement('video');
+                                    v.controls = true;
+                                    v.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+                                    v.src = src;
+                                    view.appendChild(v);
+                                } else {
+                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败: ' + (result.error || '') + '</div>';
                                 }
-                                byteArrays.push(new Uint8Array(byteNumbers));
-                            }
-                            var blob = new Blob(byteArrays, { type: mimeType });
-                            var blobUrl = URL.createObjectURL(blob);
-                            window.__currentBlobUrl = blobUrl;
-                            video.src = blobUrl;
-                        } catch(e) {
-                            console.warn('[视频播放] Blob URL创建失败，直接用data:URL:', e);
-                            video.src = src;
+                            }).catch(function(err) {
+                                view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败: ' + (err.message || err) + '</div>';
+                            });
                         }
-                        view.appendChild(video);
-                    } else {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败</div>';
-                    }
-                }).catch(function(err) {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败: ' + (err.message || err) + '</div>';
-                });
+                    }).catch(function(err) {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">打开视频失败: ' + (err.message || err) + '</div>';
+                    });
+                } else {
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频播放功能不可用</div>';
+                }
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }
