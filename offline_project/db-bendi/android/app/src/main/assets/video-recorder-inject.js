@@ -161,9 +161,9 @@
                 });
             },
             readFileAsBase64: function (filePath) {
-                // 统一走分片读取，避免 Binder 1MB 限制和 isCallerAllowed 误拦截
-                // 最终用 Blob URL 代替 data URL，避免大视频 data URL 超出 WebView 限制
-                // 彻底修复：每个读取请求独立管理 Blob URL，避免全局单例竞态
+                // 统一走分片读取，避免 Binder 1MB 限制
+                // 最终拼接为 base64 data URL（与云端桌面版本一致）
+                // Android WebView 在 file:// 协议下 Blob URL 兼容性差，故改用 data URL
                 return new Promise(function (resolve) {
                     try {
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
@@ -178,7 +178,7 @@
                         var mimeType = startR.mimeType || 'application/octet-stream';
                         var fileSize = startR.fileSize || 0;
                         console.log('[离线APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
-                        var uint8Arrays = [];
+                        var base64Parts = [];
                         var chunkRetryCount = 0;
                         var MAX_CHUNK_RETRY = 2;
 
@@ -200,48 +200,20 @@
                             // 重置重试计数（本次成功，下次失败重新计数）
                             chunkRetryCount = 0;
                             if (r.chunk) {
-                                // 分片解码 base64 → Uint8Array，避免大字符串 atob 内存翻倍
-                                try {
-                                    var binary = atob(r.chunk);
-                                    var len = binary.length;
-                                    var bytes = new Uint8Array(len);
-                                    for (var i = 0; i < len; i++) {
-                                        bytes[i] = binary.charCodeAt(i);
-                                    }
-                                    uint8Arrays.push(bytes);
-                                } catch (e) {
-                                    console.error('[离线APP] base64 解码失败:', e);
-                                }
+                                // 直接收集 base64 分片，最后拼接
+                                base64Parts.push(r.chunk);
                             }
                             if (r.eof) {
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
                                 try {
-                                    var blob = new Blob(uint8Arrays, { type: mimeType });
-                                    var blobUrl = URL.createObjectURL(blob);
-                                    // 用 Map 管理所有活动的 Blob URL，避免全局单例竞态
-                                    // closeMediaViewer 时会遍历全部 revoke
-                                    if (!window.__activeBlobUrls) {
-                                        window.__activeBlobUrls = {};
-                                        window.__activeBlobUrlCount = 0;
-                                    }
-                                    var urlId = 'burl_' + Date.now() + '_' + (window.__activeBlobUrlCount++);
-                                    window.__activeBlobUrls[urlId] = blobUrl;
-                                    // 自动 GC：10 分钟后 revoke（足够用户长时间查看）
-                                    (function(id, url) {
-                                        setTimeout(function() {
-                                            try {
-                                                if (window.__activeBlobUrls && window.__activeBlobUrls[id] === url) {
-                                                    URL.revokeObjectURL(url);
-                                                    delete window.__activeBlobUrls[id];
-                                                }
-                                            } catch (e) {}
-                                        }, 10 * 60 * 1000);
-                                    })(urlId, blobUrl);
-                                    console.log('[离线APP] 分片读取完成，blob URL=' + blobUrl + ', 片数=' + uint8Arrays.length + ', 总字节=' + blob.size);
-                                    resolve({ success: true, data: blobUrl });
+                                    var fullBase64 = base64Parts.join('');
+                                    var dataUrl = 'data:' + mimeType + ';base64,' + fullBase64;
+                                    console.log('[离线APP] 分片读取完成，data URL 长度=' + dataUrl.length + ', 片数=' + base64Parts.length);
+                                    // 返回格式与云端一致：base64 字段
+                                    resolve({ success: true, base64: dataUrl, data: dataUrl });
                                 } catch (e) {
-                                    console.error('[离线APP] 创建 blob URL 失败:', e);
-                                    resolve({ success: false, error: '创建 blob URL 失败: ' + String(e) });
+                                    console.error('[离线APP] 拼接 base64 失败:', e);
+                                    resolve({ success: false, error: '拼接 base64 失败: ' + String(e) });
                                 }
                                 return;
                             }
