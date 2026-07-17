@@ -48,7 +48,48 @@
                 throw e;
             }
         }
-        
+
+        // 分片上传：解决 Binder 事务 1MB 限制
+        var CHUNK_SIZE = 256 * 1024;
+        function chunkedUpload(base64Data, fileName, type) {
+            return new Promise(function (resolve) {
+                var startR = callNative('startMediaSession', JSON.stringify({ fileName: fileName }));
+                if (!startR || !startR.success) {
+                    resolve(startR || { success: false, error: 'startMediaSession 返回无效' });
+                    return;
+                }
+                var sessionId = startR.sessionId;
+                var total = Math.ceil(base64Data.length / CHUNK_SIZE);
+                var idx = 0;
+
+                function nextChunk() {
+                    if (idx >= total) {
+                        var commitR = callNative('commitMediaSession', JSON.stringify({
+                            sessionId: sessionId,
+                            fileName: fileName,
+                            type: type
+                        }));
+                        resolve(commitR);
+                        return;
+                    }
+                    var chunk = base64Data.substring(idx * CHUNK_SIZE, (idx + 1) * CHUNK_SIZE);
+                    var r = callNative('appendMediaChunk', JSON.stringify({
+                        sessionId: sessionId,
+                        chunkBase64: chunk,
+                        index: idx,
+                        total: total
+                    }));
+                    if (!r || !r.success) {
+                        resolve(r || { success: false, error: 'appendMediaChunk 返回无效' });
+                        return;
+                    }
+                    idx++;
+                    setTimeout(nextChunk, 0);
+                }
+                nextChunk();
+            });
+        }
+
         window.electronAPI = {
             __injected: true,
             isElectron: true,
@@ -65,8 +106,18 @@
             savePrescriptionImage: function (imageData, fileName) {
                 return new Promise(function (resolve) {
                     try {
-                        var r = callNative('savePrescriptionImage', JSON.stringify({ imageData: imageData, fileName: fileName }));
-                        resolve(r);
+                        var base64 = imageData;
+                        var commaIdx = base64.indexOf(',');
+                        if (base64.indexOf('data:') === 0 && commaIdx > 0 && commaIdx < 50) {
+                            base64 = base64.substring(commaIdx + 1);
+                        }
+                        if (base64.length >= 512 * 1024) {
+                            console.log('[离线APP] 图片分片上传: ' + base64.length + ' 字节');
+                            chunkedUpload(base64, fileName, 'image').then(resolve);
+                        } else {
+                            var r = callNative('savePrescriptionImage', JSON.stringify({ imageData: imageData, fileName: fileName }));
+                            resolve(r);
+                        }
                     } catch (e) { resolve({ success: false, error: String(e) }); }
                 });
             },
@@ -80,8 +131,8 @@
                             binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
                         }
                         var base64Data = btoa(binary);
-                        var r = callNative('saveVideoFile', JSON.stringify({ base64Data: base64Data, fileName: fileName }));
-                        resolve(r);
+                        console.log('[离线APP] 视频总大小: ' + base64Data.length + ' 字节 base64');
+                        chunkedUpload(base64Data, fileName, 'video').then(resolve);
                     } catch (e) { resolve({ success: false, error: String(e) }); }
                 });
             },

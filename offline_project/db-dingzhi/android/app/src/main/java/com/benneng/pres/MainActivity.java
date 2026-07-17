@@ -544,6 +544,17 @@ public class MainActivity extends AppCompatActivity {
                     case "saveVideoFile":
                         return saveVideoFile(args.optString("base64Data", ""),
                                 args.optString("fileName", "")).toString();
+                    case "startMediaSession":
+                        return startMediaSession(args.optString("fileName", "")).toString();
+                    case "appendMediaChunk":
+                        return appendMediaChunk(args.optString("sessionId", ""),
+                                args.optString("chunkBase64", ""),
+                                args.optInt("index", 0),
+                                args.optInt("total", 0)).toString();
+                    case "commitMediaSession":
+                        return commitMediaSession(args.optString("sessionId", ""),
+                                args.optString("fileName", ""),
+                                args.optString("type", "image")).toString();
                     case "getVideoDirectory":
                         return getVideoDirectory().toString();
                     case "findMediaFiles":
@@ -756,6 +767,121 @@ public class MainActivity extends AppCompatActivity {
                 return r;
             } catch (Exception e) {
                 Log.e(TAG, "saveVideoFile 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 分片上传（解决 Binder 事务 1MB 限制）
+        // 大文件（视频、高清照片）的 base64 编码远超 1MB，无法通过单次 invoke 调用传递
+        // 流程：startMediaSession → 多次 appendMediaChunk → commitMediaSession
+        // 临时文件存放在 app cacheDir，commit 时迁移到目标月份目录
+        // ------------------------------------------------------------------
+        private final java.util.Map<String, File> mediaSessions = new java.util.concurrent.ConcurrentHashMap<>();
+
+        private JSONObject startMediaSession(String fileName) {
+            try {
+                String sessionId = "media_" + System.currentTimeMillis() + "_" + (int) (Math.random() * 100000);
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "media_" + System.currentTimeMillis();
+                }
+                File tempFile = new File(getCacheDir(), "upload_" + sessionId + "_" + safeName);
+                if (tempFile.exists()) tempFile.delete();
+                mediaSessions.put(sessionId, tempFile);
+                Log.d("TCM-Pres", "startMediaSession: sessionId=" + sessionId + ", tempFile=" + tempFile.getAbsolutePath());
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("sessionId", sessionId);
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "startMediaSession 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        private JSONObject appendMediaChunk(String sessionId, String chunkBase64, int index, int total) {
+            try {
+                File tempFile = mediaSessions.get(sessionId);
+                if (tempFile == null) {
+                    return fail("无效或已过期的 sessionId: " + sessionId);
+                }
+                byte[] bytes = Base64.decode(chunkBase64, Base64.DEFAULT);
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile, true)) {
+                    fos.write(bytes);
+                    fos.flush();
+                }
+                if (index % 10 == 0 || index == total - 1) {
+                    Log.d("TCM-Pres", "appendMediaChunk: sessionId=" + sessionId + ", index=" + (index + 1) + "/" + total + ", fileSize=" + tempFile.length());
+                }
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("index", index);
+                r.put("total", total);
+                r.put("fileSize", tempFile.length());
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "appendMediaChunk 失败 (sessionId=" + sessionId + ", index=" + index + ")", e);
+                File tempFile = mediaSessions.remove(sessionId);
+                if (tempFile != null && tempFile.exists()) tempFile.delete();
+                return fail(e.getMessage());
+            }
+        }
+
+        private JSONObject commitMediaSession(String sessionId, String fileName, String type) {
+            File tempFile = null;
+            try {
+                tempFile = mediaSessions.remove(sessionId);
+                if (tempFile == null || !tempFile.exists()) {
+                    return fail("会话文件不存在: " + sessionId);
+                }
+                Log.d("TCM-Pres", "commitMediaSession: sessionId=" + sessionId + ", type=" + type + ", tempSize=" + tempFile.length());
+
+                File targetDir = getImageDir();
+                if (targetDir == null) {
+                    tempFile.delete();
+                    return fail("无法创建目标目录");
+                }
+                targetDir = new File(targetDir, getCurrentMonthFolder());
+                if (!targetDir.exists() && !targetDir.mkdirs()) {
+                    tempFile.delete();
+                    return fail("无法创建月份目录");
+                }
+
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "media_" + System.currentTimeMillis() + ("video".equals(type) ? ".webm" : ".jpg");
+                }
+
+                File targetFile = new File(targetDir, safeName);
+                if (targetFile.exists()) targetFile.delete();
+
+                if (!tempFile.renameTo(targetFile)) {
+                    try (java.io.FileInputStream fis = new java.io.FileInputStream(tempFile);
+                         java.io.FileOutputStream fos = new java.io.FileOutputStream(targetFile)) {
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = fis.read(buffer)) > 0) {
+                            fos.write(buffer, 0, len);
+                        }
+                        fos.flush();
+                    }
+                    tempFile.delete();
+                }
+
+                notifyMediaScanner(targetFile);
+                Log.d("TCM-Pres", "commitMediaSession 成功: " + targetFile.getAbsolutePath() + ", size=" + targetFile.length());
+
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("filePath", targetFile.getAbsolutePath());
+                r.put("directory", targetDir.getAbsolutePath());
+                r.put("fileName", safeName);
+                r.put("fileSize", targetFile.length());
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "commitMediaSession 失败 (sessionId=" + sessionId + ")", e);
+                if (tempFile != null && tempFile.exists()) tempFile.delete();
                 return fail(e.getMessage());
             }
         }
