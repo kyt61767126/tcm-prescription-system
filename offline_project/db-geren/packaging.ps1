@@ -43,7 +43,14 @@ function Build-App {
     Write-Host "  打包手机 APP (APK)"
     Write-Host "================================================================"
     Write-Host ""
-    & "$scriptDir\build-app.bat"
+    $modifyConfig = Read-Host "是否修改配置（诊所名称）？(Y/n)"
+    Write-Host ""
+    if ($modifyConfig -eq "n" -or $modifyConfig -eq "N") {
+        Write-Host "[INFO] 跳过配置修改，直接打包"
+        & "$scriptDir\build-app.bat" --skip-config
+    } else {
+        & "$scriptDir\build-app.bat"
+    }
     Write-Host ""
     Write-Host "================================================================"
     Write-Host "  手机 APP 打包完成！APK: $scriptDir\*.apk"

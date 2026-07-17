@@ -87,7 +87,14 @@ function Build-App {
     Write-Host "  安全说明：APK 内含反调试 + 完整性校验 + 签名校验"
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
-    & "$scriptDir\build-app.bat"
+    $modifyConfig = Read-Host "是否修改配置（诊所名称）？(Y/n)"
+    Write-Host ""
+    if ($modifyConfig -eq "n" -or $modifyConfig -eq "N") {
+        Write-Host "[INFO] 跳过配置修改，直接打包"
+        & "$scriptDir\build-app.bat" --skip-config
+    } else {
+        & "$scriptDir\build-app.bat"
+    }
     Write-Host ""
     Write-Host "================================================================"
     Write-Host "  手机 APP 打包完成！"

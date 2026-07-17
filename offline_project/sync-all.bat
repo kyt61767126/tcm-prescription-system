@@ -29,7 +29,7 @@ for %%v in (%VERSIONS%) do (
     if not exist "%~dp0%%v\vendor" mkdir "%~dp0%%v\vendor"
     copy /Y "%SHARED%\vendor\xlsx.full.min.js" "%~dp0%%v\vendor\xlsx.full.min.js" >nul
     
-    REM Sync to electron/ (仅 permission.js，被 electron/login.html 引用；其余 8 个模块由 root/index.html 加载，无需在 electron/ 重复)
+    REM Sync to electron/ (only permission.js, referenced by electron/login.html; other 8 modules loaded by root/index.html, no need to duplicate in electron/)
     copy /Y "%SHARED%\permission.js"       "%~dp0%%v\electron\permission.js"       >nul
     
     REM Sync to android/assets/public/

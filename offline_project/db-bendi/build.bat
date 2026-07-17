@@ -56,7 +56,6 @@ echo.
 echo [6/7] Running build...
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
-set NODE_TLS_REJECT_UNAUTHORIZED=0
 call npm run build
 if errorlevel 1 (
     echo.

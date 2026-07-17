@@ -14,11 +14,21 @@ if /i "%1"=="--skip-config" (
     echo       [SKIP] --skip-config parameter detected
 ) else (
     powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
+    if errorlevel 1 (
+        echo [ERROR] edit-config.ps1 failed, aborting
+        pause
+        exit /b 1
+    )
 )
 echo.
 
 echo [2/8] Synchronizing files to Android...
 call "sync-to-app.bat"
+if errorlevel 1 (
+    echo [ERROR] sync-to-app.bat failed, aborting
+    pause
+    exit /b 1
+)
 echo.
 
 cd /d "%~dp0\android"
@@ -73,6 +83,10 @@ if errorlevel 1 (
 ) else (
     echo [OK] Old cache cleared
 )
+echo.
+
+echo [5.5/8] Auto-increment versionCode...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='app\build.gradle'; $c=[System.IO.File]::ReadAllText($f); if($c -match 'versionCode\s+(\d+)'){ $old=$matches[1]; $new=[int]$old+1; $c=$c -replace 'versionCode\s+\d+', 'versionCode '+$new; [System.IO.File]::WriteAllText($f,$c,(New-Object System.Text.UTF8Encoding($false))); Write-Host ('  versionCode: '$old' -> '$new) } else { Write-Host '  [WARN] versionCode not found, skip' }"
 echo.
 
 echo [6/8] Building signed APK...
