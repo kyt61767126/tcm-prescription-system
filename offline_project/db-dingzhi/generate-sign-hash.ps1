@@ -1,4 +1,4 @@
-# generate-sign-hash.ps1 - 从 APK 提取签名 + dex 哈希，注入到 SecurityGuard.java
+﻿# generate-sign-hash.ps1 - 从 APK 提取签名 + dex 哈希，注入到 SecurityGuard.java
 # 启用严格模式：APP 启动时与硬编码哈希严格比对，任何二次打包都会被拒绝
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"

@@ -1,4 +1,4 @@
-# packaging.ps1 - Unified packaging tool menu（方案二：含防盗防破解）
+﻿# packaging.ps1 - Unified packaging tool menu（方案二：含防盗防破解）
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
