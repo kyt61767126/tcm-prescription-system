@@ -29,15 +29,7 @@ for %%v in (%VERSIONS%) do (
     if not exist "%~dp0%%v\vendor" mkdir "%~dp0%%v\vendor"
     copy /Y "%SHARED%\vendor\xlsx.full.min.js" "%~dp0%%v\vendor\xlsx.full.min.js" >nul
     
-    REM Sync to electron/
-    copy /Y "%SHARED%\auth-core.js"        "%~dp0%%v\electron\auth-core.js"        >nul
-    copy /Y "%SHARED%\db-adapter.js"       "%~dp0%%v\electron\db-adapter.js"       >nul
-    copy /Y "%SHARED%\prescription-core.js" "%~dp0%%v\electron\prescription-core.js" >nul
-    copy /Y "%SHARED%\patient-archive.js"  "%~dp0%%v\electron\patient-archive.js"  >nul
-    copy /Y "%SHARED%\medicine-dict.js"    "%~dp0%%v\electron\medicine-dict.js"    >nul
-    copy /Y "%SHARED%\print-utils.js"      "%~dp0%%v\electron\print-utils.js"      >nul
-    copy /Y "%SHARED%\performance-utils.js" "%~dp0%%v\electron\performance-utils.js" >nul
-    copy /Y "%SHARED%\debug-logger.js"     "%~dp0%%v\electron\debug-logger.js"     >nul
+    REM Sync to electron/ (仅 permission.js，被 electron/login.html 引用；其余 8 个模块由 root/index.html 加载，无需在 electron/ 重复)
     copy /Y "%SHARED%\permission.js"       "%~dp0%%v\electron\permission.js"       >nul
     
     REM Sync to android/assets/public/
