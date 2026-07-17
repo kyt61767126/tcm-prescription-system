@@ -63,6 +63,12 @@ findstr "url" "app\src\main\assets\capacitor.config.json"
 findstr "versionName" "app\build.gradle"
 echo.
 
+echo [2.6/6] Syncing APP version from index.html to MainActivity...
+REM 从 cloud_desktop/index.html 读取 __APP_VERSION__，自动注入到 MainActivity.EXPECTED_APP_VERSION
+REM 避免 MainActivity 与 index.html 版本号不同步导致每次启动清缓存
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$idx=Get-Content '%~dp0cloud_desktop\index.html' -Raw -Encoding UTF8; if($idx -match \"__APP_VERSION__\s*=\s*'([^']+)'\"){ $ver=$matches[1]; $main='%ANDROID_DIR%\app\src\main\java\com\tcm\prescription\MainActivity.java'; $c=Get-Content $main -Raw -Encoding UTF8; $new=$c -replace 'EXPECTED_APP_VERSION\s*=\s*\"[^\"]*\"', \"EXPECTED_APP_VERSION = \\\"$ver\\\"\"; if($new -ne $c){ [System.IO.File]::WriteAllText($main,$new,(New-Object System.Text.UTF8Encoding $false)); Write-Host ('  [OK] MainActivity.EXPECTED_APP_VERSION = '+$ver) } else { Write-Host '  [SKIP] Already in sync' } } else { Write-Host '  [WARN] __APP_VERSION__ not found in index.html' }"
+echo.
+
 echo [3/6] Stopping residual Gradle processes...
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] Cleanup completed

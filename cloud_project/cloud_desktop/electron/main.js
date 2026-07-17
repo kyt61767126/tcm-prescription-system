@@ -45,11 +45,13 @@ function safeHandle(channel, handler, defaultValue) {
     });
 }
 
+// 命令行开关：仅启用媒体流（录像所需）
+// 已移除的安全风险开关：
+//   - enable-usermedia-screen-capturing：屏幕捕获，录像用不到
+//   - use-fake-ui-for-media-stream：自动批准媒体流，可被滥用（已由 setPermissionRequestHandler 白名单授权替代）
+//   - allow-file-access-from-files：file:// 访问 file://，XSS 风险（云端桌面不需要）
 app.commandLine.appendSwitch('enable-features', 'WebDialog');
-app.commandLine.appendSwitch('enable-usermedia-screen-capturing');
 app.commandLine.appendSwitch('enable-media-stream');
-app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
-app.commandLine.appendSwitch('allow-file-access-from-files');
 
 app.on('browser-window-created', (event, window) => {
     window.webContents.on('dom-ready', () => {

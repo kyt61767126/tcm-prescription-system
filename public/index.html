@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta http-equiv="Cache-Control" content="max-age=86400, must-revalidate">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>惠康中医云端</title>
@@ -126,7 +126,7 @@
         .modal-body { flex: 1; overflow: auto; padding: 15px; background: white; }
         .modal-footer { padding: 10px 15px; background: #e0e0e0; display: flex; justify-content: flex-end; gap: 10px; border-top: 2px solid #808080; }
         .close-btn { font-size: 24px; cursor: pointer; line-height: 1; }
-        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: none; justify-content: center; align-items: center; z-index: 9999; }
         .login-container { width: 320px; background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); overflow: hidden; position: relative; }
         .bg-decoration { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400"%3E%3Cdefs%3E%3Cpattern id="grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"%3E%3Cpath d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(102,126,234,0.08)" stroke-width="1"/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill="url(%23grid)" width="320" height="400"/%3E%3C/svg%3E'); pointer-events: none; z-index: 0; }
         .header-section { position: relative; z-index: 1; padding: 20px 24px; display: flex; flex-direction: column; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
@@ -640,19 +640,14 @@
             .medicine-action-bar #importMedicineFile { grid-column: 1 / -1; }
             .medicine-action-bar .action-btn { width: 100%; box-sizing: border-box; }
         }
-
         /* ===== 兜底适配：不同品牌型号手机 ===== */
-        /* 防止字体缩放（华为/小米等手机可能自动缩放字体） */
         html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
         body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
-        /* 触摸目标兜底：确保所有可点击元素至少36px高 */
         @media screen and (max-width: 768px) {
             .action-btn, .login-btn, .history-tab, .mobile-nav-btn,
             .medicine-table input, .search-item, .modal-header button,
-            .user-item, .form-group input, button {
-                min-height: 36px;
-            }
+            .user-item, .form-group input, button { min-height: 36px; }
             .action-btn { padding: 6px 10px; }
             .medicine-table { font-size: 12px; }
             .medicine-table th { font-size: 11px; padding: 4px; }
@@ -661,7 +656,6 @@
             .prescription-info { font-size: 12px; }
         }
 
-        /* 超小屏适配（<360px）：iPhone SE/旧款Android */
         @media screen and (max-width: 360px) {
             .login-container { width: 95%; max-width: 280px; min-height: 360px; }
             .header-section { padding: 15px 12px; }
@@ -686,14 +680,12 @@
             .mobile-action-bar .action-btn { min-height: 36px; font-size: 11px; padding: 4px 2px; }
         }
 
-        /* 大屏手机/小平板适配（481-768px） */
         @media screen and (min-width: 481px) and (max-width: 768px) {
             .login-container { width: 80%; max-width: 380px; }
             .patient-input { min-height: 36px; font-size: 14px; }
             .action-btn { min-height: 40px; font-size: 12px; }
         }
 
-        /* 横屏适配 */
         @media screen and (max-width: 768px) and (orientation: landscape) {
             .login-container { width: 60%; max-width: 400px; min-height: 280px; }
             .header-section { padding: 10px 15px; }
@@ -701,7 +693,6 @@
             .login-field { margin-bottom: 10px; }
         }
 
-        /* 安全区域全面适配（刘海屏/挖孔屏） */
         @media screen and (max-width: 768px) {
             .login-overlay {
                 padding-top: env(safe-area-inset-top);
@@ -714,49 +705,11 @@
                 margin-bottom: env(safe-area-inset-bottom);
             }
         }
-
     </style>
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;">
-        <div class="login-container">
-            <div class="bg-decoration"></div>
-            <div class="header-section">
-                <div class="system-title">惠康中医诊所管理系统</div>
-                <div class="version-tag">【云端】</div>
-            </div>
-            <div class="main-content">
-                <div class="login-box">
-                    <div class="clinic-info">
-                        <div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div>
-                    </div>
-                    <div class="login-field">
-                        <label>用户名</label>
-                        <div class="username-input-wrapper">
-                            <input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()">
-                            <button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button>
-                            <div id="usernameDropdownMenu" class="username-dropdown-menu"></div>
-                        </div>
-                    </div>
-                    <div class="login-field">
-                        <label>密码</label>
-                        <input type="password" id="loginPassword" placeholder="请输入密码" onkeypress="if(event.key==='Enter')handleLogin()">
-                    </div>
-                    <div class="login-field remember-me">
-                        <input type="checkbox" id="rememberUser" checked>
-                        <label for="rememberUser">记住用户</label>
-                    </div>
-                    <div class="login-buttons">
-                        <button class="login-btn" onclick="handleLogin()">确定</button>
-                        <button class="login-btn cancel" onclick="exitApp()">取消</button>
-                    </div>
-                    <div id="loginError" class="login-error"></div>
-                    <div class="login-footer">微信号: yqjzy1688 | v2.0.4</div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【云端】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -1551,12 +1504,7 @@ if (window.Permission) {
         // 仅在 APP（Capacitor WebView）内可用；网页/Electron 自动降级为纯云端。
         // allowedMode: cloud=纯云端 / local=纯离线 / both=离线优先+联网双向同步
         function getAllowedMode() {
-            if (!currentUser) return 'both';
-            // 统一权限：管理员永远云端，普通用户离线优先+联网同步
-            if (isClinicAdmin(currentUser) || isPlatformAdmin(currentUser)) {
-                return 'cloud';
-            }
-            return 'both';
+            return (currentUser && currentUser.allowedMode) || 'both';
         }
         function offlineCapable() {
             const mode = getAllowedMode();
@@ -2106,14 +2054,15 @@ if (window.Permission) {
         // ============================================================================
         function buildAuthPayload(user) {
             // 委托给 AuthCore 统一实现
-            return window.AuthCore ? AuthCore.buildAuthPayload(user) : (function() {
-                if (!user) return null;
-                return safeBtoa(JSON.stringify({
-                    username: user.username,
-                    role: user.role || 'doctor',
-                    clinicId: user.clinicId || null
-                }));
-            })();
+            if (window.AuthCore) return AuthCore.buildAuthPayload(user);
+            // 原有逻辑保留作为fallback
+            if (!user) return null;
+            const payload = {
+                username: user.username,
+                role: user.role || 'doctor',
+                clinicId: user.clinicId || null
+            };
+            return safeBtoa(JSON.stringify(payload));
         }
 
         function buildAuthHeader(user) {
@@ -3039,13 +2988,11 @@ if (window.Permission) {
         async function getUsers() {
             const cloudUsers = await getUsersFromCloud();
             if (cloudUsers && cloudUsers.length > 0) {
-                return cloudUsers.map(user => {
-                    return {
-                        ...user,
-                        allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
-                        allowedMode: user.allowedMode || 'both'
-                    };
-                });
+                return cloudUsers.map(user => ({
+                    ...user,
+                    allowSavePrescription: user.allowSavePrescription === undefined ? true : user.allowSavePrescription,
+                    allowedMode: user.allowedMode || 'both'
+                }));
             }
             return getDefaultUsers();
         }
@@ -3059,7 +3006,7 @@ if (window.Permission) {
                 const fresh = users.find(u => u.username === currentUser.username);
                 if (fresh) {
                     let mode = fresh.allowedMode || 'both';
-                    // 网页/桌面版环境下，'local' 模式自动升级为 'both'（无真正离线功能）
+                    // 桌面版环境下，'local' 模式自动升级为 'both'（无真正离线功能）
                     if (mode === 'local' && !window.Capacitor) {
                         mode = 'both';
                     }
@@ -3298,11 +3245,9 @@ if (window.Permission) {
         });
 
         async function saveRememberedUser(username) {
-            // 委托给 AuthCore 统一实现，同时保持本地 UI 同步
             try {
                 await AuthCore.saveRememberedUser(username);
                 const remembered = await AuthCore.loadRememberedUsers();
-                // 同步到旧 key（兼容 asyncStorage 层）
                 await asyncStorage.set('cloud_rememberedUsername', String(username).trim());
                 await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(remembered));
                 renderRememberedUsers(remembered);
@@ -3380,7 +3325,6 @@ if (window.Permission) {
             }
             
             try {
-                // 委托给 AuthCore 统一登录流程
                 const result = await AuthCore.login(username, password, { adapter: AuthCore.cloudAdapter });
                 if (!result.success || !result.user) {
                     errorDiv.textContent = result.error || '登录失败';
@@ -3388,12 +3332,16 @@ if (window.Permission) {
                     return;
                 }
                 const user = result.user;
+                // 桌面版环境下，'local' 模式自动升级为 'both'（无真正离线功能）
+                if (user.allowedMode === 'local' && !window.Capacitor) {
+                    user.allowedMode = 'both';
+                }
                 currentUser = user;
-
-                // 同时写入旧 key（兼容现有代码中的直接 localStorage 读取）
                 const userData = JSON.stringify(user);
                 localStorage.setItem('cloud_currentUser', userData);
                 localStorage.setItem('cloud_isLoggedIn', 'true');
+                sessionStorage.setItem('currentUser', userData);
+                sessionStorage.setItem('isLoggedIn', 'true');
 
                 // 同步云端诊所名称到本地，登录页下次打开自动显示
                 if (user.clinicName) {
@@ -3462,11 +3410,9 @@ if (window.Permission) {
             } catch(e) {}
             
             currentUser = null;
-            // 委托给 AuthCore 统一清除所有登录态 key（含旧key）
             if (window.AuthCore) {
                 AuthCore.logout().catch(e => console.warn('AuthCore.logout failed:', e));
             }
-            // 兼容：手动清除旧 key（确保同步清除）
             localStorage.removeItem('cloud_currentUser');
             localStorage.removeItem('cloud_isLoggedIn');
             localStorage.removeItem('currentUser');
@@ -3486,17 +3432,19 @@ if (window.Permission) {
             if (window.electronAPI && window.electronAPI.logout) {
                 window.electronAPI.logout();
             } else if (window.AndroidAppExit && window.AndroidAppExit.exit) {
-                setTimeout(function() {
-                    window.AndroidAppExit.exit();
-                }, 100);
+                // APP端：调用 Android JavaScript Interface 直接退出到手机主屏
+                window.AndroidAppExit.exit();
             } else {
-                const overlay = document.getElementById('loginOverlay');
-                if (overlay) {
-                    overlay.style.display = 'flex';
-                    const mainContainer = document.querySelector('.main-container');
-                    if (mainContainer) mainContainer.style.display = 'none';
-                    initLoginDropdown();
-                }
+                // 网页端：window.close() 通常无效，延迟 100ms 后回到登录界面
+                window.close();
+                setTimeout(function() {
+                    const overlay = document.getElementById('loginOverlay');
+                    if (overlay) {
+                        overlay.style.display = 'flex';
+                        const mainContainer = document.querySelector('.main-container');
+                        if (mainContainer) mainContainer.style.display = 'none';
+                    }
+                }, 100);
             }
             return false;
         }
@@ -4157,6 +4105,7 @@ if (window.Permission) {
             renderClinicPrescriptionList(_clinicPrescriptionCache);
         }
 
+        // 管理员手动触发离线数据同步
         async function adminSyncOfflineData() {
             if (!currentUser || !isAdmin(currentUser)) {
                 showToast('只有管理员可以执行同步');
@@ -4167,26 +4116,31 @@ if (window.Permission) {
             if (btn) btn.disabled = true;
 
             try {
+                // 检查LocalDB是否可用
                 const localReady = await LocalDB.ready();
                 let pushedCount = 0;
 
                 if (localReady) {
+                    // 推送本地未同步数据
                     if (statusEl) statusEl.textContent = '正在推送本地离线数据...';
                     try {
                         pushedCount = await SyncEngine.push();
                     } catch (e) { console.warn('push失败:', e); }
 
+                    // 拉取云端最新数据
                     if (statusEl) statusEl.textContent = '正在拉取云端数据...';
                     try {
                         await SyncEngine.pull();
                     } catch (e) { console.warn('pull失败:', e); }
                 } else {
+                    // 非共享电脑：仅拉取云端数据
                     if (statusEl) statusEl.textContent = '正在拉取云端数据...';
                     try {
                         await SyncEngine.pull();
                     } catch (e) { console.warn('pull失败:', e); }
                 }
 
+                // 刷新处方列表
                 if (statusEl) statusEl.textContent = '正在刷新处方列表...';
                 await loadClinicPrescriptionList();
 
@@ -4204,6 +4158,7 @@ if (window.Permission) {
             }
         }
 
+        // 收集媒体文件元数据并更新处方记录
         async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
             if (!window.electronAPI || !window.electronAPI.findMediaFiles) return;
             if (!officialNo) return;
@@ -4219,6 +4174,7 @@ if (window.Permission) {
                         lastModified: f.lastModified || ''
                     }));
 
+                    // 更新处方记录（带上mediaFiles字段重新POST）
                     const updatedRecord = { ...savedRecord, mediaFiles };
                     const authToken = btoa(currentUser.username + ':' + (currentUser.token || ''));
                     await fetch(CLOUD_API_BASE + '/prescriptions', {
@@ -4236,6 +4192,7 @@ if (window.Permission) {
             }
         }
 
+        // 管理员查看处方媒体文件
         async function viewClinicPrescriptionMedia(id) {
             const p = _clinicPrescriptionCache.find(x => x.id === id);
             if (!p) return;
@@ -4246,18 +4203,21 @@ if (window.Permission) {
                 return;
             }
 
+            // 尝试本地查找
             if (window.electronAPI && window.electronAPI.findMediaFiles) {
                 try {
                     const result = await window.electronAPI.findMediaFiles(
                         p.patientName || p.name || '', p.prescriptionNo || p.outpatientNo || '', p.createdAt || ''
                     );
                     if (result.success && result.files && result.files.length > 0) {
+                        // 本地找到文件，复用现有查看器
                         viewMediaFiles(p.patientName || p.name || '', p.prescriptionNo || p.outpatientNo || '', p.createdAt || '');
                         return;
                     }
                 } catch (e) { console.warn('本地查找媒体文件失败:', e); }
             }
 
+            // 本地未找到：显示元数据列表+提示
             const fileList = mediaFiles.map(f => {
                 const icon = f.type === 'video' ? '🎥' : '📷';
                 const sizeStr = f.size ? `(${(f.size / 1024).toFixed(0)}KB)` : '';
@@ -4272,6 +4232,7 @@ if (window.Permission) {
                     <div style="margin-bottom:8px;color:#666;font-size:13px;">媒体文件保存在 <b>${escapeHtml(createdBy)}</b> 的本地设备上，请联系该用户获取。</div>
                     <div style="max-height:300px;overflow-y:auto;">${fileList}</div>
                 </div>`;
+            // 使用showModal显示
             const modal = document.getElementById('mediaInfoModal');
             if (modal) {
                 modal.querySelector('.modal-body').innerHTML = modalHtml;
@@ -4327,8 +4288,8 @@ if (window.Permission) {
         }
 
         async function toggleUserCloudMode(username) {
-            if (!currentUser || !isAdmin(currentUser)) {
-                alert('只有管理员可以切换云端权限');
+            if (!currentUser || currentUser.role !== 'clinic_admin') {
+                await alert('只有管理员可以切换云端权限');
                 return;
             }
             const users = await getUsers();
@@ -4347,52 +4308,48 @@ if (window.Permission) {
             }
             await renderUserList();
             const modeText = newMode === 'local' ? '仅离线' : '双模式';
-            alert(saveSuccess
+            await alert(saveSuccess
                 ? `✅ 已切换为【${modeText}】\n数据已同步到云端。`
                 : `⚠️ 已切换为【${modeText}】\n云端同步失败，可在设置中手动同步。`);
         }
 
         async function handleEditUser(username) {
-            if (!currentUser || !isAdmin(currentUser)) {
-                alert('只有管理员可以编辑用户');
-                return;
-            }
             const users = await getUsers();
             const user = users.find(u => u.username === username);
             if (!user) return;
-            
-            const newUsername = prompt('请输入新登录账户（英文或拼音）：', user.username);
+
+            const newUsername = await prompt('请输入新登录账户（英文或拼音）：', user.username);
             if (newUsername === null) return;
-            
+
             const trimmedUsername = newUsername.trim();
             if (!trimmedUsername) {
-                alert('用户名不能为空');
+                await alert('用户名不能为空');
                 return;
             }
-            
+
             if (trimmedUsername !== username) {
                 const exists = users.find(u => u.username === trimmedUsername);
                 if (exists) {
-                    alert('用户名已存在');
+                    await alert('用户名已存在');
                     return;
                 }
             }
-            
-            const newName = prompt('请输入医师姓名（中文）：', user.name);
+
+            const newName = await prompt('请输入医师姓名（中文）：', user.name);
             if (newName === null) return;
-            
+
             const trimmedName = newName.trim();
             if (!trimmedName) {
-                alert('名称不能为空');
+                await alert('名称不能为空');
                 return;
             }
-            
-            const newPassword = prompt('请输入新密码（留空则不修改）：', '');
+
+            const newPassword = await prompt('请输入新密码（留空则不修改）：', '');
 
             // 第4步：模式选择（APP离线功能）
             const currentMode = user.allowedMode || 'both';
             const modeDefault = currentMode === 'cloud' ? '2' : currentMode === 'local' ? '3' : '1';
-            const modeChoice = prompt('请选择用户使用模式（输入数字，直接点确定保持原设置）：\n1. 双模式（云端+离线）\n2. 仅云端\n3. 仅离线', modeDefault);
+            const modeChoice = await prompt('请选择用户使用模式（输入数字，直接点确定保持原设置）：\n1. 双模式（云端+离线）\n2. 仅云端\n3. 仅离线', modeDefault);
             if (modeChoice === null) return;
 
             const newMode = modeChoice.trim() === '2' ? 'cloud' : modeChoice.trim() === '3' ? 'local' : 'both';
@@ -4415,14 +4372,10 @@ if (window.Permission) {
             }
 
             await renderUserList();
-            alert(saveSuccess ? '✅ 用户信息修改成功！\n\n使用模式：' + modeText + '\n数据已自动同步到云端，其他设备登录也能看到此用户。' : '⚠️ 用户信息已保存到本地\n\n云端同步失败，可在设置中手动同步。');
+            await alert(saveSuccess ? '✅ 用户信息修改成功！\n\n使用模式：' + modeText + '\n数据已自动同步到云端，其他设备登录也能看到此用户。' : '⚠️ 用户信息已保存到本地\n\n云端同步失败，可在设置中手动同步。');
         }
 
         async function handleAddUser() {
-            if (!currentUser || !isAdmin(currentUser)) {
-                alert('只有管理员可以添加用户');
-                return;
-            }
             const username = document.getElementById('newUserUsername').value.trim();
             const password = document.getElementById('newUserPassword').value;
             const name = document.getElementById('newUserName').value.trim();
@@ -4464,7 +4417,7 @@ if (window.Permission) {
                 name: finalName,
                 role: 'doctor',
                 allowSavePrescription: true,
-                allowedMode: 'both'
+                allowedMode: 'local'
             };
             
             users.push(newUser);
@@ -4481,15 +4434,11 @@ if (window.Permission) {
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
             document.getElementById('newUserName').value = '';
-            alert(saveSuccess ? '✅ 用户添加成功！\n\n该用户已自动同步到云端，手机等其他设备登录也能看到此用户。' : '⚠️ 用户已添加到本地\n\n云端同步失败，可在设置中手动同步。');
+            await alert(saveSuccess ? '✅ 用户添加成功！\n\n该用户已自动同步到云端，手机等其他设备登录也能看到此用户。' : '⚠️ 用户已添加到本地\n\n云端同步失败，可在设置中手动同步。');
         }
 
         async function handleDeleteUser(username) {
-            if (!currentUser || !isAdmin(currentUser)) {
-                alert('只有管理员可以删除用户');
-                return;
-            }
-            if (!confirm('确定删除该用户？')) return;
+            if (!(await confirm('确定删除该用户？'))) return;
             
             const users = await getUsers();
             const filteredUsers = users.filter(u => u.username !== username);
@@ -4503,14 +4452,13 @@ if (window.Permission) {
         let _cloudReachable = null;
 
         // 更新在线/离线状态显示（替换原固定的"【云版】"）
-        // "仅离线"账号在APP环境（Capacitor）下永远显示离线；网页版无离线功能，依据云端可达性判断
+        // "仅离线"账号永远显示离线；其他模式依据云端可达性判断
         function updateModeStatus() {
             const el = document.getElementById('modeStatus');
             if (!el) return;
+            // "仅离线"模式（allowedMode=local）账号不允许使用云端，永远显示离线
             const mode = getAllowedMode();
-            // 仅在APP（Capacitor）环境下，'local' 模式才强制显示离线
-            // 网页版没有离线功能，'local' 模式也走云端逻辑，应依据云端可达性判断
-            if (mode === 'local' && window.Capacitor) {
+            if (mode === 'local') {
                 el.textContent = '【离线】';
                 el.style.color = '#d32f2f';
                 return;
@@ -4603,7 +4551,7 @@ if (window.Permission) {
                 } else {
                     btn1.innerHTML = '📊 统计';
                     btn1.onclick = function() { showModal('analyticsModal'); };
-                    btn2.innerHTML = '🔐 改密';
+                    btn2.innerHTML = '🔐 修改密码';
                     btn2.onclick = function() { showModal('changePwdModal'); };
                     btn2.style.display = '';
                 }
@@ -4611,6 +4559,7 @@ if (window.Permission) {
             }
 
             if (currentUser && isClinicAdmin(currentUser)) {
+                // 网页端管理员：统计分析、账户管理
                 btn1.innerHTML = '📊 统计';
                 btn1.onclick = function() { showModal('analyticsModal'); };
                 btn2.innerHTML = '👤 账户';
@@ -4626,13 +4575,10 @@ if (window.Permission) {
         }
 
         async function checkLoginStatus() {
-            // 委托给 AuthCore 统一会话检查
             const session = await AuthCore.checkSession();
-            
             if (session.valid && session.user) {
                 try {
                     currentUser = session.user;
-                    // 同步到旧 key（兼容现有代码读取）
                     localStorage.setItem('cloud_currentUser', JSON.stringify(session.user));
                     localStorage.setItem('cloud_isLoggedIn', 'true');
                     document.getElementById('loginOverlay').style.display = 'none';
@@ -4642,7 +4588,6 @@ if (window.Permission) {
                     console.error('解析用户数据失败:', e);
                 }
             }
-            
             currentUser = null;
             document.getElementById('loginOverlay').style.display = 'flex';
             initLoginDropdown();
@@ -5751,7 +5696,7 @@ if (window.Permission) {
             // 管理员显示（顶部tab+底部按钮），普通用户隐藏
             if (window.Capacitor) {
                 const userManageBtn = document.getElementById('userManageBtn');
-                if (userManageBtn && !isAdmin(currentUser)) userManageBtn.style.display = 'none';
+                if (userManageBtn && !isClinicAdmin(currentUser)) userManageBtn.style.display = 'none';
             }
             
             // 检查是否是Electron环境
@@ -5809,6 +5754,7 @@ if (window.Permission) {
             }
             
             // APP端（Capacitor）：每次打开都显示登录界面，确保用户可以切换账号
+            // 桌面端和网页端：已登录则直接进入主界面
             const isCapacitor = window.Capacitor && window.Capacitor.isNative;
             if (hasValidUser && !isCapacitor) {
                 document.getElementById('loginOverlay').style.display = 'none';
@@ -6623,7 +6569,25 @@ if (window.Permission) {
             try {
                 const result = await window.electronAPI.findMediaFiles(patientName, prescriptionNo, createdAt || '');
                 if (!result.success || !result.files || result.files.length === 0) {
-                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件<br><span style="font-size:11px;color:#aaa;">搜索: ' + escapeHtml(patientName) + '_' + escapeHtml(prescriptionNo) + '</span>' + (result.debug ? '<br><span style="font-size:10px;color:#ccc;word-break:break-all;">' + escapeHtml(result.debug) + '</span>' : '') + '</div>';
+                    let debugInfo = '';
+                    try {
+                        const allFilesResult = await window.electronAPI.listAllMediaFiles();
+                        if (allFilesResult.success && allFilesResult.files && allFilesResult.files.length > 0) {
+                            debugInfo = '<br><br><div style="font-size:11px;text-align:left;border-top:1px dashed #333;padding-top:10px;margin-top:10px;">';
+                            debugInfo += '<div style="color:#666;margin-bottom:5px;">📁 搜索目录:</div>';
+                            allFilesResult.searchDirectories.forEach(dir => {
+                                debugInfo += '<div style="color:#444;">' + escapeHtml(dir) + '</div>';
+                            });
+                            debugInfo += '<div style="color:#666;margin-top:8px;margin-bottom:5px;">📄 磁盘上的文件:</div>';
+                            allFilesResult.files.forEach(f => {
+                                debugInfo += '<div style="color:#444;">' + escapeHtml(f.name) + '</div>';
+                            });
+                            debugInfo += '</div>';
+                        }
+                    } catch (debugErr) {
+                        console.error('获取调试信息失败:', debugErr);
+                    }
+                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件<br><span style="font-size:11px;color:#aaa;">搜索: ' + escapeHtml(patientName) + '_' + escapeHtml(prescriptionNo) + '</span>' + debugInfo + '</div>';
                     return;
                 }
                 const sorted = result.files.sort((a,b) => {
@@ -6682,7 +6646,7 @@ if (window.Permission) {
                     var active = (i === idx) ? 'background:#4CAF50;' : 'background:#444;';
                     var icon = files[i].type === 'video' ? '🎥' : '📷';
                     var shortLabel = mediaLabelOf(files[i]);
-                    shortLabel = shortLabel.indexOf('舌面') >= 0 ? '舌面' : (shortLabel.indexOf('舌下') >= 0 ? '舌下' : (shortLabel.indexOf('视频') >= 0 ? '视频' : '处方'));
+                    shortLabel = shortLabel.indexOf('舌面') >= 0 ? '舌面' : (shortLabel.indexOf('舌下') >= 0 ? '舌下' : (shortLabel.indexOf('处方') >= 0 ? '处方' : (shortLabel.indexOf('视频') >= 0 ? '视频' : '处方')));
                     html += '<div onclick="renderMediaViewerSingle(' + i + ')" style="cursor:pointer;min-width:54px;height:38px;' + active + 'color:#fff;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;flex-shrink:0;">' + icon + ' ' + shortLabel + '</div>';
                 }
                 html += '</div>';
@@ -6786,45 +6750,21 @@ if (window.Permission) {
                     view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
                 });
             } else if (isVid) {
-                // 使用内嵌video标签播放，避免系统播放器不支持WebM格式
-                view.innerHTML = '<div style="color:#fff;font-size:12px;">正在加载视频...</div>';
                 window.electronAPI.readFileAsBase64(f.path).then(function(result) {
                     if (result.success && (result.data || result.base64)) {
                         var src = result.data || result.base64;
-                        // 将base64 data URI转换为Blob URL，避免大文件内存问题
-                        var byteChars = atob(src.split(',')[1]);
-                        var byteArrays = [];
-                        var chunkSize = 8192;
-                        for (var offset = 0; offset < byteChars.length; offset += chunkSize) {
-                            var chunk = byteChars.slice(offset, offset + chunkSize);
-                            var byteNumbers = new Array(chunk.length);
-                            for (var i = 0; i < chunk.length; i++) {
-                                byteNumbers[i] = chunk.charCodeAt(i);
-                            }
-                            byteArrays.push(new Uint8Array(byteNumbers));
-                        }
-                        var mimeType = src.split(':')[1].split(';')[0];
-                        var blob = new Blob(byteArrays, { type: mimeType });
-                        var blobUrl = URL.createObjectURL(blob);
-
-                        // 释放之前的Blob URL
-                        if (window.__currentBlobUrl) {
-                            try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
-                        }
-                        window.__currentBlobUrl = blobUrl;
-
                         view.innerHTML = '';
                         var video = document.createElement('video');
-                        video.src = blobUrl;
+                        video.src = src;
                         video.controls = true;
+                        video.playsInline = true;
                         video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
-                        video.autoplay = false;
                         view.appendChild(video);
                     } else {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败</div>';
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
                     }
-                }).catch(function(err) {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败: ' + (err.message || err) + '</div>';
+                }).catch(function() {
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
                 });
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
@@ -6834,6 +6774,11 @@ if (window.Permission) {
         function closeMediaViewer() {
             const overlay = document.getElementById('mediaViewerOverlay');
             if (overlay) overlay.style.display = 'none';
+            const video = document.getElementById('mediaSingleView')?.querySelector('video');
+            if (video) {
+                video.pause();
+                video.src = '';
+            }
             if (window.__currentBlobUrl) {
                 try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
                 window.__currentBlobUrl = null;
@@ -6876,7 +6821,8 @@ if (window.Permission) {
             document.getElementById('patientAge').value = record.patientAge;
             document.getElementById('patientPhone').value = record.patientPhone;
             document.getElementById('patientAddress').value = record.patientAddress;
-            // 统计输入框保持显示历史处方累计数量，不被打开的处方覆盖
+            // 门诊输入框（prescriptionNo）保持当前编号，不被历史处方覆盖
+            // 历史处方编号写入 paperClinicNo，保存时可通过 fallback 获取
             document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
             document.getElementById('medicalHistory').value = record.medicalHistory;
             document.getElementById('diagnosis').value = record.diagnosis;
@@ -7075,7 +7021,11 @@ if (window.Permission) {
             };
             
             // 记录保存前的处方编号（拍照录像文件以此编号保存）
-            const oldPrescriptionNo = document.getElementById('prescriptionNo').value || '';
+            // 优先从输入框获取，其次从统计显示获取，最后从拍照录像模块获取实际使用的标识符（包括localStorage备份）
+            const oldPrescriptionNo = document.getElementById('prescriptionNo').value || 
+                                     (document.getElementById('paperClinicNo')?.textContent || '') ||
+                                     (window.__lastUsedMediaIdentifier || '') ||
+                                     (localStorage.getItem('lastUsedMediaIdentifier') || '') || '';
 
             // 统一写入云端数据库，由云端生成编号
             console.log('=== Saving prescription ===');
@@ -7148,11 +7098,15 @@ if (window.Permission) {
                     savePrescriptionAsImage(savedRecord, officialNo);
                     // 云端分配的编号可能与拍照时使用的编号不同，重命名已保存的处方文件
                     if (oldPrescriptionNo && officialNo && oldPrescriptionNo !== officialNo) {
+                        console.log('[重命名检查] oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo, 'patientName:', record.patientName);
                         if (window.electronAPI && window.electronAPI.renameMediaFiles) {
                             window.electronAPI.renameMediaFiles(record.patientName, oldPrescriptionNo, officialNo)
                                 .then(r => {
+                                    console.log('[重命名结果] success:', r.success, 'renamed:', r.renamed);
                                     if (r.success && r.renamed > 0) {
                                         console.log('已重命名 ' + r.renamed + ' 个处方文件: ' + oldPrescriptionNo + ' → ' + officialNo);
+                                    } else if (r.success && r.renamed === 0) {
+                                        console.warn('[重命名警告] 没有找到需要重命名的文件，请检查文件名格式');
                                     }
                                     collectAndUpdateMediaFiles(savedRecord, officialNo);
                                 })
@@ -7161,9 +7115,11 @@ if (window.Permission) {
                                     collectAndUpdateMediaFiles(savedRecord, officialNo);
                                 });
                         } else {
+                            console.warn('[重命名警告] electronAPI.renameMediaFiles 不可用');
                             collectAndUpdateMediaFiles(savedRecord, officialNo);
                         }
                     } else {
+                        console.log('[重命名跳过] 条件不满足 - oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo);
                         collectAndUpdateMediaFiles(savedRecord, officialNo);
                     }
                     // 保存后清空表单，方便下一次使用（跳过确认弹窗）

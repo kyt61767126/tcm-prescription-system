@@ -44,9 +44,9 @@ echo [OK] Obfuscation completed
 echo.
 
 echo [5/6] Running build...
+REM 国内镜像加速 electron 二进制下载（无需禁用 TLS 验证）
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
-set NODE_TLS_REJECT_UNAUTHORIZED=0
 call npm run build
 if errorlevel 1 (
     echo.

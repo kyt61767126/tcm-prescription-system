@@ -40,7 +40,8 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             crunchPngs true
-            multiDexEnabled false
+            // 启用 multiDex 预防方法数超 65535 限制（Capacitor + 安全库 + AndroidX 可能超限）
+            multiDexEnabled true
             ndk {
                 abiFilters 'armeabi-v7a', 'arm64-v8a'
             }

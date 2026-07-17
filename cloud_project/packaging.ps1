@@ -74,7 +74,7 @@ function Build-App {
     Write-Host "  安全说明：APK 内含反调试 + 完整性校验 + 签名校验"
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
-    & "$scriptDir\打包.bat"
+    & "$scriptDir\build-app.bat"
     Write-Host ""
     Write-Host "================================================================"
     Write-Host "  手机 APP 打包完成！"
@@ -223,7 +223,7 @@ function Build-All-Strict {
     Write-Host "================================================================"
     Write-Host "  Step B. 打包手机 APP（首次锁定模式）"
     Write-Host "================================================================"
-    & "$scriptDir\打包.bat"
+    & "$scriptDir\build-app.bat"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[错误] APP 打包失败，终止一键打包"
         Read-Host "按回车键继续"
@@ -244,7 +244,7 @@ function Build-All-Strict {
     Write-Host "================================================================"
     Write-Host "  Step D. 重新打包手机 APP（严格模式 APK）"
     Write-Host "================================================================"
-    & "$scriptDir\打包.bat"
+    & "$scriptDir\build-app.bat"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[错误] 严格模式重新打包失败"
         Write-Host "  您仍可使用 Step B 的 APK（首次锁定模式）"
