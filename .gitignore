@@ -64,6 +64,9 @@ android/local.properties
 **/android/captures/
 **/android/local.properties
 
+# 构建时自动生成的时间戳文件（每次打包都会更新，无需跟踪）
+**/assets/public/build-time.js
+
 # Gradle 构建产物（覆盖子项目）
 .gradle/
 **/.gradle/

@@ -78,6 +78,8 @@ public class MainActivity extends BridgeActivity {
     private TextView loadingText;
     private volatile String cachedVideoRecorderScript = null;
     private boolean versionChecked = false;
+    // 安全防护：方案二（反调试 + 完整性校验 + 多点签名校验）
+    private SecurityGuard securityGuard;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -86,8 +88,9 @@ public class MainActivity extends BridgeActivity {
 
         super.onCreate(savedInstanceState);
 
-        // 签名校验：防止二次打包/篡改
-        if (!verifySignature()) {
+        // 安全防护：方案二启动检查（反调试 + 完整性校验 + 签名校验，任一失败则退出）
+        securityGuard = new SecurityGuard(this);
+        if (!securityGuard.runStartupChecks()) {
             finishAndRemoveTask();
             return;
         }
@@ -120,70 +123,20 @@ public class MainActivity extends BridgeActivity {
 
         // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
         preloadVideoRecorderScript();
+
+        // 启动周期性安全巡检（每30秒反调试 + 签名校验，防运行时 Frida 注入）
+        if (securityGuard != null) {
+            securityGuard.startPeriodicChecks();
+        }
     }
 
     // ========================================================================
     // 签名校验（防盗：防止二次打包/篡改）
     // ========================================================================
-
-    /**
-     * APK 签名校验
-     * 机制：首次运行锁定签名哈希，后续运行比较；支持硬编码哈希严格模式
-     * 留空 EXPECTED_HASH 则使用首次锁定模式；填入哈希则使用严格模式
-     */
-    private boolean verifySignature() {
-        try {
-            PackageInfo info = getPackageManager().getPackageInfo(
-                    getPackageName(), PackageManager.GET_SIGNATURES);
-            Signature[] signatures = info.signatures;
-            if (signatures == null || signatures.length == 0) return false;
-
-            String currentHash = sha256(signatures[0].toByteArray());
-
-            // 预期签名哈希（打包后可填入实际值实现严格模式；留空则首次锁定）
-            String expectedHash = "";
-
-            if (expectedHash.isEmpty()) {
-                // 首次锁定模式
-                SharedPreferences prefs = getSharedPreferences("app_security", MODE_PRIVATE);
-                String storedHash = prefs.getString("sign_sha256", null);
-                if (storedHash == null) {
-                    prefs.edit().putString("sign_sha256", currentHash).apply();
-                    Log.i(TAG, "签名首次锁定: " + currentHash);
-                    return true;
-                }
-                boolean valid = storedHash.equals(currentHash);
-                if (!valid) {
-                    Log.e(TAG, "签名校验失败！可能被二次打包");
-                }
-                return valid;
-            } else {
-                // 严格模式
-                boolean valid = expectedHash.equals(currentHash);
-                if (!valid) {
-                    Log.e(TAG, "签名校验失败！expected=" + expectedHash + " actual=" + currentHash);
-                }
-                return valid;
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "签名校验异常", e);
-            return false;
-        }
-    }
-
-    private String sha256(byte[] data) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] hash = md.digest(data);
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            return "";
-        }
-    }
+    // 已迁移至 SecurityGuard.java（方案二统一安全防护）
+    // - 启动检查：securityGuard.runStartupChecks()
+    // - 周期巡检：securityGuard.startPeriodicChecks()
+    // - 多点校验：securityGuard.verifySignature()（可在任意位置调用）
 
     private void configureWebView() {
         WebView webView = this.getBridge().getWebView();
@@ -435,6 +388,12 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                // 多点签名校验（方案二：分散到 WebView 生命周期）
+                if (securityGuard != null && !securityGuard.verifySignature()) {
+                    Log.e(TAG, "WebView加载时签名校验失败，退出APP");
+                    finishAndRemoveTask();
+                    return;
+                }
                 int statusBarHeightPx = getStatusBarHeightPx();
                 float density = getResources().getDisplayMetrics().density;
                 int cssPx = (int) (statusBarHeightPx / density);
@@ -674,6 +633,10 @@ public class MainActivity extends BridgeActivity {
     // 注意：BridgeActivity 的 onDestroy 是 public，覆盖时必须保持 public
     @Override
     public void onDestroy() {
+        // 停止安全巡检，防止 Activity 销毁后延迟任务执行导致崩溃
+        if (securityGuard != null) {
+            securityGuard.stopPeriodicChecks();
+        }
         // T5: 清理所有待执行的 Handler 回调，防止 Activity 销毁后延迟任务执行导致崩溃
         if (mainHandler != null) {
             mainHandler.removeCallbacksAndMessages(null);
