@@ -3333,18 +3333,42 @@ if (window.Permission) {
                     view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
                 });
             } else if (isVid) {
-                // 使用内嵌video标签播放，避免系统播放器不支持WebM格式
+                // 离线APP(file://协议)下Blob URL被WebView安全策略拦截，直接用data:URL播放
                 view.innerHTML = '<div style="color:#fff;font-size:12px;">正在加载视频...</div>';
                 window.electronAPI.readFileAsBase64(f.path).then(function(result) {
                     if (result.success && (result.data || result.base64)) {
                         var src = result.data || result.base64;
                         var mimeType = src.split(':')[1].split(';')[0];
                         var filePath = f.path;
+                        // 估算视频大小（base64长度*3/4）
+                        var base64Data = src.split(',')[1];
+                        var videoSizeMB = base64Data ? (base64Data.length * 0.75 / 1024 / 1024) : 0;
 
                         // 释放之前的Blob URL
                         if (window.__currentBlobUrl) {
                             try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
                             window.__currentBlobUrl = null;
+                        }
+
+                        // 超过3MB直接用系统播放器（data:URL过大可能导致WebView内存溢出）
+                        if (videoSizeMB > 3) {
+                            view.innerHTML = '<div style="text-align:center;color:#fff;padding:20px;font-size:12px;">' +
+                                '<div style="margin-bottom:10px;">视频较大(' + videoSizeMB.toFixed(1) + 'MB)，使用系统播放器打开</div>' +
+                                '<button onclick="window.__openVideoExternally()" ' +
+                                'style="padding:10px 20px;font-size:14px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">' +
+                                '▶ 播放视频</button></div>';
+                            window.__openVideoExternally = function() {
+                                if (window.electronAPI && window.electronAPI.openFile) {
+                                    window.electronAPI.openFile(filePath, mimeType).then(function(r) {
+                                        if (!r.success) {
+                                            alert('无法打开视频: ' + (r.error || '未知错误'));
+                                        }
+                                    }).catch(function(e) {
+                                        alert('打开视频失败: ' + e);
+                                    });
+                                }
+                            };
+                            return;
                         }
 
                         view.innerHTML = '';
@@ -3355,43 +3379,23 @@ if (window.Permission) {
                         var loadTimeout = null;
                         var loadedOk = false;
 
-                        // 监听加载成功
                         video.addEventListener('loadedmetadata', function() {
                             loadedOk = true;
                             if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
                         });
 
-                        // Blob URL播放失败时的回退链：Blob URL → data:URL → 系统播放器
-                        function fallbackToDataUrl() {
-                            console.warn('[视频播放] Blob URL加载失败，回退到data:URL');
-                            try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
-                            window.__currentBlobUrl = null;
-                            video.onerror = null;
-                            video.src = src;
-                            // data:URL也失败则调用系统播放器
-                            video.onerror = function() {
-                                console.warn('[视频播放] data:URL也失败，调用系统播放器');
-                                fallbackToSystemPlayer();
-                            };
-                            // data:URL也设置超时
-                            loadTimeout = setTimeout(function() {
-                                if (!loadedOk) {
-                                    console.warn('[视频播放] data:URL加载超时，调用系统播放器');
-                                    fallbackToSystemPlayer();
-                                }
-                            }, 5000);
-                        }
-
+                        // data:URL播放失败时的回退到系统播放器
                         function fallbackToSystemPlayer() {
                             if (loadTimeout) { clearTimeout(loadTimeout); loadTimeout = null; }
+                            console.warn('[视频播放] data:URL加载失败/超时，调用系统播放器');
                             view.innerHTML = '<div style="text-align:center;color:#fff;padding:20px;font-size:12px;">' +
                                 '<div style="margin-bottom:10px;">内嵌播放器不支持此视频格式</div>' +
-                                '<button onclick="window.__openVideoExternally(\'' + filePath.replace(/'/g, "\\'") + '\')" ' +
-                                'style="padding:8px 16px;font-size:14px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">' +
-                                '用系统播放器打开</button></div>';
-                            window.__openVideoExternally = function(fp) {
+                                '<button onclick="window.__openVideoExternally()" ' +
+                                'style="padding:10px 20px;font-size:14px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">' +
+                                '▶ 用系统播放器打开</button></div>';
+                            window.__openVideoExternally = function() {
                                 if (window.electronAPI && window.electronAPI.openFile) {
-                                    window.electronAPI.openFile(fp, mimeType).then(function(r) {
+                                    window.electronAPI.openFile(filePath, mimeType).then(function(r) {
                                         if (!r.success) {
                                             alert('无法打开视频: ' + (r.error || '未知错误'));
                                         }
@@ -3402,35 +3406,16 @@ if (window.Permission) {
                             };
                         }
 
-                        video.onerror = fallbackToDataUrl;
-                        // 设置3秒超时，Blob URL未加载成功则回退
+                        video.onerror = fallbackToSystemPlayer;
+                        // 5秒超时，data:URL未加载成功则回退
                         loadTimeout = setTimeout(function() {
                             if (!loadedOk) {
-                                fallbackToDataUrl();
+                                fallbackToSystemPlayer();
                             }
-                        }, 3000);
+                        }, 5000);
 
-                        // 尝试方式1：Blob URL
-                        try {
-                            var byteChars = atob(src.split(',')[1]);
-                            var byteArrays = [];
-                            var chunkSize = 8192;
-                            for (var offset = 0; offset < byteChars.length; offset += chunkSize) {
-                                var chunk = byteChars.slice(offset, offset + chunkSize);
-                                var byteNumbers = new Array(chunk.length);
-                                for (var i = 0; i < chunk.length; i++) {
-                                    byteNumbers[i] = chunk.charCodeAt(i);
-                                }
-                                byteArrays.push(new Uint8Array(byteNumbers));
-                            }
-                            var blob = new Blob(byteArrays, { type: mimeType });
-                            var blobUrl = URL.createObjectURL(blob);
-                            window.__currentBlobUrl = blobUrl;
-                            video.src = blobUrl;
-                        } catch(e) {
-                            console.warn('[视频播放] Blob URL创建失败，直接用data:URL:', e);
-                            video.src = src;
-                        }
+                        // 离线APP直接用data:URL（file://协议下Blob URL被拦截）
+                        video.src = src;
                         view.appendChild(video);
                     } else {
                         view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频加载失败</div>';
