@@ -140,23 +140,33 @@ for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Content 
     set "PRODUCT_NAME=%%p"
 )
 if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=HuikangTCM-Local"
-set "FINAL_APK=..\%PRODUCT_NAME%.apk"
 
-REM 用 PowerShell Copy-Item 代替 copy 命令，可靠支持中文文件名
-powershell -NoProfile -Command "Copy-Item -LiteralPath '%APK_FILE%' -Destination '%FINAL_APK%' -Force"
+REM 验证源 APK 文件大小（防止 Gradle 失败或文件未写入完成时复制空文件）
+set "SRC_SIZE=0"
+for %%A in ("%APK_FILE%") do set "SRC_SIZE=%%~zA"
+if "%SRC_SIZE%"=="" set "SRC_SIZE=0"
+if %SRC_SIZE% EQU 0 (
+    echo [ERROR] Source APK is 0 bytes or not accessible!
+    echo   Source: %CD%\%APK_FILE%
+    echo   Gradle build may have failed. Please check build log above.
+    pause
+    exit /b 1
+)
+echo Source APK size: %SRC_SIZE% bytes
+
+REM 用 PowerShell .NET File.Copy 可靠复制（支持中文文件名，带大小验证）
+set "FINAL_APK=..\%PRODUCT_NAME%.apk"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $src='%APK_FILE%'; $dst='%FINAL_APK%'; $expected=%SRC_SIZE%; try { [System.IO.File]::Copy($src,$dst,$true); $actual=(New-Object System.IO.FileInfo $dst).Length; if($actual -ne $expected){ Write-Host ('[ERROR] Size mismatch: src='+$expected+' dst='+$actual); exit 1 }; Write-Host ('[OK] Copied '+$actual+' bytes to: '+$dst) } catch { Write-Host ('[ERROR] '+$_.Exception.Message); exit 1 }"
 if errorlevel 1 (
     echo [WARN] Copy with productName failed, fallback to app-release.apk
-    REM 回退方案：复制为 app-release.apk（英文名，确保成功）
     set "FINAL_APK=..\app-release.apk"
-    powershell -NoProfile -Command "Copy-Item -LiteralPath '%APK_FILE%' -Destination '%FINAL_APK%' -Force"
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $src='%APK_FILE%'; $dst='%FINAL_APK%'; $expected=%SRC_SIZE%; try { [System.IO.File]::Copy($src,$dst,$true); $actual=(New-Object System.IO.FileInfo $dst).Length; if($actual -ne $expected){ Write-Host ('[ERROR] Size mismatch: src='+$expected+' dst='+$actual); exit 1 }; Write-Host ('[OK] Copied '+$actual+' bytes to: '+$dst) } catch { Write-Host ('[ERROR] '+$_.Exception.Message); exit 1 }"
     if errorlevel 1 (
         echo [ERROR] Copy failed, please manually get APK from:
         echo   %CD%\%APK_DIR%
-    ) else (
-        echo [OK] Copied to: %CD%\%FINAL_APK%
+        pause
+        exit /b 1
     )
-) else (
-    echo [OK] Copied to: %CD%\%FINAL_APK%
 )
 echo.
 
