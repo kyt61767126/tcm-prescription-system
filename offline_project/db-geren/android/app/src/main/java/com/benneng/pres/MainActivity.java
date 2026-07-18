@@ -26,6 +26,7 @@ import android.webkit.JsResult;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
+import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
@@ -164,6 +165,34 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             Log.e(TAG, "initMediaWhitelist 失败", e);
         }
+    }
+
+    /** 媒体路径白名单校验（Activity级别，供NativeBridge和WebViewClient共用） */
+    private boolean isMediaPathAllowed(String filePath) {
+        try {
+            if (filePath == null || filePath.isEmpty()) return false;
+            File f = new File(filePath);
+            String canonical = f.getCanonicalPath();
+            for (String root : mediaWhitelistedRoots) {
+                if (canonical.startsWith(root)) return true;
+            }
+            Log.w(TAG, "isMediaPathAllowed 拒绝非白名单路径: " + canonical);
+            return false;
+        } catch (Exception e) {
+            Log.e(TAG, "isMediaPathAllowed 异常: " + filePath, e);
+            return false;
+        }
+    }
+
+    /** 根据文件名推断MIME类型 */
+    private String guessMimeType(String filePath) {
+        if (filePath == null) return "application/octet-stream";
+        String lower = filePath.toLowerCase();
+        if (lower.endsWith(".webm")) return "video/webm";
+        if (lower.endsWith(".mp4")) return "video/mp4";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".png")) return "image/png";
+        return "application/octet-stream";
     }
 
     // ========================================================================
@@ -345,6 +374,42 @@ public class MainActivity extends AppCompatActivity {
 
                 // 延迟注入录像拍照脚本（等待页面渲染稳定）
                 mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
+                // 拦截本地媒体文件请求：http://local-media/ + 路径
+                // 用于视频内嵌播放（避免 base64 data URL 在 Android WebView 中的兼容性问题）
+                if (url != null && url.startsWith("http://local-media/")) {
+                    try {
+                        String filePath = url.substring("http://local-media/".length());
+                        // URL 解码
+                        filePath = java.net.URLDecoder.decode(filePath, "UTF-8");
+                        // 路径白名单校验
+                        if (!isMediaPathAllowed(filePath)) {
+                            Log.w(TAG, "媒体路径不在白名单内: " + filePath);
+                            return null;
+                        }
+                        File file = new File(filePath);
+                        if (!file.exists() || !file.isFile()) {
+                            Log.w(TAG, "媒体文件不存在: " + filePath);
+                            return null;
+                        }
+                        String mimeType = guessMimeType(filePath);
+                        InputStream is = new java.io.FileInputStream(file);
+                        WebResourceResponse resp = new WebResourceResponse(mimeType, "UTF-8", is);
+                        resp.setStatusCodeAndReasonPhrase(200, "OK");
+                        resp.setResponseHeaders(new java.util.HashMap<String, String>() {{
+                            put("Access-Control-Allow-Origin", "*");
+                            put("Accept-Ranges", "bytes");
+                        }});
+                        return resp;
+                    } catch (Exception e) {
+                        Log.e(TAG, "拦截媒体请求失败: " + url, e);
+                        return null;
+                    }
+                }
+                return super.shouldInterceptRequest(view, url);
             }
         });
 
@@ -1019,21 +1084,9 @@ public class MainActivity extends AppCompatActivity {
             return dir;
         }
 
-        // 统一路径校验：canonicalPath 必须以某个白名单根目录开头
-        // 加 File.separator 防止 /sdcard/Foo 误匹配 /sdcard/FooBar
+        // 统一路径校验：调用 Activity 级别的 isMediaPathAllowed（供NativeBridge和WebViewClient共用）
         private boolean isMediaPathAllowed(String filePath) {
-            if (filePath == null || filePath.isEmpty()) return false;
-            try {
-                String canonical = new File(filePath).getCanonicalPath();
-                for (String root : mediaWhitelistedRoots) {
-                    if (canonical.startsWith(root)) return true;
-                }
-                Log.w(TAG, "isMediaPathAllowed 拒绝非白名单路径: " + canonical);
-                return false;
-            } catch (Exception e) {
-                Log.e(TAG, "isMediaPathAllowed 异常: " + filePath, e);
-                return false;
-            }
+            return MainActivity.this.isMediaPathAllowed(filePath);
         }
 
         private String getCurrentMonthFolder() {

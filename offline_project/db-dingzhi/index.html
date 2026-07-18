@@ -3744,95 +3744,46 @@ if (window.Permission) {
                     console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
-                // 离线APP直接用系统播放器打开视频（最可靠，原生支持webm/mp4）
-                view.innerHTML = '<div style="color:#fff;font-size:12px;">正在打开视频...</div>';
+                // 离线APP默认内嵌播放（用local-media自定义URL，WebView拦截后返回文件流）
+                // 比base64 data URL更可靠（无大小限制、编码兼容性问题）
+                // 系统播放器作为备选（点击按钮调用）
                 var filePath = f.path;
                 var mimeType = '';
                 if (filePath.endsWith('.webm')) mimeType = 'video/webm';
                 else if (filePath.endsWith('.mp4')) mimeType = 'video/mp4';
 
-                if (window.electronAPI && window.electronAPI.openFile) {
-                    window.electronAPI.openFile(filePath, mimeType).then(function(result) {
-                        if (result.success) {
-                            // 系统播放器已打开，提供返回按钮
-                            view.innerHTML = '<div style="text-align:center;color:#fff;padding:20px;font-size:12px;">' +
-                                '<div style="margin-bottom:10px;">视频已在系统播放器中打开</div>' +
-                                '<button onclick="window.__retryVideoOpen()" ' +
-                                'style="padding:8px 16px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:8px;">' +
-                                '🔄 重新打开</button>' +
-                                '<button onclick="window.__tryInlinePlay()" ' +
-                                'style="padding:8px 16px;font-size:13px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">' +
-                                '📱 内嵌播放</button></div>';
-                            window.__retryVideoOpen = function() {
-                                window.electronAPI.openFile(filePath, mimeType);
-                            };
-                            window.__tryInlinePlay = function() {
-                                // 内嵌播放：用data:URL（小视频可用）
-                                view.innerHTML = '<div style="color:#fff;font-size:12px;">正在加载视频...</div>';
-                                window.electronAPI.readFileAsBase64(filePath).then(function(r) {
-                                    if (r.success && (r.data || r.base64)) {
-                                        var src = r.data || r.base64;
-                                        view.innerHTML = '';
-                                        var v = document.createElement('video');
-                                        v.controls = true;
-                                        v.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
-                                        v.src = src;
-                                        v.onerror = function() {
-                                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">内嵌播放失败，请使用系统播放器</div>';
-                                        };
-                                        view.appendChild(v);
-                                    } else {
-                                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                            '视频加载失败: ' + escapeHtml(String(r.error || '未知')) + '<br/>' +
-                                            '<button onclick="window.__tryInlinePlay()" ' +
-                                            'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
-                                            '</div>';
-                                        console.error('[媒体查看] 内嵌视频加载失败:', r);
-                                    }
-                                }).catch(function(err) {
-                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                        '视频加载异常: ' + escapeHtml(String(err.message || err)) + '<br/>' +
-                                        '<button onclick="window.__tryInlinePlay()" ' +
-                                        'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
-                                        '</div>';
-                                    console.error('[媒体查看] 内嵌视频加载异常:', err);
-                                });
-                            };
-                        } else {
-                            // 系统播放器打开失败，尝试内嵌播放
-                            view.innerHTML = '<div style="color:#fff;font-size:12px;">系统播放器不可用，尝试内嵌播放...</div>';
-                            window.electronAPI.readFileAsBase64(filePath).then(function(r) {
-                                if (r.success && (r.data || r.base64)) {
-                                    var src = r.data || r.base64;
-                                    view.innerHTML = '';
-                                    var v = document.createElement('video');
-                                    v.controls = true;
-                                    v.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
-                                    v.src = src;
-                                    view.appendChild(v);
-                                } else {
-                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                        '视频加载失败: ' + escapeHtml(String(r.error || result.error || '未知')) + '<br/>' +
-                                        '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
-                                        'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
-                                        '</div>';
-                                    console.error('[媒体查看] 系统播放器回退内嵌视频加载失败:', r);
-                                }
-                            }).catch(function(err) {
-                                view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                    '视频加载异常: ' + escapeHtml(String(err.message || err)) + '<br/>' +
-                                    '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
-                                    'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
-                                    '</div>';
-                                console.error('[媒体查看] 系统播放器回退内嵌视频加载异常:', err);
-                            });
-                        }
-                    }).catch(function(err) {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">打开视频失败: ' + (err.message || err) + '</div>';
-                    });
-                } else {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频播放功能不可用</div>';
-                }
+                // 构造本地媒体URL：http://local-media/ + 路径（URL编码）
+                var mediaUrl = 'http://local-media/' + encodeURIComponent(filePath);
+
+                view.innerHTML = '';
+                var v = document.createElement('video');
+                v.controls = true;
+                v.playsInline = true;
+                v.webkitPlaysInline = true;
+                v.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+                v.src = mediaUrl;
+                v.onerror = function() {
+                    // 内嵌播放失败，提供系统播放器选项
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                        '内嵌播放失败<br/>' +
+                        '<button onclick="window.__openSystemPlayerForVideo()" ' +
+                        'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">📱 用系统播放器打开</button>' +
+                        '</div>';
+                };
+                view.appendChild(v);
+
+                // 系统播放器按钮
+                var sysBtn = document.createElement('div');
+                sysBtn.style.cssText = 'text-align:center;margin-top:8px;';
+                sysBtn.innerHTML = '<button onclick="window.__openSystemPlayerForVideo()" ' +
+                    'style="padding:6px 14px;font-size:12px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">📱 用系统播放器打开</button>';
+                view.appendChild(sysBtn);
+
+                window.__openSystemPlayerForVideo = function() {
+                    if (window.electronAPI && window.electronAPI.openFile) {
+                        window.electronAPI.openFile(filePath, mimeType);
+                    }
+                };
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }
