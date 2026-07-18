@@ -3381,62 +3381,43 @@ if (window.Permission) {
                     console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
-                // 离线APP视频播放：三级降级策略
-                // 1. file:// 协议（最简单可靠，文件在app私有目录，无需权限）
-                // 2. http://local-media/ 拦截（shouldInterceptRequest返回文件流，支持Range）
-                // 3. 系统播放器（最后兜底）
+                // 离线APP视频播放：直接用系统播放器打开（最可靠，一劳永逸）
+                // 不再尝试内嵌播放（file:// / http://local-media/ 在不同机型兼容性差，反复失败）
+                // 系统播放器原生支持 webm/mp4，功能完整（全屏/快进/音量等）
                 var filePath = f.path;
                 var mimeType = '';
                 if (filePath.endsWith('.webm')) mimeType = 'video/webm';
                 else if (filePath.endsWith('.mp4')) mimeType = 'video/mp4';
 
-                view.innerHTML = '';
-                var v = document.createElement('video');
-                v.controls = true;
-                v.playsInline = true;
-                v.webkitPlaysInline = true;
-                v.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;background:#000;';
-
-                // 策略1：先用 file:// 协议（最可靠，无URL编码问题）
-                var fileUrl = 'file://' + filePath;
-                // 策略2备选：http://local-media/ 拦截（URL编码路径）
-                var interceptUrl = 'http://local-media/' + encodeURIComponent(filePath);
-                // 当前尝试的URL索引：0=file://, 1=http://local-media/
-                var tryIdx = 0;
-                var urls = [fileUrl, interceptUrl];
-
-                v.src = fileUrl;
-                v.onerror = function() {
-                    console.error('[媒体查看] 视频播放失败，尝试Idx=' + tryIdx, urls[tryIdx]);
-                    tryIdx++;
-                    if (tryIdx < urls.length) {
-                        // 尝试下一个URL
-                        console.log('[媒体查看] 切换到备选URL:', urls[tryIdx]);
-                        v.src = urls[tryIdx];
-                        v.load();
-                    } else {
-                        // 所有内嵌方式都失败，提供系统播放器选项
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                            '内嵌播放失败<br/>' +
-                            '<button onclick="window.__openSystemPlayerForVideo()" ' +
-                            'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">📱 用系统播放器打开</button>' +
-                            '</div>';
-                    }
-                };
-                view.appendChild(v);
-
-                // 系统播放器按钮（始终显示，作为备选）
-                var sysBtn = document.createElement('div');
-                sysBtn.style.cssText = 'text-align:center;margin-top:8px;';
-                sysBtn.innerHTML = '<button onclick="window.__openSystemPlayerForVideo()" ' +
-                    'style="padding:6px 14px;font-size:12px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">📱 用系统播放器打开</button>';
-                view.appendChild(sysBtn);
+                view.innerHTML = '<div style="text-align:center;color:#fff;padding:30px 20px;font-size:13px;">' +
+                    '<div style="margin-bottom:15px;">🎬 正在打开系统播放器...</div>' +
+                    '<button onclick="window.__openSystemPlayerForVideo()" ' +
+                    'style="padding:10px 20px;font-size:14px;background:#4CAF50;color:white;border:none;border-radius:6px;cursor:pointer;">' +
+                    '📱 重新打开系统播放器</button>' +
+                    '</div>';
 
                 window.__openSystemPlayerForVideo = function() {
                     if (window.electronAPI && window.electronAPI.openFile) {
-                        window.electronAPI.openFile(filePath, mimeType);
+                        window.electronAPI.openFile(filePath, mimeType).then(function(result) {
+                            if (!result.success) {
+                                view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                                    '打开失败: ' + escapeHtml(String(result.error || '未知')) + '<br/>' +
+                                    '<button onclick="window.__openSystemPlayerForVideo()" ' +
+                                    'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
+                                    '</div>';
+                            }
+                        }).catch(function(err) {
+                            console.error('[媒体查看] 系统播放器打开异常:', err);
+                        });
+                    } else {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                            'electronAPI 不可用' +
+                            '</div>';
                     }
                 };
+
+                // 自动调用系统播放器
+                window.__openSystemPlayerForVideo();
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }
