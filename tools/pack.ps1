@@ -93,12 +93,14 @@ function Stop-OnError {
 #   2. file mode:         Invoke-External -FilePath "foo.bat" -WorkDir "C:\path"
 function Invoke-External {
     param(
-        [Parameter(Mandatory=$true, ParameterSetName='ScriptBlock')]
+        [Parameter(Mandatory=$true, ParameterSetName='ScriptBlock', Position=0)]
         [scriptblock]$Command,
-        [Parameter(Mandatory=$true, ParameterSetName='FilePath')]
+        [Parameter(Mandatory=$true, ParameterSetName='FilePath', Position=0)]
         [string]$FilePath,
-        [Parameter(ParameterSetName='FilePath')]
+        [Parameter(ParameterSetName='FilePath', Position=1)]
         [string]$WorkDir,
+        [Parameter(ParameterSetName='ScriptBlock', Position=1)]
+        [Parameter(ParameterSetName='FilePath', Position=2)]
         [string]$Context = "external command"
     )
     $prevEAP = $ErrorActionPreference
