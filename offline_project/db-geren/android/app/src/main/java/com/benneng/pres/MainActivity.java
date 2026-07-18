@@ -566,10 +566,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     // P1-6: 分层校验 - 仅敏感操作需校验来源，保存/查找操作跳过校验
-    // readFileAsBase64 不再列为敏感操作：内部已用 isMediaPathAllowed 路径白名单校验
-    // 彻底解决"加载失败"反复出现：回退分支不再被 isCallerAllowed 误拦截
+    // readFileAsBase64 / openFile 不再列为敏感操作：内部已用 isMediaPathAllowed 路径白名单校验
+    // 彻底解决"加载失败"反复出现：避免 isCallerAllowed 误拦截导致视频播放
     private boolean isSensitiveOperation(String name) {
-        return "deleteFile".equals(name) || "openFile".equals(name);
+        return "deleteFile".equals(name);
     }
 
     // ========================================================================
@@ -1224,6 +1224,9 @@ public class MainActivity extends AppCompatActivity {
 
         private JSONObject openFile(String filePath, String mimeType) {
             try {
+                if (!isMediaPathAllowed(filePath)) {
+                    return fail("路径不在允许的目录内");
+                }
                 File file = new File(filePath);
                 if (!file.exists()) {
                     return fail("文件不存在: " + filePath);
