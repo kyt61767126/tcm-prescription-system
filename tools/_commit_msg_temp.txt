@@ -1,0 +1,20 @@
+fix(bendi,dingzhi): 修复账户编辑卡顿 + 移除离线版云端选项
+
+问题1: 账户管理编辑界面卡顿无法编辑
+- 原因: handleEditUser 创建 editUserModal 时，userManageModal 仍然显示，
+  两个 modal 同时显示导致事件冲突，输入卡顿
+- 修复: 创建 editUserModal 前先隐藏 userManageModal，
+  关闭 editUserModal 时（取消/保存/关闭按钮）重新显示 userManageModal
+
+问题2: 离线版本不具备云端功能，应取消编辑中的云端选项
+- 移除 handleEditUser 中的"使用模式"下拉框（双模式/仅云端/仅离线）
+- 移除 confirmEditUser 中的 newMode 变量和 allowedMode 设置
+- 简化成功提示（移除"使用模式：xxx"文字）
+
+影响文件（4 个 index.html）:
+- offline_project/db-bendi/index.html
+- offline_project/db-bendi/android/app/src/main/assets/public/index.html
+- offline_project/db-dingzhi/index.html
+- offline_project/db-dingzhi/android/app/src/main/assets/public/index.html
+
+db-geren 本身没有"使用模式"字段，无需修改。

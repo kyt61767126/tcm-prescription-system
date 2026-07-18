@@ -1297,15 +1297,14 @@ if (window.Permission) {
             const existing = document.getElementById('editUserModal');
             if (existing) existing.remove();
 
-            // 参考云端APP：在角色下方增加"使用模式"字段，默认填充原 allowedMode
-            const currentMode = user.allowedMode || 'local';
+            // 离线版本无云端功能，移除"使用模式"字段
             const modal = document.createElement('div');
             modal.id = 'editUserModal';
             modal.className = 'modal';
             modal.style.display = 'flex';
             modal.innerHTML = '<div class="modal-content user-modal-content">' +
                 '<div class="modal-header"><span>编辑用户</span>' +
-                '<span class="close-btn" onclick="document.getElementById(\'editUserModal\').remove()">&times;</span></div>' +
+                '<span class="close-btn" onclick="document.getElementById(\'editUserModal\').remove(); document.getElementById(\'userManageModal\').style.display=\'flex\';">&times;</span></div>' +
                 '<div class="modal-body">' +
                 '<div class="form-group"><label>登录账户（英文或拼音）</label>' +
                 '<input type="text" id="editUserUsername" value="' + escapeHtml(user.username) + '" placeholder="登录账号"></div>' +
@@ -1318,17 +1317,13 @@ if (window.Permission) {
                 '<option value="user"' + (user.role === 'user' ? ' selected' : '') + '>普通用户</option>' +
                 '<option value="admin"' + (user.role === 'admin' ? ' selected' : '') + '>管理员</option>' +
                 '</select></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>使用模式</label>' +
-                '<select id="editUserMode" style="width:100%;padding:5px;">' +
-                '<option value="both"' + (currentMode === 'both' ? ' selected' : '') + '>双模式（云端+离线）</option>' +
-                '<option value="cloud"' + (currentMode === 'cloud' ? ' selected' : '') + '>仅云端</option>' +
-                '<option value="local"' + (currentMode === 'local' ? ' selected' : '') + '>仅离线</option>' +
-                '</select></div>' +
                 '</div>' +
                 '<div class="modal-footer">' +
-                '<button class="action-btn" onclick="document.getElementById(\'editUserModal\').remove()">取消</button>' +
+                '<button class="action-btn" onclick="document.getElementById(\'editUserModal\').remove(); document.getElementById(\'userManageModal\').style.display=\'flex\';">取消</button>' +
                 '<button class="action-btn primary" onclick="confirmEditUser(\'' + escapeJs(username) + '\')">保存</button>' +
                 '</div></div>';
+            // 先隐藏用户管理弹窗，避免两个弹窗同时显示导致输入卡顿
+            document.getElementById('userManageModal').style.display = 'none';
             document.body.appendChild(modal);
         }
 
@@ -1338,7 +1333,6 @@ if (window.Permission) {
                 const newName = document.getElementById('editUserName').value.trim();
                 const newPassword = document.getElementById('editUserPassword').value;
                 const newRole = document.getElementById('editUserRole').value;
-                const newMode = document.getElementById('editUserMode').value;
 
                 if (!newUsername) { alert('用户名不能为空'); return; }
                 if (!newName) { alert('名称不能为空'); return; }
@@ -1364,7 +1358,6 @@ if (window.Permission) {
                 users[userIndex].username = newUsername;
                 users[userIndex].name = newName;
                 users[userIndex].role = newRole;
-                users[userIndex].allowedMode = newMode;
                 if (newPassword.trim()) {
                     users[userIndex].password = await hashPassword(newPassword.trim());
                 } else if (!isPasswordHashed(users[userIndex].password)) {
@@ -1399,10 +1392,9 @@ if (window.Permission) {
                 }
 
                 document.getElementById('editUserModal').remove();
+                document.getElementById('userManageModal').style.display = 'flex';
                 renderUserList();
-                // 参考云端APP：成功提示含使用模式文字
-                const modeText = newMode === 'cloud' ? '仅云端' : newMode === 'local' ? '仅离线' : '双模式';
-                alert('✅ 用户信息修改成功！\n\n使用模式：' + modeText);
+                alert('✅ 用户信息修改成功！');
             } catch (e) {
                 console.error('编辑用户失败:', e);
                 alert('编辑用户失败: ' + (e.message || '未知错误'));
