@@ -1,17 +1,66 @@
 import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin } from './_lib/auth.js';
 
-function corsHeaders() {
+// P1-6 安全增强：CORS 白名单（与 users.js 一致）
+function getAllowedOrigins() {
+    return [
+        'https://tcm-prescription-system.pages.dev',
+        'https://hjkangtcm.pages.dev',
+        'http://localhost:3000',
+        'http://localhost:8080',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:8080'
+    ];
+}
+
+function corsHeaders(request) {
+    const origin = request?.headers?.get('Origin') || '';
+    if (!origin) {
+        return {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
+            'Access-Control-Max-Age': '86400',
+            'Content-Type': 'application/json'
+        };
+    }
+    const allowed = getAllowedOrigins();
+    const isPagesDev = origin.endsWith('.pages.dev') && origin.startsWith('https://');
+    const allowedOrigin = (allowed.includes(origin) || isPagesDev) ? origin : 'null';
     return {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': allowedOrigin,
         'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
         'Access-Control-Max-Age': '86400',
+        'Vary': 'Origin',
         'Content-Type': 'application/json'
     };
 }
 
-function json(data, status = 200) {
-    return new Response(JSON.stringify(data), { status, headers: corsHeaders() });
+function json(data, status = 200, request = null) {
+    return new Response(JSON.stringify(data), { status, headers: corsHeaders(request) });
+}
+
+// P1-2 安全增强：操作审计日志（与 users.js 一致）
+async function writeAuditLog(kv, clinicId, username, role, action, target, request, extra = {}) {
+    try {
+        const date = new Date().toISOString().split('T')[0];
+        const key = `audit_log:${clinicId || 'platform'}:${date}`;
+        const logs = (await kv.get(key, 'json')) || [];
+        logs.push({
+            timestamp: new Date().toISOString(),
+            username,
+            role,
+            action,
+            target,
+            ip: request?.headers?.get('CF-Connecting-IP') || 'unknown',
+            userAgent: request?.headers?.get('User-Agent') || 'unknown',
+            ...extra
+        });
+        if (logs.length > 1000) logs.splice(0, logs.length - 1000);
+        await kv.put(key, JSON.stringify(logs), { expirationTtl: 90 * 24 * 60 * 60 });
+    } catch (e) {
+        console.error('writeAuditLog error:', e);
+    }
 }
 
 function getKV(context) {
@@ -117,8 +166,12 @@ export async function onRequest(context) {
                 filtered = prescriptions.filter(p => p.createdBy === currentUser.username);
             }
 
-            // 按编号倒序排序
+            // P1-4 排序一致性：改为按 createdAt 时间戳倒序排序（与前端 sortPrescriptionsByTimeDesc 对齐）
             filtered.sort((a, b) => {
+                const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                if (timeB !== timeA) return timeB - timeA;
+                // 时间相同时按编号倒序（次级排序键）
                 const noA = a.outpatientNo || a.prescriptionNo || '';
                 const noB = b.outpatientNo || b.prescriptionNo || '';
                 return noB.localeCompare(noA);
@@ -238,8 +291,11 @@ export async function onRequest(context) {
             });
             prescriptions = Array.from(idMap.values());
 
-            // 按编号倒序排序
+            // P1-4 排序一致性：保存后按 createdAt 倒序排序
             prescriptions.sort((a, b) => {
+                const timeA = new Date(a.createdAt || a.date || 0).getTime();
+                const timeB = new Date(b.createdAt || b.date || 0).getTime();
+                if (timeB !== timeA) return timeB - timeA;
                 const noA = a.outpatientNo || a.prescriptionNo || '';
                 const noB = b.outpatientNo || b.prescriptionNo || '';
                 return noB.localeCompare(noA);
@@ -268,7 +324,7 @@ export async function onRequest(context) {
             const isPermanent = url.searchParams.get('permanent') === 'true';
 
             if (!prescriptionId) {
-                return json({ success: false, error: 'Missing prescription ID' }, 400);
+                return json({ success: false, error: 'Missing prescription ID' }, 400, context.request);
             }
 
             // 永久删除：从回收站彻底删除
@@ -276,30 +332,33 @@ export async function onRequest(context) {
                 let trash = (await kv.get(KV_TRASH, 'json')) || [];
                 const idx = trash.findIndex(p => p.id.toString() === prescriptionId.toString());
                 if (idx === -1) {
-                    return json({ success: false, error: '回收站中未找到此处方' }, 404);
+                    return json({ success: false, error: '回收站中未找到此处方' }, 404, context.request);
                 }
 
                 const prescription = trash[idx];
                 if (prescription.createdBy !== currentUser.username && !isAdmin(currentUser)) {
-                    return json({ success: false, error: '无权删除此处方' }, 403);
+                    return json({ success: false, error: '无权删除此处方' }, 403, context.request);
                 }
 
                 trash.splice(idx, 1);
                 await kv.put(KV_TRASH, JSON.stringify(trash));
 
-                return json({ success: true, message: '处方已永久删除' });
+                // P1-2：审计日志
+                await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_permanent_delete', prescriptionId, context.request, { patientName: prescription.patientName });
+
+                return json({ success: true, message: '处方已永久删除' }, 200, context.request);
             }
 
             // 软删除：移入回收站
             let prescriptions = (await kv.get(KV_PRESCRIPTIONS, 'json')) || [];
             const idx = prescriptions.findIndex(p => p.id.toString() === prescriptionId.toString());
             if (idx === -1) {
-                return json({ success: false, error: 'Prescription not found' }, 404);
+                return json({ success: false, error: 'Prescription not found' }, 404, context.request);
             }
 
             const prescription = prescriptions[idx];
             if (prescription.createdBy !== currentUser.username && !isAdmin(currentUser)) {
-                return json({ success: false, error: '无权删除此处方' }, 403);
+                return json({ success: false, error: '无权删除此处方' }, 403, context.request);
             }
 
             prescriptions.splice(idx, 1);
@@ -316,7 +375,10 @@ export async function onRequest(context) {
             }
             await kv.put(KV_TRASH, JSON.stringify(trash));
 
-            return json({ success: true, message: '处方已移入回收站，可恢复', softDeleted: true });
+            // P1-2：审计日志
+            await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'prescription_soft_delete', prescriptionId, context.request, { patientName: prescription.patientName });
+
+            return json({ success: true, message: '处方已移入回收站，可恢复', softDeleted: true }, 200, context.request);
         }
 
         return json({ success: false, error: 'Method not allowed' }, 405);

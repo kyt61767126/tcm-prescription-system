@@ -1,12 +1,23 @@
+import { parseAuthHeader, isPlatformAdmin } from './_lib/auth.js';
+
 export async function onRequest(context) {
     const url = new URL(context.request.url);
-    const secret = url.searchParams.get('secret');
-    
-    // 简单的密钥验证（生产环境应使用更安全的方式）
-    if (secret !== 'tcm-backup-secret-2024') {
+
+    // P0-1 安全修复：弃用 URL 参数 secret，改用环境变量 + Bearer Token 双重鉴权
+    // 1. Bearer Token 必须为 platform_admin 角色
+    // 2. 服务端密钥来自环境变量 BACKUP_SECRET（不再硬编码）
+    const BACKUP_SECRET = context.env.BACKUP_SECRET || '';
+    const providedSecret = url.searchParams.get('secret') || context.request.headers.get('X-Backup-Secret') || '';
+
+    // 双重校验：必须有有效 Token 或正确的环境变量密钥
+    const currentUser = await parseAuthHeader(context.request, context.env);
+    const isAuthorizedPlatformAdmin = currentUser && isPlatformAdmin(currentUser);
+    const isAuthorizedBySecret = BACKUP_SECRET && providedSecret && providedSecret === BACKUP_SECRET;
+
+    if (!isAuthorizedPlatformAdmin && !isAuthorizedBySecret) {
         return new Response(JSON.stringify({
             success: false,
-            error: 'Unauthorized: Invalid secret key'
+            error: 'Unauthorized: 需要 platform_admin Token 或正确的 BACKUP_SECRET 环境变量'
         }), {
             status: 401,
             headers: { 'Content-Type': 'application/json' }

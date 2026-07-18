@@ -14,6 +14,13 @@
     const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8小时
     const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
 
+    // P2-8 角色常量前端统一定义（与后端 _lib/auth.js 保持一致）
+    const ROLE_PLATFORM_ADMIN = 'platform_admin';
+    const ROLE_CLINIC_ADMIN = 'clinic_admin';
+    const ROLE_DOCTOR = 'doctor';
+    const ROLE_ADMIN = 'admin';      // 离线版管理员
+    const ROLE_USER = 'user';        // 离线版普通用户
+
     // P1-5: 运行时派生密钥（基于环境特征，降低纯源码攻击效果）
     // 攻击者仅查看源码无法直接获得实际加密密钥
     function _deriveRuntimeKey() {
@@ -195,13 +202,30 @@
 
     async function hashPassword(password) {
         if (!password) return '';
+        // P0-11 安全升级：使用 PBKDF2-SHA256 100000 iterations（向后兼容旧 SHA-256 验证）
         try {
-            const data = new TextEncoder().encode(PASSWORD_SALT + password);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-            return Array.from(new Uint8Array(hashBuffer))
+            const saltBytes = new TextEncoder().encode(PASSWORD_SALT + password);
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw',
+                new TextEncoder().encode(password),
+                { name: 'PBKDF2' },
+                false,
+                ['deriveBits']
+            );
+            const derivedBits = await crypto.subtle.deriveBits(
+                {
+                    name: 'PBKDF2',
+                    salt: saltBytes,
+                    iterations: 100000,
+                    hash: 'SHA-256'
+                },
+                keyMaterial,
+                256
+            );
+            return 'pbkdf2$100000$' + Array.from(new Uint8Array(derivedBits))
                 .map(b => b.toString(16).padStart(2, '0')).join('');
         } catch (e) {
-            // WebView 降级：纯 JS SHA-256
+            // WebView 降级：纯 JS SHA-256（保持向后兼容）
             return sha256PureJS(PASSWORD_SALT + password);
         }
     }
@@ -221,22 +245,88 @@
     }
 
     function isPasswordHashed(pwd) {
-        return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
+        // 兼容旧 SHA-256 格式（64位hex）和新 PBKDF2 格式（pbkdf2$100000$hex）
+        if (typeof pwd !== 'string') return false;
+        if (pwd.startsWith('pbkdf2$')) return true;
+        return pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
+    }
+
+    function isLegacyPasswordHash(pwd) {
+        // 旧 SHA-256 格式（64位hex，非 pbkdf2 前缀）
+        return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd) && !pwd.startsWith('pbkdf2$');
     }
 
     async function verifyPassword(inputPassword, storedPassword, username) {
         if (!storedPassword) return false;
+
+        // P0-11 新格式：pbkdf2$100000$hex
+        if (storedPassword.startsWith('pbkdf2$')) {
+            try {
+                const parts = storedPassword.split('$');
+                if (parts.length !== 3) return false;
+                const iterations = parseInt(parts[1], 10);
+                const expectedHash = parts[2];
+                const saltBytes = new TextEncoder().encode(PASSWORD_SALT + inputPassword);
+                const keyMaterial = await crypto.subtle.importKey(
+                    'raw',
+                    new TextEncoder().encode(inputPassword),
+                    { name: 'PBKDF2' },
+                    false,
+                    ['deriveBits']
+                );
+                const derivedBits = await crypto.subtle.deriveBits(
+                    { name: 'PBKDF2', salt: saltBytes, iterations: iterations, hash: 'SHA-256' },
+                    keyMaterial,
+                    256
+                );
+                const computedHash = Array.from(new Uint8Array(derivedBits))
+                    .map(b => b.toString(16).padStart(2, '0')).join('');
+                return constantTimeEqual(computedHash, expectedHash);
+            } catch (e) {
+                console.error('PBKDF2 验证失败:', e);
+                return false;
+            }
+        }
+
         if (isPasswordHashed(storedPassword)) {
             // 先尝试增强版哈希（含用户名盐值）
             if (username) {
                 const enhancedHash = await hashPasswordWithUser(inputPassword, username);
-                if (storedPassword === enhancedHash) return true;
+                if (constantTimeEqual(storedPassword, enhancedHash)) return true;
             }
             // 降级到旧版哈希（全局盐值）
-            return storedPassword === await hashPassword(inputPassword);
+            const legacyHash = await hashPassword(inputPassword);
+            // 注意：hashPassword 现在返回 pbkdf2 格式，需要用旧 SHA-256 函数验证
+            const legacySha256 = await sha256Legacy(inputPassword);
+            return constantTimeEqual(storedPassword, legacySha256);
         }
-        // 兼容旧明文密码
-        return storedPassword === inputPassword;
+        // P0-9 安全修复：移除明文密码兼容分支，防止明文存储攻击
+        // 原代码: return storedPassword === inputPassword;
+        console.error('[P0-9 安全告警] 检测到非哈希格式的密码存储，已拒绝登录。请检查 config.json 密码字段。');
+        return false;
+    }
+
+    // P0-11 辅助：旧版 SHA-256 哈希（用于验证旧 config.json 中的密码）
+    async function sha256Legacy(password) {
+        try {
+            const data = new TextEncoder().encode(PASSWORD_SALT + password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(hashBuffer))
+                .map(b => b.toString(16).padStart(2, '0')).join('');
+        } catch (e) {
+            return sha256PureJS(PASSWORD_SALT + password);
+        }
+    }
+
+    // 常量时间字符串比较，防止时序攻击
+    function constantTimeEqual(a, b) {
+        if (typeof a !== 'string' || typeof b !== 'string') return false;
+        if (a.length !== b.length) return false;
+        let result = 0;
+        for (let i = 0; i < a.length; i++) {
+            result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+        }
+        return result === 0;
     }
 
     // 记住密码加密存储（非明文）
@@ -533,6 +623,26 @@
         };
     }
 
+    // P2-10 fetch 超时工具：包装 fetch 添加超时控制（默认 30 秒）
+    async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch(url, {
+                ...options,
+                signal: controller.signal
+            });
+            return response;
+        } catch (e) {
+            if (e.name === 'AbortError') {
+                throw new Error('请求超时（' + (timeoutMs / 1000) + '秒），请检查网络连接');
+            }
+            throw e;
+        } finally {
+            clearTimeout(timeoutId);
+        }
+    }
+
     async function login(username, password, options = {}) {
         try {
             // 1. 验证输入
@@ -663,6 +773,14 @@
         PASSWORD_SALT,
         SESSION_TIMEOUT_MS,
         CLOUD_API_BASE,
+        // P2-8 角色常量
+        ROLE_PLATFORM_ADMIN,
+        ROLE_CLINIC_ADMIN,
+        ROLE_DOCTOR,
+        ROLE_ADMIN,
+        ROLE_USER,
+        // P2-10 fetch 超时工具
+        fetchWithTimeout,
 
         // 存储适配器
         StorageAdapter,

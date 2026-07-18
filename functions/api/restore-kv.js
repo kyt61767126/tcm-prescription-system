@@ -1,13 +1,21 @@
+import { parseAuthHeader, isPlatformAdmin } from './_lib/auth.js';
+
 export async function onRequest(context) {
     const url = new URL(context.request.url);
-    const secret = url.searchParams.get('secret');
     const backupKey = url.searchParams.get('backupKey');
-    
-    // 简单的密钥验证（生产环境应使用更安全的方式）
-    if (secret !== 'tcm-backup-secret-2024') {
+
+    // P0-1 安全修复：与 backup-kv.js 一致的双重鉴权
+    const BACKUP_SECRET = context.env.BACKUP_SECRET || '';
+    const providedSecret = url.searchParams.get('secret') || context.request.headers.get('X-Backup-Secret') || '';
+
+    const currentUser = await parseAuthHeader(context.request, context.env);
+    const isAuthorizedPlatformAdmin = currentUser && isPlatformAdmin(currentUser);
+    const isAuthorizedBySecret = BACKUP_SECRET && providedSecret && providedSecret === BACKUP_SECRET;
+
+    if (!isAuthorizedPlatformAdmin && !isAuthorizedBySecret) {
         return new Response(JSON.stringify({
             success: false,
-            error: 'Unauthorized: Invalid secret key'
+            error: 'Unauthorized: 需要 platform_admin Token 或正确的 BACKUP_SECRET 环境变量'
         }), {
             status: 401,
             headers: { 'Content-Type': 'application/json' }

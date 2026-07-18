@@ -710,7 +710,7 @@ let currentUser = null;
         }
 
         const DB_NAME = 'PrescriptionDB';
-        const DB_VERSION = 2;
+        const DB_VERSION = 3;
         let db = null;
 
         function openDB() {
@@ -727,6 +727,10 @@ let currentUser = null;
                     }
                     if (!database.objectStoreNames.contains('settings')) {
                         database.createObjectStore('settings', { keyPath: 'key' });
+                    }
+                    // P0-5：新增处方回收站 store（软删除恢复用）
+                    if (!database.objectStoreNames.contains('prescriptions_trash')) {
+                        database.createObjectStore('prescriptions_trash', { keyPath: 'id' });
                     }
                 };
                 request.onsuccess = function(event) {
@@ -1478,8 +1482,18 @@ let currentUser = null;
         }
 
         async function handleDeleteUser(username) {
+            // P1-7 安全修复：内层权限校验，防止 DevTools 绕过
+            if (!currentUser || currentUser.role !== 'admin') {
+                alert('无权限：仅管理员可删除用户');
+                return;
+            }
+            // 禁止删除自己
+            if (currentUser.username === username) {
+                alert('无法删除当前登录用户');
+                return;
+            }
             if (!await confirm('确定删除该用户？删除后该用户的所有处方数据也将被删除！')) return;
-            
+
             // P7: 从 prescriptions store 批量删除该用户的处方
             const userPrescriptions = await getAllPrescriptionsFromDB();
             const toDelete = userPrescriptions.filter(p => p.createdBy === username);
@@ -1490,12 +1504,12 @@ let currentUser = null;
             // 删除用户
             const users = getUsers().filter(u =>u.username !== username);
             saveUsers(users);
-            
+
             // 刷新处方历史列表
             if (currentUser && currentUser.role === 'admin') {
                 prescriptionHistory = await getAllUserPrescriptions();
             }
-            
+
             renderUserList();
             alert('用户删除成功！');
         }
@@ -3486,7 +3500,7 @@ let currentUser = null;
         function renderHistoryList(list) {
             const el = DOM_CACHE.historyList || document.getElementById('historyList');
             if (!el) return;
-            el.innerHTML = list.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
+            el.innerHTML = list.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${p.registrationFee ? ' | 诊费:' + p.registrationFee.toFixed(2) + '元' : ''}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
         }
 
         async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
@@ -3776,6 +3790,33 @@ let currentUser = null;
         async function deleteHistory(id) {
             const record = prescriptionHistory.find(p => p.id === id);
             if (!record) return;
+
+            // P0-5 安全修复：添加确认弹窗，防止误删导致数据永久丢失
+            const patientName = record.patientName || '未知患者';
+            const prescriptionNo = record.prescriptionNo || record.clinicNo || '无编号';
+            const confirmMsg = `确定要删除该处方吗？\n\n患者：${patientName}\n编号：${prescriptionNo}\n\n删除后将移入回收站，可通过 IndexedDB prescriptions_trash store 恢复。`;
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            // P0-5：软删除 - 先保存到 prescriptions_trash store，再从主 store 删除
+            try {
+                const database = await openDB();
+                const trashRecord = {
+                    ...record,
+                    deletedAt: new Date().toISOString(),
+                    deletedBy: (typeof currentUser !== 'undefined' && currentUser?.username) || 'unknown'
+                };
+                await new Promise((resolve, reject) => {
+                    const transaction = database.transaction(['prescriptions_trash'], 'readwrite');
+                    const store = transaction.objectStore('prescriptions_trash');
+                    const request = store.put(trashRecord);
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            } catch (e) {
+                console.error('[P0-5] 保存到回收站失败（继续硬删除）:', e);
+            }
 
             // P7: 单条从 prescriptions store 删除
             await deletePrescriptionFromDB(id);

@@ -2,10 +2,11 @@
 // 文件名以 _ 开头不会被作为路由暴露
 //
 // 提供：
-//   - hashPassword / verifyPassword: SHA-256(salt + ':' + password)
-//   - signToken / verifyToken: HMAC-SHA256 无状态 token
-//   - parseAuthHeader: 兼容新版 JSON Basic auth + Bearer token + 旧版 username:role
+//   - hashPassword / verifyPassword: PBKDF2-SHA256 100000 iterations（向后兼容旧 SHA-256）
+//   - signToken / verifyToken: HMAC-SHA256 无状态 token（支持黑名单撤销）
+//   - parseAuthHeader: 仅支持 Bearer token（Basic 已于 2026-07-18 移除）
 //   - 角色常量与判定函数
+//   - isTokenRevoked / revokeToken: Token 黑名单管理（登出/改密时撤销）
 //
 // 安全密钥来自环境变量 AUTH_SECRET，请在 Cloudflare Pages 后台配置。
 
@@ -16,6 +17,9 @@ export const ROLE_DOCTOR = 'doctor';
 export const KV_SYSTEM_CLINICS = 'system:clinics';
 export const KV_SYSTEM_PLATFORM_ADMINS = 'system:platform_admins';
 export const KV_SYSTEM_PLATFORM_MEDICINES = 'system:platform_medicines';
+
+// Token 黑名单 KV key 前缀
+export const KV_TOKEN_REVOKED_PREFIX = 'revoked_token:';
 
 const DEFAULT_SECRET = 'tcm-dev-insecure-secret-replace-in-prod';
 
@@ -54,19 +58,91 @@ function generateSalt() {
     return bytesToHex(crypto.getRandomValues(new Uint8Array(16)));
 }
 
-// 密码哈希：SHA-256(salt + ':' + password)
+// P0-11 安全升级：PBKDF2-SHA256 100000 iterations（向后兼容旧 SHA-256 格式）
+// 旧格式: passwordHash = SHA-256(salt + ':' + password)
+// 新格式: passwordHash = 'pbkdf2$100000$' + PBKDF2-SHA256(salt + ':' + password)
+const PBKDF2_ITERATIONS = 100000;
+
+async function pbkdf2Hash(password, salt) {
+    const keyMaterial = await crypto.subtle.importKey(
+        'raw',
+        strToBytes(password),
+        { name: 'PBKDF2' },
+        false,
+        ['deriveBits']
+    );
+    const derivedBits = await crypto.subtle.deriveBits(
+        {
+            name: 'PBKDF2',
+            salt: strToBytes(salt + ':' + password),
+            iterations: PBKDF2_ITERATIONS,
+            hash: 'SHA-256'
+        },
+        keyMaterial,
+        256
+    );
+    return 'pbkdf2$' + PBKDF2_ITERATIONS + '$' + bytesToHex(new Uint8Array(derivedBits));
+}
+
+// 密码哈希：默认使用 PBKDF2，向后兼容旧 SHA-256 调用方
 // 返回 { passwordHash, salt }
 export async function hashPassword(password, saltHex) {
     const salt = saltHex || generateSalt();
-    const passwordHash = await sha256(salt + ':' + password);
+    const passwordHash = await pbkdf2Hash(password, salt);
     return { passwordHash, salt };
 }
 
-// 验证密码
+// 验证密码：自动识别 PBKDF2 新格式和 SHA-256 旧格式
 export async function verifyPassword(password, passwordHash, salt) {
     if (!passwordHash || !salt) return false;
+
+    // 新格式：pbkdf2$100000$hex
+    if (passwordHash.startsWith('pbkdf2$')) {
+        const parts = passwordHash.split('$');
+        if (parts.length !== 3) return false;
+        const iterations = parseInt(parts[1], 10);
+        const expectedHash = parts[2];
+        const keyMaterial = await crypto.subtle.importKey(
+            'raw',
+            strToBytes(password),
+            { name: 'PBKDF2' },
+            false,
+            ['deriveBits']
+        );
+        const derivedBits = await crypto.subtle.deriveBits(
+            {
+                name: 'PBKDF2',
+                salt: strToBytes(salt + ':' + password),
+                iterations: iterations,
+                hash: 'SHA-256'
+            },
+            keyMaterial,
+            256
+        );
+        const computedHash = bytesToHex(new Uint8Array(derivedBits));
+        // 常量时间比较，防止时序攻击
+        return constantTimeEqual(computedHash, expectedHash);
+    }
+
+    // 旧格式：SHA-256(salt + ':' + password)
     const computed = await sha256(salt + ':' + password);
-    return computed === passwordHash;
+    return constantTimeEqual(computed, passwordHash);
+}
+
+// 常量时间字符串比较，防止时序攻击
+function constantTimeEqual(a, b) {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    if (a.length !== b.length) return false;
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+        result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    return result === 0;
+}
+
+// 检查密码哈希是否为旧格式（SHA-256），用于登录时自动升级
+export function isLegacyPasswordHash(passwordHash) {
+    return passwordHash && !passwordHash.startsWith('pbkdf2$');
 }
 
 // HMAC-SHA256 签名
@@ -84,9 +160,13 @@ async function hmacSign(message, secret) {
 
 // 签发 token: base64(JSON({u, r, c, e, s}))
 //   u: username, r: role, c: clinicId, e: expire timestamp(ms), s: HMAC signature
-export async function signToken(payload, env, ttlMs = 7 * 24 * 60 * 60 * 1000) {
+// P3-6：TTL 支持环境变量 AUTH_TOKEN_TTL_HOURS 配置（默认 168 小时 = 7 天）
+export async function signToken(payload, env, ttlMs = null) {
     const secret = getSecret(env);
-    const expireAt = Date.now() + ttlMs;
+    // P3-6：优先使用环境变量配置的 TTL
+    const envTtlHours = env?.AUTH_TOKEN_TTL_HOURS ? parseFloat(env.AUTH_TOKEN_TTL_HOURS) : null;
+    const effectiveTtl = ttlMs !== null ? ttlMs : (envTtlHours ? envTtlHours * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000);
+    const expireAt = Date.now() + effectiveTtl;
     const tokenPayload = { u: payload.username, r: payload.role, c: payload.clinicId || null, e: expireAt };
     const payloadStr = JSON.stringify(tokenPayload);
     const sig = await hmacSign(payloadStr, secret);
@@ -95,6 +175,7 @@ export async function signToken(payload, env, ttlMs = 7 * 24 * 60 * 60 * 1000) {
 }
 
 // 验证 token，返回 { username, role, clinicId, isAdmin } 或 null
+// P1-3 安全增强：支持 Token 黑名单撤销检查
 export async function verifyToken(token, env) {
     try {
         const binary = atob(token);
@@ -109,6 +190,17 @@ export async function verifyToken(token, env) {
         const expectedSig = await hmacSign(JSON.stringify({ u: payload.u, r: payload.r, c: payload.c, e: payload.e }), secret);
         if (expectedSig !== payload.s) return null;
 
+        // P1-3：检查 Token 黑名单
+        const kv = env?.KV || env?.TCM_PRESCRIPTION_KV;
+        if (kv) {
+            const tokenHash = await sha256(token);
+            const revoked = await kv.get(KV_TOKEN_REVOKED_PREFIX + tokenHash);
+            if (revoked) {
+                console.warn('[安全] 已撤销的 Token 被拒绝:', payload.u);
+                return null;
+            }
+        }
+
         return {
             username: payload.u,
             role: payload.r,
@@ -117,6 +209,35 @@ export async function verifyToken(token, env) {
         };
     } catch (e) {
         return null;
+    }
+}
+
+// P1-3：撤销 Token（登出/改密时调用）
+export async function revokeToken(token, env) {
+    try {
+        const kv = env?.KV || env?.TCM_PRESCRIPTION_KV;
+        if (!kv || !token) return false;
+        const tokenHash = await sha256(token);
+        // 黑名单保留 8 天（略长于 Token 7 天 TTL）
+        await kv.put(KV_TOKEN_REVOKED_PREFIX + tokenHash, '1', { expirationTtl: 8 * 24 * 60 * 60 });
+        return true;
+    } catch (e) {
+        console.error('revokeToken error:', e);
+        return false;
+    }
+}
+
+// P1-3：撤销用户所有 Token（改密/角色变更时调用）
+// 通过递增 user_token_version 实现，旧 Token 携带的版本号不匹配即失效
+export async function revokeAllUserTokens(kv, username) {
+    try {
+        const versionKey = 'user_token_version:' + username;
+        const currentVersion = parseInt(await kv.get(versionKey) || '0', 10);
+        await kv.put(versionKey, String(currentVersion + 1));
+        return true;
+    } catch (e) {
+        console.error('revokeAllUserTokens error:', e);
+        return false;
     }
 }
 

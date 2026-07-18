@@ -1,22 +1,121 @@
 import {
     parseAuthHeader, hashPassword, verifyPassword, signToken,
-    isPlatformAdmin, isClinicAdmin, isAdmin,
+    isPlatformAdmin, isClinicAdmin, isAdmin, isLegacyPasswordHash,
+    revokeAllUserTokens,
     ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR,
     KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS
 } from './_lib/auth.js';
 
-function corsHeaders() {
+// P1-6 安全增强：CORS 白名单（替代通配符 '*'）
+function getAllowedOrigins() {
+    return [
+        'https://tcm-prescription-system.pages.dev',
+        'https://hjkangtcm.pages.dev',
+        'http://localhost:3000',
+        'http://localhost:8080',
+        'http://127.0.0.1:3000',
+        'http://127.0.0.1:8080'
+    ];
+}
+
+function corsHeaders(request) {
+    const origin = request?.headers?.get('Origin') || '';
+    // 无 Origin 头（同源请求或非浏览器请求）：保持 '*' 向后兼容
+    if (!origin) {
+        return {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
+            'Access-Control-Max-Age': '86400',
+            'Content-Type': 'application/json'
+        };
+    }
+    const allowed = getAllowedOrigins();
+    // 允许 pages.dev 子域（每个诊所可能有自己的子域）
+    const isPagesDev = origin.endsWith('.pages.dev') && origin.startsWith('https://');
+    const allowedOrigin = (allowed.includes(origin) || isPagesDev) ? origin : 'null';
     return {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': allowedOrigin,
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
         'Access-Control-Max-Age': '86400',
+        'Vary': 'Origin',
         'Content-Type': 'application/json'
     };
 }
 
-function json(data, status = 200) {
-    return new Response(JSON.stringify(data), { status, headers: corsHeaders() });
+function json(data, status = 200, request = null) {
+    return new Response(JSON.stringify(data), { status, headers: corsHeaders(request) });
+}
+
+// P1-1 安全增强：登录失败锁定（5 次失败后锁定 15 分钟）
+const LOGIN_MAX_FAILURES = 5;
+const LOGIN_LOCK_TTL = 15 * 60; // 15 分钟（秒）
+
+async function recordLoginFailure(kv, username) {
+    const key = 'login_fail:' + username;
+    const count = parseInt(await kv.get(key) || '0', 10) + 1;
+    await kv.put(key, String(count), { expirationTtl: LOGIN_LOCK_TTL });
+    return count;
+}
+
+async function checkLoginLocked(kv, username) {
+    const key = 'login_fail:' + username;
+    const count = parseInt(await kv.get(key) || '0', 10);
+    return count >= LOGIN_MAX_FAILURES;
+}
+
+async function clearLoginFailures(kv, username) {
+    const key = 'login_fail:' + username;
+    await kv.delete(key);
+}
+
+// P1-1 安全增强：IP 限流（10 次/分钟）
+const IP_RATE_LIMIT_MAX = 10;
+const IP_RATE_LIMIT_TTL = 60; // 60 秒
+
+async function checkIpRateLimit(kv, request) {
+    try {
+        const cf = request.cf;
+        const ip = request.headers.get('CF-Connecting-IP') ||
+                   request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ||
+                   'unknown';
+        if (ip === 'unknown') return true; // 无法识别 IP 时放行
+        const key = 'ip_rate:' + ip;
+        const count = parseInt(await kv.get(key) || '0', 10) + 1;
+        if (count === 1) {
+            await kv.put(key, '1', { expirationTtl: IP_RATE_LIMIT_TTL });
+        } else {
+            await kv.put(key, String(count), { expirationTtl: IP_RATE_LIMIT_TTL });
+        }
+        return count <= IP_RATE_LIMIT_MAX;
+    } catch (e) {
+        return true; // 限流失败不阻塞业务
+    }
+}
+
+// P1-2 安全增强：操作审计日志
+async function writeAuditLog(kv, clinicId, username, role, action, target, request, extra = {}) {
+    try {
+        const date = new Date().toISOString().split('T')[0];
+        const key = `audit_log:${clinicId || 'platform'}:${date}`;
+        const logs = (await kv.get(key, 'json')) || [];
+        logs.push({
+            timestamp: new Date().toISOString(),
+            username,
+            role,
+            action,
+            target,
+            ip: request?.headers?.get('CF-Connecting-IP') || 'unknown',
+            userAgent: request?.headers?.get('User-Agent') || 'unknown',
+            ...extra
+        });
+        // 保留最近 1000 条
+        if (logs.length > 1000) logs.splice(0, logs.length - 1000);
+        await kv.put(key, JSON.stringify(logs), { expirationTtl: 90 * 24 * 60 * 60 }); // 保留 90 天
+    } catch (e) {
+        console.error('writeAuditLog error:', e);
+    }
 }
 
 function getKV(context) {
@@ -128,8 +227,13 @@ export async function onRequest(context) {
         }
 
         // ===== 诊断端点 GET /users?check=username =====
-        // 用于检查用户是否存在（无需认证，仅用于诊断）
+        // P0-10 安全修复：原公开端点泄露用户元数据，现已改为需要 platform_admin 鉴权
         if (method === 'GET' && url.searchParams.get('check')) {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isPlatformAdmin(authUser)) {
+                return json({ success: false, error: '未授权：仅平台总管理员可使用诊断端点' }, 401);
+            }
+
             const checkUsername = url.searchParams.get('check');
             if (!checkUsername) {
                 return json({ success: false, error: '请提供要检查的用户名' }, 400);
@@ -219,39 +323,97 @@ export async function onRequest(context) {
         }
 
         // ===== 获取平台管理员列表 GET /users?platform-admins=true =====
+        // P0-3 安全修复：原端点无认证，现改为需要 platform_admin 鉴权
         if (method === 'GET' && url.searchParams.get('platform-admins') === 'true') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isPlatformAdmin(authUser)) {
+                return json({ success: false, error: '未授权：仅平台总管理员可查看平台管理员列表' }, 401);
+            }
             const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
             return json({ success: true, data: admins.map(a => ({ username: a.username, name: a.name, role: a.role })) });
         }
 
         // ===== 登录端点 POST /users?login=true =====
         if (method === 'POST' && url.searchParams.get('login') === 'true') {
+            // P1-1：IP 限流（10 次/分钟）
+            const allowedIp = await checkIpRateLimit(kv, context.request);
+            if (!allowedIp) {
+                return json({ success: false, error: '请求过于频繁，请稍后再试' }, 429, context.request);
+            }
+
             const bodyText = await context.request.text();
             let body = {};
             try { body = JSON.parse(bodyText); } catch (e) {}
             const { username, password } = body;
             if (!username || !password) {
-                return json({ success: false, error: '用户名或密码不能为空' }, 400);
+                return json({ success: false, error: '用户名或密码不能为空' }, 400, context.request);
+            }
+
+            // P1-1：检查账户是否被锁定
+            const isLocked = await checkLoginLocked(kv, username);
+            if (isLocked) {
+                return json({ success: false, error: '账户已被锁定，请 15 分钟后再试', code: 'ACCOUNT_LOCKED' }, 423, context.request);
             }
 
             const found = await findUserForLogin(kv, username);
             if (!found) {
                 console.error('[登录失败] 用户不存在:', username);
-                return json({ success: false, error: '用户名或密码错误' }, 401);
+                const failCount = await recordLoginFailure(kv, username);
+                await writeAuditLog(kv, null, username, 'unknown', 'login_failed', 'user_not_found', context.request, { failCount });
+                return json({ success: false, error: '用户名或密码错误' }, 401, context.request);
             }
 
             const { user, clinicId, clinicName } = found;
-            
+
             if (!user.passwordHash || !user.salt) {
                 console.error('[登录失败] 用户数据不完整，缺少 passwordHash 或 salt:', username);
-                return json({ success: false, error: '用户尚未设置密码，请联系管理员重置密码', code: 'NO_PASSWORD' }, 401);
+                return json({ success: false, error: '用户尚未设置密码，请联系管理员重置密码', code: 'NO_PASSWORD' }, 401, context.request);
             }
 
             const ok = await verifyPassword(password, user.passwordHash, user.salt);
             if (!ok) {
                 console.error('[登录失败] 密码验证失败:', username);
-                return json({ success: false, error: '用户名或密码错误' }, 401);
+                const failCount = await recordLoginFailure(kv, username);
+                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'wrong_password', context.request, { failCount });
+                const remaining = Math.max(0, LOGIN_MAX_FAILURES - failCount);
+                const errorMsg = remaining > 0
+                    ? `用户名或密码错误，剩余尝试次数：${remaining}`
+                    : '账户已被锁定，请 15 分钟后再试';
+                const status = remaining > 0 ? 401 : 423;
+                return json({ success: false, error: errorMsg, code: remaining > 0 ? 'WRONG_PASSWORD' : 'ACCOUNT_LOCKED' }, status, context.request);
             }
+
+            // P0-11 自动升级：检测旧 SHA-256 哈希，登录成功后自动升级为 PBKDF2
+            if (isLegacyPasswordHash(user.passwordHash)) {
+                try {
+                    const { passwordHash: newHash, salt: newSalt } = await hashPassword(password);
+                    user.passwordHash = newHash;
+                    user.salt = newSalt;
+                    user.updatedAt = getNowISO();
+                    // 保存升级后的密码
+                    if (clinicId) {
+                        const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
+                        const idx = users.findIndex(u => u.username === username);
+                        if (idx !== -1) {
+                            users[idx] = user;
+                            await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));
+                        }
+                    } else {
+                        const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+                        const idx = admins.findIndex(u => u.username === username);
+                        if (idx !== -1) {
+                            admins[idx] = user;
+                            await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(admins));
+                        }
+                    }
+                    console.log('[P0-11] 密码哈希已自动升级为 PBKDF2:', username);
+                } catch (upgradeErr) {
+                    console.error('[P0-11] 密码升级失败（不影响登录）:', upgradeErr);
+                }
+            }
+
+            // P1-1：登录成功，清除失败计数
+            await clearLoginFailures(kv, username);
 
             const token = await signToken({
                 username: user.username,
@@ -259,50 +421,22 @@ export async function onRequest(context) {
                 clinicId: clinicId
             }, context.env);
 
+            // P1-2：记录登录成功审计日志
+            await writeAuditLog(kv, clinicId, user.username, user.role, 'login_success', 'auth', context.request);
+
             return json({
                 success: true,
                 token,
                 user: sanitizeUser(user, clinicId, clinicName)
-            });
+            }, 200, context.request);
         }
 
-        // ===== 公开重置密码端点 POST /users?action=reset-public =====
-        // 允许用户自行重置密码（无需认证，用于修复没有密码的用户）
+        // ===== [P0-2 安全修复 已删除] 公开重置密码端点 POST /users?action=reset-public =====
+        // 该端点无需认证即可重置任意用户密码，构成账号接管风险，已于 2026-07-18 移除。
+        // 替代方案：使用 POST /users?action=change-password（需登录 + 校验旧密码），
+        // 或由 clinic_admin/platform_admin 通过用户管理界面重置（已具备权限）。
         if (method === 'POST' && url.searchParams.get('action') === 'reset-public') {
-            const body = await context.request.json().catch(() => ({}));
-            const { username, newPassword } = body;
-            if (!username || !newPassword) {
-                return json({ success: false, error: '请提供用户名和新密码' }, 400);
-            }
-
-            const found = await findUserForLogin(kv, username);
-            if (!found) {
-                return json({ success: false, error: '用户不存在' }, 404);
-            }
-
-            const { user, clinicId } = found;
-            const { passwordHash, salt } = await hashPassword(newPassword);
-            user.passwordHash = passwordHash;
-            user.salt = salt;
-            user.updatedAt = getNowISO();
-
-            if (clinicId) {
-                const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
-                const idx = users.findIndex(u => u.username === username);
-                if (idx !== -1) {
-                    users[idx] = user;
-                    await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));
-                }
-            } else {
-                const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
-                const idx = admins.findIndex(u => u.username === username);
-                if (idx !== -1) {
-                    admins[idx] = user;
-                    await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(admins));
-                }
-            }
-
-            return json({ success: true, message: '密码重置成功，请使用新密码登录' });
+            return json({ success: false, error: '该端点已废弃，请使用 change-password 或联系管理员重置' }, 410);
         }
 
         // ===== 修改密码端点 POST /users?action=change-password =====
@@ -310,23 +444,24 @@ export async function onRequest(context) {
             const body = await context.request.json().catch(() => ({}));
             const { username, oldPassword, newPassword } = body;
             if (!username || !oldPassword || !newPassword) {
-                return json({ success: false, error: '参数不完整' }, 400);
+                return json({ success: false, error: '参数不完整' }, 400, context.request);
             }
 
             const currentUser = await parseAuthHeader(context.request, context.env);
             if (!currentUser || currentUser.username !== username) {
-                return json({ success: false, error: '只能修改自己的密码' }, 403);
+                return json({ success: false, error: '只能修改自己的密码' }, 403, context.request);
             }
 
             // 查找用户原始数据
             const found = await findUserForLogin(kv, username);
             if (!found) {
-                return json({ success: false, error: '用户不存在' }, 404);
+                return json({ success: false, error: '用户不存在' }, 404, context.request);
             }
 
             const ok = await verifyPassword(oldPassword, found.user.passwordHash, found.user.salt);
             if (!ok) {
-                return json({ success: false, error: '原密码错误' }, 401);
+                await writeAuditLog(kv, found.clinicId, username, found.user.role, 'change_password_failed', 'self', context.request);
+                return json({ success: false, error: '原密码错误' }, 401, context.request);
             }
 
             // 更新密码
@@ -353,7 +488,11 @@ export async function onRequest(context) {
                 }
             }
 
-            return json({ success: true, message: '密码修改成功' });
+            // P1-3：撤销该用户所有 Token，强制重新登录
+            await revokeAllUserTokens(kv, username);
+            await writeAuditLog(kv, found.clinicId, username, found.user.role, 'change_password_success', 'self', context.request);
+
+            return json({ success: true, message: '密码修改成功，请使用新密码重新登录' }, 200, context.request);
         }
 
         // ===== 诊所列表 GET /users?clinics=true =====

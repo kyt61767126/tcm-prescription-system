@@ -1,17 +1,31 @@
 import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin } from './_lib/auth.js';
 
-function corsHeaders() {
+// P1-6 安全增强：CORS 白名单
+function corsHeaders(request) {
+    const origin = request?.headers?.get('Origin') || '';
+    if (!origin) {
+        return {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
+            'Access-Control-Max-Age': '86400',
+            'Content-Type': 'application/json'
+        };
+    }
+    const allowed = ['https://tcm-prescription-system.pages.dev', 'https://hjkangtcm.pages.dev', 'http://localhost:3000', 'http://localhost:8080', 'http://127.0.0.1:3000', 'http://127.0.0.1:8080'];
+    const isPagesDev = origin.endsWith('.pages.dev') && origin.startsWith('https://');
     return {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': (allowed.includes(origin) || isPagesDev) ? origin : 'null',
         'Access-Control-Allow-Methods': 'GET, POST, PUT, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
         'Access-Control-Max-Age': '86400',
+        'Vary': 'Origin',
         'Content-Type': 'application/json'
     };
 }
 
-function json(data, status = 200) {
-    return new Response(JSON.stringify(data), { status, headers: corsHeaders() });
+function json(data, status = 200, request = null) {
+    return new Response(JSON.stringify(data), { status, headers: corsHeaders(request) });
 }
 
 function getKV(context) {

@@ -4245,11 +4245,15 @@ if (window.Permission) {
         }
 
         async function showUserManageModal() {
-            if (!currentUser || currentUser.role !== 'clinic_admin') {
+            // P0-4 安全修复：改用 Permission 模块统一权限判断（兼容 platform_admin）
+            const canManage = (window.Permission && Permission.shouldShowUserManage)
+                ? Permission.shouldShowUserManage(currentUser)
+                : (currentUser && (currentUser.role === 'clinic_admin' || currentUser.role === 'platform_admin'));
+            if (!canManage) {
                 alert('只有管理员可以管理用户');
                 return;
             }
-            
+
             await renderUserList();
             document.getElementById('newUserUsername').value = '';
             document.getElementById('newUserPassword').value = '';
@@ -6394,23 +6398,30 @@ if (window.Permission) {
             updatePrescriptionPaper();
         }
 
+        // P1-1 性能优化：搜索防抖，避免每次按键全量扫描
+        let _searchPatientsQuickTimer = null;
         function searchPatientsQuick(event) {
-            const input = event.target.value.toLowerCase();
-            if (!input) {
-                document.getElementById('historyList').innerHTML = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div>';
-                showPatientNameDropdown([]);
-                return;
-            }
-            const matched = filterPrescriptionsByPermission(prescriptionHistory).filter(p => {
-                if (!p.patientName) return false;
-                const name = p.patientName.toLowerCase();
-                if (name.includes(input)) return true;
-                const pinyinCode = getPinyinCode(p.patientName).toLowerCase();
-                return pinyinCode.startsWith(input) || pinyinCode.includes(input);
-            });
-            renderHistoryList(matched);
-            // 显示姓名匹配下拉框
-            showPatientNameDropdown(matched.slice(0, 5));
+            // P1-1：防抖 250ms，避免快速输入时重复扫描全量处方
+            const evt = event; // 保留事件引用
+            clearTimeout(_searchPatientsQuickTimer);
+            _searchPatientsQuickTimer = setTimeout(() => {
+                const input = evt.target.value.toLowerCase();
+                if (!input) {
+                    document.getElementById('historyList').innerHTML = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div>';
+                    showPatientNameDropdown([]);
+                    return;
+                }
+                const matched = filterPrescriptionsByPermission(prescriptionHistory).filter(p => {
+                    if (!p.patientName) return false;
+                    const name = p.patientName.toLowerCase();
+                    if (name.includes(input)) return true;
+                    const pinyinCode = getPinyinCode(p.patientName).toLowerCase();
+                    return pinyinCode.startsWith(input) || pinyinCode.includes(input);
+                });
+                renderHistoryList(matched);
+                // 显示姓名匹配下拉框
+                showPatientNameDropdown(matched.slice(0, 5));
+            }, 250);
         }
 
         function showPatientNameDropdown(patients) {
@@ -6811,7 +6822,15 @@ if (window.Permission) {
         }
 
         async function deleteHistory(id) {
-            // 直接执行删除（无需确认）
+            // P0-6 安全修复：添加确认弹窗，防止误删
+            const record = prescriptionHistory.find(p => p.id === id);
+            if (!record) return;
+            const patientName = record.patientName || '未知患者';
+            const prescriptionNo = record.outpatientNo || record.prescriptionNo || record.clinicNo || '无编号';
+            const confirmMsg = `确定要删除该处方吗？\n\n患者：${patientName}\n编号：${prescriptionNo}\n\n删除后将移入回收站，可联系管理员恢复。`;
+            if (!confirm(confirmMsg)) {
+                return;
+            }
             executeDelete(id);
         }
 
@@ -7519,7 +7538,37 @@ IconFile=${scriptPath}`;
             try { setUserItem('formulas', JSON.stringify(formulas)); } catch(e) { console.warn('保存方剂到本地失败:', e); }
         }
         function savePrescriptionHistory() {
-            try { setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory)); } catch(e) { console.warn('保存处方历史到本地失败:', e); }
+            try {
+                setUserItem('prescriptionHistory', JSON.stringify(prescriptionHistory));
+            } catch(e) {
+                console.warn('保存处方历史到本地失败:', e);
+                // P0-7：localStorage 配额超限告警，提示用户导出
+                if (isQuotaExceededError(e)) {
+                    const total = prescriptionHistory.length;
+                    console.error('[P0-7] localStorage 配额超限，处方数：' + total + '。建议导出数据到文件备份。');
+                    // 静默清理 localBackups 旧备份以释放空间
+                    try {
+                        const backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
+                        if (backups.length > 2) {
+                            localStorage.setItem('localBackups', JSON.stringify(backups.slice(0, 2)));
+                            console.log('[P0-7] 已清理旧本地备份释放空间');
+                        }
+                    } catch (cleanupErr) {
+                        console.error('[P0-7] 清理旧备份失败:', cleanupErr);
+                    }
+                }
+            }
+        }
+
+        // P0-7：检测是否为 localStorage 配额超限错误
+        function isQuotaExceededError(e) {
+            return e && (
+                e.name === 'QuotaExceededError' ||
+                e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+                e.code === 22 ||
+                e.code === 1014 ||
+                (e.message && e.message.indexOf('quota') !== -1)
+            );
         }
 
         // ============ 已删除处方ID管理（防止刷新后从云端复活） ============
