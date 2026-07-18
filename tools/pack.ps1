@@ -85,6 +85,37 @@ function Stop-OnError {
     }
 }
 
+# Run external command safely. Java/Gradle/npm write warnings to stderr which
+# PowerShell 5.x with ErrorActionPreference=Stop treats as terminating errors.
+# This helper temporarily switches to Continue so only $LASTEXITCODE matters.
+function Invoke-External {
+    param(
+        [Parameter(Mandatory=$true)]
+        [scriptblock]$Command,
+        [string]$Context = "external command"
+    )
+    $prevEAP = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        & $Command 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                # stderr line - print as warning (yellow), don't throw
+                Write-Host $_.Exception.Message -ForegroundColor Yellow
+            } else {
+                Write-Host $_
+            }
+        }
+        $code = $LASTEXITCODE
+    } finally {
+        $ErrorActionPreference = $prevEAP
+    }
+    if ($code -ne 0 -and $code -ne $null) {
+        Write-Log "[FAIL] $Context (exit code: $code)" "ERROR"
+        throw "$Context failed with exit code $code"
+    }
+    Write-Log "[OK] $Context (exit code: $code)"
+}
+
 # ============================================================================
 # Section 2: Encoding Verification
 # ============================================================================
@@ -349,8 +380,7 @@ function Build-Desktop {
         Write-Host "  Installing npm dependencies..." -ForegroundColor Yellow
         Push-Location $script:VersionDir
         try {
-            npm install 2>&1 | Out-Host
-            Stop-OnError "npm install"
+            Invoke-External { npm install } "npm install"
         } finally {
             Pop-Location
         }
@@ -360,8 +390,7 @@ function Build-Desktop {
     Write-Host "  Obfuscating JavaScript..." -ForegroundColor Yellow
     Push-Location $script:ProjectRoot
     try {
-        node "tools\obfuscate.js" --target=$Version 2>&1 | Out-Host
-        Stop-OnError "JS obfuscation"
+        Invoke-External { node "tools\obfuscate.js" --target=$Version } "JS obfuscation"
     } finally {
         Pop-Location
     }
@@ -372,8 +401,7 @@ function Build-Desktop {
     try {
         $env:ELECTRON_MIRROR = "https://registry.npmmirror.com/-/binary/electron/"
         $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://registry.npmmirror.com/-/binary/electron-builder-binaries/"
-        npm run build 2>&1 | Out-Host
-        Stop-OnError "electron-builder"
+        Invoke-External { npm run build } "electron-builder"
     } finally {
         Pop-Location
     }
@@ -382,7 +410,7 @@ function Build-Desktop {
     Write-Host "  Restoring JavaScript..." -ForegroundColor Yellow
     Push-Location $script:ProjectRoot
     try {
-        node "tools\obfuscate.js" restore --target=$Version 2>&1 | Out-Host
+        Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore"
     } finally {
         Pop-Location
     }
@@ -406,8 +434,7 @@ function Build-App {
     Write-Host "  Cleaning build cache..." -ForegroundColor Yellow
     Push-Location $script:AndroidDir
     try {
-        & ".\gradlew.bat" clean --no-daemon 2>&1 | Out-Host
-        Stop-OnError "gradlew clean"
+        Invoke-External { & ".\gradlew.bat" clean --no-daemon } "gradlew clean"
     } finally {
         Pop-Location
     }
@@ -419,11 +446,10 @@ function Build-App {
     Write-Host "  Building signed APK..." -ForegroundColor Yellow
     Push-Location $script:AndroidDir
     try {
-        & ".\gradlew.bat" assembleRelease --no-daemon 2>&1 | Out-Host
-        if ($LASTEXITCODE -ne 0) {
-            Restore-VersionCode
-            throw "gradlew assembleRelease failed with exit code $LASTEXITCODE"
-        }
+        Invoke-External { & ".\gradlew.bat" assembleRelease --no-daemon } "gradlew assembleRelease"
+    } catch {
+        Restore-VersionCode
+        throw
     } finally {
         Pop-Location
     }
