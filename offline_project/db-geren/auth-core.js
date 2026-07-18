@@ -29,6 +29,50 @@
     }
     const RUNTIME_KEY = _deriveRuntimeKey();
 
+    // ==================== safeStorage 系统级加密桥（P0-2）====================
+    // 仅 Electron 桌面版可用：基于 Windows DPAPI，绑定用户/机器
+    // 远比 XOR + 硬编码盐安全，攻击者即使拿到源码与密文也无法解密
+    // 在浏览器/WebView 中 available() 返回 false，自动降级到 XOR PWDv2/XORv2
+    const SafeStorageBridge = {
+        _availableCache: null,
+        async available() {
+            if (this._availableCache !== null) return this._availableCache;
+            try {
+                if (global.electronAPI && typeof global.electronAPI.safeStorageAvailable === 'function') {
+                    this._availableCache = await global.electronAPI.safeStorageAvailable();
+                } else {
+                    this._availableCache = false;
+                }
+            } catch (e) {
+                console.warn('safeStorage 检测异常:', e);
+                this._availableCache = false;
+            }
+            return this._availableCache;
+        },
+        async encrypt(plaintext) {
+            if (!plaintext) return null;
+            try {
+                if (!(await this.available())) return null;
+                if (!global.electronAPI || typeof global.electronAPI.encryptString !== 'function') return null;
+                return await global.electronAPI.encryptString(String(plaintext));
+            } catch (e) {
+                console.warn('safeStorage 加密异常:', e);
+                return null;
+            }
+        },
+        async decrypt(encryptedBase64) {
+            if (!encryptedBase64) return null;
+            try {
+                if (!(await this.available())) return null;
+                if (!global.electronAPI || typeof global.electronAPI.decryptString !== 'function') return null;
+                return await global.electronAPI.decryptString(String(encryptedBase64));
+            } catch (e) {
+                console.warn('safeStorage 解密异常:', e);
+                return null;
+            }
+        }
+    };
+
     // 旧 key → 新 key 映射（自动迁移）
     const KEY_MIGRATION = {
         'cloud_currentUser': 'auth:currentUser',
@@ -240,9 +284,13 @@
     }
 
     // 记住密码加密存储（非明文）
-    // P1-2: PWDv2 使用运行时派生密钥（增强），PWDv1 为旧版硬编码盐（向后兼容）
-    function encryptPassword(password) {
+    // P0-2: 优先使用 safeStorage（DPAPI），降级到 XOR PWDv2，向后兼容 PWDv1
+    async function encryptPassword(password) {
         if (!password) return null;
+        // 优先：safeStorage 系统级加密
+        const safeEnc = await SafeStorageBridge.encrypt(password);
+        if (safeEnc) return 'SAFE:' + safeEnc;
+        // 降级：XOR PWDv2（运行时派生密钥）
         const key = RUNTIME_KEY;
         let result = '';
         for (let i = 0; i < password.length; i++) {
@@ -251,9 +299,22 @@
         return 'PWDv2:' + btoa(unescape(encodeURIComponent(result)));
     }
 
-    function decryptPassword(stored) {
+    async function decryptPassword(stored) {
         if (!stored || typeof stored !== 'string') return null;
-        // P1-2: 优先尝试 PWDv2（运行时派生密钥）
+        // P0-2: safeStorage 加密的密文（必须原用户/原机器才能解出）
+        if (stored.startsWith('SAFE:')) {
+            try {
+                const decrypted = await SafeStorageBridge.decrypt(stored.substring(5));
+                if (decrypted !== null) return decrypted;
+                // safeStorage 不可用或跨用户/跨机器迁移：无法解密
+                console.warn('safeStorage 解密失败：可能为跨用户/跨机器迁移，请重新输入密码');
+                return null;
+            } catch (e) {
+                console.error('safeStorage 密码解密失败:', e);
+                return null;
+            }
+        }
+        // P1-2: 尝试 PWDv2（运行时派生密钥）
         if (stored.startsWith('PWDv2:')) {
             try {
                 const text = decodeURIComponent(escape(atob(stored.substring(6))));
@@ -290,7 +351,7 @@
     // 保存记住的密码（加密存储）
     async function saveRememberedPassword(password) {
         try {
-            const encrypted = encryptPassword(password);
+            const encrypted = await encryptPassword(password);
             if (encrypted) {
                 await StorageAdapter.setItem('auth:savedPassword', encrypted);
             }
@@ -304,9 +365,9 @@
         try {
             const stored = await StorageAdapter.getItem('auth:savedPassword');
             if (!stored) return null;
-            // 兼容旧明文存储
-            if (stored.startsWith('PWDv1:')) {
-                return decryptPassword(stored);
+            // P0-2: 兼容 SAFE:/PWDv2:/PWDv1:/旧明文
+            if (stored.startsWith('SAFE:') || stored.startsWith('PWDv1:') || stored.startsWith('PWDv2:')) {
+                return await decryptPassword(stored);
             }
             return stored;
         } catch (e) {
@@ -325,9 +386,13 @@
     }
 
     // 用户列表加密存储（仅离线版使用，Unicode 安全）
-    // P1-2: XORv2 使用运行时派生密钥（增强），XORv1 为旧版硬编码盐（向后兼容）
-    function encryptUsers(users) {
+    // P0-2: 优先使用 safeStorage（DPAPI），降级到 XORv2，向后兼容 XORv1
+    async function encryptUsers(users) {
         const json = JSON.stringify(users);
+        // 优先：safeStorage 系统级加密
+        const safeEnc = await SafeStorageBridge.encrypt(json);
+        if (safeEnc) return 'SAFE:' + safeEnc;
+        // 降级：XORv2（运行时派生密钥）
         const key = RUNTIME_KEY;
         let result = '';
         for (let i = 0; i < json.length; i++) {
@@ -336,9 +401,24 @@
         return 'XORv2:' + btoa(unescape(encodeURIComponent(result)));
     }
 
-    function decryptUsers(stored) {
+    async function decryptUsers(stored) {
         if (!stored || typeof stored !== 'string') return stored;
-        // P1-2: 优先尝试 XORv2（运行时派生密钥）
+        // P0-2: safeStorage 加密的密文
+        if (stored.startsWith('SAFE:')) {
+            try {
+                const decrypted = await SafeStorageBridge.decrypt(stored.substring(5));
+                if (decrypted !== null) {
+                    try { return JSON.parse(decrypted); }
+                    catch (e) { console.error('解密后 JSON 解析失败:', e); return null; }
+                }
+                console.warn('safeStorage 用户列表解密失败：可能为跨用户/跨机器迁移');
+                return null;
+            } catch (e) {
+                console.error('safeStorage 用户列表解密失败:', e);
+                return null;
+            }
+        }
+        // P1-2: 尝试 XORv2（运行时派生密钥）
         if (stored.startsWith('XORv2:')) {
             try {
                 const text = decodeURIComponent(escape(atob(stored.substring(6))));
@@ -666,6 +746,9 @@
 
         // 存储适配器
         StorageAdapter,
+
+        // safeStorage 桥（P0-2）
+        SafeStorageBridge,
 
         // 密码加密
         hashPassword,

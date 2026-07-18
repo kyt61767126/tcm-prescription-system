@@ -208,13 +208,22 @@
         localStorage.removeItem(KEY_REMEMBER_USER);
     }
 
-    // 记住密码
+    // 记住密码（P0-2: 优先 safeStorage 系统级加密；移除明文回退分支）
     const rememberPassword = document.getElementById('rememberPassword');
     if (rememberPassword && rememberPassword.checked) {
         if (window.AuthCore && AuthCore.encryptPassword) {
-            localStorage.setItem('auth:savedPassword', AuthCore.encryptPassword(password));
+            const encryptedPwd = await AuthCore.encryptPassword(password);
+            if (encryptedPwd) {
+                localStorage.setItem('auth:savedPassword', encryptedPwd);
+            } else {
+                console.warn('[auth] 密码加密失败，已拒绝保存密码');
+                localStorage.removeItem('auth:savedPassword');
+                rememberPassword.checked = false;
+            }
         } else {
-            localStorage.setItem('auth:savedPassword', password);
+            console.warn('[auth] AuthCore.encryptPassword 不可用，已拒绝保存密码');
+            localStorage.removeItem('auth:savedPassword');
+            rememberPassword.checked = false;
         }
     } else {
         localStorage.removeItem('auth:savedPassword');
@@ -242,12 +251,28 @@
         initLoginPermissions();
         let savedPassword = localStorage.getItem('auth:savedPassword');
         if (savedPassword) {
-            if (window.AuthCore && AuthCore.decryptPassword && (savedPassword.startsWith('PWDv1:') || savedPassword.startsWith('PWDv2:'))) {
-                savedPassword = AuthCore.decryptPassword(savedPassword);
+            if (window.AuthCore && AuthCore.decryptPassword &&
+                (savedPassword.startsWith('SAFE:') || savedPassword.startsWith('PWDv1:') || savedPassword.startsWith('PWDv2:'))) {
+                try {
+                    const decrypted = await AuthCore.decryptPassword(savedPassword);
+                    if (decrypted) {
+                        savedPassword = decrypted;
+                    } else {
+                        console.warn('[auth] 保存的密码解密失败，请重新输入');
+                        localStorage.removeItem('auth:savedPassword');
+                        savedPassword = '';
+                    }
+                } catch (e) {
+                    console.warn('[auth] 解密保存密码异常:', e);
+                    localStorage.removeItem('auth:savedPassword');
+                    savedPassword = '';
+                }
             }
-            $('loginPassword').value = savedPassword;
-            const rememberPassword = document.getElementById('rememberPassword');
-            if (rememberPassword) rememberPassword.checked = true;
+            if (savedPassword) {
+                $('loginPassword').value = savedPassword;
+                const rememberPassword = document.getElementById('rememberPassword');
+                if (rememberPassword) rememberPassword.checked = true;
+            }
         }
         $('btnOk').addEventListener('click', handleLogin);
         $('btnCancel').addEventListener('click', handleCancel);
