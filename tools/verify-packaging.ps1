@@ -1,4 +1,4 @@
-﻿# verify-packaging.ps1 - Verify encoding integrity of packaging files
+# verify-packaging.ps1 - Verify encoding integrity of packaging files
 # Usage: powershell -File tools\verify-packaging.ps1
 # Exit code: 0 = all pass, 1 = issues found
 #
@@ -68,9 +68,6 @@ $ps1Files = @(
     'offline_project\db-bendi\edit-config.ps1',
     'offline_project\db-dingzhi\edit-config.ps1',
     'offline_project\db-geren\edit-config.ps1',
-    'offline_project\db-bendi\packaging.ps1',
-    'offline_project\db-dingzhi\packaging.ps1',
-    'offline_project\db-geren\packaging.ps1',
     'offline_project\db-bendi\generate-sign-hash.ps1',
     'offline_project\db-dingzhi\generate-sign-hash.ps1',
     'offline_project\db-geren\generate-sign-hash.ps1'

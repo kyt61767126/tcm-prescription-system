@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -88,25 +88,63 @@ function Stop-OnError {
 # Run external command safely. Java/Gradle/npm write warnings to stderr which
 # PowerShell 5.x with ErrorActionPreference=Stop treats as terminating errors.
 # This helper temporarily switches to Continue so only $LASTEXITCODE matters.
+# Supports two calling conventions:
+#   1. scriptblock mode:  Invoke-External { npm install } "npm install"
+#   2. file mode:         Invoke-External -FilePath "foo.bat" -WorkDir "C:\path"
 function Invoke-External {
     param(
-        [Parameter(Mandatory=$true)]
+        [Parameter(Mandatory=$true, ParameterSetName='ScriptBlock')]
         [scriptblock]$Command,
+        [Parameter(Mandatory=$true, ParameterSetName='FilePath')]
+        [string]$FilePath,
+        [Parameter(ParameterSetName='FilePath')]
+        [string]$WorkDir,
         [string]$Context = "external command"
     )
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
+
+    # Resolve FilePath to absolute path and verify existence
+    if ($PSCmdlet.ParameterSetName -eq 'FilePath') {
+        if (-not (Test-Path $FilePath)) {
+            Write-Log "[FAIL] $Context (file not found: $FilePath)" "ERROR"
+            throw "$Context failed: file not found: $FilePath"
+        }
+        $FilePath = (Resolve-Path $FilePath).Path
+        if ($Context -eq 'external command') {
+            $Context = $FilePath | Split-Path -Leaf
+        }
+    }
+
+    # Change working directory if specified
+    $prevLocation = $null
+    if ($WorkDir) {
+        $prevLocation = Get-Location
+        Set-Location $WorkDir
+    }
+
     try {
-        & $Command 2>&1 | ForEach-Object {
-            if ($_ -is [System.Management.Automation.ErrorRecord]) {
-                # stderr line - print as warning (yellow), don't throw
-                Write-Host $_.Exception.Message -ForegroundColor Yellow
-            } else {
-                Write-Host $_
+        if ($PSCmdlet.ParameterSetName -eq 'FilePath') {
+            & cmd /c "$FilePath" 2>&1 | ForEach-Object {
+                if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                    Write-Host $_.Exception.Message -ForegroundColor Yellow
+                } else {
+                    Write-Host $_
+                }
+            }
+        } else {
+            & $Command 2>&1 | ForEach-Object {
+                if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                    # stderr line - print as warning (yellow), don't throw
+                    Write-Host $_.Exception.Message -ForegroundColor Yellow
+                } else {
+                    Write-Host $_
+                }
             }
         }
         $code = $LASTEXITCODE
     } finally {
+        if ($prevLocation) { Set-Location $prevLocation }
         $ErrorActionPreference = $prevEAP
     }
     if ($code -ne 0 -and $code -ne $null) {
