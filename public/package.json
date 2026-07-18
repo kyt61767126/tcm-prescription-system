@@ -12,6 +12,7 @@
   "author": "惠康堂",
   "license": "MIT",
   "devDependencies": {
+    "asarmor": "^3.0.2",
     "electron": "^35.0.0",
     "electron-builder": "^24.9.1"
   },
@@ -21,6 +22,7 @@
     "directories": {
       "output": "dist"
     },
+    "afterPack": "./afterPack.js",
     "files": [
       "electron/**/*",
       "index.html",
