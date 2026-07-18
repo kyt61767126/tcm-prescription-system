@@ -3381,35 +3381,51 @@ if (window.Permission) {
                     console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
-                // 离线APP默认内嵌播放（用local-media自定义URL，WebView拦截后返回文件流）
-                // 比base64 data URL更可靠（无大小限制、编码兼容性问题）
-                // 系统播放器作为备选（点击按钮调用）
+                // 离线APP视频播放：三级降级策略
+                // 1. file:// 协议（最简单可靠，文件在app私有目录，无需权限）
+                // 2. http://local-media/ 拦截（shouldInterceptRequest返回文件流，支持Range）
+                // 3. 系统播放器（最后兜底）
                 var filePath = f.path;
                 var mimeType = '';
                 if (filePath.endsWith('.webm')) mimeType = 'video/webm';
                 else if (filePath.endsWith('.mp4')) mimeType = 'video/mp4';
-
-                // 构造本地媒体URL：http://local-media/ + 路径（URL编码）
-                var mediaUrl = 'http://local-media/' + encodeURIComponent(filePath);
 
                 view.innerHTML = '';
                 var v = document.createElement('video');
                 v.controls = true;
                 v.playsInline = true;
                 v.webkitPlaysInline = true;
-                v.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
-                v.src = mediaUrl;
+                v.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;background:#000;';
+
+                // 策略1：先用 file:// 协议（最可靠，无URL编码问题）
+                var fileUrl = 'file://' + filePath;
+                // 策略2备选：http://local-media/ 拦截（URL编码路径）
+                var interceptUrl = 'http://local-media/' + encodeURIComponent(filePath);
+                // 当前尝试的URL索引：0=file://, 1=http://local-media/
+                var tryIdx = 0;
+                var urls = [fileUrl, interceptUrl];
+
+                v.src = fileUrl;
                 v.onerror = function() {
-                    // 内嵌播放失败，提供系统播放器选项
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                        '内嵌播放失败<br/>' +
-                        '<button onclick="window.__openSystemPlayerForVideo()" ' +
-                        'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">📱 用系统播放器打开</button>' +
-                        '</div>';
+                    console.error('[媒体查看] 视频播放失败，尝试Idx=' + tryIdx, urls[tryIdx]);
+                    tryIdx++;
+                    if (tryIdx < urls.length) {
+                        // 尝试下一个URL
+                        console.log('[媒体查看] 切换到备选URL:', urls[tryIdx]);
+                        v.src = urls[tryIdx];
+                        v.load();
+                    } else {
+                        // 所有内嵌方式都失败，提供系统播放器选项
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                            '内嵌播放失败<br/>' +
+                            '<button onclick="window.__openSystemPlayerForVideo()" ' +
+                            'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">📱 用系统播放器打开</button>' +
+                            '</div>';
+                    }
                 };
                 view.appendChild(v);
 
-                // 系统播放器按钮
+                // 系统播放器按钮（始终显示，作为备选）
                 var sysBtn = document.createElement('div');
                 sysBtn.style.cssText = 'text-align:center;margin-top:8px;';
                 sysBtn.innerHTML = '<button onclick="window.__openSystemPlayerForVideo()" ' +

@@ -170,9 +170,12 @@ if errorlevel 1 (
 )
 echo.
 
+REM 获取 APK 文件的完整绝对路径（用于显示）
+for %%F in ("%FINAL_APK%") do set "APK_FULL_PATH=%%~fF"
+
 echo ============================================
 echo   Packing completed!
-echo   APK Path: %CD%\%FINAL_APK%
+echo   APK Path: %APK_FULL_PATH%
 echo   This APK is signed and ready for installation
 echo ============================================
 echo.
