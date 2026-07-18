@@ -3744,43 +3744,39 @@ if (window.Permission) {
                     console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
-                // 离线APP视频播放：直接用系统播放器打开（最可靠，一劳永逸）
-                // 不再尝试内嵌播放（file:// / http://local-media/ 在不同机型兼容性差，反复失败）
-                // 系统播放器原生支持 webm/mp4，功能完整（全屏/快进/音量等）
+                // 离线APP视频播放：在查看框内嵌播放（与云端APP完全一致）
+                // 用 readFileAsBase64 返回 Blob URL（video-recorder-inject.js 已改为返回 Blob URL）
+                // Blob URL 在 file:// 协议下视频播放兼容性好（data URL 才有兼容性问题）
                 var filePath = f.path;
-                var mimeType = '';
-                if (filePath.endsWith('.webm')) mimeType = 'video/webm';
-                else if (filePath.endsWith('.mp4')) mimeType = 'video/mp4';
-
-                view.innerHTML = '<div style="text-align:center;color:#fff;padding:30px 20px;font-size:13px;">' +
-                    '<div style="margin-bottom:15px;">🎬 正在打开系统播放器...</div>' +
-                    '<button onclick="window.__openSystemPlayerForVideo()" ' +
-                    'style="padding:10px 20px;font-size:14px;background:#4CAF50;color:white;border:none;border-radius:6px;cursor:pointer;">' +
-                    '📱 重新打开系统播放器</button>' +
-                    '</div>';
-
-                window.__openSystemPlayerForVideo = function() {
-                    if (window.electronAPI && window.electronAPI.openFile) {
-                        window.electronAPI.openFile(filePath, mimeType).then(function(result) {
-                            if (!result.success) {
-                                view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                    '打开失败: ' + escapeHtml(String(result.error || '未知')) + '<br/>' +
-                                    '<button onclick="window.__openSystemPlayerForVideo()" ' +
-                                    'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
-                                    '</div>';
-                            }
-                        }).catch(function(err) {
-                            console.error('[媒体查看] 系统播放器打开异常:', err);
-                        });
-                    } else {
+                view.innerHTML = '<div style="color:#fff;font-size:12px;text-align:center;padding:20px;">加载中...</div>';
+                if (window.electronAPI && window.electronAPI.readFileAsBase64) {
+                    window.electronAPI.readFileAsBase64(filePath).then(function(result) {
+                        if (result.success && (result.data || result.base64)) {
+                            var src = result.data || result.base64;
+                            view.innerHTML = '';
+                            var video = document.createElement('video');
+                            video.src = src;
+                            video.controls = true;
+                            video.playsInline = true;
+                            video.webkitPlaysInline = true;
+                            video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;background:#000;';
+                            view.appendChild(video);
+                        } else {
+                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                                '加载失败: ' + escapeHtml(String(result.error || '未知')) +
+                                '</div>';
+                        }
+                    }).catch(function(err) {
+                        console.error('[媒体查看] 视频加载异常:', err);
                         view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                            'electronAPI 不可用' +
+                            '加载异常: ' + escapeHtml(String(err)) +
                             '</div>';
-                    }
-                };
-
-                // 自动调用系统播放器
-                window.__openSystemPlayerForVideo();
+                    });
+                } else {
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                        'electronAPI 不可用' +
+                        '</div>';
+                }
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }

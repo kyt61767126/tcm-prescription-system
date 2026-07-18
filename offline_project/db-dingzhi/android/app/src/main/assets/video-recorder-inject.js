@@ -162,16 +162,15 @@
             },
             readFileAsBase64: function (filePath) {
                 // 统一走分片读取，避免 Binder 1MB 限制
-                // 最终拼接为 base64 data URL（与云端桌面版本一致）
-                // Android WebView 在 file:// 协议下 Blob URL 兼容性差，故改用 data URL
-                // 注意：分片 base64 不能直接拼接（每个分片独立编码有 padding）
-                //       必须先收集 Uint8Array，最后整体转 base64
+                // 最终用 Blob URL 代替 data URL（与云端 APP 完全一致）
+                // Blob URL 比 data URL 优势：
+                //   1. 不需要把整个文件 base64 编码成字符串（省内存）
+                //   2. WebView 对 Blob URL 的视频支持更好（data URL 视频在 file:// 下播放失败）
+                //   3. 没有 URL 长度限制
                 return new Promise(function (resolve) {
                     try {
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
                         if (!startR || !startR.success) {
-                            // 不再回退到 readFileAsBase64（Java 端已用 isMediaPathAllowed 内部校验）
-                            // 直接返回失败，让前端显示具体错误并提供重试按钮
                             console.error('[离线APP] startReadSession 失败:', startR && startR.error);
                             resolve({ success: false, error: 'startReadSession 失败: ' + (startR && startR.error || '未知') });
                             return;
@@ -181,14 +180,12 @@
                         var fileSize = startR.fileSize || 0;
                         console.log('[离线APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
                         var uint8Arrays = [];
-                        var totalBytes = 0;
                         var chunkRetryCount = 0;
                         var MAX_CHUNK_RETRY = 2;
 
                         function nextChunk() {
                             var r = callNative('readNextChunk', JSON.stringify({ sessionId: sessionId }));
                             if (!r || !r.success) {
-                                // 分片读取失败重试（最多 2 次），避免单点失败导致整体失败
                                 if (chunkRetryCount < MAX_CHUNK_RETRY) {
                                     chunkRetryCount++;
                                     console.warn('[离线APP] readNextChunk 失败，重试 ' + chunkRetryCount + '/' + MAX_CHUNK_RETRY + ':', r && r.error);
@@ -200,11 +197,9 @@
                                 resolve(r || { success: false, error: 'readNextChunk 返回无效' });
                                 return;
                             }
-                            // 重置重试计数（本次成功，下次失败重新计数）
                             chunkRetryCount = 0;
                             if (r.chunk) {
-                                // 分片解码 base64 → Uint8Array，收集起来最后整体编码
-                                // 不能直接拼接 base64 分片（每个分片独立编码有 padding）
+                                // 分片解码 base64 → Uint8Array，收集起来最后用 Blob URL
                                 try {
                                     var binary = atob(r.chunk);
                                     var len = binary.length;
@@ -213,7 +208,6 @@
                                         bytes[i] = binary.charCodeAt(i);
                                     }
                                     uint8Arrays.push(bytes);
-                                    totalBytes += len;
                                 } catch (e) {
                                     console.error('[离线APP] base64 解码失败:', e);
                                 }
@@ -221,27 +215,21 @@
                             if (r.eof) {
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
                                 try {
-                                    // 整体转 base64：先合并 Uint8Array，再一次性编码
-                                    var allBytes = new Uint8Array(totalBytes);
-                                    var offset = 0;
-                                    for (var j = 0; j < uint8Arrays.length; j++) {
-                                        allBytes.set(uint8Arrays[j], offset);
-                                        offset += uint8Arrays[j].length;
+                                    // 用 Blob URL 代替 data URL（和云端 APP 完全一致）
+                                    var blob = new Blob(uint8Arrays, { type: mimeType });
+                                    // 清理旧 blob URL 避免内存泄漏
+                                    if (window.__currentBlobUrl) {
+                                        try { URL.revokeObjectURL(window.__currentBlobUrl); } catch (e) {}
                                     }
-                                    // Uint8Array → binary string → base64
-                                    var binStr = '';
-                                    var CHUNK = 8192;
-                                    for (var k = 0; k < allBytes.length; k += CHUNK) {
-                                        binStr += String.fromCharCode.apply(null, allBytes.subarray(k, k + CHUNK));
-                                    }
-                                    var fullBase64 = btoa(binStr);
-                                    var dataUrl = 'data:' + mimeType + ';base64,' + fullBase64;
-                                    console.log('[离线APP] 分片读取完成，data URL 长度=' + dataUrl.length + ', 片数=' + uint8Arrays.length + ', 总字节=' + totalBytes);
-                                    // 返回格式与云端一致：base64 字段，同时返回 data 字段兼容旧代码
-                                    resolve({ success: true, base64: dataUrl, data: dataUrl });
+                                    var blobUrl = URL.createObjectURL(blob);
+                                    window.__currentBlobUrl = blobUrl;
+                                    console.log('[离线APP] 分片读取完成，blob URL=' + blobUrl + ', 片数=' + uint8Arrays.length + ', 总字节=' + blob.size);
+                                    // 返回格式与云端一致：data 字段返回 blob URL
+                                    // 同时返回 base64 字段兼容旧代码（值为 blobUrl，实际不是 base64 但调用方只用 .data 或 .base64 之一）
+                                    resolve({ success: true, data: blobUrl, base64: blobUrl });
                                 } catch (e) {
-                                    console.error('[离线APP] 转 base64 失败:', e);
-                                    resolve({ success: false, error: '转 base64 失败: ' + String(e) });
+                                    console.error('[离线APP] 创建 blob URL 失败:', e);
+                                    resolve({ success: false, error: '创建 blob URL 失败: ' + String(e) });
                                 }
                                 return;
                             }
