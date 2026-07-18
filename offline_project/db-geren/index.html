@@ -968,11 +968,23 @@ if (window.Permission) {
 
         // 移动端标签切换
         function switchMobileTab(tabName) {
+            const isMobile = window.innerWidth <= 768;
             const leftPanel = document.querySelector('.left-panel');
             const centerPanel = document.querySelector('.center-panel');
             const rightPanel = document.querySelector('.right-panel');
             const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
             const mobileActionBar = document.getElementById('mobileActionBar');
+            
+            // 桌面版：只切换激活状态，不改变面板显示
+            if (!isMobile) {
+                mobileNavItems.forEach(item =>item.classList.remove('active'));
+                mobileNavItems.forEach(item =>{
+                    if (item.getAttribute('onclick')?.includes(tabName)) {
+                        item.classList.add('active');
+                    }
+                });
+                return;
+            }
             
             // 移除所有激活状态
             mobileNavItems.forEach(item =>item.classList.remove('active'));
@@ -2853,48 +2865,54 @@ if (window.Permission) {
                     return;
                 }
                 
-                let filtered;
                 const sanitizedQuery = query.replace(/[<>\"\'&]/g, '');
-                if (column === 'code') {
-                    filtered = medicines.filter(m =>m.code && m.code.toLowerCase().startsWith(sanitizedQuery.toLowerCase()));
-                } else {
-                    filtered = medicines.filter(m =>m.name && m.name.includes(sanitizedQuery));
-                }
-                
+                const queryLower = sanitizedQuery.toLowerCase();
                 const addedNames = new Set(prescriptionItems.filter(item =>item.name).map(item =>item.name));
-                filtered = filtered.filter(m =>!addedNames.has(m.name));
+                
+                let filtered = [];
+                const meds = medicines.length > 0 ? medicines : defaultMedicines;
+                for (let i = 0; i < meds.length && filtered.length < 50; i++) {
+                    const m = meds[i];
+                    if (!m || addedNames.has(m.name)) continue;
+                    let match = false;
+                    if (column === 'code') {
+                        if (m.code && m.code.toLowerCase().startsWith(queryLower)) match = true;
+                    } else {
+                        if (m.name && m.name.includes(sanitizedQuery)) match = true;
+                    }
+                    if (match) filtered.push(m);
+                }
 
                 filtered.sort((a, b) => {
                     const aFreq = medicineFrequency[a.name] || 0;
                     const bFreq = medicineFrequency[b.name] || 0;
-                    if (aFreq !== bFreq) {
-                        return bFreq - aFreq;
-                    }
+                    if (aFreq !== bFreq) return bFreq - aFreq;
                     const aNameLen = (a.name || '').length;
                     const bNameLen = (b.name || '').length;
-                    if (aNameLen !== bNameLen) {
-                        return aNameLen - bNameLen;
-                    }
-                    const aCodeLen = (a.code || '').length;
-                    const bCodeLen = (b.code || '').length;
-                    return aCodeLen - bCodeLen;
+                    if (aNameLen !== bNameLen) return aNameLen - bNameLen;
+                    return (a.code || '').length - (b.code || '').length;
                 });
+                
+                const displayList = filtered.slice(0, 20);
 
-                if (filtered.length >0) {
+                if (displayList.length > 0) {
                     selectedSearchIndex = 0;
-                    dropdown.innerHTML = filtered.map((m,i) =>{
+                    let html = '';
+                    for (let i = 0; i < displayList.length; i++) {
+                        const m = displayList[i];
                         const safeName = (m.name || '').replace(/[<>\"\'&]/g, '');
                         const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
                         const safePrice = parseFloat(m.price) || 0;
                         const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
-                        return `<div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}"
+                        html += `<div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}"
                                 onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}</div>`;
-                    }).join('');
+                    }
+                    dropdown.innerHTML = html;
                     dropdown.style.display = 'block';
                 } else {
                     dropdown.style.display = 'none';
                 }
-            }, 50);
+            }, 20);
         }
 
         function tryHideSearch() {
