@@ -7,14 +7,13 @@ if (signingPropertiesFile.exists()) {
 }
 
 // 构建时间戳（北京时间），用于 APP 内显示打包时间
-def buildTimeStr() {
-    return new Date().format('yyyy-MM-dd HH:mm', TimeZone.getTimeZone('Asia/Shanghai'))
-}
+// 注意：使用脚本级变量而非方法定义，避免 task doFirst 闭包 delegate 解析失败
+def BUILD_TIME = new Date().format('yyyy-MM-dd HH:mm', TimeZone.getTimeZone('Asia/Shanghai'))
 
 // 在 mergeAssets 之前生成 build-time.js 到 assets 目录
 task generateBuildTimeFile {
     doFirst {
-        def buildTime = buildTimeStr()
+        def buildTime = BUILD_TIME
         def assetsDir = file("src/main/assets/public")
         if (!assetsDir.exists()) assetsDir.mkdirs()
         def buildTimeFile = new File(assetsDir, "build-time.js")
