@@ -745,7 +745,7 @@ if (window.Permission) {
         let currentUser = null;
 
         const DB_NAME = 'PrescriptionDB';
-        const DB_VERSION = 2;
+        const DB_VERSION = 3;
         let db = null;
 
         function openDB() {
@@ -763,6 +763,10 @@ if (window.Permission) {
                     }
                     if (!database.objectStoreNames.contains('settings')) {
                         database.createObjectStore('settings', { keyPath: 'key' });
+                    }
+                    // P0-5：新增处方回收站 store（软删除恢复用）
+                    if (!database.objectStoreNames.contains('prescriptions_trash')) {
+                        database.createObjectStore('prescriptions_trash', { keyPath: 'id' });
                     }
                 };
                 request.onsuccess = function(event) {
@@ -1374,7 +1378,7 @@ if (window.Permission) {
                 if (newUsername !== originalUsername) {
                     const oldPrefix = 'local_web_user_' + originalUsername + '_';
                     const newPrefix = 'local_web_user_' + newUsername + '_';
-                    
+
                     for (let i = 0; i < localStorage.length; i++) {
                         const key = localStorage.key(i);
                         if (key.startsWith(oldPrefix)) {
@@ -1502,8 +1506,18 @@ if (window.Permission) {
         }
 
         async function handleDeleteUser(username) {
+            // P1-7 安全修复：内层权限校验，防止 DevTools 绕过
+            if (!currentUser || currentUser.role !== 'admin') {
+                alert('无权限：仅管理员可删除用户');
+                return;
+            }
+            // 禁止删除自己
+            if (currentUser.username === username) {
+                alert('无法删除当前登录用户');
+                return;
+            }
             if (!await confirm('确定删除该用户？删除后该用户的所有处方数据也将被删除！')) return;
-            
+
             // P7: 从 prescriptions store 批量删除该用户的处方
             const userPrescriptions = await getAllPrescriptionsFromDB();
             const toDelete = userPrescriptions.filter(p => p.createdBy === username);
@@ -1514,12 +1528,12 @@ if (window.Permission) {
             // 删除用户
             const users = getUsers().filter(u =>u.username !== username);
             saveUsers(users);
-            
+
             // 刷新处方历史列表
             if (currentUser && currentUser.role === 'admin') {
                 prescriptionHistory = await getAllUserPrescriptions();
             }
-            
+
             renderUserList();
             alert('用户删除成功！');
         }
@@ -1556,19 +1570,14 @@ if (window.Permission) {
             btn1.innerHTML = '📊 统计';
             btn1.onclick = function() { showModal('analyticsModal'); };
 
-            // APP环境统一显示"改密"（账户管理通过顶部tab入口），桌面环境保留管理员账户按钮
-            if (isApp) {
+            // 管理员显示"账户"，普通用户显示"改密"（APP和桌面一致）
+            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+            if (canManage) {
+                btn2.innerHTML = '👤 账户';
+                btn2.onclick = function() { showUserManageModal(); };
+            } else {
                 btn2.innerHTML = changePwdText;
                 btn2.onclick = function() { showChangePwdModal(); };
-            } else {
-                const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
-                if (canManage) {
-                    btn2.innerHTML = '👤 账户';
-                    btn2.onclick = function() { showUserManageModal(); };
-                } else {
-                    btn2.innerHTML = changePwdText;
-                    btn2.onclick = function() { showChangePwdModal(); };
-                }
             }
             btn2.style.display = '';
         }
@@ -3736,95 +3745,43 @@ if (window.Permission) {
                     console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
-                // 离线APP直接用系统播放器打开视频（最可靠，原生支持webm/mp4）
-                view.innerHTML = '<div style="color:#fff;font-size:12px;">正在打开视频...</div>';
+                // 离线APP视频播放：直接用系统播放器打开（彻底解决内嵌播放反复失败问题）
+                // 不再尝试内嵌播放（http://local-media/ 和 data URL 在不同机型兼容性差，反复失败）
+                // 系统播放器原生支持 webm/mp4，功能完整（全屏/快进/音量等），一定能播放
                 var filePath = f.path;
                 var mimeType = '';
-                if (filePath.endsWith('.webm')) mimeType = 'video/webm';
-                else if (filePath.endsWith('.mp4')) mimeType = 'video/mp4';
+                if (filePath.match(/\.webm$/i)) mimeType = 'video/webm';
+                else if (filePath.match(/\.mp4$/i)) mimeType = 'video/mp4';
 
-                if (window.electronAPI && window.electronAPI.openFile) {
-                    window.electronAPI.openFile(filePath, mimeType).then(function(result) {
-                        if (result.success) {
-                            // 系统播放器已打开，提供返回按钮
-                            view.innerHTML = '<div style="text-align:center;color:#fff;padding:20px;font-size:12px;">' +
-                                '<div style="margin-bottom:10px;">视频已在系统播放器中打开</div>' +
-                                '<button onclick="window.__retryVideoOpen()" ' +
-                                'style="padding:8px 16px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;margin-right:8px;">' +
-                                '🔄 重新打开</button>' +
-                                '<button onclick="window.__tryInlinePlay()" ' +
-                                'style="padding:8px 16px;font-size:13px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer;">' +
-                                '📱 内嵌播放</button></div>';
-                            window.__retryVideoOpen = function() {
-                                window.electronAPI.openFile(filePath, mimeType);
-                            };
-                            window.__tryInlinePlay = function() {
-                                // 内嵌播放：用data:URL（小视频可用）
-                                view.innerHTML = '<div style="color:#fff;font-size:12px;">正在加载视频...</div>';
-                                window.electronAPI.readFileAsBase64(filePath).then(function(r) {
-                                    if (r.success && (r.data || r.base64)) {
-                                        var src = r.data || r.base64;
-                                        view.innerHTML = '';
-                                        var v = document.createElement('video');
-                                        v.controls = true;
-                                        v.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
-                                        v.src = src;
-                                        v.onerror = function() {
-                                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">内嵌播放失败，请使用系统播放器</div>';
-                                        };
-                                        view.appendChild(v);
-                                    } else {
-                                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                            '视频加载失败: ' + escapeHtml(String(r.error || '未知')) + '<br/>' +
-                                            '<button onclick="window.__tryInlinePlay()" ' +
-                                            'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
-                                            '</div>';
-                                        console.error('[媒体查看] 内嵌视频加载失败:', r);
-                                    }
-                                }).catch(function(err) {
-                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                        '视频加载异常: ' + escapeHtml(String(err.message || err)) + '<br/>' +
-                                        '<button onclick="window.__tryInlinePlay()" ' +
-                                        'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
-                                        '</div>';
-                                    console.error('[媒体查看] 内嵌视频加载异常:', err);
-                                });
-                            };
-                        } else {
-                            // 系统播放器打开失败，尝试内嵌播放
-                            view.innerHTML = '<div style="color:#fff;font-size:12px;">系统播放器不可用，尝试内嵌播放...</div>';
-                            window.electronAPI.readFileAsBase64(filePath).then(function(r) {
-                                if (r.success && (r.data || r.base64)) {
-                                    var src = r.data || r.base64;
-                                    view.innerHTML = '';
-                                    var v = document.createElement('video');
-                                    v.controls = true;
-                                    v.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
-                                    v.src = src;
-                                    view.appendChild(v);
-                                } else {
-                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                        '视频加载失败: ' + escapeHtml(String(r.error || result.error || '未知')) + '<br/>' +
-                                        '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
-                                        'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
-                                        '</div>';
-                                    console.error('[媒体查看] 系统播放器回退内嵌视频加载失败:', r);
-                                }
-                            }).catch(function(err) {
+                view.innerHTML = '<div style="text-align:center;color:#fff;padding:30px 20px;font-size:13px;">' +
+                    '<div style="margin-bottom:15px;">🎬 正在打开系统播放器...</div>' +
+                    '<button onclick="window.__openSysPlayer()" ' +
+                    'style="padding:10px 20px;font-size:14px;background:#4CAF50;color:white;border:none;border-radius:6px;cursor:pointer;">' +
+                    '📱 重新打开系统播放器</button>' +
+                    '</div>';
+
+                window.__openSysPlayer = function() {
+                    if (window.electronAPI && window.electronAPI.openFile) {
+                        window.electronAPI.openFile(filePath, mimeType).then(function(result) {
+                            if (result && !result.success) {
                                 view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                    '视频加载异常: ' + escapeHtml(String(err.message || err)) + '<br/>' +
-                                    '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
+                                    '打开失败: ' + escapeHtml(String((result && result.error) || '未知')) + '<br/>' +
+                                    '<button onclick="window.__openSysPlayer()" ' +
                                     'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
                                     '</div>';
-                                console.error('[媒体查看] 系统播放器回退内嵌视频加载异常:', err);
-                            });
-                        }
-                    }).catch(function(err) {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">打开视频失败: ' + (err.message || err) + '</div>';
-                    });
-                } else {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">视频播放功能不可用</div>';
-                }
+                            }
+                        }).catch(function(err) {
+                            console.error('[媒体查看] 系统播放器异常:', err);
+                        });
+                    } else {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                            'electronAPI 不可用' +
+                            '</div>';
+                    }
+                };
+
+                // 自动调用系统播放器
+                window.__openSysPlayer();
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }
@@ -3853,6 +3810,33 @@ if (window.Permission) {
         async function deleteHistory(id) {
             const record = prescriptionHistory.find(p => p.id === id);
             if (!record) return;
+
+            // P0-5 安全修复：添加确认弹窗，防止误删导致数据永久丢失
+            const patientName = record.patientName || '未知患者';
+            const prescriptionNo = record.prescriptionNo || record.clinicNo || '无编号';
+            const confirmMsg = `确定要删除该处方吗？\n\n患者：${patientName}\n编号：${prescriptionNo}\n\n删除后将移入回收站，可通过 IndexedDB prescriptions_trash store 恢复。`;
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            // P0-5：软删除 - 先保存到 prescriptions_trash store，再从主 store 删除
+            try {
+                const database = await openDB();
+                const trashRecord = {
+                    ...record,
+                    deletedAt: new Date().toISOString(),
+                    deletedBy: (typeof currentUser !== 'undefined' && currentUser?.username) || 'unknown'
+                };
+                await new Promise((resolve, reject) => {
+                    const transaction = database.transaction(['prescriptions_trash'], 'readwrite');
+                    const store = transaction.objectStore('prescriptions_trash');
+                    const request = store.put(trashRecord);
+                    request.onsuccess = () => resolve();
+                    request.onerror = () => reject(request.error);
+                });
+            } catch (e) {
+                console.error('[P0-5] 保存到回收站失败（继续硬删除）:', e);
+            }
 
             // P7: 单条从 prescriptions store 删除
             await deletePrescriptionFromDB(id);
