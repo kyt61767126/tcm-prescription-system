@@ -164,6 +164,8 @@
                 // 统一走分片读取，避免 Binder 1MB 限制
                 // 最终拼接为 base64 data URL（与云端桌面版本一致）
                 // Android WebView 在 file:// 协议下 Blob URL 兼容性差，故改用 data URL
+                // 注意：分片 base64 不能直接拼接（每个分片独立编码有 padding）
+                //       必须先收集 Uint8Array，最后整体转 base64
                 return new Promise(function (resolve) {
                     try {
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
@@ -178,7 +180,8 @@
                         var mimeType = startR.mimeType || 'application/octet-stream';
                         var fileSize = startR.fileSize || 0;
                         console.log('[离线APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
-                        var base64Parts = [];
+                        var uint8Arrays = [];
+                        var totalBytes = 0;
                         var chunkRetryCount = 0;
                         var MAX_CHUNK_RETRY = 2;
 
@@ -200,20 +203,45 @@
                             // 重置重试计数（本次成功，下次失败重新计数）
                             chunkRetryCount = 0;
                             if (r.chunk) {
-                                // 直接收集 base64 分片，最后拼接
-                                base64Parts.push(r.chunk);
+                                // 分片解码 base64 → Uint8Array，收集起来最后整体编码
+                                // 不能直接拼接 base64 分片（每个分片独立编码有 padding）
+                                try {
+                                    var binary = atob(r.chunk);
+                                    var len = binary.length;
+                                    var bytes = new Uint8Array(len);
+                                    for (var i = 0; i < len; i++) {
+                                        bytes[i] = binary.charCodeAt(i);
+                                    }
+                                    uint8Arrays.push(bytes);
+                                    totalBytes += len;
+                                } catch (e) {
+                                    console.error('[离线APP] base64 解码失败:', e);
+                                }
                             }
                             if (r.eof) {
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
                                 try {
-                                    var fullBase64 = base64Parts.join('');
+                                    // 整体转 base64：先合并 Uint8Array，再一次性编码
+                                    var allBytes = new Uint8Array(totalBytes);
+                                    var offset = 0;
+                                    for (var j = 0; j < uint8Arrays.length; j++) {
+                                        allBytes.set(uint8Arrays[j], offset);
+                                        offset += uint8Arrays[j].length;
+                                    }
+                                    // Uint8Array → binary string → base64
+                                    var binStr = '';
+                                    var CHUNK = 8192;
+                                    for (var k = 0; k < allBytes.length; k += CHUNK) {
+                                        binStr += String.fromCharCode.apply(null, allBytes.subarray(k, k + CHUNK));
+                                    }
+                                    var fullBase64 = btoa(binStr);
                                     var dataUrl = 'data:' + mimeType + ';base64,' + fullBase64;
-                                    console.log('[离线APP] 分片读取完成，data URL 长度=' + dataUrl.length + ', 片数=' + base64Parts.length);
-                                    // 返回格式与云端一致：base64 字段
+                                    console.log('[离线APP] 分片读取完成，data URL 长度=' + dataUrl.length + ', 片数=' + uint8Arrays.length + ', 总字节=' + totalBytes);
+                                    // 返回格式与云端一致：base64 字段，同时返回 data 字段兼容旧代码
                                     resolve({ success: true, base64: dataUrl, data: dataUrl });
                                 } catch (e) {
-                                    console.error('[离线APP] 拼接 base64 失败:', e);
-                                    resolve({ success: false, error: '拼接 base64 失败: ' + String(e) });
+                                    console.error('[离线APP] 转 base64 失败:', e);
+                                    resolve({ success: false, error: '转 base64 失败: ' + String(e) });
                                 }
                                 return;
                             }
