@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -454,21 +454,57 @@ function Build-App {
         Pop-Location
     }
 
-    # Copy APK to version directory
+    # Copy APK to version directory with proper naming
     $apkPath = Get-ChildItem -Path "$script:AndroidDir\app\build\outputs\apk\release" -Filter "*.apk" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($apkPath) {
-        $destPath = "$script:VersionDir\$($apkPath.Name)"
+        # Read productName from config.json (reference: cloud_app uses "惠康中医云端")
+        $configPath = "$script:VersionDir\config.json"
+        $productName = "惠康中医"
+        if (Test-Path $configPath) {
+            try {
+                $config = [System.IO.File]::ReadAllText($configPath, $script:UTF8NoBom) | ConvertFrom-Json
+                if ($config.productName) {
+                    $productName = $config.productName
+                }
+            } catch {
+                Write-Log "[WARN] Failed to read productName from config.json" "WARN"
+            }
+        }
+        
+        # Extract versionName from build.gradle
+        $versionName = "1.0"
+        try {
+            $gradleContent = [System.IO.File]::ReadAllText("$script:AndroidDir\app\build.gradle", $script:UTF8NoBom)
+            if ($gradleContent -match 'versionName\s+["'']([^"'']+)["'']') {
+                $versionName = $matches[1]
+            }
+        } catch {
+            Write-Log "[WARN] Failed to read versionName from build.gradle" "WARN"
+        }
+        
+        # Build final APK name: 产品名称_版本号.apk
+        $finalApkName = "$productName.apk"
+        $destPath = "$script:VersionDir\$finalApkName"
+        
+        # Copy with verification
         Copy-Item -Path $apkPath.FullName -Destination $destPath -Force
-        $sizeMB = [math]::Round($apkPath.Length / 1MB, 2)
-        Write-Host ""
-        Write-Host "  ====================================" -ForegroundColor Green
-        Write-Host "  APK Generated Successfully!" -ForegroundColor Green
-        Write-Host "  ====================================" -ForegroundColor Green
-        Write-Host "  File:  $($apkPath.Name)"
-        Write-Host "  Size:  $sizeMB MB"
-        Write-Host "  Path:  $destPath"
-        Write-Host "  ====================================" -ForegroundColor Green
-        Write-Log "[OK] APK: $($apkPath.Name) ($sizeMB MB)"
+        $destFile = Get-Item $destPath -ErrorAction SilentlyContinue
+        if ($destFile -and $destFile.Length -gt 0 -and $destFile.Length -eq $apkPath.Length) {
+            $sizeMB = [math]::Round($apkPath.Length / 1MB, 2)
+            Write-Host ""
+            Write-Host "  ====================================" -ForegroundColor Green
+            Write-Host "  APK Generated Successfully!" -ForegroundColor Green
+            Write-Host "  ====================================" -ForegroundColor Green
+            Write-Host "  File:  $finalApkName"
+            Write-Host "  Size:  $sizeMB MB"
+            Write-Host "  Path:  $destPath"
+            Write-Host "  ====================================" -ForegroundColor Green
+            Write-Log "[OK] APK: $finalApkName ($sizeMB MB)"
+        } else {
+            Restore-VersionCode
+            Write-Log "[ERROR] APK copy failed or file is empty/corrupted" "ERROR"
+            throw "APK copy failed or file is empty/corrupted"
+        }
     } else {
         Restore-VersionCode
         throw "APK not found in output directory"

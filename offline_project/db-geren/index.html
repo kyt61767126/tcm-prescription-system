@@ -1318,15 +1318,9 @@ if (window.Permission) {
             btn1.innerHTML = '📊 统计';
             btn1.onclick = function() { showModal('analyticsModal'); };
 
-            // 管理员显示"账户"，普通用户显示"改密"（APP和桌面一致）
-            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
-            if (canManage) {
-                btn2.innerHTML = '👤 账户';
-                btn2.onclick = function() { showUserManageModal(); };
-            } else {
-                btn2.innerHTML = changePwdText;
-                btn2.onclick = function() { showChangePwdModal(); };
-            }
+            // 个人版统一显示"改密"按钮（不区分管理员/普通用户）
+            btn2.innerHTML = changePwdText;
+            btn2.onclick = function() { showChangePwdModal(); };
             btn2.style.display = '';
         }
 
