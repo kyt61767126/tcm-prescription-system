@@ -82,6 +82,10 @@ public class SecurityGuard {
     // ============================================================
     public boolean runStartupChecks() {
         try {
+            // 版本号变化时重置首次锁定状态（覆盖安装后 DEX/签名会变）
+            // 避免覆盖安装后安全校验失败导致"闪退"
+            resetLockIfVersionChanged();
+
             if (!verifySignature()) {
                 Log.e(TAG, "启动检查失败：签名校验未通过");
                 return false;
@@ -98,6 +102,35 @@ public class SecurityGuard {
         } catch (Throwable t) {
             Log.e(TAG, "启动安全检查异常", t);
             return false;
+        }
+    }
+
+    /** 版本号变化时重置首次锁定状态（覆盖安装后自动重新锁定） */
+    private void resetLockIfVersionChanged() {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE);
+            String currentVersion = getVersionName();
+            String savedVersion = prefs.getString("last_version", null);
+            if (savedVersion == null || !savedVersion.equals(currentVersion)) {
+                Log.i(TAG, "应用版本变化 (" + savedVersion + " -> " + currentVersion + ")，重置安全锁定状态");
+                prefs.edit()
+                        .remove("sign_sha256")
+                        .remove("dex_sha256")
+                        .putString("last_version", currentVersion)
+                        .apply();
+            }
+        } catch (Throwable t) {
+            Log.e(TAG, "版本检测异常", t);
+        }
+    }
+
+    /** 获取当前应用版本名 */
+    private String getVersionName() {
+        try {
+            PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            return info.versionName;
+        } catch (Throwable t) {
+            return "unknown";
         }
     }
 
