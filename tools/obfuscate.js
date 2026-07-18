@@ -121,10 +121,8 @@ const TARGET_DIRS = {
     all: ALL_DISTRIBUTION_DIRS
 };
 
-// 额外需要混淆的文件（各目录中的 login.js, main.js, preload.js）
+// 额外需要混淆的文件（各目录中的 login.js，仅离线版 electron 子目录存在）
 const EXTRA_FILES = {
-    'public/electron': ['login.js'],
-    'cloud_project/cloud_desktop/electron': ['login.js'],
     'offline_project/db-bendi/electron': ['login.js'],
     'offline_project/db-dingzhi/electron': ['login.js'],
     'offline_project/db-geren/electron': ['login.js']

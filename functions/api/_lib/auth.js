@@ -120,10 +120,13 @@ export async function verifyToken(token, env) {
     }
 }
 
-// 解析 Authorization 头，兼容多种格式：
-//   1. Bearer <token>      - HMAC 签名 token
-//   2. Basic base64(JSON({username, role, clinicId}))  - 新版 JSON 格式
-//   3. Basic base64(username:role)  - 旧版格式（兼容过渡）
+// 解析 Authorization 头：
+//   Bearer <token>  - HMAC 签名 token（唯一支持的认证方式）
+//
+// 安全说明：Basic auth 兼容分支已于 2026-07-18 移除（P0 安全修复）。
+// 旧实现允许任意客户端通过 `Authorization: Basic base64("任意用户名:platform_admin")`
+// 绕过密码验证并声明任意角色，构成认证绕过漏洞。所有前端均使用 Bearer token，
+// 不再需要 Basic 兼容路径。
 export async function parseAuthHeader(request, env) {
     const authHeader = request.headers.get('Authorization');
     if (!authHeader) return null;
@@ -134,33 +137,8 @@ export async function parseAuthHeader(request, env) {
             const verified = await verifyToken(token, env);
             if (verified) return verified;
             return null;
-        } else if (authHeader.startsWith('Basic ')) {
-            const base64Credentials = authHeader.substring(6);
-            const decoded = atob(base64Credentials);
-            // 优先尝试 JSON 格式（新版）
-            try {
-                const payload = JSON.parse(decoded);
-                if (payload && payload.username) {
-                    return {
-                        username: payload.username,
-                        role: payload.role || ROLE_DOCTOR,
-                        clinicId: payload.clinicId || null,
-                        isAdmin: payload.role === ROLE_PLATFORM_ADMIN || payload.role === ROLE_CLINIC_ADMIN
-                    };
-                }
-            } catch (e) {
-                // 不是 JSON，尝试旧版 username:role 格式
-                const [username, role] = decoded.split(':');
-                if (username) {
-                    return {
-                        username,
-                        role: role || 'user',
-                        clinicId: null,
-                        isAdmin: role === 'admin' || role === ROLE_PLATFORM_ADMIN || role === ROLE_CLINIC_ADMIN
-                    };
-                }
-            }
         }
+        // 拒绝所有非 Bearer 认证方式（包括 Basic），防止认证绕过
         return null;
     } catch (error) {
         console.error('Auth parsing error:', error);

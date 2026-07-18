@@ -103,21 +103,60 @@ function getCurrentMonthDirectory() {
     }
 }
 
+// ★ 安全文件名清理：剥离目录部分，过滤危险字符，防止路径穿越
+// 与 cloud_desktop/electron/main.js 保持一致
+function sanitizeFileName(fileName) {
+    if (!fileName || typeof fileName !== 'string') return '';
+    let name = path.basename(fileName);
+    name = name.replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
+    name = name.replace(/\.\./g, '_');
+    return name;
+}
+
+// ★ 路径白名单校验：仅允许写入 downloads 目录及其子目录
+function getAllowedRoots() {
+    const roots = new Set();
+    try { roots.add(path.resolve(getDownloadsDirectory())); } catch(e) {}
+    try { roots.add(path.resolve(app.getPath('userData'), 'downloads')); } catch(e) {}
+    return Array.from(roots);
+}
+
+function isPathAllowed(filePath) {
+    if (!filePath || typeof filePath !== 'string') return false;
+    try {
+        const resolved = path.resolve(filePath);
+        for (const root of getAllowedRoots()) {
+            const rel = path.relative(root, resolved);
+            if (rel && !rel.startsWith('..') && !path.isAbsolute(rel)) {
+                return true;
+            }
+        }
+        console.warn('[路径校验] 拒绝访问:', filePath);
+        return false;
+    } catch (e) {
+        console.warn('[路径校验] 异常:', e.message);
+        return false;
+    }
+}
+
 async function savePrescriptionImage(imageData, fileName) {
     try {
+        const safeName = sanitizeFileName(fileName);
+        if (!safeName) return { success: false, error: '文件名无效' };
         const monthDir = getCurrentMonthDirectory();
-        
+
         const base64Data = imageData.replace(/^data:image\/[a-z]+;base64,/, '');
         const buffer = Buffer.from(base64Data, 'base64');
-        
-        const filePath = path.join(monthDir, fileName);
+
+        const filePath = path.join(monthDir, safeName);
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的下载目录内，已拒绝' };
         await fs.writeFile(filePath, buffer);
-        
+
         console.log('图片已保存:', filePath);
         return { success: true, filePath, directory: monthDir };
     } catch (error) {
         console.error('保存图片失败:', error);
-        return { success: false, error: error.message };
+        return { success: false, error: '保存图片失败' };
     }
 }
 

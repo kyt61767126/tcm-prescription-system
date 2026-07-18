@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -534,10 +534,175 @@ function Show-Menu {
     Write-Host "  [4] Sync files to Android only"
     Write-Host "  [5] Modify clinic config only"
     Write-Host "  [6] Encoding check only"
+    Write-Host "  [7] Show current config"
+    Write-Host "  [8] Enable strict mode (extract & inject hash)"
+    Write-Host "  [9] Build all with strict mode (A->B->hash->repack)"
     Write-Host "  [0] Exit"
     Write-Host ""
     $choice = Read-Host "  Select option"
     return $choice
+}
+
+function Show-CurrentConfig {
+    param([string]$Ver)
+    $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
+    $configPath = "$versionDir\config.json"
+    if (-not (Test-Path $configPath)) {
+        Write-Host "[ERROR] config.json not found: $configPath" -ForegroundColor Red
+        return
+    }
+    try {
+        $config = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
+        Write-Host ""
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "  Current Config ($Ver)" -ForegroundColor Cyan
+        Write-Host "========================================" -ForegroundColor Cyan
+        Write-Host "  Clinic Name : $($config.clinicName)"
+        Write-Host "  Doctor Name : $($config.doctorName)"
+        Write-Host "  Version Tag : $($config.versionLabel)"
+        Write-Host "  Product Name: $($config.productName)"
+        Write-Host ""
+        Write-Host "  Registered Users:" -ForegroundColor Yellow
+        if ($config.users) {
+            foreach ($u in $config.users) {
+                Write-Host "    - $($u.name) ($($u.username), $($u.role))"
+            }
+        } else {
+            Write-Host "    (none)"
+        }
+        Write-Host ""
+    } catch {
+        Write-Host "[ERROR] Failed to read config: $_" -ForegroundColor Red
+    }
+}
+
+function Enable-StrictMode {
+    param([string]$Ver)
+    $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
+    $hashBat = "$versionDir\generate-sign-hash.bat"
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host "  Enable Strict Mode ($Ver)" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Prerequisites:"
+    Write-Host "    - APK has been built at least once (via option [2])"
+    Write-Host "    - APK is signed with release certificate"
+    Write-Host ""
+    Write-Host "  Flow:"
+    Write-Host "    1. Extract signature SHA-256 from latest APK"
+    Write-Host "    2. Compute SHA-256 of classes*.dex inside APK"
+    Write-Host "    3. Inject into SecurityGuard.java (EXPECTED_SIGN_HASH / EXPECTED_DEX_HASH)"
+    Write-Host "    4. Rebuild APK to enable strict mode"
+    Write-Host ""
+
+    if (-not (Test-Path $hashBat)) {
+        Write-Host "[ERROR] generate-sign-hash.bat not found: $hashBat" -ForegroundColor Red
+        return 1
+    }
+
+    $confirm = Read-Host "Confirm to enable strict mode? (y/N)"
+    if ($confirm -ne 'y' -and $confirm -ne 'Y') {
+        Write-Host "  Cancelled"
+        return 0
+    }
+
+    Write-Host ""
+    Write-Log "[STEP] Enable strict mode for $Ver"
+    Invoke-External -FilePath $hashBat -WorkDir $versionDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] Hash extraction failed" -ForegroundColor Red
+        Write-Log "[ERROR] generate-sign-hash.bat failed" "ERROR"
+        return 1
+    }
+
+    Write-Host ""
+    Write-Host "  Hash injected. Now rebuild APK to activate strict mode." -ForegroundColor Green
+    $rebuild = Read-Host "Rebuild APK now? (Y/n)"
+    if ($rebuild -ne 'n' -and $rebuild -ne 'N') {
+        Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
+    }
+    return 0
+}
+
+function Build-AllStrict {
+    param([string]$Ver)
+    $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
+    $hashBat = "$versionDir\generate-sign-hash.bat"
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host "  Build All with Strict Mode ($Ver)" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  Steps:"
+    Write-Host "    A. Build Desktop App (exe)"
+    Write-Host "    B. Build Mobile App (first-lock APK)"
+    Write-Host "    C. Extract & inject hash (strict mode)"
+    Write-Host "    D. Rebuild Mobile App (strict APK)"
+    Write-Host ""
+    Write-Host "  Output:"
+    Write-Host "    - Desktop: dist\*.exe"
+    Write-Host "    - Mobile : <versionDir>\*.apk (strict mode)"
+    Write-Host ""
+
+    $confirm = Read-Host "Confirm to start full build with strict mode? (y/N)"
+    if ($confirm -ne 'y' -and $confirm -ne 'Y') {
+        Write-Host "  Cancelled"
+        return 0
+    }
+
+    # Step A: Desktop build
+    Write-Host ""
+    Write-Host "  [Step A] Building Desktop..." -ForegroundColor Cyan
+    $rc = Invoke-Packaging -Ver $Ver -Tgt 'desktop' -SkipCfg $false -SkipEnc $false
+    if ($rc -ne 0) {
+        Write-Host "[ERROR] Desktop build failed, abort" -ForegroundColor Red
+        return 1
+    }
+
+    # Step B: Mobile build (first-lock)
+    Write-Host ""
+    Write-Host "  [Step B] Building Mobile (first-lock)..." -ForegroundColor Cyan
+    $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $false -SkipEnc $true
+    if ($rc -ne 0) {
+        Write-Host "[ERROR] Mobile build failed, abort" -ForegroundColor Red
+        return 1
+    }
+
+    # Step C: Extract & inject hash
+    Write-Host ""
+    Write-Host "  [Step C] Extracting & injecting hash..." -ForegroundColor Cyan
+    if (-not (Test-Path $hashBat)) {
+        Write-Host "[ERROR] generate-sign-hash.bat not found, skip strict mode" -ForegroundColor Red
+        Write-Host "  You can still use the APK from Step B (first-lock mode)"
+        return 1
+    }
+    Invoke-External -FilePath $hashBat -WorkDir $versionDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[ERROR] Hash extraction failed, skip strict mode" -ForegroundColor Red
+        Write-Host "  You can still use the APK from Step B (first-lock mode)"
+        return 1
+    }
+
+    # Step D: Rebuild mobile (strict)
+    Write-Host ""
+    Write-Host "  [Step D] Rebuilding Mobile (strict mode)..." -ForegroundColor Cyan
+    $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
+    if ($rc -ne 0) {
+        Write-Host "[ERROR] Strict mode rebuild failed" -ForegroundColor Red
+        Write-Host "  You can still use the APK from Step B (first-lock mode)"
+        return 1
+    }
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "  Full build with strict mode completed!" -ForegroundColor Green
+    Write-Host "  Desktop: $versionDir\dist\" -ForegroundColor Green
+    Write-Host "  Mobile : $versionDir\*.apk (strict)" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Green
+    return 0
 }
 
 function Invoke-Packaging {
@@ -648,6 +813,9 @@ if ($Interactive) {
             '4' { Invoke-Packaging -Ver $Version -Tgt 'sync' -SkipCfg $true -SkipEnc $true }
             '5' { Invoke-Packaging -Ver $Version -Tgt 'config' -SkipCfg $false -SkipEnc $true }
             '6' { Invoke-Packaging -Ver $Version -Tgt 'encoding' -SkipCfg $true -SkipEnc $false }
+            '7' { Show-CurrentConfig -Ver $Version }
+            '8' { Enable-StrictMode -Ver $Version }
+            '9' { Build-AllStrict -Ver $Version }
             '0' { exit 0 }
             default { Write-Host "Invalid option, try again" -ForegroundColor Red }
         }

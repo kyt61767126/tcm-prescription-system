@@ -6,13 +6,13 @@ REM ============================================================
 REM  Sync and Push - cloud_desktop -> public -> git commit -> push
 REM
 REM  Usage:
-REM    sync-and-push.bat           (默认：同步 + 提交 + 推送)
-REM    sync-and-push.bat --no-push (仅同步 + 提交，不推送)
+REM    sync-and-push.bat           (default: sync + commit + push)
+REM    sync-and-push.bat --no-push (sync + commit only, no push)
 REM
-REM  流程：
+REM  Flow:
 REM    1) Sync frontend code to public/ directory
 REM    2) Auto git add + commit
-REM    3) Push to GitHub (除非 --no-push)
+REM    3) Push to GitHub (unless --no-push)
 REM    4) Cloudflare Pages auto-deploys after push (1-2 min)
 REM ============================================================
 
@@ -20,7 +20,7 @@ set "SRC=%~dp0"
 set "DST=%~dp0..\..\public"
 set "REPO=%~dp0..\..\"
 
-REM 解析参数
+REM Parse arguments
 set "NO_PUSH=0"
 if /i "%~1"=="--no-push" set "NO_PUSH=1"
 
@@ -81,7 +81,7 @@ if "%NO_PUSH%"=="1" (
     echo [4/4] Skipped push (--no-push)
 ) else (
     echo [4/4] git pull --rebase + push ...
-    REM P1-14: push 前先 pull --rebase，避免远端有新提交时 push 失败
+    REM P1-14: pull --rebase before push to avoid push failure when remote has new commits
     git pull --rebase origin main
     if errorlevel 1 (
         echo [ERROR] git pull --rebase failed, please resolve conflicts manually

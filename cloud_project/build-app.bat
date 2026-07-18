@@ -14,7 +14,7 @@ set "APK_OUTPUT_DIR=%ANDROID_DIR%\app\build\outputs\apk\release"
 cd /d "%ANDROID_DIR%"
 
 echo [1/6] Checking environment...
-REM P1-16: 检查 JDK/JAVA_HOME，Gradle 构建必需
+REM P1-16: Check JDK/JAVA_HOME, required by Gradle build
 if defined JAVA_HOME (
     if not exist "%JAVA_HOME%\bin\java.exe" (
         echo [ERROR] JAVA_HOME points to invalid path: %JAVA_HOME%
@@ -81,23 +81,23 @@ findstr "versionName" "app\build.gradle"
 echo.
 
 echo [2.6/6] Syncing APP version from index.html to MainActivity...
-REM 从 cloud_desktop/index.html 读取 __APP_VERSION__，自动注入到 MainActivity.EXPECTED_APP_VERSION
-REM 避免 MainActivity 与 index.html 版本号不同步导致每次启动清缓存
-REM 使用独立 .ps1 脚本避免 cmd/PowerShell 双重转义问题
+REM Read __APP_VERSION__ from cloud_desktop/index.html, inject into MainActivity.EXPECTED_APP_VERSION
+REM Avoid cache clearing on every launch caused by MainActivity/index.html version mismatch
+REM Use standalone .ps1 script to avoid cmd/PowerShell double-escape issues
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sync-app-version.ps1" "%~dp0" "%ANDROID_DIR%"
 echo.
 
 echo [2.7/6] Auto-incrementing versionCode...
-REM 自动递增 build.gradle 中的 versionCode，确保每次打包 APK versionCode 单调递增
-REM 避免 Android 系统因 versionCode 重复拒绝升级安装
-REM P1-12: 递增前保存旧值到临时文件，构建失败时自动回滚避免跳号
+REM Auto-increment versionCode in build.gradle to ensure monotonic increase per build
+REM Avoid Android rejecting upgrade install due to duplicate versionCode
+REM P1-12: Save old value to temp file before increment; rollback on build failure to avoid skipping numbers
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$g='%ANDROID_DIR%\app\build.gradle'; $c=Get-Content $g -Raw -Encoding UTF8; if($c -match 'versionCode\s+(\d+)'){ $old=[int]$matches[1]; $new=$old+1; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $new\"; [System.IO.File]::WriteAllText($g,$nc,(New-Object System.Text.UTF8Encoding $false)); Set-Content -Path '%~dp0.build_vcode_prev' -Value $old -Encoding ASCII -NoNewline; Write-Host ('  [OK] versionCode: '+$old+' -> '+$new+' (prev saved)') } else { Write-Host '  [WARN] versionCode not found in build.gradle' }"
 echo.
 
 echo [3/6] Stopping residual Gradle processes...
-REM P1-15: 优先使用 gradlew --stop 优雅停止 Gradle daemon，避免 taskkill java.exe 误杀其他 Java 应用
+REM P1-15: Prefer gradlew --stop to gracefully stop Gradle daemon; avoid taskkill java.exe killing other Java apps
 call gradlew.bat --stop >nul 2>&1
-REM 仍有残留时才用 taskkill + 窗口标题过滤（双保险）
+REM Use taskkill + window title filter only if residuals remain (double safety)
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] Cleanup completed
 echo.
@@ -122,7 +122,7 @@ if errorlevel 1 (
     pause
     exit /b 1
 )
-REM P1-12: 构建成功后清理 versionCode 临时回滚文件
+REM P1-12: Clean up versionCode rollback temp file after successful build
 if exist "%~dp0.build_vcode_prev" del "%~dp0.build_vcode_prev"
 echo.
 

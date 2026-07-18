@@ -35,20 +35,20 @@ jobs:
           set -e
           echo "=== 同步 shared/*.js 到 13 个分发目录 ==="
 
-          # 13 个分发目标目录
+          # 10 个分发目标目录
+          # 注：3 个 offline db-*/electron 目录已于 2026-07-18 清理（electron 主进程
+          # 加载父目录的 shared 模块，子目录无需副本），从同步目标中移除避免撤销清理。
+          # 保留的 permission.js 例外由 code-quality.yml 单独处理。
           TARGETS=(
             "public"
             "public/electron"
             "cloud_project/cloud_desktop"
             "cloud_project/cloud_desktop/electron"
             "offline_project/db-bendi"
-            "offline_project/db-bendi/electron"
             "offline_project/db-bendi/android/app/src/main/assets/public"
             "offline_project/db-dingzhi"
-            "offline_project/db-dingzhi/electron"
             "offline_project/db-dingzhi/android/app/src/main/assets/public"
             "offline_project/db-geren"
-            "offline_project/db-geren/electron"
             "offline_project/db-geren/android/app/src/main/assets/public"
           )
 

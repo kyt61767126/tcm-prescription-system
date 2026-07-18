@@ -141,7 +141,7 @@ for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Content 
 )
 if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=HuikangTCM-Personal"
 
-REM 验证源 APK 文件大小（防止 Gradle 失败或文件未写入完成时复制空文件）
+REM Verify source APK size (prevent copying empty file when Gradle fails or write incomplete)
 set "SRC_SIZE=0"
 for %%A in ("%APK_FILE%") do set "SRC_SIZE=%%~zA"
 if "%SRC_SIZE%"=="" set "SRC_SIZE=0"
@@ -154,7 +154,7 @@ if %SRC_SIZE% EQU 0 (
 )
 echo Source APK size: %SRC_SIZE% bytes
 
-REM 用 PowerShell .NET File.Copy 可靠复制（支持中文文件名，带大小验证）
+REM Use PowerShell .NET File.Copy for reliable copy (supports unicode names, with size verification)
 set "FINAL_APK=..\%PRODUCT_NAME%.apk"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $src='%APK_FILE%'; $dst='%FINAL_APK%'; $expected=%SRC_SIZE%; try { [System.IO.File]::Copy($src,$dst,$true); $actual=(New-Object System.IO.FileInfo $dst).Length; if($actual -ne $expected){ Write-Host ('[ERROR] Size mismatch: src='+$expected+' dst='+$actual); exit 1 }; Write-Host ('[OK] Copied '+$actual+' bytes to: '+$dst) } catch { Write-Host ('[ERROR] '+$_.Exception.Message); exit 1 }"
 if errorlevel 1 (
@@ -170,7 +170,7 @@ if errorlevel 1 (
 )
 echo.
 
-REM 获取 APK 文件的完整绝对路径（用于显示）
+REM Get absolute path of APK file (for display)
 for %%F in ("%FINAL_APK%") do set "APK_FULL_PATH=%%~fF"
 
 echo ============================================

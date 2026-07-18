@@ -1089,6 +1089,27 @@ public class MainActivity extends BridgeActivity {
             return dir;
         }
 
+        // 统一路径校验：使用 canonicalPath.startsWith(root) 校验文件路径必须在允许的根目录下
+        // 同步离线版本 isMediaPathAllowed 安全实现，供 readFileAsBase64/deleteFile/openFile 共用
+        private boolean isMediaPathAllowed(String filePath) {
+            try {
+                if (filePath == null || filePath.isEmpty()) return false;
+                File f = new File(filePath);
+                String canonicalPath = f.getCanonicalPath();
+                File imgDir = getImageDir();
+                File vidDir = getVideoDir();
+                String imgDirPath = imgDir != null ? imgDir.getCanonicalPath() : "";
+                String vidDirPath = vidDir != null ? vidDir.getCanonicalPath() : "";
+                if (!imgDirPath.isEmpty() && canonicalPath.startsWith(imgDirPath)) return true;
+                if (!vidDirPath.isEmpty() && canonicalPath.startsWith(vidDirPath)) return true;
+                Log.w("TCM-Pres", "isMediaPathAllowed 拒绝非白名单路径: " + canonicalPath);
+                return false;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "isMediaPathAllowed 异常: " + filePath, e);
+                return false;
+            }
+        }
+
         private String getCurrentMonthFolder() {
             java.util.Calendar cal = java.util.Calendar.getInstance();
             int year = cal.get(java.util.Calendar.YEAR);
@@ -1312,6 +1333,10 @@ public class MainActivity extends BridgeActivity {
                 if (!file.exists()) {
                     return fail("文件不存在: " + filePath);
                 }
+                // 路径白名单校验：只允许打开图片/视频目录下的文件
+                if (!isMediaPathAllowed(filePath)) {
+                    return fail("路径不在允许的目录内");
+                }
                 if (mimeType == null || mimeType.isEmpty()) {
                     if (filePath.endsWith(".webm")) mimeType = "video/webm";
                     else if (filePath.endsWith(".mp4")) mimeType = "video/mp4";
@@ -1339,6 +1364,10 @@ public class MainActivity extends BridgeActivity {
                 File file = new File(filePath);
                 if (!file.exists()) {
                     return fail("文件不存在: " + filePath);
+                }
+                // 路径白名单校验：只允许读取图片/视频目录下的文件
+                if (!isMediaPathAllowed(filePath)) {
+                    return fail("路径不在允许的目录内");
                 }
                 java.io.FileInputStream fis = new java.io.FileInputStream(file);
                 java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
@@ -1557,6 +1586,10 @@ public class MainActivity extends BridgeActivity {
                 File file = new File(filePath);
                 if (!file.exists()) {
                     return fail("文件不存在: " + filePath);
+                }
+                // 路径白名单校验：只允许删除图片/视频目录下的文件
+                if (!isMediaPathAllowed(filePath)) {
+                    return fail("路径不在允许的目录内");
                 }
                 if (file.delete()) {
                     JSONObject result = new JSONObject();

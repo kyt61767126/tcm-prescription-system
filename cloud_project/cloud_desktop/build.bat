@@ -44,7 +44,7 @@ echo [OK] Obfuscation completed
 echo.
 
 echo [5/6] Running build...
-REM 国内镜像加速 electron 二进制下载（无需禁用 TLS 验证）
+REM Use domestic mirror to accelerate electron binary download (no need to disable TLS verification)
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
 call npm run build
