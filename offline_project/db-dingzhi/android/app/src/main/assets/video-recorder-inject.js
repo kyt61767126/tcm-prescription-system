@@ -46,6 +46,30 @@
             }
         }
 
+        // Uint8Array → base64 编码（避免 btoa 不支持 >127 字节的问题）
+        // btoa 只支持 ASCII 字符（0-127），视频二进制数据包含 >127 的字节会失败
+        var _base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+        function _uint8ArrayToBase64(bytes) {
+            var len = bytes.length;
+            var base64 = '';
+            var i = 0;
+            while (i < len) {
+                var b1 = bytes[i++] || 0;
+                var b2 = i < len ? bytes[i++] : 0;
+                var b3 = i < len ? bytes[i++] : 0;
+                var group = (b1 << 16) | (b2 << 8) | b3;
+                base64 += _base64Chars[(group >> 18) & 0x3F];
+                base64 += _base64Chars[(group >> 12) & 0x3F];
+                base64 += _base64Chars[(group >> 6) & 0x3F];
+                base64 += _base64Chars[group & 0x3F];
+            }
+            var padLen = (3 - (len % 3)) % 3;
+            if (padLen > 0) {
+                base64 = base64.substring(0, base64.length - padLen) + '=='.substring(0, padLen);
+            }
+            return base64;
+        }
+
         // 分片上传：解决 Binder 事务 1MB 限制
         var CHUNK_SIZE = 256 * 1024;
         function chunkedUpload(base64Data, fileName, type) {
@@ -162,11 +186,8 @@
             },
             readFileAsBase64: function (filePath) {
                 // 统一走分片读取，避免 Binder 1MB 限制
-                // 最终用 Blob URL 代替 data URL（与云端 APP 完全一致）
-                // Blob URL 比 data URL 优势：
-                //   1. 不需要把整个文件 base64 编码成字符串（省内存）
-                //   2. WebView 对 Blob URL 的视频支持更好（data URL 视频在 file:// 下播放失败）
-                //   3. 没有 URL 长度限制
+                // 最终用 base64 data URL（Blob URL 在 file:// 协议下不稳定）
+                // 使用自定义 Uint8Array → base64 函数，避免 btoa 不支持 >127 字节的问题
                 return new Promise(function (resolve) {
                     try {
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
@@ -180,6 +201,7 @@
                         var fileSize = startR.fileSize || 0;
                         console.log('[离线APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
                         var uint8Arrays = [];
+                        var totalBytes = 0;
                         var chunkRetryCount = 0;
                         var MAX_CHUNK_RETRY = 2;
 
@@ -199,7 +221,6 @@
                             }
                             chunkRetryCount = 0;
                             if (r.chunk) {
-                                // 分片解码 base64 → Uint8Array，收集起来最后用 Blob URL
                                 try {
                                     var binary = atob(r.chunk);
                                     var len = binary.length;
@@ -208,6 +229,7 @@
                                         bytes[i] = binary.charCodeAt(i);
                                     }
                                     uint8Arrays.push(bytes);
+                                    totalBytes += len;
                                 } catch (e) {
                                     console.error('[离线APP] base64 解码失败:', e);
                                 }
@@ -215,21 +237,21 @@
                             if (r.eof) {
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
                                 try {
-                                    // 用 Blob URL 代替 data URL（和云端 APP 完全一致）
-                                    var blob = new Blob(uint8Arrays, { type: mimeType });
-                                    // 清理旧 blob URL 避免内存泄漏
-                                    if (window.__currentBlobUrl) {
-                                        try { URL.revokeObjectURL(window.__currentBlobUrl); } catch (e) {}
+                                    // 合并所有 Uint8Array
+                                    var allBytes = new Uint8Array(totalBytes);
+                                    var offset = 0;
+                                    for (var j = 0; j < uint8Arrays.length; j++) {
+                                        allBytes.set(uint8Arrays[j], offset);
+                                        offset += uint8Arrays[j].length;
                                     }
-                                    var blobUrl = URL.createObjectURL(blob);
-                                    window.__currentBlobUrl = blobUrl;
-                                    console.log('[离线APP] 分片读取完成，blob URL=' + blobUrl + ', 片数=' + uint8Arrays.length + ', 总字节=' + blob.size);
-                                    // 返回格式与云端一致：data 字段返回 blob URL
-                                    // 同时返回 base64 字段兼容旧代码（值为 blobUrl，实际不是 base64 但调用方只用 .data 或 .base64 之一）
-                                    resolve({ success: true, data: blobUrl, base64: blobUrl });
+                                    // 用自定义 base64 编码函数（避免 btoa 不支持 >127 字节）
+                                    var fullBase64 = _uint8ArrayToBase64(allBytes);
+                                    var dataUrl = 'data:' + mimeType + ';base64,' + fullBase64;
+                                    console.log('[离线APP] 分片读取完成，data URL 长度=' + dataUrl.length + ', 片数=' + uint8Arrays.length + ', 总字节=' + totalBytes);
+                                    resolve({ success: true, base64: dataUrl, data: dataUrl });
                                 } catch (e) {
-                                    console.error('[离线APP] 创建 blob URL 失败:', e);
-                                    resolve({ success: false, error: '创建 blob URL 失败: ' + String(e) });
+                                    console.error('[离线APP] 转 base64 失败:', e);
+                                    resolve({ success: false, error: '转 base64 失败: ' + String(e) });
                                 }
                                 return;
                             }
