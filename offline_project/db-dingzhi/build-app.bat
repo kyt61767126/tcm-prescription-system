@@ -136,17 +136,25 @@ set "VERSION_STR=%VERSION_STR: =%"
 set "VERSION_STR=%VERSION_STR:"=%"
 if "%VERSION_STR%"=="" set "VERSION_STR=1.0"
 
-set "PRODUCT_NAME="
-for /f "delims=" %%p in ('powershell -NoProfile -Command "(Get-Content '..\config.json' -Encoding UTF8 -Raw | ConvertFrom-Json).productName"') do (
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Content '..\config.json' -Encoding UTF8 -Raw | ConvertFrom-Json).productName"`) do (
     set "PRODUCT_NAME=%%p"
 )
 if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=HuikangTCM-Custom"
 set "FINAL_APK=..\%PRODUCT_NAME%.apk"
 
-copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
+REM 用 PowerShell Copy-Item 代替 copy 命令，可靠支持中文文件名
+powershell -NoProfile -Command "Copy-Item -LiteralPath '%APK_FILE%' -Destination '%FINAL_APK%' -Force"
 if errorlevel 1 (
-    echo [WARN] Copy failed, please manually get APK from:
-    echo   %CD%\%APK_DIR%
+    echo [WARN] Copy with productName failed, fallback to app-release.apk
+    REM 回退方案：复制为 app-release.apk（英文名，确保成功）
+    set "FINAL_APK=..\app-release.apk"
+    powershell -NoProfile -Command "Copy-Item -LiteralPath '%APK_FILE%' -Destination '%FINAL_APK%' -Force"
+    if errorlevel 1 (
+        echo [ERROR] Copy failed, please manually get APK from:
+        echo   %CD%\%APK_DIR%
+    ) else (
+        echo [OK] Copied to: %CD%\%FINAL_APK%
+    )
 ) else (
     echo [OK] Copied to: %CD%\%FINAL_APK%
 )
