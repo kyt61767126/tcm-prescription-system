@@ -402,23 +402,29 @@ function Restore-VersionCode {
 function Build-Desktop {
     Write-Step "Desktop Build" "Building Electron desktop application..."
 
-    # Kill old process
+    # Kill old process (only target our app, reduce wait time)
     $processNames = @("app-local", "app-custom", "app-personal", "HuikangTCM-Local", "HuikangTCM-Custom", "HuikangTCM-Personal")
     foreach ($proc in $processNames) {
         $running = Get-Process -Name $proc -ErrorAction SilentlyContinue
         if ($running) {
             Write-Host "  Stopping process: $proc" -ForegroundColor Yellow
             $running | Stop-Process -Force -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 1
         }
     }
+    Start-Sleep -Milliseconds 500  # reduced from 1s
 
-    # Check node_modules
+    # Check node_modules - use npm ci for faster, deterministic install
     if (-not (Test-Path "$script:VersionDir\node_modules")) {
+        $lockFile = "$script:VersionDir\package-lock.json"
         Write-Host "  Installing npm dependencies..." -ForegroundColor Yellow
         Push-Location $script:VersionDir
         try {
-            Invoke-External { npm install } "npm install"
+            if (Test-Path $lockFile) {
+                # npm ci is 2-3x faster than npm install when lock file exists
+                Invoke-External { npm ci --no-audit --no-fund --prefer-offline } "npm ci"
+            } else {
+                Invoke-External { npm install --no-audit --no-fund --prefer-offline } "npm install"
+            }
         } finally {
             Pop-Location
         }
@@ -433,12 +439,14 @@ function Build-Desktop {
         Pop-Location
     }
 
-    # Build with electron-builder
+    # Build with electron-builder (use cache via mirror)
     Write-Host "  Running electron-builder..." -ForegroundColor Yellow
     Push-Location $script:VersionDir
     try {
         $env:ELECTRON_MIRROR = "https://registry.npmmirror.com/-/binary/electron/"
         $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://registry.npmmirror.com/-/binary/electron-builder-binaries/"
+        # Enable caching to skip re-download of electron binary
+        $env:ELECTRON_BUILDER_CACHE = "$env:LOCALAPPDATA\electron-builder\Cache"
         Invoke-External { npm run build } "electron-builder"
     } finally {
         Pop-Location
@@ -463,28 +471,41 @@ function Build-Desktop {
 function Build-App {
     Write-Step "APP Build" "Building Android APK..."
 
-    # Kill residual Gradle processes
-    Write-Host "  Stopping residual Gradle processes..." -ForegroundColor Yellow
-    Get-Process -Name "java","gradle" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 1
-
-    # Clean build cache
-    Write-Host "  Cleaning build cache..." -ForegroundColor Yellow
+    # Kill only Gradle daemon processes (not all java processes - preserves IDE etc.)
+    Write-Host "  Stopping Gradle daemon..." -ForegroundColor Yellow
     Push-Location $script:AndroidDir
     try {
-        Invoke-External { & ".\gradlew.bat" clean --no-daemon } "gradlew clean"
+        # Graceful daemon stop (faster restart than --no-daemon every time)
+        & ".\gradlew.bat" --stop 2>&1 | Out-Null
     } finally {
         Pop-Location
+    }
+    Start-Sleep -Milliseconds 500  # reduced from 1s
+
+    # Skip clean for incremental build - only clean if --clean flag was passed
+    # Gradle's incremental build + build cache handles dependency changes automatically
+    if ($env:TCM_GRADLE_CLEAN -eq '1') {
+        Write-Host "  [Deep Clean] Cleaning build cache (TCM_GRADLE_CLEAN=1)..." -ForegroundColor Yellow
+        Push-Location $script:AndroidDir
+        try {
+            Invoke-External { & ".\gradlew.bat" clean } "gradlew clean"
+        } finally {
+            Pop-Location
+        }
+    } else {
+        Write-Host "  [Incremental] Skipping clean (set TCM_GRADLE_CLEAN=1 for full clean)" -ForegroundColor Cyan
     }
 
     # Increment versionCode
     Increment-VersionCode
 
-    # Build APK
+    # Build APK - use daemon for faster subsequent builds
     Write-Host "  Building signed APK..." -ForegroundColor Yellow
     Push-Location $script:AndroidDir
     try {
-        Invoke-External { & ".\gradlew.bat" assembleRelease --no-daemon } "gradlew assembleRelease"
+        # Using daemon (no --no-daemon) enables 2-3x faster incremental builds
+        # --parallel enables parallel task execution
+        Invoke-External { & ".\gradlew.bat" assembleRelease --parallel --build-cache } "gradlew assembleRelease"
     } catch {
         Restore-VersionCode
         throw
