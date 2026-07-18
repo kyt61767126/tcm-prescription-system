@@ -1564,19 +1564,14 @@ if (window.Permission) {
             btn1.innerHTML = '📊 统计';
             btn1.onclick = function() { showModal('analyticsModal'); };
 
-            // APP环境统一显示"改密"（账户管理通过顶部tab入口），桌面环境保留管理员账户按钮
-            if (isApp) {
+            // 管理员显示"账户"，普通用户显示"改密"（APP和桌面一致）
+            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+            if (canManage) {
+                btn2.innerHTML = '👤 账户';
+                btn2.onclick = function() { showUserManageModal(); };
+            } else {
                 btn2.innerHTML = changePwdText;
                 btn2.onclick = function() { showChangePwdModal(); };
-            } else {
-                const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
-                if (canManage) {
-                    btn2.innerHTML = '👤 账户';
-                    btn2.onclick = function() { showUserManageModal(); };
-                } else {
-                    btn2.innerHTML = changePwdText;
-                    btn2.onclick = function() { showChangePwdModal(); };
-                }
             }
             btn2.style.display = '';
         }
