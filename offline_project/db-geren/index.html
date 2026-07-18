@@ -639,6 +639,8 @@
 <script src="patient-archive.js"></script>
 
 <script>
+// 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
+window.EDITION = 'personal';
 if (window.Permission) {
     Permission.init().then(function() {
         if (document.readyState === 'loading') {
@@ -2651,8 +2653,6 @@ if (window.Permission) {
 
         function addEmptyRow() {
             prescriptionItems.push(createEmptyMedicine());
-            DOM_CACHE.init();
-            renderPrescriptionTable();
         }
 
         // 药物表格防火墙 - 防止优化导致药物栏不显示
