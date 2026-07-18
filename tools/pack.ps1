@@ -457,7 +457,7 @@ function Build-App {
     # Copy APK to version directory with proper naming
     $apkPath = Get-ChildItem -Path "$script:AndroidDir\app\build\outputs\apk\release" -Filter "*.apk" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($apkPath) {
-        # Read productName from config.json (reference: cloud_app uses "惠康中医云端")
+        # Read productName from config.json (reference: cloud_app uses "惠康中医-云端")
         $configPath = "$script:VersionDir\config.json"
         $productName = "惠康中医"
         if (Test-Path $configPath) {

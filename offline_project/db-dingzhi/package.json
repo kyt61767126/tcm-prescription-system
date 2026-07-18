@@ -1,7 +1,7 @@
 {
   "name": "tcm-prescription-custom",
   "version": "1.0.0",
-  "description": "惠康中医定制",
+  "description": "惠康中医-定制",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -10,12 +10,12 @@
   "author": "本能中医",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^31.0.0",
+    "electron": "^35.0.0",
     "electron-builder": "^24.9.1"
   },
   "build": {
     "appId": "com.benneng.prescription.clinic",
-    "productName": "惠康中医定制",
+    "productName": "惠康中医-定制",
     "directories": {
       "output": "dist"
     },

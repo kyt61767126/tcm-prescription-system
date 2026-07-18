@@ -4,7 +4,7 @@
   IfFileExists "D:\" D盘存在 继续
   Goto 继续
   D盘存在:
-    StrCpy $INSTDIR "D:\Program Files\惠康中医云端"
+    StrCpy $INSTDIR "D:\Program Files\惠康中医-云端"
     Goto 结束
   继续:
     ; 优先使用 ProgramW6432 环境变量（64位 Windows 总是存在），回退到注册表
@@ -12,6 +12,6 @@
     StrCmp $R0 "" 0 设置路径
       ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion" "ProgramFilesDir"
     设置路径:
-    StrCpy $INSTDIR "$R0\惠康中医云端"
+    StrCpy $INSTDIR "$R0\惠康中医-云端"
   结束:
 !macroend

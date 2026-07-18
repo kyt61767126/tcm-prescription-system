@@ -1,7 +1,7 @@
 {
   "name": "tcm-prescription-system",
   "version": "1.0.0",
-  "description": "惠康中医云端",
+  "description": "惠康中医-云端",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -12,12 +12,12 @@
   "author": "惠康堂",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.3.3",
+    "electron": "^35.0.0",
     "electron-builder": "^24.9.1"
   },
   "build": {
     "appId": "com.huikangtang.prescription",
-    "productName": "惠康中医云端",
+    "productName": "惠康中医-云端",
     "directories": {
       "output": "dist"
     },

@@ -1,7 +1,7 @@
 {
   "name": "tcm-prescription-personal",
   "version": "1.0.0",
-  "description": "惠康中医个人",
+  "description": "惠康中医-个人",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -10,12 +10,12 @@
   "author": "王桂杰",
   "license": "ISC",
   "devDependencies": {
-    "electron": "^28.3.3",
+    "electron": "^35.0.0",
     "electron-builder": "^24.9.1"
   },
   "build": {
     "appId": "com.benneng.prescription.personal",
-    "productName": "惠康中医个人",
+    "productName": "惠康中医-个人",
     "directories": {
       "output": "dist"
     },

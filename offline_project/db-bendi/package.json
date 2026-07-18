@@ -1,7 +1,7 @@
 {
   "name": "tcm-prescription-local",
   "version": "1.0.0",
-  "description": "惠康中医本地",
+  "description": "惠康中医-本地",
   "main": "electron/main.js",
   "scripts": {
     "start": "electron .",
@@ -10,12 +10,12 @@
   "author": "本能堂",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^31.0.0",
+    "electron": "^35.0.0",
     "electron-builder": "^24.9.1"
   },
   "build": {
     "appId": "com.benneng.prescription.offline",
-    "productName": "惠康中医本地",
+    "productName": "惠康中医-本地",
     "directories": {
       "output": "dist"
     },
