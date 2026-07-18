@@ -314,7 +314,7 @@ function createLoginWindow() {
 
     loginWindow = new BrowserWindow({
         width: 260,
-        height: 380,
+        height: 400,
         resizable: false,
         autoHideMenuBar: true,
         center: true,
