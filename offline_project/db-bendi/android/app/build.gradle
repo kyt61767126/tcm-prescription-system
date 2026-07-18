@@ -7,16 +7,18 @@ if (signingPropertiesFile.exists()) {
 }
 
 // 构建时间戳（北京时间），用于 APP 内显示打包时间
-// 注意：在 doFirst 内计算时间，避免 configuration-cache 序列化缓存首次构建时间
+// 注意：doFirst 内禁止调用 Project.file() 等 script 方法（configuration-cache 不支持）
+// 在配置阶段捕获项目绝对路径（String 可序列化），doFirst 内用 new File() 构造
 // 在 mergeAssets 之前生成 build-time.js 到 assets 目录
 task generateBuildTimeFile {
+    def projectDirPath = projectDir.absolutePath
     doFirst {
         def buildTime = new Date().format('yyyy-MM-dd HH:mm', TimeZone.getTimeZone('Asia/Shanghai'))
-        def assetsDir = file("src/main/assets/public")
+        def assetsDir = new File(projectDirPath, "src/main/assets/public")
         if (!assetsDir.exists()) assetsDir.mkdirs()
         def buildTimeFile = new File(assetsDir, "build-time.js")
         buildTimeFile.text = "window.BUILD_TIME = '${buildTime}';"
-        println "[build-time] 生成打包时间: ${buildTime}"
+        logger.lifecycle("[build-time] 生成打包时间: ${buildTime}")
     }
 }
 
