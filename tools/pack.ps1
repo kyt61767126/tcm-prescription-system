@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -81,7 +81,7 @@ function Stop-OnError {
     param([string]$Context)
     if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne $null) {
         Write-Log "[FAIL] $Context (exit code: $LASTEXITCODE)" "ERROR"
-        throw "$Context failed with exit code $LASTEXITCODE"
+        throw "$Context 失败，退出码: $LASTEXITCODE"
     }
 }
 
@@ -108,7 +108,7 @@ function Invoke-External {
     if ($PSCmdlet.ParameterSetName -eq 'FilePath') {
         if (-not (Test-Path $FilePath)) {
             Write-Log "[FAIL] $Context (file not found: $FilePath)" "ERROR"
-            throw "$Context failed: file not found: $FilePath"
+            throw "$Context 失败: 文件未找到: $FilePath"
         }
         $FilePath = (Resolve-Path $FilePath).Path
         if ($Context -eq 'external command') {
@@ -149,7 +149,7 @@ function Invoke-External {
     }
     if ($code -ne 0 -and $code -ne $null) {
         Write-Log "[FAIL] $Context (exit code: $code)" "ERROR"
-        throw "$Context failed with exit code $code"
+        throw "$Context 失败，退出码: $code"
     }
     Write-Log "[OK] $Context (exit code: $code)"
 }
@@ -183,7 +183,7 @@ function Repair-FileBom {
 }
 
 function Invoke-EncodingCheck {
-    Write-Step "Encoding Check" "Verifying file encoding integrity..."
+    Write-Step "编码检查" "Verifying file encoding integrity..."
 
     $fixed = 0
 
@@ -194,9 +194,9 @@ function Invoke-EncodingCheck {
 
     foreach ($f in $ps1Files) {
         if (Test-FileBom -Path $f) {
-            Write-Host "  [OK]   $($f | Split-Path -Leaf) : BOM present" -ForegroundColor Green
+            Write-Host "  [OK]   $($f | Split-Path -Leaf) : BOM 已存在" -ForegroundColor Green
         } else {
-            Write-Host "  [FIX]   $($f | Split-Path -Leaf) : BOM missing, repairing..." -ForegroundColor Yellow
+            Write-Host "  [FIX]  $($f | Split-Path -Leaf) : BOM 缺失，修复中..." -ForegroundColor Yellow
             Repair-FileBom -Path $f -ShouldHaveBom $true | Out-Null
             $fixed++
         }
@@ -211,11 +211,11 @@ function Invoke-EncodingCheck {
     foreach ($f in $htmlFiles) {
         $hasBom = Test-FileBom -Path $f
         if ($hasBom) {
-            Write-Host "  [FIX]   $($f | Split-Path -Leaf) : BOM found, stripping..." -ForegroundColor Yellow
+            Write-Host "  [FIX]  $($f | Split-Path -Leaf) : 检测到 BOM，去除中..." -ForegroundColor Yellow
             Repair-FileBom -Path $f -ShouldHaveBom $false | Out-Null
             $fixed++
         } else {
-            Write-Host "  [OK]   $($f | Split-Path -Leaf) : no BOM" -ForegroundColor Green
+            Write-Host "  [OK]   $($f | Split-Path -Leaf) : 无 BOM" -ForegroundColor Green
         }
     }
 
@@ -231,7 +231,7 @@ function Invoke-EncodingCheck {
 # ============================================================================
 
 function Edit-ClinicConfig {
-    Write-Step "Config Modification" "Modifying clinic configuration..."
+    Write-Step "配置修改" "Modifying clinic configuration..."
 
     $configPath = "$script:VersionDir\config.json"
     $htmlPath = "$script:VersionDir\index.html"
@@ -245,13 +245,13 @@ function Edit-ClinicConfig {
     $config = [System.IO.File]::ReadAllText($configPath, $script:UTF8NoBom) | ConvertFrom-Json
     $currentClinic = $config.clinicName
 
-    Write-Host "  Current clinic name: $currentClinic"
-    Write-Host "  (Press Enter to keep current value)"
-    $newClinic = Read-Host "  Enter clinic name"
+    Write-Host "  当前诊所名称: $currentClinic"
+    Write-Host "  (按回车键保留当前值)"
+    $newClinic = Read-Host "  请输入诊所名称"
 
     if ([string]::IsNullOrWhiteSpace($newClinic)) {
         $newClinic = $currentClinic
-        Write-Host "  [SKIP] Using current name: $newClinic" -ForegroundColor Yellow
+        Write-Host "  [SKIP] 使用当前名称: $newClinic" -ForegroundColor Yellow
     } else {
         # Update config.json (with BOM for JSON compatibility)
         $config.clinicName = $newClinic
@@ -280,7 +280,7 @@ function Edit-ClinicConfig {
 
         [System.IO.File]::WriteAllText($htmlPath, $html, $script:UTF8NoBom)
 
-        Write-Host "  [OK] Config updated: $newClinic" -ForegroundColor Green
+        Write-Host "  [OK] 配置已更新: $newClinic" -ForegroundColor Green
     }
     Write-Log "Config: clinic name = $newClinic"
 }
@@ -293,14 +293,14 @@ function Copy-FileWithLog {
     param([string]$Src, [string]$Dst)
     if (Test-Path $Src) {
         Copy-Item -Path $Src -Destination $Dst -Force
-        Write-Host "  [OK]   $(Split-Path $Src -Leaf) synced" -ForegroundColor Green
+        Write-Host "  [OK]   $(Split-Path $Src -Leaf) 已同步" -ForegroundColor Green
     } else {
-        Write-Host "  [SKIP] $(Split-Path $Src -Leaf) not found" -ForegroundColor Yellow
+        Write-Host "  [SKIP] $(Split-Path $Src -Leaf) 未找到" -ForegroundColor Yellow
     }
 }
 
 function Sync-FilesToApp {
-    Write-Step "File Sync" "Syncing web files to Android assets..."
+    Write-Step "文件同步" "Syncing web files to Android assets..."
 
     $publicDir = "$script:AndroidDir\app\src\main\assets\public"
     $assetsDir = "$script:AndroidDir\app\src\main\assets"
@@ -342,7 +342,7 @@ function Sync-FilesToApp {
     if (Test-Path $injectSrc) {
         Copy-FileWithLog $injectSrc "$assetsDir\video-recorder-inject.js"
     } else {
-        Write-Host "  [SKIP] video-recorder-inject.js not found" -ForegroundColor Yellow
+        Write-Host "  [SKIP] 未找到 video-recorder-inject.js" -ForegroundColor Yellow
     }
 
     Write-Log "[OK] File sync completed"
@@ -373,7 +373,7 @@ function Set-VersionCode {
 }
 
 function Increment-VersionCode {
-    Write-Step "VersionCode" "Incrementing versionCode..."
+    Write-Step "版本号管理" "Incrementing versionCode..."
 
     $script:OldVersionCode = Get-VersionCode
     if ($script:OldVersionCode -eq $null) {
@@ -391,7 +391,7 @@ function Restore-VersionCode {
     if ($script:OldVersionCode -ne $null) {
         Write-Log "[ROLLBACK] Restoring versionCode to $($script:OldVersionCode)" "WARN"
         Set-VersionCode -Code $script:OldVersionCode
-        Write-Host "  [ROLLBACK] versionCode restored to $($script:OldVersionCode)" -ForegroundColor Yellow
+        Write-Host "  [ROLLBACK] versionCode 已回滚到 $($script:OldVersionCode)" -ForegroundColor Yellow
     }
 }
 
@@ -400,14 +400,14 @@ function Restore-VersionCode {
 # ============================================================================
 
 function Build-Desktop {
-    Write-Step "Desktop Build" "Building Electron desktop application..."
+    Write-Step "桌面版打包" "Building Electron desktop application..."
 
     # Kill old process (only target our app, reduce wait time)
     $processNames = @("app-local", "app-custom", "app-personal", "HuikangTCM-Local", "HuikangTCM-Custom", "HuikangTCM-Personal")
     foreach ($proc in $processNames) {
         $running = Get-Process -Name $proc -ErrorAction SilentlyContinue
         if ($running) {
-            Write-Host "  Stopping process: $proc" -ForegroundColor Yellow
+            Write-Host "  停止进程: $proc" -ForegroundColor Yellow
             $running | Stop-Process -Force -ErrorAction SilentlyContinue
         }
     }
@@ -416,7 +416,7 @@ function Build-Desktop {
     # Check node_modules - use npm ci for faster, deterministic install
     if (-not (Test-Path "$script:VersionDir\node_modules")) {
         $lockFile = "$script:VersionDir\package-lock.json"
-        Write-Host "  Installing npm dependencies..." -ForegroundColor Yellow
+        Write-Host "  安装 npm 依赖中..." -ForegroundColor Yellow
         Push-Location $script:VersionDir
         try {
             if (Test-Path $lockFile) {
@@ -431,7 +431,7 @@ function Build-Desktop {
     }
 
     # Obfuscate JS
-    Write-Host "  Obfuscating JavaScript..." -ForegroundColor Yellow
+    Write-Host "  混淆 JavaScript 中..." -ForegroundColor Yellow
     Push-Location $script:ProjectRoot
     try {
         Invoke-External { node "tools\obfuscate.js" --target=$Version } "JS obfuscation"
@@ -440,7 +440,7 @@ function Build-Desktop {
     }
 
     # Build with electron-builder (use cache via mirror)
-    Write-Host "  Running electron-builder..." -ForegroundColor Yellow
+    Write-Host "  运行 electron-builder 中..." -ForegroundColor Yellow
     Push-Location $script:VersionDir
     try {
         $env:ELECTRON_MIRROR = "https://registry.npmmirror.com/-/binary/electron/"
@@ -453,7 +453,7 @@ function Build-Desktop {
     }
 
     # Restore JS (de-obfuscate)
-    Write-Host "  Restoring JavaScript..." -ForegroundColor Yellow
+    Write-Host "  恢复 JavaScript 中..." -ForegroundColor Yellow
     Push-Location $script:ProjectRoot
     try {
         Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore"
@@ -469,10 +469,10 @@ function Build-Desktop {
 # ============================================================================
 
 function Build-App {
-    Write-Step "APP Build" "Building Android APK..."
+    Write-Step "APP 打包" "Building Android APK..."
 
     # Kill only Gradle daemon processes (not all java processes - preserves IDE etc.)
-    Write-Host "  Stopping Gradle daemon..." -ForegroundColor Yellow
+    Write-Host "  停止 Gradle daemon 中..." -ForegroundColor Yellow
     Push-Location $script:AndroidDir
     try {
         # Graceful daemon stop (faster restart than --no-daemon every time)
@@ -485,7 +485,7 @@ function Build-App {
     # Skip clean for incremental build - only clean if --clean flag was passed
     # Gradle's incremental build + build cache handles dependency changes automatically
     if ($env:TCM_GRADLE_CLEAN -eq '1') {
-        Write-Host "  [Deep Clean] Cleaning build cache (TCM_GRADLE_CLEAN=1)..." -ForegroundColor Yellow
+        Write-Host "  [深度清理] 清理构建缓存 (TCM_GRADLE_CLEAN=1)..." -ForegroundColor Yellow
         Push-Location $script:AndroidDir
         try {
             Invoke-External { & ".\gradlew.bat" clean } "gradlew clean"
@@ -493,14 +493,14 @@ function Build-App {
             Pop-Location
         }
     } else {
-        Write-Host "  [Incremental] Skipping clean (set TCM_GRADLE_CLEAN=1 for full clean)" -ForegroundColor Cyan
+        Write-Host "  [增量构建] 跳过 clean (设置 TCM_GRADLE_CLEAN=1 进行全量清理)" -ForegroundColor Cyan
     }
 
     # Increment versionCode
     Increment-VersionCode
 
     # Build APK - use daemon for faster subsequent builds
-    Write-Host "  Building signed APK..." -ForegroundColor Yellow
+    Write-Host "  构建签名 APK 中..." -ForegroundColor Yellow
     Push-Location $script:AndroidDir
     try {
         # Using daemon (no --no-daemon) enables 2-3x faster incremental builds
@@ -529,7 +529,7 @@ function Build-App {
                 Write-Log "[WARN] Failed to read productName from config.json" "WARN"
             }
         }
-        
+
         # Extract versionName from build.gradle
         $versionName = "1.0"
         try {
@@ -540,11 +540,11 @@ function Build-App {
         } catch {
             Write-Log "[WARN] Failed to read versionName from build.gradle" "WARN"
         }
-        
+
         # Build final APK name: 产品名称_版本号.apk
         $finalApkName = "$productName.apk"
         $destPath = "$script:VersionDir\$finalApkName"
-        
+
         # Copy with verification
         Copy-Item -Path $apkPath.FullName -Destination $destPath -Force
         $destFile = Get-Item $destPath -ErrorAction SilentlyContinue
@@ -552,21 +552,21 @@ function Build-App {
             $sizeMB = [math]::Round($apkPath.Length / 1MB, 2)
             Write-Host ""
             Write-Host "  ====================================" -ForegroundColor Green
-            Write-Host "  APK Generated Successfully!" -ForegroundColor Green
+            Write-Host "  APK 生成成功!" -ForegroundColor Green
             Write-Host "  ====================================" -ForegroundColor Green
-            Write-Host "  File:  $finalApkName"
-            Write-Host "  Size:  $sizeMB MB"
-            Write-Host "  Path:  $destPath"
+            Write-Host "  文件:  $finalApkName"
+            Write-Host "  大小:  $sizeMB MB"
+            Write-Host "  路径:  $destPath"
             Write-Host "  ====================================" -ForegroundColor Green
             Write-Log "[OK] APK: $finalApkName ($sizeMB MB)"
         } else {
             Restore-VersionCode
             Write-Log "[ERROR] APK copy failed or file is empty/corrupted" "ERROR"
-            throw "APK copy failed or file is empty/corrupted"
+            throw "APK 复制失败或文件为空/损坏"
         }
     } else {
         Restore-VersionCode
-        throw "APK not found in output directory"
+        throw "输出目录未找到 APK"
     }
 }
 
@@ -578,27 +578,27 @@ function Show-Menu {
     param([string]$Ver)
     Clear-Host
     $versionLabel = switch ($Ver) {
-        'bendi'   { 'Local Edition (bendi)' }
-        'dingzhi' { 'Custom Edition (dingzhi)' }
-        'geren'   { 'Personal Edition (geren)' }
+        'bendi'   { '本地版 (bendi)' }
+        'dingzhi' { '定制版 (dingzhi)' }
+        'geren'   { '个人版 (geren)' }
     }
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  Packaging Module - $versionLabel" -ForegroundColor Cyan
+    Write-Host "  惠康中医打包工具 - $versionLabel" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  [1] Build Desktop App (Electron exe)"
-    Write-Host "  [2] Build Mobile App (Android APK)"
-    Write-Host "  [3] Build Both (Desktop + Mobile)"
-    Write-Host "  [4] Sync files to Android only"
-    Write-Host "  [5] Modify clinic config only"
-    Write-Host "  [6] Encoding check only"
-    Write-Host "  [7] Show current config"
-    Write-Host "  [8] Enable strict mode (extract & inject hash)"
-    Write-Host "  [9] Build all with strict mode (A->B->hash->repack)"
-    Write-Host "  [0] Exit"
+    Write-Host "  [1] 打包桌面版 (Electron exe)"
+    Write-Host "  [2] 打包手机 APP (Android APK)"
+    Write-Host "  [3] 全部打包 (桌面 + APP)"
+    Write-Host "  [4] 仅同步文件到 Android"
+    Write-Host "  [5] 仅修改诊所配置"
+    Write-Host "  [6] 仅编码检查"
+    Write-Host "  [7] 查看当前配置"
+    Write-Host "  [8] 启用严格模式 (提取并注入哈希)"
+    Write-Host "  [9] 一键打包严格模式 (A->B->哈希->重打包)"
+    Write-Host "  [0] 退出"
     Write-Host ""
-    $choice = Read-Host "  Select option"
+    $choice = Read-Host "  请选择 [0-9]"
     return $choice
 }
 
@@ -607,31 +607,31 @@ function Show-CurrentConfig {
     $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
     $configPath = "$versionDir\config.json"
     if (-not (Test-Path $configPath)) {
-        Write-Host "[ERROR] config.json not found: $configPath" -ForegroundColor Red
+        Write-Host "[错误] 未找到 config.json: $configPath" -ForegroundColor Red
         return
     }
     try {
         $config = Get-Content $configPath -Raw -Encoding UTF8 | ConvertFrom-Json
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  Current Config ($Ver)" -ForegroundColor Cyan
+        Write-Host "  当前配置 ($Ver)" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  Clinic Name : $($config.clinicName)"
-        Write-Host "  Doctor Name : $($config.doctorName)"
-        Write-Host "  Version Tag : $($config.versionLabel)"
-        Write-Host "  Product Name: $($config.productName)"
+        Write-Host "  诊所名称 : $($config.clinicName)"
+        Write-Host "  医师姓名 : $($config.doctorName)"
+        Write-Host "  版本标签 : $($config.versionLabel)"
+        Write-Host "  产品名称 : $($config.productName)"
         Write-Host ""
-        Write-Host "  Registered Users:" -ForegroundColor Yellow
+        Write-Host "  已注册用户:" -ForegroundColor Yellow
         if ($config.users) {
             foreach ($u in $config.users) {
                 Write-Host "    - $($u.name) ($($u.username), $($u.role))"
             }
         } else {
-            Write-Host "    (none)"
+            Write-Host "    (无)"
         }
         Write-Host ""
     } catch {
-        Write-Host "[ERROR] Failed to read config: $_" -ForegroundColor Red
+        Write-Host "[错误] 读取配置失败: $_" -ForegroundColor Red
     }
 }
 
@@ -642,28 +642,28 @@ function Enable-StrictMode {
 
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Yellow
-    Write-Host "  Enable Strict Mode ($Ver)" -ForegroundColor Yellow
+    Write-Host "  启用严格模式 ($Ver)" -ForegroundColor Yellow
     Write-Host "========================================" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  Prerequisites:"
-    Write-Host "    - APK has been built at least once (via option [2])"
-    Write-Host "    - APK is signed with release certificate"
+    Write-Host "  前置条件:"
+    Write-Host "    - 已通过选项 [2] 打包过至少一次 APK"
+    Write-Host "    - APK 使用正式签名证书签名"
     Write-Host ""
-    Write-Host "  Flow:"
-    Write-Host "    1. Extract signature SHA-256 from latest APK"
-    Write-Host "    2. Compute SHA-256 of classes*.dex inside APK"
-    Write-Host "    3. Inject into SecurityGuard.java (EXPECTED_SIGN_HASH / EXPECTED_DEX_HASH)"
-    Write-Host "    4. Rebuild APK to enable strict mode"
+    Write-Host "  流程:"
+    Write-Host "    1. 从最新 APK 提取签名 SHA-256"
+    Write-Host "    2. 计算 APK 内 classes*.dex 的 SHA-256"
+    Write-Host "    3. 注入到 SecurityGuard.java (EXPECTED_SIGN_HASH / EXPECTED_DEX_HASH)"
+    Write-Host "    4. 重新打包 APK 启用严格模式"
     Write-Host ""
 
     if (-not (Test-Path $hashBat)) {
-        Write-Host "[ERROR] generate-sign-hash.bat not found: $hashBat" -ForegroundColor Red
+        Write-Host "[错误] 未找到 generate-sign-hash.bat: $hashBat" -ForegroundColor Red
         return 1
     }
 
-    $confirm = Read-Host "Confirm to enable strict mode? (y/N)"
+    $confirm = Read-Host "确认启用严格模式? (y/N)"
     if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-        Write-Host "  Cancelled"
+        Write-Host "  已取消"
         return 0
     }
 
@@ -671,14 +671,14 @@ function Enable-StrictMode {
     Write-Log "[STEP] Enable strict mode for $Ver"
     Invoke-External -FilePath $hashBat -WorkDir $versionDir
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "[ERROR] Hash extraction failed" -ForegroundColor Red
+        Write-Host "[错误] 哈希提取失败" -ForegroundColor Red
         Write-Log "[ERROR] generate-sign-hash.bat failed" "ERROR"
         return 1
     }
 
     Write-Host ""
-    Write-Host "  Hash injected. Now rebuild APK to activate strict mode." -ForegroundColor Green
-    $rebuild = Read-Host "Rebuild APK now? (Y/n)"
+    Write-Host "  哈希已注入。现在重新打包 APK 以激活严格模式。" -ForegroundColor Green
+    $rebuild = Read-Host "立即重新打包 APK? (Y/n)"
     if ($rebuild -ne 'n' -and $rebuild -ne 'N') {
         Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
     }
@@ -692,74 +692,74 @@ function Build-AllStrict {
 
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Yellow
-    Write-Host "  Build All with Strict Mode ($Ver)" -ForegroundColor Yellow
+    Write-Host "  一键打包严格模式 ($Ver)" -ForegroundColor Yellow
     Write-Host "========================================" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  Steps:"
-    Write-Host "    A. Build Desktop App (exe)"
-    Write-Host "    B. Build Mobile App (first-lock APK)"
-    Write-Host "    C. Extract & inject hash (strict mode)"
-    Write-Host "    D. Rebuild Mobile App (strict APK)"
+    Write-Host "  步骤:"
+    Write-Host "    A. 打包桌面版 (exe)"
+    Write-Host "    B. 打包手机 APP (首次锁定模式 APK)"
+    Write-Host "    C. 提取并注入哈希 (严格模式)"
+    Write-Host "    D. 重新打包手机 APP (严格模式 APK)"
     Write-Host ""
-    Write-Host "  Output:"
-    Write-Host "    - Desktop: dist\*.exe"
-    Write-Host "    - Mobile : <versionDir>\*.apk (strict mode)"
+    Write-Host "  输出:"
+    Write-Host "    - 桌面版: dist\*.exe"
+    Write-Host "    - 手机版: <versionDir>\*.apk (严格模式)"
     Write-Host ""
 
-    $confirm = Read-Host "Confirm to start full build with strict mode? (y/N)"
+    $confirm = Read-Host "确认开始一键打包严格模式? (y/N)"
     if ($confirm -ne 'y' -and $confirm -ne 'Y') {
-        Write-Host "  Cancelled"
+        Write-Host "  已取消"
         return 0
     }
 
     # Step A: Desktop build
     Write-Host ""
-    Write-Host "  [Step A] Building Desktop..." -ForegroundColor Cyan
+    Write-Host "  [步骤 A] 打包桌面版..." -ForegroundColor Cyan
     $rc = Invoke-Packaging -Ver $Ver -Tgt 'desktop' -SkipCfg $false -SkipEnc $false
     if ($rc -ne 0) {
-        Write-Host "[ERROR] Desktop build failed, abort" -ForegroundColor Red
+        Write-Host "[错误] 桌面版打包失败，终止" -ForegroundColor Red
         return 1
     }
 
     # Step B: Mobile build (first-lock)
     Write-Host ""
-    Write-Host "  [Step B] Building Mobile (first-lock)..." -ForegroundColor Cyan
+    Write-Host "  [步骤 B] 打包手机 APP (首次锁定模式)..." -ForegroundColor Cyan
     $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $false -SkipEnc $true
     if ($rc -ne 0) {
-        Write-Host "[ERROR] Mobile build failed, abort" -ForegroundColor Red
+        Write-Host "[错误] 手机 APP 打包失败，终止" -ForegroundColor Red
         return 1
     }
 
     # Step C: Extract & inject hash
     Write-Host ""
-    Write-Host "  [Step C] Extracting & injecting hash..." -ForegroundColor Cyan
+    Write-Host "  [步骤 C] 提取并注入哈希..." -ForegroundColor Cyan
     if (-not (Test-Path $hashBat)) {
-        Write-Host "[ERROR] generate-sign-hash.bat not found, skip strict mode" -ForegroundColor Red
-        Write-Host "  You can still use the APK from Step B (first-lock mode)"
+        Write-Host "[错误] 未找到 generate-sign-hash.bat，跳过严格模式" -ForegroundColor Red
+        Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
         return 1
     }
     Invoke-External -FilePath $hashBat -WorkDir $versionDir
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "[ERROR] Hash extraction failed, skip strict mode" -ForegroundColor Red
-        Write-Host "  You can still use the APK from Step B (first-lock mode)"
+        Write-Host "[错误] 哈希提取失败，跳过严格模式" -ForegroundColor Red
+        Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
         return 1
     }
 
     # Step D: Rebuild mobile (strict)
     Write-Host ""
-    Write-Host "  [Step D] Rebuilding Mobile (strict mode)..." -ForegroundColor Cyan
+    Write-Host "  [步骤 D] 重新打包手机 APP (严格模式)..." -ForegroundColor Cyan
     $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
     if ($rc -ne 0) {
-        Write-Host "[ERROR] Strict mode rebuild failed" -ForegroundColor Red
-        Write-Host "  You can still use the APK from Step B (first-lock mode)"
+        Write-Host "[错误] 严格模式重新打包失败" -ForegroundColor Red
+        Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
         return 1
     }
 
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  Full build with strict mode completed!" -ForegroundColor Green
-    Write-Host "  Desktop: $versionDir\dist\" -ForegroundColor Green
-    Write-Host "  Mobile : $versionDir\*.apk (strict)" -ForegroundColor Green
+    Write-Host "  一键打包严格模式完成!" -ForegroundColor Green
+    Write-Host "  桌面版: $versionDir\dist\" -ForegroundColor Green
+    Write-Host "  手机版: $versionDir\*.apk (严格模式)" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     return 0
 }
@@ -779,7 +779,7 @@ function Invoke-Packaging {
 
     # Validate paths
     if (-not (Test-Path $script:VersionDir)) {
-        throw "Version directory not found: $($script:VersionDir)"
+        throw "版本目录未找到: $($script:VersionDir)"
     }
 
     # Setup log
@@ -792,10 +792,10 @@ function Invoke-Packaging {
     $startTime = Get-Date
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Magenta
-    Write-Host "  TCM Prescription Packaging Module" -ForegroundColor Magenta
-    Write-Host "  Version: $Ver | Target: $Tgt" -ForegroundColor Magenta
-    Write-Host "  Started: $($startTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Magenta
-    Write-Host "  Log:     $($script:LogFile)" -ForegroundColor Magenta
+    Write-Host "  惠康中医打包模块" -ForegroundColor Magenta
+    Write-Host "  版本: $Ver | 目标: $Tgt" -ForegroundColor Magenta
+    Write-Host "  开始: $($startTime.ToString('yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Magenta
+    Write-Host "  日志: $($script:LogFile)" -ForegroundColor Magenta
     Write-Host "========================================" -ForegroundColor Magenta
 
     try {
@@ -832,9 +832,9 @@ function Invoke-Packaging {
         $elapsed = (Get-Date) - $startTime
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Green
-        Write-Host "  Packaging Completed!" -ForegroundColor Green
-        Write-Host "  Elapsed: $($elapsed.ToString('mm\:ss'))" -ForegroundColor Green
-        Write-Host "  Log:     $($script:LogFile)" -ForegroundColor Green
+        Write-Host "  打包完成!" -ForegroundColor Green
+        Write-Host "  耗时: $($elapsed.ToString('mm\:ss'))" -ForegroundColor Green
+        Write-Host "  日志: $($script:LogFile)" -ForegroundColor Green
         Write-Host "========================================" -ForegroundColor Green
         Write-Log "[OK] Packaging completed in $($elapsed.ToString('mm\:ss'))"
 
@@ -842,10 +842,10 @@ function Invoke-Packaging {
         $elapsed = (Get-Date) - $startTime
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Red
-        Write-Host "  Packaging FAILED!" -ForegroundColor Red
-        Write-Host "  Error: $_" -ForegroundColor Red
-        Write-Host "  Elapsed: $($elapsed.ToString('mm\:ss'))" -ForegroundColor Red
-        Write-Host "  Log:     $($script:LogFile)" -ForegroundColor Red
+        Write-Host "  打包失败!" -ForegroundColor Red
+        Write-Host "  错误: $_" -ForegroundColor Red
+        Write-Host "  耗时: $($elapsed.ToString('mm\:ss'))" -ForegroundColor Red
+        Write-Host "  日志: $($script:LogFile)" -ForegroundColor Red
         Write-Host "========================================" -ForegroundColor Red
         Write-Log "[ERROR] Packaging failed: $_" "ERROR"
         return 1
@@ -859,7 +859,7 @@ function Invoke-Packaging {
 
 if ($Interactive) {
     if (-not $Version) {
-        Write-Host "Usage: pack.ps1 -Version <bendi|dingzhi|geren> -Interactive"
+        Write-Host "用法: pack.ps1 -Version <bendi|dingzhi|geren> -Interactive"
         exit 1
     }
 
@@ -876,18 +876,18 @@ if ($Interactive) {
             '8' { Enable-StrictMode -Ver $Version }
             '9' { Build-AllStrict -Ver $Version }
             '0' { exit 0 }
-            default { Write-Host "Invalid option, try again" -ForegroundColor Red }
+            default { Write-Host "  [错误] 无效选项，请重新选择" -ForegroundColor Red }
         }
         if ($choice -ne '0') {
             Write-Host ""
-            Read-Host "Press Enter to continue"
+            Read-Host "按回车键继续"
         }
     }
 } else {
     # Direct execution mode
     if (-not $Version -or -not $Target) {
-        Write-Host "Usage: pack.ps1 -Version <bendi|dingzhi|geren> -Target <desktop|app|all>"
-        Write-Host "       pack.ps1 -Version bendi -Interactive"
+        Write-Host "用法: pack.ps1 -Version <bendi|dingzhi|geren> -Target <desktop|app|all>"
+        Write-Host "     pack.ps1 -Version bendi -Interactive"
         exit 1
     }
     $exitCode = Invoke-Packaging -Ver $Version -Tgt $Target -SkipCfg $SkipConfig -SkipEnc $SkipEncodingCheck
