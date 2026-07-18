@@ -2007,8 +2007,8 @@ if (window.Permission) {
         }
 
         async function loadData() {
-            await renumberHistoricalPrescriptions();
-            
+            try { await renumberHistoricalPrescriptions(); } catch(e) { console.warn('renumberHistoricalPrescriptions 失败，跳过:', e); }
+
             let savedFormulas = localStorage.getItem('local_formulas');
             let savedMedicines = localStorage.getItem('local_medicines');
             

@@ -2196,6 +2196,28 @@ if (window.Permission) {
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('Cloud fetch HTTP error, status:', response.status);
+                    // 检测 401 认证失效：自动清除登录状态并跳转登录界面
+                    if (response.status === 401) {
+                        let parsed = null;
+                        try { parsed = JSON.parse(errorText.replace(/^\uFEFF/, '').trim()); } catch(e) {}
+                        if (parsed && parsed.requireAuth === true) {
+                            console.warn('[Auth] Token 已过期或无效，触发重新登录');
+                            try {
+                                currentUser = null;
+                                if (window.AuthCore && AuthCore.logout) {
+                                    AuthCore.logout().catch(e => console.warn('AuthCore.logout failed:', e));
+                                }
+                                localStorage.removeItem('cloud_currentUser');
+                                localStorage.removeItem('cloud_isLoggedIn');
+                                localStorage.removeItem('currentUser');
+                                localStorage.removeItem('isLoggedIn');
+                                sessionStorage.removeItem('currentUser');
+                            } catch(e) {}
+                            const overlay = document.getElementById('loginOverlay');
+                            if (overlay) overlay.style.display = 'flex';
+                            return { success: false, error: '登录已过期，请重新登录', requireAuth: true, fromCloud: true };
+                        }
+                    }
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
                 
@@ -2852,8 +2874,10 @@ if (window.Permission) {
                             } catch(e) { console.warn('LocalDB 回写失败:', e); }
                             return data;
                         }
-                        // 云端返回失败：保持原行为提示失败
-                        alert('处方保存失败：' + (data.error || '未知错误'));
+                        // 云端返回失败：保持原行为提示失败（requireAuth 时 cloudFetch 已显示登录界面，跳过 alert）
+                        if (data.requireAuth !== true) {
+                            alert('处方保存失败：' + (data.error || '未知错误'));
+                        }
                         return null;
                     } catch (netErr) {
                         // 网络异常：降级落本地 synced=0，待 SyncEngine 推送，本地生成处方编号
@@ -2924,7 +2948,9 @@ if (window.Permission) {
                     body: JSON.stringify({ prescription: arr })
                 });
                 if (data.success) return data;
-                alert('处方保存失败：' + (data.error || '未知错误'));
+                if (data.requireAuth !== true) {
+                    alert('处方保存失败：' + (data.error || '未知错误'));
+                }
                 return null;
             } catch (error) {
                 console.error('Failed to save prescriptions:', error);
