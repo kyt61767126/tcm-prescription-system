@@ -84,6 +84,8 @@ const ALL_DISTRIBUTION_DIRS = [
     'public/electron',
     'cloud_project/cloud_desktop',
     'cloud_project/cloud_desktop/electron',
+    'cloud_project/cloud_app/app/src/main/assets/public',
+    'cloud_project/cloud_app/app/src/main/assets',
     'offline_project/db-bendi',
     'offline_project/db-bendi/electron',
     'offline_project/db-dingzhi',
@@ -116,7 +118,9 @@ const TARGET_DIRS = {
         'public',
         'public/electron',
         'cloud_project/cloud_desktop',
-        'cloud_project/cloud_desktop/electron'
+        'cloud_project/cloud_desktop/electron',
+        'cloud_project/cloud_app/app/src/main/assets/public',
+        'cloud_project/cloud_app/app/src/main/assets'
     ],
     all: ALL_DISTRIBUTION_DIRS
 };
@@ -125,7 +129,8 @@ const TARGET_DIRS = {
 const EXTRA_FILES = {
     'offline_project/db-bendi/electron': ['login.js'],
     'offline_project/db-dingzhi/electron': ['login.js'],
-    'offline_project/db-geren/electron': ['login.js']
+    'offline_project/db-geren/electron': ['login.js'],
+    'cloud_project/cloud_app/app/src/main/assets': ['video-recorder-inject.js']
 };
 
 /**

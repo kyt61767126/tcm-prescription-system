@@ -498,21 +498,43 @@ function Build-App {
         Write-Host "  [增量构建] 跳过 clean (设置 TCM_GRADLE_CLEAN=1 进行全量清理)" -ForegroundColor Cyan
     }
 
-    # Increment versionCode
-    Increment-VersionCode
-
-    # Build APK - use daemon for faster subsequent builds
-    Write-Host "  构建签名 APK 中..." -ForegroundColor Yellow
-    Push-Location $script:AndroidDir
+    # P1: 混淆 JS 代码（含 Android assets/public，防 APK 内 JS 被直接读取）
+    Write-Host "  混淆 JavaScript 中（含 Android assets）..." -ForegroundColor Yellow
+    Push-Location $script:ProjectRoot
     try {
-        # Using daemon (no --no-daemon) enables 2-3x faster incremental builds
-        # --parallel enables parallel task execution
-        Invoke-External { & ".\gradlew.bat" assembleRelease --parallel --build-cache } "gradlew assembleRelease"
-    } catch {
-        Restore-VersionCode
-        throw
+        Invoke-External { node "tools\obfuscate.js" --target=$Version } "JS obfuscation for APK"
     } finally {
         Pop-Location
+    }
+
+    try {
+        # Increment versionCode
+        Increment-VersionCode
+
+        # Build APK - use daemon for faster subsequent builds
+        Write-Host "  构建签名 APK 中..." -ForegroundColor Yellow
+        Push-Location $script:AndroidDir
+        try {
+            # Using daemon (no --no-daemon) enables 2-3x faster incremental builds
+            # --parallel enables parallel task execution
+            Invoke-External { & ".\gradlew.bat" assembleRelease --parallel --build-cache } "gradlew assembleRelease"
+        } catch {
+            Restore-VersionCode
+            throw
+        } finally {
+            Pop-Location
+        }
+    } finally {
+        # P1: 无论成功或失败，都恢复原始 JS 代码（防源码污染开发环境）
+        Write-Host "  恢复 JavaScript 中..." -ForegroundColor Yellow
+        Push-Location $script:ProjectRoot
+        try {
+            Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore"
+        } catch {
+            Write-Log "[WARN] JS restore failed after APK build" "WARN"
+        } finally {
+            Pop-Location
+        }
     }
 
     # Copy APK to version directory with proper naming

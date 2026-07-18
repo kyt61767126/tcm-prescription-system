@@ -111,6 +111,18 @@ if errorlevel 1 (
 )
 echo.
 
+echo [4.5/6] Obfuscating JavaScript (cloud target - includes cloud_app assets)...
+REM P1: 混淆 cloud_app assets 内 JS（auth-core.js / permission.js / video-recorder-inject.js）
+REM 防 APK 内 JS 被直接反编译读取，攻击难度提升
+call node "%~dp0..\tools\obfuscate.js" --target=cloud
+if errorlevel 1 (
+    echo [ERROR] JS obfuscation failed
+    pause
+    exit /b 1
+)
+echo [OK] JS obfuscation complete
+echo.
+
 echo [5/6] Building signed APK...
 echo.
 call gradlew.bat assembleRelease --no-daemon
@@ -118,12 +130,24 @@ if errorlevel 1 (
     echo.
     echo [ERROR] Build failed! Rolling back versionCode...
     powershell -NoProfile -ExecutionPolicy Bypass -Command "$g='%ANDROID_DIR%\app\build.gradle'; $prevFile='%~dp0.build_vcode_prev'; if(Test-Path $prevFile){ $prev=Get-Content $prevFile -Raw; $c=Get-Content $g -Raw -Encoding UTF8; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $prev\"; [System.IO.File]::WriteAllText($g,$nc,(New-Object System.Text.UTF8Encoding $false)); Remove-Item $prevFile -Force; Write-Host ('  [OK] versionCode rolled back to '+$prev) } else { Write-Host '  [WARN] No prev versionCode to rollback' }"
+    echo [WARN] Restoring JavaScript due to build failure...
+    call node "%~dp0..\tools\obfuscate.js" restore --target=cloud
     echo [ERROR] Build failed! Please check error messages
     pause
     exit /b 1
 )
 REM P1-12: Clean up versionCode rollback temp file after successful build
 if exist "%~dp0.build_vcode_prev" del "%~dp0.build_vcode_prev"
+echo.
+
+echo [5.5/6] Restoring JavaScript (cloud target)...
+REM P1: 无论构建成功或失败，都恢复原始 JS 代码（防源码污染开发环境）
+call node "%~dp0..\tools\obfuscate.js" restore --target=cloud
+if errorlevel 1 (
+    echo [WARN] JS restore failed - may need manual restore: node tools\obfuscate.js restore --target=cloud
+) else (
+    echo [OK] JS restored to original state
+)
 echo.
 
 echo [6/6] Build successful, copying APK...
