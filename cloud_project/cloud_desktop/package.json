@@ -19,7 +19,7 @@
     "appId": "com.tcm.prescription.cloud",
     "productName": "惠康中医-云端",
     "directories": {
-      "output": "dist"
+      "output": "build_output"
     },
     "asarUnpack": [
       "**/node_modules/better-sqlite3/**"

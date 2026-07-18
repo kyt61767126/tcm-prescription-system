@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Electron 构建输出目录（避免锁定问题改用 build_output）
+build_output/
+build_output_old_*/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

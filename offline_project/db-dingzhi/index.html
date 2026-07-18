@@ -2013,25 +2013,32 @@ if (window.Permission) {
             let savedMedicines = localStorage.getItem('local_medicines');
             
             if (IS_ELECTRON) {
-                const formulaResult = await window.electronAPI.getUserData('local_formulas');
-                if (formulaResult.success && formulaResult.data !== null) {
-                    savedFormulas = JSON.stringify(formulaResult.data);
-                }
-                const medicineResult = await window.electronAPI.getUserData('local_medicines');
-                if (medicineResult.success && medicineResult.data !== null) {
-                    savedMedicines = JSON.stringify(medicineResult.data);
-                }
+                try {
+                    const formulaResult = await window.electronAPI.getUserData('local_formulas');
+                    if (formulaResult.success && formulaResult.data !== null) {
+                        savedFormulas = JSON.stringify(formulaResult.data);
+                    }
+                    const medicineResult = await window.electronAPI.getUserData('local_medicines');
+                    if (medicineResult.success && medicineResult.data !== null) {
+                        savedMedicines = JSON.stringify(medicineResult.data);
+                    }
+                } catch(e) { console.warn('Electron getUserData 失败，使用 localStorage:', e); }
             }
             
             formulas = safeParseJSON(savedFormulas, []);
             
-            // 根据用户权限加载处方数据
-            if (currentUser && currentUser.role === 'admin') {
-                // 管理员：加载所有处方
-                prescriptionHistory = await getAllUserPrescriptions();
-            } else {
-                // 普通用户：只加载自己的处方
-                prescriptionHistory = await getAllUserPrescriptions(currentUser?.username || '');
+            // 根据用户权限加载处方数据（try/catch 保护）
+            try {
+                if (currentUser && currentUser.role === 'admin') {
+                    // 管理员：加载所有处方
+                    prescriptionHistory = await getAllUserPrescriptions();
+                } else {
+                    // 普通用户：只加载自己的处方
+                    prescriptionHistory = await getAllUserPrescriptions(currentUser?.username || '');
+                }
+            } catch(e) {
+                console.warn('getAllUserPrescriptions 失败，跳过:', e);
+                prescriptionHistory = [];
             }
             
             defaultMedicines = [
@@ -3013,6 +3020,25 @@ if (window.Permission) {
         setTimeout(__medicineTableFirewall, 500);
         setTimeout(__medicineTableFirewall, 2000);
         setTimeout(__medicineTableFirewall, 5000);
+
+        // 药物数据防火墙 - 确保药物数据总是被加载（即使 loadData 失败）
+        function __medicinesFirewall() {
+            try {
+                if (typeof medicines === 'undefined' || !medicines || medicines.length === 0) {
+                    if (typeof defaultMedicines !== 'undefined' && defaultMedicines && defaultMedicines.length > 0) {
+                        medicines = defaultMedicines;
+                        if (typeof buildMedicineMap === 'function') buildMedicineMap();
+                        console.log('[药物防火墙] 已从 defaultMedicines 恢复药物数据:', medicines.length);
+                    } else if (typeof loadData === 'function' && typeof currentUser !== 'undefined' && currentUser) {
+                        // 用户已登录但药物数据为空，尝试重新加载
+                        loadData().catch(e => console.warn('[药物防火墙] loadData 重试失败:', e));
+                    }
+                }
+            } catch(e) { console.error('[药物防火墙] 异常:', e); }
+        }
+        setTimeout(__medicinesFirewall, 1000);
+        setTimeout(__medicinesFirewall, 3000);
+        setTimeout(__medicinesFirewall, 6000);
 
         function renderPrescriptionTable() {
             if (!DOM_CACHE.prescriptionBody) {
