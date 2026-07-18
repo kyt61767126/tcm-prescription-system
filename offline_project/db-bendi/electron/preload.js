@@ -46,6 +46,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     saveUserData: (key, data) => ipcRenderer.invoke('save-user-data', key, data),
     getUserData: (key) => ipcRenderer.invoke('get-user-data', key),
 
+    // 安全存储（safeStorage）- P0-2: 基于 Windows DPAPI 的系统级加密
+    // 用于替代 auth-core.js 中旧的硬编码盐 XOR 加密（PWDv1/PWDv2）
+    safeStorageAvailable: () => ipcRenderer.invoke('auth:safeStorageAvailable'),
+    encryptString: (plaintext) => ipcRenderer.invoke('auth:encryptString', plaintext),
+    decryptString: (encryptedBase64) => ipcRenderer.invoke('auth:decryptString', encryptedBase64),
+
     // 登录态
     loginSuccess: (userData) => ipcRenderer.invoke('login-success', userData),
     getCurrentUser: () => ipcRenderer.invoke('get-current-user'),

@@ -469,11 +469,19 @@
                     localStorage.removeItem('rememberedUsername');
                 }
 
-                // 记住密码（P1-2 修复：移除明文密码回退分支，AuthCore 不可用时拒绝保存）
+                // 记住密码（P0-2: 优先 safeStorage 系统级加密；P1-2: 移除明文回退分支，AuthCore 不可用时拒绝保存）
                 const rememberPassword = document.getElementById('rememberPassword');
                 if (rememberPassword && rememberPassword.checked) {
                     if (window.AuthCore && AuthCore.encryptPassword) {
-                        localStorage.setItem('auth:savedPassword', AuthCore.encryptPassword(password));
+                        // P0-2: encryptPassword 现已为 async（优先 safeStorage，降级 XOR PWDv2）
+                        const encryptedPwd = await AuthCore.encryptPassword(password);
+                        if (encryptedPwd) {
+                            localStorage.setItem('auth:savedPassword', encryptedPwd);
+                        } else {
+                            console.warn('[auth] 密码加密失败，已拒绝保存密码');
+                            localStorage.removeItem('auth:savedPassword');
+                            rememberPassword.checked = false;
+                        }
                     } else {
                         // 加密模块未就绪，不保存密码，避免明文持久化导致 XSS 泄露
                         console.warn('[auth] AuthCore.encryptPassword 不可用，已拒绝保存密码');
@@ -514,7 +522,7 @@
             }
         }
 
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('loginBtn').addEventListener('click', handleLogin);
             document.getElementById('cancelBtn').addEventListener('click', handleCancel);
             document.getElementById('loginPassword').addEventListener('keydown', (e) => {
@@ -526,14 +534,33 @@
             loadClinicName().catch(e => console.warn('loadClinicName失败:', e));
             initLoginFields().catch(e => console.warn('initLoginFields失败:', e));
             initLoginPermissions();
+            // P0-2: 兼容 SAFE:/PWDv2:/PWDv1: 加密格式（均为 AuthCore 加密）
             let savedPassword = localStorage.getItem('auth:savedPassword');
             if (savedPassword) {
-                if (window.AuthCore && AuthCore.decryptPassword && savedPassword.startsWith('PWDv1:')) {
-                    savedPassword = AuthCore.decryptPassword(savedPassword);
+                if (window.AuthCore && AuthCore.decryptPassword &&
+                    (savedPassword.startsWith('SAFE:') || savedPassword.startsWith('PWDv1:') || savedPassword.startsWith('PWDv2:'))) {
+                    try {
+                        // P0-2: decryptPassword 现已为 async（safeStorage 优先，降级 XOR）
+                        const decrypted = await AuthCore.decryptPassword(savedPassword);
+                        if (decrypted) {
+                            savedPassword = decrypted;
+                        } else {
+                            // 解密失败（如跨用户/跨机器迁移）：清空保存的密码，让用户重新输入
+                            console.warn('[auth] 保存的密码解密失败，请重新输入');
+                            localStorage.removeItem('auth:savedPassword');
+                            savedPassword = '';
+                        }
+                    } catch (e) {
+                        console.warn('[auth] 解密保存密码异常:', e);
+                        localStorage.removeItem('auth:savedPassword');
+                        savedPassword = '';
+                    }
                 }
-                document.getElementById('loginPassword').value = savedPassword;
-                const rememberPassword = document.getElementById('rememberPassword');
-                if (rememberPassword) rememberPassword.checked = true;
+                if (savedPassword) {
+                    document.getElementById('loginPassword').value = savedPassword;
+                    const rememberPassword = document.getElementById('rememberPassword');
+                    if (rememberPassword) rememberPassword.checked = true;
+                }
             }
         });
     </script>

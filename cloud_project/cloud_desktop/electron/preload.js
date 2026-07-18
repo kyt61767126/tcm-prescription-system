@@ -116,6 +116,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return ipcRenderer.invoke('get-user-data', key);
     },
 
+    // 安全存储（safeStorage）- P0-2: 基于 Windows DPAPI 的系统级加密
+    // 用于替代 auth-core.js 中旧的硬编码盐 XOR 加密（PWDv1/PWDv2）
+    safeStorageAvailable: () => {
+        return ipcRenderer.invoke('auth:safeStorageAvailable');
+    },
+
+    encryptString: (plaintext) => {
+        return ipcRenderer.invoke('auth:encryptString', plaintext);
+    },
+
+    decryptString: (encryptedBase64) => {
+        return ipcRenderer.invoke('auth:decryptString', encryptedBase64);
+    },
+
     // ---------- 本地离线数据库 ----------
     localDB: {
         ready: () => ipcRenderer.invoke('localdb:ready'),

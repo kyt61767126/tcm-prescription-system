@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, session } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, session, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
@@ -245,6 +245,45 @@ ipcMain.handle('quit-app', async () => {
     saveLoginState(false);
     app.quit();
     return { success: true };
+});
+
+// ===================== 安全存储（safeStorage）=====================
+// P0-2: 使用 Electron safeStorage API（基于 Windows DPAPI）加密敏感数据
+// 替代旧的硬编码盐值 XOR 加密（PWDv1/PWDv2）
+// 数据仅在当前用户/机器可解密，复制到其他机器无效
+ipcMain.handle('auth:safeStorageAvailable', () => {
+    try {
+        return safeStorage.isEncryptionAvailable();
+    } catch (e) {
+        console.error('safeStorage 检测失败:', e);
+        return false;
+    }
+});
+
+// 加密字符串 -> 返回 base64（前缀 'SAFE:' 由调用方添加）
+ipcMain.handle('auth:encryptString', (event, plaintext) => {
+    try {
+        if (!plaintext) return null;
+        if (!safeStorage.isEncryptionAvailable()) return null;
+        const buf = safeStorage.encryptString(String(plaintext));
+        return buf.toString('base64');
+    } catch (e) {
+        console.error('safeStorage 加密失败:', e);
+        return null;
+    }
+});
+
+// 解密 base64 字符串 -> 返回明文（失败返回 null）
+ipcMain.handle('auth:decryptString', (event, encryptedBase64) => {
+    try {
+        if (!encryptedBase64) return null;
+        if (!safeStorage.isEncryptionAvailable()) return null;
+        const buf = Buffer.from(String(encryptedBase64), 'base64');
+        return safeStorage.decryptString(buf);
+    } catch (e) {
+        console.error('safeStorage 解密失败:', e);
+        return null;
+    }
 });
 
 app.on('window-all-closed', () => {
