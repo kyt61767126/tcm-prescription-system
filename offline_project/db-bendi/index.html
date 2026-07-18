@@ -721,6 +721,8 @@ let currentUser = null;
                     resolve(db);
                     return;
                 }
+                let timeoutId = null;
+                let settled = false;
                 const request = indexedDB.open(DB_NAME, DB_VERSION);
                 request.onupgradeneeded = function(event) {
                     const database = event.target.result;
@@ -736,13 +738,29 @@ let currentUser = null;
                     }
                 };
                 request.onsuccess = function(event) {
+                    if (settled) return;
+                    settled = true;
+                    if (timeoutId) clearTimeout(timeoutId);
                     db = event.target.result;
                     resolve(db);
                 };
                 request.onerror = function(event) {
+                    if (settled) return;
+                    settled = true;
+                    if (timeoutId) clearTimeout(timeoutId);
                     console.error('[IndexedDB] 数据库打开失败:', event.target.error);
                     reject(event.target.error);
                 };
+                request.onblocked = function(event) {
+                    console.warn('[IndexedDB] 数据库打开被阻塞:', event);
+                };
+                // 超时保护：3秒内未打开成功则失败，避免永久挂起
+                timeoutId = setTimeout(() => {
+                    if (settled) return;
+                    settled = true;
+                    console.warn('[IndexedDB] 打开超时（3s），降级使用 localStorage');
+                    reject(new Error('IndexedDB open timeout'));
+                }, 3000);
             });
         }
 
@@ -2004,15 +2022,19 @@ let currentUser = null;
             
             formulas = safeParseJSON(savedFormulas, []);
             
-            // 根据用户权限加载处方数据（try/catch 保护）
+            // 根据用户权限加载处方数据（try/catch + 超时保护，防止 IndexedDB 挂起导致 defaultMedicines 不被赋值）
             try {
-                if (currentUser && currentUser.role === 'admin') {
-                    // 管理员：加载所有处方
-                    prescriptionHistory = await getAllUserPrescriptions();
-                } else {
-                    // 普通用户：只加载自己的处方
-                    prescriptionHistory = await getAllUserPrescriptions(currentUser?.username || '');
-                }
+                const loadPrescriptions = async () => {
+                    if (currentUser && currentUser.role === 'admin') {
+                        return await getAllUserPrescriptions();
+                    } else {
+                        return await getAllUserPrescriptions(currentUser?.username || '');
+                    }
+                };
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => reject(new Error('处方加载超时')), 5000);
+                });
+                prescriptionHistory = await Promise.race([loadPrescriptions(), timeoutPromise]);
             } catch(e) {
                 console.warn('getAllUserPrescriptions 失败，跳过:', e);
                 prescriptionHistory = [];
