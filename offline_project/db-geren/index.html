@@ -120,21 +120,23 @@
         .system-title { font-size: 15px; font-weight: bold; color: white; text-shadow: 1px 1px 3px rgba(0,0,0,0.4); letter-spacing: 1.5px; }
         .version-tag { font-size: 10px; font-weight: bold; color: white; text-shadow: 1px 1px 2px rgba(0,0,0,0.4); }
         .main-content { position: relative; z-index: 1; display: flex; align-items: flex-start; justify-content: center; height: calc(100% - 52px); padding: 2px 13px 0; }
-        .login-box { background: rgba(255,255,255,0.95); border-radius: 7px; padding: 12px 15px 15px; width: 100%; max-width: 150px; box-shadow: 0 3px 10px rgba(74, 144, 217, 0.3); border: 1.5px solid #7ab8f5; }
+        .login-box { background: rgba(255,255,255,0.95); border-radius: 7px; padding: 12px 15px 15px; width: 100%; max-width: 280px; box-shadow: 0 3px 10px rgba(74, 144, 217, 0.3); border: 1.5px solid #7ab8f5; }
         .login-field { margin-bottom: 13px; display: flex; align-items: center; gap: 8px; }
-        .login-field label { width: 33px; font-size: 10px; font-weight: bold; color: #333; text-align: left; white-space: nowrap; line-height: 1.2; }
-        .login-field input, .login-field select { flex: 0.6667; padding: 6px 8px; border: 1.5px solid #4a90d9; border-radius: 4px; font-size: 10px; background: white; min-width: 66px; }
+        .login-field label { width: 42px; font-size: 11px; font-weight: bold; color: #333; text-align: left; white-space: nowrap; line-height: 1.2; }
+        .login-field input, .login-field select { flex: 1; padding: 6px 8px; border: 1.5px solid #4a90d9; border-radius: 4px; font-size: 12px; background: white; min-width: 66px; }
         .login-field input:focus, .login-field select:focus { border-color: #667eea; outline: none; box-shadow: 0 0 5px rgba(102, 126, 234, 0.5); }
-        .login-field.remember-me { justify-content: flex-start; gap: 4px; margin-bottom: 8px; margin-left: 0; }
-        .login-field.remember-me input[type="checkbox"] { flex: none; width: 12px; height: 12px; accent-color: #667eea; cursor: pointer; margin: 0; }
-        .login-field.remember-me label { flex: none; width: auto; font-size: 8px; font-weight: normal; color: #666; cursor: pointer; }
-        .login-buttons { display: flex; gap: 13px; justify-content: center; margin-top: 17px; }
-        .login-btn { padding: 5px 15px; min-width: 53px; background: linear-gradient(180deg, #6cb3f0 0%, #4a90d9 100%); color: #fff; border: 1.5px solid #357abd; border-radius: 4px; font-size: 9px; font-weight: bold; cursor: pointer; box-shadow: 1.5px 2px 4px rgba(0, 82, 152, 0.35); transition: all 0.2s; }
+        .login-field.remember-me { justify-content: flex-start; gap: 6px; margin-bottom: 10px; margin-left: 0; }
+        .login-field.remember-me input[type="checkbox"] { flex: none; width: 14px; height: 14px; accent-color: #667eea; cursor: pointer; margin: 0; }
+        .login-field.remember-me label { flex: none; width: auto; font-size: 11px; font-weight: normal; color: #666; cursor: pointer; }
+        .login-buttons { display: flex; gap: 15px; justify-content: center; margin-top: 15px; }
+        .login-btn { padding: 6px 20px; min-width: 60px; background: linear-gradient(180deg, #6cb3f0 0%, #4a90d9 100%); color: #fff; border: 1.5px solid #357abd; border-radius: 4px; font-size: 12px; font-weight: bold; cursor: pointer; box-shadow: 1.5px 2px 4px rgba(0, 82, 152, 0.35); transition: all 0.2s; }
         .login-btn:hover { background: linear-gradient(180deg, #8dc8f7 0%, #6cb3f0 100%); transform: translateY(-0.5px); }
-        .login-footer { text-align: center; margin-top: 8px; font-size: 8px; color: #666; }
+        .login-btn.cancel { background: linear-gradient(180deg, #e0e0e0 0%, #bdbdbd 100%); color: #555; border: 1.5px solid #999; box-shadow: 1px 1.5px 3px rgba(0, 0, 0, 0.2); }
+        .login-btn.cancel:hover { background: linear-gradient(180deg, #eee 0%, #d0d0d0 100%); }
+        .login-footer { text-align: center; margin-top: 8px; font-size: 10px; color: #666; }
         .clinic-info { text-align: center; padding: 8px 10px; background: linear-gradient(180deg, #fff5f5 0%, #ffeaea 100%); border: 1px solid #ffcccc; border-radius: 4px; margin-bottom: 13px; }
-        .clinic-info-name { font-size: 11px; font-weight: bold; color: #8b0000; margin-bottom: 2px; }
-        .login-error { color: #dc2626; font-size: 7px; text-align: center; margin-top: 7px; padding: 4px; background: #fff5f5; border-radius: 2px; border: 1px solid #fcc; display: none; }
+        .clinic-info-name { font-size: 13px; font-weight: bold; color: #8b0000; margin-bottom: 2px; }
+        .login-error { color: #dc2626; font-size: 10px; text-align: center; margin-top: 7px; padding: 4px; background: #fff5f5; border-radius: 2px; border: 1px solid #fcc; display: none; }
         .login-links a:hover { text-decoration: underline; }
         .user-modal-content { width: 400px; }
         .form-group { margin: 15px 0; text-align: left; }
