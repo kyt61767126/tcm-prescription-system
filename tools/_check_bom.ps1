@@ -1,4 +1,4 @@
-$files = @(
+﻿$files = @(
     'cloud_project\cloud_app\app\src\main\assets\video-recorder-inject.js',
     'cloud_project\cloud_app\app\src\main\assets\capacitor.config.json'
 )

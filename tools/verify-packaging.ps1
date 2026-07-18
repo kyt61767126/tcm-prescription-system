@@ -1,4 +1,4 @@
-# verify-packaging.ps1 - Verify encoding integrity of packaging files
+﻿# verify-packaging.ps1 - Verify encoding integrity of packaging files
 # Usage: powershell -File tools\verify-packaging.ps1
 # Exit code: 0 = all pass, 1 = issues found
 #
