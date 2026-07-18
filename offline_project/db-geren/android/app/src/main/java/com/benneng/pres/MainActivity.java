@@ -218,7 +218,9 @@ public class MainActivity extends AppCompatActivity {
         s.setAllowContentAccess(true);
         s.setAllowFileAccessFromFileURLs(true);
         s.setAllowUniversalAccessFromFileURLs(true);
-        s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        // 允许 file:// 页面加载 http://local-media/ 资源（内嵌视频播放需要）
+        // shouldInterceptRequest 会拦截并返回本地文件流，不存在真实网络请求
+        s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         s.setTextZoom(100);
         s.setSupportZoom(false);
         s.setBuiltInZoomControls(false);
@@ -378,42 +380,142 @@ public class MainActivity extends AppCompatActivity {
 
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, String url) {
-                // 拦截本地媒体文件请求：http://local-media/ + 路径
-                // 用于视频内嵌播放（避免 base64 data URL 在 Android WebView 中的兼容性问题）
-                if (url != null && url.startsWith("http://local-media/")) {
-                    try {
-                        String filePath = url.substring("http://local-media/".length());
-                        // URL 解码
-                        filePath = java.net.URLDecoder.decode(filePath, "UTF-8");
-                        // 路径白名单校验
-                        if (!isMediaPathAllowed(filePath)) {
-                            Log.w(TAG, "媒体路径不在白名单内: " + filePath);
-                            return null;
-                        }
-                        File file = new File(filePath);
-                        if (!file.exists() || !file.isFile()) {
-                            Log.w(TAG, "媒体文件不存在: " + filePath);
-                            return null;
-                        }
-                        String mimeType = guessMimeType(filePath);
-                        InputStream is = new java.io.FileInputStream(file);
-                        WebResourceResponse resp = new WebResourceResponse(mimeType, "UTF-8", is);
-                        resp.setStatusCodeAndReasonPhrase(200, "OK");
-                        resp.setResponseHeaders(new java.util.HashMap<String, String>() {{
-                            put("Access-Control-Allow-Origin", "*");
-                            put("Accept-Ranges", "bytes");
-                        }});
-                        return resp;
-                    } catch (Exception e) {
-                        Log.e(TAG, "拦截媒体请求失败: " + url, e);
-                        return null;
-                    }
-                }
-                return super.shouldInterceptRequest(view, url);
+                return handleMediaRequest(url, null);
+            }
+
+            @Override
+            public WebResourceResponse shouldInterceptRequest(WebView view, android.webkit.WebResourceRequest request) {
+                if (request == null) return null;
+                String url = request.getUrl() != null ? request.getUrl().toString() : null;
+                // 获取请求头（用于 Range 请求）
+                java.util.Map<String, String> headers = null;
+                try {
+                    headers = request.getRequestHeaders();
+                } catch (Throwable ignored) {}
+                return handleMediaRequest(url, headers);
             }
         });
 
         webView.loadUrl(LOCAL_INDEX);
+    }
+
+    /**
+     * 处理本地媒体文件请求（http://local-media/ + 路径）
+     * 支持 Range 请求（视频 seek 必需），返回 200 或 206
+     */
+    private WebResourceResponse handleMediaRequest(String url, java.util.Map<String, String> headers) {
+        if (url == null || !url.startsWith("http://local-media/")) {
+            return null;
+        }
+        try {
+            String filePath = url.substring("http://local-media/".length());
+            filePath = java.net.URLDecoder.decode(filePath, "UTF-8");
+            if (!isMediaPathAllowed(filePath)) {
+                Log.w(TAG, "媒体路径不在白名单内: " + filePath);
+                return null;
+            }
+            File file = new File(filePath);
+            if (!file.exists() || !file.isFile()) {
+                Log.w(TAG, "媒体文件不存在: " + filePath);
+                return null;
+            }
+            String mimeType = guessMimeType(filePath);
+            long fileLen = file.length();
+
+            // 解析 Range 请求头（HTML5 video 通常会发送）
+            long start = 0;
+            long end = fileLen - 1;
+            boolean hasRange = false;
+            if (headers != null) {
+                for (java.util.Map.Entry<String, String> e : headers.entrySet()) {
+                    if (e.getKey() != null && e.getKey().equalsIgnoreCase("Range") && e.getValue() != null) {
+                        String val = e.getValue().trim();
+                        if (val.startsWith("bytes=")) {
+                            String range = val.substring(6);
+                            int dash = range.indexOf('-');
+                            if (dash >= 0) {
+                                try {
+                                    String s = range.substring(0, dash).trim();
+                                    String e2 = range.substring(dash + 1).trim();
+                                    if (!s.isEmpty()) start = Long.parseLong(s);
+                                    if (!e2.isEmpty()) end = Long.parseLong(e2);
+                                    hasRange = true;
+                                } catch (Exception ignored) {}
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 修正 end 边界
+            if (end < 0 || end >= fileLen) end = fileLen - 1;
+            if (start < 0) start = 0;
+            if (start > end) start = 0;
+
+            long contentLen = end - start + 1;
+            final long startOffset = start;
+            final long limit = contentLen;
+
+            // 使用 RandomAccessFile 包装成 InputStream，支持从指定位置读取指定长度
+            // 这样既能 seek 到 Range 请求的 start 位置，又能限制读取长度（206 响应）
+            java.io.InputStream inputStream = new java.io.InputStream() {
+                private java.io.RandomAccessFile raf;
+                private long remaining;
+                private boolean initialized = false;
+                private void ensureInit() throws java.io.IOException {
+                    if (!initialized) {
+                        raf = new java.io.RandomAccessFile(file, "r");
+                        raf.seek(startOffset);
+                        remaining = limit;
+                        initialized = true;
+                    }
+                }
+                @Override
+                public int read() throws java.io.IOException {
+                    ensureInit();
+                    if (remaining <= 0) return -1;
+                    int b = raf.read();
+                    if (b >= 0) remaining--;
+                    return b;
+                }
+                @Override
+                public int read(byte[] b, int off, int len) throws java.io.IOException {
+                    ensureInit();
+                    if (remaining <= 0) return -1;
+                    int toRead = (int) Math.min(len, remaining);
+                    int n = raf.read(b, off, toRead);
+                    if (n > 0) remaining -= n;
+                    return n;
+                }
+                @Override
+                public void close() throws java.io.IOException {
+                    if (raf != null) {
+                        try { raf.close(); } catch (Exception ignored) {}
+                    }
+                }
+            };
+
+            // 视频是二进制流，encoding 必须为 null（不能是 UTF-8）
+            WebResourceResponse resp = new WebResourceResponse(mimeType, null, inputStream);
+
+            final java.util.Map<String, String> respHeaders = new java.util.HashMap<>();
+            respHeaders.put("Access-Control-Allow-Origin", "*");
+            respHeaders.put("Accept-Ranges", "bytes");
+            respHeaders.put("Content-Length", String.valueOf(contentLen));
+
+            if (hasRange) {
+                // 206 Partial Content（视频 seek 需要）
+                resp.setStatusCodeAndReasonPhrase(206, "Partial Content");
+                respHeaders.put("Content-Range", "bytes " + start + "-" + end + "/" + fileLen);
+            } else {
+                resp.setStatusCodeAndReasonPhrase(200, "OK");
+            }
+            resp.setResponseHeaders(respHeaders);
+            return resp;
+        } catch (Exception e) {
+            Log.e(TAG, "拦截媒体请求失败: " + url, e);
+            return null;
+        }
     }
 
     /**
