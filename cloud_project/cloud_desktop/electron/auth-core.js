@@ -406,6 +406,18 @@
         }));
     }
 
+    // P0 修复：构造完整 Authorization header 值
+    // 云端登录后 user.token 存在 → 返回 Bearer token
+    // 离线模式无 token → 回退到 Basic base64 payload
+    function buildAuthHeader(user) {
+        const u = user || null;
+        if (u && u.token) {
+            return `Bearer ${u.token}`;
+        }
+        const payload = buildAuthPayload(u);
+        return payload ? `Basic ${payload}` : null;
+    }
+
     // ==================== 会话管理层 ====================
 
     async function checkSession() {
@@ -473,6 +485,10 @@
                     : response;
                 if (!data || !data.success || !data.user) {
                     return { success: false, error: (data && data.error) || '用户名或密码错误' };
+                }
+                // P0 修复：保存后端返回的 Bearer token，供后续 API 调用使用
+                if (data.token) {
+                    data.user.token = data.token;
                 }
                 return { success: true, user: data.user };
             } catch (e) {
@@ -686,6 +702,7 @@
         isClinicAdmin,
         isPlatformAdmin,
         buildAuthPayload,
+        buildAuthHeader,
 
         // 会话管理
         checkSession,

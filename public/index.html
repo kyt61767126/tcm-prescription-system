@@ -1736,7 +1736,7 @@ if (window.Permission) {
             _timer: null,
             _authHeader() {
                 if (!currentUser) return null;
-                try { return 'Basic ' + buildAuthPayload(currentUser); } catch (e) { return null; }
+                try { return buildAuthHeader(currentUser); } catch (e) { return null; }
             },
             // 带超时的 fetch（防止网络卡死）
             async _fetchWithTimeout(url, options = {}, timeout = 30000) {
@@ -2067,8 +2067,15 @@ if (window.Permission) {
             return safeBtoa(JSON.stringify(payload));
         }
 
+        // P0 修复：构造完整 Authorization header 值
+        // 云端登录后 user.token 存在 → 返回 Bearer token（后端仅识别 Bearer）
+        // 离线模式无 token → 回退到 Basic base64 payload
         function buildAuthHeader(user) {
-            const payload = buildAuthPayload(user || currentUser);
+            const u = user || currentUser;
+            if (u && u.token) {
+                return `Bearer ${u.token}`;
+            }
+            const payload = buildAuthPayload(u);
             return payload ? ('Basic ' + payload) : null;
         }
 
@@ -2328,10 +2335,10 @@ if (window.Permission) {
         async function getUsersFromCloud() {
             try {
                 // GET /api/users 需带认证头（platform_admin / clinic_admin / doctor 均可，按角色返回可见用户）
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 if (!authToken) return null;
                 const response = await cloudFetch(`${CLOUD_API_BASE}/users`, {
-                    headers: { 'Authorization': `Basic ${authToken}` }
+                    headers: { 'Authorization': authToken }
                 });
                 if (response.success && response.data) {
                     return response.data;
@@ -2346,11 +2353,11 @@ if (window.Permission) {
         async function saveUsersToCloud(users) {
             try {
                 // 添加认证头
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/users`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': authToken,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ users: users })
@@ -2538,10 +2545,10 @@ if (window.Permission) {
                 console.log('请求处方API:', url);
                 
                 // 添加认证头（使用 safeBtoa 处理中文字符）
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const response = await cloudFetch(url, {
                     headers: {
-                        'Authorization': `Basic ${authToken}`
+                        'Authorization': authToken
                     }
                 });
                 console.log('处方API响应:', response);
@@ -2619,9 +2626,9 @@ if (window.Permission) {
                 // 添加认证头（即使GET请求不需要认证，保持一致性）
                 const options = {};
                 if (currentUser) {
-                    const authToken = buildAuthPayload(currentUser);
+                    const authToken = buildAuthHeader(currentUser);
                     options.headers = {
-                        'Authorization': `Basic ${authToken}`
+                        'Authorization': authToken
                     };
                 }
                 
@@ -2657,11 +2664,11 @@ if (window.Permission) {
                     console.warn('Only admin can save medicines');
                     return false;
                 }
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/medicines`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': authToken,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ medicines })
@@ -2714,9 +2721,9 @@ if (window.Permission) {
                 const url = `${CLOUD_API_BASE}/formulas`;
                 const options = {};
                 if (currentUser) {
-                    const authToken = buildAuthPayload(currentUser);
+                    const authToken = buildAuthHeader(currentUser);
                     options.headers = {
-                        'Authorization': `Basic ${authToken}`
+                        'Authorization': authToken
                     };
                 }
                 const response = await cloudFetch(url, options);
@@ -2747,11 +2754,11 @@ if (window.Permission) {
                     console.warn('User not logged in');
                     return false;
                 }
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const response = await cloudFetch(`${CLOUD_API_BASE}/formulas`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': authToken,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ formulas })
@@ -2823,10 +2830,10 @@ if (window.Permission) {
                 // 2) both 模式在线：直连云端，成功后回写本地 synced=1
                 if (canOffline && mode === 'both' && isOnline) {
                     try {
-                        const authToken = buildAuthPayload(currentUser);
+                        const authToken = buildAuthHeader(currentUser);
                         const data = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`, {
                             method: 'POST',
-                            headers: { 'Authorization': `Basic ${authToken}` },
+                            headers: { 'Authorization': authToken },
                             body: JSON.stringify({ prescription: arr })
                         });
                         if (data.success) {
@@ -2908,10 +2915,10 @@ if (window.Permission) {
                 }
 
                 // 4) cloud 模式或非 Capacitor 环境：原纯云端逻辑
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const data = await cloudFetch(`${CLOUD_API_BASE}/prescriptions`, {
                     method: 'POST',
-                    headers: { 'Authorization': `Basic ${authToken}` },
+                    headers: { 'Authorization': authToken },
                     body: JSON.stringify({ prescription: arr })
                 });
                 if (data.success) return data;
@@ -2954,12 +2961,12 @@ if (window.Permission) {
                 }
 
                 // 3) both 模式在线 / cloud 模式 / 非 Capacitor：直连云端 DELETE
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const url = `${CLOUD_API_BASE}/prescriptions?id=${prescriptionId}`;
                 const response = await cloudFetch(url, {
                     method: 'DELETE',
                     headers: {
-                        'Authorization': `Basic ${authToken}`
+                        'Authorization': authToken
                     }
                 });
                 if (response.success && canOffline) {
@@ -3526,11 +3533,11 @@ if (window.Permission) {
             // 修改密码：调用后端 change-password 端点
             if (changePassword) {
                 try {
-                    const authToken = buildAuthPayload(currentUser);
+                    const authToken = buildAuthHeader(currentUser);
                     const response = await cloudFetch(`${CLOUD_API_BASE}/users?action=change-password`, {
                         method: 'POST',
                         headers: {
-                            'Authorization': `Basic ${authToken}`,
+                            'Authorization': authToken,
                             'Content-Type': 'application/json'
                         },
                         body: JSON.stringify({
@@ -3644,9 +3651,9 @@ if (window.Permission) {
             params.set('_t', Date.now());
 
             try {
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const resp = await cloudFetch(`${CLOUD_API_BASE}/platform-prescriptions?${params}`, {
-                    headers: { 'Authorization': `Basic ${authToken}` }
+                    headers: { 'Authorization': authToken }
                 });
                 if (!resp || !resp.success) {
                     listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载失败：' + escapeHtml(resp?.error || '未知错误') + '</div>';
@@ -3836,9 +3843,9 @@ if (window.Permission) {
             if (!listEl) return;
             listEl.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载中...</div>';
             try {
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinics=true`, {
-                    headers: { 'Authorization': `Basic ${authToken}` }
+                    headers: { 'Authorization': authToken }
                 });
                 if (!resp || !resp.success || !Array.isArray(resp.data)) {
                     listEl.innerHTML = '<div style="text-align:center;color:#dc2626;padding:20px;">加载失败：' + escapeHtml(resp?.error || '未知错误') + '</div>';
@@ -3892,11 +3899,11 @@ if (window.Permission) {
             }
 
             try {
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinic=create`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': authToken,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
@@ -3925,11 +3932,11 @@ if (window.Permission) {
             const action = newStatus === 'active' ? '启用' : '停用';
             if (!confirm('确定' + action + '该诊所？')) return;
             try {
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinic=update`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': authToken,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ clinicId, status: newStatus })
@@ -3974,7 +3981,7 @@ if (window.Permission) {
                 return;
             }
             try {
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const body = { clinicId, name };
                 if (adminUsername !== _editClinicCtx.adminUsername) body.adminUsername = adminUsername;
                 if (adminName && adminName !== _editClinicCtx.adminName) body.adminName = adminName;
@@ -3982,7 +3989,7 @@ if (window.Permission) {
                 const resp = await cloudFetch(`${CLOUD_API_BASE}/users?clinic=update`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': authToken,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify(body)
@@ -4014,9 +4021,9 @@ if (window.Permission) {
 
         async function loadPrescriptionStats() {
             try {
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const resp = await cloudFetch(`${CLOUD_API_BASE}/prescriptions?stats=true&_t=${Date.now()}`, {
-                    headers: { 'Authorization': `Basic ${authToken}` }
+                    headers: { 'Authorization': authToken }
                 });
                 if (resp && resp.success && resp.stats) {
                     document.getElementById('statsTodayCount').textContent = resp.stats.todayCount;
@@ -4034,9 +4041,9 @@ if (window.Permission) {
             const listEl = document.getElementById('clinicPrescriptionList');
             listEl.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载中...</div>';
             try {
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const resp = await cloudFetch(`${CLOUD_API_BASE}/prescriptions?_t=${Date.now()}`, {
-                    headers: { 'Authorization': `Basic ${authToken}` }
+                    headers: { 'Authorization': authToken }
                 });
                 if (resp && resp.success && resp.data) {
                     _clinicPrescriptionCache = resp.data;
@@ -4178,12 +4185,12 @@ if (window.Permission) {
 
                     // 更新处方记录（带上mediaFiles字段重新POST）
                     const updatedRecord = { ...savedRecord, mediaFiles };
-                    const authToken = btoa(currentUser.username + ':' + (currentUser.token || ''));
+                    const authToken = buildAuthHeader(currentUser);
                     await fetch(CLOUD_API_BASE + '/prescriptions', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
-                            'Authorization': 'Basic ' + authToken
+                            'Authorization': authToken
                         },
                         body: JSON.stringify({ prescription: [updatedRecord] })
                     });
@@ -5652,13 +5659,13 @@ if (window.Permission) {
                     return null;
                 }
                 
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const url = `${CLOUD_API_BASE}/prescriptions?user=${encodeURIComponent(currentUser.username)}`;
 
                 try {
                     const data = await cloudFetch(url, {
                         method: 'GET',
-                        headers: { 'Authorization': `Basic ${authToken}` }
+                        headers: { 'Authorization': authToken }
                     });
 
                     if (data.success && data.nextPrescriptionNo) {
@@ -8705,11 +8712,11 @@ IconFile=${scriptPath}`;
             }
             const newVal = !m.priority_use;
             try {
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const resp = await cloudFetch(`${CLOUD_API_BASE}/medicines?medicine=priority`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': authToken,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({ medicineId: m.id, priorityUse: newVal })
@@ -8736,11 +8743,11 @@ IconFile=${scriptPath}`;
                 return;
             }
             try {
-                const authToken = buildAuthPayload(currentUser);
+                const authToken = buildAuthHeader(currentUser);
                 const resp = await cloudFetch(`${CLOUD_API_BASE}/medicines?medicine=sync_platform`, {
                     method: 'POST',
                     headers: {
-                        'Authorization': `Basic ${authToken}`,
+                        'Authorization': authToken,
                         'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({})

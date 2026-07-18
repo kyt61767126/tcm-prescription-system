@@ -1950,8 +1950,10 @@ if (window.Permission) {
         }
 
         function escapeHtml(str) {
-            if (!str) return '';
-            return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+            if (str == null) return '';
+            return String(str).replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[ch]));
         }
 
         function formatPrice(val) {
@@ -2983,6 +2985,8 @@ if (window.Permission) {
 
         function addEmptyRow() {
             prescriptionItems.push(createEmptyMedicine());
+            DOM_CACHE.init();
+            renderPrescriptionTable();
         }
 
         // 药物表格防火墙 - 防止优化导致药物栏不显示
@@ -3032,7 +3036,7 @@ if (window.Permission) {
                         onfocus="startSearch(event,${index},'name')"
                         onblur="tryHideSearch()"
                         onkeyup="handleSearchKey(event,${index},'name')"
-                        style="padding:2px;text-align:left;"></td><td><input type="number" value="${item.name ? escapeHtml(item.dosage) : ''}" oninput="updateDosage(${index},this.value)" style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(item.unit) : ''}" onchange="updateUnit(${index},this.value);calculateAmount()" style="padding:2px;"></td><td><input type="text" value="${item.name ? formatPrice(item.price) : ''}" readonly style="padding:2px;"></td><td><input type="text" value="${item.name ? formatPrice(item.total) : ''}" readonly style="padding:2px;"></td><td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;" onclick="deleteRow(${index})">删</button></td></tr>`).join('');
+                        style="padding:2px;text-align:left;"></td><td><input type="number" value="${item.name ? escapeHtml(item.dosage) : ''}" oninput="updateDosage(${index},this.value)" style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(item.unit) : ''}" onchange="updateUnit(${index},this.value);calculateAmount()" style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.price)) : ''}" readonly style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.total)) : ''}" readonly style="padding:2px;"></td><td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;" onclick="deleteRow(${index})">删</button></td></tr>`).join('');
         }
 
         function startSearch(event, index, column) {
@@ -3186,7 +3190,7 @@ if (window.Permission) {
             
             prescriptionItems[index].name = name;
             prescriptionItems[index].code = code;
-            prescriptionItems[index].price = price;
+            prescriptionItems[index].price = parseFloat(price).toFixed(2);
             prescriptionItems[index].dosage = actualDosage;
             prescriptionItems[index].total = (price * actualDosage).toFixed(2);
             if (index >= prescriptionItems.length - 3) addEmptyRow();
@@ -3232,7 +3236,7 @@ if (window.Permission) {
 
         function deleteRow(index) {
             prescriptionItems.splice(index, 1);
-            if (prescriptionItems.length< 10) addEmptyRow();
+            if (prescriptionItems.length < 15) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();

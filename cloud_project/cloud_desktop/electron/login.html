@@ -445,6 +445,10 @@
                     return;
                 }
                 const user = data.user;
+                // P0 修复：保存后端返回的 Bearer token，供后续 API 调用使用
+                if (data.token) {
+                    user.token = data.token;
+                }
                 localStorage.setItem('cloud_currentUser', JSON.stringify(user));
                 if (window.AuthCore) {
                     try {
