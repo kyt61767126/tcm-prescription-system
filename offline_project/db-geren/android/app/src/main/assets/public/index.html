@@ -1253,7 +1253,7 @@ if (window.Permission) {
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             }
             if (prescriptionItems.length === 0) {
-                for (let i = 0; i< 5; i++) addEmptyRow();
+                for (let i = 0; i< 25; i++) addEmptyRow();
             }
             DOM_CACHE.init();
             renderPrescriptionTable();
@@ -2644,7 +2644,7 @@ if (window.Permission) {
             document.getElementById('doctorName').value = clinicDoctorVal;
             document.getElementById('defaultDoctor').value = clinicDoctorVal;
             document.getElementById('autoStart').checked = localStorage.getItem('local_autoStartEnabled') === 'true';
-            for (let i = 0; i< 5; i++) addEmptyRow();
+            for (let i = 0; i< 25; i++) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
@@ -3592,7 +3592,7 @@ if (window.Permission) {
                 dosage: item.dosage || 10,
                 total: item.total || 0
             }));
-            while (prescriptionItems.length< 10) addEmptyRow();
+            while (prescriptionItems.length< 25) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
@@ -3637,7 +3637,7 @@ if (window.Permission) {
             const clearRegFeeEl1 = document.getElementById('registrationFee');
             if (clearRegFeeEl1) clearRegFeeEl1.value = '';
             prescriptionItems = [];
-            for (let i = 0; i< 5; i++) addEmptyRow();
+            for (let i = 0; i< 25; i++) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
@@ -4336,7 +4336,7 @@ if (window.Permission) {
                     total: ((c.price || med?.price || 0) * c.dosage).toFixed(2)
                 };
             });
-            while (prescriptionItems.length< 10) addEmptyRow();
+            while (prescriptionItems.length< 25) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
