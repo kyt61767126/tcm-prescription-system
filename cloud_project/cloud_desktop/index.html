@@ -5894,21 +5894,14 @@ if (window.Permission) {
             document.getElementById('paperDoseCount').textContent = config.defaultDose;
             
             // 快速初始化表格（只创建必要的行）
-            for (let i = 0; i < 10; i++) addEmptyRow();
+            for (let i = 0; i < 15; i++) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
-            
+
             // 延迟加载非关键数据，不阻塞页面渲染
             document.addEventListener('keydown', handleKeyboard);
             updatePrescriptionPaper();
-            
-            // 延迟执行：补充表格行数
-            setTimeout(() => {
-                for (let i = 10; i < 25; i++) addEmptyRow();
-                DOM_CACHE.init();
-            renderPrescriptionTable();
-            }, 50);
             
             if (hasValidUser) {
                 const mainContainer = document.querySelector('.main-container');
@@ -6930,7 +6923,7 @@ if (window.Permission) {
                 dosage: item.dosage || 10,
                 total: item.total || 0
             }));
-            while (prescriptionItems.length < 25) addEmptyRow();
+            while (prescriptionItems.length < 15) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
@@ -6975,7 +6968,7 @@ if (window.Permission) {
             safeSet('medicalHistory', '');
             safeSet('diagnosis', '');
             prescriptionItems = [];
-            for (let i = 0; i < 25; i++) addEmptyRow();
+            for (let i = 0; i < 15; i++) addEmptyRow();
             try {
                 DOM_CACHE.prescriptionBody = null;
                 DOM_CACHE.medicineSearchDropdown = null;
@@ -8105,7 +8098,7 @@ IconFile=${scriptPath}`;
 
         function clearAllMedicines() {
             prescriptionItems = [];
-            for (let i = 0; i < 25; i++) {
+            for (let i = 0; i < 15; i++) {
                 prescriptionItems.push(createEmptyMedicine());
             }
             DOM_CACHE.init();
