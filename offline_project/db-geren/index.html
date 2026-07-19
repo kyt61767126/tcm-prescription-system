@@ -1256,12 +1256,28 @@ if (window.Permission) {
                         localStorage.removeItem('local_rememberedUsername');
                     }
                     
-                    // 个人版：记住密码功能（明文存储，离线APP本地存储）
+                    // 个人版：记住密码功能（P0-1 安全优化：禁止明文存储）
+                    // 使用 AuthCore.saveRememberedPassword 加密存储（safeStorage/DPAPI 优先，XOR PWDv2 降级）
+                    // 兼容旧明文 local_rememberedPassword：检测到时自动迁移到加密存储并删除
                     const rememberPassword = document.getElementById('rememberPassword')?.checked;
                     if (rememberPassword) {
-                        localStorage.setItem('local_rememberedPassword', password);
+                        if (window.AuthCore && AuthCore.saveRememberedPassword) {
+                            AuthCore.saveRememberedPassword(password).catch(e => {
+                                console.warn('加密保存密码失败:', e);
+                            });
+                        } else {
+                            // 兜底：AuthCore 未加载时降级为 sessionStorage（仅会话内有效，关闭即失效）
+                            sessionStorage.setItem('auth:savedPassword', password);
+                        }
+                        // 清除可能存在的旧明文数据
+                        localStorage.removeItem('local_rememberedPassword');
                     } else {
                         localStorage.removeItem('local_rememberedPassword');
+                        if (window.AuthCore && AuthCore.clearRememberedPassword) {
+                            AuthCore.clearRememberedPassword().catch(e => {});
+                        } else {
+                            sessionStorage.removeItem('auth:savedPassword');
+                        }
                     }
                     
                     document.getElementById('loginOverlay').style.display = 'none';
@@ -1470,9 +1486,10 @@ if (window.Permission) {
             btn2.style.display = '';
         }
 
-        // 个人版：恢复记住的用户名
-        function initRememberedCredentials() {
-            const rememberedUsername = localStorage.getItem('local_rememberedUsername');
+        // 个人版：恢复记住的用户名（P0-1：密码改为从加密存储读取）
+        async function initRememberedCredentials() {
+            const rememberedUsername = localStorage.getItem('local_rememberedUsername')
+                || localStorage.getItem('auth:rememberedUsername');
             if (rememberedUsername) {
                 const userInput = document.getElementById('loginUsername');
                 if (userInput) {
@@ -1483,8 +1500,32 @@ if (window.Permission) {
                     rememberUserCheckbox.checked = true;
                 }
             }
-            // 恢复记住的密码
-            const rememberedPassword = localStorage.getItem('local_rememberedPassword');
+            // 恢复记住的密码（优先从加密存储读取）
+            let rememberedPassword = null;
+            try {
+                if (window.AuthCore && AuthCore.getRememberedPassword) {
+                    rememberedPassword = await AuthCore.getRememberedPassword();
+                }
+            } catch (e) { console.warn('读取加密密码失败:', e); }
+
+            // 兼容旧明文数据：自动迁移到加密存储并删除明文
+            if (!rememberedPassword) {
+                const legacyPlain = localStorage.getItem('local_rememberedPassword');
+                if (legacyPlain) {
+                    rememberedPassword = legacyPlain;
+                    if (window.AuthCore && AuthCore.saveRememberedPassword) {
+                        AuthCore.saveRememberedPassword(legacyPlain).then(() => {
+                            localStorage.removeItem('local_rememberedPassword');
+                            console.log('[P0-1] 旧明文密码已迁移到加密存储并清除');
+                        }).catch(e => console.warn('迁移密码失败:', e));
+                    }
+                }
+            }
+            // 兜底：会话级存储（仅当前会话有效）
+            if (!rememberedPassword) {
+                rememberedPassword = sessionStorage.getItem('auth:savedPassword');
+            }
+
             if (rememberedPassword) {
                 const passwordInput = document.getElementById('loginPassword');
                 if (passwordInput) {
@@ -2759,8 +2800,8 @@ if (window.Permission) {
           try {
             populateUserList();
             checkLoginStatus().catch(e => console.warn('checkLoginStatus error:', e));
-            // 恢复记住的用户名/密码（登录界面显示后）
-            try { initRememberedCredentials(); } catch(e) { console.warn('initRememberedCredentials error:', e); }
+            // 恢复记住的用户名/密码（登录界面显示后；P0-1 改为 async 调用，支持加密读取）
+            initRememberedCredentials().catch(e => console.warn('initRememberedCredentials error:', e));
             // 不在init中调用loadData()，因为用户还没登录
             // loadData()会在handleLogin成功后调用
             const now = new Date();
