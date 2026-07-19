@@ -5919,6 +5919,20 @@ if (window.Permission) {
             if (doseEl3) doseEl3.value = config.defaultDose;
             document.getElementById('paperDoseCount').textContent = config.defaultDose;
             
+            // 同步初始化 medicines（避免 loadData 异步加载前用户输入简码无数据）
+            if (medicines.length === 0) {
+                const savedMedicines = localStorage.getItem('cloud_medicines');
+                if (savedMedicines) {
+                    try {
+                        const parsed = JSON.parse(savedMedicines);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            medicines = parsed;
+                            if (typeof buildMedicineMap === 'function') buildMedicineMap();
+                        }
+                    } catch (e) {}
+                }
+            }
+
             // 快速初始化表格（只创建必要的行）
             for (let i = 0; i < 15; i++) addEmptyRow();
             DOM_CACHE.init();
