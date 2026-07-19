@@ -1339,7 +1339,7 @@ if (window.Permission) {
                 }
 
                 // 使用与 login.js 完全一致的密码校验逻辑（hashPassword 直接比较 + 明文兼容）
-                // 避免因 AuthCore.verifyPassword 在混淆后行为不同导致"原密码错误"
+                // 不依赖 AuthCore.verifyPassword（混淆后行为可能与源码不一致）
                 const storedPwd = users[userIndex].password || '';
                 const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
                 let verified = false;
@@ -1351,7 +1351,14 @@ if (window.Permission) {
                     }
                 } catch(e) { console.warn('密码校验异常:', e); }
                 if (!verified) {
-                    alert('原密码错误');
+                    // 校验失败：可能是用户忘记之前修改的密码，提供重置为 admin 的选项
+                    const reset = confirm('原密码错误！\n\n是否重置密码为默认值 admin？\n（重置后可用 admin 登录，再修改为新密码）');
+                    if (reset) {
+                        const defaultUsers = getDefaultUsers();
+                        saveUsers(defaultUsers);
+                        alert('密码已重置为 admin！\n\n请点击"修改密码"重新设置新密码。');
+                        closeModal('changePwdModal');
+                    }
                     return;
                 }
 
@@ -1756,7 +1763,8 @@ if (window.Permission) {
         }
 
         async function loadData() {
-            try { await renumberHistoricalPrescriptions(); } catch(e) { console.warn('renumberHistoricalPrescriptions 失败，跳过:', e); }
+            // 后台异步执行重编号，不阻塞 loadData（避免 O(n²) 阻塞导致 5 秒超时后历史处方为空）
+            renumberHistoricalPrescriptions().catch(e => console.warn('后台重编号失败:', e));
 
             let savedFormulas = localStorage.getItem('local_formulas');
             let savedMedicines = localStorage.getItem('local_medicines');
