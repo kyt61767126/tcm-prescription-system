@@ -1311,6 +1311,16 @@ let currentUser = null;
                     return;
                 }
 
+                // 建议 13：密码复杂度校验（6-32 位，必须包含字母和数字）
+                if (newPwd.length < 6 || newPwd.length > 32) {
+                    alert('密码长度需 6-32 位');
+                    return;
+                }
+                if (!/[a-zA-Z]/.test(newPwd) || !/\d/.test(newPwd)) {
+                    alert('密码必须包含字母和数字');
+                    return;
+                }
+
                 const users = getUsers();
                 const userIndex = users.findIndex(u =>u.username === currentUser.username);
 
@@ -3114,6 +3124,83 @@ let currentUser = null;
             updatePrescriptionPaper();
             // P1-1 每日首次启动自动备份（异步，不阻塞 UI）
             dailyAutoBackup().catch(e => console.warn('[Backup] dailyAutoBackup error:', e));
+            // 建议 11/12/14/15/20：输入框增强初始化（不改 HTML，仅通过 addEventListener 绑定）
+            _initInputEnhancements();
+        }
+
+        // 输入框增强初始化函数（建议 11/12/14/15/20 集中实施）
+        function _initInputEnhancements() {
+            try {
+                // 建议 12：文本框 maxlength 限制（防止超长文本破坏排版）
+                const _setMaxLength = (id, len) => {
+                    const el = document.getElementById(id);
+                    if (el) el.maxLength = len;
+                };
+                _setMaxLength('patientName', 30);
+                _setMaxLength('patientAddress', 100);
+                _setMaxLength('diagnosis', 50);
+                _setMaxLength('medicalHistory', 500);
+                _setMaxLength('formulaName', 50);
+                _setMaxLength('formulaCode', 30);
+                _setMaxLength('formulaEffect', 200);
+                _setMaxLength('formulaIndication', 200);
+                _setMaxLength('caseNameSearch', 30);
+                _setMaxLength('medicineSearch', 30);
+                _setMaxLength('formulaSearch', 30);
+                _setMaxLength('medicineName', 50);
+                _setMaxLength('medicineCode', 30);
+                _setMaxLength('medicineUnit', 10);
+
+                // 建议 11：patientPhone/patientAge 实时清洗（300ms 防抖，同步写回 input.value）
+                const phoneElInit = document.getElementById('patientPhone');
+                if (phoneElInit) {
+                    phoneElInit.addEventListener('input', debounce(function() {
+                        const cleanPhone = phoneElInit.value.replace(/[^\d+]/g, '').slice(0, 15);
+                        if (phoneElInit.value !== cleanPhone) phoneElInit.value = cleanPhone;
+                    }, 300));
+                }
+                const ageElInit = document.getElementById('patientAge');
+                if (ageElInit) {
+                    ageElInit.addEventListener('input', debounce(function() {
+                        const cleanAge = ageElInit.value.replace(/[^\d岁个月]/g, '').slice(0, 6);
+                        if (ageElInit.value !== cleanAge) ageElInit.value = cleanAge;
+                    }, 300));
+                }
+
+                // 建议 14：formulaSearch 实时过滤（与 medicineSearch 行为对齐，200ms 防抖）
+                const formulaSearchEl = document.getElementById('formulaSearch');
+                if (formulaSearchEl && (typeof renderFormulaList === 'function')) {
+                    formulaSearchEl.addEventListener('input', debounce(renderFormulaList, 200));
+                }
+
+                // 建议 15：caseNameSearch/caseDateStart/caseDateEnd 实时响应
+                const caseNameSearchEl = document.getElementById('caseNameSearch');
+                if (caseNameSearchEl && (typeof searchCases === 'function')) {
+                    caseNameSearchEl.addEventListener('input', debounce(searchCases, 300));
+                }
+                const caseDateStartEl = document.getElementById('caseDateStart');
+                if (caseDateStartEl && (typeof searchCases === 'function')) {
+                    caseDateStartEl.addEventListener('change', searchCases);
+                }
+                const caseDateEndEl = document.getElementById('caseDateEnd');
+                if (caseDateEndEl && (typeof searchCases === 'function')) {
+                    caseDateEndEl.addEventListener('change', searchCases);
+                }
+
+                // 建议 20：loginPassword 使用 keydown 替代废弃的 keypress（仅新增监听，HTML 原有 onkeypress 保留）
+                const loginPasswordEl = document.getElementById('loginPassword');
+                if (loginPasswordEl && (typeof handleLogin === 'function')) {
+                    loginPasswordEl.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            handleLogin();
+                        }
+                    });
+                }
+            } catch (e) {
+                console.warn('[_initInputEnhancements] 初始化失败:', e);
+            }
         }
 
         async function handleBeforeUnload() {
@@ -3226,6 +3313,18 @@ let currentUser = null;
                         onblur="tryHideSearch()"
                         onkeyup="handleSearchKey(event,${index},'name')"
                         style="padding:2px;text-align:left;"></td><td><input type="number" value="${item.name ? escapeHtml(item.dosage) : ''}" oninput="updateDosage(${index},this.value)" style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(item.unit) : ''}" onchange="updateUnit(${index},this.value);calculateAmount()" style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.price)) : ''}" readonly style="padding:2px;"></td><td><input type="text" value="${item.name ? escapeHtml(formatPrice(item.total)) : ''}" readonly style="padding:2px;"></td><td><button class="small-btn" style="padding:1px 6px;font-size:10px;background:#ffdddd;" onclick="deleteRow(${index})">删</button></td></tr>`).join('');
+            // 建议 16：补齐 name-input 事件绑定（与 code-input 一致：onkeydown/onkeypress/oninput）
+            // 不修改 HTML 模板，仅通过 addEventListener 统一绑定
+            try {
+                const nameInputs = tbody.querySelectorAll('input[id^="name-input-"]');
+                nameInputs.forEach(inp => {
+                    const idx = parseInt((inp.id || '').replace('name-input-', ''), 10);
+                    if (isNaN(idx)) return;
+                    inp.addEventListener('keydown', e => handleSearchKeyDown(e, idx, 'name'));
+                    inp.addEventListener('keypress', e => handleSearchKeyPress(e, idx, 'name'));
+                    inp.addEventListener('input', e => handleInput(e, idx, 'name'));
+                });
+            } catch (e) { console.warn('name-input 事件绑定失败:', e); }
         }
 
         function startSearch(event, index, column) {
@@ -3366,12 +3465,16 @@ let currentUser = null;
                 if (filtered.length >0) {
                     selectedSearchIndex = 0;
                     dropdown.innerHTML = filtered.map((m,i) =>{
-                        const safeName = (m.name || '').replace(/[<>\"\'&]/g, '');
-                        const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
+                        // 建议 19：用 escapeHtml + escapeJs 完整转义（替代简单 replace，防止 \ / \n / \u2028 等破坏 onclick 字符串）
+                        const safeName = escapeHtml(m.name || '');
+                        const safeNameJs = escapeJs(m.name || '');
+                        const safeCode = escapeHtml(m.code || '');
+                        const safeCodeJs = escapeJs(m.code || '');
+                        const safeUnit = escapeHtml(m.unit || 'g');
                         const safePrice = parseFloat(m.price) || 0;
                         const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
                         return `<div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}"
-                                onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}</div>`;
+                                onclick="selectMedicine(${currentEditIndex},'${safeNameJs}','${safeCodeJs}',${safePrice})">${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + safeUnit}</div>`;
                     }).join('');
                     dropdown.style.display = 'block';
                 } else {
@@ -3516,7 +3619,16 @@ let currentUser = null;
             if (DOM_CACHE.grandTotal2) DOM_CACHE.grandTotal2.textContent = grandText;
         }
 
+        // 建议 10：updatePrescriptionPaper 内部防抖（150ms），减少 onkeyup 高频重渲染
+        let _updatePaperTimer = null;
         function updatePrescriptionPaper() {
+            if (_updatePaperTimer) clearTimeout(_updatePaperTimer);
+            _updatePaperTimer = setTimeout(() => {
+                _updatePaperTimer = null;
+                _updatePrescriptionPaperImpl();
+            }, 150);
+        }
+        function _updatePrescriptionPaperImpl() {
             const get = document.getElementById.bind(document);
             get('paperName').textContent = get('patientName').value;
             get('paperGender').textContent = get('patientGender').value;
@@ -4101,7 +4213,13 @@ let currentUser = null;
             const record = prescriptionHistory.find(p =>p.id === id);
             if (!record) return;
             document.getElementById('patientName').value = record.patientName;
-            document.getElementById('patientGender').value = record.patientGender || '男';
+            // 建议 21：patientGender 历史无值时从姓名推断（不强制设为"男"）
+            if (record.patientGender) {
+                document.getElementById('patientGender').value = record.patientGender;
+            } else {
+                const inferredGender = (typeof smartMatchGender === 'function') ? smartMatchGender(record.patientName || '') : '';
+                if (inferredGender) document.getElementById('patientGender').value = inferredGender;
+            }
             document.getElementById('patientAge').value = record.patientAge;
             document.getElementById('patientPhone').value = record.patientPhone;
             document.getElementById('patientAddress').value = record.patientAddress;
@@ -4135,11 +4253,12 @@ let currentUser = null;
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
-            // 恢复历史处方的日期和医师名到输入框
+            // 恢复历史处方的日期到输入框
             const _visitDateEl = document.getElementById('visitDate');
             if (_visitDateEl) _visitDateEl.value = record.date || '';
-            const _doctorNameEl = document.getElementById('doctorName');
-            if (_doctorNameEl) _doctorNameEl.value = record.doctorName || '';
+            // 建议 22：不覆盖 doctorName（保留当前登录医生，避免医生身份混淆）
+            // 原: const _doctorNameEl = document.getElementById('doctorName');
+            //     if (_doctorNameEl) _doctorNameEl.value = record.doctorName || '';
             updatePrescriptionPaper();
             document.getElementById('paperDate').textContent = record.date || '';
         }
@@ -4171,10 +4290,18 @@ let currentUser = null;
             document.getElementById('clinicNo').value = year + String(prescriptionHistory.length).padStart(6, '0');
             document.getElementById('medicalHistory').value = '';
             document.getElementById('diagnosis').value = '';
+            // 建议 9：clearPrescription 重置默认值与 HTML 初始 value 保持一致
             const clearRegFeeEl2 = document.getElementById('registrationFee2');
-            if (clearRegFeeEl2) clearRegFeeEl2.value = '';
+            if (clearRegFeeEl2) clearRegFeeEl2.value = '0';
             const clearRegFeeEl1 = document.getElementById('registrationFee');
-            if (clearRegFeeEl1) clearRegFeeEl1.value = '';
+            if (clearRegFeeEl1) clearRegFeeEl1.value = '0';
+            // 重置剂数输入框为默认值 7（避免保留上次值）
+            const clearDoseEl3 = document.getElementById('doseCountInput3');
+            if (clearDoseEl3) clearDoseEl3.value = '7';
+            const clearDoseEl = document.getElementById('doseCountInput');
+            if (clearDoseEl) clearDoseEl.value = '7';
+            const clearPaperDoseEl = document.getElementById('paperDoseCount');
+            if (clearPaperDoseEl) clearPaperDoseEl.textContent = '7';
             prescriptionItems = [];
             for (let i = 0; i< 15; i++) addEmptyRow();
             DOM_CACHE.init();
@@ -4562,6 +4689,15 @@ let currentUser = null;
         }
 
         function saveSettings() {
+            // 建议 17：defaultRegFee/defaultDose 边界校验（与诊疗费/剂数输入框一致）
+            let _regFeeVal = parseFloat(document.getElementById('defaultRegFee').value);
+            if (isNaN(_regFeeVal) || _regFeeVal < 0) _regFeeVal = 0;
+            if (_regFeeVal > 99999) _regFeeVal = 99999;
+            document.getElementById('defaultRegFee').value = _regFeeVal;
+            let _doseVal = parseInt(document.getElementById('defaultDose').value);
+            if (isNaN(_doseVal) || _doseVal < 1) _doseVal = 1;
+            if (_doseVal > 99) _doseVal = 99;
+            document.getElementById('defaultDose').value = _doseVal;
             localStorage.setItem('local_clinicName', document.getElementById('clinicName').value);
             localStorage.setItem('local_clinicDoctor', document.getElementById('defaultDoctor').value);
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
@@ -5136,11 +5272,21 @@ let currentUser = null;
             const code = document.getElementById('medEditCode').value.trim();
             if (!name) { alert('请输入药品名称'); return; }
             if (!code) { alert('请输入简码'); return; }
-            const costPrice = parseFloat(document.getElementById('medEditCostPrice').value) || 0;
-            const price = parseFloat(document.getElementById('medEditPrice').value) || 0;
+            // 建议 18：药品价格/库存/用量边界校验（防止负数和超大值）
+            let costPrice = parseFloat(document.getElementById('medEditCostPrice').value);
+            if (isNaN(costPrice) || costPrice < 0) costPrice = 0;
+            if (costPrice > 99999.99) costPrice = 99999.99;
+            let price = parseFloat(document.getElementById('medEditPrice').value);
+            if (isNaN(price) || price < 0) price = 0;
+            if (price > 99999.99) price = 99999.99;
             const unit = document.getElementById('medEditUnit').value.trim() || 'g';
-            const dosage = parseFloat(document.getElementById('medEditDosage').value) || 10;
-            const stock = parseInt(document.getElementById('medEditStock').value) || 0;
+            // 建议 23：medicineDosage 默认值与其他字段统一为 0（NaN/负数→0，上限 9999）
+            let dosage = parseFloat(document.getElementById('medEditDosage').value);
+            if (isNaN(dosage) || dosage < 0) dosage = 0;
+            if (dosage > 9999) dosage = 9999;
+            let stock = parseInt(document.getElementById('medEditStock').value);
+            if (isNaN(stock) || stock < 0) stock = 0;
+            if (stock > 999999) stock = 999999;
             const data = {name, code, costPrice, price, unit, dosage, stock};
             if (editingMedicineIndex >= 0) {
                 medicines[editingMedicineIndex] = data;
