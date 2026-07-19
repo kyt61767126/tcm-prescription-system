@@ -3027,6 +3027,11 @@ if (window.Permission) {
                         }
                     } catch (e) {}
                 }
+                // localStorage 为空时，立即异步触发 loadData() 提前加载默认药物（不等登录）
+                // 参考 cloud_desktop finishInitUI：loadData 不依赖登录状态，可提前触发
+                if (medicines.length === 0 && typeof loadData === 'function') {
+                    loadData().catch(e => console.warn('[init] 提前触发 loadData 失败:', e));
+                }
             }
             for (let i = 0; i< 15; i++) addEmptyRow();
             DOM_CACHE.init();
@@ -3100,6 +3105,9 @@ if (window.Permission) {
         setTimeout(__medicineTableFirewall, 5000);
 
         // 药物数据防火墙 - 确保药物数据总是被加载（即使 loadData 失败）
+        // 递归自查：100ms 后首次检查，之后每 100ms 检查一次直到 medicines 填充或 3秒超时
+        let __medicinesFirewallTriggered = false;
+        let __medicinesFirewallRetryCount = 0;
         function __medicinesFirewall() {
             try {
                 if (typeof medicines === 'undefined' || !medicines || medicines.length === 0) {
@@ -3107,16 +3115,20 @@ if (window.Permission) {
                         medicines = defaultMedicines;
                         if (typeof buildMedicineMap === 'function') buildMedicineMap();
                         console.log('[药物防火墙] 已从 defaultMedicines 恢复药物数据:', medicines.length);
-                    } else if (typeof loadData === 'function' && typeof currentUser !== 'undefined' && currentUser) {
-                        // 用户已登录但药物数据为空，尝试重新加载
+                    } else if (typeof loadData === 'function' && !__medicinesFirewallTriggered) {
+                        // loadData 未触发过（init 未触发或失败），尝试加载一次（不依赖登录状态）
+                        __medicinesFirewallTriggered = true;
                         loadData().catch(e => console.warn('[药物防火墙] loadData 重试失败:', e));
+                    }
+                    // medicines 仍为空，100ms 后递归自查（最多30次 = 3秒）
+                    if (medicines.length === 0 && __medicinesFirewallRetryCount < 30) {
+                        __medicinesFirewallRetryCount++;
+                        setTimeout(__medicinesFirewall, 100);
                     }
                 }
             } catch(e) { console.error('[药物防火墙] 异常:', e); }
         }
-        setTimeout(__medicinesFirewall, 1000);
-        setTimeout(__medicinesFirewall, 3000);
-        setTimeout(__medicinesFirewall, 6000);
+        setTimeout(__medicinesFirewall, 100);
 
         function renderPrescriptionTable() {
             if (!DOM_CACHE.prescriptionBody) {
