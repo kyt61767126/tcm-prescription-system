@@ -754,6 +754,78 @@ ipcMain.handle('save-backup-file', async (event, jsonStr, fileName) => {
     }
 });
 
+// P1-1 自动备份策略：保存到 userData/backups/（独立目录，便于清理）
+// 文件名格式：backup_YYYYMMDD_HHmmss.json
+ipcMain.handle('save-auto-backup', async (event, jsonStr, fileName) => {
+    try {
+        const safeName = sanitizeFileName(fileName);
+        if (!safeName.endsWith('.json')) return { success: false, error: '文件名无效（仅允许 .json）' };
+        if (!/^backup_\d{8}_\d{6}\.json$/.test(safeName)) {
+            return { success: false, error: '文件名格式不符（backup_YYYYMMDD_HHmmss.json）' };
+        }
+        const backupsDir = path.join(app.getPath('userData'), 'backups');
+        fse.ensureDirSync(backupsDir);
+        const filePath = path.join(backupsDir, safeName);
+        await fs.writeFile(filePath, jsonStr, 'utf8');
+        return { success: true, fileName: safeName, filePath };
+    } catch (error) {
+        console.error('保存自动备份失败:', error);
+        return { success: false, error: '保存自动备份失败' };
+    }
+});
+
+// P1-1 列出所有自动备份文件（按时间倒序）
+ipcMain.handle('list-auto-backups', async () => {
+    try {
+        const backupsDir = path.join(app.getPath('userData'), 'backups');
+        if (!fse.existsSync(backupsDir)) return { success: true, files: [] };
+        const entries = await fs.readdir(backupsDir, { withFileTypes: true });
+        const files = [];
+        for (const e of entries) {
+            if (!e.isFile() || !e.name.startsWith('backup_') || !e.name.endsWith('.json')) continue;
+            const filePath = path.join(backupsDir, e.name);
+            const stat = await fs.stat(filePath);
+            files.push({
+                fileName: e.name,
+                timestamp: stat.mtimeMs || stat.ctimeMs || Date.now(),
+                size: stat.size
+            });
+        }
+        files.sort((a, b) => b.timestamp - a.timestamp);
+        return { success: true, files };
+    } catch (error) {
+        console.error('列出自动备份失败:', error);
+        return { success: false, files: [], error: error.message };
+    }
+});
+
+// P1-1 删除指定自动备份文件
+ipcMain.handle('delete-auto-backup', async (event, fileName) => {
+    try {
+        const safeName = sanitizeFileName(fileName);
+        if (!/^backup_\d{8}_\d{6}\.json$/.test(safeName)) {
+            return { success: false, error: '文件名格式不符' };
+        }
+        const backupsDir = path.join(app.getPath('userData'), 'backups');
+        const filePath = path.join(backupsDir, safeName);
+        // 路径白名单校验：仅允许访问 backups 目录
+        const resolved = path.resolve(filePath);
+        const backupsRoot = path.resolve(backupsDir);
+        const rel = path.relative(backupsRoot, resolved);
+        if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) {
+            return { success: false, error: '路径越权已拒绝' };
+        }
+        if (fse.existsSync(filePath)) {
+            await fs.unlink(filePath);
+            return { success: true };
+        }
+        return { success: true, message: '文件不存在' };
+    } catch (error) {
+        console.error('删除自动备份失败:', error);
+        return { success: false, error: error.message };
+    }
+});
+
 ipcMain.handle('quit-app', async () => {
     await saveLoginState(false);
     currentLoggedInUser = null;

@@ -67,6 +67,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 备份文件保存（绕过 Electron 下载机制，直接写文件）
     saveBackupFile: (jsonStr, fileName) => ipcRenderer.invoke('save-backup-file', jsonStr, fileName),
 
+    // P1-1 自动备份策略：保存/列出/删除（userData/backups/ 目录）
+    saveAutoBackup: (jsonStr, fileName) => ipcRenderer.invoke('save-auto-backup', jsonStr, fileName),
+    listAutoBackups: () => ipcRenderer.invoke('list-auto-backups'),
+    deleteAutoBackup: (fileName) => ipcRenderer.invoke('delete-auto-backup', fileName),
+
     // 主进程推送给渲染进程：登录用户信息（主窗口 dom-ready 时一次性发送）
     onLoginUser: (callback) => {
         const handler = (_event, user) => callback(user);
