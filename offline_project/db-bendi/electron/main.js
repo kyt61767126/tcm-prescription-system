@@ -290,6 +290,34 @@ function createMainWindow() {
 
         // ★ 注入视频录制模块（从同目录读取 video-recorder.js）
         injectVideoRecorder(mainWindow);
+
+        // ★ 修复 Electron 35 alert() 关闭后鼠标光标不显示的 bug
+        // 问题根源：Electron 35 中原生 alert() 关闭后 Chromium 模态框焦点未正确恢复，导致鼠标光标不显示
+        // 修复方案：用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，由 main.js 的 IPC handler 处理）替代原生 alert/confirm
+        //          业务代码同步调用 window.alert/confirm 不受影响（保留同步语义）
+        try {
+            const fixCode = `(function() {
+                if (window.__nativeDialogsInjected) return;
+                window.__nativeDialogsInjected = true;
+                if (window.electronAPI && typeof window.electronAPI.alertSync === 'function') {
+                    var origAlert = window.alert;
+                    window.alert = function(msg) {
+                        try { window.electronAPI.alertSync(msg); }
+                        catch(e) { console.warn('[alert] 同步 dialog 失败，回退原生:', e.message); origAlert(msg); }
+                    };
+                }
+                if (window.electronAPI && typeof window.electronAPI.confirmSync === 'function') {
+                    var origConfirm = window.confirm;
+                    window.confirm = function(msg) {
+                        try { return window.electronAPI.confirmSync(msg); }
+                        catch(e) { console.warn('[confirm] 同步 dialog 失败，回退原生:', e.message); return origConfirm(msg); }
+                    };
+                }
+                console.log('[FIX] alert/confirm 已替换为 Electron 原生同步 dialog');
+            })();`;
+            await mainWindow.webContents.executeJavaScript(fixCode);
+            console.log('[FIX] 原生同步 dialog 注入完成');
+        } catch(e) { console.warn('[FIX] 原生同步 dialog 注入失败:', e.message); }
     });
 
     mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
@@ -414,6 +442,49 @@ app.whenReady().then(() => {
 // ============================================================================
 //  IPC handlers
 // ============================================================================
+
+// ★ 同步 alert/confirm 对话框（替代原生 window.alert/window.confirm）
+// 问题：Electron 35 中原生 alert() 关闭后鼠标光标不显示（Chromium 模态框焦点 bug）
+// 方案：使用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，行为与原生一致）
+// 渲染进程通过 window.electronAPI.alertSync/confirmSync 调用（dom-ready 时已重写 window.alert/confirm）
+ipcMain.on('dialog:alert-sync', (event, message) => {
+    try {
+        const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        if (win && !win.isDestroyed()) {
+            dialog.showMessageBoxSync(win, {
+                type: 'info',
+                message: message,
+                buttons: ['确定'],
+                defaultId: 0,
+                noLink: true
+            });
+        }
+    } catch (e) {
+        console.error('[dialog:alert-sync] 失败:', e.message);
+    }
+    event.returnValue = true;
+});
+
+ipcMain.on('dialog:confirm-sync', (event, message) => {
+    let result = 0; // 默认取消
+    try {
+        const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        if (win && !win.isDestroyed()) {
+            result = dialog.showMessageBoxSync(win, {
+                type: 'question',
+                message: message,
+                buttons: ['取消', '确定'],
+                defaultId: 1,
+                cancelId: 0,
+                noLink: true
+            });
+        }
+    } catch (e) {
+        console.error('[dialog:confirm-sync] 失败:', e.message);
+    }
+    event.returnValue = result; // 0=取消, 1=确定
+});
+
 ipcMain.handle('save-prescription-image', (event, imageData, fileName) => savePrescriptionImage(imageData, fileName));
 
 // ★ 视频文件保存 IPC（新增）

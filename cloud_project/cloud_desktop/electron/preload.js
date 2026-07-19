@@ -143,5 +143,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
         setCache: (key, data) => ipcRenderer.invoke('localdb:setCache', key, data),
         getSyncStatus: () => ipcRenderer.invoke('localdb:getSyncStatus'),
         setSyncStatus: (s) => ipcRenderer.invoke('localdb:setSyncStatus', s)
-    }
+    },
+
+    // ★ 同步对话框（替代原生 alert/confirm 和原 HTML 模态框方案）
+    // 原因：
+    //   1. Electron 35 原生 alert() 关闭后鼠标光标不显示（Chromium 模态框焦点 bug）
+    //   2. 原 HTML 模态框方案将 confirm 改为返回 Promise，破坏了 `if (!confirm(...)) return;` 同步语义
+    //      （Promise 是 truthy，导致删除等危险操作不弹窗直接执行）
+    // 方案：使用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，行为与原生 alert/confirm 一致）
+    // 兼容：同步返回 boolean，`if (!confirm(...))` 和 `await confirm(...)` 均正确工作
+    alertSync: (message) => ipcRenderer.sendSync('dialog:alert-sync', String(message || '')),
+    confirmSync: (message) => ipcRenderer.sendSync('dialog:confirm-sync', String(message || '')) === 1
 });

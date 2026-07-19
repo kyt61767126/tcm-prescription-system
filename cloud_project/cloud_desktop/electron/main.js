@@ -53,56 +53,11 @@ function safeHandle(channel, handler, defaultValue) {
 app.commandLine.appendSwitch('enable-features', 'WebDialog');
 app.commandLine.appendSwitch('enable-media-stream');
 
-app.on('browser-window-created', (event, window) => {
-    window.webContents.on('dom-ready', () => {
-        window.webContents.executeJavaScript(`
-            (function() {
-                if (window.__electronDialogsInjected) return;
-                window.__electronDialogsInjected = true;
-                
-                function escapeHtml(str) { return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-                function escapeAttr(str) { return String(str).replace(/"/g, '&quot;').replace(/&/g, '&amp;'); }
-                
-                window.alert = function(message) {
-                    return new Promise((resolve) => { showElectronAlert(String(message || ''), () => resolve()); });
-                };
-                window.prompt = function(message, defaultValue) {
-                    return new Promise((resolve) => { showElectronPrompt(String(message || ''), String(defaultValue || ''), (value) => resolve(value)); });
-                };
-                window.confirm = function(message) {
-                    return new Promise((resolve) => { showElectronConfirm(String(message || ''), (result) => resolve(result)); });
-                };
-                
-                function showElectronAlert(message, callback) {
-                    const modal = document.createElement('div');
-                    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
-                    modal.innerHTML = '<div style="background:#fff;padding:20px;border-radius:8px;min-width:300px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"><div style="margin-bottom:15px;font-size:14px;color:#333;white-space:pre-wrap;">' + escapeHtml(message) + '</div><div style="text-align:right;"><button id="__alertOk" style="padding:6px 16px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;">确定</button></div></div>';
-                    document.body.appendChild(modal);
-                    document.getElementById('__alertOk').onclick = function() { modal.remove(); if (callback) callback(); };
-                }
-                function showElectronPrompt(message, defaultValue, callback) {
-                    const modal = document.createElement('div');
-                    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
-                    modal.innerHTML = '<div style="background:#fff;padding:20px;border-radius:8px;min-width:300px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"><div style="margin-bottom:15px;font-size:14px;color:#333;">' + escapeHtml(message) + '</div><input id="__promptInput" type="text" value="' + escapeAttr(defaultValue) + '" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px;box-sizing:border-box;"><div style="margin-top:15px;text-align:right;"><button id="__promptCancel" style="padding:6px 16px;margin-right:8px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">取消</button><button id="__promptOk" style="padding:6px 16px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;">确定</button></div></div>';
-                    document.body.appendChild(modal);
-                    const input = document.getElementById('__promptInput');
-                    input.focus(); input.select();
-                    document.getElementById('__promptOk').onclick = function() { const v = input.value; modal.remove(); if (callback) callback(v); };
-                    document.getElementById('__promptCancel').onclick = function() { modal.remove(); if (callback) callback(null); };
-                    input.onkeydown = function(e) { if (e.key === 'Enter') document.getElementById('__promptOk').click(); else if (e.key === 'Escape') document.getElementById('__promptCancel').click(); };
-                }
-                function showElectronConfirm(message, callback) {
-                    const modal = document.createElement('div');
-                    modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;z-index:99999;';
-                    modal.innerHTML = '<div style="background:#fff;padding:20px;border-radius:8px;min-width:300px;max-width:500px;box-shadow:0 4px 20px rgba(0,0,0,0.3);"><div style="margin-bottom:15px;font-size:14px;color:#333;white-space:pre-wrap;">' + escapeHtml(message) + '</div><div style="text-align:right;"><button id="__confirmCancel" style="padding:6px 16px;margin-right:8px;background:#f0f0f0;border:1px solid #ddd;border-radius:4px;cursor:pointer;">取消</button><button id="__confirmOk" style="padding:6px 16px;background:#4CAF50;color:#fff;border:none;border-radius:4px;cursor:pointer;">确定</button></div></div>';
-                    document.body.appendChild(modal);
-                    document.getElementById('__confirmOk').onclick = function() { modal.remove(); if (callback) callback(true); };
-                    document.getElementById('__confirmCancel').onclick = function() { modal.remove(); if (callback) callback(false); };
-                }
-            })();
-        `).catch(() => {});
-    });
-});
+// ★ 已移除原 `app.on('browser-window-created', ...)` 中的 HTML 模态框注入方案
+// 原因：该方案将 confirm 改为返回 Promise，破坏了 `if (!confirm(...)) return;` 同步语义
+//      （Promise 是 truthy，导致删除等危险操作不弹窗直接执行）
+// 现方案：使用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，行为与原生一致）
+//        由 dom-ready 时注入的代码重写 window.alert/confirm 调用 electronAPI.alertSync/confirmSync
 
 function getExeDirectory() {
     if (process.env.PORTABLE_EXECUTABLE_DIR) {
@@ -497,7 +452,7 @@ function createMainWindow() {
         return { action: 'deny' };
     });
 
-    mainWindow.webContents.on('dom-ready', () => {
+    mainWindow.webContents.on('dom-ready', async () => {
         if (currentLoggedInUser) {
             const userJson = JSON.stringify(currentLoggedInUser).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
             mainWindow.webContents.executeJavaScript(`
@@ -519,6 +474,34 @@ function createMainWindow() {
             `).catch(() => {});
         }
         injectVideoRecorder(mainWindow);
+
+        // ★ 修复 Electron 35 alert() 关闭后鼠标光标不显示的 bug
+        // 问题根源：Electron 35 中原生 alert() 关闭后 Chromium 模态框焦点未正确恢复，导致鼠标光标不显示
+        // 修复方案：用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，由 main.js 的 IPC handler 处理）替代原生 alert/confirm
+        //          业务代码同步调用 window.alert/confirm 不受影响（保留同步语义）
+        try {
+            const fixCode = `(function() {
+                if (window.__nativeDialogsInjected) return;
+                window.__nativeDialogsInjected = true;
+                if (window.electronAPI && typeof window.electronAPI.alertSync === 'function') {
+                    var origAlert = window.alert;
+                    window.alert = function(msg) {
+                        try { window.electronAPI.alertSync(msg); }
+                        catch(e) { console.warn('[alert] 同步 dialog 失败，回退原生:', e.message); origAlert(msg); }
+                    };
+                }
+                if (window.electronAPI && typeof window.electronAPI.confirmSync === 'function') {
+                    var origConfirm = window.confirm;
+                    window.confirm = function(msg) {
+                        try { return window.electronAPI.confirmSync(msg); }
+                        catch(e) { console.warn('[confirm] 同步 dialog 失败，回退原生:', e.message); return origConfirm(msg); }
+                    };
+                }
+                console.log('[FIX] alert/confirm 已替换为 Electron 原生同步 dialog');
+            })();`;
+            await mainWindow.webContents.executeJavaScript(fixCode);
+            console.log('[FIX] 原生同步 dialog 注入完成');
+        } catch(e) { console.warn('[FIX] 原生同步 dialog 注入失败:', e.message); }
     });
     
     if (loginWindow && !loginWindow.isDestroyed()) {
@@ -634,6 +617,49 @@ app.whenReady().then(() => {
             }
         }
     });
+});
+
+// ★ 同步 alert/confirm 对话框（替代原生 window.alert/window.confirm 和原 HTML 模态框方案）
+// 问题：
+//   1. Electron 35 原生 alert() 关闭后鼠标光标不显示（Chromium 模态框焦点 bug）
+//   2. 原 HTML 模态框方案将 confirm 改为返回 Promise，破坏同步语义（见上方注释）
+// 方案：使用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，行为与原生一致）
+ipcMain.on('dialog:alert-sync', (event, message) => {
+    try {
+        const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        if (win && !win.isDestroyed()) {
+            dialog.showMessageBoxSync(win, {
+                type: 'info',
+                message: message,
+                buttons: ['确定'],
+                defaultId: 0,
+                noLink: true
+            });
+        }
+    } catch (e) {
+        console.error('[dialog:alert-sync] 失败:', e.message);
+    }
+    event.returnValue = true;
+});
+
+ipcMain.on('dialog:confirm-sync', (event, message) => {
+    let result = 0; // 默认取消
+    try {
+        const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        if (win && !win.isDestroyed()) {
+            result = dialog.showMessageBoxSync(win, {
+                type: 'question',
+                message: message,
+                buttons: ['取消', '确定'],
+                defaultId: 1,
+                cancelId: 0,
+                noLink: true
+            });
+        }
+    } catch (e) {
+        console.error('[dialog:confirm-sync] 失败:', e.message);
+    }
+    event.returnValue = result; // 0=取消, 1=确定
 });
 
 ipcMain.handle('save-prescription-image', async (event, imageData, fileName) => {

@@ -78,5 +78,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.once('main:login-user', handler);
     },
 
-    showMessageBox: (options) => ipcRenderer.invoke('show-message-box', options)
+    showMessageBox: (options) => ipcRenderer.invoke('show-message-box', options),
+
+    // ★ 同步对话框（替代原生 alert/confirm）
+    // 原因：Electron 35 中原生 alert() 关闭后鼠标光标不显示（已知 bug）
+    // 方案：使用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，行为与原生 alert/confirm 一致）
+    // 业务代码同步调用 alert/confirm 不受影响（dom-ready 时已重写 window.alert/confirm 调用这些方法）
+    alertSync: (message) => ipcRenderer.sendSync('dialog:alert-sync', String(message || '')),
+    confirmSync: (message) => ipcRenderer.sendSync('dialog:confirm-sync', String(message || '')) === 1
 });
