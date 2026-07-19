@@ -30,6 +30,22 @@
         }
     }
 
+    // 与 index.html 的 simpleDecrypt 保持一致，用于解密 local_systemUsers（XORv1 格式）
+    // 避免登录读不到修改后的密码（修改密码保存到 local_systemUsers 是加密的）
+    function simpleDecrypt(stored) {
+        if (!stored || typeof stored !== 'string') return stored;
+        if (!stored.startsWith('XORv1:')) return stored;
+        try {
+            const text = decodeURIComponent(escape(atob(stored.substring(6))));
+            const key = PASSWORD_SALT;
+            let result = '';
+            for (let i = 0; i < text.length; i++) {
+                result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+            }
+            return result;
+        } catch(e) { return stored; }
+    }
+
     function $(id) { return document.getElementById(id); }
 
     function showError(msg) {
@@ -80,7 +96,9 @@
     function getUsersFromStorage() {
         const saved = localStorage.getItem(KEY_USERS);
         if (saved) {
-            const users = safeParse(saved, []);
+            // 先用 simpleDecrypt 解密 XORv1 格式（与 index.html getUsers 一致）
+            const decrypted = simpleDecrypt(saved);
+            const users = safeParse(decrypted, []);
             if (Array.isArray(users) && users.length > 0) {
                 return users.map(normalizeUser).filter(u => u.username && u.password);
             }

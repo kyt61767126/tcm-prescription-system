@@ -1296,8 +1296,16 @@ let currentUser = null;
                     if (reset) {
                         const defaultUsers = getDefaultUsers();
                         saveUsers(defaultUsers);
+                        // 同步更新 currentUser，避免后续操作找不到用户
+                        const matchedUser = defaultUsers.find(u => u.username === (currentUser?.username || 'admin')) || defaultUsers[0];
+                        currentUser = matchedUser;
+                        localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
                         alert('密码已重置为 admin！\n\n请点击"修改密码"重新设置新密码。');
                         closeModal('changePwdModal');
+                        // 重置密码后刷新历史列表，避免 modal 关闭后历史区域空白
+                        try {
+                            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                        } catch(e) { console.warn('renderHistoryList 失败:', e); }
                     }
                     return;
                 }

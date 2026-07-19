@@ -1352,12 +1352,21 @@ if (window.Permission) {
                 } catch(e) { console.warn('密码校验异常:', e); }
                 if (!verified) {
                     // 校验失败：可能是用户忘记之前修改的密码，提供重置为 admin 的选项
+                    // 个人版离线应用，重置密码安全性可接受
                     const reset = confirm('原密码错误！\n\n是否重置密码为默认值 admin？\n（重置后可用 admin 登录，再修改为新密码）');
                     if (reset) {
                         const defaultUsers = getDefaultUsers();
                         saveUsers(defaultUsers);
+                        // 同步更新 currentUser，避免后续操作找不到用户
+                        const matchedUser = defaultUsers.find(u => u.username === (currentUser?.username || 'admin')) || defaultUsers[0];
+                        currentUser = matchedUser;
+                        localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
                         alert('密码已重置为 admin！\n\n请点击"修改密码"重新设置新密码。');
                         closeModal('changePwdModal');
+                        // 重置密码后刷新历史列表，避免 modal 关闭后历史区域空白
+                        try {
+                            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                        } catch(e) { console.warn('renderHistoryList 失败:', e); }
                     }
                     return;
                 }

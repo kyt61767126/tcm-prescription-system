@@ -21,26 +21,26 @@ const fs = require('fs');
 const path = require('path');
 
 // 混淆配置（平衡安全性与性能）
+// 注意：控制流平坦化、死代码注入、字符串数组等会改变函数运行时行为
+// 导致 hashPassword/verifyPassword 等关键函数在混淆后行为异常
+// 为保证软件正常使用，已大幅降低混淆强度
 const OBFUSCATOR_CONFIG = {
     compact: true,
-    controlFlowFlattening: true,
-    controlFlowFlatteningThreshold: 0.75,
-    deadCodeInjection: true,
-    deadCodeInjectionThreshold: 0.4,
-    stringArray: true,
-    stringArrayEncoding: ['rc4'],
-    stringArrayThreshold: 0.75,
+    controlFlowFlattening: false,
+    controlFlowFlatteningThreshold: 0,
+    deadCodeInjection: false,
+    deadCodeInjectionThreshold: 0,
+    stringArray: false,
+    stringArrayEncoding: [],
+    stringArrayThreshold: 0,
     identifierNamesGenerator: 'hexadecimal',
-    transformObjectKeys: true,
+    transformObjectKeys: false,
     unicodeEscapeSequence: false,
-    // 生产环境禁用 console.log/info/warn/error，防止调试信息泄露
-    disableConsoleOutput: true,
+    // 保留 console 输出，便于调试和错误排查
+    disableConsoleOutput: false,
     // 保留注释中的版权信息
     reserveStrings: ['Copyright', '版权所有', '惠康'],
     // 不混淆的标识符（仅保留被内联 HTML 事件处理直接调用的业务函数名）
-    // 内置 API（window/document/console 等）和对象名（AuthCore/Permission 等）无需保留：
-    // - 内置 API obfuscator 不会混淆
-    // - 对象属性名通过字符串数组解密还原，混淆后运行时仍可访问
     reservedNames: [
         // 用户管理（内联 onclick 调用）
         'handleEditUser', 'confirmEditUser', 'handleDeleteUser',
