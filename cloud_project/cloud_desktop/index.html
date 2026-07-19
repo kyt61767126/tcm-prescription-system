@@ -749,7 +749,7 @@
     <div id="userManageModal" class="modal">
         <div class="modal-content user-modal-content">
             <div class="modal-header">
-                <span>账户管理</span>
+                <span>用户管理</span>
                 <span class="close-btn" onclick="closeModal('userManageModal')">&times;</span>
             </div>
             <div class="modal-body">
@@ -936,7 +936,7 @@
         <div class="tab-item" id="medicineManageBtn" onclick="showModal('medicineModal')">【药品管理】</div>
         <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
         <div class="tab-item" onclick="showModal('analyticsModal')">【统计】</div>
-        <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【账户管理】</div>
+        <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【用户管理】</div>
         <div class="tab-item" id="changePwdBtn" onclick="showModal('changePwdModal')" style="display:none;">【修改密码】</div>
         <div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div>
         <div class="tab-item" id="platformManageBtn" onclick="showPlatformManageModal()" style="display:none;background:#fff3cd;color:#856404;border-color:#ffc107;">【平台管理】</div>
@@ -1147,7 +1147,7 @@
                     <input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;">
                 </div>
                 <div style="margin-bottom:12px;">
-                    <label>医师姓名 <span style="font-size:11px;color:#888;">（登录账户医师姓名，个人信息中修改）</span>:</label>
+                    <label>医师姓名 <span style="font-size:11px;color:#888;">（登录用户医师姓名，个人信息中修改）</span>:</label>
                     <input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;">
                 </div>
                 <div style="margin-bottom:12px;">
@@ -4400,7 +4400,7 @@ if (window.Permission) {
             const user = users.find(u => u.username === username);
             if (!user) return;
 
-            const newUsername = await prompt('请输入新登录账户（英文或拼音）：', user.username);
+            const newUsername = await prompt('请输入新登录用户（英文或拼音）：', user.username);
             if (newUsername === null) return;
 
             const trimmedUsername = newUsername.trim();
@@ -4627,7 +4627,7 @@ if (window.Permission) {
                 } else if (isClinicAdmin(currentUser)) {
                     btn1.innerHTML = '📊 统计';
                     btn1.onclick = function() { showModal('analyticsModal'); };
-                    btn2.innerHTML = '👤 账户';
+                    btn2.innerHTML = '👤 用户';
                     btn2.onclick = function() { showUserManageModal(); };
                     btn2.style.display = '';
                 } else {
@@ -4644,7 +4644,7 @@ if (window.Permission) {
                 // 网页端管理员：统计分析、账户管理
                 btn1.innerHTML = '📊 统计';
                 btn1.onclick = function() { showModal('analyticsModal'); };
-                btn2.innerHTML = '👤 账户';
+                btn2.innerHTML = '👤 用户';
                 btn2.onclick = function() { showUserManageModal(); };
                 btn2.style.display = '';
             } else {
