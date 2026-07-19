@@ -1046,8 +1046,10 @@ if (window.Permission) {
         }
 
         const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
+        // simpleEncrypt/simpleDecrypt 必须为同步函数（saveUsers/getUsers 同步调用）
+        // 不能调用 AuthCore.encryptUsers/decryptUsers（async 函数会返回 Promise，导致 localStorage 存入 '[object Promise]'，用户数据丢失）
         function simpleEncrypt(text) {
-            if (window.AuthCore) return AuthCore.encryptUsers(text);
+            if (!text) return '';
             const key = PASSWORD_SALT;
             let result = '';
             for (let i = 0; i < text.length; i++) {
@@ -1056,8 +1058,9 @@ if (window.Permission) {
             return 'XORv1:' + btoa(unescape(encodeURIComponent(result)));
         }
         function simpleDecrypt(stored) {
-            if (window.AuthCore) { const r = AuthCore.decryptUsers(stored); if (r) return r; }
-            if (!stored || typeof stored !== 'string' || !stored.startsWith('XORv1:')) return stored;
+            if (!stored || typeof stored !== 'string') return stored;
+            // 兼容损坏数据（如历史 '[object Promise]'）：直接返回原值让上层 fallback 到默认用户
+            if (!stored.startsWith('XORv1:')) return stored;
             try {
                 const text = decodeURIComponent(escape(atob(stored.substring(6))));
                 const key = PASSWORD_SALT;

@@ -6059,7 +6059,8 @@ if (window.Permission) {
                 const nextInput = document.getElementById(`code-input-${index + 1}`);
                 if (nextInput) nextInput.focus();
             } else {
-                showSearchDropdown(event.target, event.target.value, column);
+                if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+                searchDebounceTimer = setTimeout(() => showSearchDropdown(event.target, event.target.value, column), 200);
             }
         }
 
@@ -6127,8 +6128,8 @@ if (window.Permission) {
             } else {
                 filtered = medicines.filter(m => m.name && m.name.includes(sanitizedQuery));
             }
-            
-            filtered = filtered.filter(m => !prescriptionItems.some(item => item.name === m.name));
+            const addedNames = new Set(prescriptionItems.filter(item => item.name).map(item => item.name));
+            filtered = filtered.filter(m => !addedNames.has(m.name));
 
             filtered.sort((a, b) => {
                 // 优先使用标记的药材置顶
