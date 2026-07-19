@@ -266,8 +266,24 @@ function createMainWindow() {
         webPreferences: getSharedWebPrefs()
     });
 
-    mainWindow.webContents.on('dom-ready', () => {
+    mainWindow.webContents.on('dom-ready', async () => {
+        // ★修复登录界面闪现（2026-07-19）：
+        // 原因：index.html 中 loginOverlay 默认 style="display:flex;visibility:visible;"
+        //       dom-ready 时 loginOverlay 已渲染显示，但 checkLoginStatus() 是异步执行
+        //       会在 show() 之后才隐藏 loginOverlay，导致用户看到第二次登录界面闪现
+        // 方案：已通过 login.html 登录时（currentLoggedInUser 存在），
+        //       先 executeJavaScript 同步隐藏 loginOverlay，再 show()
         if (currentLoggedInUser) {
+            try {
+                await mainWindow.webContents.executeJavaScript(`
+                    try {
+                        var _ov = document.getElementById('loginOverlay');
+                        if (_ov) _ov.style.display = 'none';
+                        var _mc = document.querySelector('.main-container');
+                        if (_mc) _mc.style.display = 'flex';
+                    } catch(e) {}
+                `);
+            } catch(e) { /* 忽略注入失败 */ }
             mainWindow.webContents.send('main:login-user', currentLoggedInUser);
         }
         mainWindow.show();
