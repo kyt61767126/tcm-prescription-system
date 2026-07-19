@@ -1510,6 +1510,7 @@ if (window.Permission) {
         let searchDebounceTimer = null;
         let hideSearchTimer = null;
         let medicineMap = new Map();
+        let medicineCodeIndex = new Map();
         const DOM_CACHE = {
             prescriptionBody: null,
             medicineSearchDropdown: null,
@@ -1637,8 +1638,18 @@ if (window.Permission) {
         
         function buildMedicineMap() {
             medicineMap.clear();
+            medicineCodeIndex.clear();
             medicines.forEach(med =>{
                 medicineMap.set(med.name, med);
+                const code = (med.code || '').toLowerCase();
+                if (code) {
+                    let list = medicineCodeIndex.get(code);
+                    if (!list) {
+                        list = [];
+                        medicineCodeIndex.set(code, list);
+                    }
+                    list.push(med);
+                }
             });
         }
         
@@ -2913,22 +2924,43 @@ if (window.Permission) {
                     return;
                 }
                 
-                const sanitizedQuery = query.replace(/[<>\"\'&]/g, '');
-                const queryLower = sanitizedQuery.toLowerCase();
-                const addedNames = new Set(prescriptionItems.filter(item =>item.name).map(item =>item.name));
-                
                 let filtered = [];
-                const meds = medicines.length > 0 ? medicines : defaultMedicines;
-                for (let i = 0; i < meds.length && filtered.length < 50; i++) {
-                    const m = meds[i];
-                    if (!m || addedNames.has(m.name)) continue;
-                    let match = false;
-                    if (column === 'code') {
-                        if (m.code && m.code.toLowerCase().startsWith(queryLower)) match = true;
+                const sanitizedQuery = query.replace(/[<>\"\'&]/g, '').toLowerCase();
+                const maxResults = 50;
+                const existingNames = new Set(prescriptionItems.map(item => item.name));
+
+                if (column === 'code') {
+                    if (medicineCodeIndex.size > 0) {
+                        for (const [code, meds] of medicineCodeIndex) {
+                            if (code.startsWith(sanitizedQuery)) {
+                                for (const m of meds) {
+                                    if (!existingNames.has(m.name)) {
+                                        filtered.push(m);
+                                        if (filtered.length >= maxResults) break;
+                                    }
+                                }
+                                if (filtered.length >= maxResults) break;
+                            }
+                        }
                     } else {
-                        if (m.name && m.name.includes(sanitizedQuery)) match = true;
+                        const meds = medicines.length > 0 ? medicines : defaultMedicines;
+                        for (const m of meds) {
+                            if (!m || existingNames.has(m.name)) continue;
+                            if (m.code && m.code.toLowerCase().startsWith(sanitizedQuery)) {
+                                filtered.push(m);
+                                if (filtered.length >= maxResults) break;
+                            }
+                        }
                     }
-                    if (match) filtered.push(m);
+                } else {
+                    const meds = medicines.length > 0 ? medicines : defaultMedicines;
+                    for (const m of meds) {
+                        if (!m || existingNames.has(m.name)) continue;
+                        if (m.name && m.name.includes(sanitizedQuery)) {
+                            filtered.push(m);
+                            if (filtered.length >= maxResults) break;
+                        }
+                    }
                 }
 
                 filtered.sort((a, b) => {
@@ -2940,14 +2972,14 @@ if (window.Permission) {
                     if (aNameLen !== bNameLen) return aNameLen - bNameLen;
                     return (a.code || '').length - (b.code || '').length;
                 });
-                
-                const displayList = filtered.slice(0, 20);
 
-                if (displayList.length > 0) {
+                filtered = filtered.slice(0, 20);
+
+                if (filtered.length > 0) {
                     selectedSearchIndex = 0;
                     let html = '';
-                    for (let i = 0; i < displayList.length; i++) {
-                        const m = displayList[i];
+                    for (let i = 0; i < filtered.length; i++) {
+                        const m = filtered[i];
                         const safeName = (m.name || '').replace(/[<>\"\'&]/g, '');
                         const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
                         const safePrice = parseFloat(m.price) || 0;
@@ -2960,7 +2992,7 @@ if (window.Permission) {
                 } else {
                     dropdown.style.display = 'none';
                 }
-            }, 20);
+            }, 30);
         }
 
         function tryHideSearch() {

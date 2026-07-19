@@ -4710,6 +4710,7 @@ if (window.Permission) {
         let selectedSearchIndex = 0;
         let currentSearchColumn = 'code';
         let medicineMap = new Map();
+        let medicineCodeIndex = new Map();
         let medicineFrequency = {};
         
         const DOM_CACHE = {
@@ -4744,8 +4745,18 @@ if (window.Permission) {
         
         function buildMedicineMap() {
             medicineMap.clear();
+            medicineCodeIndex.clear();
             medicines.forEach(med => {
                 medicineMap.set(med.name, med);
+                const code = (med.code || '').toLowerCase();
+                if (code) {
+                    let list = medicineCodeIndex.get(code);
+                    if (!list) {
+                        list = [];
+                        medicineCodeIndex.set(code, list);
+                    }
+                    list.push(med);
+                }
             });
         }
         
@@ -6122,64 +6133,82 @@ if (window.Permission) {
             const rect = element.getBoundingClientRect();
             dropdown.style.left = rect.left + 'px';
             dropdown.style.top = (rect.bottom + 2) + 'px';
-            dropdown.style.width = (rect.width) + 'px';
+                dropdown.style.width = (rect.width) + 'px';
 
-            if (!query.trim()) {
-                dropdown.style.display = 'none';
-                return;
-            }
-            
-            let filtered;
-            const sanitizedQuery = query.replace(/[<>\"\'&]/g, '');
-            if (column === 'code') {
-                filtered = medicines.filter(m => m.code && m.code.toLowerCase().startsWith(sanitizedQuery.toLowerCase()));
-            } else {
-                filtered = medicines.filter(m => m.name && m.name.includes(sanitizedQuery));
-            }
-            const addedNames = new Set(prescriptionItems.filter(item => item.name).map(item => item.name));
-            filtered = filtered.filter(m => !addedNames.has(m.name));
+                if (!query.trim()) {
+                    dropdown.style.display = 'none';
+                    return;
+                }
+                
+                let filtered = [];
+                const sanitizedQuery = query.replace(/[<>\"\'&]/g, '').toLowerCase();
+                const maxResults = 50;
 
-            filtered.sort((a, b) => {
-                // 优先使用标记的药材置顶
-                const aPriority = a.priority_use ? 1 : 0;
-                const bPriority = b.priority_use ? 1 : 0;
-                if (aPriority !== bPriority) {
-                    return bPriority - aPriority;
+                if (column === 'code') {
+                    if (medicineCodeIndex.size > 0) {
+                        for (const [code, meds] of medicineCodeIndex) {
+                            if (code.startsWith(sanitizedQuery)) {
+                                filtered.push(...meds);
+                                if (filtered.length >= maxResults) break;
+                            }
+                        }
+                    } else {
+                        for (const m of medicines) {
+                            if (m.code && m.code.toLowerCase().startsWith(sanitizedQuery)) {
+                                filtered.push(m);
+                                if (filtered.length >= maxResults) break;
+                            }
+                        }
+                    }
+                } else {
+                    for (const m of medicines) {
+                        if (m.name && m.name.includes(sanitizedQuery)) {
+                            filtered.push(m);
+                            if (filtered.length >= maxResults) break;
+                        }
+                    }
                 }
-                const aFreq = medicineFrequency[a.name] || 0;
-                const bFreq = medicineFrequency[b.name] || 0;
-                if (aFreq !== bFreq) {
-                    return bFreq - aFreq;
-                }
-                const aNameLen = (a.name || '').length;
-                const bNameLen = (b.name || '').length;
-                if (aNameLen !== bNameLen) {
-                    return aNameLen - bNameLen;
-                }
-                const aCodeLen = (a.code || '').length;
-                const bCodeLen = (b.code || '').length;
-                return aCodeLen - bCodeLen;
-            });
+                
+                const existingNames = new Set(prescriptionItems.map(item => item.name));
+                filtered = filtered.filter(m => !existingNames.has(m.name));
 
-            if (filtered.length > 0) {
-                selectedSearchIndex = 0;
-                dropdown.innerHTML = filtered.map((m,i) => {
-                    const safeName = (m.name || '').replace(/[<>\"\'&]/g, '');
-                    const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
-                    const safePrice = parseFloat(m.price) || 0;
-                    const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
-                    const priorityMark = m.priority_use ? '<span style="color:#e65100;font-weight:bold;" title="优先使用">★</span> ' : '';
-                    return `
-                        <div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}" ${m.priority_use ? 'style="background:#fff8e1;"' : ''}
-                            onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">
-                            ${priorityMark}${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}
-                        </div>
-                    `;
-                }).join('');
-                dropdown.style.display = 'block';
-            } else {
-                dropdown.style.display = 'none';
-            }
+                filtered.sort((a, b) => {
+                    const aPriority = a.priority_use ? 1 : 0;
+                    const bPriority = b.priority_use ? 1 : 0;
+                    if (aPriority !== bPriority) return bPriority - aPriority;
+                    const aFreq = medicineFrequency[a.name] || 0;
+                    const bFreq = medicineFrequency[b.name] || 0;
+                    if (aFreq !== bFreq) return bFreq - aFreq;
+                    const aNameLen = (a.name || '').length;
+                    const bNameLen = (b.name || '').length;
+                    if (aNameLen !== bNameLen) return aNameLen - bNameLen;
+                    const aCodeLen = (a.code || '').length;
+                    const bCodeLen = (b.code || '').length;
+                    return aCodeLen - bCodeLen;
+                });
+
+                filtered = filtered.slice(0, 20);
+
+                if (filtered.length > 0) {
+                    selectedSearchIndex = 0;
+                    dropdown.innerHTML = filtered.map((m,i) => {
+                        const safeName = (m.name || '').replace(/[<>\"\'&]/g, '');
+                        const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
+                        const safePrice = parseFloat(m.price) || 0;
+                        const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
+                        const priorityMark = m.priority_use ? '<span style="color:#e65100;font-weight:bold;" title="优先使用">★</span> ' : '';
+                        return `
+                            <div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}" ${m.priority_use ? 'style="background:#fff8e1;"' : ''}
+                                onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">
+                                ${priorityMark}${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}
+                            </div>
+                        `;
+                    }).join('');
+                    dropdown.style.display = 'block';
+                } else {
+                    dropdown.style.display = 'none';
+                }
+            }, 30);
         }
 
         function tryHideSearch() {
