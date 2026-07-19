@@ -3185,7 +3185,16 @@ if (window.Permission) {
         }
 
         function updateDosage(index, val) {
-            prescriptionItems[index].dosage = parseFloat(val) || 10;
+            // 建议 7：药品数量边界校验（0-9999，防止负数和超大值）
+            let numVal = parseFloat(val);
+            if (isNaN(numVal) || numVal < 0) numVal = 0;
+            if (numVal > 9999) numVal = 9999;
+            // 同步修正输入框显示
+            const inputEl = document.querySelector(`#prescriptionBody tr:nth-child(${index + 1}) td:nth-child(4) input`);
+            if (inputEl && inputEl.value !== String(numVal)) {
+                inputEl.value = numVal;
+            }
+            prescriptionItems[index].dosage = numVal || 10;
             prescriptionItems[index].total = (prescriptionItems[index].price * prescriptionItems[index].dosage).toFixed(2);
             // 更新合计列显示
             const row = document.querySelector(`#prescriptionBody tr:nth-child(${index + 1})`);
@@ -3218,11 +3227,14 @@ if (window.Permission) {
             } else {
                 value = parseInt(DOM_CACHE.doseCountInput3?.value || '7') || 7;
             }
-
-            if (DOM_CACHE.doseCountInput3 && DOM_CACHE.doseCountInput3.value != value) DOM_CACHE.doseCountInput3.value = value;
+            // 建议 2：剂数边界校验（1-99，防止 0/负数/超大值导致金额计算错误）
+            if (isNaN(value) || value < 1) value = 1;
+            if (value > 99) value = 99;
+            if (DOM_CACHE.doseCountInput3 && parseInt(DOM_CACHE.doseCountInput3.value) !== value) {
+                DOM_CACHE.doseCountInput3.value = value;
+            }
             const display = document.getElementById('paperDoseCount');
             if (display) display.textContent = value;
-
             calculateAmount();
         }
 
@@ -3233,9 +3245,12 @@ if (window.Permission) {
             } else {
                 value = parseFloat(DOM_CACHE.registrationFee2?.value || '0') || 0;
             }
-
-            if (DOM_CACHE.registrationFee2 && DOM_CACHE.registrationFee2.value != value) DOM_CACHE.registrationFee2.value = value;
-
+            // 建议 5：诊疗费边界校验（0-99999，非数字归零）
+            if (isNaN(value) || value < 0) value = 0;
+            if (value > 99999) value = 99999;
+            if (DOM_CACHE.registrationFee2 && parseFloat(DOM_CACHE.registrationFee2.value) !== value) {
+                DOM_CACHE.registrationFee2.value = value;
+            }
             calculateAmount();
         }
 
@@ -3389,9 +3404,15 @@ if (window.Permission) {
             updatePrescriptionPaper();
         }
 
+        let patientSearchDebounceTimer = null;
+
         function searchPatientsQuick(event) {
             const input = (event && event.target) ? event.target.value.toLowerCase() : '';
-            searchPatientsByName(input);
+            // 建议 1：300ms 防抖，减少输入过程中不必要的过滤计算
+            if (patientSearchDebounceTimer) clearTimeout(patientSearchDebounceTimer);
+            patientSearchDebounceTimer = setTimeout(() => {
+                searchPatientsByName(input);
+            }, 300);
         }
 
         function searchPatientsByName(name) {
@@ -4038,8 +4059,24 @@ if (window.Permission) {
                 alert('请先登录后再保存处方');
                 return;
             }
-            const name = document.getElementById('patientName').value;
+            // 建议 8：患者姓名 trim，避免"张三 "和"张三"被识别为两个人
+            const name = document.getElementById('patientName').value.trim();
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
+            document.getElementById('patientName').value = name;
+
+            // 建议 3：电话格式校验（仅保留数字和+号，最多 15 位）
+            const phoneEl = document.getElementById('patientPhone');
+            if (phoneEl) {
+                const cleanPhone = phoneEl.value.replace(/[^\d+]/g, '').slice(0, 15);
+                if (phoneEl.value !== cleanPhone) phoneEl.value = cleanPhone;
+            }
+
+            // 建议 4：年龄格式校验（仅保留数字和"岁/个/月"汉字）
+            const ageEl = document.getElementById('patientAge');
+            if (ageEl) {
+                const cleanAge = ageEl.value.replace(/[^\d岁个月]/g, '').slice(0, 6);
+                if (ageEl.value !== cleanAge) ageEl.value = cleanAge;
+            }
             
             // 1. 获取当前保存操作时间戳，解析 YYMMDD 日期串
             const now = new Date();
