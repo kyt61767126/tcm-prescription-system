@@ -1302,10 +1302,11 @@ let currentUser = null;
                         localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
                         alert('密码已重置为 admin！\n\n请点击"修改密码"重新设置新密码。');
                         closeModal('changePwdModal');
-                        // 重置密码后刷新历史列表，避免 modal 关闭后历史区域空白
+                        // 修复历史处方消失：重置密码后重新加载处方数据
                         try {
-                            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                        } catch(e) { console.warn('renderHistoryList 失败:', e); }
+                            await loadData();
+                            refreshUserInterface();
+                        } catch(e) { console.warn('重置密码后刷新数据失败:', e); }
                     }
                     return;
                 }
@@ -1317,10 +1318,12 @@ let currentUser = null;
 
                 alert('密码修改成功！');
                 closeModal('changePwdModal');
-                // 刷新历史列表显示，防止 modal 关闭后历史区域空白
+                // 修复历史处方消失：修改密码后重新加载处方数据
+                // 之前 prescriptionHistory 可能为空（loadData 超时或后台重编号竞态），导致历史处方消失
                 try {
-                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-                } catch(e) { console.warn('刷新历史列表失败:', e); }
+                    await loadData();
+                    refreshUserInterface();
+                } catch(e) { console.warn('修改密码后刷新数据失败:', e); }
             } catch (e) {
                 console.error('修改密码失败:', e);
                 alert('修改密码失败: ' + (e.message || '未知错误'));
@@ -2109,8 +2112,9 @@ let currentUser = null;
                         return await getAllUserPrescriptions(currentUser?.username || '');
                     }
                 };
+                // 超时延长到 15 秒（原 5 秒过短，慢速机器/大量处方时误杀导致历史处方为空）
                 const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error('处方加载超时')), 5000);
+                    setTimeout(() => reject(new Error('处方加载超时')), 15000);
                 });
                 prescriptionHistory = await Promise.race([loadPrescriptions(), timeoutPromise]);
             } catch(e) {
