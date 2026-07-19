@@ -1297,7 +1297,11 @@ if (window.Permission) {
                 for (let i = 0; i< 15; i++) addEmptyRow();
             }
             DOM_CACHE.init();
-            renderPrescriptionTable();
+            // 只在表格为空时才重新渲染，避免清空用户正在输入的简码
+            const tbody = DOM_CACHE.prescriptionBody;
+            if (!tbody || !tbody.children || tbody.children.length === 0) {
+                renderPrescriptionTable();
+            }
             calculateAmount();
             updatePrescriptionPaper();
         }
@@ -2686,6 +2690,19 @@ if (window.Permission) {
             document.getElementById('doctorName').value = clinicDoctorVal;
             document.getElementById('defaultDoctor').value = clinicDoctorVal;
             document.getElementById('autoStart').checked = localStorage.getItem('local_autoStartEnabled') === 'true';
+            // 同步初始化 medicines（避免 loadData 异步加载前用户输入简码无数据）
+            if (medicines.length === 0) {
+                const savedMedicines = localStorage.getItem('local_medicines');
+                if (savedMedicines) {
+                    try {
+                        const parsed = JSON.parse(savedMedicines);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            medicines = parsed;
+                            if (typeof buildMedicineMap === 'function') buildMedicineMap();
+                        }
+                    } catch (e) {}
+                }
+            }
             for (let i = 0; i< 15; i++) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
