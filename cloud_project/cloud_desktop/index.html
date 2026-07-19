@@ -6052,8 +6052,7 @@ if (window.Permission) {
                 const nextInput = document.getElementById(`code-input-${index + 1}`);
                 if (nextInput) nextInput.focus();
             } else {
-                if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-                searchDebounceTimer = setTimeout(() => showSearchDropdown(event.target, event.target.value, column), 200);
+                showSearchDropdown(event.target, event.target.value, column);
             }
         }
 
