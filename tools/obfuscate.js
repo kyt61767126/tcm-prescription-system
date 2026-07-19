@@ -21,23 +21,31 @@ const fs = require('fs');
 const path = require('path');
 
 // 混淆配置（平衡安全性与性能）
-// 注意：控制流平坦化、死代码注入、字符串数组等会改变函数运行时行为
+// 注意：控制流平坦化、死代码注入、对象键名转换等会改变函数运行时行为
 // 导致 hashPassword/verifyPassword 等关键函数在混淆后行为异常
-// 为保证软件正常使用，已大幅降低混淆强度
-// 用户多次反馈"继续降低安全确保好用"，已于 2026-07-19 完全关闭所有混淆：
-// - compact: false（不做任何压缩）
-// - identifierNamesGenerator: 'dictionary'（无影响）
-// - 所有保护性转换全部关闭
+//
+// 配置策略（2026-07-19 恢复轻量级混淆）：
+// 之前用户多次反馈"继续降低安全确保好用"，于 2026-07-19 完全关闭所有混淆。
+// 第6轮修复 db-adapter.js 版本冲突（commit aee66f3）后，根因消除，软件恢复正常。
+// 经用户同意恢复"不影响运行时行为"的轻量级混淆，仅增加反编译难度：
+//   ✅ compact: true              - 压缩为一行，难以阅读
+//   ✅ identifierNamesGenerator    - 变量名混淆为 _0x... 形式
+//   ✅ stringArray + RC4 加密      - 字符串数组化，增加反编译难度
+//   ❌ controlFlowFlattening       - 禁用：破坏关键函数运行时行为
+//   ❌ deadCodeInjection           - 禁用：影响性能，容易触发问题
+//   ❌ transformObjectKeys         - 禁用：破坏对象访问
+//   ❌ unicodeEscapeSequence       - 禁用：破坏 unicode 字符
+// 详见《public/云端版开发规范.md》第七节
 const OBFUSCATOR_CONFIG = {
-    compact: false,
+    compact: true,
     controlFlowFlattening: false,
     controlFlowFlatteningThreshold: 0,
     deadCodeInjection: false,
     deadCodeInjectionThreshold: 0,
-    stringArray: false,
-    stringArrayEncoding: [],
-    stringArrayThreshold: 0,
-    identifierNamesGenerator: 'dictionary',
+    stringArray: true,
+    stringArrayEncoding: ['rc4'],
+    stringArrayThreshold: 0.75,
+    identifierNamesGenerator: 'mangled',
     transformObjectKeys: false,
     unicodeEscapeSequence: false,
     // 保留 console 输出，便于调试和错误排查

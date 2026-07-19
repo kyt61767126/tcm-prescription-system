@@ -4017,6 +4017,12 @@ let currentUser = null;
         }
 
         async function deleteHistory(id) {
+            // ★安全防护：关键 API 校验，防止绕过登录直接调用
+            if (!currentUser || !currentUser.username) {
+                console.warn('[安全] 拒绝未登录状态调用 deleteHistory');
+                alert('请先登录后再操作');
+                return;
+            }
             const record = prescriptionHistory.find(p => p.id === id);
             if (!record) return;
 
@@ -4170,6 +4176,12 @@ let currentUser = null;
         }
 
         function printPrescription(orientation = 'portrait') {
+            // ★安全防护：关键 API 校验，防止绕过登录直接调用
+            if (!currentUser || !currentUser.username) {
+                console.warn('[安全] 拒绝未登录状态调用 printPrescription');
+                alert('请先登录后再打印');
+                return;
+            }
             const printContent = document.getElementById('prescriptionPaper').innerHTML;
             const isLandscape = orientation === 'landscape';
             const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
@@ -4214,6 +4226,12 @@ let currentUser = null;
         }
 
         async function savePrescription() {
+            // ★安全防护：关键 API 校验，防止绕过登录直接调用
+            if (!currentUser || !currentUser.username) {
+                console.warn('[安全] 拒绝未登录状态调用 savePrescription');
+                alert('请先登录后再保存处方');
+                return;
+            }
             const name = document.getElementById('patientName').value;
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
             
