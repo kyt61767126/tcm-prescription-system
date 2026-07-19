@@ -16,6 +16,7 @@ const { app, BrowserWindow, ipcMain, session, dialog, shell, safeStorage } = req
 const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
+const licenseManager = require('./license-manager');
 
 let mainWindow;
 let loginWindow;
@@ -383,6 +384,24 @@ function createLoginWindow() {
 }
 
 app.whenReady().then(() => {
+    // ★ License 授权校验（启动时同步校验，未授权或过期则阻止启动）
+    const licenseResult = licenseManager.validateLicense();
+    console.log('[License]', licenseResult.type, licenseResult.message);
+    if (!licenseResult.valid) {
+        dialog.showMessageBoxSync({
+            type: 'warning',
+            title: '授权提示',
+            message: licenseResult.message,
+            buttons: ['确定']
+        });
+        app.quit();
+        return;
+    }
+    // 授权有效时，在控制台显示授权信息（不弹窗，避免干扰用户）
+    if (licenseResult.type === 'trial') {
+        console.log('[License] 试用模式：', licenseResult.message);
+    }
+
     fse.ensureDirSync(getDownloadsDirectory());
 
     sharedSession = session.fromPartition(SESSION_PARTITION);
@@ -442,6 +461,24 @@ app.whenReady().then(() => {
 // ============================================================================
 //  IPC handlers
 // ============================================================================
+
+// ★ License 授权相关 IPC
+ipcMain.handle('license:get-status', () => {
+    return licenseManager.validateLicense();
+});
+
+ipcMain.handle('license:activate', (event, base64Content) => {
+    try {
+        const result = licenseManager.writeLicenseContent(base64Content);
+        if (result.success) {
+            const validate = licenseManager.validateLicense();
+            return { success: true, status: validate };
+        }
+        return { success: false, error: result.error };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
 
 // ★ 同步 alert/confirm 对话框（替代原生 window.alert/window.confirm）
 // 问题：Electron 35 中原生 alert() 关闭后鼠标光标不显示（Chromium 模态框焦点 bug）

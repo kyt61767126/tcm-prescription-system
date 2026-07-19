@@ -85,5 +85,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 方案：使用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，行为与原生 alert/confirm 一致）
     // 业务代码同步调用 alert/confirm 不受影响（dom-ready 时已重写 window.alert/confirm 调用这些方法）
     alertSync: (message) => ipcRenderer.sendSync('dialog:alert-sync', String(message || '')),
-    confirmSync: (message) => ipcRenderer.sendSync('dialog:confirm-sync', String(message || '')) === 1
+    confirmSync: (message) => ipcRenderer.sendSync('dialog:confirm-sync', String(message || '')) === 1,
+
+    // ★ License 授权管理
+    license: {
+        getStatus: () => ipcRenderer.invoke('license:get-status'),
+        activate: (base64Content) => ipcRenderer.invoke('license:activate', base64Content)
+    }
 });

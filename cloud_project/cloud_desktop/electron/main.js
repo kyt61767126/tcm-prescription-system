@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
 const Database = require('better-sqlite3');
+const licenseManager = require('./license-manager');
 
 let mainWindow;
 let loginWindow;
@@ -511,6 +512,23 @@ function createMainWindow() {
 }
 
 app.whenReady().then(() => {
+    // ★ License 授权校验（启动时同步校验，未授权或过期则阻止启动）
+    const licenseResult = licenseManager.validateLicense();
+    console.log('[License]', licenseResult.type, licenseResult.message);
+    if (!licenseResult.valid) {
+        dialog.showMessageBoxSync({
+            type: 'warning',
+            title: '授权提示',
+            message: licenseResult.message,
+            buttons: ['确定']
+        });
+        app.quit();
+        return;
+    }
+    if (licenseResult.type === 'trial') {
+        console.log('[License] 试用模式：', licenseResult.message);
+    }
+
     // 初始化本地离线数据库（建表，幂等）
     try {
         initDatabase();
@@ -617,6 +635,24 @@ app.whenReady().then(() => {
             }
         }
     });
+});
+
+// ★ License 授权相关 IPC
+ipcMain.handle('license:get-status', () => {
+    return licenseManager.validateLicense();
+});
+
+ipcMain.handle('license:activate', (event, base64Content) => {
+    try {
+        const result = licenseManager.writeLicenseContent(base64Content);
+        if (result.success) {
+            const validate = licenseManager.validateLicense();
+            return { success: true, status: validate };
+        }
+        return { success: false, error: result.error };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
 });
 
 // ★ 同步 alert/confirm 对话框（替代原生 window.alert/window.confirm 和原 HTML 模态框方案）
