@@ -92,7 +92,8 @@ const MODULE_FILES = [
     'db-adapter.js',
     'performance-utils.js',
     'prescription-core.js',
-    'patient-archive.js'
+    'patient-archive.js',
+    'security-guard.js'
 ];
 
 // 全部分发目录（相对于项目根目录）
