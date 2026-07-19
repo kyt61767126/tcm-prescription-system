@@ -45,16 +45,10 @@
 # 仅保留 @JavascriptInterface 注解的方法（R8 full mode 可优化其他 public 方法）
 # 旧规则 -keepclassmembers class com.tcm.prescription.** { public *; } 过度保留
 # 已删除：MainActivity lifecycle 方法由 Android framework 自动保留，
-#         SecurityGuard 单独保留，NativeBridge 的 JS 方法由下方规则覆盖
+#         NativeBridge 的 JS 方法由下方规则覆盖
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
-
-# ============================================================================
-# 安全防护类（方案二：反调试 + 完整性校验 + 签名校验）
-# 必须保留所有方法，防止 R8 优化删除看似未使用的安全检查
-# ============================================================================
--keep class com.tcm.prescription.SecurityGuard { *; }
 
 # ============================================================================
 # SQLite 加密库

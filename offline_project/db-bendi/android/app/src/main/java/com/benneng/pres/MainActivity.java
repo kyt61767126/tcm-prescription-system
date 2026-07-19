@@ -70,8 +70,6 @@ public class MainActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> filePathCallback;
     private static final int REQ_FILE_CHOOSER = 1002;
     private volatile String cachedVideoRecorderScript = null;
-    // 安全防护：方案二（反调试 + 完整性校验 + 多点签名校验）
-    private SecurityGuard securityGuard;
     // 媒体文件读取白名单（启动时初始化一次，避免每次调用都做 I/O 解析）
     // 彻底解决"加载失败"反复出现：统一路径解析，消除 getAbsolutePath vs getCanonicalPath 不一致
     private java.util.Set<String> mediaWhitelistedRoots = new java.util.HashSet<>();
@@ -83,13 +81,6 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         super.onCreate(savedInstanceState);
-
-        // 安全防护：方案二启动检查（反调试 + 完整性校验 + 签名校验，任一失败则退出）
-        securityGuard = new SecurityGuard(this);
-        if (!securityGuard.runStartupChecks()) {
-            finishAndRemoveTask();
-            return;
-        }
 
         // Android 6.0+ 动态申请存储权限（仅 28 及以下需要 WRITE_EXTERNAL_STORAGE）
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
@@ -122,11 +113,6 @@ public class MainActivity extends AppCompatActivity {
 
         // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
         preloadVideoRecorderScript();
-
-        // 启动周期性安全巡检（每30秒反调试 + 签名校验，防运行时 Frida 注入）
-        if (securityGuard != null) {
-            securityGuard.startPeriodicChecks();
-        }
     }
 
     // 初始化媒体文件读取白名单：缓存所有可能的目录（外部 + 内部 fallback）
@@ -198,10 +184,8 @@ public class MainActivity extends AppCompatActivity {
     // ========================================================================
     // 签名校验（防盗：防止二次打包/篡改）
     // ========================================================================
-    // 已迁移至 SecurityGuard.java（方案二统一安全防护）
-    // - 启动检查：securityGuard.runStartupChecks()
-    // - 周期巡检：securityGuard.startPeriodicChecks()
-    // - 多点校验：securityGuard.verifySignature()（可在任意位置调用）
+    // 安全防护已于 2026-07-19 应用户要求回退到 7月17日18:00 之前的状态
+    // 如需恢复防盗防破解功能，请从 commit 0f49e52 cherry-pick SecurityGuard 相关代码
 
     // ========================================================================
     // WebView 配置
@@ -366,12 +350,6 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // 多点签名校验（方案二：分散到 WebView 生命周期）
-                if (securityGuard != null && !securityGuard.verifySignature()) {
-                    Log.e(TAG, "WebView加载时签名校验失败，退出APP");
-                    finishAndRemoveTask();
-                    return;
-                }
                 injectElectronApiShim(view);
 
                 // 延迟注入录像拍照脚本（等待页面渲染稳定）
@@ -673,10 +651,6 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
-        // 停止安全巡检，防止 Activity 销毁后延迟任务执行导致崩溃
-        if (securityGuard != null) {
-            securityGuard.stopPeriodicChecks();
-        }
         if (webView != null) {
             webView.removeJavascriptInterface("AndroidNative");
             ((ViewGroup) webView.getParent()).removeView(webView);

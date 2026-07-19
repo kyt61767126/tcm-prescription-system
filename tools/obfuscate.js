@@ -24,12 +24,12 @@ const path = require('path');
 // 注意：控制流平坦化、死代码注入、字符串数组等会改变函数运行时行为
 // 导致 hashPassword/verifyPassword 等关键函数在混淆后行为异常
 // 为保证软件正常使用，已大幅降低混淆强度
-// 用户多次反馈"继续降低安全确保好用"，已将混淆降至最弱：
-// - 仅启用 compact 压缩（不影响逻辑）
-// - 变量名用 dictionary 可读名称（原 hexadecimal 容易与其他变量冲突）
+// 用户多次反馈"继续降低安全确保好用"，已于 2026-07-19 完全关闭所有混淆：
+// - compact: false（不做任何压缩）
+// - identifierNamesGenerator: 'dictionary'（无影响）
 // - 所有保护性转换全部关闭
 const OBFUSCATOR_CONFIG = {
-    compact: true,
+    compact: false,
     controlFlowFlattening: false,
     controlFlowFlatteningThreshold: 0,
     deadCodeInjection: false,

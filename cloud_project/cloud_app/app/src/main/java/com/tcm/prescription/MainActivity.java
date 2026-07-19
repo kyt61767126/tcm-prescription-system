@@ -74,8 +74,6 @@ public class MainActivity extends BridgeActivity {
     private TextView loadingText;
     private volatile String cachedVideoRecorderScript = null;
     private boolean versionChecked = false;
-    // 安全防护：方案二（反调试 + 完整性校验 + 多点签名校验）
-    private SecurityGuard securityGuard;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -83,13 +81,6 @@ public class MainActivity extends BridgeActivity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 
         super.onCreate(savedInstanceState);
-
-        // 安全防护：方案二启动检查（反调试 + 完整性校验 + 签名校验，任一失败则退出）
-        securityGuard = new SecurityGuard(this);
-        if (!securityGuard.runStartupChecks()) {
-            finishAndRemoveTask();
-            return;
-        }
 
         // T5: 使用主线程 Looper 的 Handler，便于 onDestroy 统一清理
         mainHandler = new Handler(Looper.getMainLooper());
@@ -119,20 +110,13 @@ public class MainActivity extends BridgeActivity {
 
         // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
         preloadVideoRecorderScript();
-
-        // 启动周期性安全巡检（每30秒反调试 + 签名校验，防运行时 Frida 注入）
-        if (securityGuard != null) {
-            securityGuard.startPeriodicChecks();
-        }
     }
 
     // ========================================================================
     // 签名校验（防盗：防止二次打包/篡改）
     // ========================================================================
-    // 已迁移至 SecurityGuard.java（方案二统一安全防护）
-    // - 启动检查：securityGuard.runStartupChecks()
-    // - 周期巡检：securityGuard.startPeriodicChecks()
-    // - 多点校验：securityGuard.verifySignature()（可在任意位置调用）
+    // 安全防护已于 2026-07-19 应用户要求回退到 7月17日18:00 之前的状态
+    // 如需恢复防盗防破解功能，请从 commit 0f49e52 cherry-pick SecurityGuard 相关代码
 
     private void configureWebView() {
         WebView webView = this.getBridge().getWebView();
@@ -391,12 +375,6 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // 多点签名校验（方案二：分散到 WebView 生命周期）
-                if (securityGuard != null && !securityGuard.verifySignature()) {
-                    Log.e(TAG, "WebView加载时签名校验失败，退出APP");
-                    finishAndRemoveTask();
-                    return;
-                }
                 int statusBarHeightPx = getStatusBarHeightPx();
                 float density = getResources().getDisplayMetrics().density;
                 int cssPx = (int) (statusBarHeightPx / density);
@@ -665,10 +643,6 @@ public class MainActivity extends BridgeActivity {
     // 注意：BridgeActivity 的 onDestroy 是 public，覆盖时必须保持 public
     @Override
     public void onDestroy() {
-        // 停止安全巡检，防止 Activity 销毁后延迟任务执行导致崩溃
-        if (securityGuard != null) {
-            securityGuard.stopPeriodicChecks();
-        }
         // T5: 清理所有待执行的 Handler 回调，防止 Activity 销毁后延迟任务执行导致崩溃
         if (mainHandler != null) {
             mainHandler.removeCallbacksAndMessages(null);
