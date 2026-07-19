@@ -24,13 +24,16 @@ const path = require('path');
 // 注意：控制流平坦化、死代码注入、对象键名转换等会改变函数运行时行为
 // 导致 hashPassword/verifyPassword 等关键函数在混淆后行为异常
 //
-// 配置策略（2026-07-19 恢复轻量级混淆）：
+// 配置策略（2026-07-19 恢复轻量级混淆 + 修复桌面版登入失败）：
 // 之前用户多次反馈"继续降低安全确保好用"，于 2026-07-19 完全关闭所有混淆。
 // 第6轮修复 db-adapter.js 版本冲突（commit aee66f3）后，根因消除，软件恢复正常。
 // 经用户同意恢复"不影响运行时行为"的轻量级混淆，仅增加反编译难度：
 //   ✅ compact: true              - 压缩为一行，难以阅读
 //   ✅ identifierNamesGenerator    - 变量名混淆为 _0x... 形式
-//   ✅ stringArray + RC4 加密      - 字符串数组化，增加反编译难度
+//   ❌ stringArray                 - 禁用：RC4 解码在 Electron 桌面端可能失败
+//      （历史问题：commit 5bcb0ad 启用 stringArray+RC4 后桌面版登入失败，
+//       网页版正常。根因是 'SHA-256'/'PBKDF2'/'PASSWORD_SALT' 等关键字符串
+//       被 stringArray 化后 RC4 解码失败，导致 crypto.subtle.digest 调用异常）
 //   ❌ controlFlowFlattening       - 禁用：破坏关键函数运行时行为
 //   ❌ deadCodeInjection           - 禁用：影响性能，容易触发问题
 //   ❌ transformObjectKeys         - 禁用：破坏对象访问
@@ -42,9 +45,14 @@ const OBFUSCATOR_CONFIG = {
     controlFlowFlatteningThreshold: 0,
     deadCodeInjection: false,
     deadCodeInjectionThreshold: 0,
-    stringArray: true,
-    stringArrayEncoding: ['rc4'],
-    stringArrayThreshold: 0.75,
+    // ★关键修复：禁用 stringArray + RC4 编码
+    // 原因：RC4 解码在 Electron 桌面端环境下可能失败，导致关键字符串
+    //       （'SHA-256'、'PBKDF2'、'bnzc_prescription_salt_v1'、'XORv1:'）
+    //       返回错误值，crypto.subtle.digest 调用失败，密码验证失败
+    // 表现：桌面版登入失败（密码正确），网页版正常（网页版未混淆）
+    stringArray: false,
+    stringArrayEncoding: [],
+    stringArrayThreshold: 0,
     identifierNamesGenerator: 'mangled',
     transformObjectKeys: false,
     unicodeEscapeSequence: false,
@@ -143,11 +151,14 @@ const TARGET_DIRS = {
     all: ALL_DISTRIBUTION_DIRS
 };
 
-// 额外需要混淆的文件（各目录中的 login.js，仅离线版 electron 子目录存在）
+// 额外需要混淆的文件
+// ★关键修复：移除所有 electron/login.js（commit 5bcb0ad 启用混淆后桌面版登入失败）
+// 原因：login.js 中的 simpleDecrypt 使用 atob/escape/decodeURIComponent 等
+//       编码敏感函数，混淆后行为异常；且 login.js 优先委托 AuthCore.hashPassword，
+//       核心算法已在 auth-core.js 中，login.js 不含核心安全资产
+// 影响：login.js 不再被混淆（保持明文），可被反编译读取登录流程，
+//       但密码哈希值存于 config.json/localStorage，不在 login.js 中，安全性损失可接受
 const EXTRA_FILES = {
-    'offline_project/db-bendi/electron': ['login.js'],
-    'offline_project/db-dingzhi/electron': ['login.js'],
-    'offline_project/db-geren/electron': ['login.js'],
     'cloud_project/cloud_app/app/src/main/assets': ['video-recorder-inject.js']
 };
 
