@@ -213,6 +213,25 @@ async function saveLoginState(hasLoggedIn, user = null) {
     }
 }
 
+// 启动时从 login-state.json 恢复登录状态，避免每次都强制重新登录
+// 这样用户即使修改密码失败，下次启动仍可进入主界面查看历史处方
+async function loadLoginState() {
+    try {
+        const settingsPath = path.join(app.getPath('userData'), 'login-state.json');
+        if (await fse.pathExists(settingsPath)) {
+            const data = await fse.readJson(settingsPath);
+            if (data && data.hasLoggedIn && data.user) {
+                currentLoggedInUser = data.user;
+                console.log('[main] 恢复登录状态:', currentLoggedInUser.username);
+                return true;
+            }
+        }
+    } catch (e) {
+        console.error('读取登录状态失败:', e);
+    }
+    return false;
+}
+
 // ============================================================================
 //  CSP：禁止远程脚本、禁止内联事件
 //  ★ 增加 media-src 'self' blob: 允许视频录制预览
@@ -379,12 +398,26 @@ app.whenReady().then(() => {
         }
     });
 
-    createLoginWindow();
+    // 启动时尝试恢复上次登录状态；已登录过则直接进入主窗口，否则显示登录窗口
+    loadLoginState().then((restored) => {
+        if (restored && currentLoggedInUser) {
+            createMainWindow();
+        } else {
+            createLoginWindow();
+        }
+    });
 
     app.on('activate', () => {
         const allWindows = BrowserWindow.getAllWindows();
         if (allWindows.length === 0) {
-            createLoginWindow();
+            // 重新激活时优先恢复登录态
+            loadLoginState().then((restored) => {
+                if (restored && currentLoggedInUser) {
+                    createMainWindow();
+                } else {
+                    createLoginWindow();
+                }
+            });
         } else {
             if (loginWindow && !loginWindow.isDestroyed()) {
                 focusWindow(loginWindow);

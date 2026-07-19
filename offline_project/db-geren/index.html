@@ -1290,9 +1290,10 @@ if (window.Permission) {
             // 统计输入框：按登入用户累计历史处方计数（管理员统计全部、普通用户统计自己的）
             const year = String(new Date().getFullYear()).slice(-2);
             document.getElementById('clinicNo').value = year + String(prescriptionHistory.length).padStart(6, '0');
-            if (prescriptionHistory.length >0) {
+            // 无论 prescriptionHistory 是否为空，都渲染历史列表，避免登录后历史区域空白
+            try {
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-            }
+            } catch(e) { console.warn('renderHistoryList 失败:', e); }
             if (prescriptionItems.length === 0) {
                 for (let i = 0; i< 15; i++) addEmptyRow();
             }
@@ -1337,14 +1338,18 @@ if (window.Permission) {
                     return;
                 }
 
-                // 使用 AuthCore.verifyPassword 兼容多种密码格式（hashPasswordWithUser/hashPassword/明文）
-                // 避免因密码哈希格式不一致导致"原密码错误"（与登录使用同一套校验逻辑）
+                // 使用与 login.js 完全一致的密码校验逻辑（hashPassword 直接比较 + 明文兼容）
+                // 避免因 AuthCore.verifyPassword 在混淆后行为不同导致"原密码错误"
+                const storedPwd = users[userIndex].password || '';
+                const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
                 let verified = false;
-                if (window.AuthCore && AuthCore.verifyPassword) {
-                    verified = await AuthCore.verifyPassword(oldPwd, users[userIndex].password || '', users[userIndex].username);
-                } else {
-                    verified = (users[userIndex].password === await hashPassword(oldPwd));
-                }
+                try {
+                    if (isHash) {
+                        verified = (storedPwd === await hashPassword(oldPwd));
+                    } else {
+                        verified = (storedPwd === oldPwd);
+                    }
+                } catch(e) { console.warn('密码校验异常:', e); }
                 if (!verified) {
                     alert('原密码错误');
                     return;
