@@ -815,6 +815,8 @@ if (window.Permission) {
                         console.error('[IndexedDB保存] 保存失败:', e);
                         reject(request.error);
                     };
+                    // ★修复事务挂起：abort 时必须 reject，否则 Promise 永远挂起
+                    transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
                 });
             } catch (e) {
                 console.error('保存到 IndexedDB 失败:', e);
@@ -830,6 +832,8 @@ if (window.Permission) {
                     const request = store.get(key);
                     request.onsuccess = () => resolve(request.result);
                     request.onerror = () => reject(request.error);
+                    // ★修复事务挂起：abort 时必须 reject
+                    transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
                 });
             } catch (e) {
                 console.error('从 IndexedDB 读取失败:', e);
@@ -850,6 +854,8 @@ if (window.Permission) {
                         console.error('[IndexedDB] 单条处方保存失败:', e);
                         reject(request.error);
                     };
+                    // ★修复事务挂起：abort 时必须 reject
+                    transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
                 });
             } catch (e) {
                 console.error('保存单条处方到 IndexedDB 失败:', e);
@@ -865,6 +871,8 @@ if (window.Permission) {
                     const request = store.delete(id);
                     request.onsuccess = () => resolve();
                     request.onerror = () => reject(request.error);
+                    // ★修复事务挂起：abort 时必须 reject
+                    transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
                 });
             } catch (e) {
                 console.error('从 IndexedDB 删除单条处方失败:', e);
@@ -874,12 +882,47 @@ if (window.Permission) {
         async function getAllPrescriptionsFromDB() {
             try {
                 const database = await openDB();
-                return new Promise((resolve, reject) => {
-                    const transaction = database.transaction(['prescriptions'], 'readonly');
+                return await new Promise((resolve, reject) => {
+                    // ★修复事务挂起：增加事务级超时，避免被其他 readwrite 事务阻塞导致 loadData 15s 超时
+                    let settled = false;
+                    let transaction = null;
+                    const timer = setTimeout(() => {
+                        if (settled) return;
+                        settled = true;
+                        if (transaction) { try { transaction.abort(); } catch(_) {} }
+                        console.warn('[IndexedDB] getAll 事务超时(5s)，可能被 readwrite 阻塞');
+                        resolve([]);  // 超时降级返回空数组（让上层降级到 localStorage/settings）
+                    }, 5000);
+                    try {
+                        transaction = database.transaction(['prescriptions'], 'readonly');
+                    } catch(e) {
+                        clearTimeout(timer);
+                        console.error('[IndexedDB] 创建事务失败:', e);
+                        resolve([]);
+                        return;
+                    }
                     const store = transaction.objectStore('prescriptions');
                     const request = store.getAll();
-                    request.onsuccess = () => resolve(request.result || []);
-                    request.onerror = () => reject(request.error);
+                    request.onsuccess = () => {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(timer);
+                        resolve(request.result || []);
+                    };
+                    request.onerror = () => {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(timer);
+                        reject(request.error);
+                    };
+                    // ★修复事务挂起：abort 时必须 resolve（避免 Promise 永远挂起阻塞 loadData）
+                    transaction.onabort = () => {
+                        if (settled) return;
+                        settled = true;
+                        clearTimeout(timer);
+                        console.warn('[IndexedDB] getAll 事务被中止');
+                        resolve([]);
+                    };
                 });
             } catch (e) {
                 console.error('从 IndexedDB 读取所有处方失败:', e);
@@ -896,6 +939,8 @@ if (window.Permission) {
                     const request = store.clear();
                     request.onsuccess = () => resolve();
                     request.onerror = () => reject(request.error);
+                    // ★修复事务挂起：abort 时必须 reject
+                    transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
                 });
             } catch (e) {
                 console.error('清空 prescriptions store 失败:', e);
@@ -912,6 +957,8 @@ if (window.Permission) {
                     records.forEach(r => store.put(r));
                     transaction.oncomplete = () => resolve();
                     transaction.onerror = () => reject(transaction.error);
+                    // ★修复事务挂起：abort 时必须 reject，否则 Promise 永远挂起
+                    transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
                 });
             } catch (e) {
                 console.error('批量保存处方到 IndexedDB 失败:', e);
@@ -2103,8 +2150,13 @@ if (window.Permission) {
         }
 
         async function loadData() {
-            // 后台异步执行重编号，不阻塞 loadData（避免 O(n²) 阻塞导致 5 秒超时后历史处方为空）
-            renumberHistoricalPrescriptions().catch(e => console.warn('后台重编号失败:', e));
+            // ★修复历史处方消失：移除 renumberHistoricalPrescriptions 自动调用
+            // 原因：renumber 的 saveAllPrescriptionsToDB(readwrite 事务) 会阻塞
+            //       getAllUserPrescriptions 中的 getAllPrescriptionsFromDB(readonly 事务)，
+            //       导致 15 秒超时后 prescriptionHistory = []，历史处方消失。
+            //       修改密码触发 loadData → 触发 renumber → 触发 readwrite 事务 →
+            //       getAll 等待 → 超时 → 处方消失。
+            // renumber 功能保留，仅在需要时手动调用（如导入数据后）。
 
             let savedFormulas = localStorage.getItem('local_formulas');
             let savedMedicines = localStorage.getItem('local_medicines');
