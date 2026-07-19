@@ -1504,6 +1504,7 @@ if (window.Permission) {
         let selectedSearchIndex = 0;
         let currentSearchColumn = 'code';
         let searchDebounceTimer = null;
+        let hideSearchTimer = null;
         let medicineMap = new Map();
         const DOM_CACHE = {
             prescriptionBody: null,
@@ -2883,6 +2884,7 @@ if (window.Permission) {
         function showSearchDropdown(element, query, column) {
             if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
+                if (hideSearchTimer) { clearTimeout(hideSearchTimer); hideSearchTimer = null; }
                 const dropdown = DOM_CACHE.medicineSearchDropdown;
                 const rect = element.getBoundingClientRect();
                 dropdown.style.left = rect.left + 'px';
@@ -2945,7 +2947,8 @@ if (window.Permission) {
         }
 
         function tryHideSearch() {
-            setTimeout(() =>{DOM_CACHE.medicineSearchDropdown.style.display = 'none';}, 200);
+            if (hideSearchTimer) clearTimeout(hideSearchTimer);
+            hideSearchTimer = setTimeout(() =>{DOM_CACHE.medicineSearchDropdown.style.display = 'none';}, 200);
         }
 
         function selectMedicine(index, name, code, price) {

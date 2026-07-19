@@ -1494,6 +1494,7 @@ if (window.Permission) {
 
         let currentUser = null;
         let searchDebounceTimer = null;
+        let hideSearchTimer = null;
 
         // Cloudflare KV API 地址
         const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
@@ -6103,6 +6104,7 @@ if (window.Permission) {
 
         function showSearchDropdown(element, query, column) {
             const dropdown = DOM_CACHE.medicineSearchDropdown;
+            if (hideSearchTimer) { clearTimeout(hideSearchTimer); hideSearchTimer = null; }
             const rect = element.getBoundingClientRect();
             dropdown.style.left = rect.left + 'px';
             dropdown.style.top = (rect.bottom + 2) + 'px';
@@ -6167,7 +6169,8 @@ if (window.Permission) {
         }
 
         function tryHideSearch() {
-            setTimeout(() => {DOM_CACHE.medicineSearchDropdown.style.display = 'none';}, 200);
+            if (hideSearchTimer) clearTimeout(hideSearchTimer);
+            hideSearchTimer = setTimeout(() => {DOM_CACHE.medicineSearchDropdown.style.display = 'none';}, 200);
         }
 
         function selectMedicine(index, name, code, price) {
