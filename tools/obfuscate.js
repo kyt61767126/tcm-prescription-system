@@ -33,35 +33,40 @@ const OBFUSCATOR_CONFIG = {
     identifierNamesGenerator: 'hexadecimal',
     transformObjectKeys: true,
     unicodeEscapeSequence: false,
+    // 生产环境禁用 console.log/info/warn/error，防止调试信息泄露
+    disableConsoleOutput: true,
     // 保留注释中的版权信息
     reserveStrings: ['Copyright', '版权所有', '惠康'],
-    // 不混淆的标识符（保持API兼容）
+    // 不混淆的标识符（仅保留被内联 HTML 事件处理直接调用的业务函数名）
+    // 内置 API（window/document/console 等）和对象名（AuthCore/Permission 等）无需保留：
+    // - 内置 API obfuscator 不会混淆
+    // - 对象属性名通过字符串数组解密还原，混淆后运行时仍可访问
     reservedNames: [
-        'AuthCore', 'Permission', 'DBG', 'PrintUtils',
-        'MedicineDict', 'DbAdapter', 'PerfUtils',
-        'PrescriptionCore', 'PatientArchive',
-        'window', 'document', 'localStorage', 'sessionStorage',
-        'console', 'fetch', 'Promise', 'IndexedDB',
-        'require', 'module', 'exports', 'process',
-        'crypto', 'TextEncoder', 'URL', 'Date',
-        'JSON', 'Object', 'Array', 'String', 'Number',
-        'Boolean', 'Error', 'Map', 'Set', 'Math',
-        'parseInt', 'parseFloat', 'isNaN', 'encodeURIComponent',
-        'decodeURIComponent', 'setTimeout', 'setInterval',
-        'clearTimeout', 'clearInterval', 'requestAnimationFrame',
-        'cancelAnimationFrame', 'IntersectionObserver', 'MutationObserver',
-        'indexedDB', 'openDatabase', 'navigator', 'location',
-        'history', 'screen', 'alert', 'confirm', 'prompt',
-        'capacitor', 'Capacitor', 'electronAPI', 'ipcRenderer',
-        'androidAppExit', 'AndroidAppExit',
-        // 业务函数名（被 inline onclick 调用，必须保留）
+        // 用户管理（内联 onclick 调用）
+        'handleEditUser', 'confirmEditUser', 'handleDeleteUser',
+        'handleAddUser', 'handleViewUserPrescriptions',
+        'getUsers', 'saveUsers', 'renderUserList',
+        // 权限检查（内联调用）
         'isAdmin', 'isClinicAdmin', 'isPlatformAdmin', 'isDoctor',
         'currentUser', 'filterPrescriptionsByPermission',
-        'openRecordingOverlay', 'openPhotoOverlay',
+        // 处方操作（内联调用）
         'renderHistoryList', 'savePrescription', 'printPrescription',
         'clearPrescription', 'loadHistory', 'deleteHistory',
-        'viewMediaFiles', 'hashPassword', 'getUsers', 'saveUsers',
-        'renderUserList', 'handleAddUser', 'handleViewUserPrescriptions'
+        // 媒体操作（内联调用）
+        'openRecordingOverlay', 'openPhotoOverlay',
+        'viewMediaFiles', 'mediaViewerNav', 'renderMediaViewerSingle',
+        'loadMediaSingleFile', '__openSysPlayer',
+        // 药品管理（内联调用）
+        'selectMedicine', 'selectPatientName', 'selectFormula',
+        'closeMedicineEditModal', 'saveMedicineEdit',
+        // 药品导入（内联调用）
+        'cancelImportMethod', 'executeImportMethod',
+        'confirmFormula', 'confirmMedicine', 'confirmImportMedicines',
+        // 密码哈希（内联调用）
+        'hashPassword',
+        // 搜索框事件处理（内联 onfocus/onblur/onkeyup/onkeydown/onkeypress/oninput）
+        'startSearch', 'tryHideSearch', 'handleSearchKey',
+        'handleSearchKeyDown', 'handleSearchKeyPress', 'handleInput'
     ]
 };
 

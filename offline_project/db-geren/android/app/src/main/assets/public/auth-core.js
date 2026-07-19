@@ -264,12 +264,67 @@
         }
     }
 
+    // PBKDF2 增强哈希（防字典爆破）：格式 pbkdf2$iterations$saltHex$hashHex
+    const PBKDF2_ITERATIONS = 100000;
+    function isPasswordPBKDF2(pwd) {
+        return typeof pwd === 'string' && pwd.startsWith('pbkdf2$');
+    }
+
+    async function hashPasswordPBKDF2(password, username) {
+        if (!password) return '';
+        try {
+            const saltSource = username ? (PASSWORD_SALT + ':' + username) : PASSWORD_SALT;
+            const saltBytes = new TextEncoder().encode(saltSource);
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']
+            );
+            const hashBuffer = await crypto.subtle.deriveBits(
+                { name: 'PBKDF2', salt: saltBytes, iterations: PBKDF2_ITERATIONS, hash: 'SHA-256' },
+                keyMaterial, 256
+            );
+            const saltHex = Array.from(saltBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+            const hashHex = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+            return 'pbkdf2$' + PBKDF2_ITERATIONS + '$' + saltHex + '$' + hashHex;
+        } catch (e) {
+            return await hashPasswordWithUser(password, username);
+        }
+    }
+
+    async function verifyPasswordPBKDF2(inputPassword, storedPassword) {
+        try {
+            const parts = storedPassword.split('$');
+            if (parts.length !== 4) return false;
+            const iterations = parseInt(parts[1], 10);
+            const saltHex = parts[2];
+            const expectedHash = parts[3];
+            const saltBytes = new Uint8Array(saltHex.length / 2);
+            for (let i = 0; i < saltBytes.length; i++) {
+                saltBytes[i] = parseInt(saltHex.substr(i * 2,2), 16);
+            }
+            const keyMaterial = await crypto.subtle.importKey(
+                'raw', new TextEncoder().encode(inputPassword), 'PBKDF2', false, ['deriveBits']
+            );
+            const hashBuffer = await crypto.subtle.deriveBits(
+                { name: 'PBKDF2', salt: saltBytes, iterations: iterations, hash: 'SHA-256' },
+                keyMaterial, 256
+            );
+            const actualHash = Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+            return actualHash === expectedHash;
+        } catch (e) {
+            return false;
+        }
+    }
+
     function isPasswordHashed(pwd) {
         return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
     }
 
     async function verifyPassword(inputPassword, storedPassword, username) {
         if (!storedPassword) return false;
+        // 优先校验 PBKDF2 格式（新格式）
+        if (isPasswordPBKDF2(storedPassword)) {
+            return await verifyPasswordPBKDF2(inputPassword, storedPassword);
+        }
         if (isPasswordHashed(storedPassword)) {
             // 先尝试增强版哈希（含用户名盐值）
             if (username) {
@@ -281,6 +336,13 @@
         }
         // 兼容旧明文密码
         return storedPassword === inputPassword;
+    }
+
+    // 密码自动升级：登录成功后如果密码是旧格式（SHA-256 或明文），升级为 PBKDF2
+    async function upgradePasswordIfNeeded(inputPassword, storedPassword, username) {
+        if (!storedPassword || isPasswordPBKDF2(storedPassword)) return null;
+        // 旧格式（SHA-256 或明文），生成 PBKDF2 哈希
+        return await hashPasswordPBKDF2(inputPassword, username);
     }
 
     // 记住密码加密存储（非明文）
@@ -575,10 +637,17 @@
                     if (!user) {
                         return { success: false, error: '用户不存在' };
                     }
-                    const pwdOk = await verifyPassword(password, user.password || '');
+                    const pwdOk = await verifyPassword(password, user.password || '', username);
                     if (!pwdOk) {
                         return { success: false, error: '密码错误' };
                     }
+                    // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
+                    try {
+                        const upgraded = await upgradePasswordIfNeeded(password, user.password, username);
+                        if (upgraded && typeof window !== 'undefined' && window.AuthCore && window.AuthCore.upgradeUserPassword) {
+                            await window.AuthCore.upgradeUserPassword(username, upgraded);
+                        }
+                    } catch (e) { /* 升级失败不影响登录 */ }
                     // 不返回密码
                     const { password: _, ...safeUser } = user;
                     return { success: true, user: safeUser };
@@ -599,10 +668,17 @@
                     if (!user) {
                         return { success: false, error: '用户信息加载失败' };
                     }
-                    const pwdOk = await verifyPassword(password, user.password || '');
+                    const pwdOk = await verifyPassword(password, user.password || '', username);
                     if (!pwdOk) {
                         return { success: false, error: '密码错误' };
                     }
+                    // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
+                    try {
+                        const upgraded = await upgradePasswordIfNeeded(password, user.password, username);
+                        if (upgraded && typeof window !== 'undefined' && window.AuthCore && window.AuthCore.upgradeUserPassword) {
+                            await window.AuthCore.upgradeUserPassword(username, upgraded);
+                        }
+                    } catch (e) { /* 升级失败不影响登录 */ }
                     const { password: _, ...safeUser } = user;
                     return { success: true, user: safeUser };
                 } catch (e) {
@@ -753,8 +829,12 @@
         // 密码加密
         hashPassword,
         hashPasswordWithUser,
+        hashPasswordPBKDF2,
         verifyPassword,
+        verifyPasswordPBKDF2,
+        upgradePasswordIfNeeded,
         isPasswordHashed,
+        isPasswordPBKDF2,
         encryptUsers,
         decryptUsers,
         encryptPassword,

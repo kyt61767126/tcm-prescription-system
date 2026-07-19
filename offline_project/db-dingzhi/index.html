@@ -1142,10 +1142,34 @@ if (window.Permission) {
                 }
                 
                 const users = getUsers();
-                const hashedPwd = await hashPassword(password);
-                const user = users.find(u =>u.username === username && u.password === hashedPwd);
-                
+                // 使用 AuthCore.verifyPassword 支持 PBKDF2 + 旧 SHA-256 + 明文兼容
+                let user = null;
+                for (const u of users) {
+                    if (u.username !== username) continue;
+                    if (window.AuthCore && AuthCore.verifyPassword) {
+                        if (await AuthCore.verifyPassword(password, u.password || '', username)) { user = u; break; }
+                    } else {
+                        const hashedPwd = await hashPassword(password);
+                        if (u.password === hashedPwd) { user = u; break; }
+                    }
+                }
+
                 if (user) {
+                    // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
+                    try {
+                        if (window.AuthCore && AuthCore.upgradePasswordIfNeeded) {
+                            const upgraded = await AuthCore.upgradePasswordIfNeeded(password, user.password, username);
+                            if (upgraded) {
+                                const allUsers = getUsers();
+                                const idx = allUsers.findIndex(u => u.username === username);
+                                if (idx >= 0) {
+                                    allUsers[idx].password = upgraded;
+                                    saveUsers(allUsers);
+                                }
+                            }
+                        }
+                    } catch (e) { console.warn('密码升级失败:', e); }
+
                     currentUser = user;
                     // 使用统一的 user_login_data 存储登录信息
                     const loginData = {
