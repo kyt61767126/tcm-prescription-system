@@ -4279,6 +4279,10 @@ if (window.Permission) {
             clearPrescription();
             // B1: 处方保存后自动备份
             saveLocalBackup();
+            // 刷新历史列表显示，确保用户能立即看到刚才保存的处方
+            try {
+                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+            } catch(e) { console.warn('刷新历史列表失败:', e); }
         }
 
         function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
