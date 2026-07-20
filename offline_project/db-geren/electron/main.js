@@ -546,6 +546,31 @@ ipcMain.handle('license:get-feature-status', () => {
 });
 
 // ★ 激活码相关 IPC（云端激活系统，第3周任务）
+
+// ★ 一体化到期提示 + 拉起激活窗口（解决渲染进程 alert 阻塞导致 activate.show 不执行的问题）
+// 流程：main process 中 dialog.showMessageBoxSync 阻塞等待用户点击确定 → 自动 showActivateWindow
+ipcMain.handle('license:show-expire-alert', (event, message) => {
+    try {
+        // 1. 显示到期提示框（同步阻塞，等待用户点击确定）
+        dialog.showMessageBoxSync(mainWindow, {
+            type: 'warning',
+            title: '授权失效',
+            message: message || '授权已失效，请激活',
+            buttons: ['确定，前往激活'],
+            defaultId: 0,
+            cancelId: 0
+        });
+        // 2. 用户点击确定后，自动拉起激活码输入窗口
+        activateManager.showActivateWindow(mainWindow);
+        return { success: true };
+    } catch (e) {
+        console.error('[IPC] show-expire-alert 异常:', e);
+        // 出错时尝试单独弹激活窗口
+        try { activateManager.showActivateWindow(mainWindow); } catch (e2) {}
+        return { success: false, error: String(e) };
+    }
+});
+
 ipcMain.handle('license:show-activate', () => {
     try {
         activateManager.showActivateWindow(mainWindow);

@@ -977,10 +977,25 @@
     }
 
     // ★ 弹窗交互：先显示到期提示，用户点击确定后自动拉起激活窗口
+    // 桌面版：优先用 showExpireAlert 一体化 IPC（main process 中 dialog + showActivateWindow）
+    // APP 端：showExpireAlert 不存在，回退到 alert + activate.show()
     async function showExpireAlertAndActivate(msg) {
         global.__licenseActivating = true;
 
-        // 显示到期提示弹窗（阻塞，用户点击确定后继续）
+        // ★ 桌面版优先：一体化 IPC（解决渲染进程 alert 阻塞导致 activate.show 不执行的问题）
+        if (global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.showExpireAlert === 'function') {
+            try {
+                await global.electronAPI.activate.showExpireAlert(msg);
+                // main process 中 dialog 关闭后已自动 showActivateWindow
+                return;
+            } catch (e) {
+                console.error('[LicenseCheck] showExpireAlert 失败，回退到 alert+show:', e);
+                // 回退到下面的 alert + show 流程
+            }
+        }
+
+        // ★ APP 端或回退：先 alert 显示到期信息，关闭后 activate.show()
         try {
             alert(msg);
         } catch (e) { /* alert 不可用时忽略 */ }

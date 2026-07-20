@@ -175,6 +175,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // ★ 激活码激活窗口（云端激活系统，第3周任务）
     activate: {
         show: () => ipcRenderer.invoke('license:show-activate'),
+        // ★ 一体化到期提示 + 拉起激活窗口（main process 中 dialog + showActivateWindow）
+        showExpireAlert: (message) => ipcRenderer.invoke('license:show-expire-alert', message),
         submit: (code, user) => ipcRenderer.invoke('license:submit-activate', code, user),
         close: () => ipcRenderer.invoke('license:close-activate'),
         restart: () => ipcRenderer.invoke('license:restart'),
