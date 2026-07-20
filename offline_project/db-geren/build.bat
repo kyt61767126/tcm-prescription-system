@@ -91,6 +91,9 @@ echo.
 echo [6/7] Running build...
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
+REM better-sqlite3 prebuild-install 从 GitHub Releases 下载预编译二进制时 SSL 证书验证失败
+REM 临时关闭 TLS 验证（仅构建期间），确保 prebuild-install 能成功下载 electron ABI 二进制
+set NODE_TLS_REJECT_UNAUTHORIZED=0
 call npm run build
 if errorlevel 1 (
     echo.
