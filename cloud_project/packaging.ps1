@@ -215,8 +215,66 @@ function Show-Menu {
 # Section 5: Build Functions
 # ============================================================================
 
+# 打包前配置确认（显示当前版本号+关键信息，要求用户确认）
+function Confirm-BuildConfig {
+    param([string]$Target)
+    Write-Host ""
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host "  打包前配置确认 - $Target" -ForegroundColor Cyan
+    Write-Host "==========================================" -ForegroundColor Cyan
+
+    # 从 cloud_desktop/package.json 读取
+    $pkgFile = Join-Path $scriptDir 'cloud_desktop\package.json'
+    if (Test-Path $pkgFile) {
+        try {
+            $pkg = Get-Content $pkgFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            Write-Host "  产品名称: $($pkg.build.productName)" -ForegroundColor Yellow
+            Write-Host "  桌面版本: $($pkg.version)" -ForegroundColor Yellow
+        } catch {
+            Write-Host "  [警告] 无法解析 package.json" -ForegroundColor Yellow
+        }
+    }
+
+    # 从 build.gradle 读取 versionName
+    $gradleFile = Join-Path $scriptDir 'cloud_app\app\build.gradle'
+    if (Test-Path $gradleFile) {
+        $gradleContent = Get-Content $gradleFile -Raw -Encoding UTF8
+        $versionNameMatch = [regex]::Match($gradleContent, 'versionName\s+"([^"]+)"')
+        if ($versionNameMatch.Success) {
+            Write-Host "  APP版本:  $($versionNameMatch.Groups[1].Value)" -ForegroundColor Yellow
+        }
+    }
+
+    # 从 capacitor.config.json 读取云端URL
+    $capFile = Join-Path $scriptDir 'cloud_app\app\src\main\assets\capacitor.config.json'
+    if (Test-Path $capFile) {
+        try {
+            $cap = Get-Content $capFile -Raw -Encoding UTF8 | ConvertFrom-Json
+            Write-Host "  云端URL:  $($cap.server.url)" -ForegroundColor Yellow
+        } catch {}
+    }
+
+    Write-Host "==========================================" -ForegroundColor Cyan
+    Write-Host ""
+    $confirm = Read-Host "  确认开始打包吗？(Y=确认 / N=取消 / 回车=确认) [Y]"
+    if ([string]::IsNullOrWhiteSpace($confirm)) { $confirm = 'Y' }
+    if ($confirm -ieq 'N') {
+        Write-Host "  [SKIP] 用户取消打包" -ForegroundColor Yellow
+        return $false
+    }
+    Write-Host "  [INFO] 开始打包..." -ForegroundColor Green
+    Write-Host ""
+    return $true
+}
+
 function Build-Desktop {
     Write-Step "打包云端桌面版 exe (Electron)"
+
+    # 打包前配置确认
+    if (-not (Confirm-BuildConfig -Target "云端桌面版")) {
+        return 1
+    }
+
     Write-Host "  将执行以下步骤："
     Write-Host "  1. 检查环境（npm）"
     Write-Host "  2. 检查 node_modules（缺失时自动 npm ci/install）"
@@ -254,6 +312,12 @@ function Build-Desktop {
 
 function Build-App {
     Write-Step "打包云端手机 APP (APK)"
+
+    # 打包前配置确认
+    if (-not (Confirm-BuildConfig -Target "云端手机 APP")) {
+        return 1
+    }
+
     Write-Host "  将执行以下步骤："
     Write-Host "  1. 同步 shared 文件到 cloud_app"
     Write-Host "  2. 同步 APP 版本号"
