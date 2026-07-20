@@ -935,7 +935,7 @@
         <div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div>
         <div class="tab-item" id="medicineManageBtn" onclick="showModal('medicineModal')">【药品管理】</div>
         <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
-        <div class="tab-item" onclick="showModal('analyticsModal')">【统计】</div>
+        <div class="tab-item" onclick="showModal('analyticsModal')">【数据统计】</div>
         <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【用户管理】</div>
         <div class="tab-item" id="changePwdBtn" onclick="showModal('changePwdModal')" style="display:none;">【修改密码】</div>
         <div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div>
@@ -1171,9 +1171,9 @@
                         <button class="action-btn" onclick="selectImageSaveDirectory()" style="background:#4CAF50;color:white;">📂 设置图片保存位置</button>
                         <div id="imageSavePath" style="font-size:11px;color:#666;margin-top:4px;"></div>
                     </div>
-                    <button class="action-btn mobile-hide" onclick="backupData()" style="background:#4CAF50;color:white;">💾 备份数据</button>
-                    <button class="action-btn mobile-hide" onclick="restoreData()" style="background:#9C27B0;color:white;">📤 恢复数据</button>
-                    <button class="action-btn mobile-hide" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button>
+                    <button class="action-btn mobile-hide" onclick="backupData()" style="background:#4CAF50;color:white;display:none;">💾 备份数据</button>
+                    <button class="action-btn mobile-hide" onclick="restoreData()" style="background:#9C27B0;color:white;display:none;">📤 恢复数据</button>
+                    <button class="action-btn mobile-hide" onclick="clearAllData()" style="background:#f44336;color:white;display:none;">🗑️ 清空数据</button>
                 </div>
             </div>
             <div class="modal-footer">
@@ -4626,13 +4626,13 @@ if (window.Permission) {
                     btn2.onclick = function() { showPlatformPrescriptionModal(); };
                     btn2.style.display = '';
                 } else if (isClinicAdmin(currentUser)) {
-                    btn1.innerHTML = '📊 统计';
+                    btn1.innerHTML = '📊 数据统计';
                     btn1.onclick = function() { showModal('analyticsModal'); };
                     btn2.innerHTML = '👤 用户';
                     btn2.onclick = function() { showUserManageModal(); };
                     btn2.style.display = '';
                 } else {
-                    btn1.innerHTML = '📊 统计';
+                    btn1.innerHTML = '📊 数据统计';
                     btn1.onclick = function() { showModal('analyticsModal'); };
                     btn2.innerHTML = '🔐 修改密码';
                     btn2.onclick = function() { showModal('changePwdModal'); };
@@ -4643,13 +4643,13 @@ if (window.Permission) {
 
             if (currentUser && isClinicAdmin(currentUser)) {
                 // 网页端管理员：统计分析、账户管理
-                btn1.innerHTML = '📊 统计';
+                btn1.innerHTML = '📊 数据统计';
                 btn1.onclick = function() { showModal('analyticsModal'); };
                 btn2.innerHTML = '👤 用户';
                 btn2.onclick = function() { showUserManageModal(); };
                 btn2.style.display = '';
             } else {
-                btn1.innerHTML = '📊 统计';
+                btn1.innerHTML = '📊 数据统计';
                 btn1.onclick = function() { showModal('analyticsModal'); };
                 btn2.innerHTML = '🔐 修改密码';
                 btn2.onclick = function() { showModal('changePwdModal'); };
@@ -5923,6 +5923,9 @@ if (window.Permission) {
             }
 
             // 快速初始化表格（只创建必要的行）
+            // ★ 修复18行bug：防火墙 __medicineTableFirewall 可能在 init 完成前已 push 3 行，
+            //   此处先清空再添加15行，确保最终行数严格为15
+            prescriptionItems = [];
             for (let i = 0; i < 15; i++) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
@@ -9367,7 +9370,7 @@ IconFile=${scriptPath}`;
                             <div style="font-size:11px;color:#666;">${escapeHtml(p.date)} | ${escapeHtml(p.diagnosis || '无诊断')}</div>
                         </div>
                         <div style="text-align:right;">
-                            <div style="font-weight:bold;color:#8b0000;">¥${escapeHtml(p.totalAmount || 0)}</div>
+                            <div style="font-weight:bold;color:#8b0000;">¥${Number(p.totalAmount || 0).toFixed(2)}</div>
                             <button class="small-btn" onclick="event.stopPropagation();deleteCase(${p.id})">删除</button>
                         </div>
                     </div>
