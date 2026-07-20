@@ -223,8 +223,8 @@ function Build-All-Strict {
     Write-Host "  - 桌面版: cloud_desktop\dist\*.exe"
     Write-Host "  - 手机 APP: 当前目录\*.apk（已启用签名严格模式）"
     Write-Host ""
-    $confirm = Read-Host "确认开始一键打包？(y/N)"
-    if ($confirm -ne "y" -and $confirm -ne "Y") {
+    $confirm = Read-Host "确认开始一键打包？(Y/n) [默认回车=开始]"
+    if ($confirm -eq "n" -or $confirm -eq "N") {
         Write-Host "  已取消"
         Start-Sleep -Seconds 1
         return
