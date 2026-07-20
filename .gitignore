@@ -45,6 +45,7 @@ fix*.ts
 # 临时校验/调试目录
 _apk_check/
 _apk_verify/
+.interface-baseline/
 
 # 敏感凭据图片
 网页版密码.png

@@ -623,7 +623,7 @@ app.whenReady().then(async () => {
             return false;
         });
     }
-    
+
     createLoginWindow();
 
     app.on('activate', () => {
