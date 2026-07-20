@@ -213,6 +213,71 @@ public class LicenseManager {
         return false;
     }
 
+    // ========================================================================
+    //  ★ P3-B 新增：模拟器检测（防 VM/Sandbox 分析）
+    //  策略：检测 Build 系列属性中的模拟器特征（generic/sdk/goldfish/google_sdk 等）
+    //  返回：true 表示检测到模拟器（仅记录日志，不阻塞运行，避免误判）
+    //  ★ 重要：仅在 release 版启用，debug 模式跳过；只记录日志不阻塞运行
+    // ========================================================================
+    public boolean isEmulator() {
+        try {
+            // Build.FINGERPRINT 含 generic/sdk/google_sdk 等模拟器标志
+            if (Build.FINGERPRINT != null) {
+                String fp = Build.FINGERPRINT.toLowerCase();
+                if (fp.contains("generic") || fp.contains("sdk") ||
+                    fp.contains("google_sdk") || fp.contains("goldfish") ||
+                    fp.contains("vbox") || fp.contains("ttvm")) {
+                    Log.w(TAG, "模拟器检测：Build.FINGERPRINT 含模拟器特征: " + Build.FINGERPRINT);
+                    return true;
+                }
+            }
+            // Build.MODEL 含 sdk/google_sdk/Android SDK built for x86 等
+            if (Build.MODEL != null) {
+                String model = Build.MODEL.toLowerCase();
+                if (model.contains("google_sdk") || model.contains("emulator") ||
+                    model.contains("android sdk built for x86") || model.contains("sdk gphone")) {
+                    Log.w(TAG, "模拟器检测：Build.MODEL 含模拟器特征: " + Build.MODEL);
+                    return true;
+                }
+            }
+            // Build.HARDWARE 含 goldfish/ranchu（Android 模拟器常用）
+            if (Build.HARDWARE != null) {
+                String hw = Build.HARDWARE.toLowerCase();
+                if (hw.contains("goldfish") || hw.contains("ranchu") || hw.contains("vbox")) {
+                    Log.w(TAG, "模拟器检测：Build.HARDWARE 含模拟器特征: " + Build.HARDWARE);
+                    return true;
+                }
+            }
+            // Build.PRODUCT 含 sdk/google_sdk/sdk_x86 等
+            if (Build.PRODUCT != null) {
+                String prod = Build.PRODUCT.toLowerCase();
+                if (prod.contains("sdk") || prod.contains("google_sdk") || prod.contains("vbox")) {
+                    Log.w(TAG, "模拟器检测：Build.PRODUCT 含模拟器特征: " + Build.PRODUCT);
+                    return true;
+                }
+            }
+            // Build.BRAND 含 generic/google
+            if (Build.BRAND != null) {
+                String brand = Build.BRAND.toLowerCase();
+                if (brand.contains("generic")) {
+                    Log.w(TAG, "模拟器检测：Build.BRAND=generic");
+                    return true;
+                }
+            }
+            // Build.MANUFACTURER 含 Genymotion/google
+            if (Build.MANUFACTURER != null) {
+                String mfr = Build.MANUFACTURER.toLowerCase();
+                if (mfr.contains("genymotion") || mfr.contains("unknown")) {
+                    Log.w(TAG, "模拟器检测：Build.MANUFACTURER 含模拟器特征: " + Build.MANUFACTURER);
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            // 检测异常时不阻塞
+        }
+        return false;
+    }
+
     /**
      * 反射读取 Android 系统属性（替代隐藏 API android.os.SystemProperties）
      * @param key 属性名
@@ -1269,6 +1334,12 @@ public class LicenseManager {
                 return failValidation(
                         "APK 签名校验失败，软件可能被篡改。\n请从官方渠道重新下载安装。",
                         "signature_mismatch");
+            }
+
+            // ★ P3-B 新增：模拟器检测（仅记录日志，不阻塞运行）
+            // 用途：便于将来分析破解行为，避免误判合法用户
+            if (isEmulator()) {
+                Log.w(TAG, "检测到运行在模拟器环境中（仍允许运行，仅记录日志）");
             }
 
             // 1. 时间回拨检测

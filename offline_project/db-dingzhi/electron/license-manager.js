@@ -719,6 +719,91 @@ function isDebuggerAttached() {
 }
 
 // ============================================================================
+//  ★ P3-B 新增：虚拟机/沙箱检测（防 VM/Sandbox 分析）
+//  策略：
+//   1. CPU vendor 字符串含 VMware/VirtualBox/Hyper-V/QEMU/Xen
+//   2. WMI 查询 Win32_ComputerSystem.Manufacturer 含 VMware/VirtualBox/Microsoft/QEMU
+//   3. 进程列表含 sandboxie.exe / Sandboxie* （沙箱）
+//   4. 可选磁盘特征（VM 磁盘型号通常含 VBOX/VIRTUAL/VMware）
+//  返回：true 表示检测到 VM/沙箱（仅记录日志，不阻塞运行，避免误判）
+//  ★ 重要：仅在打包后启用，开发模式跳过；检测结果只记录日志不直接拒绝运行
+//        （避免在 VM 中合法用户被误判阻塞，由调用方决定如何处理）
+// ============================================================================
+let _vmCheckCache = null;
+function isVirtualMachine() {
+    if (_vmCheckCache !== null) return _vmCheckCache;
+    try {
+        // 仅在打包后启用检测（开发模式下跳过）
+        if (!app.isPackaged) {
+            _vmCheckCache = false;
+            return false;
+        }
+        const { execSync } = require('child_process');
+        const vmIndicators = [
+            'vmware', 'virtualbox', 'vbox', 'qemu', 'xen', 'hyper-v', 'hyperv',
+            'parallels', 'vmware virtual platform', 'innotek gmbh'
+        ];
+
+        // 1. WMI 查询计算机制造商和型号
+        try {
+            const out = execSync('wmic computersystem get manufacturer,model',
+                { timeout: 2000, windowsHide: true }).toString().toLowerCase();
+            for (const ind of vmIndicators) {
+                if (out.includes(ind)) {
+                    console.warn('[License] 检测到 VM 标志（WMI Manufacturer/Model）:', ind);
+                    _vmCheckCache = true;
+                    return true;
+                }
+            }
+        } catch (e) { /* 忽略 WMI 失败 */ }
+
+        // 2. WMI 查询磁盘型号（VM 磁盘通常含 VBOX/VIRTUAL/VMware）
+        try {
+            const out = execSync('wmic diskdrive get model',
+                { timeout: 2000, windowsHide: true }).toString().toLowerCase();
+            for (const ind of vmIndicators) {
+                if (out.includes(ind)) {
+                    console.warn('[License] 检测到 VM 标志（WMI DiskDrive Model）:', ind);
+                    _vmCheckCache = true;
+                    return true;
+                }
+            }
+        } catch (e) { /* 忽略 */ }
+
+        // 3. BIOS 版本字符串（VMware/VirtualBox BIOS 标志）
+        try {
+            const out = execSync('wmic bios get serialnumber,version',
+                { timeout: 2000, windowsHide: true }).toString().toLowerCase();
+            for (const ind of vmIndicators) {
+                if (out.includes(ind)) {
+                    console.warn('[License] 检测到 VM 标志（WMI BIOS）:', ind);
+                    _vmCheckCache = true;
+                    return true;
+                }
+            }
+        } catch (e) { /* 忽略 */ }
+
+        // 4. 进程列表检测沙箱（Sandboxie）
+        try {
+            const out = execSync('wmic process get name',
+                { timeout: 2000, windowsHide: true }).toString().toLowerCase();
+            if (out.includes('sandboxie') || out.includes('sandboxiedcomlaunch') ||
+                out.includes('sandboxierpcss')) {
+                console.warn('[License] 检测到沙箱进程（Sandboxie）');
+                _vmCheckCache = true;
+                return true;
+            }
+        } catch (e) { /* 忽略 */ }
+
+        _vmCheckCache = false;
+        return false;
+    } catch (e) {
+        _vmCheckCache = false;
+        return false;
+    }
+}
+
+// ============================================================================
 //  校验主逻辑
 // ============================================================================
 function validateLicense(options) {
@@ -736,6 +821,12 @@ function validateLicense(options) {
             message: '检测到调试器已连接，软件无法运行。\n请关闭调试模式后重启应用。',
             type: 'debugger'
         };
+    }
+
+    // ★ P3-B 新增：VM/沙箱检测（仅记录日志，不阻塞运行）
+    // 用途：便于将来分析破解行为，避免误判合法用户（如企业 IT 部署在 VM 中）
+    if (isVirtualMachine()) {
+        console.warn('[License] 检测到运行在 VM/沙箱环境中（仍允许运行，仅记录日志）');
     }
 
     // 1. 检查时间回拨（防止用户修改系统时间延长试用/授权）
@@ -967,5 +1058,7 @@ module.exports = {
     // ★ P3-A 新增：硬件指纹相关
     getHardwareFingerprint, // 获取硬件指纹（供测试用）
     // ★ P1-B 新增：安全检测
-    isDebuggerAttached    // 调试器检测（供 main.js 调用）
+    isDebuggerAttached,    // 调试器检测（供 main.js 调用）
+    // ★ P3-B 新增：VM/沙箱检测
+    isVirtualMachine       // 虚拟机检测（供 main.js 调用，仅记录日志）
 };
