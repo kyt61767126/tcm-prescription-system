@@ -4073,6 +4073,13 @@ let currentUser = null;
         async function loadHistory(id) {
             const record = prescriptionHistory.find(p =>p.id === id);
             if (!record) return;
+            // ★ 优化1：检查当前是否有未保存的内容，避免被历史处方覆盖
+            const _curName = document.getElementById('patientName').value.trim();
+            const _curDiag = document.getElementById('diagnosis').value.trim();
+            const _hasItems = prescriptionItems && prescriptionItems.some(item => item.name);
+            if ((_curName || _curDiag || _hasItems) && !confirm('当前有未保存的内容，加载历史处方将覆盖。是否继续？')) {
+                return;
+            }
             document.getElementById('patientName').value = record.patientName;
             document.getElementById('patientGender').value = record.patientGender || '男';
             document.getElementById('patientAge').value = record.patientAge;
@@ -4300,7 +4307,14 @@ let currentUser = null;
             };
             
             // P7: 单条保存到 prescriptions store（O(1) 增量写入，替代全量重写）
-            await savePrescriptionToDB(record);
+            // ★ 优化2：处方保存事务包装，确保数据一致性
+            try {
+                await savePrescriptionToDB(record);
+            } catch (dbErr) {
+                console.error('[保存失败] 处方写入数据库失败:', dbErr);
+                alert('处方保存失败：' + (dbErr.message || '数据库写入错误') + '\n请重试或联系技术支持。');
+                return;
+            }
 
             // 更新内存数组（会话内查询源，按权限保持一致）
             prescriptionHistory.unshift(record);
@@ -4316,16 +4330,17 @@ let currentUser = null;
             prescriptionNoEl.blur();
             prescriptionNoEl.focus();
             
+            // 辅助操作失败不影响处方数据完整性（仅记录日志）
             // 生成处方签图片并自动下载
-            savePrescriptionAsImage(record, newPrescriptionNo);
+            try { savePrescriptionAsImage(record, newPrescriptionNo); } catch (e) { console.warn('生成处方图片失败:', e); }
             // 收集媒体文件元数据并更新处方记录
-            collectAndUpdateMediaFiles(record, newPrescriptionNo);
+            try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) { console.warn('收集媒体文件失败:', e); }
             // 更新药物使用频率
-            updateMedicineFrequency(record.items);
+            try { updateMedicineFrequency(record.items); } catch (e) { console.warn('更新药品频次失败:', e); }
             // 10. 执行重输清空表单
             clearPrescription();
             // B1: 处方保存后自动备份
-            saveLocalBackup();
+            try { saveLocalBackup(); } catch (e) { console.warn('自动备份失败:', e); }
             // 刷新历史列表显示，确保用户能立即看到刚才保存的处方
             try {
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
