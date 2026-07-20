@@ -722,27 +722,17 @@ ipcMain.handle('license:get-feature-status', () => {
 
 // ★ 激活码相关 IPC（云端激活系统，第3周任务）
 
-// ★ 一体化到期提示 + 拉起激活窗口（用异步 dialog.showMessageBox 避免阻塞 main process）
+// ★ 一体化到期提示 + 拉起激活窗口（双按钮：前往激活 / 退出软件）
+// 用异步 dialog.showMessageBox（不阻塞 main process 事件循环）
+// 用户点击【前往激活】→ 关闭到期弹窗，唤起激活码输入页面，软件保持运行
+// 用户点击【退出软件】→ 直接 app.exit(0) 终止 Electron 进程
+// 激活窗口关闭后 license 仍失效时，自动重新弹 expire-alert（兜底限制）
 ipcMain.handle('license:show-expire-alert', async (event, message) => {
     try {
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            await dialog.showMessageBox(mainWindow, {
-                type: 'warning',
-                title: '授权失效',
-                message: message || '授权已失效，请激活',
-                buttons: ['确定，前往激活'],
-                defaultId: 0,
-                cancelId: 0
-            });
-        }
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            activateManager.showActivateWindow(mainWindow);
-        } else {
-            activateManager.showActivateWindow(null);
-        }
-        return { success: true };
+        return await activateManager.showExpireAlertAndActivate(mainWindow, message);
     } catch (e) {
         console.error('[IPC] show-expire-alert 异常:', e);
+        // 出错时尝试单独弹激活窗口（兜底放行，避免阻塞用户）
         try { activateManager.showActivateWindow(mainWindow); } catch (e2) {
             console.error('[IPC] showActivateWindow 也失败:', e2);
         }

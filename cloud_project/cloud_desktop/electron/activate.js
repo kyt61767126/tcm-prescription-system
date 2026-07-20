@@ -15,7 +15,7 @@
 //    5. 提示激活成功 → 重启应用
 // ============================================================================
 
-const { BrowserWindow, app } = require('electron');
+const { BrowserWindow, app, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -110,6 +110,61 @@ async function activateOnline(code, machineId, user) {
 // ============================================================================
 let activateWindow = null;
 
+// ★ 是否正在执行 expire-alert 流程（防止 closed 事件与 expire-alert 互相递归）
+let inExpireAlertFlow = false;
+
+// ★ 一体化到期提示 + 拉起激活窗口（双按钮：前往激活 / 退出软件）
+// 用异步 dialog.showMessageBox（不阻塞 main process 事件循环）
+// 用户点击【前往激活】→ 关闭到期弹窗，唤起激活码输入页面，软件保持运行
+// 用户点击【退出软件】→ 直接 app.exit(0) 终止 Electron 进程
+async function showExpireAlertAndActivate(parentWindow, message) {
+    // 防止递归调用（closed 事件触发的 expire-alert 期间再次被触发）
+    if (inExpireAlertFlow) return { success: true, action: 'skipped' };
+    inExpireAlertFlow = true;
+    try {
+        // 1. 异步显示双按钮到期提示框（不阻塞 main process）
+        let choice = 0; // 默认前往激活
+        const safeWindow = (parentWindow && !parentWindow.isDestroyed()) ? parentWindow : null;
+        const msgBoxOptions = {
+            type: 'warning',
+            title: '授权提示',
+            message: message || '试用期已到期，无法进入系统，请完成激活或退出程序',
+            buttons: ['前往激活', '退出软件'],
+            defaultId: 0,
+            cancelId: 0,
+            noLink: true
+        };
+        if (safeWindow) {
+            const result = await dialog.showMessageBox(safeWindow, msgBoxOptions);
+            choice = result.response;
+        } else {
+            // 无父窗口时，用同步 dialog
+            choice = dialog.showMessageBoxSync(msgBoxOptions);
+        }
+
+        // 2. 用户点击【退出软件】，直接终止 Electron 全部进程
+        if (choice === 1) {
+            console.log('[Activate] 用户选择退出软件');
+            app.exit(0);
+            return { success: true, action: 'exit' };
+        }
+
+        // 3. 用户点击【前往激活】，拉起激活码输入窗口
+        console.log('[Activate] 用户选择前往激活');
+        showActivateWindow(safeWindow);
+        return { success: true, action: 'activate' };
+    } catch (e) {
+        console.error('[Activate] showExpireAlertAndActivate 异常:', e);
+        // 异常时尝试单独弹激活窗口（兜底放行，避免阻塞用户）
+        try { showActivateWindow(parentWindow); } catch (e2) {
+            console.error('[Activate] showActivateWindow 也失败:', e2);
+        }
+        return { success: false, error: String(e) };
+    } finally {
+        inExpireAlertFlow = false;
+    }
+}
+
 function showActivateWindow(parentWindow) {
     // 如果已存在，聚焦
     if (activateWindow && !activateWindow.isDestroyed()) {
@@ -140,8 +195,24 @@ function showActivateWindow(parentWindow) {
     const htmlPath = path.join(__dirname, 'activate-window.html');
     activateWindow.loadFile(htmlPath, { query: { machineId: machineId } });
 
+    // ★ 兜底限制：激活窗口关闭后重新校验 license
+    // 如果 license 仍失效，重新弹 expire-alert（前往激活/退出软件）
+    // 防止用户关闭激活窗口后绕过激活使用主界面，杜绝免授权使用漏洞
     activateWindow.on('closed', () => {
         activateWindow = null;
+        if (inExpireAlertFlow) return; // 正在 expire-alert 流程中，避免递归
+        try {
+            const licenseResult = licenseManager.validateLicense();
+            if (!licenseResult.valid) {
+                console.log('[Activate] 激活窗口关闭后 license 仍失效，重新弹到期提示');
+                // 延迟 200ms 避免与当前 closed 事件循环冲突
+                setTimeout(() => {
+                    showExpireAlertAndActivate(parentWindow, licenseResult.message);
+                }, 200);
+            }
+        } catch (e) {
+            console.warn('[Activate] 关闭后重新校验 license 失败:', e);
+        }
     });
 
     return activateWindow;
@@ -164,6 +235,7 @@ module.exports = {
     getMachineId,
     activateOnline,
     showActivateWindow,
+    showExpireAlertAndActivate,  // ★ 新增：双按钮到期提示（前往激活/退出软件）
     closeActivateWindow,
     restartApp,
     ACTIVATE_API_URL

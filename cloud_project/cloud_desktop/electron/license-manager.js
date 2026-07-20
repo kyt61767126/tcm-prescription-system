@@ -86,7 +86,9 @@ function getTrialDays() {
     return DEFAULT_TRIAL_DAYS;
 }
 
-// ★ 设置试用期天数（持久化到 trial-config.json，重启后生效）
+// ★ 设置试用期天数（持久化到 trial-config.json，并自动覆盖 trial.dat 即时生效）
+// 修改配置后无需重启，trial.dat 立即按新配置更新 expiresAt（保留 startTime）
+// 测试时设为 0 天 → trial.dat 立即过期，下次校验触发激活
 function setTrialDays(days) {
     try {
         const parsed = parseInt(days, 10);
@@ -96,7 +98,37 @@ function setTrialDays(days) {
         const configPath = getTrialConfigPath();
         const config = { trialDays: parsed, updatedAt: new Date().toISOString() };
         fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-        return { success: true, trialDays: parsed, configPath: configPath };
+
+        // ★ 同步覆盖更新 trial.dat，修改配置即时生效（无需重启）
+        // 保留原 trial.startTime，按新配置重算 expiresAt
+        // 若 trial.dat 不存在则按新配置创建
+        // 若配置为 0 天，expiresAt = startTime 立即过期
+        let trialSyncMsg = '';
+        try {
+            let trial = readTrial();
+            const now = Date.now();
+            if (!trial) {
+                // 首次创建 trial.dat
+                trial = {
+                    startTime: now,
+                    expiresAt: now + parsed * 24 * 60 * 60 * 1000
+                };
+                if (parsed === 0) trial.expiresAt = trial.startTime;
+                trialSyncMsg = 'trial.dat 已创建';
+            } else {
+                // 保留 startTime，按新配置重算 expiresAt
+                trial.expiresAt = trial.startTime + parsed * 24 * 60 * 60 * 1000;
+                if (parsed === 0) trial.expiresAt = trial.startTime;
+                trialSyncMsg = 'trial.dat 已同步更新';
+            }
+            writeTrial(trial);
+            console.log('[License] setTrialDays:', trialSyncMsg, JSON.stringify(trial));
+        } catch (e2) {
+            console.warn('[License] setTrialDays 同步更新 trial.dat 失败:', e2.message);
+            trialSyncMsg = 'trial.dat 同步失败：' + e2.message;
+        }
+
+        return { success: true, trialDays: parsed, configPath: configPath, trialSync: trialSyncMsg };
     } catch (e) {
         return { success: false, error: String(e) };
     }
