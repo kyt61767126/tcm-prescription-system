@@ -50,10 +50,13 @@ function getMachineId() {
 //  在线激活
 // ============================================================================
 // 调用云端 validate API，返回 { success, license, licenseInfo } 或 { success: false, error }
-async function activateOnline(code, machineId, user) {
+// ★ v3 新增：clinicName 参数，传给云端做诊所名绑定校验
+async function activateOnline(code, machineId, user, clinicName) {
     try {
         const body = { code, machineId };
         if (user) body.user = user;
+        // ★ v3 新增：提交 clinicName（如填写）
+        if (clinicName) body.clinicName = clinicName;
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);  // 15 秒超时
@@ -202,7 +205,9 @@ function showActivateWindow(parentWindow) {
         activateWindow = null;
         if (inExpireAlertFlow) return; // 正在 expire-alert 流程中，避免递归
         try {
-            const licenseResult = licenseManager.validateLicense();
+            // ★ v3 新增：激活窗口关闭后重新校验 license，传入 localMachineId 进行绑定校验
+            const localMachineId = getMachineId();
+            const licenseResult = licenseManager.validateLicense({ localMachineId });
             if (!licenseResult.valid) {
                 console.log('[Activate] 激活窗口关闭后 license 仍失效，重新弹到期提示');
                 // 延迟 200ms 避免与当前 closed 事件循环冲突

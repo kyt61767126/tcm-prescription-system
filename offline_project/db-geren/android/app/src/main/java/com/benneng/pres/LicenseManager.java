@@ -24,6 +24,7 @@ import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
@@ -42,6 +43,9 @@ public class LicenseManager {
 
     // ★ HMAC 密钥（与桌面版 license-manager.js / 云端 license-core.js 完全一致）
     private static final String LICENSE_HMAC_KEY = "bnzc_tcm_license_key_v1_2026";
+
+    // ★ v3 新增：config.json 完整性签名密钥（与桌面版 license-manager.js / edit-config.ps1 完全一致）
+    private static final String CONFIG_SIGN_KEY = "bnzc_config_sign_key_v1_2026";
 
     // 试用与时间回拨配置（与桌面版一致）
     private static final int DEFAULT_TRIAL_DAYS = 7;  // 默认试用期 7 天（可通过 SharedPreferences 修改，测试时设为 0）
@@ -351,11 +355,12 @@ public class LicenseManager {
     // ========================================================================
     //  HMAC-SHA256 签名（与桌面版 generateSignature 完全一致）
     //  v2 签名内容：user|type|issuedAt|expiresAt|maxPrescriptions|features
+    //  v3 签名内容：在 v2 基础上增加 clinicName|machineId|licenseBinding
     //  v1 签名内容：user|type|issuedAt|expiresAt（向后兼容）
     // ========================================================================
     private String generateSignature(JSONObject data) {
         try {
-            String content = buildSignatureContent(data, true);
+            String content = buildSignatureContent(data, true, false);
             return hmacSha256(content);
         } catch (Exception e) {
             Log.e(TAG, "生成 v2 签名失败", e);
@@ -363,9 +368,20 @@ public class LicenseManager {
         }
     }
 
+    // ★ v3 新增：生成 v3 签名（含 clinicName/machineId/licenseBinding 三个绑定字段）
+    private String generateSignatureV3(JSONObject data) {
+        try {
+            String content = buildSignatureContent(data, true, true);
+            return hmacSha256(content);
+        } catch (Exception e) {
+            Log.e(TAG, "生成 v3 签名失败", e);
+            return "";
+        }
+    }
+
     private String generateSignatureV1(JSONObject data) {
         try {
-            String content = buildSignatureContent(data, false);
+            String content = buildSignatureContent(data, false, false);
             return hmacSha256(content);
         } catch (Exception e) {
             Log.e(TAG, "生成 v1 签名失败", e);
@@ -373,7 +389,8 @@ public class LicenseManager {
         }
     }
 
-    private String buildSignatureContent(JSONObject data, boolean v2) throws Exception {
+    // ★ v3 新增：v3 参数控制是否追加 clinicName|machineId|licenseBinding 三个绑定字段
+    private String buildSignatureContent(JSONObject data, boolean v2, boolean v3) throws Exception {
         StringBuilder sb = new StringBuilder();
         sb.append(data.optString("user", ""));
         sb.append('|');
@@ -382,7 +399,7 @@ public class LicenseManager {
         sb.append(data.optString("issuedAt", ""));
         sb.append('|');
         sb.append(data.optString("expiresAt", ""));
-        if (v2) {
+        if (v2 || v3) {
             sb.append('|');
             // maxPrescriptions: 默认 0
             int max = data.optInt("maxPrescriptions", 0);
@@ -398,6 +415,15 @@ public class LicenseManager {
                 }
                 sb.append(fs.toString());
             }
+        }
+        // ★ v3 新增：追加绑定字段
+        if (v3) {
+            sb.append('|');
+            sb.append(data.optString("clinicName", ""));
+            sb.append('|');
+            sb.append(data.optString("machineId", ""));
+            sb.append('|');
+            sb.append(data.optString("licenseBinding", ""));
         }
         return sb.toString();
     }
@@ -420,10 +446,15 @@ public class LicenseManager {
         }
     }
 
-    // 签名验证（先 v2，失败后旧版 license 回退 v1）
+    // 签名验证（先 v3，再 v2，最后 v1 向后兼容）
     private boolean verifySignature(JSONObject data) {
         String sig = data.optString("signature", "");
         if (sig == null || sig.isEmpty()) return false;
+        // ★ v3 签名优先校验（含 clinicName/machineId/licenseBinding 时使用）
+        if (data.has("clinicName") && data.has("machineId") && data.has("licenseBinding")) {
+            String expectedV3 = generateSignatureV3(data);
+            if (sig.equalsIgnoreCase(expectedV3)) return true;
+        }
         // v2 签名校验
         String expectedV2 = generateSignature(data);
         if (sig.equalsIgnoreCase(expectedV2)) return true;
@@ -640,11 +671,140 @@ public class LicenseManager {
             if (license.has("signature")) {
                 normalized.put("signature", license.getString("signature"));
             }
+            // ★ v3 新增：透传绑定字段（旧版 license 无该字段时不设置）
+            if (license.has("clinicName")) {
+                normalized.put("clinicName", license.optString("clinicName", ""));
+            }
+            if (license.has("machineId")) {
+                normalized.put("machineId", license.optString("machineId", ""));
+            }
+            if (license.has("licenseBinding")) {
+                normalized.put("licenseBinding", license.optString("licenseBinding", ""));
+            }
             return normalized;
         } catch (Exception e) {
             Log.e(TAG, "normalizeLicense 失败", e);
             return null;
         }
+    }
+
+    // ========================================================================
+    //  ★ v3 新增：本地诊所名/用户名读取 + 三因子绑定校验 + config 完整性校验
+    // ========================================================================
+    // 从 assets/public/config.json 读取本地诊所名
+    public String getLocalClinicName() {
+        try {
+            InputStream is = context.getAssets().open("public/config.json");
+            String json = readStream(is);
+            JSONObject cfg = new JSONObject(json);
+            return cfg.optString("clinicName", "");
+        } catch (Exception e) {
+            Log.w(TAG, "读取本地 config.json 诊所名失败: " + e.getMessage());
+            return "";
+        }
+    }
+
+    // 从 assets/public/config.json 读取本地医师名
+    public String getLocalDoctorName() {
+        try {
+            InputStream is = context.getAssets().open("public/config.json");
+            String json = readStream(is);
+            JSONObject cfg = new JSONObject(json);
+            return cfg.optString("doctorName", "");
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    // 读取输入流为字符串
+    private String readStream(InputStream is) throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        byte[] buf = new byte[1024];
+        int len;
+        while ((len = is.read(buf)) != -1) {
+            baos.write(buf, 0, len);
+        }
+        is.close();
+        return baos.toString("UTF-8");
+    }
+
+    // ★ v3 核心：校验 license 三因子绑定（clinicName + machineId）
+    // 仅当 license 含 licenseBinding 字段时才校验
+    public JSONObject checkLicenseBinding(JSONObject license, String localMachineId) {
+        if (license == null || !license.has("licenseBinding")) {
+            return successResult();  // 旧版 license 跳过
+        }
+        StringBuilder errs = new StringBuilder();
+        // 机器 ID 校验
+        String licenseMachineId = license.optString("machineId", "");
+        if (!licenseMachineId.isEmpty() && localMachineId != null &&
+                !licenseMachineId.equals(localMachineId)) {
+            errs.append("机器标识不匹配（授权可能从其他设备复制）\n");
+        }
+        // 诊所名校验
+        String licenseClinicName = license.optString("clinicName", "");
+        String localClinicName = getLocalClinicName();
+        if (!licenseClinicName.isEmpty() && !localClinicName.isEmpty() &&
+                !licenseClinicName.equals(localClinicName)) {
+            errs.append("诊所名不匹配（本地: ").append(localClinicName)
+               .append(", 授权: ").append(licenseClinicName).append("）\n");
+        }
+        if (errs.length() > 0) {
+            return failValidation(
+                    "授权绑定校验失败：\n" + errs +
+                    "\n请联系客服重新激活或检查 config.json 配置。",
+                    "binding_mismatch");
+        }
+        return successResult();
+    }
+
+    // ★ v3 新增：校验 config.json 完整性签名
+    // 防止用户修改 assets 中的 config.json 绕过 license 绑定校验
+    public boolean verifyConfigIntegrity() {
+        try {
+            InputStream is = context.getAssets().open("public/config.json");
+            String json = readStream(is);
+            JSONObject cfg = new JSONObject(json);
+            String sig = cfg.optString("configSignature", "");
+            // 无 configSignature 字段 → 旧版 config.json，跳过校验（兼容性优先）
+            if (sig.isEmpty()) return true;
+            String issuedAt = cfg.optString("configIssuedAt", "");
+            if (issuedAt.isEmpty()) return false;
+            // 签名内容：clinicName|doctorName|edition|configIssuedAt
+            String signContent = cfg.optString("clinicName", "") + "|" +
+                                 cfg.optString("doctorName", "") + "|" +
+                                 cfg.optString("edition", "") + "|" + issuedAt;
+            String expected = hmacSha256WithKey(signContent, CONFIG_SIGN_KEY);
+            return sig.equalsIgnoreCase(expected);
+        } catch (Exception e) {
+            Log.w(TAG, "config.json 完整性校验异常: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // 用指定密钥计算 HMAC-SHA256（用于 config.json 完整性校验）
+    private String hmacSha256WithKey(String content, String key) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec keySpec = new SecretKeySpec(
+                    key.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
+            mac.init(keySpec);
+            byte[] hash = mac.doFinal(content.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    // 成功结果工厂
+    private JSONObject successResult() {
+        JSONObject r = new JSONObject();
+        try { r.put("valid", true); } catch (Exception e) { /* ignore */ }
+        return r;
     }
 
     private int getDefaultMaxPrescriptions(String type) {
@@ -672,8 +832,14 @@ public class LicenseManager {
     //  校验主逻辑（与桌面版 validateLicense 一致）
     //  返回 JSONObject:
     //    { valid, message, type, licenseType, maxPrescriptions, features, remainingDays }
+    // ★ v3 新增：接受 localMachineId 参数用于三因子绑定校验，旧调用方式（无参）默认空串跳过机器 ID 校验
     // ========================================================================
     public JSONObject validateLicense() {
+        return validateLicense(null);
+    }
+
+    public JSONObject validateLicense(String localMachineId) {
+        if (localMachineId == null) localMachineId = "";
         long now = System.currentTimeMillis();
         try {
             // ★ 安全检测 1：Root 检测（防 root 设备篡改 license）
@@ -718,6 +884,24 @@ public class LicenseManager {
                 }
                 // 签名验证通过，规范化字段
                 JSONObject license = normalizeLicense(rawLicense);
+
+                // ★ v3 新增：config.json 完整性校验（仅对绑定型 license 生效）
+                if (license != null && license.has("licenseBinding") && !verifyConfigIntegrity()) {
+                    JSONObject r = failValidation(
+                            "配置文件 config.json 已被篡改或损坏，请重新打包或联系客服。\n（诊所名/医师名等关键字段签名校验失败）",
+                            "config_tampered");
+                    r.put("license", license);
+                    return r;
+                }
+
+                // ★ v3 新增：三因子绑定校验（clinicName + machineId）
+                // 仅当 license 含 licenseBinding 字段时才校验，旧版 license 自动跳过
+                JSONObject bindingCheck = checkLicenseBinding(license, localMachineId);
+                if (bindingCheck != null && !bindingCheck.optBoolean("valid", true)) {
+                    JSONObject r = new JSONObject(bindingCheck.toString());
+                    if (license != null) r.put("license", license);
+                    return r;
+                }
 
                 // 校验到期时间
                 String expiresAtStr = license.optString("expiresAt", "");
@@ -845,10 +1029,15 @@ public class LicenseManager {
 
     // ========================================================================
     //  在线激活（HTTP POST 云端 /api/license/validate）
-    //  请求体：{ code, machineId, user }
+    //  请求体：{ code, machineId, user, clinicName }
     //  响应体：{ success, license: base64, message, expiresAt, type, ... }
+    // ★ v3 新增：clinicName 参数传给云端做绑定校验
     // ========================================================================
     public JSONObject activateOnline(String code, String machineId, String user) {
+        return activateOnline(code, machineId, user, null);
+    }
+
+    public JSONObject activateOnline(String code, String machineId, String user, String clinicName) {
         HttpURLConnection conn = null;
         try {
             // ★ 激活码失败限速检查（防暴力尝试）
@@ -870,6 +1059,10 @@ public class LicenseManager {
             reqBody.put("code", code != null ? code.trim() : "");
             reqBody.put("machineId", machineId != null ? machineId : "");
             reqBody.put("user", user != null ? user : "");
+            // ★ v3 新增：提交 clinicName（如填写）
+            if (clinicName != null && !clinicName.isEmpty()) {
+                reqBody.put("clinicName", clinicName);
+            }
 
             try (OutputStream os = conn.getOutputStream()) {
                 os.write(reqBody.toString().getBytes(StandardCharsets.UTF_8));

@@ -150,6 +150,11 @@ h1 {
     </div>
 
     <div class="form-group">
+        <label>诊所名称（与激活码绑定的诊所一致）</label>
+        <input type="text" id="clinicName" placeholder="如：本能堂中医诊所" autocomplete="off">
+    </div>
+
+    <div class="form-group">
         <label>用户名（可选）</label>
         <input type="text" id="userName" placeholder="留空则使用激活码绑定的用户名" autocomplete="off">
     </div>
@@ -166,7 +171,7 @@ h1 {
         <strong>激活说明：</strong><br>
         1. 请联系管理员获取激活码<br>
         2. 激活码格式：BNZC-XXXX-XXXX-XXXX-XXXX<br>
-        3. 每个激活码绑定一台设备，换机需联系管理员解绑<br>
+        3. 每个激活码绑定一台设备 + 一个诊所，换机或换诊所需联系管理员解绑<br>
         4. 激活成功后软件将自动重启<br>
         5. 如无法联网，请联系管理员获取离线激活文件
     </div>
@@ -176,6 +181,18 @@ h1 {
 // 从 URL 参数获取机器 ID
 const params = new URLSearchParams(window.location.search);
 document.getElementById('machineId').textContent = params.get('machineId') || '未知';
+
+// ★ v3 新增：自动从 config.json 预填诊所名（用户可改）
+(async function prefillClinicName() {
+    try {
+        if (window.electronAPI && window.electronAPI.getAppConfig) {
+            const result = await window.electronAPI.getAppConfig();
+            if (result && result.success && result.config && result.config.clinicName) {
+                document.getElementById('clinicName').value = result.config.clinicName;
+            }
+        }
+    } catch (e) { /* 预填失败不影响激活流程 */ }
+})();
 
 // 自动格式化激活码输入
 document.getElementById('activationCode').addEventListener('input', function(e) {
@@ -194,6 +211,9 @@ document.getElementById('activationCode').addEventListener('input', function(e) 
 
 // 回车键激活
 document.getElementById('activationCode').addEventListener('keyup', e => {
+    if (e.key === 'Enter') document.getElementById('clinicName').focus();
+});
+document.getElementById('clinicName').addEventListener('keyup', e => {
     if (e.key === 'Enter') document.getElementById('userName').focus();
 });
 document.getElementById('userName').addEventListener('keyup', e => {
@@ -208,6 +228,7 @@ function showStatus(message, type) {
 
 async function submitActivate() {
     const code = document.getElementById('activationCode').value.trim();
+    const clinicName = document.getElementById('clinicName').value.trim();
     const user = document.getElementById('userName').value.trim();
 
     if (!code) {
@@ -222,13 +243,24 @@ async function submitActivate() {
         return;
     }
 
+    // ★ v3 新增：诊所名格式校验（如填写）
+    if (clinicName && clinicName.includes('|')) {
+        showStatus('诊所名不能包含特殊字符 |', 'error');
+        return;
+    }
+    if (clinicName && clinicName.length > 100) {
+        showStatus('诊所名长度不能超过 100 字符', 'error');
+        return;
+    }
+
     const btn = document.getElementById('activateBtn');
     btn.disabled = true;
     btn.textContent = '激活中...';
     showStatus('正在连接服务器验证激活码...', 'loading');
 
     try {
-        const result = await window.electronAPI.activate.submit(code, user);
+        // ★ v3 新增：提交 clinicName 给云端校验绑定
+        const result = await window.electronAPI.activate.submit(code, user, clinicName);
         if (result.success) {
             showStatus('激活成功！软件将自动重启...', 'success');
             btn.textContent = '激活成功';

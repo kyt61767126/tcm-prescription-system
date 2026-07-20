@@ -12,7 +12,8 @@
 //    {
 //      "code": "BNZC-XXXX-XXXX-XXXX-XXXX",   // 激活码
 //      "machineId": "abc123def456",           // 客户端机器 ID
-//      "user": "张三"                          // 用户名（可选，覆盖激活码上的 user）
+//      "user": "张三",                        // 用户名（可选，覆盖激活码上的 user）
+//      "clinicName": "本能堂中医诊所"          // ★ v3 新增：诊所名（激活码绑定时必填）
 //    }
 //
 //  返回（成功）：
@@ -21,7 +22,8 @@
 //      "license": "base64-encoded-license",   // 客户端写入 license.dat
 //      "licenseInfo": {                        // license 元信息（不包含签名）
 //        "user": "...", "type": "...", "expiresAt": "...",
-//        "maxPrescriptions": 0, "features": [...]
+//        "maxPrescriptions": 0, "features": [...],
+//        "clinicName": "...", "licenseBinding": "clinic+user+machine"
 //      }
 //    }
 //
@@ -96,7 +98,7 @@ export async function onRequest(context) {
         }
 
         const body = await context.request.json().catch(() => ({}));
-        const { code, machineId, user } = body;
+        const { code, machineId, user, clinicName } = body;
 
         // 参数校验
         if (!code) {
@@ -107,6 +109,18 @@ export async function onRequest(context) {
         }
         if (!isValidCodeFormat(code)) {
             return json({ success: false, error: '激活码格式错误' }, 400);
+        }
+        // ★ v3 新增：clinicName 长度/字符校验
+        if (clinicName !== undefined && clinicName !== null && clinicName !== '') {
+            if (typeof clinicName !== 'string') {
+                return json({ success: false, error: 'clinicName 必须是字符串' }, 400);
+            }
+            if (clinicName.includes('|')) {
+                return json({ success: false, error: 'clinicName 不能包含特殊字符 "|"' }, 400);
+            }
+            if (clinicName.length > 100) {
+                return json({ success: false, error: 'clinicName 长度不能超过 100 字符' }, 400);
+            }
         }
 
         // 查询激活码
@@ -123,7 +137,25 @@ export async function onRequest(context) {
             return json({ success: false, error: '激活码已过期' }, 403);
         }
 
-        // 已使用：仅允许同一机器重激活（换机需管理员解绑）
+        // ★ v3 新增：诊所名绑定校验
+        // 仅当激活码生成时已绑定 clinicName 时才校验（向后兼容旧激活码）
+        if (record.clinicName) {
+            if (!clinicName || clinicName.trim() === '') {
+                return json({
+                    success: false,
+                    error: '此激活码已绑定诊所，激活时必须提供 clinicName',
+                    needClinicName: true
+                }, 400);
+            }
+            if (clinicName !== record.clinicName) {
+                return json({
+                    success: false,
+                    error: `诊所名与激活码绑定的诊所不一致（绑定：${record.clinicName}，输入：${clinicName}），请联系客服核对`
+                }, 403);
+            }
+        }
+
+        // 已使用：仅允许同一机器 + 同一诊所重激活
         if (record.status === 'used') {
             if (record.machineId !== machineId) {
                 return json({
@@ -131,7 +163,14 @@ export async function onRequest(context) {
                     error: '激活码已绑定其他设备，如需换机请联系管理员解绑'
                 }, 403);
             }
-            // 同机器重激活，允许重新生成 license
+            // ★ v3 新增：同机器重激活时，诊所名也必须一致
+            if (record.clinicName && record.clinicName !== clinicName) {
+                return json({
+                    success: false,
+                    error: '诊所名与已激活记录不一致，无法重新激活'
+                }, 403);
+            }
+            // 同机器 + 同诊所重激活，允许重新生成 license
         }
 
         // 到期校验（如果激活码本身有 expiresAt）
@@ -147,10 +186,18 @@ export async function onRequest(context) {
         const licenseUser = user || record.user || record.username || 'user';
 
         // 生成 license 数据
+        // ★ v3 新增：将 clinicName + machineId + licenseBinding 传给 buildLicenseData
+        // 仅当激活码已绑定诊所名时才启用 v3 签名（含绑定字段）
         const licenseRecord = { ...record, user: licenseUser };
-        const licenseData = await buildLicenseData(licenseRecord);
+        const licenseOptions = {};
+        if (record.clinicName) {
+            licenseOptions.clinicName = record.clinicName;
+            licenseOptions.machineId = machineId;
+            licenseOptions.licenseBinding = 'clinic+user+machine';
+        }
+        const licenseData = await buildLicenseData(licenseRecord, licenseOptions);
 
-        // 更新激活码记录：标记为已使用，绑定机器 ID
+        // 更新激活码记录：标记为已使用，绑定机器 ID + 诊所名
         const updates = {
             status: 'used',
             machineId: machineId,
@@ -158,6 +205,10 @@ export async function onRequest(context) {
             activatedIp: ip,
             user: licenseUser
         };
+        // ★ v3 新增：首次激活时记录 clinicName（已使用重激活时不变更）
+        if (record.clinicName && !record.activatedClinicName) {
+            updates.activatedClinicName = record.clinicName;
+        }
         await updateLicense(kv, code, updates);
 
         // 编码为 base64（客户端写入 license.dat 的格式）
@@ -172,7 +223,9 @@ export async function onRequest(context) {
                 issuedAt: licenseData.issuedAt,
                 expiresAt: licenseData.expiresAt,
                 maxPrescriptions: licenseData.maxPrescriptions,
-                features: licenseData.features
+                features: licenseData.features,
+                clinicName: licenseData.clinicName || null,           // ★ v3 新增
+                licenseBinding: licenseData.licenseBinding || null    // ★ v3 新增
             }
         });
 

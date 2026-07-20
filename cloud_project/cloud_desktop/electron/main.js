@@ -533,7 +533,9 @@ function createMainWindow() {
 
 app.whenReady().then(async () => {
     // ★ License 授权校验（启动时校验，未授权或过期则弹双按钮：前往激活/退出软件）
-    const licenseResult = licenseManager.validateLicense();
+    // ★ v3 新增：传入 localMachineId 用于三因子绑定校验（clinicName + machineId）
+    const localMachineId = activateManager.getMachineId();
+    const licenseResult = licenseManager.validateLicense({ localMachineId });
     console.log('[License]', licenseResult.type, licenseResult.message);
     if (!licenseResult.valid) {
         // ★ 启动时 license 失效：弹双按钮到期提示（前往激活/退出软件）
@@ -661,14 +663,23 @@ app.whenReady().then(async () => {
 
 // ★ License 授权相关 IPC
 ipcMain.handle('license:get-status', () => {
-    return licenseManager.validateLicense();
+    // ★ v3 新增：传入 localMachineId 用于绑定校验
+    try {
+        const localMachineId = activateManager.getMachineId();
+        return licenseManager.validateLicense({ localMachineId });
+    } catch (e) {
+        return licenseManager.validateLicense();
+    }
 });
 
 ipcMain.handle('license:activate', (event, base64Content) => {
     try {
         const result = licenseManager.writeLicenseContent(base64Content);
         if (result.success) {
-            const validate = licenseManager.validateLicense();
+            // ★ v3 新增：激活后立即校验绑定
+            let localMachineId = '';
+            try { localMachineId = activateManager.getMachineId(); } catch (e) {}
+            const validate = licenseManager.validateLicense({ localMachineId });
             return { success: true, status: validate };
         }
         return { success: false, error: result.error };
@@ -763,10 +774,11 @@ ipcMain.handle('license:show-activate', () => {
     }
 });
 
-ipcMain.handle('license:submit-activate', async (event, code, user) => {
+ipcMain.handle('license:submit-activate', async (event, code, user, clinicName) => {
     try {
         const machineId = activateManager.getMachineId();
-        const result = await activateManager.activateOnline(code, machineId, user);
+        // ★ v3 新增：透传 clinicName 给云端做绑定校验
+        const result = await activateManager.activateOnline(code, machineId, user, clinicName);
         return result;
     } catch (e) {
         console.error('[IPC] submit-activate 异常:', e);

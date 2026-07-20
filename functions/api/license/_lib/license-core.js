@@ -80,6 +80,33 @@ async function generateSignature(data) {
     return hmacSign(content, LICENSE_HMAC_KEY);
 }
 
+// ★ v3 签名：在 v2 基础上增加 clinicName/machineId/licenseBinding 三个绑定字段
+// 内容：user|type|issuedAt|expiresAt|maxPrescriptions|features|clinicName|machineId|licenseBinding
+// 仅当 clinicName/machineId/licenseBinding 同时存在时才使用 v3 签名
+async function generateSignatureV3(data) {
+    const content = [
+        data.user,
+        data.type,
+        data.issuedAt,
+        data.expiresAt,
+        String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
+        Array.isArray(data.features) ? data.features.join(',') : '',
+        data.clinicName || '',
+        data.machineId || '',
+        data.licenseBinding || ''
+    ].join('|');
+    return hmacSign(content, LICENSE_HMAC_KEY);
+}
+
+// ★ 统一签名生成入口：自动选择 v3 / v2
+// 含 clinicName + machineId + licenseBinding → v3，否则 → v2
+async function generateSignatureAuto(data) {
+    if (data.clinicName && data.machineId && data.licenseBinding) {
+        return generateSignatureV3(data);
+    }
+    return generateSignature(data);
+}
+
 // ============================================================================
 //  激活码生成
 // ============================================================================
@@ -111,6 +138,8 @@ function generateActivationCode() {
 //  license 数据组装（与客户端 license.dat 格式一致）
 // ============================================================================
 // 根据激活码记录生成 license 数据（用于 validate API 返回给客户端）
+// ★ v3 新增：options.clinicName + options.machineId + options.licenseBinding
+// 三者同时存在时启用 v3 签名（含绑定字段），否则走 v2 签名（向后兼容）
 async function buildLicenseData(record, options = {}) {
     const config = LICENSE_TYPE_CONFIG[record.type] || LICENSE_TYPE_CONFIG.personal;
     const maxPrescriptions = record.maxPrescriptions !== undefined ? record.maxPrescriptions : config.maxPrescriptions;
@@ -137,7 +166,17 @@ async function buildLicenseData(record, options = {}) {
         maxPrescriptions: maxPrescriptions,
         features: features
     };
-    data.signature = await generateSignature(data);
+
+    // ★ v3 新增：绑定字段（clinicName/machineId/licenseBinding）
+    // 由 validate API 从客户端请求中传入，写入 license 实现三因子绑定
+    if (options.clinicName && options.machineId) {
+        data.clinicName = options.clinicName;
+        data.machineId = options.machineId;
+        data.licenseBinding = options.licenseBinding || 'clinic+user+machine';
+    }
+
+    // ★ 自动选择 v3 / v2 签名
+    data.signature = await generateSignatureAuto(data);
     return data;
 }
 
@@ -208,6 +247,7 @@ function sanitizeRecord(record) {
         issuedAt: record.issuedAt,
         activatedAt: record.activatedAt,
         expiresAt: record.expiresAt,
+        clinicName: record.clinicName || null,  // ★ v3 新增：绑定诊所名
         machineId: record.machineId ? record.machineId.substring(0, 8) + '...' : null,  // 仅显示前 8 位
         status: record.status,
         maxPrescriptions: record.maxPrescriptions,
@@ -241,6 +281,8 @@ export {
     KV_LICENSE_INDEX,
     generateActivationCode,
     generateSignature,
+    generateSignatureV3,
+    generateSignatureAuto,
     buildLicenseData,
     encodeLicenseBase64,
     getKV,

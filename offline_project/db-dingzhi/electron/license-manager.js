@@ -18,6 +18,10 @@ const TIME_TAMPER_THRESHOLD = 24 * 60 * 60 * 1000;           // 时间回拨阈�
 const TRIAL_KEY = 'bnzc_trial_key_v1';
 const LASTRUN_KEY = 'bnzc_lastrun_key_v1';
 
+// ★ v3 新增：config.json 完整性签名密钥（与 edit-config.ps1 中 $CONFIG_SIGN_KEY 保持一致）
+// 用于校验 config.json 中的 clinicName/doctorName 未被篡改
+const CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026';
+
 // ★ v2: 版本类型默认配置（功能差异矩阵）
 // trial: 试用版，限 30 张/月处方，无高级功能
 // personal: 个人版，无限处方，支持数据备份
@@ -168,6 +172,7 @@ function xorDecrypt(base64, key) {
 // ============================================================================
 //  HMAC 签名（用于 license.dat 完整性校验）
 //  v2: 签名包含 type/maxPrescriptions/features，防篡改版本分级
+//  v3: 签名包含 clinicName/machineId/licenseBinding，实现三因子绑定
 //  向后兼容：旧版 license（无 maxPrescriptions/features）用 v1 签名逻辑验证
 // ============================================================================
 function generateSignature(data) {
@@ -183,6 +188,22 @@ function generateSignature(data) {
     return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
 }
 
+// ★ v3 签名：在 v2 基础上增加 clinicName/machineId/licenseBinding 三个绑定字段
+function generateSignatureV3(data) {
+    const content = [
+        data.user,
+        data.type,
+        data.issuedAt,
+        data.expiresAt,
+        String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
+        Array.isArray(data.features) ? data.features.join(',') : '',
+        data.clinicName || '',
+        data.machineId || '',
+        data.licenseBinding || ''
+    ].join('|');
+    return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
+}
+
 // v1 签名逻辑（向后兼容旧版 license）
 function generateSignatureV1(data) {
     const content = [data.user, data.type, data.issuedAt, data.expiresAt].join('|');
@@ -191,6 +212,15 @@ function generateSignatureV1(data) {
 
 function verifySignature(data) {
     if (!data.signature) return false;
+    // ★ v3 签名优先校验（含 clinicName/machineId/licenseBinding 时使用）
+    if (data.clinicName !== undefined && data.machineId !== undefined && data.licenseBinding) {
+        const expectedV3 = generateSignatureV3(data);
+        try {
+            if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV3, 'hex'))) {
+                return true;
+            }
+        } catch (e) { /* 长度不匹配，继续尝试 v2/v1 */ }
+    }
     // v2 签名校验
     const expectedV2 = generateSignature(data);
     try {
@@ -280,7 +310,7 @@ function writeLastRun(data) {
 function normalizeLicense(license) {
     if (!license) return null;
     const config = LICENSE_TYPE_CONFIG[license.type] || LICENSE_TYPE_CONFIG.personal;
-    return {
+    const normalized = {
         user: license.user || '',
         type: license.type || 'personal',
         issuedAt: license.issuedAt,
@@ -290,13 +320,107 @@ function normalizeLicense(license) {
         features: Array.isArray(license.features) ? license.features : config.features,
         signature: license.signature
     };
+    // ★ v3 新增：绑定字段透传（旧版 license 无此字段时不设置）
+    if (license.clinicName !== undefined) normalized.clinicName = license.clinicName || '';
+    if (license.machineId !== undefined) normalized.machineId = license.machineId || '';
+    if (license.licenseBinding !== undefined) normalized.licenseBinding = license.licenseBinding || '';
+    return normalized;
+}
+
+// ============================================================================
+//  v3 新增：本地诊所名/机器 ID 读取 + 三因子绑定校验
+// ============================================================================
+// 从 config.json 读取本地诊所名（exe 同目录，由 edit-config.ps1 写入）
+// 注意：config.json 必须配合 configSignature 完整性校验使用，防止被篡改绕过绑定
+function getLocalClinicName() {
+    try {
+        const configPath = path.join(getExeDirectory(), 'config.json');
+        if (fs.existsSync(configPath)) {
+            const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            return cfg.clinicName || '';
+        }
+    } catch (e) { /* 忽略 */ }
+    return '';
+}
+
+// 从 config.json 读取本地用户名（doctorName，作为绑定辅助字段）
+function getLocalDoctorName() {
+    try {
+        const configPath = path.join(getExeDirectory(), 'config.json');
+        if (fs.existsSync(configPath)) {
+            const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            return cfg.doctorName || '';
+        }
+    } catch (e) { /* 忽略 */ }
+    return '';
+}
+
+// ★ v3 核心：校验 license 三因子绑定（clinicName + machineId + 用户名）
+// 仅当 license 含 licenseBinding 字段时才校验（向后兼容旧版 license）
+// 返回 { valid: true } 或 { valid: false, message, type }
+function checkLicenseBinding(license, localMachineId) {
+    // 无 licenseBinding 字段 → 旧版 license，跳过绑定校验（兼容性优先）
+    if (!license || !license.licenseBinding) return { valid: true };
+
+    const mismatches = [];
+
+    // 机器 ID 校验（核心：防 license.dat 复制到其他机器）
+    if (license.machineId && localMachineId && license.machineId !== localMachineId) {
+        mismatches.push('机器标识不匹配（授权可能从其他电脑复制）');
+    }
+
+    // 诊所名校验（核心：防 license.dat 跨诊所复制）
+    const localClinicName = getLocalClinicName();
+    if (license.clinicName && localClinicName && license.clinicName !== localClinicName) {
+        mismatches.push(`诊所名不匹配（本地：${localClinicName}，授权：${license.clinicName}）`);
+    }
+
+    if (mismatches.length > 0) {
+        return {
+            valid: false,
+            message: '授权绑定校验失败：\n' + mismatches.join('\n') +
+                     '\n\n请联系客服重新激活或检查 config.json 配置。',
+            type: 'binding_mismatch'
+        };
+    }
+    return { valid: true };
+}
+
+// ★ v3 新增：校验 config.json 完整性签名
+// 防止用户修改 config.json 中的 clinicName 绕过 license 绑定校验
+// 返回 true=完整 / false=被篡改或无签名
+function verifyConfigIntegrity() {
+    try {
+        const configPath = path.join(getExeDirectory(), 'config.json');
+        if (!fs.existsSync(configPath)) return true;  // 无 config.json 跳过校验（兜底放行）
+        const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        // 无 configSignature 字段 → 旧版 config.json，跳过校验（兼容性优先）
+        if (!cfg.configSignature) return true;
+        // 必须有 configIssuedAt 才能验签
+        if (!cfg.configIssuedAt) return false;
+        // 签名内容：clinicName|doctorName|edition|configIssuedAt
+        const signContent = [cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '', cfg.configIssuedAt].join('|');
+        const expected = crypto.createHmac('sha256', CONFIG_SIGN_KEY).update(signContent).digest('hex');
+        try {
+            return crypto.timingSafeEqual(Buffer.from(cfg.configSignature, 'hex'), Buffer.from(expected, 'hex'));
+        } catch (e) {
+            return false;
+        }
+    } catch (e) {
+        console.warn('[License] config.json 完整性校验异常:', e.message);
+        return false;
+    }
 }
 
 // ============================================================================
 //  校验主逻辑
 // ============================================================================
-function validateLicense() {
+function validateLicense(options) {
+    options = options || {};
     const now = Date.now();
+    // ★ v3 新增：允许传入 localMachineId（避免循环依赖 activate.js）
+    // 如未传入则置空字符串，机器 ID 校验自动跳过（仅靠诊所名校验）
+    const localMachineId = options.localMachineId || '';
 
     // 1. 检查时间回拨（防止用户修改系统时间延长试用/授权）
     const lastRun = readLastRun();
@@ -325,6 +449,29 @@ function validateLicense() {
 
         // 签名验证通过后，规范化字段（补全 v2 新字段默认值）
         const license = normalizeLicense(rawLicense);
+
+        // ★ v3 新增：config.json 完整性校验（仅对绑定型 license 生效）
+        // 防止用户修改 config.json 中的 clinicName 绕过 license 绑定校验
+        if (license.licenseBinding && !verifyConfigIntegrity()) {
+            return {
+                valid: false,
+                message: '配置文件 config.json 已被篡改或损坏，请重新打包或联系客服。\n（诊所名/医师名等关键字段签名校验失败）',
+                type: 'config_tampered',
+                license: license
+            };
+        }
+
+        // ★ v3 新增：三因子绑定校验（clinicName + machineId）
+        // 仅当 license 含 licenseBinding 字段时才校验，旧版 license 自动跳过
+        const bindingCheck = checkLicenseBinding(license, localMachineId);
+        if (!bindingCheck.valid) {
+            return {
+                valid: false,
+                message: bindingCheck.message,
+                type: bindingCheck.type || 'binding_mismatch',
+                license: license
+            };
+        }
 
         // 校验到期时间
         const expiresAtMs = new Date(license.expiresAt).getTime();
@@ -471,5 +618,11 @@ module.exports = {
     LICENSE_TYPE_CONFIG,  // v2 新增
     DEFAULT_TRIAL_DAYS,   // 默认试用期 7 天
     getTrialDays,         // ★ 获取试用期天数（可配置）
-    setTrialDays          // ★ 设置试用期天数（持久化）
+    setTrialDays,         // ★ 设置试用期天数（持久化）
+    // ★ v3 新增：绑定校验相关
+    generateSignatureV3,  // v3 签名生成（含绑定字段）
+    checkLicenseBinding,  // 三因子绑定校验
+    getLocalClinicName,   // 从 config.json 读取本地诊所名
+    getLocalDoctorName,   // 从 config.json 读取本地医师名
+    verifyConfigIntegrity // config.json 完整性校验
 };

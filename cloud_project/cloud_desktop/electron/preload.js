@@ -184,7 +184,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         show: () => ipcRenderer.invoke('license:show-activate'),
         // ★ 一体化到期提示 + 拉起激活窗口（main process 中 dialog + showActivateWindow）
         showExpireAlert: (message) => ipcRenderer.invoke('license:show-expire-alert', message),
-        submit: (code, user) => ipcRenderer.invoke('license:submit-activate', code, user),
+        // ★ v3 新增：clinicName 参数透传给云端做绑定校验
+        submit: (code, user, clinicName) => ipcRenderer.invoke('license:submit-activate', code, user, clinicName),
         close: () => ipcRenderer.invoke('license:close-activate'),
         restart: () => ipcRenderer.invoke('license:restart'),
         getMachineId: () => ipcRenderer.invoke('license:get-machine-id')

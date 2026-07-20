@@ -805,10 +805,12 @@ public class MainActivity extends AppCompatActivity {
                                 args.optString("newNo", "")).toString();
                     // ★ License 相关调用（与桌面版 IPC 接口保持一致）
                     case "license_validate":
-                        return licenseManager.validateLicense().toString();
+                        // ★ v3 新增：传入 localMachineId 用于三因子绑定校验
+                        return licenseManager.validateLicense(licenseManager.getMachineId()).toString();
                     case "license_getStatus":
                         try {
-                            JSONObject r = licenseManager.validateLicense();
+                            // ★ v3 新增：传入 localMachineId 用于绑定校验
+                            JSONObject r = licenseManager.validateLicense(licenseManager.getMachineId());
                             r.put("prescriptionStatus", licenseManager.getPrescriptionStatus());
                             r.put("machineId", licenseManager.getMachineId());
                             r.put("success", r.optBoolean("valid", false));
@@ -853,10 +855,12 @@ public class MainActivity extends AppCompatActivity {
                         return licenseManager.getFeatureStatus(args.optString("feature", "")).toString();
                     case "license_activateOnline":
                         // JavascriptInterface 在 JavaBridge 线程执行，可直接网络请求
+                        // ★ v3 新增：APP 端 clinicName 为只读配置，直接从本地 config.json 读取（避免 JS 层篡改）
                         return licenseManager.activateOnline(
                                 args.optString("code", ""),
                                 licenseManager.getMachineId(),
-                                args.optString("user", "")
+                                args.optString("user", ""),
+                                licenseManager.getLocalClinicName()
                         ).toString();
                     case "license_restart":
                         // 重启 APP

@@ -14,7 +14,8 @@
 //      "count": 1,                        // 生成数量，默认 1，最大 100
 //      "note": "客户备注",                // 备注（可选）
 //      "maxPrescriptions": 0,             // 覆盖默认处方限制（可选）
-//      "features": ["backup","sync"]      // 覆盖默认功能列表（可选）
+//      "features": ["backup","sync"],     // 覆盖默认功能列表（可选）
+//      "clinicName": "本能堂中医诊所"      // ★ v3 新增：绑定诊所名（可选，激活时校验）
 //    }
 //
 //  返回：
@@ -75,7 +76,7 @@ export async function onRequest(context) {
         }
 
         const body = await context.request.json().catch(() => ({}));
-        const { user, type, days, expiresAt, count, note, maxPrescriptions, features } = body;
+        const { user, type, days, expiresAt, count, note, maxPrescriptions, features, clinicName } = body;
 
         // 参数校验
         if (!user) {
@@ -86,6 +87,18 @@ export async function onRequest(context) {
         }
         if (!days && !expiresAt) {
             return json({ success: false, error: '请提供 days 或 expiresAt' }, 400);
+        }
+        // ★ v3 新增：如果提供 clinicName，必须非空字符串
+        if (clinicName !== undefined && clinicName !== null) {
+            if (typeof clinicName !== 'string' || clinicName.trim().length === 0) {
+                return json({ success: false, error: 'clinicName 不能为空字符串' }, 400);
+            }
+            if (clinicName.includes('|')) {
+                return json({ success: false, error: 'clinicName 不能包含特殊字符 "|"' }, 400);
+            }
+            if (clinicName.length > 100) {
+                return json({ success: false, error: 'clinicName 长度不能超过 100 字符' }, 400);
+            }
         }
 
         const generateCount = Math.min(Math.max(parseInt(count, 10) || 1, 1), 100);
@@ -110,6 +123,7 @@ export async function onRequest(context) {
                 issuedBy: currentUser.username,
                 activatedAt: null,
                 machineId: null,
+                clinicName: clinicName || null,  // ★ v3 新增：绑定的诊所名（null 表示不绑定）
                 status: 'unused',  // unused / used / expired / disabled
                 maxPrescriptions: maxPrescriptions !== undefined ? maxPrescriptions : undefined,
                 features: features || undefined,
