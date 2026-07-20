@@ -515,18 +515,17 @@ function createMainWindow() {
     }
 }
 
-app.whenReady().then(() => {
-    // ★ License 授权校验（启动时同步校验，未授权或过期则阻止启动）
+app.whenReady().then(async () => {
+    // ★ License 授权校验（启动时校验，未授权或过期则弹双按钮：前往激活/退出软件）
     const licenseResult = licenseManager.validateLicense();
     console.log('[License]', licenseResult.type, licenseResult.message);
     if (!licenseResult.valid) {
-        dialog.showMessageBoxSync({
-            type: 'warning',
-            title: '授权提示',
-            message: licenseResult.message,
-            buttons: ['确定']
-        });
-        app.quit();
+        // ★ 启动时 license 失效：弹双按钮到期提示（前往激活/退出软件）
+        // - 用户点击【前往激活】→ 唤起激活码输入页面，激活成功后重启进入主界面
+        // - 用户点击【退出软件】→ app.exit(0) 退出
+        // - 启动时 mainWindow 尚未创建，传 null 作为 parentWindow
+        // - 激活窗口关闭后 license 仍失效时，兜底逻辑会重新弹 expire-alert
+        await activateManager.showExpireAlertAndActivate(null, licenseResult.message);
         return;
     }
     if (licenseResult.type === 'trial') {
