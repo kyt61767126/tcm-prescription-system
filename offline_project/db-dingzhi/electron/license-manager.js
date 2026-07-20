@@ -179,6 +179,9 @@ function xorDecrypt(base64, key) {
 //  方案：密钥从 machineId 派生，不同机器无法解密
 //  文件格式：ENC1:base64(iv(16) + ciphertext)
 //  旧格式：base64(JSON)（向后兼容，读取后自动迁移为加密格式）
+//  ★ P3-A 增强：密钥派生追加硬件指纹（MachineGuid + 主板序列号 + CPU ID）
+//              防止通过克隆虚拟机/复制镜像绕过 machineId 校验
+//              旧 license.dat 仍可用（解密时双密钥尝试，新密钥失败回退旧密钥）
 // ============================================================================
 
 // 生成机器 ID（与 activate.js 中 getMachineId 逻辑完全一致）
@@ -198,10 +201,75 @@ function getMachineId() {
     }
 }
 
-// 派生 AES-256 密钥：SHA256(machineId + LICENSE_HMAC_KEY) → 32 字节
+// ★ P3-A 新增：获取硬件指纹（Windows MachineGuid + 主板序列号 + CPU ID）
+// 缓存结果避免重复执行 WMIC 命令（执行约 100-500ms）
+// 任一特征获取失败时跳过该特征，不影响其他特征
+// 全部失败时返回空字符串（密钥派生降级为不含硬件指纹，兼容旧版）
+let _hardwareFingerprintCache = null;
+function getHardwareFingerprint() {
+    if (_hardwareFingerprintCache !== null) return _hardwareFingerprintCache;
+    try {
+        const parts = [];
+        const { execSync } = require('child_process');
+        // 1. Windows MachineGuid（注册表，系统安装后不变，VM 克隆时变化）
+        try {
+            const out = execSync('reg query "HKLM\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid',
+                { timeout: 2000, windowsHide: true }).toString();
+            const m = out.match(/MachineGuid\s+REG_SZ\s+([A-Fa-f0-9-]+)/i);
+            if (m) parts.push('mg=' + m[1].toLowerCase());
+        } catch (e) { /* 忽略 */ }
+        // 2. 主板序列号（硬件固定，VM 克隆时可能为空或默认值）
+        try {
+            const out = execSync('wmic baseboard get serialnumber',
+                { timeout: 2000, windowsHide: true }).toString();
+            const lines = out.split('\n').map(s => s.trim())
+                .filter(s => s && s.toLowerCase() !== 'serialnumber');
+            if (lines.length > 0 && lines[0]) parts.push('bb=' + lines[0]);
+        } catch (e) { /* 忽略 */ }
+        // 3. CPU ID（硬件固定，VM 克隆时可能变化）
+        try {
+            const out = execSync('wmic cpu get processorid',
+                { timeout: 2000, windowsHide: true }).toString();
+            const lines = out.split('\n').map(s => s.trim())
+                .filter(s => s && s.toLowerCase() !== 'processorid');
+            if (lines.length > 0 && lines[0]) parts.push('cpu=' + lines[0]);
+        } catch (e) { /* 忽略 */ }
+        _hardwareFingerprintCache = parts.length === 0 ? '' :
+            crypto.createHash('sha256').update(parts.join('|')).digest('hex');
+    } catch (e) {
+        _hardwareFingerprintCache = '';
+    }
+    return _hardwareFingerprintCache;
+}
+
+// ★ P3-A 新增：派生 AES-256 密钥（含硬件指纹）
+// 新密钥 = SHA256(machineId + hardwareFingerprint + LICENSE_HMAC_KEY)
 function deriveLicenseKey(machineId) {
+    const hwFp = getHardwareFingerprint();
+    const combined = (machineId || '') + (hwFp || '') + LICENSE_HMAC_KEY;
+    return crypto.createHash('sha256').update(combined).digest();
+}
+
+// ★ P3-A 新增：旧密钥派生（不含硬件指纹，向后兼容旧 license.dat）
+// 旧密钥 = SHA256(machineId + LICENSE_HMAC_KEY)
+function deriveLicenseKeyLegacy(machineId) {
     const combined = (machineId || '') + LICENSE_HMAC_KEY;
     return crypto.createHash('sha256').update(combined).digest();
+}
+
+// ★ P3-A 新增：通用 AES 解密尝试（用于双密钥回退）
+function tryDecryptAes(base64Data, key) {
+    try {
+        const data = Buffer.from(base64Data, 'base64');
+        if (data.length < 32) return null;
+        const iv = data.slice(0, 16);
+        const ciphertext = data.slice(16);
+        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+        const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+        return plaintext.toString('utf8');
+    } catch (e) {
+        return null;
+    }
 }
 
 // 加密 license JSON 字符串
@@ -215,21 +283,15 @@ function encryptLicenseContent(jsonStr, machineId) {
 }
 
 // 解密 license 字符串（返回 JSON 字符串，失败返回 null）
+// ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥（向后兼容）
 function decryptLicenseContent(encryptedStr, machineId) {
     if (!encryptedStr || !encryptedStr.startsWith('ENC1:')) return null;
-    try {
-        const key = deriveLicenseKey(machineId);
-        const data = Buffer.from(encryptedStr.substring(5), 'base64');
-        if (data.length < 32) return null;
-        const iv = data.slice(0, 16);
-        const ciphertext = data.slice(16);
-        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-        const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-        return plaintext.toString('utf8');
-    } catch (e) {
-        // 解密失败（machineId 不匹配、文件损坏、密钥错误等）
-        return null;
-    }
+    const base64Data = encryptedStr.substring(5);
+    // 优先尝试新密钥（含硬件指纹）
+    let plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
+    if (plaintext) return plaintext;
+    // 回退到旧密钥（向后兼容旧 license.dat）
+    return tryDecryptAes(base64Data, deriveLicenseKeyLegacy(machineId));
 }
 
 // ============================================================================
@@ -238,18 +300,33 @@ function decryptLicenseContent(encryptedStr, machineId) {
 //       防止 license.dat 密钥被破解后 trial.dat / last-run.dat 同时失守
 //  文件格式：TRIAL1:base64(iv(16) + ciphertext) / LASTRUN1:base64(iv(16) + ciphertext)
 //  旧格式：Base64(XOR(plaintext, key))（向后兼容，读取后自动迁移为 AES 格式）
+//  ★ P3-A 增强：密钥派生追加硬件指纹，解密时双密钥尝试（新密钥优先，旧密钥回退）
 // ============================================================================
 const TRIAL_ENC_PREFIX = 'TRIAL1:';
 const LASTRUN_ENC_PREFIX = 'LASTRUN1:';
 
-// 派生 trial 加密密钥：SHA256(machineId + LICENSE_HMAC_KEY + ':trial')
+// ★ P3-A 新增：派生 trial 加密密钥（含硬件指纹）
 function deriveTrialKey(machineId) {
+    const hwFp = getHardwareFingerprint();
+    const combined = (machineId || '') + (hwFp || '') + LICENSE_HMAC_KEY + ':trial';
+    return crypto.createHash('sha256').update(combined).digest();
+}
+
+// ★ P3-A 新增：旧 trial 密钥派生（不含硬件指纹，向后兼容）
+function deriveTrialKeyLegacy(machineId) {
     const combined = (machineId || '') + LICENSE_HMAC_KEY + ':trial';
     return crypto.createHash('sha256').update(combined).digest();
 }
 
-// 派生 last-run 加密密钥：SHA256(machineId + LICENSE_HMAC_KEY + ':lastrun')
+// ★ P3-A 新增：派生 last-run 加密密钥（含硬件指纹）
 function deriveLastRunKey(machineId) {
+    const hwFp = getHardwareFingerprint();
+    const combined = (machineId || '') + (hwFp || '') + LICENSE_HMAC_KEY + ':lastrun';
+    return crypto.createHash('sha256').update(combined).digest();
+}
+
+// ★ P3-A 新增：旧 last-run 密钥派生（不含硬件指纹，向后兼容）
+function deriveLastRunKeyLegacy(machineId) {
     const combined = (machineId || '') + LICENSE_HMAC_KEY + ':lastrun';
     return crypto.createHash('sha256').update(combined).digest();
 }
@@ -265,20 +342,13 @@ function encryptTrialContent(jsonStr, machineId) {
 }
 
 // 解密 trial 字符串（仅处理 TRIAL1: 前缀，失败返回 null）
+// ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
 function decryptTrialContent(encryptedStr, machineId) {
     if (!encryptedStr || !encryptedStr.startsWith(TRIAL_ENC_PREFIX)) return null;
-    try {
-        const key = deriveTrialKey(machineId);
-        const data = Buffer.from(encryptedStr.substring(TRIAL_ENC_PREFIX.length), 'base64');
-        if (data.length < 32) return null;
-        const iv = data.slice(0, 16);
-        const ciphertext = data.slice(16);
-        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-        const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-        return plaintext.toString('utf8');
-    } catch (e) {
-        return null;
-    }
+    const base64Data = encryptedStr.substring(TRIAL_ENC_PREFIX.length);
+    let plaintext = tryDecryptAes(base64Data, deriveTrialKey(machineId));
+    if (plaintext) return plaintext;
+    return tryDecryptAes(base64Data, deriveTrialKeyLegacy(machineId));
 }
 
 // 加密 last-run JSON 字符串
@@ -292,20 +362,13 @@ function encryptLastRunContent(jsonStr, machineId) {
 }
 
 // 解密 last-run 字符串（仅处理 LASTRUN1: 前缀，失败返回 null）
+// ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
 function decryptLastRunContent(encryptedStr, machineId) {
     if (!encryptedStr || !encryptedStr.startsWith(LASTRUN_ENC_PREFIX)) return null;
-    try {
-        const key = deriveLastRunKey(machineId);
-        const data = Buffer.from(encryptedStr.substring(LASTRUN_ENC_PREFIX.length), 'base64');
-        if (data.length < 32) return null;
-        const iv = data.slice(0, 16);
-        const ciphertext = data.slice(16);
-        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-        const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-        return plaintext.toString('utf8');
-    } catch (e) {
-        return null;
-    }
+    const base64Data = encryptedStr.substring(LASTRUN_ENC_PREFIX.length);
+    let plaintext = tryDecryptAes(base64Data, deriveLastRunKey(machineId));
+    if (plaintext) return plaintext;
+    return tryDecryptAes(base64Data, deriveLastRunKeyLegacy(machineId));
 }
 
 // ============================================================================
@@ -901,6 +964,8 @@ module.exports = {
     decryptTrialContent,   // 解密 trial（供测试用）
     encryptLastRunContent, // 加密 last-run（供测试用）
     decryptLastRunContent, // 解密 last-run（供测试用）
+    // ★ P3-A 新增：硬件指纹相关
+    getHardwareFingerprint, // 获取硬件指纹（供测试用）
     // ★ P1-B 新增：安全检测
     isDebuggerAttached    // 调试器检测（供 main.js 调用）
 };

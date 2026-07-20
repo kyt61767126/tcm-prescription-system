@@ -271,17 +271,71 @@ public class LicenseManager {
     //  方案：密钥从 machineId 派生，不同机器无法解密
     //  文件格式：ENC1:base64(iv(16) + ciphertext)
     //  旧格式：base64(JSON)（向后兼容，读取后自动迁移为加密格式）
+    //  ★ P3-A 增强：密钥派生追加硬件指纹（Build.FINGERPRINT + DISPLAY + ID）
+    //              防止通过克隆虚拟机/复制镜像绕过 machineId 校验
+    //              旧 license.dat 仍可用（解密时双密钥尝试，新密钥失败回退旧密钥）
     // ========================================================================
 
-    // 派生 AES-256 密钥：SHA256(machineId + LICENSE_HMAC_KEY) → 32 字节
+    // ★ P3-A 新增：获取硬件指纹（Build 系列属性，缓存结果）
+    // Build.FINGERPRINT：系统指纹，含品牌/型号/版本（同一型号设备相同，但模拟器会暴露）
+    // Build.DISPLAY：系统显示版本号
+    // Build.ID：系统版本 ID
+    // 全部失败时返回空字符串（密钥派生降级为不含硬件指纹，兼容旧版）
+    private String _hardwareFingerprintCache = null;
+    private String getHardwareFingerprint() {
+        if (_hardwareFingerprintCache != null) return _hardwareFingerprintCache;
+        try {
+            StringBuilder sb = new StringBuilder();
+            if (Build.FINGERPRINT != null && !Build.FINGERPRINT.isEmpty()) {
+                sb.append("fp=").append(Build.FINGERPRINT);
+            }
+            if (Build.DISPLAY != null && !Build.DISPLAY.isEmpty()) {
+                if (sb.length() > 0) sb.append("|");
+                sb.append("dp=").append(Build.DISPLAY);
+            }
+            if (Build.ID != null && !Build.ID.isEmpty()) {
+                if (sb.length() > 0) sb.append("|");
+                sb.append("id=").append(Build.ID);
+            }
+            // Build.SERIAL 在 Android 8.0+ 需要 READ_PHONE_STATE 权限，不使用
+            if (sb.length() == 0) {
+                _hardwareFingerprintCache = "";
+            } else {
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                byte[] hash = md.digest(sb.toString().getBytes(StandardCharsets.UTF_8));
+                StringBuilder hex = new StringBuilder();
+                for (byte b : hash) hex.append(String.format("%02x", b));
+                _hardwareFingerprintCache = hex.toString();
+            }
+        } catch (Exception e) {
+            _hardwareFingerprintCache = "";
+        }
+        return _hardwareFingerprintCache;
+    }
+
+    // ★ P3-A 新增：派生 AES-256 密钥（含硬件指纹）
+    // 新密钥 = SHA256(machineId + hardwareFingerprint + LICENSE_HMAC_KEY)
     private SecretKeySpec deriveLicenseKey(String machineId) {
+        try {
+            String hwFp = getHardwareFingerprint();
+            String combined = (machineId == null ? "" : machineId) + (hwFp == null ? "" : hwFp) + LICENSE_HMAC_KEY;
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] keyBytes = md.digest(combined.getBytes(StandardCharsets.UTF_8));
+            return new SecretKeySpec(keyBytes, "AES");
+        } catch (Exception e) {
+            Log.e(TAG, "派生 license 密钥失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // ★ P3-A 新增：旧密钥派生（不含硬件指纹，向后兼容旧 license.dat）
+    private SecretKeySpec deriveLicenseKeyLegacy(String machineId) {
         try {
             String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY;
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             byte[] keyBytes = md.digest(combined.getBytes(StandardCharsets.UTF_8));
             return new SecretKeySpec(keyBytes, "AES");
         } catch (Exception e) {
-            Log.e(TAG, "派生 license 密钥失败: " + e.getMessage());
             return null;
         }
     }
@@ -314,29 +368,33 @@ public class LicenseManager {
     }
 
     // 解密 license 字符串（返回 JSON 字符串，失败返回 null）
+    // ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥（向后兼容）
     private String decryptLicenseContent(String encryptedStr, String machineId) {
         if (encryptedStr == null || !encryptedStr.startsWith(LICENSE_ENC_PREFIX)) return null;
+        // 优先尝试新密钥（含硬件指纹）
+        String plaintext = tryDecryptAes(encryptedStr.substring(LICENSE_ENC_PREFIX.length()),
+                deriveLicenseKey(machineId));
+        if (plaintext != null) return plaintext;
+        // 回退到旧密钥（向后兼容旧 license.dat）
+        return tryDecryptAes(encryptedStr.substring(LICENSE_ENC_PREFIX.length()),
+                deriveLicenseKeyLegacy(machineId));
+    }
+
+    // ★ P3-A 新增：通用 AES 解密尝试（用于双密钥回退）
+    private String tryDecryptAes(String base64Data, SecretKeySpec key) {
+        if (key == null) return null;
         try {
-            String base64Data = encryptedStr.substring(LICENSE_ENC_PREFIX.length());
             byte[] data = Base64.decode(base64Data, Base64.DEFAULT);
             if (data == null || data.length < 32) return null;
-
-            SecretKeySpec key = deriveLicenseKey(machineId);
-            if (key == null) return null;
-
-            // 提取 IV（前 16 字节）和密文
             byte[] iv = new byte[16];
             byte[] ciphertext = new byte[data.length - 16];
             System.arraycopy(data, 0, iv, 0, 16);
             System.arraycopy(data, 16, ciphertext, 0, ciphertext.length);
-
             Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
             cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
             byte[] plaintext = cipher.doFinal(ciphertext);
-
             return new String(plaintext, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            // 解密失败（machineId 不匹配、文件损坏、密钥错误等）
             return null;
         }
     }
@@ -349,10 +407,11 @@ public class LicenseManager {
     //  旧格式：Base64(XOR(plaintext, key))（向后兼容，读取后自动迁移为 AES 格式）
     // ========================================================================
 
-    // 派生 trial 加密密钥：SHA256(machineId + LICENSE_HMAC_KEY + ':trial')
+    // ★ P3-A 新增：派生 trial 加密密钥（含硬件指纹）
     private SecretKeySpec deriveTrialKey(String machineId) {
         try {
-            String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY + ":trial";
+            String hwFp = getHardwareFingerprint();
+            String combined = (machineId == null ? "" : machineId) + (hwFp == null ? "" : hwFp) + LICENSE_HMAC_KEY + ":trial";
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
         } catch (Exception e) {
@@ -361,10 +420,22 @@ public class LicenseManager {
         }
     }
 
-    // 派生 last-run 加密密钥：SHA256(machineId + LICENSE_HMAC_KEY + ':lastrun')
+    // ★ P3-A 新增：旧 trial 密钥派生（不含硬件指纹，向后兼容）
+    private SecretKeySpec deriveTrialKeyLegacy(String machineId) {
+        try {
+            String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY + ":trial";
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // ★ P3-A 新增：派生 last-run 加密密钥（含硬件指纹）
     private SecretKeySpec deriveLastRunKey(String machineId) {
         try {
-            String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY + ":lastrun";
+            String hwFp = getHardwareFingerprint();
+            String combined = (machineId == null ? "" : machineId) + (hwFp == null ? "" : hwFp) + LICENSE_HMAC_KEY + ":lastrun";
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
         } catch (Exception e) {
@@ -373,14 +444,37 @@ public class LicenseManager {
         }
     }
 
-    // 派生 count 加密密钥：SHA256(machineId + LICENSE_HMAC_KEY + ':count')
+    // ★ P3-A 新增：旧 last-run 密钥派生（不含硬件指纹，向后兼容）
+    private SecretKeySpec deriveLastRunKeyLegacy(String machineId) {
+        try {
+            String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY + ":lastrun";
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // ★ P3-A 新增：派生 count 加密密钥（含硬件指纹）
     private SecretKeySpec deriveCountKey(String machineId) {
+        try {
+            String hwFp = getHardwareFingerprint();
+            String combined = (machineId == null ? "" : machineId) + (hwFp == null ? "" : hwFp) + LICENSE_HMAC_KEY + ":count";
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
+        } catch (Exception e) {
+            Log.e(TAG, "派生 count 密钥失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // ★ P3-A 新增：旧 count 密钥派生（不含硬件指纹，向后兼容）
+    private SecretKeySpec deriveCountKeyLegacy(String machineId) {
         try {
             String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY + ":count";
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
         } catch (Exception e) {
-            Log.e(TAG, "派生 count 密钥失败: " + e.getMessage());
             return null;
         }
     }
@@ -429,24 +523,39 @@ public class LicenseManager {
     private String encryptTrialContent(String jsonStr, String machineId) {
         return aesEncrypt(jsonStr, deriveTrialKey(machineId), TRIAL_ENC_PREFIX);
     }
+    // ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
     private String decryptTrialContent(String encryptedStr, String machineId) {
-        return aesDecrypt(encryptedStr, deriveTrialKey(machineId), TRIAL_ENC_PREFIX);
+        if (encryptedStr == null || !encryptedStr.startsWith(TRIAL_ENC_PREFIX)) return null;
+        String base64Data = encryptedStr.substring(TRIAL_ENC_PREFIX.length());
+        String plaintext = tryDecryptAes(base64Data, deriveTrialKey(machineId));
+        if (plaintext != null) return plaintext;
+        return tryDecryptAes(base64Data, deriveTrialKeyLegacy(machineId));
     }
 
     // last-run 加解密
     private String encryptLastRunContent(String jsonStr, String machineId) {
         return aesEncrypt(jsonStr, deriveLastRunKey(machineId), LASTRUN_ENC_PREFIX);
     }
+    // ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
     private String decryptLastRunContent(String encryptedStr, String machineId) {
-        return aesDecrypt(encryptedStr, deriveLastRunKey(machineId), LASTRUN_ENC_PREFIX);
+        if (encryptedStr == null || !encryptedStr.startsWith(LASTRUN_ENC_PREFIX)) return null;
+        String base64Data = encryptedStr.substring(LASTRUN_ENC_PREFIX.length());
+        String plaintext = tryDecryptAes(base64Data, deriveLastRunKey(machineId));
+        if (plaintext != null) return plaintext;
+        return tryDecryptAes(base64Data, deriveLastRunKeyLegacy(machineId));
     }
 
     // count 加解密
     private String encryptCountContent(String jsonStr, String machineId) {
         return aesEncrypt(jsonStr, deriveCountKey(machineId), COUNT_ENC_PREFIX);
     }
+    // ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
     private String decryptCountContent(String encryptedStr, String machineId) {
-        return aesDecrypt(encryptedStr, deriveCountKey(machineId), COUNT_ENC_PREFIX);
+        if (encryptedStr == null || !encryptedStr.startsWith(COUNT_ENC_PREFIX)) return null;
+        String base64Data = encryptedStr.substring(COUNT_ENC_PREFIX.length());
+        String plaintext = tryDecryptAes(base64Data, deriveCountKey(machineId));
+        if (plaintext != null) return plaintext;
+        return tryDecryptAes(base64Data, deriveCountKeyLegacy(machineId));
     }
 
     // ========================================================================
