@@ -51,6 +51,21 @@ public class LicenseManager {
     private static final String PREF_NAME = "license_config";
     private static final String PREF_KEY_TRIAL_DAYS = "trial_days";
 
+    // ★ 激活码失败限速配置（防暴力尝试）
+    private static final String PREF_KEY_ACTIVATE_FAIL_COUNT = "activate_fail_count";
+    private static final String PREF_KEY_ACTIVATE_FIRST_FAIL_TIME = "activate_first_fail_time";
+    private static final int ACTIVATE_FAIL_THRESHOLD = 5;        // 5 次失败后进入冷却
+    private static final long ACTIVATE_COOLDOWN_MS = 5L * 60 * 1000;  // 冷却 5 分钟
+
+    // ★ APK 签名校验（防反编译重打包）
+    // 留空则不校验；填入发布签名的 SHA-256 指纹（小写无冒号）后启用
+    // 获取方式：keytool -printcert -jarfile your.apk （取 SHA256: 后的值，去冒号转小写）
+    private static final String EXPECTED_APK_SIGNATURE_SHA256 = "";
+
+    // ★ 安全检测开关（root/debugger 检测）
+    private static final boolean ENABLE_ROOT_CHECK = true;
+    private static final boolean ENABLE_DEBUGGER_CHECK = true;
+
     // XOR 混淆密钥
     private static final String TRIAL_KEY = "bnzc_trial_key_v1";
     private static final String LASTRUN_KEY = "bnzc_lastrun_key_v1";
@@ -112,6 +127,175 @@ public class LicenseManager {
             Log.e(TAG, "生成机器 ID 失败", e);
             // 失败时返回固定的回退 ID（避免完全无法激活）
             return "fallback_" + packageName.hashCode() + "_" + versionName.hashCode();
+        }
+    }
+
+    // ========================================================================
+    //  ★ 安全检测：Root 检测（防 root 设备篡改 license）
+    // ========================================================================
+    public boolean isRooted() {
+        if (!ENABLE_ROOT_CHECK) return false;
+        try {
+            // 1. 检查 su 命令是否可执行
+            String[] suPaths = {"/system/bin/su", "/system/xbin/su", "/sbin/su",
+                    "/system/sd/xbin/su", "/system/bin/failsafe/su", "/data/local/xbin/su",
+                    "/data/local/bin/su", "/data/local/su"};
+            for (String path : suPaths) {
+                if (new java.io.File(path).exists()) {
+                    Log.w(TAG, "Root 检测：发现 su 路径 " + path);
+                    return true;
+                }
+            }
+            // 2. 检查 Build.TAGS（test-keys 是 root 固件标志）
+            if (Build.TAGS != null && Build.TAGS.contains("test-keys")) {
+                Log.w(TAG, "Root 检测：Build.TAGS 包含 test-keys");
+                return true;
+            }
+            // 3. 检查 Magisk 等常见 root 应用包名
+            String[] rootApps = {"com.topjohnwu.magisk", "eu.chainfire.supersu",
+                    "com.koushikdutta.superuser", "com.thirdparty.superuser"};
+            java.util.List<android.content.pm.PackageInfo> pkgs =
+                    context.getPackageManager().getInstalledPackages(0);
+            for (android.content.pm.PackageInfo pi : pkgs) {
+                for (String pkg : rootApps) {
+                    if (pkg.equals(pi.packageName)) {
+                        Log.w(TAG, "Root 检测：发现 root 应用 " + pkg);
+                        return true;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Root 检测异常（视为未 root）: " + e.getMessage());
+        }
+        return false;
+    }
+
+    // ========================================================================
+    //  ★ 安全检测：调试器检测（防 hook/调试绕过 license）
+    // ========================================================================
+    public boolean isDebuggerAttached() {
+        if (!ENABLE_DEBUGGER_CHECK) return false;
+        try {
+            // 1. 系统 debug 标志
+            if (android.os.Debug.isDebuggerConnected()) {
+                Log.w(TAG, "调试器检测：isDebuggerConnected=true");
+                return true;
+            }
+            // 2. 系统属性 ro.debuggable（release 版应为 0）
+            String debuggable = android.os.SystemProperties.get("ro.debuggable", "0");
+            if ("1".equals(debuggable)) {
+                Log.w(TAG, "调试器检测：ro.debuggable=1");
+                return true;
+            }
+        } catch (Exception e) {
+            // SystemProperties 可能不可访问，忽略
+        }
+        return false;
+    }
+
+    // ========================================================================
+    //  ★ 安全检测：APK 签名校验（防反编译重打包）
+    // ========================================================================
+    public boolean verifyApkSignature() {
+        if (EXPECTED_APK_SIGNATURE_SHA256 == null || EXPECTED_APK_SIGNATURE_SHA256.isEmpty()) {
+            // 未配置预期签名，跳过校验（开发阶段）
+            return true;
+        }
+        try {
+            android.content.pm.PackageInfo pi = context.getPackageManager().getPackageInfo(
+                    packageName, android.content.pm.PackageManager.GET_SIGNATURES);
+            if (pi == null || pi.signatures == null || pi.signatures.length == 0) {
+                Log.e(TAG, "APK 签名校验：未找到签名");
+                return false;
+            }
+            for (android.content.pm.Signature sig : pi.signatures) {
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                byte[] digest = md.digest(sig.toByteArray());
+                StringBuilder sb = new StringBuilder();
+                for (byte b : digest) {
+                    sb.append(String.format("%02x", b));
+                }
+                String fingerprint = sb.toString();
+                if (EXPECTED_APK_SIGNATURE_SHA256.equalsIgnoreCase(fingerprint)) {
+                    return true;
+                }
+                Log.e(TAG, "APK 签名校验：指纹不匹配 expected=" + EXPECTED_APK_SIGNATURE_SHA256 +
+                        " actual=" + fingerprint);
+            }
+            return false;
+        } catch (Exception e) {
+            Log.e(TAG, "APK 签名校验异常", e);
+            return false;
+        }
+    }
+
+    // ========================================================================
+    //  ★ 激活码失败限速（防暴力尝试激活码）
+    // ========================================================================
+    // 检查是否在冷却期。返回 null 表示可继续激活；返回非 null 表示冷却中（含错误信息）
+    private JSONObject checkActivateRateLimit() {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            int failCount = prefs.getInt(PREF_KEY_ACTIVATE_FAIL_COUNT, 0);
+            long firstFailTime = prefs.getLong(PREF_KEY_ACTIVATE_FIRST_FAIL_TIME, 0);
+            long now = System.currentTimeMillis();
+
+            if (failCount >= ACTIVATE_FAIL_THRESHOLD) {
+                long remaining = ACTIVATE_COOLDOWN_MS - (now - firstFailTime);
+                if (remaining > 0) {
+                    long remainingSec = remaining / 1000;
+                    JSONObject r = new JSONObject();
+                    r.put("success", false);
+                    r.put("error", "激活失败次数过多，请 " + remainingSec + " 秒后再试");
+                    r.put("cooldown", true);
+                    r.put("remainingMs", remaining);
+                    return r;
+                } else {
+                    // 冷却期已过，重置计数
+                    SharedPreferences.Editor editor = prefs.edit();
+                    editor.putInt(PREF_KEY_ACTIVATE_FAIL_COUNT, 0);
+                    editor.putLong(PREF_KEY_ACTIVATE_FIRST_FAIL_TIME, 0);
+                    editor.apply();
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "checkActivateRateLimit 异常", e);
+        }
+        return null;
+    }
+
+    // 记录激活失败（增加计数）
+    private void recordActivateFailure() {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            int failCount = prefs.getInt(PREF_KEY_ACTIVATE_FAIL_COUNT, 0);
+            long firstFailTime = prefs.getLong(PREF_KEY_ACTIVATE_FIRST_FAIL_TIME, 0);
+            long now = System.currentTimeMillis();
+            SharedPreferences.Editor editor = prefs.edit();
+            if (failCount == 0 || firstFailTime == 0 ||
+                    (now - firstFailTime) > ACTIVATE_COOLDOWN_MS) {
+                // 首次失败或冷却期已过，重新开始计数
+                editor.putInt(PREF_KEY_ACTIVATE_FAIL_COUNT, 1);
+                editor.putLong(PREF_KEY_ACTIVATE_FIRST_FAIL_TIME, now);
+            } else {
+                editor.putInt(PREF_KEY_ACTIVATE_FAIL_COUNT, failCount + 1);
+            }
+            editor.apply();
+        } catch (Exception e) {
+            Log.e(TAG, "recordActivateFailure 异常", e);
+        }
+    }
+
+    // 激活成功时重置失败计数
+    private void resetActivateFailCount() {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putInt(PREF_KEY_ACTIVATE_FAIL_COUNT, 0);
+            editor.putLong(PREF_KEY_ACTIVATE_FIRST_FAIL_TIME, 0);
+            editor.apply();
+        } catch (Exception e) {
+            Log.e(TAG, "resetActivateFailCount 异常", e);
         }
     }
 
@@ -474,6 +658,25 @@ public class LicenseManager {
     public JSONObject validateLicense() {
         long now = System.currentTimeMillis();
         try {
+            // ★ 安全检测 1：Root 检测（防 root 设备篡改 license）
+            if (isRooted()) {
+                return failValidation(
+                        "检测到 Root 设备，软件无法运行。\n如需正常使用，请在非 Root 设备上安装。",
+                        "rooted");
+            }
+            // ★ 安全检测 2：调试器检测（防 hook/调试绕过 license）
+            if (isDebuggerAttached()) {
+                return failValidation(
+                        "检测到调试器已连接，软件无法运行。\n请关闭调试模式后重启应用。",
+                        "debugger");
+            }
+            // ★ 安全检测 3：APK 签名校验（防反编译重打包）
+            if (!verifyApkSignature()) {
+                return failValidation(
+                        "APK 签名校验失败，软件可能被篡改。\n请从官方渠道重新下载安装。",
+                        "signature_mismatch");
+            }
+
             // 1. 时间回拨检测
             JSONObject lastRun = readLastRun();
             if (lastRun != null && lastRun.has("timestamp")) {
@@ -630,6 +833,12 @@ public class LicenseManager {
     public JSONObject activateOnline(String code, String machineId, String user) {
         HttpURLConnection conn = null;
         try {
+            // ★ 激活码失败限速检查（防暴力尝试）
+            JSONObject rateLimitResult = checkActivateRateLimit();
+            if (rateLimitResult != null) {
+                return rateLimitResult;
+            }
+
             URL url = new URL(ACTIVATE_API_URL);
             conn = (HttpURLConnection) url.openConnection();
             conn.setRequestMethod("POST");
@@ -659,20 +868,26 @@ public class LicenseManager {
             JSONObject respJson = new JSONObject(response);
 
             if (!respJson.optBoolean("success", false)) {
+                recordActivateFailure();  // ★ 云端返回激活失败，增加计数
                 return failResult(respJson.optString("message", "激活失败"));
             }
 
             // 获取 license base64 并写入文件
             String licenseBase64 = respJson.optString("license", "");
             if (licenseBase64 == null || licenseBase64.isEmpty()) {
+                recordActivateFailure();
                 return failResult("服务器返回的 license 数据为空");
             }
             if (!writeLicenseContent(licenseBase64)) {
+                recordActivateFailure();
                 return failResult("写入 license 文件失败");
             }
 
             // 清除 trial 文件（已正式激活）
             try { getFile(TRIAL_FILE).delete(); } catch (Exception ignored) {}
+
+            // ★ 激活成功，重置失败计数
+            resetActivateFailCount();
 
             JSONObject r = new JSONObject();
             r.put("success", true);
@@ -685,12 +900,15 @@ public class LicenseManager {
             return r;
         } catch (java.net.SocketTimeoutException e) {
             Log.e(TAG, "激活超时", e);
+            recordActivateFailure();  // ★ 网络超时也算失败
             return failResult("激活超时，请检查网络后重试（15秒）");
         } catch (java.net.UnknownHostException e) {
             Log.e(TAG, "无法连接服务器", e);
+            recordActivateFailure();  // ★ 网络错误不算激活失败（避免误伤）
             return failResult("无法连接服务器，请检查网络连接");
         } catch (Exception e) {
             Log.e(TAG, "激活失败", e);
+            recordActivateFailure();  // ★ 激活失败增加计数
             return failResult("激活失败: " + e.getMessage());
         } finally {
             if (conn != null) conn.disconnect();
