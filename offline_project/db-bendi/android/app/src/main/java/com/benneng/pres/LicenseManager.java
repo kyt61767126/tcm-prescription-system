@@ -53,7 +53,9 @@ public class LicenseManager {
     private static final String CONFIG_SIGN_KEY = "bnzc_config_sign_key_v1_2026";
 
     // ★ P1-A 新增：license 文件加密格式标识和算法
-    private static final String LICENSE_ENC_PREFIX = "ENC1:";  // 加密格式前缀
+    private static final String LICENSE_ENC_PREFIX = "ENC1:";  // 旧加密格式前缀（向后兼容）
+    // ★ P3-C 新增：license 文件新格式前缀（含 HMAC 校验）
+    private static final String LICENSE_ENC2_PREFIX = "ENC2:";
     private static final String AES_ALGORITHM = "AES/CBC/PKCS5Padding";
 
     // ★ P2 新增：trial / last-run / count 文件加密格式标识
@@ -405,7 +407,31 @@ public class LicenseManager {
         }
     }
 
+    // ★ P3-C 新增：派生 license HMAC 密钥（含硬件指纹）
+    private SecretKeySpec deriveLicenseHmacKey(String machineId) {
+        try {
+            String hwFp = getHardwareFingerprint();
+            String combined = (machineId == null ? "" : machineId) + (hwFp == null ? "" : hwFp) + LICENSE_HMAC_KEY + ":hmac";
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "HmacSHA256");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // ★ P3-C 新增：旧 HMAC 密钥派生（不含硬件指纹，向后兼容）
+    private SecretKeySpec deriveLicenseHmacKeyLegacy(String machineId) {
+        try {
+            String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY + ":hmac";
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "HmacSHA256");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     // 加密 license JSON 字符串
+    // ★ P3-C 新增：加密后追加外层 HMAC 签名，文件格式 ENC2:hex(hmac):base64(iv+ciphertext)
     private String encryptLicenseContent(String jsonStr, String machineId) {
         try {
             SecretKeySpec key = deriveLicenseKey(machineId);
@@ -424,8 +450,18 @@ public class LicenseManager {
             byte[] combined = new byte[iv.length + ciphertext.length];
             System.arraycopy(iv, 0, combined, 0, iv.length);
             System.arraycopy(ciphertext, 0, combined, iv.length, ciphertext.length);
+            String payload = Base64.encodeToString(combined, Base64.NO_WRAP);
 
-            return LICENSE_ENC_PREFIX + Base64.encodeToString(combined, Base64.NO_WRAP);
+            // ★ P3-C 新增：计算外层 HMAC（基于 machineId + 硬件指纹 + 密文）
+            SecretKeySpec hmacKey = deriveLicenseHmacKey(machineId);
+            if (hmacKey == null) return null;
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(hmacKey);
+            byte[] hmacBytes = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hmacBytes) hex.append(String.format("%02x", b));
+
+            return LICENSE_ENC2_PREFIX + hex.toString() + ":" + payload;
         } catch (Exception e) {
             Log.e(TAG, "加密 license 失败: " + e.getMessage());
             return null;
@@ -433,16 +469,62 @@ public class LicenseManager {
     }
 
     // 解密 license 字符串（返回 JSON 字符串，失败返回 null）
-    // ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥（向后兼容）
+    // ★ P3-C 新增：优先 ENC2 格式（含 HMAC 校验），回退 ENC1 格式（向后兼容）
+    // ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
     private String decryptLicenseContent(String encryptedStr, String machineId) {
-        if (encryptedStr == null || !encryptedStr.startsWith(LICENSE_ENC_PREFIX)) return null;
-        // 优先尝试新密钥（含硬件指纹）
-        String plaintext = tryDecryptAes(encryptedStr.substring(LICENSE_ENC_PREFIX.length()),
-                deriveLicenseKey(machineId));
-        if (plaintext != null) return plaintext;
-        // 回退到旧密钥（向后兼容旧 license.dat）
-        return tryDecryptAes(encryptedStr.substring(LICENSE_ENC_PREFIX.length()),
-                deriveLicenseKeyLegacy(machineId));
+        if (encryptedStr == null) return null;
+        // ★ P3-C 新增：优先尝试 ENC2 格式（含 HMAC 校验）
+        if (encryptedStr.startsWith(LICENSE_ENC2_PREFIX)) {
+            String rest = encryptedStr.substring(LICENSE_ENC2_PREFIX.length());
+            int sep = rest.indexOf(':');
+            if (sep < 0) return null;
+            String storedHmac = rest.substring(0, sep);
+            String base64Data = rest.substring(sep + 1);
+            // 优先用新密钥校验 HMAC
+            boolean hmacMatched = verifyHmac(storedHmac, base64Data, deriveLicenseHmacKey(machineId));
+            // 旧 HMAC 密钥（不含硬件指纹，向后兼容）
+            if (!hmacMatched) {
+                hmacMatched = verifyHmac(storedHmac, base64Data, deriveLicenseHmacKeyLegacy(machineId));
+            }
+            if (!hmacMatched) {
+                Log.e(TAG, "HMAC 校验失败（文件可能被替换/篡改）");
+                return null;
+            }
+            // HMAC 校验通过，解密内容（双密钥尝试）
+            String plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
+            if (plaintext != null) return plaintext;
+            return tryDecryptAes(base64Data, deriveLicenseKeyLegacy(machineId));
+        }
+        // 旧 ENC1 格式 - 向后兼容
+        if (encryptedStr.startsWith(LICENSE_ENC_PREFIX)) {
+            String base64Data = encryptedStr.substring(LICENSE_ENC_PREFIX.length());
+            // 优先尝试新密钥（含硬件指纹）
+            String plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
+            if (plaintext != null) return plaintext;
+            return tryDecryptAes(base64Data, deriveLicenseKeyLegacy(machineId));
+        }
+        return null;
+    }
+
+    // ★ P3-C 新增：HMAC 校验工具（常量时间比较，防时序攻击）
+    private boolean verifyHmac(String storedHmacHex, String payload, SecretKeySpec hmacKey) {
+        if (hmacKey == null || storedHmacHex == null) return false;
+        try {
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(hmacKey);
+            byte[] expected = mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : expected) hex.append(String.format("%02x", b));
+            // 常量时间比较（防时序攻击）
+            if (hex.length() != storedHmacHex.length()) return false;
+            int diff = 0;
+            for (int i = 0; i < hex.length(); i++) {
+                diff |= hex.charAt(i) ^ storedHmacHex.charAt(i);
+            }
+            return diff == 0;
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     // ★ P3-A 新增：通用 AES 解密尝试（用于双密钥回退）
@@ -845,7 +927,7 @@ public class LicenseManager {
         return new File(context.getFilesDir(), name);
     }
 
-    // license.dat: 优先 ENC1:base64(iv+ciphertext)，旧格式 base64(JSON) 向后兼容
+    // license.dat: 优先 ENC2:hex(hmac):base64(iv+ciphertext)，旧格式 ENC1 / base64 向后兼容
     public JSONObject readLicense() {
         return readLicense(getMachineId());
     }
@@ -858,7 +940,22 @@ public class LicenseManager {
             byte[] bytes = readFileBytes(f);
             String content = new String(bytes, StandardCharsets.UTF_8).trim();
 
-            // ★ P1-A 新增：优先尝试新加密格式（ENC1:）
+            // ★ P3-C 新增：优先尝试 ENC2 格式（含 HMAC 校验）
+            if (content.startsWith(LICENSE_ENC2_PREFIX)) {
+                String actualMachineId = machineId != null ? machineId : getMachineId();
+                if (actualMachineId == null || actualMachineId.isEmpty()) {
+                    Log.e(TAG, "无法获取 machineId 解密 license");
+                    return null;
+                }
+                String json = decryptLicenseContent(content, actualMachineId);
+                if (json == null) {
+                    Log.e(TAG, "解密失败（machineId 不匹配 / 文件损坏 / HMAC 校验失败）");
+                    return null;
+                }
+                return new JSONObject(json);
+            }
+
+            // ★ P1-A 新增：旧加密格式（ENC1:）
             if (content.startsWith(LICENSE_ENC_PREFIX)) {
                 String actualMachineId = machineId != null ? machineId : getMachineId();
                 if (actualMachineId == null || actualMachineId.isEmpty()) {

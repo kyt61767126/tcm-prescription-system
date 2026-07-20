@@ -273,25 +273,85 @@ function tryDecryptAes(base64Data, key) {
 }
 
 // 加密 license JSON 字符串
+// ★ P3-C 新增：加密后追加外层 HMAC 签名（基于 machineId + 硬件指纹）
+// 文件格式：ENC2:hex(hmac):base64(iv + ciphertext)
+// 旧格式 ENC1:base64(iv + ciphertext) 仍可读（向后兼容，读取后自动迁移为 ENC2）
 function encryptLicenseContent(jsonStr, machineId) {
     const key = deriveLicenseKey(machineId);
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
     const plaintext = Buffer.from(jsonStr, 'utf8');
     const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-    return 'ENC1:' + Buffer.concat([iv, ciphertext]).toString('base64');
+    const payload = Buffer.concat([iv, ciphertext]).toString('base64');
+    // ★ P3-C 新增：计算外层 HMAC（基于 machineId + 硬件指纹 + 密文）
+    // 防止攻击者替换整个 license.dat 文件（即使 machineId 相同，HMAC 不匹配也会拒绝）
+    const hmacKey = deriveLicenseHmacKey(machineId);
+    const hmac = crypto.createHmac('sha256', hmacKey).update(payload).digest('hex');
+    return 'ENC2:' + hmac + ':' + payload;
+}
+
+// ★ P3-C 新增：派生 license HMAC 密钥（独立于加密密钥，不同盐）
+function deriveLicenseHmacKey(machineId) {
+    const hwFp = getHardwareFingerprint();
+    const combined = (machineId || '') + (hwFp || '') + LICENSE_HMAC_KEY + ':hmac';
+    return crypto.createHash('sha256').update(combined).digest();
 }
 
 // 解密 license 字符串（返回 JSON 字符串，失败返回 null）
-// ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥（向后兼容）
+// ★ P3-C 新增：优先 ENC2 格式（含 HMAC 校验），回退 ENC1 格式（向后兼容）
+// ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
 function decryptLicenseContent(encryptedStr, machineId) {
-    if (!encryptedStr || !encryptedStr.startsWith('ENC1:')) return null;
-    const base64Data = encryptedStr.substring(5);
-    // 优先尝试新密钥（含硬件指纹）
-    let plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
-    if (plaintext) return plaintext;
-    // 回退到旧密钥（向后兼容旧 license.dat）
-    return tryDecryptAes(base64Data, deriveLicenseKeyLegacy(machineId));
+    if (!encryptedStr) return null;
+    // ★ P3-C 新增：优先尝试 ENC2 格式（含 HMAC 校验）
+    if (encryptedStr.startsWith('ENC2:')) {
+        const parts = encryptedStr.substring(5).split(':');
+        if (parts.length < 2) return null;
+        const storedHmac = parts[0];
+        const base64Data = parts.slice(1).join(':');
+        // 优先用新密钥校验 HMAC
+        const newHmacKey = deriveLicenseHmacKey(machineId);
+        const newExpectedHmac = crypto.createHmac('sha256', newHmacKey).update(base64Data).digest('hex');
+        let hmacMatched = false;
+        try {
+            if (crypto.timingSafeEqual(Buffer.from(storedHmac, 'hex'), Buffer.from(newExpectedHmac, 'hex'))) {
+                hmacMatched = true;
+            }
+        } catch (e) { /* 长度不匹配，尝试旧密钥 */ }
+        // 旧 HMAC 密钥（不含硬件指纹，向后兼容）
+        if (!hmacMatched) {
+            const legacyHmacKey = deriveLicenseHmacKeyLegacy(machineId);
+            const legacyExpectedHmac = crypto.createHmac('sha256', legacyHmacKey).update(base64Data).digest('hex');
+            try {
+                if (crypto.timingSafeEqual(Buffer.from(storedHmac, 'hex'), Buffer.from(legacyExpectedHmac, 'hex'))) {
+                    hmacMatched = true;
+                }
+            } catch (e) { return null; }
+        }
+        if (!hmacMatched) {
+            console.error('[License] HMAC 校验失败（文件可能被替换/篡改）');
+            return null;
+        }
+        // HMAC 校验通过，解密内容（双密钥尝试）
+        let plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
+        if (plaintext) return plaintext;
+        return tryDecryptAes(base64Data, deriveLicenseKeyLegacy(machineId));
+    }
+    // 旧 ENC1 格式 - 向后兼容
+    if (encryptedStr.startsWith('ENC1:')) {
+        const base64Data = encryptedStr.substring(5);
+        // 优先尝试新密钥（含硬件指纹）
+        let plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
+        if (plaintext) return plaintext;
+        // 回退到旧密钥（向后兼容旧 license.dat）
+        return tryDecryptAes(base64Data, deriveLicenseKeyLegacy(machineId));
+    }
+    return null;
+}
+
+// ★ P3-C 新增：旧 HMAC 密钥派生（不含硬件指纹，向后兼容）
+function deriveLicenseHmacKeyLegacy(machineId) {
+    const combined = (machineId || '') + LICENSE_HMAC_KEY + ':hmac';
+    return crypto.createHash('sha256').update(combined).digest();
 }
 
 // ============================================================================
@@ -451,7 +511,22 @@ function readLicense(machineId) {
         if (!fs.existsSync(licensePath)) return null;
         const content = fs.readFileSync(licensePath, 'utf8').trim();
 
-        // ★ P1-A 新增：优先尝试新加密格式（ENC1:）
+        // ★ P3-C 新增：优先尝试 ENC2 格式（含 HMAC 校验）
+        if (content.startsWith('ENC2:')) {
+            const actualMachineId = machineId || getMachineId();
+            if (!actualMachineId) {
+                console.error('[License] 无法获取 machineId 解密 license');
+                return null;
+            }
+            const json = decryptLicenseContent(content, actualMachineId);
+            if (!json) {
+                console.error('[License] 解密失败（machineId 不匹配 / 文件损坏 / HMAC 校验失败）');
+                return null;
+            }
+            return JSON.parse(json);
+        }
+
+        // ★ P1-A 新增：旧加密格式（ENC1:）
         if (content.startsWith('ENC1:')) {
             const actualMachineId = machineId || getMachineId();
             if (!actualMachineId) {
