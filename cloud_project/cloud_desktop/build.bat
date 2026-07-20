@@ -7,7 +7,7 @@ echo  Huikang TCM Cloud - Desktop Build
 echo ============================================
 echo.
 
-echo [1/7] Checking environment...
+echo [1/8] Checking environment...
 where npm >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] npm not found, please install Node.js first
@@ -17,7 +17,28 @@ if errorlevel 1 (
 echo       npm OK
 echo.
 
-echo [2/7] Closing remaining processes...
+echo [2/8] Checking node_modules...
+if not exist "node_modules" (
+    echo       node_modules not found, installing dependencies...
+    if exist "package-lock.json" (
+        echo       Running npm ci ^(faster, deterministic^)...
+        call npm ci --no-audit --no-fund --prefer-offline
+    ) else (
+        echo       Running npm install...
+        call npm install --no-audit --no-fund --prefer-offline
+    )
+    if errorlevel 1 (
+        echo [ERROR] npm install failed
+        pause
+        exit /b 1
+    )
+    echo       [OK] Dependencies installed
+) else (
+    echo       [OK] node_modules exists
+)
+echo.
+
+echo [3/8] Closing remaining processes...
 REM Kill all electron and app processes that might lock files
 taskkill /F /IM electron.exe >nul 2>&1
 taskkill /F /IM "HuikangTCM*.exe" >nul 2>&1
@@ -30,7 +51,7 @@ echo [OK] Processes cleaned
 timeout /t 3 /nobreak >nul
 echo.
 
-echo [3/7] Cleaning old build artifacts...
+echo [4/8] Cleaning old build artifacts...
 REM Define the output directory (must match package.json build.directories.output)
 set "OUTPUT_DIR=build_output"
 
@@ -82,7 +103,7 @@ if exist "dist" (
 echo [OK] Old artifacts cleaned
 echo.
 
-echo [4/7] Obfuscating JavaScript code (target=cloud)...
+echo [5/8] Obfuscating JavaScript code (target=cloud)...
 node "%~dp0..\..\tools\obfuscate.js" --target=cloud
 if errorlevel 1 (
     echo [ERROR] Obfuscation failed
@@ -94,7 +115,7 @@ if errorlevel 1 (
 echo [OK] Obfuscation completed
 echo.
 
-echo [5/7] Running build...
+echo [6/8] Running build...
 REM Use domestic mirror to accelerate electron binary download (no need to disable TLS verification)
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
@@ -112,7 +133,7 @@ if errorlevel 1 (
 )
 echo.
 
-echo [6/7] Restoring original JavaScript code...
+echo [7/8] Restoring original JavaScript code...
 node "%~dp0..\..\tools\obfuscate.js" restore --target=cloud
 if errorlevel 1 (
     echo [ERROR] Restore failed! Source code may remain obfuscated.
@@ -123,7 +144,7 @@ if errorlevel 1 (
 echo [OK] Original code restored
 echo.
 
-echo [7/7] Build completed
+echo [8/8] Build completed
 echo Output dir: %CD%\%OUTPUT_DIR%
 echo ============================================
 if exist "build_output_old_*" (
