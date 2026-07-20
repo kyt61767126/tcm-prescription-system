@@ -99,5 +99,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         // v2 新增：功能权限校验
         checkFeature: (featureName) => ipcRenderer.invoke('license:check-feature', featureName),
         getFeatureStatus: () => ipcRenderer.invoke('license:get-feature-status')
+    },
+
+    // ★ 激活码激活窗口（云端激活系统，第3周任务）
+    activate: {
+        show: () => ipcRenderer.invoke('license:show-activate'),
+        submit: (code, user) => ipcRenderer.invoke('license:submit-activate', code, user),
+        close: () => ipcRenderer.invoke('license:close-activate'),
+        restart: () => ipcRenderer.invoke('license:restart'),
+        getMachineId: () => ipcRenderer.invoke('license:get-machine-id')
     }
 });

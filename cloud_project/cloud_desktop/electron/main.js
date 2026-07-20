@@ -6,6 +6,7 @@ const Database = require('better-sqlite3');
 const licenseManager = require('./license-manager');
 const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
+const activateManager = require('./activate');
 
 let mainWindow;
 let loginWindow;
@@ -712,6 +713,51 @@ ipcMain.handle('license:get-feature-status', () => {
     } catch (e) {
         console.error('[IPC] get-feature-status 异常:', e);
         return [];
+    }
+});
+
+// ★ 激活码相关 IPC（云端激活系统，第3周任务）
+ipcMain.handle('license:show-activate', () => {
+    try {
+        activateManager.showActivateWindow(mainWindow);
+    } catch (e) {
+        console.error('[IPC] show-activate 异常:', e);
+    }
+});
+
+ipcMain.handle('license:submit-activate', async (event, code, user) => {
+    try {
+        const machineId = activateManager.getMachineId();
+        const result = await activateManager.activateOnline(code, machineId, user);
+        return result;
+    } catch (e) {
+        console.error('[IPC] submit-activate 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('license:close-activate', () => {
+    try {
+        activateManager.closeActivateWindow();
+    } catch (e) {
+        console.error('[IPC] close-activate 异常:', e);
+    }
+});
+
+ipcMain.handle('license:restart', () => {
+    try {
+        activateManager.restartApp();
+    } catch (e) {
+        console.error('[IPC] restart 异常:', e);
+    }
+});
+
+ipcMain.handle('license:get-machine-id', () => {
+    try {
+        return activateManager.getMachineId();
+    } catch (e) {
+        console.error('[IPC] get-machine-id 异常:', e);
+        return null;
     }
 });
 
