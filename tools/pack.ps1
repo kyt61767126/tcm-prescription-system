@@ -52,6 +52,10 @@ $script:OldVersionCode = $null
 $script:UTF8WithBom = New-Object System.Text.UTF8Encoding($true)
 $script:UTF8NoBom = New-Object System.Text.UTF8Encoding($false)
 
+# ★ v3 安全：config.json 完整性签名密钥（与 license-manager.js / edit-config.ps1 保持一致）
+# 修改 config.json 时必须同步计算 HMAC-SHA256 签名并写入 configSignature 字段
+$script:CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026'
+
 function Write-Log {
     param([string]$Message, [string]$Level = "INFO")
     $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -299,11 +303,32 @@ function Edit-ClinicConfig {
         return
     }
 
-    # 更新 config.json (with BOM for JSON compatibility)
+    # 更新 config.json（必须计算 HMAC-SHA256 签名，与 edit-config.ps1 保持一致）
     if ($clinicChanged) { $config.clinicName = $newClinic }
     if ($doctorChanged) { $config.doctorName = $newDoctor }
-    $json = $config | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText($configPath, $json, $script:UTF8WithBom)
+
+    # ★ v3 安全：写入签名时间戳（UTC ISO 8601，与 license-manager.js 验签逻辑匹配）
+    $config.configIssuedAt = (Get-Date).ToUniversalTime().ToString("o")
+
+    # 先写入不含签名的 config.json（清掉可能存在的旧 configSignature）
+    $config | Select-Object -Property * -ExcludeProperty configSignature |
+        ConvertTo-Json -Depth 10 |
+        Set-Content -Path $configPath -Encoding UTF8
+
+    # ★ v3 安全：计算 HMAC-SHA256 签名
+    # 签名内容：clinicName|doctorName|edition|configIssuedAt
+    $signContent = "$($config.clinicName)|$($config.doctorName)|$($config.edition)|$($config.configIssuedAt)"
+    $hmac = New-Object System.Security.Cryptography.HMACSHA256
+    $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($script:CONFIG_SIGN_KEY)
+    $hashBytes = $hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($signContent))
+    $configSignature = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ''
+    $config | Add-Member -NotePropertyName configSignature -NotePropertyValue $configSignature -Force
+
+    # 重新写入带签名的 config.json（无 BOM，与 edit-config.ps1 保持一致）
+    $configJson = $config | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($configPath, $configJson, $script:UTF8NoBom)
+
+    Write-Host "  [OK] config.json 签名已生成: $configSignature" -ForegroundColor Green
 
     # 更新 index.html (NO BOM - critical!)
     $html = [System.IO.File]::ReadAllText($htmlPath, $script:UTF8NoBom)
@@ -917,8 +942,8 @@ function Invoke-Packaging {
             $stepStartTime = Get-Date
         }
 
-        # Step 2: Config modification
-        if (-not $SkipCfg -and ($Tgt -eq 'app' -or $Tgt -eq 'all' -or $Tgt -eq 'config')) {
+        # Step 2: Config modification (for desktop/app/all/config targets)
+        if (-not $SkipCfg -and ($Tgt -eq 'desktop' -or $Tgt -eq 'app' -or $Tgt -eq 'all' -or $Tgt -eq 'config')) {
             Edit-ClinicConfig
             Write-Host "  [耗时] 配置修改: $(((Get-Date) - $stepStartTime).ToString('ss\.fff'))s" -ForegroundColor DarkGray
             $stepStartTime = Get-Date
