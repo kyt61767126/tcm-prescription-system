@@ -449,6 +449,9 @@ function Build-Desktop {
         $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://registry.npmmirror.com/-/binary/electron-builder-binaries/"
         # Enable caching to skip re-download of electron binary
         $env:ELECTRON_BUILDER_CACHE = "$env:LOCALAPPDATA\electron-builder\Cache"
+        # better-sqlite3 prebuild-install 从 GitHub Releases 下载预编译二进制时 SSL 证书验证失败
+        # 临时关闭 TLS 验证（仅构建期间），确保 prebuild-install 成功下载 electron ABI 二进制
+        $env:NODE_TLS_REJECT_UNAUTHORIZED = "0"
         Invoke-External { npm run build } "electron-builder"
     } finally {
         Pop-Location
@@ -675,9 +678,8 @@ function Enable-StrictMode {
     Write-Host ""
     Write-Host "  流程:"
     Write-Host "    1. 从最新 APK 提取签名 SHA-256"
-    Write-Host "    2. 计算 APK 内 classes*.dex 的 SHA-256"
-    Write-Host "    3. 注入到 SecurityGuard.java (EXPECTED_SIGN_HASH / EXPECTED_DEX_HASH)"
-    Write-Host "    4. 重新打包 APK 启用严格模式"
+    Write-Host "    2. 注入到 LicenseManager.java (EXPECTED_APK_SIGNATURE_SHA256)"
+    Write-Host "    3. 重新打包 APK 启用签名严格模式"
     Write-Host ""
 
     if (-not (Test-Path $hashBat)) {
@@ -685,8 +687,8 @@ function Enable-StrictMode {
         return 1
     }
 
-    $confirm = Read-Host "确认启用严格模式? (y/N)"
-    if ($confirm -ne 'y' -and $confirm -ne 'Y') {
+    $confirm = Read-Host "确认启用严格模式? (Y/n) [默认回车=开始]"
+    if ($confirm -eq 'n' -or $confirm -eq 'N') {
         Write-Host "  已取消"
         return 0
     }
@@ -721,17 +723,17 @@ function Build-AllStrict {
     Write-Host ""
     Write-Host "  步骤:"
     Write-Host "    A. 打包桌面版 (exe)"
-    Write-Host "    B. 打包手机 APP (首次锁定模式 APK)"
-    Write-Host "    C. 提取并注入哈希 (严格模式)"
-    Write-Host "    D. 重新打包手机 APP (严格模式 APK)"
+    Write-Host "    B. 打包手机 APP (默认模式 APK：Root+调试器检测)"
+    Write-Host "    C. 提取 APK 签名哈希并注入 LicenseManager.java"
+    Write-Host "    D. 重新打包手机 APP (签名严格模式 APK)"
     Write-Host ""
     Write-Host "  输出:"
     Write-Host "    - 桌面版: dist\*.exe"
-    Write-Host "    - 手机版: <versionDir>\*.apk (严格模式)"
+    Write-Host "    - 手机版: <versionDir>\*.apk (签名严格模式)"
     Write-Host ""
 
-    $confirm = Read-Host "确认开始一键打包严格模式? (y/N)"
-    if ($confirm -ne 'y' -and $confirm -ne 'Y') {
+    $confirm = Read-Host "确认开始一键打包严格模式? (Y/n) [默认回车=开始]"
+    if ($confirm -eq 'n' -or $confirm -eq 'N') {
         Write-Host "  已取消"
         return 0
     }
