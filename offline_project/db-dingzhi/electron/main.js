@@ -20,6 +20,7 @@ const licenseManager = require('./license-manager');
 const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
 const activateManager = require('./activate');
+const updateNotifier = require('./update-notifier');
 
 let mainWindow;
 let loginWindow;
@@ -403,6 +404,9 @@ app.whenReady().then(() => {
     if (licenseResult.type === 'trial') {
         console.log('[License] 试用模式：', licenseResult.message);
     }
+
+    // ★ 启动自动更新检查（第4周任务，延迟 5 秒检查避免影响启动）
+    updateNotifier.init('dingzhi');
 
     fse.ensureDirSync(getDownloadsDirectory());
 

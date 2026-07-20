@@ -1,0 +1,9 @@
+{
+    "version": "1.2.0",
+    "releaseDate": "2026-07-20",
+    "releaseNotes": "初始版本",
+    "url": "https://tcm-prescription-system.pages.dev/updates/cloud/惠康中医-云端-Setup-1.2.0.exe",
+    "portableUrl": "https://tcm-prescription-system.pages.dev/updates/cloud/惠康中医-云端-1.2.0.exe",
+    "forceUpdate": false,
+    "minVersion": "1.0.0"
+}
