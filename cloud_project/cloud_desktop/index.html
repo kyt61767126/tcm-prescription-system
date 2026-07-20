@@ -7032,10 +7032,10 @@ if (window.Permission) {
             } catch(e) { console.warn('更新编号失败:', e); }
         }
 
-        function saveAsFormula() {
-            const name = prompt('请输入验方名称：');
+        async function saveAsFormula() {
+            const name = await prompt('请输入验方名称：');
             if (!name) return;
-            const code = prompt('请输入验方简码：');
+            const code = await prompt('请输入验方简码：');
             if (!code) return;
             const items = prescriptionItems.filter(item => item.name);
             formulas.push({name:name, code:code, composition:items.map(i => ({name:i.name, dosage:i.dosage, price:i.price, unit:i.unit}))});
@@ -8841,35 +8841,35 @@ IconFile=${scriptPath}`;
             saveMedicinesToCloud(medicines);
         }
 
-        function editMedicine(index) {
+        async function editMedicine(index) {
             const m = medicines[index];
-            const name = prompt('请输入药品名称：', m.name);
+            const name = await prompt('请输入药品名称：', m.name);
             if (name === null) return;
-            const code = prompt('请输入简码：', m.code);
+            const code = await prompt('请输入简码：', m.code);
             if (code === null) return;
-            const costPriceInput = prompt('请输入进价：', (m.costPrice !== null && m.costPrice !== undefined && m.costPrice !== '') ? m.costPrice : '');
+            const costPriceInput = await prompt('请输入进价：', (m.costPrice !== null && m.costPrice !== undefined && m.costPrice !== '') ? m.costPrice : '');
             const costPrice = (costPriceInput === null || costPriceInput === '') ? null : (parseFloat(costPriceInput) || null);
-            const price = parseFloat(prompt('请输入单价：', m.price)) || 0;
-            const unit = prompt('请输入单位：', m.unit || 'g') || 'g';
-            const dosage = parseFloat(prompt('请输入常用用量：', m.dosage || '10')) || 10;
-            const stock = parseInt(prompt('请输入库存数量：', m.stock || '0')) || 0;
+            const price = parseFloat(await prompt('请输入单价：', m.price)) || 0;
+            const unit = (await prompt('请输入单位：', m.unit || 'g')) || 'g';
+            const dosage = parseFloat(await prompt('请输入常用用量：', m.dosage || '10')) || 10;
+            const stock = parseInt(await prompt('请输入库存数量：', m.stock || '0')) || 0;
             medicines[index] = {...m, name, code, costPrice, price, unit, dosage, stock};
             buildMedicineMap();
             renderMedicineList();
             saveMedicinesToCloud(medicines);
         }
 
-        function showAddMedicineForm() {
-            const name = prompt('请输入药品名称：');
+        async function showAddMedicineForm() {
+            const name = await prompt('请输入药品名称：');
             if (!name) return;
-            const code = prompt('请输入简码：');
+            const code = await prompt('请输入简码：');
             if (!code) return;
-            const costPriceInput = prompt('请输入进价：');
+            const costPriceInput = await prompt('请输入进价：');
             const costPrice = (costPriceInput === null || costPriceInput === '') ? null : (parseFloat(costPriceInput) || null);
-            const price = parseFloat(prompt('请输入单价：')) || 0;
-            const unit = prompt('请输入单位（默认g）：') || 'g';
-            const dosage = parseFloat(prompt('请输入常用用量（默认10）：')) || 10;
-            const stock = parseInt(prompt('请输入库存数量：')) || 0;
+            const price = parseFloat(await prompt('请输入单价：')) || 0;
+            const unit = (await prompt('请输入单位（默认g）：')) || 'g';
+            const dosage = parseFloat(await prompt('请输入常用用量（默认10）：')) || 10;
+            const stock = parseInt(await prompt('请输入库存数量：')) || 0;
             const maxId = medicines.reduce((max, m) => Math.max(max, m.id || 0), 0);
             medicines.push({id: maxId + 1, name, code, costPrice, price, unit, dosage, stock, priority_use: false});
             buildMedicineMap();
@@ -9345,13 +9345,13 @@ IconFile=${scriptPath}`;
             renderFormulaList();
         }
 
-        function showAddFormulaForm() {
-            const name = prompt('请输入验方名称：');
+        async function showAddFormulaForm() {
+            const name = await prompt('请输入验方名称：');
             if (!name) return;
-            const code = prompt('请输入验方简码：');
+            const code = await prompt('请输入验方简码：');
             if (!code) return;
-            const effect = prompt('请输入功效：');
-            const indication = prompt('请输入主治：');
+            const effect = await prompt('请输入功效：');
+            const indication = await prompt('请输入主治：');
             formulas.push({name,code,effect:effect||'',indication:indication||'',composition:[]});
             setUserItem('formulas', JSON.stringify(formulas));
             renderFormulaList();

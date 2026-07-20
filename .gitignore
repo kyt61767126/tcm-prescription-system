@@ -15,6 +15,7 @@ dist-ssr
 # Electron 构建输出目录（避免锁定问题改用 build_output）
 build_output/
 build_output_old_*/
+build_new/
 
 # Editor directories and files
 .vscode/*
@@ -86,3 +87,4 @@ cloud_project/tcm-prescription-system/
 # 临时验证脚本（引用了不在仓库中的目录）
 _validate_*.cjs
 _validate_*.js
+check_syntax.cjs

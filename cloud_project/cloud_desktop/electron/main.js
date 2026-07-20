@@ -505,7 +505,20 @@ function createMainWindow() {
                         catch(e) { console.warn('[confirm] 同步 dialog 失败，回退原生:', e.message); return origConfirm(msg); }
                     };
                 }
-                console.log('[FIX] alert/confirm 已替换为 Electron 原生同步 dialog');
+                if (window.electronAPI && typeof window.electronAPI.prompt === 'function') {
+                    var origPrompt = window.prompt;
+                    window.prompt = function(msg, def) {
+                        try {
+                            // 返回 Promise（异步），业务代码必须用 await prompt(...)
+                            // Electron 35 原生 prompt() 默认返回 null，这里替换为 modal 窗口
+                            return window.electronAPI.prompt(msg, def);
+                        } catch(e) {
+                            console.warn('[prompt] 异步 dialog 失败，回退原生:', e.message);
+                            return origPrompt(msg, def);
+                        }
+                    };
+                }
+                console.log('[FIX] alert/confirm/prompt 已替换为 Electron 原生 dialog');
             })();`;
             await mainWindow.webContents.executeJavaScript(fixCode);
             console.log('[FIX] 原生同步 dialog 注入完成');
@@ -846,6 +859,109 @@ ipcMain.on('dialog:confirm-sync', (event, message) => {
         console.error('[dialog:confirm-sync] 失败:', e.message);
     }
     event.returnValue = result; // 0=取消, 1=确定
+});
+
+// ★ 异步 prompt 对话框（替代原生 window.prompt，Electron 35 默认返回 null）
+// 原生 window.prompt() 在 Electron BrowserWindow 中默认禁用（返回 null，不弹框），
+// 导致 handleEditUser / editMedicine / showAddMedicineForm / saveAsFormula / showAddFormulaForm
+// 等函数静默失败（用户点"编辑"按钮无反应）。
+// 方案：创建独立 BrowserWindow（modal）作为 prompt 对话框，用 executeJavaScript + Promise
+// 等待用户输入。无外部资源，contextIsolation: true，安全。
+function escapeHtml(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+async function showPromptDialog(parentWin, message, defaultValue) {
+    if (!parentWin || parentWin.isDestroyed()) return null;
+
+    return new Promise((resolve) => {
+        let resolved = false;
+        const promptWin = new BrowserWindow({
+            width: 480,
+            height: 240,
+            parent: parentWin,
+            modal: true,
+            resizable: false,
+            minimizable: false,
+            maximizable: false,
+            autoHideMenuBar: true,
+            title: '请输入',
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true
+            }
+        });
+
+        const safeMsg = escapeHtml(message);
+        const safeDef = escapeHtml(defaultValue);
+        // message 中的 \n 转为 <br>
+        const msgHtml = safeMsg.replace(/&#10;|\\n/g, '<br>');
+
+        const html = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+* { box-sizing: border-box; }
+body { font-family: -apple-system, "Microsoft YaHei", "Segoe UI", sans-serif; margin: 0; padding: 20px; background: #f5f5f5; color: #333; }
+.label { font-size: 14px; line-height: 1.5; margin-bottom: 14px; word-break: break-all; max-height: 100px; overflow-y: auto; }
+input { width: 100%; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; outline: none; }
+input:focus { border-color: #1976d2; box-shadow: 0 0 0 2px rgba(25,118,210,0.2); }
+.btns { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+button { padding: 6px 18px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; min-width: 70px; }
+.btn-ok { background: #1976d2; color: white; }
+.btn-ok:hover { background: #1565c0; }
+.btn-cancel { background: #e0e0e0; color: #333; }
+.btn-cancel:hover { background: #d0d0d0; }
+</style></head><body>
+<div class="label">${msgHtml}</div>
+<input type="text" id="input" value="${safeDef}" autofocus>
+<div class="btns">
+<button class="btn-cancel" id="cancel">取消</button>
+<button class="btn-ok" id="ok">确定</button>
+</div>
+</body></html>`;
+
+        promptWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+
+        const finish = (value) => {
+            if (resolved) return;
+            resolved = true;
+            resolve(value);
+            if (!promptWin.isDestroyed()) promptWin.close();
+        };
+
+        promptWin.webContents.on('did-finish-load', async () => {
+            try {
+                // executeJavaScript 返回 Promise，会等待用户点击按钮
+                const result = await promptWin.webContents.executeJavaScript(`
+                    new Promise((resolve) => {
+                        const input = document.getElementById('input');
+                        if (input) { input.focus(); input.select(); }
+                        document.getElementById('ok').onclick = () => resolve(input.value);
+                        document.getElementById('cancel').onclick = () => resolve(null);
+                        input.addEventListener('keydown', (e) => {
+                            if (e.key === 'Enter') resolve(input.value);
+                            if (e.key === 'Escape') resolve(null);
+                        });
+                    });
+                `);
+                finish(result);
+            } catch (e) {
+                console.error('[dialog:prompt] executeJavaScript 失败:', e.message);
+                finish(null);
+            }
+        });
+
+        promptWin.on('closed', () => finish(null));
+    });
+}
+
+ipcMain.handle('dialog:prompt', async (event, message, defaultValue) => {
+    const parentWin = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    return await showPromptDialog(parentWin, message, defaultValue);
 });
 
 ipcMain.handle('save-prescription-image', async (event, imageData, fileName) => {
