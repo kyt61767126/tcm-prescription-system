@@ -917,6 +917,12 @@
 // 启动后延迟 2 秒校验 license，失效时自动弹出激活窗口
 // 桌面版：调用 activate.show() 打开独立 BrowserWindow（activate-window.html）
 // APP 端：activate.show() 触发 'app:show-activate' 事件，本模块用 prompt 实现激活
+//
+// ★ 完善体验（2026-07-20）：
+//   1. 弹窗交互：alert 显示到期信息 → 点击确定 → 自动拉起激活码输入窗口
+//   2. 兜底逻辑：设置 __licenseExpired 标志，定期检查（5秒），失效则重新弹激活窗口
+//                  用户取消激活后，5 秒后会重新弹窗，强制停留在激活页面
+//   3. 兼容逻辑：激活成功后清除 __licenseExpired 标志（重启后自动清除，但即时反馈更好）
 // ============================================================================
 (function (global) {
     'use strict';
@@ -924,6 +930,13 @@
     // 避免重复初始化
     if (global.__licenseCheckInitialized) return;
     global.__licenseCheckInitialized = true;
+
+    // ★ 全局 License 状态标志
+    global.__licenseExpired = false;       // License 是否已失效
+    global.__licenseActivating = false;    // 是否正在激活流程中（防止重复弹窗）
+
+    // 上次失败的消息（用于兜底弹窗显示）
+    let lastFailMessage = '授权已失效，请激活';
 
     async function checkLicenseAndShowActivate() {
         try {
@@ -936,25 +949,75 @@
             const result = await global.electronAPI.license.validate();
             if (result && result.valid) {
                 console.log('[LicenseCheck] 授权有效:', result.message || '');
+                // ★ 兼容逻辑：授权有效时清除失效标志
+                global.__licenseExpired = false;
+                global.__licenseActivating = false;
                 return;
             }
-            // license 失效，显示提示并弹激活窗口
+            // license 失效
             const msg = (result && result.message) ? result.message : '授权已失效，请激活';
+            lastFailMessage = msg;
             console.warn('[LicenseCheck] 授权失效:', msg);
-            // 桌面版：activate.show() 打开独立 BrowserWindow
-            // APP 端：activate.show() 触发 'app:show-activate' 事件
-            if (global.electronAPI.activate && typeof global.electronAPI.activate.show === 'function') {
-                try { alert(msg); } catch (e) {}
-                global.electronAPI.activate.show();
-            } else {
-                try { alert(msg + '\n\n请联系管理员获取激活码'); } catch (e) {}
+
+            // ★ 设置失效标志
+            global.__licenseExpired = true;
+
+            // ★ 如果正在激活中，不重复弹窗
+            if (global.__licenseActivating) {
+                console.log('[LicenseCheck] 激活流程进行中，跳过弹窗');
+                return;
             }
+
+            // ★ 弹窗交互：先 alert 显示到期信息，关闭后自动拉起激活窗口
+            await showExpireAlertAndActivate(msg);
         } catch (e) {
             console.error('[LicenseCheck] 校验异常:', e);
+            global.__licenseActivating = false;
         }
     }
 
-    // APP 端监听 'app:show-activate' 事件，用 prompt 实现简单激活流程
+    // ★ 弹窗交互：先显示到期提示，用户点击确定后自动拉起激活窗口
+    async function showExpireAlertAndActivate(msg) {
+        global.__licenseActivating = true;
+
+        // 显示到期提示弹窗（阻塞，用户点击确定后继续）
+        try {
+            alert(msg);
+        } catch (e) { /* alert 不可用时忽略 */ }
+
+        // 自动拉起激活码输入窗口
+        if (global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.show === 'function') {
+            try {
+                await global.electronAPI.activate.show();
+                // 桌面版：activate.show() 打开 BrowserWindow，窗口关闭后通过定时器重新检查
+                // APP 端：activate.show() 触发 'app:show-activate' 事件
+            } catch (e) {
+                console.error('[LicenseCheck] 拉起激活窗口失败:', e);
+                global.__licenseActivating = false;
+            }
+        } else {
+            // 无 activate API，仅显示提示
+            try { alert(msg + '\n\n请联系管理员获取激活码'); } catch (e) {}
+            global.__licenseActivating = false;
+        }
+    }
+
+    // ★ 兜底逻辑：定期检查 license 状态，失效则重新弹激活窗口
+    // 防止用户关闭激活窗口后继续使用主界面
+    let fallbackTimer = null;
+    function startFallbackCheck() {
+        if (fallbackTimer) clearInterval(fallbackTimer);
+        fallbackTimer = setInterval(async () => {
+            // 只在 license 已失效且不在激活流程中时检查
+            if (!global.__licenseExpired || global.__licenseActivating) return;
+
+            console.log('[LicenseCheck] 兜底检查：license 失效，重新弹激活窗口');
+            await showExpireAlertAndActivate(lastFailMessage);
+        }, 5000); // 每 5 秒检查一次
+    }
+
+    // APP 端监听 'app:show-activate' 事件，用 prompt 实现激活流程
     // 桌面版的 activate.show() 由 main.js 处理（打开 BrowserWindow），不会触发此事件
     if (typeof global.addEventListener === 'function') {
         global.addEventListener('app:show-activate', async function () {
@@ -966,8 +1029,21 @@
                     const r = await global.electronAPI.activate.getMachineId();
                     machineId = (r && r.machineId) ? r.machineId : (r || '');
                 } catch (e) {}
-                const code = prompt('请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）：\n\n机器ID：' + (machineId || '未知') + '\n\n如有疑问请联系客服');
-                if (!code || !code.trim()) return;
+
+                // ★ 显示到期信息 + 激活码输入（合并到一个 prompt）
+                const promptMsg = lastFailMessage +
+                    '\n\n请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）：\n机器ID：' + (machineId || '未知') +
+                    '\n\n如有疑问请联系客服';
+                const code = prompt(promptMsg);
+
+                if (!code || !code.trim()) {
+                    // ★ 用户取消激活，不清除 __licenseActivating（兜底定时器会重新弹窗）
+                    // 但为了让兜底定时器能工作，需要清除 __licenseActivating
+                    global.__licenseActivating = false;
+                    console.log('[LicenseCheck] 用户取消激活，5 秒后将重新弹窗');
+                    return;
+                }
+
                 // 获取用户名（从 CONFIG 或 localStorage）
                 let user = '';
                 try {
@@ -977,22 +1053,37 @@
                         user = localStorage.getItem('auth:rememberedUsername') || '';
                     }
                 } catch (e) {}
+
                 const result = await global.electronAPI.activate.submit(code.trim(), user);
                 if (result && result.success) {
+                    // ★ 兼容逻辑：激活成功，清除失效标记
+                    global.__licenseExpired = false;
+                    global.__licenseActivating = false;
                     try { alert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启'); } catch (e) {}
                     global.electronAPI.activate.restart();
                 } else {
-                    try { alert('激活失败：\n' + (result && result.error ? result.error : '未知错误')); } catch (e) {}
+                    // ★ 激活失败，显示错误并重新弹 prompt（递归触发事件）
+                    try {
+                        alert('激活失败：\n' + (result && result.error ? result.error : '未知错误') + '\n\n点击确定重新输入激活码');
+                    } catch (e) {}
+                    // 重新触发激活流程
+                    global.__licenseActivating = false;
+                    global.dispatchEvent(new CustomEvent('app:show-activate'));
                 }
             } catch (e) {
                 try { alert('激活过程出错：' + e.message); } catch (er) {}
+                global.__licenseActivating = false;
             }
         });
     }
 
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
     function startLicenseCheck() {
-        setTimeout(checkLicenseAndShowActivate, 2000);
+        setTimeout(async () => {
+            await checkLicenseAndShowActivate();
+            // ★ 启动兜底检查（无论首次校验结果如何，都启动定时器）
+            startFallbackCheck();
+        }, 2000);
     }
 
     if (document.readyState === 'complete' || document.readyState === 'interactive') {

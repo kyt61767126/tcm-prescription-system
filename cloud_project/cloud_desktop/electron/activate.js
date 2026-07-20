@@ -77,6 +77,17 @@ async function activateOnline(code, machineId, user) {
         fs.writeFileSync(licensePath, data.license, 'utf8');
         console.log('[Activate] license.dat 已写入:', licensePath);
 
+        // ★ 清除 trial 文件（已正式激活，避免残留过期试用标记导致重复弹窗）
+        try {
+            const trialPath = licenseManager.getTrialPath();
+            if (fs.existsSync(trialPath)) {
+                fs.unlinkSync(trialPath);
+                console.log('[Activate] trial.dat 已清除');
+            }
+        } catch (e) {
+            console.warn('[Activate] 清除 trial.dat 失败:', e);
+        }
+
         return {
             success: true,
             licenseInfo: data.licenseInfo,
