@@ -185,29 +185,70 @@ function Show-Menu {
     Write-Host "  (桌面+APP 统一入口)" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  [1] 打包桌面版 (Electron exe)"
-    Write-Host "  [2] 打包手机 APP (Android APK)"
-    Write-Host "  [3] 全部打包 (桌面 + APP)"
+    Write-Host "  ---- 常用打包选项 ----" -ForegroundColor Yellow
+    Write-Host "  [1] 打包桌面版 (Electron exe)" -ForegroundColor White
+    Write-Host "      说明: 生成电脑安装包 (.exe)，用户双击安装到电脑"
+    Write-Host "      输出: cloud_desktop\dist\*.exe"
+    Write-Host ""
+    Write-Host "  [2] 打包手机 APP (Android APK)" -ForegroundColor White
+    Write-Host "      说明: 生成手机安装包 (.apk)，用户下载安装到手机"
+    Write-Host "      输出: cloud_project\*.apk"
+    Write-Host "      默认已启用 Root 检测 + 调试器检测（防盗用）"
+    Write-Host ""
+    Write-Host "  [3] 全部打包 (桌面 + APP)" -ForegroundColor Green
+    Write-Host "      说明: 同时生成 exe + apk，最常用！"
+    Write-Host "      推荐: 日常发布新版本时选这个"
+    Write-Host ""
+    Write-Host "  ---- 快捷选项（跳过非必要步骤，打包更快）----" -ForegroundColor Yellow
+    Write-Host "  [a] 快速全部打包 (跳过编码检查)" -ForegroundColor Green
+    Write-Host "      适用: 代码没改动，只是重新打包（如更新版本号）"
+    Write-Host ""
+    Write-Host "  [d] 仅桌面快速打包 (跳过编码检查)"
+    Write-Host "      适用: 只需要 exe，不需要 apk"
+    Write-Host ""
+    Write-Host "  [p] 仅 APP 快速打包 (跳过编码检查)"
+    Write-Host "      适用: 只需要 apk，不需要 exe"
+    Write-Host ""
+    Write-Host "  ---- 辅助功能 ----" -ForegroundColor Yellow
     Write-Host "  [4] 仅同步文件到 cloud_app"
+    Write-Host "      说明: 把最新的 shared 文件复制到 APP 工程目录"
+    Write-Host "      适用: 改了网页代码但还没准备好打包"
+    Write-Host ""
     Write-Host "  [5] (云端不适用) 修改诊所配置"
+    Write-Host "      云端版使用账号登录，无需本地诊所配置"
+    Write-Host ""
     Write-Host "  [6] 仅编码检查"
+    Write-Host "      说明: 检查文件编码是否正确，防止中文乱码"
+    Write-Host "      适用: 遇到中文乱码问题时排查"
+    Write-Host ""
     Write-Host "  [7] 查看当前配置"
-    Write-Host "  [8] 启用严格模式 (提取并注入哈希)"
-    Write-Host "  [9] 一键打包严格模式 (A->B->哈希->重打包)"
+    Write-Host "      说明: 查看当前版本号、构建信息等"
+    Write-Host ""
+    Write-Host "  ---- 安全防护选项（防止被人盗用/破解）----" -ForegroundColor Yellow
+    Write-Host "  [8] 启用严格模式 (提取并注入哈希)" -ForegroundColor Magenta
+    Write-Host "      说明: 给 APK 加上'数字指纹'保护" -ForegroundColor Magenta
+    Write-Host "      作用: 别人如果重新打包你的 APK，APP 会拒绝运行"
+    Write-Host "      何时用: APK 已经打包好（选过 [2] 或 [3]）后，再加保护"
+    Write-Host "      注意: 这是一个技术步骤，通常不需要单独使用"
+    Write-Host "            推荐直接用 [9] 一键完成"
+    Write-Host ""
+    Write-Host "  [9] 一键打包严格模式 (A->B->哈希->重打包)" -ForegroundColor Green
+    Write-Host "      说明: 全自动打包 + 加保护的完整流程" -ForegroundColor Green
+    Write-Host "      流程: 1.先打包 APK → 2.提取数字指纹 → 3.注入到代码 → 4.重新打包"
+    Write-Host "      作用: 生成的 APK 别人无法重新打包盗用"
+    Write-Host "      推荐: 正式发布给客户时用这个，安全有保障！" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  ---- 其他 ----" -ForegroundColor Yellow
     Write-Host "  [0] 退出"
     Write-Host ""
-    Write-Host "  快捷选项:"
-    Write-Host "    [a] 快速全部打包 (跳过编码检查)"
-    Write-Host "    [d] 仅桌面快速打包 (跳过编码检查)"
-    Write-Host "    [p] 仅 APP 快速打包 (跳过编码检查)"
+    Write-Host "========================================" -ForegroundColor DarkGray
+    Write-Host "  小白用户使用建议：" -ForegroundColor Yellow
+    Write-Host "    • 日常测试打包: 选 [3] 全部打包" -ForegroundColor White
+    Write-Host "    • 正式发布给客户: 选 [9] 一键打包严格模式" -ForegroundColor Green
+    Write-Host "    • 遇到中文乱码: 选 [6] 检查编码" -ForegroundColor White
+    Write-Host "========================================" -ForegroundColor DarkGray
     Write-Host ""
-    Write-Host "----------------------------------------------------------------"
-    Write-Host "  防护说明："
-    Write-Host "    [2] 默认启用 Root 检测 + 调试器检测（详见 SecurityGuard.java）"
-    Write-Host "    [8] 启用严格模式后，APK 内硬编码签名哈希，任何二次打包即拒绝运行"
-    Write-Host "    [9] 自动完成：打包->提取哈希->注入->重新打包"
-    Write-Host "----------------------------------------------------------------"
-    $choice = Read-Host "请选择 [0-9]"
+    $choice = Read-Host "  请选择 [0-9] 或 [a/d/p]"
     return $choice
 }
 
