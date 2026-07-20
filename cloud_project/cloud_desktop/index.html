@@ -5923,10 +5923,12 @@ if (window.Permission) {
             }
 
             // 快速初始化表格（只创建必要的行）
-            // ★ 修复18行bug：防火墙 __medicineTableFirewall 可能在 init 完成前已 push 3 行，
-            //   此处先清空再添加15行，确保最终行数严格为15
-            prescriptionItems = [];
-            for (let i = 0; i < 15; i++) addEmptyRow();
+            // ★ 修复闪动：若防火墙已 push 15 行（行数已正确），不再清空重建，仅渲染
+            //   避免出现"先3行→闪动→15行"的视觉跳动
+            if (prescriptionItems.length !== 15) {
+                prescriptionItems = [];
+                for (let i = 0; i < 15; i++) addEmptyRow();
+            }
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
@@ -6009,7 +6011,9 @@ if (window.Permission) {
                 if (typeof prescriptionItems === 'undefined' || !prescriptionItems || prescriptionItems.length === 0) {
                     if (typeof createEmptyMedicine === 'function') {
                         prescriptionItems = [];
-                        for (var i = 0; i < 3; i++) prescriptionItems.push(createEmptyMedicine());
+                        // ★ 修复闪动：原 push 3 行会被 init() 清空再 push 15 行导致闪动
+                        //   改为 push 15 行，与 init() 的目标行数一致，init() 检测到已15行就跳过清空
+                        for (var i = 0; i < 15; i++) prescriptionItems.push(createEmptyMedicine());
                     }
                 }
                 if (prescriptionItems && prescriptionItems.length > 0 && (!tbody.innerHTML || tbody.children.length === 0)) {

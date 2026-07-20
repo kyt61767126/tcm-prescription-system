@@ -179,4 +179,4 @@ echo   APK Path: %APK_FULL_PATH%
 echo   This APK is signed and ready for installation
 echo ============================================
 echo.
-pause
+if not defined NO_PAUSE pause

@@ -123,4 +123,4 @@ if exist "dist_old_*" (
     echo [NOTE] Old build artifacts saved as dist_old_* directories
     echo        These will be auto-cleaned in future builds (keeping latest 2)
 )
-pause
+if not defined NO_PAUSE pause

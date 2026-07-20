@@ -151,4 +151,4 @@ if exist "build_output_old_*" (
     echo [NOTE] Legacy build_output_old_* directories detected, cleaning...
     rmdir /s /q "build_output_old_*" 2>nul
 )
-pause
+if not defined NO_PAUSE pause
