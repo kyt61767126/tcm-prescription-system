@@ -1,10 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
-chcp 65001 >nul
 cd /d "%~dp0"
 title Huikang TCM Cloud - Desktop Build
 
-REM è®°å½•æ‰“åŒ…å¼€å§‹æ—¶é—´ï¼ˆç”¨äºŽè€—æ—¶ç»Ÿè®¡ï¼‰- ä½¿ç”¨ PowerShell æ›¿ä»£ wmicï¼ˆWindows 11 å·²å¼ƒç”¨ï¼‰
+REM ¼ÇÂ¼´ò°ü¿ªÊ¼Ê±¼ä£¨ÓÃÓÚºÄÊ±Í³¼Æ£©- Ê¹ÓÃ PowerShell Ìæ´ú wmic£¨Windows 11 ÒÑÆúÓÃ£©
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "BUILD_START_STAMP=%%t"
 
@@ -46,12 +45,12 @@ if not exist "node_modules" (
 echo.
 
 echo [3/8] Closing remaining processes...
-REM P0-ä¼˜åŒ–ï¼šç²¾ç¡®åŒ¹é…é¡¹ç›®ç›¸å…³è¿›ç¨‹ï¼Œé¿å…è¯¯æ€å…¶ä»– Electron åº”ç”¨ï¼ˆå¦‚ VSCodeã€Slack ç­‰ï¼‰
-REM ä»…ç»ˆæ­¢ä»Ž cloud_desktop/dist æˆ– build_output ç›®å½•å¯åŠ¨çš„è¿›ç¨‹
+REM P0-ÓÅ»¯£º¾«È·Æ¥ÅäÏîÄ¿Ïà¹Ø½ø³Ì£¬±ÜÃâÎóÉ±ÆäËû Electron Ó¦ÓÃ£¨Èç VSCode¡¢Slack µÈ£©
+REM ½öÖÕÖ¹´Ó cloud_desktop/dist »ò build_output Ä¿Â¼Æô¶¯µÄ½ø³Ì
 taskkill /F /IM "HuikangTCM*.exe" >nul 2>&1
-taskkill /F /IM "æƒ åº·ä¸­åŒ»-äº‘ç«¯.exe" >nul 2>&1
-taskkill /F /IM "æƒ åº·ä¸­åŒ»*.exe" >nul 2>&1
-REM P0-ä¼˜åŒ–ï¼šæ›¿æ¢ wmicï¼ˆWindows 11 å·²å¼ƒç”¨ä¸”æ…¢ï¼‰ä¸º PowerShell Get-Processï¼ˆç²¾ç¡®è·¯å¾„åŒ¹é…ï¼‰
+taskkill /F /IM "»Ý¿µÖÐÒ½-ÔÆ¶Ë.exe" >nul 2>&1
+taskkill /F /IM "»Ý¿µÖÐÒ½*.exe" >nul 2>&1
+REM P0-ÓÅ»¯£ºÌæ»» wmic£¨Windows 11 ÒÑÆúÓÃÇÒÂý£©Îª PowerShell Get-Process£¨¾«È·Â·¾¶Æ¥Åä£©
 powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*cloud_desktop*dist*' -or $_.Path -like '*cloud_desktop*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 echo [OK] Processes cleaned
 timeout /t 2 /nobreak >nul
@@ -82,7 +81,7 @@ if exist "%OUTPUT_DIR%" (
         powershell -ExecutionPolicy Bypass -Command "try { [System.IO.Directory]::Delete('%CD%\%OUTPUT_DIR%', $true) } catch { Write-Host '[WARNING] PowerShell delete also failed' }" 2>nul
     )
     if exist "%OUTPUT_DIR%" (
-        REM P0-ä¼˜åŒ–ï¼šæ›¿æ¢ wmicï¼ˆå·²å¼ƒç”¨ï¼‰ä¸º PowerShell Get-Date ç”Ÿæˆæ—¶é—´æˆ³
+        REM P0-ÓÅ»¯£ºÌæ»» wmic£¨ÒÑÆúÓÃ£©Îª PowerShell Get-Date Éú³ÉÊ±¼ä´Á
         for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "DSTAMP=%%t"
         echo [WARNING] Could not delete %OUTPUT_DIR%, renaming to dist_old_!DSTAMP!...
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
@@ -115,12 +114,12 @@ echo [6/8] Running build...
 REM Use domestic mirror to accelerate electron binary download (no need to disable TLS verification)
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
-REM better-sqlite3 prebuild-install ä»Ž GitHub Releases ä¸‹è½½é¢„ç¼–è¯‘äºŒè¿›åˆ¶æ—¶ SSL è¯ä¹¦éªŒè¯å¤±è´¥
-REM ä¸´æ—¶å…³é—­ TLS éªŒè¯ï¼ˆä»…æž„å»ºæœŸé—´ï¼‰ï¼Œç¡®ä¿ prebuild-install èƒ½æˆåŠŸä¸‹è½½ electron ABI äºŒè¿›åˆ¶
+REM better-sqlite3 prebuild-install ´Ó GitHub Releases ÏÂÔØÔ¤±àÒë¶þ½øÖÆÊ± SSL Ö¤ÊéÑéÖ¤Ê§°Ü
+REM ÁÙÊ±¹Ø±Õ TLS ÑéÖ¤£¨½ö¹¹½¨ÆÚ¼ä£©£¬È·±£ prebuild-install ÄÜ³É¹¦ÏÂÔØ electron ABI ¶þ½øÖÆ
 set NODE_TLS_REJECT_UNAUTHORIZED=0
 call npm run build
 set "BUILD_RC=%errorlevel%"
-REM P1-å®‰å…¨ï¼šç«‹å³æ¸…é™¤ TLS ä¸´æ—¶å˜é‡ï¼Œé¿å…æ±¡æŸ“åŽç»­å‘½ä»¤çŽ¯å¢ƒ
+REM P1-°²È«£ºÁ¢¼´Çå³ý TLS ÁÙÊ±±äÁ¿£¬±ÜÃâÎÛÈ¾ºóÐøÃüÁî»·¾³
 set NODE_TLS_REJECT_UNAUTHORIZED=
 if not "%BUILD_RC%"=="0" (
     echo.
@@ -143,7 +142,7 @@ if errorlevel 1 (
 echo [OK] Original code restored
 echo.
 
-REM P1-æ˜“ç”¨ï¼šéªŒè¯äº§ç‰©å­˜åœ¨ä¸”éžç©ºï¼Œå¤±è´¥åˆ™æå‰é€€å‡º
+REM P1-Ò×ÓÃ£ºÑéÖ¤²úÎï´æÔÚÇÒ·Ç¿Õ£¬Ê§°ÜÔòÌáÇ°ÍË³ö
 echo [7.5/8] Verifying build output...
 set "EXE_FILE="
 for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
@@ -167,7 +166,7 @@ if exist "build_output_old_*" (
     echo [NOTE] Legacy build_output_old_* directories detected, cleaning...
     rmdir /s /q "build_output_old_*" 2>nul
 )
-REM P1-æ˜“ç”¨ï¼šæ˜¾ç¤ºæ‰“åŒ…æ€»è€—æ—¶
+REM P1-Ò×ÓÃ£ºÏÔÊ¾´ò°ü×ÜºÄÊ±
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 echo Start: %BUILD_START_TIME%
 echo End:   %BUILD_END_TIME%

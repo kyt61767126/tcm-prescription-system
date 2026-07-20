@@ -1,59 +1,58 @@
 @echo off
 setlocal enableextensions
-chcp 65001 >nul 2>&1
 cd /d "%~dp0"
-title æƒ åº·ä¸­åŒ»äº‘ç«¯ç‰ˆ - æ‰“åŒ…å·¥å…·
+title »İ¿µÖĞÒ½ÔÆ¶Ë°æ - ´ò°ü¹¤¾ß
 
 echo ============================================
-echo   æƒ åº·ä¸­åŒ»äº‘ç«¯ç‰ˆ - æ‰“åŒ…å·¥å…·
-echo   (æ¡Œé¢+APP ç»Ÿä¸€å…¥å£)
+echo   »İ¿µÖĞÒ½ÔÆ¶Ë°æ - ´ò°ü¹¤¾ß
+echo   (×ÀÃæ+APP Í³Ò»Èë¿Ú)
 echo ============================================
 echo.
 
-REM [1] æ£€æŸ¥ packaging.ps1 æ˜¯å¦å­˜åœ¨
+REM [1] ¼ì²é packaging.ps1 ÊÇ·ñ´æÔÚ
 set "PACK_PS1=%~dp0packaging.ps1"
 if not exist "%PACK_PS1%" (
-    echo [é”™è¯¯] æœªæ‰¾åˆ° packaging.ps1ï¼
-    echo        è·¯å¾„: %PACK_PS1%
+    echo [´íÎó] Î´ÕÒµ½ packaging.ps1£¡
+    echo        Â·¾¶: %PACK_PS1%
     pause
     exit /b 1
 )
-echo [OK] å·²æ‰¾åˆ° packaging.ps1
+echo [OK] ÒÑÕÒµ½ packaging.ps1
 
-REM [2] æ£€æŸ¥ Node.js ç¯å¢ƒ
+REM [2] ¼ì²é Node.js »·¾³
 where node >nul 2>nul
 if errorlevel 1 (
-    echo [é”™è¯¯] æœªæ‰¾åˆ° Node.jsï¼
-    echo        è¯·ä» https://nodejs.org/ å®‰è£… Node.js
+    echo [´íÎó] Î´ÕÒµ½ Node.js£¡
+    echo        Çë´Ó https://nodejs.org/ °²×° Node.js
     pause
     exit /b 1
 )
-echo [OK] å·²æ‰¾åˆ° Node.js:
+echo [OK] ÒÑÕÒµ½ Node.js:
 node --version
 
-REM [3] æ£€æŸ¥é…ç½®æ–‡ä»¶
+REM [3] ¼ì²éÅäÖÃÎÄ¼ş
 if exist "%~dp0cloud_desktop\package.json" (
-    echo [OK] å·²æ‰¾åˆ° cloud_desktop/package.json
+    echo [OK] ÒÑÕÒµ½ cloud_desktop/package.json
 ) else (
-    echo [è­¦å‘Š] æœªæ‰¾åˆ° cloud_desktop/package.json
+    echo [¾¯¸æ] Î´ÕÒµ½ cloud_desktop/package.json
 )
 
 echo.
-echo æ­£åœ¨å¯åŠ¨æ‰“åŒ…æ¨¡å—...
+echo ÕıÔÚÆô¶¯´ò°üÄ£¿é...
 echo ============================================
 echo.
 
-REM è¿è¡Œ packaging.ps1
+REM ÔËĞĞ packaging.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%"
 set "EXIT_CODE=%errorlevel%"
 
 echo.
 echo ============================================
 if %EXIT_CODE% equ 0 (
-    echo [å®Œæˆ] æ‰“åŒ…æµç¨‹å·²æ­£å¸¸ç»“æŸï¼
+    echo [Íê³É] ´ò°üÁ÷³ÌÒÑÕı³£½áÊø£¡
 ) else (
-    echo [é”™è¯¯] æ‰“åŒ…å¼‚å¸¸é€€å‡ºï¼Œé€€å‡ºç : %EXIT_CODE%
-    echo        è‹¥å‡ºç°ç¼–ç ä¹±ç ï¼Œè¯·è¿è¡Œ:
+    echo [´íÎó] ´ò°üÒì³£ÍË³ö£¬ÍË³öÂë: %EXIT_CODE%
+    echo        Èô³öÏÖ±àÂëÂÒÂë£¬ÇëÔËĞĞ:
     echo          chcp 65001 ^&^& pack.bat
 )
 echo ============================================

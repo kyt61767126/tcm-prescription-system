@@ -1,10 +1,9 @@
 @echo off
 setlocal enabledelayedexpansion
-chcp 65001 >nul
 cd /d "%~dp0"
 title Huikang TCM Local - Offline Desktop Build
 
-REM è®°å½•æ‰“åŒ…å¼€å§‹æ—¶é—´ï¼ˆç”¨äºè€—æ—¶ç»Ÿè®¡ï¼‰- ä½¿ç”¨ PowerShell æ›¿ä»£ wmicï¼ˆWindows 11 å·²å¼ƒç”¨ï¼‰
+REM ¼ÇÂ¼´ò°ü¿ªÊ¼Ê±¼ä£¨ÓÃÓÚºÄÊ±Í³¼Æ£©- Ê¹ÓÃ PowerShell Ìæ´ú wmic£¨Windows 11 ÒÑÆúÓÃ£©
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "BUILD_START_STAMP=%%t"
 
@@ -25,10 +24,10 @@ echo       npm OK
 echo.
 
 echo [2/7] Closing remaining processes...
-REM P0-ä¼˜åŒ–ï¼šç²¾ç¡®åŒ¹é…é¡¹ç›®ç›¸å…³è¿›ç¨‹ï¼Œé¿å…è¯¯æ€å…¶ä»– Electron åº”ç”¨ï¼ˆå¦‚ VSCodeã€Slack ç­‰ï¼‰
+REM P0-ÓÅ»¯£º¾«È·Æ¥ÅäÏîÄ¿Ïà¹Ø½ø³Ì£¬±ÜÃâÎóÉ±ÆäËû Electron Ó¦ÓÃ£¨Èç VSCode¡¢Slack µÈ£©
 taskkill /F /IM "app-local.exe" >nul 2>&1
-taskkill /F /IM "æƒ åº·ä¸­åŒ»æœ¬åœ°.exe" >nul 2>&1
-REM P0-ä¼˜åŒ–ï¼šæ›¿æ¢ wmicï¼ˆWindows 11 å·²å¼ƒç”¨ä¸”æ…¢ï¼‰ä¸º PowerShell Get-Processï¼ˆç²¾ç¡®è·¯å¾„åŒ¹é…ï¼‰
+taskkill /F /IM "»İ¿µÖĞÒ½±¾µØ.exe" >nul 2>&1
+REM P0-ÓÅ»¯£ºÌæ»» wmic£¨Windows 11 ÒÑÆúÓÃÇÒÂı£©Îª PowerShell Get-Process£¨¾«È·Â·¾¶Æ¥Åä£©
 powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-bendi*dist*' -or $_.Path -like '*db-bendi*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 timeout /t 2 /nobreak >nul
 echo [OK] Processes cleaned
@@ -60,7 +59,7 @@ if exist "%OUTPUT_DIR%" (
         powershell -ExecutionPolicy Bypass -Command "try { [System.IO.Directory]::Delete('%CD%\%OUTPUT_DIR%', $true) } catch { Write-Host '[WARNING] PowerShell delete also failed' }" 2>nul
     )
     if exist "%OUTPUT_DIR%" (
-        REM P0-ä¼˜åŒ–ï¼šæ›¿æ¢ wmicï¼ˆå·²å¼ƒç”¨ï¼‰ä¸º PowerShell Get-Date ç”Ÿæˆæ—¶é—´æˆ³
+        REM P0-ÓÅ»¯£ºÌæ»» wmic£¨ÒÑÆúÓÃ£©Îª PowerShell Get-Date Éú³ÉÊ±¼ä´Á
         for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "DSTAMP=%%t"
         echo [WARNING] Could not delete %OUTPUT_DIR%, renaming to dist_old_!DSTAMP!...
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
@@ -91,12 +90,12 @@ echo.
 echo [6/7] Running build...
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
-REM better-sqlite3 prebuild-install ä» GitHub Releases ä¸‹è½½é¢„ç¼–è¯‘äºŒè¿›åˆ¶æ—¶ SSL è¯ä¹¦éªŒè¯å¤±è´¥
-REM ä¸´æ—¶å…³é—­ TLS éªŒè¯ï¼ˆä»…æ„å»ºæœŸé—´ï¼‰ï¼Œç¡®ä¿ prebuild-install èƒ½æˆåŠŸä¸‹è½½ electron ABI äºŒè¿›åˆ¶
+REM better-sqlite3 prebuild-install ´Ó GitHub Releases ÏÂÔØÔ¤±àÒë¶ş½øÖÆÊ± SSL Ö¤ÊéÑéÖ¤Ê§°Ü
+REM ÁÙÊ±¹Ø±Õ TLS ÑéÖ¤£¨½ö¹¹½¨ÆÚ¼ä£©£¬È·±£ prebuild-install ÄÜ³É¹¦ÏÂÔØ electron ABI ¶ş½øÖÆ
 set NODE_TLS_REJECT_UNAUTHORIZED=0
 call npm run build
 set "BUILD_RC=%errorlevel%"
-REM P1-å®‰å…¨ï¼šç«‹å³æ¸…é™¤ TLS ä¸´æ—¶å˜é‡ï¼Œé¿å…æ±¡æŸ“åç»­å‘½ä»¤ç¯å¢ƒ
+REM P1-°²È«£ºÁ¢¼´Çå³ı TLS ÁÙÊ±±äÁ¿£¬±ÜÃâÎÛÈ¾ºóĞøÃüÁî»·¾³
 set NODE_TLS_REJECT_UNAUTHORIZED=
 if not "%BUILD_RC%"=="0" (
     echo.
@@ -119,7 +118,7 @@ if errorlevel 1 (
 echo [OK] Original code restored
 echo.
 
-REM P1-æ˜“ç”¨ï¼šéªŒè¯äº§ç‰©å­˜åœ¨ä¸”éç©º
+REM P1-Ò×ÓÃ£ºÑéÖ¤²úÎï´æÔÚÇÒ·Ç¿Õ
 set "EXE_FILE="
 for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
 if not "%EXE_FILE%"=="" (
@@ -135,7 +134,7 @@ if exist "dist_old_*" (
     echo [NOTE] Old build artifacts saved as dist_old_* directories
     echo        These will be auto-cleaned in future builds (keeping latest 2)
 )
-REM P1-æ˜“ç”¨ï¼šæ˜¾ç¤ºæ‰“åŒ…æ€»è€—æ—¶
+REM P1-Ò×ÓÃ£ºÏÔÊ¾´ò°ü×ÜºÄÊ±
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 echo Start: %BUILD_START_TIME%
 echo End:   %BUILD_END_TIME%
