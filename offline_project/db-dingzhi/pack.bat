@@ -2,59 +2,60 @@
 setlocal enableextensions
 chcp 65001 >nul 2>&1
 cd /d "%~dp0"
-title Huikang TCM Custom - Packaging Module
+title 惠康中医定制版 - 打包工具
 
 echo ============================================
-echo   Huikang TCM Custom - Packaging Module
+echo   惠康中医定制版 - 打包工具
+echo   (桌面+APP 统一入口)
 echo ============================================
 echo.
 
-REM [1] Check pack.ps1 exists
+REM [1] 检查 pack.ps1 是否存在
 set "PACK_PS1=%~dp0..\..\tools\pack.ps1"
 if not exist "%PACK_PS1%" (
-    echo [ERROR] pack.ps1 not found!
-    echo         Path: %PACK_PS1%
-    echo         Please ensure the tools directory is intact.
+    echo [错误] 未找到 pack.ps1！
+    echo        路径: %PACK_PS1%
+    echo        请确保 tools 目录完整。
     pause
     exit /b 1
 )
-echo [OK] pack.ps1 found
+echo [OK] 已找到 pack.ps1
 
-REM [2] Check Node.js environment
+REM [2] 检查 Node.js 环境
 where node >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] Node.js not found!
-    echo         Please install Node.js from https://nodejs.org/
+    echo [错误] 未找到 Node.js！
+    echo        请从 https://nodejs.org/ 安装 Node.js
     pause
     exit /b 1
 )
-echo [OK] Node.js found: 
+echo [OK] 已找到 Node.js:
 node --version
 
-REM [3] Check config.json
+REM [3] 检查 config.json
 if not exist "%~dp0config.json" (
-    echo [WARN] config.json not found, will use defaults
+    echo [警告] 未找到 config.json，将使用默认值
 ) else (
-    echo [OK] config.json found
+    echo [OK] 已找到 config.json
 )
 
 echo.
-echo Starting packaging module...
+echo 正在启动打包模块...
 echo ============================================
 echo.
 
-REM Run pack.ps1 with -Interactive mode (shows menu)
+REM 运行 pack.ps1，使用 -Interactive 模式（显示菜单）
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -Version dingzhi -Interactive
 set "EXIT_CODE=%errorlevel%"
 
 echo.
 echo ============================================
 if %EXIT_CODE% equ 0 (
-    echo [OK] Packaging completed successfully!
+    echo [完成] 打包流程已正常结束！
 ) else (
-    echo [ERROR] Packaging exited with code: %EXIT_CODE%
-    echo         If encoding issues occur, run:
-    echo           chcp 65001 ^&^& pack.bat
+    echo [错误] 打包异常退出，退出码: %EXIT_CODE%
+    echo        若出现编码乱码，请运行:
+    echo          chcp 65001 ^&^& pack.bat
 )
 echo ============================================
 echo.
