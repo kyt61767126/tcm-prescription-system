@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>惠康中医 - 激活码管理后台</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f7fa;
+    color: #333;
+    line-height: 1.6;
+    padding: 20px;
+    font-size: 14px;
+}
+.container { max-width: 1200px; margin: 0 auto; }
+h1 { color: #2c3e50; margin-bottom: 20px; font-size: 22px; }
+h2 { color: #34495e; margin: 20px 0 12px; font-size: 16px; border-left: 4px solid #3498db; padding-left: 10px; }
+
+/* 登录区域 */
+.login-box {
+    background: white; padding: 30px; border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08); max-width: 400px; margin: 60px auto;
+}
+.login-box h1 { text-align: center; margin-bottom: 24px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 6px; color: #606266; font-weight: 500; }
+.form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 8px 12px; border: 1px solid #dcdfe6; border-radius: 4px;
+    font-size: 14px; transition: border-color 0.2s;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    border-color: #3498db; outline: none;
+}
+.btn {
+    display: inline-block; padding: 8px 18px; background: #3498db; color: white;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+    transition: background 0.2s; text-decoration: none;
+}
+.btn:hover { background: #2980b9; }
+.btn-success { background: #27ae60; }
+.btn-success:hover { background: #229954; }
+.btn-warning { background: #f39c12; }
+.btn-warning:hover { background: #d68910; }
+.btn-danger { background: #e74c3c; }
+.btn-danger:hover { background: #c0392b; }
+.btn-sm { padding: 4px 10px; font-size: 12px; margin: 0 2px; }
+.btn-block { display: block; width: 100%; padding: 10px; }
+
+/* 统计卡片 */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card {
+    background: white; padding: 16px; border-radius: 8px; text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.stat-card .num { font-size: 24px; font-weight: bold; color: #3498db; }
+.stat-card .label { color: #909399; font-size: 12px; margin-top: 4px; }
+.stat-card.unused .num { color: #27ae60; }
+.stat-card.used .num { color: #3498db; }
+.stat-card.expired .num { color: #f39c12; }
+.stat-card.disabled .num { color: #e74c3c; }
+
+/* 生成表单 */
+.gen-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 20px; }
+.gen-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.gen-actions { display: flex; gap: 10px; margin-top: 12px; }
+
+/* 表格 */
+.table-box { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 900px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #ebeef5; font-size: 13px; }
+th { background: #f5f7fa; color: #606266; font-weight: 600; white-space: nowrap; }
+tr:hover { background: #f9fafc; }
+td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e50; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.tag-unused { background: #d4edda; color: #155724; }
+.tag-used { background: #d1ecf1; color: #0c5460; }
+.tag-expired { background: #fff3cd; color: #856404; }
+.tag-disabled { background: #f8d7da; color: #721c24; }
+.tag-trial { background: #e2e3e5; color: #383d41; }
+.tag-personal { background: #d1ecf1; color: #0c5460; }
+.tag-pro { background: #d4edda; color: #155724; }
+
+/* 过滤栏 */
+.filter-bar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.filter-bar select, .filter-bar input { padding: 6px 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; }
+.filter-bar input { flex: 1; min-width: 180px; }
+
+.empty { text-align: center; padding: 40px; color: #909399; }
+.loading { text-align: center; padding: 20px; color: #909399; }
+
+/* 提示框 */
+.alert {
+    padding: 10px 16px; border-radius: 4px; margin-bottom: 16px;
+    display: none;
+}
+.alert.show { display: block; }
+.alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+
+/* 顶部栏 */
+.top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.top-bar .user-info { color: #606266; font-size: 13px; }
+.top-bar .user-info strong { color: #3498db; }
+.logout-btn { background: #95a5a6; }
+.logout-btn:hover { background: #7f8c8d; }
+
+.hidden { display: none !important; }
+
+@media (max-width: 768px) {
+    body { padding: 10px; }
+    .gen-row { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .top-bar { flex-direction: column; gap: 10px; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <!-- 登录区域 -->
+    <div id="loginSection" class="login-box">
+        <h1>惠康中医 激活码管理</h1>
+        <div id="loginAlert" class="alert"></div>
+        <div class="form-group">
+            <label>管理员账号</label>
+            <input type="text" id="loginUser" placeholder="平台管理员账号" autocomplete="username">
+        </div>
+        <div class="form-group">
+            <label>密码</label>
+            <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
+        </div>
+        <button class="btn btn-block" onclick="doLogin()">登录</button>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="mainSection" class="hidden">
+        <div class="top-bar">
+            <h1>惠康中医 激活码管理后台</h1>
+            <div>
+                <span class="user-info">已登录：<strong id="currentAdmin"></strong></span>
+                <button class="btn btn-sm logout-btn" onclick="doLogout()" style="margin-left:10px;">退出</button>
+            </div>
+        </div>
+
+        <div id="mainAlert" class="alert"></div>
+
+        <!-- 统计 -->
+        <h2>统计概览</h2>
+        <div class="stats" id="statsBox">
+            <div class="stat-card"><div class="num" id="statTotal">0</div><div class="label">总数</div></div>
+            <div class="stat-card unused"><div class="num" id="statUnused">0</div><div class="label">未使用</div></div>
+            <div class="stat-card used"><div class="num" id="statUsed">0</div><div class="label">已激活</div></div>
+            <div class="stat-card expired"><div class="num" id="statExpired">0</div><div class="label">已过期</div></div>
+            <div class="stat-card disabled"><div class="num" id="statDisabled">0</div><div class="label">已禁用</div></div>
+        </div>
+
+        <!-- 生成激活码 -->
+        <h2>生成激活码</h2>
+        <div class="gen-box">
+            <div class="gen-row">
+                <div class="form-group">
+                    <label>用户名 *</label>
+                    <input type="text" id="genUser" placeholder="如：张三">
+                </div>
+                <div class="form-group">
+                    <label>版本类型 *</label>
+                    <select id="genType">
+                        <option value="trial">试用版（30张/月，7天）</option>
+                        <option value="personal" selected>个人版（无限处方，1年）</option>
+                        <option value="pro">专业版（无限+同步+多设备，1年）</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>有效天数</label>
+                    <input type="number" id="genDays" placeholder="如 365，留空则按类型默认" min="1">
+                </div>
+                <div class="form-group">
+                    <label>到期日期</label>
+                    <input type="date" id="genExpiresAt" placeholder="与天数二选一">
+                </div>
+                <div class="form-group">
+                    <label>生成数量</label>
+                    <input type="number" id="genCount" value="1" min="1" max="100">
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="genNote" placeholder="如：客户A">
+                </div>
+            </div>
+            <div class="gen-actions">
+                <button class="btn btn-success" onclick="generateCodes()">生成激活码</button>
+                <button class="btn" onclick="clearGenForm()">清空</button>
+            </div>
+        </div>
+
+        <!-- 激活码列表 -->
+        <h2>激活码列表</h2>
+        <div class="filter-bar">
+            <select id="filterStatus" onchange="loadList()">
+                <option value="">全部状态</option>
+                <option value="unused">未使用</option>
+                <option value="used">已激活</option>
+                <option value="expired">已过期</option>
+                <option value="disabled">已禁用</option>
+            </select>
+            <select id="filterType" onchange="loadList()">
+                <option value="">全部类型</option>
+                <option value="trial">试用版</option>
+                <option value="personal">个人版</option>
+                <option value="pro">专业版</option>
+            </select>
+            <input type="text" id="filterQ" placeholder="搜索激活码/用户名/备注" onkeyup="if(event.key==='Enter') loadList()">
+            <button class="btn btn-sm" onclick="loadList()">搜索</button>
+            <button class="btn btn-sm" onclick="clearFilter()">重置</button>
+            <button class="btn btn-sm" onclick="loadList()" style="margin-left:auto;">刷新</button>
+        </div>
+        <div class="table-box">
+            <table>
+                <thead>
+                    <tr>
+                        <th>激活码</th>
+                        <th>用户</th>
+                        <th>类型</th>
+                        <th>状态</th>
+                        <th>签发时间</th>
+                        <th>激活时间</th>
+                        <th>到期时间</th>
+                        <th>机器ID</th>
+                        <th>备注</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="listBody">
+                    <tr><td colspan="10" class="loading">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+// API 基础路径（与 Pages Functions 路径一致）
+const API_BASE = '/api';
+let token = localStorage.getItem('license_admin_token') || '';
+let currentUser = localStorage.getItem('license_admin_user') || '';
+
+// 显示提示
+function showAlert(elementId, message, type) {
+    const el = document.getElementById(elementId);
+    el.className = 'alert show alert-' + type;
+    el.textContent = message;
+    setTimeout(() => { el.className = 'alert'; }, 4000);
+}
+
+// 登录
+async function doLogin() {
+    const username = document.getElementById('loginUser').value.trim();
+    const password = document.getElementById('loginPass').value;
+    if (!username || !password) {
+        showAlert('loginAlert', '请输入账号和密码', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(API_BASE + '/users?login=true', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+            // 校验是否为 platform_admin
+            if (data.user.role !== 'platform_admin') {
+                showAlert('loginAlert', '仅平台总管理员可登录此后台', 'error');
+                return;
+            }
+            token = data.token;
+            currentUser = username;
+            localStorage.setItem('license_admin_token', token);
+            localStorage.setItem('license_admin_user', username);
+            showMain();
+        } else {
+            showAlert('loginAlert', data.error || '登录失败', 'error');
+        }
+    } catch (e) {
+        showAlert('loginAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+function doLogout() {
+    token = '';
+    currentUser = '';
+    localStorage.removeItem('license_admin_token');
+    localStorage.removeItem('license_admin_user');
+    location.reload();
+}
+
+function showMain() {
+    document.getElementById('loginSection').classList.add('hidden');
+    document.getElementById('mainSection').classList.remove('hidden');
+    document.getElementById('currentAdmin').textContent = currentUser;
+    loadList();
+}
+
+// 生成激活码
+async function generateCodes() {
+    const user = document.getElementById('genUser').value.trim();
+    const type = document.getElementById('genType').value;
+    const days = document.getElementById('genDays').value;
+    const expiresAt = document.getElementById('genExpiresAt').value;
+    const count = document.getElementById('genCount').value || 1;
+    const note = document.getElementById('genNote').value.trim();
+
+    if (!user) { showAlert('mainAlert', '请输入用户名', 'error'); return; }
+    if (!days && !expiresAt) { showAlert('mainAlert', '请填写有效天数或到期日期', 'error'); return; }
+
+    const body = { user, type, count: parseInt(count, 10), note };
+    if (days) body.days = parseInt(days, 10);
+    if (expiresAt) body.expiresAt = expiresAt;
+
+    try {
+        const res = await fetch(API_BASE + '/license/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            const codes = data.codes.map(c => c.code).join('\n');
+            showAlert('mainAlert', '成功生成 ' + data.count + ' 个激活码：\n' + codes, 'success');
+            // 复制到剪贴板
+            if (navigator.clipboard) {
+                navigator.clipboard.writeText(codes).then(() => {
+                    showAlert('mainAlert', '成功生成 ' + data.count + ' 个激活码（已复制到剪贴板）：\n' + codes, 'info');
+                });
+            }
+            clearGenForm();
+            loadList();
+        } else {
+            showAlert('mainAlert', data.error || '生成失败', 'error');
+        }
+    } catch (e) {
+        showAlert('mainAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+function clearGenForm() {
+    document.getElementById('genUser').value = '';
+    document.getElementById('genDays').value = '';
+    document.getElementById('genExpiresAt').value = '';
+    document.getElementById('genCount').value = '1';
+    document.getElementById('genNote').value = '';
+}
+
+// 加载列表
+async function loadList() {
+    const status = document.getElementById('filterStatus').value;
+    const type = document.getElementById('filterType').value;
+    const q = document.getElementById('filterQ').value.trim();
+    let url = API_BASE + '/license/list?';
+    if (status) url += 'status=' + encodeURIComponent(status) + '&';
+    if (type) url += 'type=' + encodeURIComponent(type) + '&';
+    if (q) url += 'q=' + encodeURIComponent(q) + '&';
+
+    try {
+        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+        const data = await res.json();
+        if (data.success) {
+            renderList(data.data);
+            renderStats(data.stats);
+        } else {
+            if (res.status === 403) {
+                showAlert('mainAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(doLogout, 1500);
+            } else {
+                document.getElementById('listBody').innerHTML = '<tr><td colspan="10" class="empty">' + (data.error || '加载失败') + '</td></tr>';
+            }
+        }
+    } catch (e) {
+        document.getElementById('listBody').innerHTML = '<tr><td colspan="10" class="empty">网络错误：' + e.message + '</td></tr>';
+    }
+}
+
+function renderStats(stats) {
+    if (!stats) return;
+    document.getElementById('statTotal').textContent = stats.total || 0;
+    document.getElementById('statUnused').textContent = stats.unused || 0;
+    document.getElementById('statUsed').textContent = stats.used || 0;
+    document.getElementById('statExpired').textContent = stats.expired || 0;
+    document.getElementById('statDisabled').textContent = stats.disabled || 0;
+}
+
+function renderList(records) {
+    const tbody = document.getElementById('listBody');
+    if (!records || records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="10" class="empty">暂无激活码</td></tr>';
+        return;
+    }
+    const typeNames = { trial: '试用版', personal: '个人版', pro: '专业版' };
+    const statusNames = { unused: '未使用', used: '已激活', expired: '已过期', disabled: '已禁用' };
+
+    tbody.innerHTML = records.map(r => {
+        const typeTag = '<span class="tag tag-' + r.type + '">' + typeNames[r.type] + '</span>';
+        const statusTag = '<span class="tag tag-' + r.status + '">' + statusNames[r.status] + '</span>';
+        const issuedAt = r.issuedAt ? new Date(r.issuedAt).toLocaleString('zh-CN') : '-';
+        const activatedAt = r.activatedAt ? new Date(r.activatedAt).toLocaleString('zh-CN') : '-';
+        const expiresAt = r.expiresAt ? new Date(r.expiresAt).toLocaleDateString('zh-CN') : '-';
+
+        let actions = '<button class="btn btn-sm" onclick="copyCode(\'' + r.code + '\')">复制</button>';
+        if (r.status === 'used') {
+            actions += '<button class="btn btn-sm btn-warning" onclick="manageCode(\'' + r.code + '\',\'unbind\')">解绑</button>';
+        }
+        if (r.status !== 'disabled') {
+            actions += '<button class="btn btn-sm btn-warning" onclick="manageCode(\'' + r.code + '\',\'disable\')">禁用</button>';
+        } else {
+            actions += '<button class="btn btn-sm btn-success" onclick="manageCode(\'' + r.code + '\',\'enable\')">启用</button>';
+        }
+        actions += '<button class="btn btn-sm btn-danger" onclick="deleteCode(\'' + r.code + '\')">删除</button>';
+
+        return '<tr>' +
+            '<td class="code">' + r.code + '</td>' +
+            '<td>' + escapeHtml(r.user || '-') + '</td>' +
+            '<td>' + typeTag + '</td>' +
+            '<td>' + statusTag + '</td>' +
+            '<td>' + issuedAt + '</td>' +
+            '<td>' + activatedAt + '</td>' +
+            '<td>' + expiresAt + '</td>' +
+            '<td>' + (r.machineId || '-') + '</td>' +
+            '<td>' + escapeHtml(r.note || '-') + '</td>' +
+            '<td style="white-space:nowrap;">' + actions + '</td>' +
+            '</tr>';
+    }).join('');
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function copyCode(code) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code).then(() => {
+            showAlert('mainAlert', '已复制：' + code, 'info');
+        });
+    } else {
+        showAlert('mainAlert', '请手动复制：' + code, 'info');
+    }
+}
+
+async function manageCode(code, action) {
+    const actionNames = { unbind: '解绑', disable: '禁用', enable: '启用' };
+    if (!confirm('确认' + actionNames[action] + '激活码 ' + code + ' ?')) return;
+    try {
+        const res = await fetch(API_BASE + '/license/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ code, action })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('mainAlert', data.message, 'success');
+            loadList();
+        } else {
+            showAlert('mainAlert', data.error || '操作失败', 'error');
+        }
+    } catch (e) {
+        showAlert('mainAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+async function deleteCode(code) {
+    if (!confirm('确认删除激活码 ' + code + ' ?\n删除后不可恢复！')) return;
+    try {
+        const res = await fetch(API_BASE + '/license/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ code, action: 'delete' })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('mainAlert', data.message, 'success');
+            loadList();
+        } else {
+            showAlert('mainAlert', data.error || '删除失败', 'error');
+        }
+    } catch (e) {
+        showAlert('mainAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+function clearFilter() {
+    document.getElementById('filterStatus').value = '';
+    document.getElementById('filterType').value = '';
+    document.getElementById('filterQ').value = '';
+    loadList();
+}
+
+// 回车键登录
+document.getElementById('loginPass').addEventListener('keyup', e => {
+    if (e.key === 'Enter') doLogin();
+});
+document.getElementById('loginUser').addEventListener('keyup', e => {
+    if (e.key === 'Enter') document.getElementById('loginPass').focus();
+});
+
+// 自动登录
+if (token && currentUser) {
+    showMain();
+}
+</script>
+</body>
+</html>
