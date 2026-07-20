@@ -1,8 +1,11 @@
 // ============================================================================
 //  license-manager.js — 授权管理模块（v2 支持版本分级）
 //  功能：license 文件校验 + 试用模式 + 防时间回拨 + 版本分级
-//  方案：HMAC-SHA256 签名 + XOR 混淆（简单高效，配合 asarmor 增加逆向难度）
+//  方案：HMAC-SHA256 签名 + AES-256-CBC 加密存储（配合 asarmor 增加逆向难度）
 //  v2 新增：type (trial/personal/pro) + maxPrescriptions + features
+//  P2 优化：trial.dat / last-run.dat 从 XOR 升级为 AES-256-CBC 加密
+//          不同文件使用不同盐派生密钥（防止一文件破解后所有文件被破解）
+//          向后兼容：读取时若为旧 XOR 格式自动解密并迁移为 AES 格式
 // ============================================================================
 
 const fs = require('fs');
@@ -144,7 +147,8 @@ function getLastRunPath() {
 }
 
 // ============================================================================
-//  XOR 混淆（用于 trial.dat 和 last-run.dat，防止用户直接查看/篡改）
+//  XOR 混淆（仅用于读取旧格式 trial.dat / last-run.dat，向后兼容）
+//  ★ P2 优化后新文件不再使用 XOR，写入时改用 AES-256-CBC 加密
 // ============================================================================
 function xorEncrypt(text, key) {
     const buf = Buffer.from(text, 'utf8');
@@ -224,6 +228,82 @@ function decryptLicenseContent(encryptedStr, machineId) {
         return plaintext.toString('utf8');
     } catch (e) {
         // 解密失败（machineId 不匹配、文件损坏、密钥错误等）
+        return null;
+    }
+}
+
+// ============================================================================
+//  ★ P2 新增：trial.dat / last-run.dat AES-256-CBC 加密
+//  方案：与 license.dat 一致使用 AES-256-CBC，但派生不同密钥（不同盐）
+//       防止 license.dat 密钥被破解后 trial.dat / last-run.dat 同时失守
+//  文件格式：TRIAL1:base64(iv(16) + ciphertext) / LASTRUN1:base64(iv(16) + ciphertext)
+//  旧格式：Base64(XOR(plaintext, key))（向后兼容，读取后自动迁移为 AES 格式）
+// ============================================================================
+const TRIAL_ENC_PREFIX = 'TRIAL1:';
+const LASTRUN_ENC_PREFIX = 'LASTRUN1:';
+
+// 派生 trial 加密密钥：SHA256(machineId + LICENSE_HMAC_KEY + ':trial')
+function deriveTrialKey(machineId) {
+    const combined = (machineId || '') + LICENSE_HMAC_KEY + ':trial';
+    return crypto.createHash('sha256').update(combined).digest();
+}
+
+// 派生 last-run 加密密钥：SHA256(machineId + LICENSE_HMAC_KEY + ':lastrun')
+function deriveLastRunKey(machineId) {
+    const combined = (machineId || '') + LICENSE_HMAC_KEY + ':lastrun';
+    return crypto.createHash('sha256').update(combined).digest();
+}
+
+// 加密 trial JSON 字符串
+function encryptTrialContent(jsonStr, machineId) {
+    const key = deriveTrialKey(machineId);
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    const plaintext = Buffer.from(jsonStr, 'utf8');
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    return TRIAL_ENC_PREFIX + Buffer.concat([iv, ciphertext]).toString('base64');
+}
+
+// 解密 trial 字符串（仅处理 TRIAL1: 前缀，失败返回 null）
+function decryptTrialContent(encryptedStr, machineId) {
+    if (!encryptedStr || !encryptedStr.startsWith(TRIAL_ENC_PREFIX)) return null;
+    try {
+        const key = deriveTrialKey(machineId);
+        const data = Buffer.from(encryptedStr.substring(TRIAL_ENC_PREFIX.length), 'base64');
+        if (data.length < 32) return null;
+        const iv = data.slice(0, 16);
+        const ciphertext = data.slice(16);
+        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+        const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+        return plaintext.toString('utf8');
+    } catch (e) {
+        return null;
+    }
+}
+
+// 加密 last-run JSON 字符串
+function encryptLastRunContent(jsonStr, machineId) {
+    const key = deriveLastRunKey(machineId);
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    const plaintext = Buffer.from(jsonStr, 'utf8');
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    return LASTRUN_ENC_PREFIX + Buffer.concat([iv, ciphertext]).toString('base64');
+}
+
+// 解密 last-run 字符串（仅处理 LASTRUN1: 前缀，失败返回 null）
+function decryptLastRunContent(encryptedStr, machineId) {
+    if (!encryptedStr || !encryptedStr.startsWith(LASTRUN_ENC_PREFIX)) return null;
+    try {
+        const key = deriveLastRunKey(machineId);
+        const data = Buffer.from(encryptedStr.substring(LASTRUN_ENC_PREFIX.length), 'base64');
+        if (data.length < 32) return null;
+        const iv = data.slice(0, 16);
+        const ciphertext = data.slice(16);
+        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+        const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+        return plaintext.toString('utf8');
+    } catch (e) {
         return null;
     }
 }
@@ -337,6 +417,21 @@ function readTrial() {
         const trialPath = getTrialPath();
         if (!fs.existsSync(trialPath)) return null;
         const content = fs.readFileSync(trialPath, 'utf8').trim();
+        // ★ P2 新增：优先尝试新 AES 加密格式（TRIAL1:）
+        if (content.startsWith(TRIAL_ENC_PREFIX)) {
+            const actualMachineId = getMachineId();
+            if (!actualMachineId) {
+                console.error('[License] 无法获取 machineId 解密 trial');
+                return null;
+            }
+            const json = decryptTrialContent(content, actualMachineId);
+            if (!json) {
+                console.error('[License] trial 解密失败（machineId 不匹配或文件损坏）');
+                return null;
+            }
+            return JSON.parse(json);
+        }
+        // 旧格式（XOR + Base64）- 向后兼容
         const json = xorDecrypt(content, TRIAL_KEY);
         if (!json) return null;
         return JSON.parse(json);
@@ -349,6 +444,17 @@ function writeTrial(data) {
     try {
         const trialPath = getTrialPath();
         const json = JSON.stringify(data);
+        // ★ P2 新增：使用 AES-256-CBC 加密写入（密钥从 machineId 派生）
+        const actualMachineId = getMachineId();
+        if (actualMachineId) {
+            const encrypted = encryptTrialContent(json, actualMachineId);
+            if (encrypted) {
+                fs.writeFileSync(trialPath, encrypted, 'utf8');
+                return;
+            }
+        }
+        // 回退到 XOR 加密（仅当 machineId 不可用时）
+        console.warn('[License] machineId 不可用，trial 回退到 XOR 加密');
         const encrypted = xorEncrypt(json, TRIAL_KEY);
         fs.writeFileSync(trialPath, encrypted, 'utf8');
     } catch (e) {
@@ -361,6 +467,21 @@ function readLastRun() {
         const lastRunPath = getLastRunPath();
         if (!fs.existsSync(lastRunPath)) return null;
         const content = fs.readFileSync(lastRunPath, 'utf8').trim();
+        // ★ P2 新增：优先尝试新 AES 加密格式（LASTRUN1:）
+        if (content.startsWith(LASTRUN_ENC_PREFIX)) {
+            const actualMachineId = getMachineId();
+            if (!actualMachineId) {
+                console.error('[License] 无法获取 machineId 解密 last-run');
+                return null;
+            }
+            const json = decryptLastRunContent(content, actualMachineId);
+            if (!json) {
+                console.error('[License] last-run 解密失败（machineId 不匹配或文件损坏）');
+                return null;
+            }
+            return JSON.parse(json);
+        }
+        // 旧格式（XOR + Base64）- 向后兼容
         const json = xorDecrypt(content, LASTRUN_KEY);
         if (!json) return null;
         return JSON.parse(json);
@@ -373,6 +494,17 @@ function writeLastRun(data) {
     try {
         const lastRunPath = getLastRunPath();
         const json = JSON.stringify(data);
+        // ★ P2 新增：使用 AES-256-CBC 加密写入（密钥从 machineId 派生）
+        const actualMachineId = getMachineId();
+        if (actualMachineId) {
+            const encrypted = encryptLastRunContent(json, actualMachineId);
+            if (encrypted) {
+                fs.writeFileSync(lastRunPath, encrypted, 'utf8');
+                return;
+            }
+        }
+        // 回退到 XOR 加密（仅当 machineId 不可用时）
+        console.warn('[License] machineId 不可用，last-run 回退到 XOR 加密');
         const encrypted = xorEncrypt(json, LASTRUN_KEY);
         fs.writeFileSync(lastRunPath, encrypted, 'utf8');
     } catch (e) {
@@ -764,6 +896,11 @@ module.exports = {
     getMachineId,         // 获取机器 ID（供 main.js 调用）
     encryptLicenseContent, // 加密 license（供测试用）
     decryptLicenseContent, // 解密 license（供测试用）
+    // ★ P2 新增：trial / last-run 加密相关
+    encryptTrialContent,   // 加密 trial（供测试用）
+    decryptTrialContent,   // 解密 trial（供测试用）
+    encryptLastRunContent, // 加密 last-run（供测试用）
+    decryptLastRunContent, // 解密 last-run（供测试用）
     // ★ P1-B 新增：安全检测
     isDebuggerAttached    // 调试器检测（供 main.js 调用）
 };

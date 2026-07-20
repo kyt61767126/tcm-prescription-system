@@ -4,12 +4,15 @@ package com.benneng.pres;
 //  LicenseManager — APP 端授权管理（与桌面版 license-manager.js v2 一致）
 //  功能：
 //   - license.dat 校验（HMAC-SHA256 签名，v2 含 maxPrescriptions/features）
-//   - 试用模式（7 天，XOR 混淆存储）
+//   - 试用模式（7 天，AES-256-CBC 加密存储）
 //   - 防时间回拨
 //   - 在线激活（HTTP POST 云端 /api/license/validate）
-//   - 处方计数（按月统计，XOR 混淆）
+//   - 处方计数（按月统计，AES-256-CBC 加密）
 //   - 机器 ID 生成（SHA256(androidId + package + version + model).substring(0,32)）
 //  安全：签名验证在 Java 层，攻击者难以通过修改 JS 绕过
+//  P2 优化：trial.dat / last-run.dat / prescription-count.dat 从 XOR 升级为
+//          AES-256-CBC 加密，不同文件使用不同盐派生密钥（防一文件破解后全失守）
+//          向后兼容：读取时若为旧 XOR 格式自动解密并迁移为 AES 格式
 // ============================================================================
 
 import android.content.Context;
@@ -52,6 +55,12 @@ public class LicenseManager {
     // ★ P1-A 新增：license 文件加密格式标识和算法
     private static final String LICENSE_ENC_PREFIX = "ENC1:";  // 加密格式前缀
     private static final String AES_ALGORITHM = "AES/CBC/PKCS5Padding";
+
+    // ★ P2 新增：trial / last-run / count 文件加密格式标识
+    // 不同文件使用不同前缀和不同盐派生密钥（防一文件破解后全失守）
+    private static final String TRIAL_ENC_PREFIX = "TRIAL1:";
+    private static final String LASTRUN_ENC_PREFIX = "LASTRUN1:";
+    private static final String COUNT_ENC_PREFIX = "COUNT1:";
 
     // 试用与时间回拨配置（与桌面版一致）
     private static final int DEFAULT_TRIAL_DAYS = 7;  // 默认试用期 7 天（可通过 SharedPreferences 修改，测试时设为 0）
@@ -330,6 +339,114 @@ public class LicenseManager {
             // 解密失败（machineId 不匹配、文件损坏、密钥错误等）
             return null;
         }
+    }
+
+    // ========================================================================
+    //  ★ P2 新增：trial.dat / last-run.dat / prescription-count.dat AES-256-CBC 加密
+    //  方案：与 license.dat 一致使用 AES-256-CBC，但派生不同密钥（不同盐）
+    //       防止 license.dat 密钥被破解后 trial / last-run / count 同时失守
+    //  文件格式：TRIAL1:/LASTRUN1:/COUNT1: + base64(iv(16) + ciphertext)
+    //  旧格式：Base64(XOR(plaintext, key))（向后兼容，读取后自动迁移为 AES 格式）
+    // ========================================================================
+
+    // 派生 trial 加密密钥：SHA256(machineId + LICENSE_HMAC_KEY + ':trial')
+    private SecretKeySpec deriveTrialKey(String machineId) {
+        try {
+            String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY + ":trial";
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
+        } catch (Exception e) {
+            Log.e(TAG, "派生 trial 密钥失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // 派生 last-run 加密密钥：SHA256(machineId + LICENSE_HMAC_KEY + ':lastrun')
+    private SecretKeySpec deriveLastRunKey(String machineId) {
+        try {
+            String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY + ":lastrun";
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
+        } catch (Exception e) {
+            Log.e(TAG, "派生 last-run 密钥失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // 派生 count 加密密钥：SHA256(machineId + LICENSE_HMAC_KEY + ':count')
+    private SecretKeySpec deriveCountKey(String machineId) {
+        try {
+            String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY + ":count";
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
+        } catch (Exception e) {
+            Log.e(TAG, "派生 count 密钥失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // 通用 AES 加密：返回 PREFIX + base64(iv + ciphertext)
+    private String aesEncrypt(String jsonStr, SecretKeySpec key, String prefix) {
+        try {
+            if (key == null) return null;
+            byte[] iv = new byte[16];
+            new java.security.SecureRandom().nextBytes(iv);
+            Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
+            cipher.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
+            byte[] ciphertext = cipher.doFinal(jsonStr.getBytes(StandardCharsets.UTF_8));
+            byte[] combined = new byte[iv.length + ciphertext.length];
+            System.arraycopy(iv, 0, combined, 0, iv.length);
+            System.arraycopy(ciphertext, 0, combined, iv.length, ciphertext.length);
+            return prefix + Base64.encodeToString(combined, Base64.NO_WRAP);
+        } catch (Exception e) {
+            Log.e(TAG, "AES 加密失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // 通用 AES 解密：返回 JSON 字符串，失败返回 null
+    private String aesDecrypt(String encryptedStr, SecretKeySpec key, String prefix) {
+        if (encryptedStr == null || !encryptedStr.startsWith(prefix)) return null;
+        try {
+            String base64Data = encryptedStr.substring(prefix.length());
+            byte[] data = Base64.decode(base64Data, Base64.DEFAULT);
+            if (data == null || data.length < 32) return null;
+            if (key == null) return null;
+            byte[] iv = new byte[16];
+            byte[] ciphertext = new byte[data.length - 16];
+            System.arraycopy(data, 0, iv, 0, 16);
+            System.arraycopy(data, 16, ciphertext, 0, ciphertext.length);
+            Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
+            cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
+            byte[] plaintext = cipher.doFinal(ciphertext);
+            return new String(plaintext, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    // trial 加解密
+    private String encryptTrialContent(String jsonStr, String machineId) {
+        return aesEncrypt(jsonStr, deriveTrialKey(machineId), TRIAL_ENC_PREFIX);
+    }
+    private String decryptTrialContent(String encryptedStr, String machineId) {
+        return aesDecrypt(encryptedStr, deriveTrialKey(machineId), TRIAL_ENC_PREFIX);
+    }
+
+    // last-run 加解密
+    private String encryptLastRunContent(String jsonStr, String machineId) {
+        return aesEncrypt(jsonStr, deriveLastRunKey(machineId), LASTRUN_ENC_PREFIX);
+    }
+    private String decryptLastRunContent(String encryptedStr, String machineId) {
+        return aesDecrypt(encryptedStr, deriveLastRunKey(machineId), LASTRUN_ENC_PREFIX);
+    }
+
+    // count 加解密
+    private String encryptCountContent(String jsonStr, String machineId) {
+        return aesEncrypt(jsonStr, deriveCountKey(machineId), COUNT_ENC_PREFIX);
+    }
+    private String decryptCountContent(String encryptedStr, String machineId) {
+        return aesDecrypt(encryptedStr, deriveCountKey(machineId), COUNT_ENC_PREFIX);
     }
 
     // ========================================================================
@@ -637,15 +754,27 @@ public class LicenseManager {
         }
     }
 
-    // trial.dat: Base64(XOR(JSON))
+    // trial.dat: AES-256-CBC 加密（旧格式 Base64(XOR(JSON)) 向后兼容）
     private JSONObject readTrial() {
         try {
             File f = getFile(TRIAL_FILE);
             if (!f.exists()) return null;
             byte[] bytes = readFileBytes(f);
             String content = new String(bytes, StandardCharsets.UTF_8).trim();
-            String json = xorDecrypt(content, TRIAL_KEY);
-            if (json == null) return null;
+            String json = null;
+            // ★ P2 新增：优先尝试新 AES 加密格式（TRIAL1:）
+            if (content.startsWith(TRIAL_ENC_PREFIX)) {
+                String mid = getMachineId();
+                json = decryptTrialContent(content, mid);
+                if (json == null) {
+                    Log.e(TAG, "trial 解密失败（machineId 不匹配或文件损坏）");
+                    return null;
+                }
+            } else {
+                // 旧格式（XOR + Base64）- 向后兼容
+                json = xorDecrypt(content, TRIAL_KEY);
+                if (json == null) return null;
+            }
             return new JSONObject(json);
         } catch (Exception e) {
             return null;
@@ -655,7 +784,15 @@ public class LicenseManager {
     private void writeTrial(JSONObject trial) {
         try {
             File f = getFile(TRIAL_FILE);
-            String encrypted = xorEncrypt(trial.toString(), TRIAL_KEY);
+            String jsonStr = trial.toString();
+            // ★ P2 新增：优先使用 AES-256-CBC 加密写入（密钥从 machineId 派生）
+            String mid = getMachineId();
+            String encrypted = (mid != null && !mid.isEmpty()) ? encryptTrialContent(jsonStr, mid) : null;
+            if (encrypted == null) {
+                // 回退到 XOR 加密（仅当 machineId 不可用时）
+                Log.w(TAG, "machineId 不可用，trial 回退到 XOR 加密");
+                encrypted = xorEncrypt(jsonStr, TRIAL_KEY);
+            }
             try (FileOutputStream fos = new FileOutputStream(f)) {
                 fos.write(encrypted.getBytes(StandardCharsets.UTF_8));
                 fos.flush();
@@ -702,15 +839,27 @@ public class LicenseManager {
         return result;
     }
 
-    // last-run.dat: Base64(XOR(JSON{timestamp}))
+    // last-run.dat: AES-256-CBC 加密（旧格式 Base64(XOR(JSON)) 向后兼容）
     private JSONObject readLastRun() {
         try {
             File f = getFile(LASTRUN_FILE);
             if (!f.exists()) return null;
             byte[] bytes = readFileBytes(f);
             String content = new String(bytes, StandardCharsets.UTF_8).trim();
-            String json = xorDecrypt(content, LASTRUN_KEY);
-            if (json == null) return null;
+            String json = null;
+            // ★ P2 新增：优先尝试新 AES 加密格式（LASTRUN1:）
+            if (content.startsWith(LASTRUN_ENC_PREFIX)) {
+                String mid = getMachineId();
+                json = decryptLastRunContent(content, mid);
+                if (json == null) {
+                    Log.e(TAG, "last-run 解密失败（machineId 不匹配或文件损坏）");
+                    return null;
+                }
+            } else {
+                // 旧格式（XOR + Base64）- 向后兼容
+                json = xorDecrypt(content, LASTRUN_KEY);
+                if (json == null) return null;
+            }
             return new JSONObject(json);
         } catch (Exception e) {
             return null;
@@ -722,7 +871,14 @@ public class LicenseManager {
             File f = getFile(LASTRUN_FILE);
             JSONObject data = new JSONObject();
             data.put("timestamp", timestamp);
-            String encrypted = xorEncrypt(data.toString(), LASTRUN_KEY);
+            String jsonStr = data.toString();
+            // ★ P2 新增：优先使用 AES-256-CBC 加密写入
+            String mid = getMachineId();
+            String encrypted = (mid != null && !mid.isEmpty()) ? encryptLastRunContent(jsonStr, mid) : null;
+            if (encrypted == null) {
+                Log.w(TAG, "machineId 不可用，last-run 回退到 XOR 加密");
+                encrypted = xorEncrypt(jsonStr, LASTRUN_KEY);
+            }
             try (FileOutputStream fos = new FileOutputStream(f)) {
                 fos.write(encrypted.getBytes(StandardCharsets.UTF_8));
                 fos.flush();
@@ -732,15 +888,27 @@ public class LicenseManager {
         }
     }
 
-    // prescription-count.dat: Base64(XOR(JSON{YYYY-MM: count})))
+    // prescription-count.dat: AES-256-CBC 加密（旧格式 Base64(XOR(JSON)) 向后兼容）
     private JSONObject readCounts() {
         try {
             File f = getFile(COUNT_FILE);
             if (!f.exists()) return new JSONObject();
             byte[] bytes = readFileBytes(f);
             String content = new String(bytes, StandardCharsets.UTF_8).trim();
-            String json = xorDecrypt(content, COUNT_KEY);
-            if (json == null) return new JSONObject();
+            String json = null;
+            // ★ P2 新增：优先尝试新 AES 加密格式（COUNT1:）
+            if (content.startsWith(COUNT_ENC_PREFIX)) {
+                String mid = getMachineId();
+                json = decryptCountContent(content, mid);
+                if (json == null) {
+                    Log.e(TAG, "count 解密失败（machineId 不匹配或文件损坏）");
+                    return new JSONObject();
+                }
+            } else {
+                // 旧格式（XOR + Base64）- 向后兼容
+                json = xorDecrypt(content, COUNT_KEY);
+                if (json == null) return new JSONObject();
+            }
             return new JSONObject(json);
         } catch (Exception e) {
             return new JSONObject();
@@ -750,7 +918,14 @@ public class LicenseManager {
     private void writeCounts(JSONObject counts) {
         try {
             File f = getFile(COUNT_FILE);
-            String encrypted = xorEncrypt(counts.toString(), COUNT_KEY);
+            String jsonStr = counts.toString();
+            // ★ P2 新增：优先使用 AES-256-CBC 加密写入
+            String mid = getMachineId();
+            String encrypted = (mid != null && !mid.isEmpty()) ? encryptCountContent(jsonStr, mid) : null;
+            if (encrypted == null) {
+                Log.w(TAG, "machineId 不可用，count 回退到 XOR 加密");
+                encrypted = xorEncrypt(jsonStr, COUNT_KEY);
+            }
             try (FileOutputStream fos = new FileOutputStream(f)) {
                 fos.write(encrypted.getBytes(StandardCharsets.UTF_8));
                 fos.flush();
