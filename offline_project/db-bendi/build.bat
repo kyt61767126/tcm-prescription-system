@@ -4,8 +4,13 @@ chcp 65001 >nul
 cd /d "%~dp0"
 title Huikang TCM Local - Offline Desktop Build
 
+REM 记录打包开始时间（用于耗时统计）- 使用 PowerShell 替代 wmic（Windows 11 已弃用）
+for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
+for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "BUILD_START_STAMP=%%t"
+
 echo ============================================
 echo  Huikang TCM Local - Offline Desktop
+echo  Start: %BUILD_START_TIME%
 echo ============================================
 echo.
 
@@ -20,11 +25,11 @@ echo       npm OK
 echo.
 
 echo [2/7] Closing remaining processes...
+REM P0-优化：精确匹配项目相关进程，避免误杀其他 Electron 应用（如 VSCode、Slack 等）
 taskkill /F /IM "app-local.exe" >nul 2>&1
 taskkill /F /IM "惠康中医本地.exe" >nul 2>&1
-taskkill /F /IM electron.exe >nul 2>&1
-wmic process where "ExecutablePath like '%%db-bendi%%dist%%'" call terminate >nul 2>&1
-wmic process where "ExecutablePath like '%%db-bendi%%build_output%%'" call terminate >nul 2>&1
+REM P0-优化：替换 wmic（Windows 11 已弃用且慢）为 PowerShell Get-Process（精确路径匹配）
+powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-bendi*dist*' -or $_.Path -like '*db-bendi*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 timeout /t 2 /nobreak >nul
 echo [OK] Processes cleaned
 echo.
@@ -55,13 +60,8 @@ if exist "%OUTPUT_DIR%" (
         powershell -ExecutionPolicy Bypass -Command "try { [System.IO.Directory]::Delete('%CD%\%OUTPUT_DIR%', $true) } catch { Write-Host '[WARNING] PowerShell delete also failed' }" 2>nul
     )
     if exist "%OUTPUT_DIR%" (
-        for /f "tokens=2 delims==" %%a in ('wmic os get localdatetime /value 2^>nul ^| find "="') do set "ldt=%%a"
-        if defined ldt (
-            set "DSTAMP=!ldt:~0,8!_!ldt:~8,6!"
-        ) else (
-            set "DSTAMP=%date:~0,4%%date:~5,2%%date:~8,2%_%time:~0,2%%time:~3,2%%time:~6,2%"
-            set "DSTAMP=!DSTAMP: =0!"
-        )
+        REM P0-优化：替换 wmic（已弃用）为 PowerShell Get-Date 生成时间戳
+        for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "DSTAMP=%%t"
         echo [WARNING] Could not delete %OUTPUT_DIR%, renaming to dist_old_!DSTAMP!...
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
         if exist "%OUTPUT_DIR%" (
@@ -95,7 +95,10 @@ REM better-sqlite3 prebuild-install 从 GitHub Releases 下载预编译二进制
 REM 临时关闭 TLS 验证（仅构建期间），确保 prebuild-install 能成功下载 electron ABI 二进制
 set NODE_TLS_REJECT_UNAUTHORIZED=0
 call npm run build
-if errorlevel 1 (
+set "BUILD_RC=%errorlevel%"
+REM P1-安全：立即清除 TLS 临时变量，避免污染后续命令环境
+set NODE_TLS_REJECT_UNAUTHORIZED=
+if not "%BUILD_RC%"=="0" (
     echo.
     echo [ERROR] Build failed, please check logs above
     echo Restoring original JavaScript code...
@@ -116,6 +119,15 @@ if errorlevel 1 (
 echo [OK] Original code restored
 echo.
 
+REM P1-易用：验证产物存在且非空
+set "EXE_FILE="
+for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
+if not "%EXE_FILE%"=="" (
+    for %%A in ("%EXE_FILE%") do (
+        echo   [OK] %%~nxA  %%~zA bytes
+    )
+)
+
 echo [7/7] Build completed
 echo Output dir: %CD%\%OUTPUT_DIR%
 echo ============================================
@@ -123,4 +135,8 @@ if exist "dist_old_*" (
     echo [NOTE] Old build artifacts saved as dist_old_* directories
     echo        These will be auto-cleaned in future builds (keeping latest 2)
 )
+REM P1-易用：显示打包总耗时
+for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
+echo Start: %BUILD_START_TIME%
+echo End:   %BUILD_END_TIME%
 if not defined NO_PAUSE pause

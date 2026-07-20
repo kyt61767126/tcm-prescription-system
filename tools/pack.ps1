@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -452,9 +452,31 @@ function Build-Desktop {
         # better-sqlite3 prebuild-install 从 GitHub Releases 下载预编译二进制时 SSL 证书验证失败
         # 临时关闭 TLS 验证（仅构建期间），确保 prebuild-install 成功下载 electron ABI 二进制
         $env:NODE_TLS_REJECT_UNAUTHORIZED = "0"
-        Invoke-External { npm run build } "electron-builder"
+        try {
+            Invoke-External { npm run build } "electron-builder"
+        } finally {
+            # P1-安全：立即清除 TLS 临时变量，避免污染后续命令环境
+            Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
+            Remove-Item Env:\ELECTRON_MIRROR -ErrorAction SilentlyContinue
+            Remove-Item Env:\ELECTRON_BUILDER_BINARIES_MIRROR -ErrorAction SilentlyContinue
+        }
     } finally {
         Pop-Location
+    }
+
+    # P1-易用：验证产物存在并显示大小
+    $distDir = "$script:VersionDir\dist"
+    if (Test-Path $distDir) {
+        $exeFiles = Get-ChildItem -Path $distDir -Filter "*.exe" -ErrorAction SilentlyContinue
+        if ($exeFiles) {
+            foreach ($f in $exeFiles) {
+                $sizeMB = [math]::Round($f.Length / 1MB, 2)
+                Write-Host "  [OK] 产物: $($f.Name)  $sizeMB MB" -ForegroundColor Green
+                Write-Log "[OK] Built exe: $($f.Name) ($sizeMB MB)"
+            }
+        } else {
+            Write-Host "  [WARN] dist 目录下未发现 .exe 文件（可能仅生成 NSIS 安装包）" -ForegroundColor Yellow
+        }
     }
 
     # Restore JS (de-obfuscate)
@@ -612,6 +634,7 @@ function Show-Menu {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  惠康中医打包工具 - $versionLabel" -ForegroundColor Cyan
+    Write-Host "  (桌面+APP 统一入口)" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  [1] 打包桌面版 (Electron exe)"
@@ -624,6 +647,11 @@ function Show-Menu {
     Write-Host "  [8] 启用严格模式 (提取并注入哈希)"
     Write-Host "  [9] 一键打包严格模式 (A->B->哈希->重打包)"
     Write-Host "  [0] 退出"
+    Write-Host ""
+    Write-Host "  快捷选项:"
+    Write-Host "    [a] 快速全部打包 (跳过编码检查/配置编辑)"
+    Write-Host "    [d] 仅桌面快速打包 (跳过编码检查)"
+    Write-Host "    [p] 仅 APP 快速打包 (跳过编码检查/配置)"
     Write-Host ""
     $choice = Read-Host "  请选择 [0-9]"
     return $choice
@@ -825,44 +853,58 @@ function Invoke-Packaging {
     Write-Host "========================================" -ForegroundColor Magenta
 
     try {
+        # P1-易用：分步耗时记录
+        $stepStartTime = Get-Date
+
         # Step 1: Pre-packaging encoding check (skip if target is 'encoding' to avoid duplicate with Step 6)
         if (-not $SkipEnc -and $Tgt -ne 'encoding') {
             Invoke-EncodingCheck
+            Write-Host "  [耗时] 编码检查: $(((Get-Date) - $stepStartTime).ToString('ss\.fff'))s" -ForegroundColor DarkGray
+            $stepStartTime = Get-Date
         }
 
         # Step 2: Config modification
         if (-not $SkipCfg -and ($Tgt -eq 'app' -or $Tgt -eq 'all' -or $Tgt -eq 'config')) {
             Edit-ClinicConfig
+            Write-Host "  [耗时] 配置修改: $(((Get-Date) - $stepStartTime).ToString('ss\.fff'))s" -ForegroundColor DarkGray
+            $stepStartTime = Get-Date
         }
 
         # Step 3: File sync (for app target)
         if ($Tgt -eq 'app' -or $Tgt -eq 'all' -or $Tgt -eq 'sync') {
             Sync-FilesToApp
+            Write-Host "  [耗时] 文件同步: $(((Get-Date) - $stepStartTime).ToString('ss\.fff'))s" -ForegroundColor DarkGray
+            $stepStartTime = Get-Date
         }
 
         # Step 4: Desktop build
         if ($Tgt -eq 'desktop' -or $Tgt -eq 'all') {
             Build-Desktop
+            Write-Host "  [耗时] 桌面打包: $(((Get-Date) - $stepStartTime).ToString('mm\:ss'))" -ForegroundColor DarkGray
+            $stepStartTime = Get-Date
         }
 
         # Step 5: APP build
         if ($Tgt -eq 'app' -or $Tgt -eq 'all') {
             Build-App
+            Write-Host "  [耗时] APP 打包: $(((Get-Date) - $stepStartTime).ToString('mm\:ss'))" -ForegroundColor DarkGray
+            $stepStartTime = Get-Date
         }
 
         # Step 6: Encoding check only
         if ($Tgt -eq 'encoding') {
             Invoke-EncodingCheck
+            Write-Host "  [耗时] 编码检查: $(((Get-Date) - $stepStartTime).ToString('ss\.fff'))s" -ForegroundColor DarkGray
         }
 
         $elapsed = (Get-Date) - $startTime
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Green
         Write-Host "  打包完成!" -ForegroundColor Green
-        Write-Host "  耗时: $($elapsed.ToString('mm\:ss'))" -ForegroundColor Green
-        Write-Host "  日志: $($script:LogFile)" -ForegroundColor Green
+        Write-Host "  总耗时: $($elapsed.ToString('hh\:mm\:ss'))" -ForegroundColor Green
+        Write-Host "  日志:   $($script:LogFile)" -ForegroundColor Green
         Write-Host "========================================" -ForegroundColor Green
-        Write-Log "[OK] Packaging completed in $($elapsed.ToString('mm\:ss'))"
+        Write-Log "[OK] Packaging completed in $($elapsed.ToString('hh\:mm\:ss'))"
 
     } catch {
         $elapsed = (Get-Date) - $startTime
@@ -870,8 +912,8 @@ function Invoke-Packaging {
         Write-Host "========================================" -ForegroundColor Red
         Write-Host "  打包失败!" -ForegroundColor Red
         Write-Host "  错误: $_" -ForegroundColor Red
-        Write-Host "  耗时: $($elapsed.ToString('mm\:ss'))" -ForegroundColor Red
-        Write-Host "  日志: $($script:LogFile)" -ForegroundColor Red
+        Write-Host "  总耗时: $($elapsed.ToString('hh\:mm\:ss'))" -ForegroundColor Red
+        Write-Host "  日志:   $($script:LogFile)" -ForegroundColor Red
         Write-Host "========================================" -ForegroundColor Red
         Write-Log "[ERROR] Packaging failed: $_" "ERROR"
         return 1
@@ -901,6 +943,10 @@ if ($Interactive) {
             '7' { Show-CurrentConfig -Ver $Version }
             '8' { Enable-StrictMode -Ver $Version }
             '9' { Build-AllStrict -Ver $Version }
+            # P1-易用：快捷选项 - 跳过耗时步骤，专注打包
+            'a' { Invoke-Packaging -Ver $Version -Tgt 'all' -SkipCfg $true -SkipEnc $true }
+            'd' { Invoke-Packaging -Ver $Version -Tgt 'desktop' -SkipCfg $true -SkipEnc $true }
+            'p' { Invoke-Packaging -Ver $Version -Tgt 'app' -SkipCfg $true -SkipEnc $true }
             '0' { exit 0 }
             default { Write-Host "  [错误] 无效选项，请重新选择" -ForegroundColor Red }
         }

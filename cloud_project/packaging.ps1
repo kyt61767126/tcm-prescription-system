@@ -1,4 +1,4 @@
-﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-bendi/db-dingzhi）
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
@@ -182,6 +182,7 @@ function Show-Menu {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  惠康中医打包工具 - 云端版 (cloud)" -ForegroundColor Cyan
+    Write-Host "  (桌面+APP 统一入口)" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  [1] 打包桌面版 (Electron exe)"
@@ -194,6 +195,11 @@ function Show-Menu {
     Write-Host "  [8] 启用严格模式 (提取并注入哈希)"
     Write-Host "  [9] 一键打包严格模式 (A->B->哈希->重打包)"
     Write-Host "  [0] 退出"
+    Write-Host ""
+    Write-Host "  快捷选项:"
+    Write-Host "    [a] 快速全部打包 (跳过编码检查)"
+    Write-Host "    [d] 仅桌面快速打包 (跳过编码检查)"
+    Write-Host "    [p] 仅 APP 快速打包 (跳过编码检查)"
     Write-Host ""
     Write-Host "----------------------------------------------------------------"
     Write-Host "  防护说明："
@@ -224,11 +230,15 @@ function Build-Desktop {
     Write-Host ""
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
+    # P1-易用：分步耗时统计
+    $stepStart = Get-Date
     $code = Invoke-BatFile "$scriptDir\cloud_desktop\build.bat" "桌面版打包"
+    $stepElapsed = (Get-Date) - $stepStart
     if ($code -ne 0) {
         Write-Host ""
         Write-Host "================================================================" -ForegroundColor Red
         Write-Host "  [ERROR] 桌面版打包失败！退出码: $code" -ForegroundColor Red
+        Write-Host "  耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Red
         Write-Host "  请查看上方错误日志" -ForegroundColor Red
         Write-Host "================================================================" -ForegroundColor Red
         return 1
@@ -237,6 +247,7 @@ function Build-Desktop {
     Write-Host "================================================================" -ForegroundColor Green
     Write-Host "  桌面版打包完成！" -ForegroundColor Green
     Write-Host "  输出目录: $scriptDir\cloud_desktop\dist\" -ForegroundColor Green
+    Write-Host "  耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Green
     Write-Host "================================================================" -ForegroundColor Green
     return 0
 }
@@ -258,19 +269,31 @@ function Build-App {
     Write-Host "  安全说明：APK 内含 Root 检测 + 调试器检测 + 签名校验（SecurityGuard.java）"
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
+    # P1-易用：分步耗时统计
+    $stepStart = Get-Date
     $code = Invoke-BatFile "$scriptDir\build-app.bat" "APP 打包"
+    $stepElapsed = (Get-Date) - $stepStart
     if ($code -ne 0) {
         Write-Host ""
         Write-Host "================================================================" -ForegroundColor Red
         Write-Host "  [ERROR] 手机 APP 打包失败！退出码: $code" -ForegroundColor Red
+        Write-Host "  耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Red
         Write-Host "  请查看上方错误日志" -ForegroundColor Red
         Write-Host "================================================================" -ForegroundColor Red
         return 1
+    }
+    # P1-易用：验证 APK 产物并显示大小
+    $apkFiles = Get-ChildItem -Path $scriptDir -Filter "*.apk" -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "*-unaligned*" }
+    if ($apkFiles) {
+        $latest = $apkFiles | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $sizeMB = [math]::Round($latest.Length / 1MB, 2)
+        Write-Host "  [OK] APK: $($latest.Name)  $sizeMB MB" -ForegroundColor Green
     }
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Green
     Write-Host "  手机 APP 打包完成！" -ForegroundColor Green
     Write-Host "  APK 文件: $scriptDir\*.apk" -ForegroundColor Green
+    Write-Host "  耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Green
     Write-Host "================================================================" -ForegroundColor Green
     return 0
 }
@@ -503,6 +526,8 @@ function Build-AllStrict {
 
 while ($true) {
     $choice = Show-Menu
+    # P1-易用：总耗时统计
+    $totalStart = Get-Date
     switch ($choice) {
         '1' { Build-Desktop | Out-Null }
         '2' { Build-App | Out-Null }
@@ -518,6 +543,19 @@ while ($true) {
         '7' { Show-Config | Out-Null }
         '8' { Enable-StrictMode | Out-Null }
         '9' { Build-AllStrict | Out-Null }
+        # P1-易用：快捷选项 - 跳过编码检查，直接打包
+        'a' {
+            Write-Host "[快捷] 快速全部打包（跳过编码检查）..." -ForegroundColor Cyan
+            Build-All | Out-Null
+        }
+        'd' {
+            Write-Host "[快捷] 快速桌面打包（跳过编码检查）..." -ForegroundColor Cyan
+            Build-Desktop | Out-Null
+        }
+        'p' {
+            Write-Host "[快捷] 快速 APP 打包（跳过编码检查）..." -ForegroundColor Cyan
+            Build-App | Out-Null
+        }
         '0' {
             Write-Host ""
             Write-Host "再见！" -ForegroundColor Cyan
@@ -529,6 +567,12 @@ while ($true) {
             Write-Host "  [错误] 无效选择，请重新输入" -ForegroundColor Red
             Start-Sleep -Seconds 2
         }
+    }
+    # P1-易用：显示本次操作总耗时
+    if ($choice -ne '0' -and $choice -ne '7') {
+        $totalElapsed = (Get-Date) - $totalStart
+        Write-Host ""
+        Write-Host "  本次操作总耗时: $($totalElapsed.ToString('hh\:mm\:ss'))" -ForegroundColor DarkGray
     }
     if ($choice -ne '0') {
         Write-Host ""
