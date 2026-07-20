@@ -587,7 +587,9 @@ public class MainActivity extends AppCompatActivity {
             "      checkFeature: function(feature){ return new Promise(function(resolve){ try { resolve(callNative('license_checkFeature', JSON.stringify({feature:feature}))); } catch(e){ resolve({allowed:true, feature:feature, error:String(e)}); } }); }," +
             "      activate: { /* 离线 license 文件导入，APP 端不支持 */" +
             "        importLicense: function(){ return P({success:false, error:'APP端不支持离线license文件导入，请使用在线激活'}); }" +
-            "      }" +
+            "      }," +
+            "      setTrialDays: function(days){ return new Promise(function(resolve){ try { resolve(callNative('license_setTrialDays', JSON.stringify({days:days}))); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
+            "      getTrialDays: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getTrialDays', '{}')); } catch(e){ resolve({success:false, trialDays:7, error:String(e)}); } }); }" +
             "    }," +
             // ★ activate 命名空间（与桌面版 preload.js activate 命名空间接口一致）
             // APP 端无独立 BrowserWindow，show() 通过 JS 事件触发激活对话框
@@ -873,6 +875,19 @@ public class MainActivity extends AppCompatActivity {
                         try {
                             JSONObject r = new JSONObject();
                             r.put("success", true);
+                            return r.toString();
+                        } catch (Exception e) {
+                            return fail(e.getMessage()).toString();
+                        }
+                    case "license_setTrialDays":
+                        // ★ 设置试用期天数（测试用，0=立即过期，默认 7）
+                        return licenseManager.setTrialDays(args.optInt("days", 7)).toString();
+                    case "license_getTrialDays":
+                        // ★ 获取试用期天数
+                        try {
+                            JSONObject r = new JSONObject();
+                            r.put("success", true);
+                            r.put("trialDays", licenseManager.getTrialDays());
                             return r.toString();
                         } catch (Exception e) {
                             return fail(e.getMessage()).toString();

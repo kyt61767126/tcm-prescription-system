@@ -1,5 +1,5 @@
 // ============================================================================
-//  惠康中医-定制  Electron 主进程
+//  惠康中医-个人  Electron 主进程
 //  安全配置：contextIsolation=true / nodeIntegration=false
 //  注：未启用 sandbox，以保留原生 window.prompt/confirm/alert（业务大量使用）
 //      contextIsolation 仍确保渲染进程无法直接访问 Node API
@@ -27,7 +27,7 @@ let loginWindow;
 let packagingWindow = null;
 let sharedSession;
 let currentLoggedInUser = null;
-const SESSION_PARTITION = 'persist:tcm-prescription-custom';
+const SESSION_PARTITION = 'persist:tcm-prescription-personal';
 
 // 全局异常捕获，避免静默崩溃
 process.on('uncaughtException', (err) => {
@@ -341,6 +341,20 @@ function getSharedWebPrefs() {
     };
 }
 
+// ============================================================================
+//  视频录制模块注入（新增）
+// ============================================================================
+async function injectVideoRecorder(win) {
+    try {
+        const recorderPath = path.join(__dirname, 'video-recorder.js');
+        const code = await fs.readFile(recorderPath, 'utf8');
+        await win.webContents.executeJavaScript(code);
+        console.log('[视频录制] 模块注入成功');
+    } catch (e) {
+        console.error('[视频录制] 模块注入失败:', e.message);
+    }
+}
+
 function createLoginWindow() {
     if (loginWindow && !loginWindow.isDestroyed()) {
         focusWindow(loginWindow);
@@ -373,20 +387,6 @@ function createLoginWindow() {
     });
 }
 
-// ============================================================================
-//  视频录制模块注入（新增）
-// ============================================================================
-async function injectVideoRecorder(win) {
-    try {
-        const recorderPath = path.join(__dirname, 'video-recorder.js');
-        const code = await fs.readFile(recorderPath, 'utf8');
-        await win.webContents.executeJavaScript(code);
-        console.log('[视频录制] 模块注入成功');
-    } catch (e) {
-        console.error('[视频录制] 模块注入失败:', e.message);
-    }
-}
-
 app.whenReady().then(() => {
     // ★ License 授权校验（启动时同步校验，未授权或过期则阻止启动）
     const licenseResult = licenseManager.validateLicense();
@@ -401,12 +401,13 @@ app.whenReady().then(() => {
         app.quit();
         return;
     }
+    // 授权有效时，在控制台显示授权信息（不弹窗，避免干扰用户）
     if (licenseResult.type === 'trial') {
         console.log('[License] 试用模式：', licenseResult.message);
     }
 
     // ★ 启动自动更新检查（第4周任务，延迟 5 秒检查避免影响启动）
-    updateNotifier.init('dingzhi');
+    updateNotifier.init('geren');
 
     fse.ensureDirSync(getDownloadsDirectory());
 
@@ -492,7 +493,7 @@ ipcMain.handle('license:can-prescribe', () => {
         return prescriptionCounter.canPrescribe();
     } catch (e) {
         console.error('[IPC] can-prescribe 异常:', e);
-        return { allowed: true, current: 0, max: 0, remaining: -1 };
+        return { allowed: true, current: 0, max: 0, remaining: -1 };  // 出错时放行，避免阻塞用户
     }
 });
 
@@ -586,6 +587,25 @@ ipcMain.handle('license:get-machine-id', () => {
     } catch (e) {
         console.error('[IPC] get-machine-id 异常:', e);
         return null;
+    }
+});
+
+// ★ 设置试用期天数（测试用，0=立即过期触发激活，默认 7）
+ipcMain.handle('license:set-trial-days', (event, days) => {
+    try {
+        return licenseManager.setTrialDays(days);
+    } catch (e) {
+        console.error('[IPC] set-trial-days 异常:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+// ★ 获取试用期天数（默认 7）
+ipcMain.handle('license:get-trial-days', () => {
+    try {
+        return { success: true, trialDays: licenseManager.getTrialDays() };
+    } catch (e) {
+        return { success: false, trialDays: 7, error: String(e) };
     }
 });
 
@@ -893,8 +913,8 @@ ipcMain.handle('get-app-config', async () => {
     const defaults = {
         clinicName: '本能堂中医诊所',
         doctorName: '张大夫',
-        edition: 'clinic_custom',
-        productName: '惠康中医-定制'
+        edition: 'personal',
+        productName: '惠康中医-个人'
     };
     try {
         const configPath = path.join(__dirname, '..', 'config.json');
@@ -1025,6 +1045,7 @@ ipcMain.handle('delete-auto-backup', async (event, fileName) => {
         }
         const backupsDir = path.join(app.getPath('userData'), 'backups');
         const filePath = path.join(backupsDir, safeName);
+        // 路径白名单校验：仅允许访问 backups 目录
         const resolved = path.resolve(filePath);
         const backupsRoot = path.resolve(backupsDir);
         const rel = path.relative(backupsRoot, resolved);
@@ -1044,6 +1065,7 @@ ipcMain.handle('delete-auto-backup', async (event, fileName) => {
 
 ipcMain.handle('quit-app', async () => {
     await saveLoginState(false);
+    currentLoggedInUser = null;
     app.quit();
     return { success: true };
 });

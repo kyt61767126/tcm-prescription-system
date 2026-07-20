@@ -12,7 +12,7 @@ const { app } = require('electron');
 
 // ★ HMAC 密钥（混淆用，配合 asarmor 增加逆向难度）
 const LICENSE_HMAC_KEY = 'bnzc_tcm_license_key_v1_2026';
-const TRIAL_DAYS = 7;                                        // 试用期 7 天
+const DEFAULT_TRIAL_DAYS = 7;                                 // 默认试用期 7 天（可通过 trial-config.json 修改，测试时设为 0）
 const TIME_TAMPER_THRESHOLD = 24 * 60 * 60 * 1000;           // 时间回拨阈值：1 天
 
 const TRIAL_KEY = 'bnzc_trial_key_v1';
@@ -61,6 +61,45 @@ function getLicensePath() {
 
 function getTrialPath() {
     return path.join(app.getPath('userData'), 'trial.dat');
+}
+
+// ★ 试用期配置文件路径（与 license.dat 同目录，portable 友好）
+function getTrialConfigPath() {
+    try {
+        return path.join(getExeDirectory(), 'trial-config.json');
+    } catch (e) {
+        return path.join(app.getPath('userData'), 'trial-config.json');
+    }
+}
+
+// ★ 获取试用期天数（可配置，默认 7 天，测试时可设为 0 天立即触发激活）
+function getTrialDays() {
+    try {
+        const configPath = getTrialConfigPath();
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            if (typeof config.trialDays === 'number' && config.trialDays >= 0 && config.trialDays <= 365) {
+                return config.trialDays;
+            }
+        }
+    } catch (e) { /* 忽略，使用默认值 */ }
+    return DEFAULT_TRIAL_DAYS;
+}
+
+// ★ 设置试用期天数（持久化到 trial-config.json，重启后生效）
+function setTrialDays(days) {
+    try {
+        const parsed = parseInt(days, 10);
+        if (isNaN(parsed) || parsed < 0 || parsed > 365) {
+            return { success: false, error: '试用期天数必须在 0-365 之间' };
+        }
+        const configPath = getTrialConfigPath();
+        const config = { trialDays: parsed, updatedAt: new Date().toISOString() };
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        return { success: true, trialDays: parsed, configPath: configPath };
+    } catch (e) {
+        return { success: false, error: String(e) };
+    }
 }
 
 function getLastRunPath() {
@@ -291,20 +330,32 @@ function validateLicense() {
 
     // 3. 没有 license 文件，进入试用模式
     let trial = readTrial();
+    const currentTrialDays = getTrialDays();   // ★ 当前配置的试用期天数
     if (!trial) {
         trial = {
             startTime: now,
-            expiresAt: now + TRIAL_DAYS * 24 * 60 * 60 * 1000
+            expiresAt: now + currentTrialDays * 24 * 60 * 60 * 1000
         };
         writeTrial(trial);
+    } else if (currentTrialDays === 0) {
+        // ★ 配置为 0 天时，立即过期（测试用）
+        trial.expiresAt = trial.startTime;
+        writeTrial(trial);
+    } else {
+        // ★ 配置变化时，重新计算 expiresAt（保留 startTime）
+        const expectedExpiresAt = trial.startTime + currentTrialDays * 24 * 60 * 60 * 1000;
+        if (trial.expiresAt !== expectedExpiresAt) {
+            trial.expiresAt = expectedExpiresAt;
+            writeTrial(trial);
+        }
     }
 
     // 校验试用到期
-    const trialExpiresAtMs = trial.expiresAt || (trial.startTime + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+    const trialExpiresAtMs = trial.expiresAt || (trial.startTime + currentTrialDays * 24 * 60 * 60 * 1000);
     if (now > trialExpiresAtMs) {
         return {
             valid: false,
-            message: `试用期已到期（${TRIAL_DAYS} 天）。\n请联系客服购买正式授权。`,
+            message: `试用期已到期（${currentTrialDays} 天）。\n请联系客服购买正式授权。`,
             type: 'trial_expired',
             trial: trial
         };
@@ -386,5 +437,7 @@ module.exports = {
     getLicenseType,       // v2 新增
     normalizeLicense,     // v2 新增
     LICENSE_TYPE_CONFIG,  // v2 新增
-    TRIAL_DAYS
+    DEFAULT_TRIAL_DAYS,   // 默认试用期 7 天
+    getTrialDays,         // ★ 获取试用期天数（可配置）
+    setTrialDays          // ★ 设置试用期天数（持久化）
 };

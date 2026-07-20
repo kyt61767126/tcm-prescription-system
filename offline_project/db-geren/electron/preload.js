@@ -98,7 +98,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getPrescriptionStatus: () => ipcRenderer.invoke('license:get-prescription-status'),
         // v2 新增：功能权限校验
         checkFeature: (featureName) => ipcRenderer.invoke('license:check-feature', featureName),
-        getFeatureStatus: () => ipcRenderer.invoke('license:get-feature-status')
+        getFeatureStatus: () => ipcRenderer.invoke('license:get-feature-status'),
+        // ★ 试用期配置（测试用，0=立即过期，默认 7）
+        setTrialDays: (days) => ipcRenderer.invoke('license:set-trial-days', days),
+        getTrialDays: () => ipcRenderer.invoke('license:get-trial-days')
     },
 
     // ★ 激活码激活窗口（云端激活系统，第3周任务）

@@ -13,6 +13,7 @@ package com.benneng.pres;
 // ============================================================================
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.os.Build;
@@ -43,8 +44,12 @@ public class LicenseManager {
     private static final String LICENSE_HMAC_KEY = "bnzc_tcm_license_key_v1_2026";
 
     // 试用与时间回拨配置（与桌面版一致）
-    private static final int TRIAL_DAYS = 7;
+    private static final int DEFAULT_TRIAL_DAYS = 7;  // 默认试用期 7 天（可通过 SharedPreferences 修改，测试时设为 0）
     private static final long TIME_TAMPER_THRESHOLD = 24L * 60 * 60 * 1000; // 1 天
+
+    // ★ 试用期配置存储（SharedPreferences，与桌面版 trial-config.json 对应）
+    private static final String PREF_NAME = "license_config";
+    private static final String PREF_KEY_TRIAL_DAYS = "trial_days";
 
     // XOR 混淆密钥
     private static final String TRIAL_KEY = "bnzc_trial_key_v1";
@@ -301,6 +306,43 @@ public class LicenseManager {
         }
     }
 
+    // ★ 获取试用期天数（可配置，默认 7 天，测试时可设为 0 天立即触发激活）
+    // 与桌面版 license-manager.js getTrialDays() 对应（桌面版用 trial-config.json）
+    public int getTrialDays() {
+        try {
+            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            int days = prefs.getInt(PREF_KEY_TRIAL_DAYS, -1);
+            if (days >= 0 && days <= 365) return days;
+        } catch (Exception e) {
+            Log.e(TAG, "读取试用期天数失败", e);
+        }
+        return DEFAULT_TRIAL_DAYS;
+    }
+
+    // ★ 设置试用期天数（持久化到 SharedPreferences，重启后生效）
+    public JSONObject setTrialDays(int days) {
+        JSONObject result = new JSONObject();
+        try {
+            if (days < 0 || days > 365) {
+                result.put("success", false);
+                result.put("error", "试用期天数必须在 0-365 之间");
+                return result;
+            }
+            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            SharedPreferences.Editor editor = prefs.edit();
+            editor.putInt(PREF_KEY_TRIAL_DAYS, days);
+            editor.apply();
+            result.put("success", true);
+            result.put("trialDays", days);
+        } catch (Exception e) {
+            try {
+                result.put("success", false);
+                result.put("error", String.valueOf(e));
+            } catch (Exception ignored) {}
+        }
+        return result;
+    }
+
     // last-run.dat: Base64(XOR(JSON{timestamp}))
     private JSONObject readLastRun() {
         try {
@@ -492,20 +534,32 @@ public class LicenseManager {
 
             // 3. 无 license 文件，进入试用模式
             JSONObject trial = readTrial();
+            int currentTrialDays = getTrialDays();   // ★ 当前配置的试用期天数
             if (trial == null) {
                 trial = new JSONObject();
                 trial.put("startTime", now);
-                trial.put("expiresAt", now + (long) TRIAL_DAYS * 24 * 60 * 60 * 1000);
+                trial.put("expiresAt", now + (long) currentTrialDays * 24 * 60 * 60 * 1000);
                 writeTrial(trial);
+            } else if (currentTrialDays == 0) {
+                // ★ 配置为 0 天时，立即过期（测试用）
+                trial.put("expiresAt", trial.optLong("startTime", now));
+                writeTrial(trial);
+            } else {
+                // ★ 配置变化时，重新计算 expiresAt（保留 startTime）
+                long expectedExpiresAt = trial.optLong("startTime", now) + (long) currentTrialDays * 24 * 60 * 60 * 1000;
+                if (trial.optLong("expiresAt", 0) != expectedExpiresAt) {
+                    trial.put("expiresAt", expectedExpiresAt);
+                    writeTrial(trial);
+                }
             }
 
             long trialExpiresAtMs = trial.optLong("expiresAt", 0);
             if (trialExpiresAtMs == 0) {
-                trialExpiresAtMs = trial.optLong("startTime", now) + (long) TRIAL_DAYS * 24 * 60 * 60 * 1000;
+                trialExpiresAtMs = trial.optLong("startTime", now) + (long) currentTrialDays * 24 * 60 * 60 * 1000;
             }
             if (now > trialExpiresAtMs) {
                 JSONObject r = failValidation(
-                        "试用期已到期（" + TRIAL_DAYS + " 天）。\n请联系客服购买正式授权。",
+                        "试用期已到期（" + currentTrialDays + " 天）。\n请联系客服购买正式授权。",
                         "trial_expired");
                 r.put("trial", trial);
                 return r;

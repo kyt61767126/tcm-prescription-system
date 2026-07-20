@@ -590,6 +590,25 @@ ipcMain.handle('license:get-machine-id', () => {
     }
 });
 
+// ★ 设置试用期天数（测试用，0=立即过期触发激活，默认 7）
+ipcMain.handle('license:set-trial-days', (event, days) => {
+    try {
+        return licenseManager.setTrialDays(days);
+    } catch (e) {
+        console.error('[IPC] set-trial-days 异常:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+// ★ 获取试用期天数（默认 7）
+ipcMain.handle('license:get-trial-days', () => {
+    try {
+        return { success: true, trialDays: licenseManager.getTrialDays() };
+    } catch (e) {
+        return { success: false, trialDays: 7, error: String(e) };
+    }
+});
+
 // ★ 同步 alert/confirm 对话框（替代原生 window.alert/window.confirm）
 // 问题：Electron 35 中原生 alert() 关闭后鼠标光标不显示（Chromium 模态框焦点 bug）
 // 方案：使用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，行为与原生一致）
