@@ -483,11 +483,12 @@ ipcMain.handle('license:get-status', () => {
 
 ipcMain.handle('license:activate', (event, base64Content) => {
     try {
-        const result = licenseManager.writeLicenseContent(base64Content);
+        // ★ P1-A 新增：writeLicenseContent 需要 machineId 用于加密
+        let localMachineId = '';
+        try { localMachineId = activateManager.getMachineId(); } catch (e) {}
+        const result = licenseManager.writeLicenseContent(base64Content, localMachineId);
         if (result.success) {
             // ★ v3 新增：激活后立即校验绑定
-            let localMachineId = '';
-            try { localMachineId = activateManager.getMachineId(); } catch (e) {}
             const validate = licenseManager.validateLicense({ localMachineId });
             return { success: true, status: validate };
         }

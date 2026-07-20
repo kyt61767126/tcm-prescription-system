@@ -6,6 +6,7 @@
 // ============================================================================
 
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const { app } = require('electron');
@@ -170,6 +171,64 @@ function xorDecrypt(base64, key) {
 }
 
 // ============================================================================
+//  ★ P1-A 新增：AES-256-CBC 加密（用于 license.dat 存储加密）
+//  方案：密钥从 machineId 派生，不同机器无法解密
+//  文件格式：ENC1:base64(iv(16) + ciphertext)
+//  旧格式：base64(JSON)（向后兼容，读取后自动迁移为加密格式）
+// ============================================================================
+
+// 生成机器 ID（与 activate.js 中 getMachineId 逻辑完全一致）
+// 复制到本文件是因为 license-manager.js 不能 require activate.js（循环依赖）
+function getMachineId() {
+    try {
+        const exePath = process.execPath || app.getPath('exe');
+        const hostname = os.hostname();
+        const userInfo = os.userInfo();
+        const username = userInfo.username;
+        const platform = os.platform();
+        const content = [exePath, hostname, username, platform].join('|');
+        return crypto.createHash('sha256').update(content).digest('hex').substring(0, 32);
+    } catch (e) {
+        console.error('[License] 生成机器 ID 失败:', e);
+        return '';
+    }
+}
+
+// 派生 AES-256 密钥：SHA256(machineId + LICENSE_HMAC_KEY) → 32 字节
+function deriveLicenseKey(machineId) {
+    const combined = (machineId || '') + LICENSE_HMAC_KEY;
+    return crypto.createHash('sha256').update(combined).digest();
+}
+
+// 加密 license JSON 字符串
+function encryptLicenseContent(jsonStr, machineId) {
+    const key = deriveLicenseKey(machineId);
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
+    const plaintext = Buffer.from(jsonStr, 'utf8');
+    const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()]);
+    return 'ENC1:' + Buffer.concat([iv, ciphertext]).toString('base64');
+}
+
+// 解密 license 字符串（返回 JSON 字符串，失败返回 null）
+function decryptLicenseContent(encryptedStr, machineId) {
+    if (!encryptedStr || !encryptedStr.startsWith('ENC1:')) return null;
+    try {
+        const key = deriveLicenseKey(machineId);
+        const data = Buffer.from(encryptedStr.substring(5), 'base64');
+        if (data.length < 32) return null;
+        const iv = data.slice(0, 16);
+        const ciphertext = data.slice(16);
+        const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+        const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+        return plaintext.toString('utf8');
+    } catch (e) {
+        // 解密失败（machineId 不匹配、文件损坏、密钥错误等）
+        return null;
+    }
+}
+
+// ============================================================================
 //  HMAC 签名（用于 license.dat 完整性校验）
 //  v2: 签名包含 type/maxPrescriptions/features，防篡改版本分级
 //  v3: 签名包含 clinicName/machineId/licenseBinding，实现三因子绑定
@@ -243,11 +302,28 @@ function verifySignature(data) {
 // ============================================================================
 //  文件读写
 // ============================================================================
-function readLicense() {
+function readLicense(machineId) {
     try {
         const licensePath = getLicensePath();
         if (!fs.existsSync(licensePath)) return null;
         const content = fs.readFileSync(licensePath, 'utf8').trim();
+
+        // ★ P1-A 新增：优先尝试新加密格式（ENC1:）
+        if (content.startsWith('ENC1:')) {
+            const actualMachineId = machineId || getMachineId();
+            if (!actualMachineId) {
+                console.error('[License] 无法获取 machineId 解密 license');
+                return null;
+            }
+            const json = decryptLicenseContent(content, actualMachineId);
+            if (!json) {
+                console.error('[License] 解密失败（machineId 不匹配或文件损坏）');
+                return null;
+            }
+            return JSON.parse(json);
+        }
+
+        // 旧格式（Base64）- 向后兼容
         const json = Buffer.from(content, 'base64').toString('utf8');
         return JSON.parse(json);
     } catch (e) {
@@ -413,6 +489,41 @@ function verifyConfigIntegrity() {
 }
 
 // ============================================================================
+//  ★ P1-B 新增：安全检测（调试器检测，防 hook/调试绕过 license）
+// ============================================================================
+function isDebuggerAttached() {
+    try {
+        // 仅在打包后启用检测（开发模式下跳过，避免误报）
+        if (!app.isPackaged) return false;
+
+        // 1. 检测 --inspect / --inspect-brk / --remote-debugging-port 命令行参数
+        const argv = process.argv.join(' ');
+        if (argv.includes('--inspect') || argv.includes('--inspect-brk') ||
+            argv.includes('--remote-debugging-port')) {
+            console.warn('[License] 检测到调试参数:', argv);
+            return true;
+        }
+
+        // 2. 检测 NODE_OPTIONS 环境变量中的 --inspect
+        if (process.env.NODE_OPTIONS && process.env.NODE_OPTIONS.includes('--inspect')) {
+            console.warn('[License] NODE_OPTIONS 含调试参数:', process.env.NODE_OPTIONS);
+            return true;
+        }
+
+        // 3. 检测 ELECTRON_ENABLE_LOGGING（非正常生产环境配置）
+        if (process.env.ELECTRON_ENABLE_LOGGING) {
+            console.warn('[License] ELECTRON_ENABLE_LOGGING 已启用');
+            return true;
+        }
+
+        return false;
+    } catch (e) {
+        // 检测异常时放行，避免误判阻塞用户
+        return false;
+    }
+}
+
+// ============================================================================
 //  校验主逻辑
 // ============================================================================
 function validateLicense(options) {
@@ -421,6 +532,16 @@ function validateLicense(options) {
     // ★ v3 新增：允许传入 localMachineId（避免循环依赖 activate.js）
     // 如未传入则置空字符串，机器 ID 校验自动跳过（仅靠诊所名校验）
     const localMachineId = options.localMachineId || '';
+
+    // ★ P1-B 新增：调试器检测（防 hook/调试绕过 license）
+    // 仅在打包后启用（开发模式下跳过，避免误报）
+    if (isDebuggerAttached()) {
+        return {
+            valid: false,
+            message: '检测到调试器已连接，软件无法运行。\n请关闭调试模式后重启应用。',
+            type: 'debugger'
+        };
+    }
 
     // 1. 检查时间回拨（防止用户修改系统时间延长试用/授权）
     const lastRun = readLastRun();
@@ -436,7 +557,7 @@ function validateLicense(options) {
     }
 
     // 2. 尝试读取 license 文件（正式授权）
-    const rawLicense = readLicense();
+    const rawLicense = readLicense(localMachineId || getMachineId());
     if (rawLicense) {
         // 先用原始字段验证签名（保留向后兼容：旧版 license 走 v1 签名）
         if (!verifySignature(rawLicense)) {
@@ -576,10 +697,24 @@ function generateLicense(user, type, expiresAt, options) {
 }
 
 // 写入 license 文件（供激活码导入使用）
-function writeLicenseContent(base64Content) {
+// ★ P1-A 新增：写入前先加密（AES-256-CBC，密钥从 machineId 派生）
+function writeLicenseContent(base64Content, machineId) {
     try {
         const licensePath = getLicensePath();
-        fs.writeFileSync(licensePath, base64Content.trim(), 'utf8');
+        const actualMachineId = machineId || getMachineId();
+        if (!actualMachineId) {
+            return { success: false, error: '无法获取机器 ID，无法加密 license' };
+        }
+
+        // 解码 Base64 得到 JSON 字符串
+        const jsonStr = Buffer.from(base64Content.trim(), 'base64').toString('utf8');
+
+        // 验证是有效的 JSON（防止写入损坏数据）
+        JSON.parse(jsonStr);
+
+        // 加密并写入
+        const encrypted = encryptLicenseContent(jsonStr, actualMachineId);
+        fs.writeFileSync(licensePath, encrypted, 'utf8');
         return { success: true, path: licensePath };
     } catch (e) {
         return { success: false, error: e.message };
@@ -624,5 +759,11 @@ module.exports = {
     checkLicenseBinding,  // 三因子绑定校验
     getLocalClinicName,   // 从 config.json 读取本地诊所名
     getLocalDoctorName,   // 从 config.json 读取本地医师名
-    verifyConfigIntegrity // config.json 完整性校验
+    verifyConfigIntegrity, // config.json 完整性校验
+    // ★ P1-A 新增：加密相关
+    getMachineId,         // 获取机器 ID（供 main.js 调用）
+    encryptLicenseContent, // 加密 license（供测试用）
+    decryptLicenseContent, // 解密 license（供测试用）
+    // ★ P1-B 新增：安全检测
+    isDebuggerAttached    // 调试器检测（供 main.js 调用）
 };

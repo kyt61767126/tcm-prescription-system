@@ -34,7 +34,9 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Iterator;
+import javax.crypto.Cipher;
 import javax.crypto.Mac;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 
 public class LicenseManager {
@@ -46,6 +48,10 @@ public class LicenseManager {
 
     // ★ v3 新增：config.json 完整性签名密钥（与桌面版 license-manager.js / edit-config.ps1 完全一致）
     private static final String CONFIG_SIGN_KEY = "bnzc_config_sign_key_v1_2026";
+
+    // ★ P1-A 新增：license 文件加密格式标识和算法
+    private static final String LICENSE_ENC_PREFIX = "ENC1:";  // 加密格式前缀
+    private static final String AES_ALGORITHM = "AES/CBC/PKCS5Padding";
 
     // 试用与时间回拨配置（与桌面版一致）
     private static final int DEFAULT_TRIAL_DAYS = 7;  // 默认试用期 7 天（可通过 SharedPreferences 修改，测试时设为 0）
@@ -248,6 +254,81 @@ public class LicenseManager {
         } catch (Exception e) {
             Log.e(TAG, "APK 签名校验异常", e);
             return false;
+        }
+    }
+
+    // ========================================================================
+    //  ★ P1-A 新增：AES-256-CBC 加密（用于 license.dat 存储加密）
+    //  方案：密钥从 machineId 派生，不同机器无法解密
+    //  文件格式：ENC1:base64(iv(16) + ciphertext)
+    //  旧格式：base64(JSON)（向后兼容，读取后自动迁移为加密格式）
+    // ========================================================================
+
+    // 派生 AES-256 密钥：SHA256(machineId + LICENSE_HMAC_KEY) → 32 字节
+    private SecretKeySpec deriveLicenseKey(String machineId) {
+        try {
+            String combined = (machineId == null ? "" : machineId) + LICENSE_HMAC_KEY;
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] keyBytes = md.digest(combined.getBytes(StandardCharsets.UTF_8));
+            return new SecretKeySpec(keyBytes, "AES");
+        } catch (Exception e) {
+            Log.e(TAG, "派生 license 密钥失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // 加密 license JSON 字符串
+    private String encryptLicenseContent(String jsonStr, String machineId) {
+        try {
+            SecretKeySpec key = deriveLicenseKey(machineId);
+            if (key == null) return null;
+
+            // 生成随机 IV（16 字节）
+            byte[] iv = new byte[16];
+            java.security.SecureRandom random = new java.security.SecureRandom();
+            random.nextBytes(iv);
+
+            Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
+            cipher.init(Cipher.ENCRYPT_MODE, key, new IvParameterSpec(iv));
+            byte[] ciphertext = cipher.doFinal(jsonStr.getBytes(StandardCharsets.UTF_8));
+
+            // 拼接 iv + ciphertext，Base64 编码
+            byte[] combined = new byte[iv.length + ciphertext.length];
+            System.arraycopy(iv, 0, combined, 0, iv.length);
+            System.arraycopy(ciphertext, 0, combined, iv.length, ciphertext.length);
+
+            return LICENSE_ENC_PREFIX + Base64.encodeToString(combined, Base64.NO_WRAP);
+        } catch (Exception e) {
+            Log.e(TAG, "加密 license 失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // 解密 license 字符串（返回 JSON 字符串，失败返回 null）
+    private String decryptLicenseContent(String encryptedStr, String machineId) {
+        if (encryptedStr == null || !encryptedStr.startsWith(LICENSE_ENC_PREFIX)) return null;
+        try {
+            String base64Data = encryptedStr.substring(LICENSE_ENC_PREFIX.length());
+            byte[] data = Base64.decode(base64Data, Base64.DEFAULT);
+            if (data == null || data.length < 32) return null;
+
+            SecretKeySpec key = deriveLicenseKey(machineId);
+            if (key == null) return null;
+
+            // 提取 IV（前 16 字节）和密文
+            byte[] iv = new byte[16];
+            byte[] ciphertext = new byte[data.length - 16];
+            System.arraycopy(data, 0, iv, 0, 16);
+            System.arraycopy(data, 16, ciphertext, 0, ciphertext.length);
+
+            Cipher cipher = Cipher.getInstance(AES_ALGORITHM);
+            cipher.init(Cipher.DECRYPT_MODE, key, new IvParameterSpec(iv));
+            byte[] plaintext = cipher.doFinal(ciphertext);
+
+            return new String(plaintext, StandardCharsets.UTF_8);
+        } catch (Exception e) {
+            // 解密失败（machineId 不匹配、文件损坏、密钥错误等）
+            return null;
         }
     }
 
@@ -473,13 +554,35 @@ public class LicenseManager {
         return new File(context.getFilesDir(), name);
     }
 
-    // license.dat: Base64(JSON)
+    // license.dat: 优先 ENC1:base64(iv+ciphertext)，旧格式 base64(JSON) 向后兼容
     public JSONObject readLicense() {
+        return readLicense(getMachineId());
+    }
+
+    // ★ P1-A 新增：readLicense 可传入 machineId 用于解密
+    public JSONObject readLicense(String machineId) {
         try {
             File f = getFile(LICENSE_FILE);
             if (!f.exists()) return null;
             byte[] bytes = readFileBytes(f);
             String content = new String(bytes, StandardCharsets.UTF_8).trim();
+
+            // ★ P1-A 新增：优先尝试新加密格式（ENC1:）
+            if (content.startsWith(LICENSE_ENC_PREFIX)) {
+                String actualMachineId = machineId != null ? machineId : getMachineId();
+                if (actualMachineId == null || actualMachineId.isEmpty()) {
+                    Log.e(TAG, "无法获取 machineId 解密 license");
+                    return null;
+                }
+                String json = decryptLicenseContent(content, actualMachineId);
+                if (json == null) {
+                    Log.e(TAG, "解密失败（machineId 不匹配或文件损坏）");
+                    return null;
+                }
+                return new JSONObject(json);
+            }
+
+            // 旧格式（Base64）- 向后兼容
             String json = new String(Base64.decode(content, Base64.DEFAULT), StandardCharsets.UTF_8);
             return new JSONObject(json);
         } catch (Exception e) {
@@ -488,11 +591,34 @@ public class LicenseManager {
         }
     }
 
+    // ★ P1-A 新增：writeLicenseContent 加密后写入（密钥从 machineId 派生）
     public boolean writeLicenseContent(String base64Content) {
+        return writeLicenseContent(base64Content, getMachineId());
+    }
+
+    public boolean writeLicenseContent(String base64Content, String machineId) {
         try {
             File f = getFile(LICENSE_FILE);
+            String actualMachineId = machineId != null ? machineId : getMachineId();
+            if (actualMachineId == null || actualMachineId.isEmpty()) {
+                Log.e(TAG, "无法获取 machineId，无法加密 license");
+                return false;
+            }
+
+            // 解码 Base64 得到 JSON 字符串
+            String jsonStr = new String(Base64.decode(base64Content.trim(), Base64.DEFAULT), StandardCharsets.UTF_8);
+
+            // 验证是有效的 JSON（防止写入损坏数据）
+            new JSONObject(jsonStr);
+
+            // 加密并写入
+            String encrypted = encryptLicenseContent(jsonStr, actualMachineId);
+            if (encrypted == null) {
+                Log.e(TAG, "加密 license 失败");
+                return false;
+            }
             try (FileOutputStream fos = new FileOutputStream(f)) {
-                fos.write(base64Content.trim().getBytes(StandardCharsets.UTF_8));
+                fos.write(encrypted.getBytes(StandardCharsets.UTF_8));
                 fos.flush();
             }
             return true;
@@ -874,7 +1000,8 @@ public class LicenseManager {
             }
 
             // 2. 读取 license 文件
-            JSONObject rawLicense = readLicense();
+            // ★ P1-A 新增：传入 localMachineId 用于解密
+            JSONObject rawLicense = readLicense(localMachineId);
             if (rawLicense != null) {
                 // 先用原始字段验证签名
                 if (!verifySignature(rawLicense)) {
@@ -1089,7 +1216,8 @@ public class LicenseManager {
                 recordActivateFailure();
                 return failResult("服务器返回的 license 数据为空");
             }
-            if (!writeLicenseContent(licenseBase64)) {
+            // ★ P1-A 新增：传入 machineId 用于加密 license
+            if (!writeLicenseContent(licenseBase64, machineId)) {
                 recordActivateFailure();
                 return failResult("写入 license 文件失败");
             }
