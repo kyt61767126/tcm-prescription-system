@@ -722,22 +722,30 @@ ipcMain.handle('license:get-feature-status', () => {
 
 // ★ 激活码相关 IPC（云端激活系统，第3周任务）
 
-// ★ 一体化到期提示 + 拉起激活窗口（解决渲染进程 alert 阻塞导致 activate.show 不执行的问题）
-ipcMain.handle('license:show-expire-alert', (event, message) => {
+// ★ 一体化到期提示 + 拉起激活窗口（用异步 dialog.showMessageBox 避免阻塞 main process）
+ipcMain.handle('license:show-expire-alert', async (event, message) => {
     try {
-        dialog.showMessageBoxSync(mainWindow, {
-            type: 'warning',
-            title: '授权失效',
-            message: message || '授权已失效，请激活',
-            buttons: ['确定，前往激活'],
-            defaultId: 0,
-            cancelId: 0
-        });
-        activateManager.showActivateWindow(mainWindow);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            await dialog.showMessageBox(mainWindow, {
+                type: 'warning',
+                title: '授权失效',
+                message: message || '授权已失效，请激活',
+                buttons: ['确定，前往激活'],
+                defaultId: 0,
+                cancelId: 0
+            });
+        }
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            activateManager.showActivateWindow(mainWindow);
+        } else {
+            activateManager.showActivateWindow(null);
+        }
         return { success: true };
     } catch (e) {
         console.error('[IPC] show-expire-alert 异常:', e);
-        try { activateManager.showActivateWindow(mainWindow); } catch (e2) {}
+        try { activateManager.showActivateWindow(mainWindow); } catch (e2) {
+            console.error('[IPC] showActivateWindow 也失败:', e2);
+        }
         return { success: false, error: String(e) };
     }
 });
