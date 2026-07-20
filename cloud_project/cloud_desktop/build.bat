@@ -45,23 +45,27 @@ taskkill /F /IM "HuikangTCM*.exe" >nul 2>&1
 taskkill /F /IM "惠康中医-云端.exe" >nul 2>&1
 taskkill /F /IM "惠康中医*.exe" >nul 2>&1
 REM Kill any process running from the build output directory
-wmic process where "ExecutablePath like '%%cloud_desktop%%build_output%%'" call terminate >nul 2>&1
 wmic process where "ExecutablePath like '%%cloud_desktop%%dist%%'" call terminate >nul 2>&1
+wmic process where "ExecutablePath like '%%cloud_desktop%%build_output%%'" call terminate >nul 2>&1
 echo [OK] Processes cleaned
 timeout /t 3 /nobreak >nul
 echo.
 
 echo [4/8] Cleaning old build artifacts...
 REM Define the output directory (must match package.json build.directories.output)
-set "OUTPUT_DIR=build_output"
+set "OUTPUT_DIR=dist"
 
 REM Clean up old renamed output directories first (keep only the latest 2)
 set old_count=0
-for /f "delims=" %%D in ('dir /b /ad "build_output_old_*" 2^>nul ^| sort /r') do (
+for /f "delims=" %%D in ('dir /b /ad "dist_old_*" 2^>nul ^| sort /r') do (
     set /a old_count+=1
     if !old_count! gtr 2 (
         rmdir /s /q "%%D" 2>nul
     )
+)
+REM Also clean up legacy build_output_old_* directories from previous versions
+for /f "delims=" %%D in ('dir /b /ad "build_output_old_*" 2^>nul ^| sort /r') do (
+    rmdir /s /q "%%D" 2>nul
 )
 
 REM Try to clean the output directory
@@ -80,8 +84,8 @@ if exist "%OUTPUT_DIR%" (
             set "DSTAMP=%date:~0,4%%date:~5,2%%date:~8,2%_%time:~0,2%%time:~3,2%%time:~6,2%"
             set "DSTAMP=!DSTAMP: =0!"
         )
-        echo [WARNING] Could not delete %OUTPUT_DIR%, renaming to build_output_old_!DSTAMP!...
-        rename "%OUTPUT_DIR%" "build_output_old_!DSTAMP!" 2>nul
+        echo [WARNING] Could not delete %OUTPUT_DIR%, renaming to dist_old_!DSTAMP!...
+        rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
         if exist "%OUTPUT_DIR%" (
             echo [ERROR] Cannot clean or rename %OUTPUT_DIR% directory
             echo         Please manually close any program using %OUTPUT_DIR%\ and retry
@@ -89,14 +93,6 @@ if exist "%OUTPUT_DIR%" (
             pause
             exit /b 1
         )
-    )
-)
-
-REM Also try to clean old dist directory if it exists (from previous builds)
-if exist "dist" (
-    rmdir /s /q "dist" 2>nul
-    if exist "dist" (
-        echo [WARNING] Old dist directory could not be deleted, leaving it in place
     )
 )
 
@@ -147,12 +143,12 @@ echo.
 echo [8/8] Build completed
 echo Output dir: %CD%\%OUTPUT_DIR%
 echo ============================================
-if exist "build_output_old_*" (
-    echo [NOTE] Old build artifacts saved as build_output_old_* directories
+if exist "dist_old_*" (
+    echo [NOTE] Old build artifacts saved as dist_old_* directories
     echo        These will be auto-cleaned in future builds
 )
-if exist "dist" (
-    echo [NOTE] Old dist directory still exists and could not be deleted
-    echo        You can manually delete it if no longer needed
+if exist "build_output_old_*" (
+    echo [NOTE] Legacy build_output_old_* directories detected, cleaning...
+    rmdir /s /q "build_output_old_*" 2>nul
 )
 pause

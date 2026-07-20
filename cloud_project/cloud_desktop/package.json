@@ -20,7 +20,7 @@
     "appId": "com.tcm.prescription.cloud",
     "productName": "惠康中医-云端",
     "directories": {
-      "output": "build_output"
+      "output": "dist"
     },
     "afterPack": "./afterPack.js",
     "asarUnpack": [

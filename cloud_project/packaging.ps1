@@ -220,7 +220,7 @@ function Build-Desktop {
     Write-Host "  6. npm build 打包（含 better-sqlite3 SSL 修复）"
     Write-Host "  7. 恢复原始代码"
     Write-Host ""
-    Write-Host "  输出目录: cloud_desktop\build_output\"
+    Write-Host "  输出目录: cloud_desktop\dist\"
     Write-Host ""
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
@@ -236,7 +236,7 @@ function Build-Desktop {
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Green
     Write-Host "  桌面版打包完成！" -ForegroundColor Green
-    Write-Host "  输出目录: $scriptDir\cloud_desktop\build_output\" -ForegroundColor Green
+    Write-Host "  输出目录: $scriptDir\cloud_desktop\dist\" -ForegroundColor Green
     Write-Host "================================================================" -ForegroundColor Green
     return 0
 }
@@ -282,7 +282,7 @@ function Build-All {
     Write-Host "  Step B. 打包手机 APP (默认模式：Root+调试器检测)"
     Write-Host ""
     Write-Host "  输出："
-    Write-Host "  - 桌面版: cloud_desktop\build_output\*.exe"
+    Write-Host "  - 桌面版: cloud_desktop\dist\*.exe"
     Write-Host "  - 手机 APP: 当前目录\*.apk"
     Write-Host ""
     $confirm = Read-Host "确认开始全部打包？(Y/n) [默认回车=开始]"
@@ -316,7 +316,7 @@ function Build-All {
     Write-Host "  全部打包完成！" -ForegroundColor Green
     Write-Host "================================================================" -ForegroundColor Green
     Write-Host ""
-    Write-Host "  桌面版: $scriptDir\cloud_desktop\build_output\" -ForegroundColor Green
+    Write-Host "  桌面版: $scriptDir\cloud_desktop\dist\" -ForegroundColor Green
     Write-Host "  手机 APP: $scriptDir\*.apk" -ForegroundColor Green
     Write-Host ""
     return 0
@@ -435,7 +435,7 @@ function Build-AllStrict {
     Write-Host "  Step D. 重新打包手机 APP（签名严格模式 APK）"
     Write-Host ""
     Write-Host "  最终输出："
-    Write-Host "  - 桌面版: cloud_desktop\build_output\*.exe"
+    Write-Host "  - 桌面版: cloud_desktop\dist\*.exe"
     Write-Host "  - 手机 APP: 当前目录\*.apk（已启用签名严格模式）"
     Write-Host ""
     $confirm = Read-Host "确认开始一键打包？(Y/n) [默认回车=开始]"
@@ -491,7 +491,7 @@ function Build-AllStrict {
     Write-Host "  一键打包完成！" -ForegroundColor Green
     Write-Host "================================================================" -ForegroundColor Green
     Write-Host ""
-    Write-Host "  桌面版: $scriptDir\cloud_desktop\build_output\" -ForegroundColor Green
+    Write-Host "  桌面版: $scriptDir\cloud_desktop\dist\" -ForegroundColor Green
     Write-Host "  手机 APP: $scriptDir\*.apk（签名严格模式）" -ForegroundColor Green
     Write-Host ""
     return 0
