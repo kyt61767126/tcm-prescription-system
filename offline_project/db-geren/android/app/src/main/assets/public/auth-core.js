@@ -562,11 +562,116 @@
         }
     };
 
+    // ★ 优化3：密码错误锁定辅助工具（5次错误锁定30分钟）
+    const LoginLockout = {
+        _getStorage() {
+            // 兼容 Capacitor Preferences 和 localStorage
+            if (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences) {
+                return null; // APP 端暂不支持锁定，仅桌面/网页版支持
+            }
+            try { return global.localStorage; } catch (e) { return null; }
+        },
+        checkLocked(username) {
+            const storage = this._getStorage();
+            if (!storage) return null;
+            const lockUntil = parseInt(storage.getItem('auth:lockUntil:' + username) || '0', 10);
+            if (lockUntil > Date.now()) {
+                const remainMin = Math.ceil((lockUntil - Date.now()) / 60000);
+                return '账号已被锁定，请 ' + remainMin + ' 分钟后重试';
+            }
+            return null;
+        },
+        recordFailure(username) {
+            const storage = this._getStorage();
+            if (!storage) return '密码错误';
+            const failKey = 'auth:failCount:' + username;
+            let failCount = parseInt(storage.getItem(failKey) || '0', 10) + 1;
+            if (failCount >= 5) {
+                storage.setItem('auth:lockUntil:' + username, String(Date.now() + 30 * 60 * 1000));
+                storage.removeItem(failKey);
+                return '密码错误次数过多，账号已被锁定 30 分钟';
+            }
+            storage.setItem(failKey, String(failCount));
+            return '密码错误（剩余 ' + (5 - failCount) + ' 次尝试机会）';
+        },
+        recordSuccess(username) {
+            const storage = this._getStorage();
+            if (!storage) return;
+            storage.removeItem('auth:failCount:' + username);
+            storage.removeItem('auth:lockUntil:' + username);
+        }
+    };
+
+    // ★ 优化3：操作审计日志（登录/退出/处方保存/删除等关键操作）
+    const AuditLog = {
+        _getStorage() {
+            if (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences) {
+                return null; // APP 端暂不支持，仅桌面/网页版
+            }
+            try { return global.localStorage; } catch (e) { return null; }
+        },
+        _resolveUser() {
+            // 优先读取运行时 currentUser，回退到 storage
+            try {
+                if (typeof currentUser !== 'undefined' && currentUser && currentUser.username) {
+                    return currentUser.username;
+                }
+            } catch (e) { /* currentUser 未定义 */ }
+            const storage = this._getStorage();
+            if (storage) {
+                try {
+                    const stored = storage.getItem('auth:currentUser');
+                    if (stored) return (JSON.parse(stored).username) || 'unknown';
+                } catch (e) {}
+            }
+            return 'unknown';
+        },
+        record(action, details) {
+            const storage = this._getStorage();
+            if (!storage) return;
+            try {
+                const entry = {
+                    t: Date.now(),
+                    ts: new Date().toISOString(),
+                    user: this._resolveUser(),
+                    action: String(action || '').slice(0, 64),
+                    details: String(details || '').slice(0, 500)
+                };
+                let logs = [];
+                try { logs = JSON.parse(storage.getItem('audit:log') || '[]'); } catch (e) {}
+                if (!Array.isArray(logs)) logs = [];
+                logs.push(entry);
+                // 最多保留 500 条，超出时丢弃最早的
+                if (logs.length > 500) logs = logs.slice(-500);
+                storage.setItem('audit:log', JSON.stringify(logs));
+            } catch (e) { console.warn('审计日志写入失败:', e); }
+        },
+        list(limit) {
+            const storage = this._getStorage();
+            if (!storage) return [];
+            try {
+                const logs = JSON.parse(storage.getItem('audit:log') || '[]');
+                if (!Array.isArray(logs)) return [];
+                return limit ? logs.slice(-limit) : logs;
+            } catch (e) { return []; }
+        },
+        clear() {
+            const storage = this._getStorage();
+            if (!storage) return;
+            storage.removeItem('audit:log');
+        }
+    };
+    global.AuditLog = AuditLog;
+
     // 离线适配器工厂
     function createLocalAdapter(getUsersFn) {
         return {
             async authenticate(username, password) {
                 try {
+                    // ★ 优化3：检查账号是否被锁定
+                    const lockMsg = LoginLockout.checkLocked(username);
+                    if (lockMsg) return { success: false, error: lockMsg };
+
                     const users = typeof getUsersFn === 'function' ? await getUsersFn() : getUsersFn;
                     if (!Array.isArray(users)) {
                         return { success: false, error: '用户数据加载失败' };
@@ -577,8 +682,11 @@
                     }
                     const pwdOk = await verifyPassword(password, user.password || '');
                     if (!pwdOk) {
-                        return { success: false, error: '密码错误' };
+                        // ★ 优化3：密码错误计数+1，5次后锁定30分钟
+                        return { success: false, error: LoginLockout.recordFailure(username) };
                     }
+                    // 登录成功，清零错误计数
+                    LoginLockout.recordSuccess(username);
                     // 不返回密码
                     const { password: _, ...safeUser } = user;
                     return { success: true, user: safeUser };
@@ -595,14 +703,21 @@
         return {
             async authenticate(username, password) {
                 try {
+                    // ★ 优化3：检查账号是否被锁定
+                    const lockMsg = LoginLockout.checkLocked(username);
+                    if (lockMsg) return { success: false, error: lockMsg };
+
                     const user = typeof getUserFn === 'function' ? await getUserFn() : getUserFn;
                     if (!user) {
                         return { success: false, error: '用户信息加载失败' };
                     }
                     const pwdOk = await verifyPassword(password, user.password || '');
                     if (!pwdOk) {
-                        return { success: false, error: '密码错误' };
+                        // ★ 优化3：密码错误计数+1，5次后锁定30分钟
+                        return { success: false, error: LoginLockout.recordFailure(username) };
                     }
+                    // 登录成功，清零错误计数
+                    LoginLockout.recordSuccess(username);
                     const { password: _, ...safeUser } = user;
                     return { success: true, user: safeUser };
                 } catch (e) {
@@ -625,6 +740,8 @@
             const result = await adapter.authenticate(username, password);
 
             if (!result.success || !result.user) {
+                // ★ 优化3：审计日志 - 登录失败
+                try { AuditLog.record('login_failure', username + ': ' + (result.error || '认证失败')); } catch(e) {}
                 return { success: false, error: result.error || '认证失败' };
             }
 
@@ -666,6 +783,8 @@
     // ==================== 退出登录 ====================
 
     async function logout() {
+        // ★ 优化3：审计日志 - 退出登录
+        try { AuditLog.record('logout', ''); } catch(e) {}
         const allKeys = [
             'auth:currentUser', 'auth:isLoggedIn', 'auth:loginData',
             // 兼容旧key也清除

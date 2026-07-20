@@ -300,3 +300,47 @@
     global.PerfUtils = PerfUtils;
 
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+
+// ============================================================================
+// ★ 优化4：safe-area-inset 适配（仅 Capacitor APP 端生效，动态注入 style，不改原 HTML/CSS）
+// 适配刘海屏顶部、底部 Home 指示器、横屏左右安全区
+// ============================================================================
+(function (global) {
+    'use strict';
+    // 仅在 Capacitor APP 环境下生效，桌面/网页端跳过
+    if (typeof global.Capacitor === 'undefined') return;
+    function applySafeArea() {
+        try {
+            // 已注入则跳过，避免重复
+            if (document.getElementById('__safe_area_style__')) return;
+            const style = document.createElement('style');
+            style.id = '__safe_area_style__';
+            // 利用 env(safe-area-inset-*) 自动适配刘海屏/底部 Home 指示器
+            style.textContent = [
+                'body {',
+                '  padding-top: env(safe-area-inset-top);',
+                '  padding-bottom: env(safe-area-inset-bottom);',
+                '  padding-left: env(safe-area-inset-left);',
+                '  padding-right: env(safe-area-inset-right);',
+                '}',
+                /* 底部固定导航条额外加 padding，避免被 Home 指示器遮挡 */
+                '.mobile-nav, .bottom-nav, .nav-bar, [class*="mobile-action-bar"], [class*="bottom-action"] {',
+                '  padding-bottom: env(safe-area-inset-bottom) !important;',
+                '}',
+                /* 顶部固定 header 额外加 padding，避免被状态栏遮挡 */
+                '.app-header, .top-bar, [class*="app-title"], header {',
+                '  padding-top: env(safe-area-inset-top) !important;',
+                '}'
+            ].join('\n');
+            (document.head || document.documentElement).appendChild(style);
+            console.log('[SafeArea] safe-area-inset 样式已注入');
+        } catch (e) {
+            console.warn('[SafeArea] 注入失败:', e);
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', applySafeArea);
+    } else {
+        applySafeArea();
+    }
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

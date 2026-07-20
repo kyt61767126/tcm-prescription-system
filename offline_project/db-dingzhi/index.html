@@ -3395,7 +3395,7 @@ if (window.Permission) {
                 } else {
                     dropdown.style.display = 'none';
                 }
-            }, 30);
+            }, 150);
         }
 
         function tryHideSearch() {
@@ -3647,9 +3647,14 @@ if (window.Permission) {
             updatePrescriptionPaper();
         }
 
+        let __patientSearchTimer = null;
         function searchPatientsQuick(event) {
             const input = (event && event.target) ? event.target.value.toLowerCase() : '';
-            searchPatientsByName(input);
+            // ★ 优化2：300ms 防抖，避免快速输入时频繁搜索导致卡顿
+            if (__patientSearchTimer) clearTimeout(__patientSearchTimer);
+            __patientSearchTimer = setTimeout(() => {
+                searchPatientsByName(input);
+            }, 300);
         }
 
         function searchPatientsByName(name) {
@@ -3747,10 +3752,36 @@ if (window.Permission) {
             return prescriptions.filter(function(p) { return p.createdBy === currentUser.username; });
         }
 
+        // ★ 优化1：处方历史分页加载状态（默认15条/页，避免大数据量卡顿）
+        let __historyPageSize = 15;
+        let __historyCurrentPage = 1;
+        let __historyFullList = [];
+
         function renderHistoryList(list) {
             const el = DOM_CACHE.historyList || document.getElementById('historyList');
             if (!el) return;
-            el.innerHTML = list.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${p.registrationFee ? ' | 诊费:' + p.registrationFee.toFixed(2) + '元' : ''}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('') || '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
+            __historyFullList = Array.isArray(list) ? list : [];
+            __historyCurrentPage = 1;
+            __renderHistoryPage();
+        }
+
+        function __renderHistoryPage() {
+            const el = DOM_CACHE.historyList || document.getElementById('historyList');
+            if (!el) return;
+            const list = __historyFullList;
+            const showCount = Math.min(list.length, __historyPageSize * __historyCurrentPage);
+            const items = list.slice(0, showCount);
+            let html = items.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${p.registrationFee ? ' | 诊费:' + p.registrationFee.toFixed(2) + '元' : ''}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('');
+            if (!html) html = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
+            if (list.length > showCount) {
+                html += `<div onclick="loadMoreHistory()" style="text-align:center;padding:10px;color:#1976d2;cursor:pointer;font-size:12px;border-top:1px dashed #ccc;background:#f8f9fa;">▼ 加载更多（剩余 ${list.length - showCount} 条 / 共 ${list.length} 条）</div>`;
+            }
+            el.innerHTML = html;
+        }
+
+        function loadMoreHistory() {
+            __historyCurrentPage++;
+            __renderHistoryPage();
         }
 
         async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
@@ -4079,6 +4110,8 @@ if (window.Permission) {
 
             // 更新内存数组
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            // ★ 优化3：审计日志 - 处方删除
+            try { if (window.AuditLog) AuditLog.record('delete_prescription', (record.patientName || '') + ' [' + (record.prescriptionNo || '') + ']'); } catch(e) {}
 
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             const year = String(new Date().getFullYear()).slice(-2);
@@ -4381,6 +4414,8 @@ if (window.Permission) {
             // 更新内存数组（会话内查询源，按权限保持一致）
             prescriptionHistory.unshift(record);
             if (prescriptionHistory.length > 100000) prescriptionHistory = prescriptionHistory.slice(0, 100000);
+            // ★ 优化3：审计日志 - 处方保存成功
+            try { if (window.AuditLog) AuditLog.record('save_prescription', (record.patientName || '') + ' [' + (record.prescriptionNo || '') + '] ' + (record.items || []).length + '味药'); } catch(e) {}
             
             // 9. 重新读取存储内当日最新序号，算出下一条待使用编号，赋值到编号、门诊号输入框，强制页面刷新显示
             const nextPresNo = await generatePrescriptionNo();
@@ -5614,7 +5649,9 @@ if (window.Permission) {
 
             // 更新内存数组
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
-            
+            // ★ 优化3：审计日志 - 病历删除
+            try { if (window.AuditLog) AuditLog.record('delete_case', (record.patientName || '') + ' [' + (record.prescriptionNo || '') + ']'); } catch(e) {}
+
             renderCaseList(prescriptionHistory);
         }
 
