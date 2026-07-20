@@ -108,15 +108,18 @@ public class MainActivity extends BridgeActivity {
         // 立即配置 WebView，不延迟，加快启动速度
         configureWebView();
 
+        // ★ 启动时安全检测（结合最近安全升级）：root/debugger/APK 签名校验
+        // 检测到威胁则 Toast 提示并退出 APP
+        SecurityGuard.checkAndExit(this);
+
         // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
         preloadVideoRecorderScript();
     }
 
     // ========================================================================
-    // 签名校验（防盗：防止二次打包/篡改）
+    // 安全防护：委托给 SecurityGuard.checkAndExit()（在 onCreate 中调用）
+    // 包含 root/debugger/APK 签名校验，详见 SecurityGuard.java
     // ========================================================================
-    // 安全防护已于 2026-07-19 应用户要求回退到 7月17日18:00 之前的状态
-    // 如需恢复防盗防破解功能，请从 commit 0f49e52 cherry-pick SecurityGuard 相关代码
 
     private void configureWebView() {
         WebView webView = this.getBridge().getWebView();

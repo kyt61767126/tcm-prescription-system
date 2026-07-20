@@ -1,4 +1,4 @@
-﻿# generate-sign-hash.ps1 - 从 APK 提取签名 + dex 哈希，注入到 SecurityGuard.java
+# generate-sign-hash.ps1 - 从 APK 提取签名 SHA-256，注入到 SecurityGuard.java
 # 启用严格模式：APP 启动时与硬编码哈希严格比对，任何二次打包都会被拒绝
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
@@ -6,14 +6,14 @@ $scriptDir = $PSScriptRoot
 
 Write-Host ""
 Write-Host "================================================================"
-Write-Host "  签名哈希生成工具（启用严格模式）"
+Write-Host "  签名哈希生成工具（启用 APK 签名严格模式）"
 Write-Host "================================================================"
 Write-Host ""
 
 # ------------------------------------------------------------
-# [1/5] 查找最新的 APK 文件
+# [1/4] 查找最新的 APK 文件
 # ------------------------------------------------------------
-Write-Host "[1/5] 查找 APK 文件..."
+Write-Host "[1/4] 查找 APK 文件..."
 $apkFiles = Get-ChildItem -Path $scriptDir -Filter "*.apk" -File -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending
 if (-not $apkFiles -or $apkFiles.Count -eq 0) {
@@ -28,9 +28,9 @@ Write-Host "  路径: $($apkFile.FullName)"
 Write-Host ""
 
 # ------------------------------------------------------------
-# [2/5] 用 keytool 读取签名 SHA-256
+# [2/4] 用 keytool 读取签名 SHA-256
 # ------------------------------------------------------------
-Write-Host "[2/5] 读取 APK 签名 SHA-256..."
+Write-Host "[2/4] 读取 APK 签名 SHA-256..."
 
 $keytoolPath = $null
 # 优先尝试 PATH 中的 keytool
@@ -82,54 +82,14 @@ Write-Host "  [OK] 签名 SHA-256: $signSha256"
 Write-Host ""
 
 # ------------------------------------------------------------
-# [3/5] 计算 APK 内所有 classes*.dex 的串联 SHA-256
+# [3/4] 注入签名哈希到 SecurityGuard.java
 # ------------------------------------------------------------
-Write-Host "[3/5] 计算 classes*.dex 串联 SHA-256..."
-Add-Type -AssemblyName System.IO.Compression.FileSystem
-
-$apkZip = [System.IO.Compression.ZipFile]::OpenRead($apkFile.FullName)
-try {
-    $dexEntries = $apkZip.Entries |
-                  Where-Object { $_.Name -match "^classes.*\.dex$" } |
-                  Sort-Object Name
-    if (-not $dexEntries -or $dexEntries.Count -eq 0) {
-        Write-Host "  [错误] APK 内未找到 dex 文件"
-        exit 1
-    }
-    Write-Host "  找到 $($dexEntries.Count) 个 dex 文件: $($dexEntries.Name -join ', ')"
-
-    $sha = [System.Security.Cryptography.SHA256]::Create()
-    $sep = [byte[]](124)  # '|' 分隔符
-    foreach ($entry in $dexEntries) {
-        $stream = $entry.Open()
-        try {
-            $buf = New-Object byte[] 8192
-            while (($len = $stream.Read($buf, 0, $buf.Length)) -gt 0) {
-                $sha.TransformBlock($buf, 0, $len, $buf, 0)
-            }
-            # 加分隔符防止拼接歧义（与 Java 端 SecurityGuard.computeDexHash 保持一致）
-            $sha.TransformBlock($sep, 0, 1, $sep, 0)
-        } finally {
-            $stream.Dispose()
-        }
-    }
-    $sha.TransformFinalBlock([byte[]]@(), 0, 0)
-    $dexSha256 = -join ($sha.Hash | ForEach-Object { $_.ToString("x2") })
-} finally {
-    $apkZip.Dispose()
-}
-
-Write-Host "  [OK] Dex SHA-256: $dexSha256"
-Write-Host ""
-
-# ------------------------------------------------------------
-# [4/5] 注入哈希到 SecurityGuard.java
-# ------------------------------------------------------------
-Write-Host "[4/5] 注入哈希到 SecurityGuard.java..."
+Write-Host "[3/4] 注入签名哈希到 SecurityGuard.java..."
 
 $guardFiles = Get-ChildItem -Path $scriptDir -Recurse -Filter "SecurityGuard.java" -ErrorAction SilentlyContinue
 if (-not $guardFiles -or $guardFiles.Count -eq 0) {
     Write-Host "  [错误] 未找到 SecurityGuard.java"
+    Write-Host "  请确认 cloud_app/app/src/main/java/com/tcm/prescription/SecurityGuard.java 存在"
     exit 1
 }
 if ($guardFiles.Count -gt 1) {
@@ -156,20 +116,6 @@ if ($content -match $signPattern) {
     Write-Host "  [警告] 未找到 EXPECTED_SIGN_HASH 占位符（可能已被修改过格式）"
 }
 
-# 替换 EXPECTED_DEX_HASH
-$dexPattern = 'private static final String EXPECTED_DEX_HASH = "[^"]*";'
-$dexReplacement = 'private static final String EXPECTED_DEX_HASH = "' + $dexSha256 + '";'
-if ($content -match $dexPattern) {
-    $newContent = $content -replace $dexPattern, $dexReplacement
-    if ($newContent -ne $content) {
-        $content = $newContent
-        $updated = $true
-        Write-Host "  [OK] EXPECTED_DEX_HASH = $dexSha256"
-    }
-} else {
-    Write-Host "  [警告] 未找到 EXPECTED_DEX_HASH 占位符"
-}
-
 if ($updated) {
     # 保留原文件 BOM 和换行风格
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
@@ -181,26 +127,25 @@ if ($updated) {
 Write-Host ""
 
 # ------------------------------------------------------------
-# [5/5] 完成提示
+# [4/4] 完成提示
 # ------------------------------------------------------------
-Write-Host "[5/5] 完成"
+Write-Host "[4/4] 完成"
 Write-Host ""
 Write-Host "================================================================"
-Write-Host "  严格模式哈希已注入成功！"
+Write-Host "  APK 签名严格模式已启用！"
 Write-Host "================================================================"
 Write-Host ""
 Write-Host "  签名 SHA-256: $signSha256"
-Write-Host "  Dex   SHA-256: $dexSha256"
 Write-Host ""
 Write-Host "  下一步："
 Write-Host "  1. 重新运行 build-app.bat 打包 APK"
-Write-Host "  2. 新 APK 将启用严格模式："
-Write-Host "     - 签名必须与上述哈希完全一致"
-Write-Host "     - dex 哈希必须与上述哈希完全一致"
-Write-Host "     - 任何二次打包、调试器附加、Frida 注入都会导致 APP 自动退出"
+Write-Host "  2. 新 APK 将启用签名严格模式："
+Write-Host "     - APK 签名必须与上述哈希完全一致"
+Write-Host "     - 任何二次打包、签名替换都会导致 APP 自动退出"
+Write-Host "     - 同时保留 Root 检测 + 调试器检测"
 Write-Host ""
 Write-Host "  注意："
-Write-Host "  - 修改 Java 代码后 dex 哈希会变化，需重新生成本工具的哈希"
 Write-Host "  - 更换签名证书后签名哈希会变化，需重新生成本工具的哈希"
+Write-Host "  - 开发调试时如需关闭 Root/调试器检测，编辑 SecurityGuard.java 中的开关"
 Write-Host ""
 Read-Host "按回车键继续"
