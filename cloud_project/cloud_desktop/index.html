@@ -4559,7 +4559,7 @@ if (window.Permission) {
 
         function updateUserDisplay() {
             if (currentUser) {
-                document.getElementById('userDisplayName').textContent = currentUser.name;
+                document.getElementById('userDisplayName').textContent = currentUser.name || currentUser.username || '';
                 // 更新在线/离线状态显示
                 updateModeStatus();
                 // 普通用户隐藏云端状态显示（modeStatusWrapper 包含 " | " 分隔符和状态文本）
@@ -5800,11 +5800,14 @@ if (window.Permission) {
                         sessionStorage.setItem('currentUser', userData);
                         // 确保登录覆盖层隐藏
                         document.getElementById('loginOverlay').style.display = 'none';
-                        updateUserDisplay();
-                        // 先从云端刷新用户权限（管理员可能已修改 allowedMode）
-                        await refreshCurrentUserFromCloud();
-                        await loadData();
-                        renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
+                        // ★ 防御性修复：提前显示 main-container，防止后续调用异常导致空白
+                        const mainContainer = document.querySelector('.main-container');
+                        if (mainContainer) mainContainer.style.display = 'flex';
+                        // 每个中间步骤独立 try-catch，确保 finishInitUI 始终被调用
+                        try { updateUserDisplay(); } catch(e) { console.error('updateUserDisplay 异常:', e); }
+                        try { await refreshCurrentUserFromCloud(); } catch(e) { console.error('refreshCurrentUserFromCloud 异常:', e); }
+                        try { await loadData(); } catch(e) { console.error('loadData 异常:', e); }
+                        try { renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount)); } catch(e) { console.error('renderHistoryList 异常:', e); }
                         // 继续初始化界面
                         finishInitUI(true);
                         return;

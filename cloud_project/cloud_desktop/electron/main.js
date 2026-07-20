@@ -469,6 +469,9 @@ function createMainWindow() {
                     if (document.getElementById('loginOverlay')) {
                         document.getElementById('loginOverlay').style.display = 'none';
                     }
+                    // ★ 防御性修复：提前显示 main-container，防止 init() 异常导致空白
+                    var mc = document.querySelector('.main-container');
+                    if (mc) mc.style.display = 'flex';
                     if (typeof updateUserDisplay === 'function') {
                         try { updateUserDisplay(); } catch(e) {}
                     }
