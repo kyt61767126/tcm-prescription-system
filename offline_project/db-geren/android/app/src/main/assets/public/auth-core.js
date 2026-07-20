@@ -911,3 +911,93 @@
     };
 
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
+
+// ============================================================================
+// LicenseCheck — License 启动校验与自动激活（4端桌面版 + APP 端通用）
+// 启动后延迟 2 秒校验 license，失效时自动弹出激活窗口
+// 桌面版：调用 activate.show() 打开独立 BrowserWindow（activate-window.html）
+// APP 端：activate.show() 触发 'app:show-activate' 事件，本模块用 prompt 实现激活
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    // 避免重复初始化
+    if (global.__licenseCheckInitialized) return;
+    global.__licenseCheckInitialized = true;
+
+    async function checkLicenseAndShowActivate() {
+        try {
+            // 检查 license API 是否存在（APP 端无 window.electronAPI 时自动跳过）
+            if (!global.electronAPI || !global.electronAPI.license ||
+                typeof global.electronAPI.license.validate !== 'function') {
+                console.log('[LicenseCheck] 未检测到 license API，跳过校验');
+                return;
+            }
+            const result = await global.electronAPI.license.validate();
+            if (result && result.valid) {
+                console.log('[LicenseCheck] 授权有效:', result.message || '');
+                return;
+            }
+            // license 失效，显示提示并弹激活窗口
+            const msg = (result && result.message) ? result.message : '授权已失效，请激活';
+            console.warn('[LicenseCheck] 授权失效:', msg);
+            // 桌面版：activate.show() 打开独立 BrowserWindow
+            // APP 端：activate.show() 触发 'app:show-activate' 事件
+            if (global.electronAPI.activate && typeof global.electronAPI.activate.show === 'function') {
+                try { alert(msg); } catch (e) {}
+                global.electronAPI.activate.show();
+            } else {
+                try { alert(msg + '\n\n请联系管理员获取激活码'); } catch (e) {}
+            }
+        } catch (e) {
+            console.error('[LicenseCheck] 校验异常:', e);
+        }
+    }
+
+    // APP 端监听 'app:show-activate' 事件，用 prompt 实现简单激活流程
+    // 桌面版的 activate.show() 由 main.js 处理（打开 BrowserWindow），不会触发此事件
+    if (typeof global.addEventListener === 'function') {
+        global.addEventListener('app:show-activate', async function () {
+            try {
+                if (!global.electronAPI || !global.electronAPI.activate) return;
+                // 获取机器 ID（显示给用户，方便客服查证）
+                let machineId = '';
+                try {
+                    const r = await global.electronAPI.activate.getMachineId();
+                    machineId = (r && r.machineId) ? r.machineId : (r || '');
+                } catch (e) {}
+                const code = prompt('请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）：\n\n机器ID：' + (machineId || '未知') + '\n\n如有疑问请联系客服');
+                if (!code || !code.trim()) return;
+                // 获取用户名（从 CONFIG 或 localStorage）
+                let user = '';
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG.doctorName) {
+                        user = CONFIG.doctorName;
+                    } else {
+                        user = localStorage.getItem('auth:rememberedUsername') || '';
+                    }
+                } catch (e) {}
+                const result = await global.electronAPI.activate.submit(code.trim(), user);
+                if (result && result.success) {
+                    try { alert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启'); } catch (e) {}
+                    global.electronAPI.activate.restart();
+                } else {
+                    try { alert('激活失败：\n' + (result && result.error ? result.error : '未知错误')); } catch (e) {}
+                }
+            } catch (e) {
+                try { alert('激活过程出错：' + e.message); } catch (er) {}
+            }
+        });
+    }
+
+    // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
+    function startLicenseCheck() {
+        setTimeout(checkLicenseAndShowActivate, 2000);
+    }
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        startLicenseCheck();
+    } else {
+        document.addEventListener('DOMContentLoaded', startLicenseCheck);
+    }
+})(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);

@@ -74,6 +74,10 @@ public class MainActivity extends AppCompatActivity {
     // 彻底解决"加载失败"反复出现：统一路径解析，消除 getAbsolutePath vs getCanonicalPath 不一致
     private java.util.Set<String> mediaWhitelistedRoots = new java.util.HashSet<>();
 
+    // ★ License 管理器（APP 端授权校验 + 处方计数 + 在线激活）
+    // 与桌面版 license-manager.js / prescription-counter.js 逻辑一致
+    private LicenseManager licenseManager;
+
     // ========================================================================
     // 生命周期
     // ========================================================================
@@ -107,6 +111,9 @@ public class MainActivity extends AppCompatActivity {
         setContentView(webView);
         getWindow().setBackgroundDrawable(null);
         configureWebView();
+
+        // ★ 初始化 License 管理器（APP 端授权校验）
+        licenseManager = new LicenseManager(this);
 
         // 初始化媒体文件读取白名单（只解析一次，避免运行时 I/O 不稳定）
         initMediaWhitelist();
@@ -500,6 +507,7 @@ public class MainActivity extends AppCompatActivity {
      * 注入 window.electronAPI 桥接层。
      * isElectron=true 使网页走 Electron 代码分支；
      * saveBackupFile/savePrescriptionImage/quitApp 调用原生方法；
+     * license/activate 命名空间与桌面版 preload.js 保持接口一致；
      * 其余方法为 no-op，数据由 localStorage 持久化。
      */
     private void injectElectronApiShim(WebView view) {
@@ -566,7 +574,30 @@ public class MainActivity extends AppCompatActivity {
             "    getCurrentUser: function(){ return P(null); }," +
             "    onLoginUser: function(cb){ /* no-op */ }," +
             "    setAutoStart: function(en){ return P({success:true}); }," +
-            "    quitApp: function(){ N.quitApp(); return P({success:true}); }" +
+            "    quitApp: function(){ N.quitApp(); return P({success:true}); }," +
+            // ★ License 命名空间（与桌面版 preload.js license 命名空间接口一致）
+            "    license: {" +
+            "      validate: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_validate', '{}')); } catch(e){ resolve({valid:false, type:'error', message:String(e)}); } }); }," +
+            "      getStatus: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getStatus', '{}')); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
+            "      getMachineId: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getMachineId', '{}')); } catch(e){ resolve(null); } }); }," +
+            "      canPrescribe: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_canPrescribe', '{}')); } catch(e){ resolve({allowed:true, error:String(e)}); } }); }," +
+            "      incrementPrescription: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_incrementPrescription', '{}')); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
+            "      decrementPrescription: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_decrementPrescription', '{}')); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
+            "      getPrescriptionStatus: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getPrescriptionStatus', '{}')); } catch(e){ resolve({current:0, max:0, remaining:-1, error:String(e)}); } }); }," +
+            "      checkFeature: function(feature){ return new Promise(function(resolve){ try { resolve(callNative('license_checkFeature', JSON.stringify({feature:feature}))); } catch(e){ resolve({allowed:true, feature:feature, error:String(e)}); } }); }," +
+            "      activate: { /* 离线 license 文件导入，APP 端不支持 */" +
+            "        importLicense: function(){ return P({success:false, error:'APP端不支持离线license文件导入，请使用在线激活'}); }" +
+            "      }" +
+            "    }," +
+            // ★ activate 命名空间（与桌面版 preload.js activate 命名空间接口一致）
+            // APP 端无独立 BrowserWindow，show() 通过 JS 事件触发激活对话框
+            "    activate: {" +
+            "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
+            "      submit: function(code, user){ return new Promise(function(resolve){ try { resolve(callNative('license_activateOnline', JSON.stringify({code:code,user:user||''}))); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
+            "      close: function(){ return P({success:true}); }," +
+            "      restart: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_restart', '{}')); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
+            "      getMachineId: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getMachineId', '{}')); } catch(e){ resolve(null); } }); }" +
+            "    }" +
             "  };" +
             "  window.IS_ELECTRON = true;" +
             "})();";
@@ -770,6 +801,82 @@ public class MainActivity extends AppCompatActivity {
                         return renameMediaFiles(args.optString("patientName", ""),
                                 args.optString("oldNo", ""),
                                 args.optString("newNo", "")).toString();
+                    // ★ License 相关调用（与桌面版 IPC 接口保持一致）
+                    case "license_validate":
+                        return licenseManager.validateLicense().toString();
+                    case "license_getStatus":
+                        try {
+                            JSONObject r = licenseManager.validateLicense();
+                            r.put("prescriptionStatus", licenseManager.getPrescriptionStatus());
+                            r.put("machineId", licenseManager.getMachineId());
+                            r.put("success", r.optBoolean("valid", false));
+                            return r.toString();
+                        } catch (Exception e) {
+                            return fail(e.getMessage()).toString();
+                        }
+                    case "license_getMachineId":
+                        try {
+                            JSONObject r = new JSONObject();
+                            r.put("success", true);
+                            r.put("machineId", licenseManager.getMachineId());
+                            return r.toString();
+                        } catch (Exception e) {
+                            return fail(e.getMessage()).toString();
+                        }
+                    case "license_canPrescribe":
+                        return licenseManager.canPrescribe().toString();
+                    case "license_incrementPrescription":
+                        try {
+                            int n = licenseManager.incrementPrescription();
+                            JSONObject r = new JSONObject();
+                            r.put("success", n >= 0);
+                            r.put("count", n);
+                            return r.toString();
+                        } catch (Exception e) {
+                            return fail(e.getMessage()).toString();
+                        }
+                    case "license_decrementPrescription":
+                        try {
+                            int n = licenseManager.decrementPrescription();
+                            JSONObject r = new JSONObject();
+                            r.put("success", n >= 0);
+                            r.put("count", n);
+                            return r.toString();
+                        } catch (Exception e) {
+                            return fail(e.getMessage()).toString();
+                        }
+                    case "license_getPrescriptionStatus":
+                        return licenseManager.getPrescriptionStatus().toString();
+                    case "license_checkFeature":
+                        return licenseManager.getFeatureStatus(args.optString("feature", "")).toString();
+                    case "license_activateOnline":
+                        // JavascriptInterface 在 JavaBridge 线程执行，可直接网络请求
+                        return licenseManager.activateOnline(
+                                args.optString("code", ""),
+                                licenseManager.getMachineId(),
+                                args.optString("user", "")
+                        ).toString();
+                    case "license_restart":
+                        // 重启 APP
+                        mainHandler.post(() -> {
+                            try {
+                                Intent i = getPackageManager().getLaunchIntentForPackage(getPackageName());
+                                if (i != null) {
+                                    i.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    startActivity(i);
+                                }
+                                finishAndRemoveTask();
+                            } catch (Exception e) {
+                                Log.e(TAG, "重启 APP 失败", e);
+                            }
+                        });
+                        try {
+                            JSONObject r = new JSONObject();
+                            r.put("success", true);
+                            return r.toString();
+                        } catch (Exception e) {
+                            return fail(e.getMessage()).toString();
+                        }
                     default:
                         return fail("unknown method: " + name).toString();
                 }

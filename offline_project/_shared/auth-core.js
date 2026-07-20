@@ -14,13 +14,6 @@
     const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; // 8小时
     const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
 
-    // P2-8 角色常量前端统一定义（与后端 _lib/auth.js 保持一致）
-    const ROLE_PLATFORM_ADMIN = 'platform_admin';
-    const ROLE_CLINIC_ADMIN = 'clinic_admin';
-    const ROLE_DOCTOR = 'doctor';
-    const ROLE_ADMIN = 'admin';      // 离线版管理员
-    const ROLE_USER = 'user';        // 离线版普通用户
-
     // P1-5: 运行时派生密钥（基于环境特征，降低纯源码攻击效果）
     // 攻击者仅查看源码无法直接获得实际加密密钥
     function _deriveRuntimeKey() {
@@ -35,6 +28,50 @@
         return PASSWORD_SALT + '_' + Math.abs(hash).toString(36);
     }
     const RUNTIME_KEY = _deriveRuntimeKey();
+
+    // ==================== safeStorage 系统级加密桥（P0-2）====================
+    // 仅 Electron 桌面版可用：基于 Windows DPAPI，绑定用户/机器
+    // 远比 XOR + 硬编码盐安全，攻击者即使拿到源码与密文也无法解密
+    // 在浏览器/WebView 中 available() 返回 false，自动降级到 XOR PWDv2/XORv2
+    const SafeStorageBridge = {
+        _availableCache: null,
+        async available() {
+            if (this._availableCache !== null) return this._availableCache;
+            try {
+                if (global.electronAPI && typeof global.electronAPI.safeStorageAvailable === 'function') {
+                    this._availableCache = await global.electronAPI.safeStorageAvailable();
+                } else {
+                    this._availableCache = false;
+                }
+            } catch (e) {
+                console.warn('safeStorage 检测异常:', e);
+                this._availableCache = false;
+            }
+            return this._availableCache;
+        },
+        async encrypt(plaintext) {
+            if (!plaintext) return null;
+            try {
+                if (!(await this.available())) return null;
+                if (!global.electronAPI || typeof global.electronAPI.encryptString !== 'function') return null;
+                return await global.electronAPI.encryptString(String(plaintext));
+            } catch (e) {
+                console.warn('safeStorage 加密异常:', e);
+                return null;
+            }
+        },
+        async decrypt(encryptedBase64) {
+            if (!encryptedBase64) return null;
+            try {
+                if (!(await this.available())) return null;
+                if (!global.electronAPI || typeof global.electronAPI.decryptString !== 'function') return null;
+                return await global.electronAPI.decryptString(String(encryptedBase64));
+            } catch (e) {
+                console.warn('safeStorage 解密异常:', e);
+                return null;
+            }
+        }
+    };
 
     // 旧 key → 新 key 映射（自动迁移）
     const KEY_MIGRATION = {
@@ -202,30 +239,13 @@
 
     async function hashPassword(password) {
         if (!password) return '';
-        // P0-11 安全升级：使用 PBKDF2-SHA256 100000 iterations（向后兼容旧 SHA-256 验证）
         try {
-            const saltBytes = new TextEncoder().encode(PASSWORD_SALT + password);
-            const keyMaterial = await crypto.subtle.importKey(
-                'raw',
-                new TextEncoder().encode(password),
-                { name: 'PBKDF2' },
-                false,
-                ['deriveBits']
-            );
-            const derivedBits = await crypto.subtle.deriveBits(
-                {
-                    name: 'PBKDF2',
-                    salt: saltBytes,
-                    iterations: 100000,
-                    hash: 'SHA-256'
-                },
-                keyMaterial,
-                256
-            );
-            return 'pbkdf2$100000$' + Array.from(new Uint8Array(derivedBits))
+            const data = new TextEncoder().encode(PASSWORD_SALT + password);
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return Array.from(new Uint8Array(hashBuffer))
                 .map(b => b.toString(16).padStart(2, '0')).join('');
         } catch (e) {
-            // WebView 降级：纯 JS SHA-256（保持向后兼容）
+            // WebView 降级：纯 JS SHA-256
             return sha256PureJS(PASSWORD_SALT + password);
         }
     }
@@ -245,94 +265,32 @@
     }
 
     function isPasswordHashed(pwd) {
-        // 兼容旧 SHA-256 格式（64位hex）和新 PBKDF2 格式（pbkdf2$100000$hex）
-        if (typeof pwd !== 'string') return false;
-        if (pwd.startsWith('pbkdf2$')) return true;
-        return pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
-    }
-
-    function isLegacyPasswordHash(pwd) {
-        // 旧 SHA-256 格式（64位hex，非 pbkdf2 前缀）
-        return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd) && !pwd.startsWith('pbkdf2$');
+        return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
     }
 
     async function verifyPassword(inputPassword, storedPassword, username) {
         if (!storedPassword) return false;
-
-        // P0-11 新格式：pbkdf2$100000$hex
-        if (storedPassword.startsWith('pbkdf2$')) {
-            try {
-                const parts = storedPassword.split('$');
-                if (parts.length !== 3) return false;
-                const iterations = parseInt(parts[1], 10);
-                const expectedHash = parts[2];
-                const saltBytes = new TextEncoder().encode(PASSWORD_SALT + inputPassword);
-                const keyMaterial = await crypto.subtle.importKey(
-                    'raw',
-                    new TextEncoder().encode(inputPassword),
-                    { name: 'PBKDF2' },
-                    false,
-                    ['deriveBits']
-                );
-                const derivedBits = await crypto.subtle.deriveBits(
-                    { name: 'PBKDF2', salt: saltBytes, iterations: iterations, hash: 'SHA-256' },
-                    keyMaterial,
-                    256
-                );
-                const computedHash = Array.from(new Uint8Array(derivedBits))
-                    .map(b => b.toString(16).padStart(2, '0')).join('');
-                return constantTimeEqual(computedHash, expectedHash);
-            } catch (e) {
-                console.error('PBKDF2 验证失败:', e);
-                return false;
-            }
-        }
-
         if (isPasswordHashed(storedPassword)) {
             // 先尝试增强版哈希（含用户名盐值）
             if (username) {
                 const enhancedHash = await hashPasswordWithUser(inputPassword, username);
-                if (constantTimeEqual(storedPassword, enhancedHash)) return true;
+                if (storedPassword === enhancedHash) return true;
             }
             // 降级到旧版哈希（全局盐值）
-            const legacyHash = await hashPassword(inputPassword);
-            // 注意：hashPassword 现在返回 pbkdf2 格式，需要用旧 SHA-256 函数验证
-            const legacySha256 = await sha256Legacy(inputPassword);
-            return constantTimeEqual(storedPassword, legacySha256);
+            return storedPassword === await hashPassword(inputPassword);
         }
-        // P0-9 安全修复：移除明文密码兼容分支，防止明文存储攻击
-        // 原代码: return storedPassword === inputPassword;
-        console.error('[P0-9 安全告警] 检测到非哈希格式的密码存储，已拒绝登录。请检查 config.json 密码字段。');
-        return false;
-    }
-
-    // P0-11 辅助：旧版 SHA-256 哈希（用于验证旧 config.json 中的密码）
-    async function sha256Legacy(password) {
-        try {
-            const data = new TextEncoder().encode(PASSWORD_SALT + password);
-            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-            return Array.from(new Uint8Array(hashBuffer))
-                .map(b => b.toString(16).padStart(2, '0')).join('');
-        } catch (e) {
-            return sha256PureJS(PASSWORD_SALT + password);
-        }
-    }
-
-    // 常量时间字符串比较，防止时序攻击
-    function constantTimeEqual(a, b) {
-        if (typeof a !== 'string' || typeof b !== 'string') return false;
-        if (a.length !== b.length) return false;
-        let result = 0;
-        for (let i = 0; i < a.length; i++) {
-            result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-        }
-        return result === 0;
+        // 兼容旧明文密码
+        return storedPassword === inputPassword;
     }
 
     // 记住密码加密存储（非明文）
-    // P1-2: PWDv2 使用运行时派生密钥（增强），PWDv1 为旧版硬编码盐（向后兼容）
-    function encryptPassword(password) {
+    // P0-2: 优先使用 safeStorage（DPAPI），降级到 XOR PWDv2，向后兼容 PWDv1
+    async function encryptPassword(password) {
         if (!password) return null;
+        // 优先：safeStorage 系统级加密
+        const safeEnc = await SafeStorageBridge.encrypt(password);
+        if (safeEnc) return 'SAFE:' + safeEnc;
+        // 降级：XOR PWDv2（运行时派生密钥）
         const key = RUNTIME_KEY;
         let result = '';
         for (let i = 0; i < password.length; i++) {
@@ -341,9 +299,22 @@
         return 'PWDv2:' + btoa(unescape(encodeURIComponent(result)));
     }
 
-    function decryptPassword(stored) {
+    async function decryptPassword(stored) {
         if (!stored || typeof stored !== 'string') return null;
-        // P1-2: 优先尝试 PWDv2（运行时派生密钥）
+        // P0-2: safeStorage 加密的密文（必须原用户/原机器才能解出）
+        if (stored.startsWith('SAFE:')) {
+            try {
+                const decrypted = await SafeStorageBridge.decrypt(stored.substring(5));
+                if (decrypted !== null) return decrypted;
+                // safeStorage 不可用或跨用户/跨机器迁移：无法解密
+                console.warn('safeStorage 解密失败：可能为跨用户/跨机器迁移，请重新输入密码');
+                return null;
+            } catch (e) {
+                console.error('safeStorage 密码解密失败:', e);
+                return null;
+            }
+        }
+        // P1-2: 尝试 PWDv2（运行时派生密钥）
         if (stored.startsWith('PWDv2:')) {
             try {
                 const text = decodeURIComponent(escape(atob(stored.substring(6))));
@@ -380,7 +351,7 @@
     // 保存记住的密码（加密存储）
     async function saveRememberedPassword(password) {
         try {
-            const encrypted = encryptPassword(password);
+            const encrypted = await encryptPassword(password);
             if (encrypted) {
                 await StorageAdapter.setItem('auth:savedPassword', encrypted);
             }
@@ -394,9 +365,9 @@
         try {
             const stored = await StorageAdapter.getItem('auth:savedPassword');
             if (!stored) return null;
-            // 兼容旧明文存储
-            if (stored.startsWith('PWDv1:')) {
-                return decryptPassword(stored);
+            // P0-2: 兼容 SAFE:/PWDv2:/PWDv1:/旧明文
+            if (stored.startsWith('SAFE:') || stored.startsWith('PWDv1:') || stored.startsWith('PWDv2:')) {
+                return await decryptPassword(stored);
             }
             return stored;
         } catch (e) {
@@ -415,9 +386,13 @@
     }
 
     // 用户列表加密存储（仅离线版使用，Unicode 安全）
-    // P1-2: XORv2 使用运行时派生密钥（增强），XORv1 为旧版硬编码盐（向后兼容）
-    function encryptUsers(users) {
+    // P0-2: 优先使用 safeStorage（DPAPI），降级到 XORv2，向后兼容 XORv1
+    async function encryptUsers(users) {
         const json = JSON.stringify(users);
+        // 优先：safeStorage 系统级加密
+        const safeEnc = await SafeStorageBridge.encrypt(json);
+        if (safeEnc) return 'SAFE:' + safeEnc;
+        // 降级：XORv2（运行时派生密钥）
         const key = RUNTIME_KEY;
         let result = '';
         for (let i = 0; i < json.length; i++) {
@@ -426,9 +401,24 @@
         return 'XORv2:' + btoa(unescape(encodeURIComponent(result)));
     }
 
-    function decryptUsers(stored) {
+    async function decryptUsers(stored) {
         if (!stored || typeof stored !== 'string') return stored;
-        // P1-2: 优先尝试 XORv2（运行时派生密钥）
+        // P0-2: safeStorage 加密的密文
+        if (stored.startsWith('SAFE:')) {
+            try {
+                const decrypted = await SafeStorageBridge.decrypt(stored.substring(5));
+                if (decrypted !== null) {
+                    try { return JSON.parse(decrypted); }
+                    catch (e) { console.error('解密后 JSON 解析失败:', e); return null; }
+                }
+                console.warn('safeStorage 用户列表解密失败：可能为跨用户/跨机器迁移');
+                return null;
+            } catch (e) {
+                console.error('safeStorage 用户列表解密失败:', e);
+                return null;
+            }
+        }
+        // P1-2: 尝试 XORv2（运行时派生密钥）
         if (stored.startsWith('XORv2:')) {
             try {
                 const text = decodeURIComponent(escape(atob(stored.substring(6))));
@@ -572,11 +562,116 @@
         }
     };
 
+    // ★ 优化3：密码错误锁定辅助工具（5次错误锁定30分钟）
+    const LoginLockout = {
+        _getStorage() {
+            // 兼容 Capacitor Preferences 和 localStorage
+            if (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences) {
+                return null; // APP 端暂不支持锁定，仅桌面/网页版支持
+            }
+            try { return global.localStorage; } catch (e) { return null; }
+        },
+        checkLocked(username) {
+            const storage = this._getStorage();
+            if (!storage) return null;
+            const lockUntil = parseInt(storage.getItem('auth:lockUntil:' + username) || '0', 10);
+            if (lockUntil > Date.now()) {
+                const remainMin = Math.ceil((lockUntil - Date.now()) / 60000);
+                return '账号已被锁定，请 ' + remainMin + ' 分钟后重试';
+            }
+            return null;
+        },
+        recordFailure(username) {
+            const storage = this._getStorage();
+            if (!storage) return '密码错误';
+            const failKey = 'auth:failCount:' + username;
+            let failCount = parseInt(storage.getItem(failKey) || '0', 10) + 1;
+            if (failCount >= 5) {
+                storage.setItem('auth:lockUntil:' + username, String(Date.now() + 30 * 60 * 1000));
+                storage.removeItem(failKey);
+                return '密码错误次数过多，账号已被锁定 30 分钟';
+            }
+            storage.setItem(failKey, String(failCount));
+            return '密码错误（剩余 ' + (5 - failCount) + ' 次尝试机会）';
+        },
+        recordSuccess(username) {
+            const storage = this._getStorage();
+            if (!storage) return;
+            storage.removeItem('auth:failCount:' + username);
+            storage.removeItem('auth:lockUntil:' + username);
+        }
+    };
+
+    // ★ 优化3：操作审计日志（登录/退出/处方保存/删除等关键操作）
+    const AuditLog = {
+        _getStorage() {
+            if (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences) {
+                return null; // APP 端暂不支持，仅桌面/网页版
+            }
+            try { return global.localStorage; } catch (e) { return null; }
+        },
+        _resolveUser() {
+            // 优先读取运行时 currentUser，回退到 storage
+            try {
+                if (typeof currentUser !== 'undefined' && currentUser && currentUser.username) {
+                    return currentUser.username;
+                }
+            } catch (e) { /* currentUser 未定义 */ }
+            const storage = this._getStorage();
+            if (storage) {
+                try {
+                    const stored = storage.getItem('auth:currentUser');
+                    if (stored) return (JSON.parse(stored).username) || 'unknown';
+                } catch (e) {}
+            }
+            return 'unknown';
+        },
+        record(action, details) {
+            const storage = this._getStorage();
+            if (!storage) return;
+            try {
+                const entry = {
+                    t: Date.now(),
+                    ts: new Date().toISOString(),
+                    user: this._resolveUser(),
+                    action: String(action || '').slice(0, 64),
+                    details: String(details || '').slice(0, 500)
+                };
+                let logs = [];
+                try { logs = JSON.parse(storage.getItem('audit:log') || '[]'); } catch (e) {}
+                if (!Array.isArray(logs)) logs = [];
+                logs.push(entry);
+                // 最多保留 500 条，超出时丢弃最早的
+                if (logs.length > 500) logs = logs.slice(-500);
+                storage.setItem('audit:log', JSON.stringify(logs));
+            } catch (e) { console.warn('审计日志写入失败:', e); }
+        },
+        list(limit) {
+            const storage = this._getStorage();
+            if (!storage) return [];
+            try {
+                const logs = JSON.parse(storage.getItem('audit:log') || '[]');
+                if (!Array.isArray(logs)) return [];
+                return limit ? logs.slice(-limit) : logs;
+            } catch (e) { return []; }
+        },
+        clear() {
+            const storage = this._getStorage();
+            if (!storage) return;
+            storage.removeItem('audit:log');
+        }
+    };
+    global.AuditLog = AuditLog;
+
     // 离线适配器工厂
     function createLocalAdapter(getUsersFn) {
         return {
             async authenticate(username, password) {
                 try {
+                    // ★ 优化3：检查账号是否被锁定
+                    const lockMsg = LoginLockout.checkLocked(username);
+                    if (lockMsg) return { success: false, error: lockMsg };
+
                     const users = typeof getUsersFn === 'function' ? await getUsersFn() : getUsersFn;
                     if (!Array.isArray(users)) {
                         return { success: false, error: '用户数据加载失败' };
@@ -587,8 +682,11 @@
                     }
                     const pwdOk = await verifyPassword(password, user.password || '');
                     if (!pwdOk) {
-                        return { success: false, error: '密码错误' };
+                        // ★ 优化3：密码错误计数+1，5次后锁定30分钟
+                        return { success: false, error: LoginLockout.recordFailure(username) };
                     }
+                    // 登录成功，清零错误计数
+                    LoginLockout.recordSuccess(username);
                     // 不返回密码
                     const { password: _, ...safeUser } = user;
                     return { success: true, user: safeUser };
@@ -605,14 +703,21 @@
         return {
             async authenticate(username, password) {
                 try {
+                    // ★ 优化3：检查账号是否被锁定
+                    const lockMsg = LoginLockout.checkLocked(username);
+                    if (lockMsg) return { success: false, error: lockMsg };
+
                     const user = typeof getUserFn === 'function' ? await getUserFn() : getUserFn;
                     if (!user) {
                         return { success: false, error: '用户信息加载失败' };
                     }
                     const pwdOk = await verifyPassword(password, user.password || '');
                     if (!pwdOk) {
-                        return { success: false, error: '密码错误' };
+                        // ★ 优化3：密码错误计数+1，5次后锁定30分钟
+                        return { success: false, error: LoginLockout.recordFailure(username) };
                     }
+                    // 登录成功，清零错误计数
+                    LoginLockout.recordSuccess(username);
                     const { password: _, ...safeUser } = user;
                     return { success: true, user: safeUser };
                 } catch (e) {
@@ -621,26 +726,6 @@
                 }
             }
         };
-    }
-
-    // P2-10 fetch 超时工具：包装 fetch 添加超时控制（默认 30 秒）
-    async function fetchWithTimeout(url, options = {}, timeoutMs = 30000) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-        try {
-            const response = await fetch(url, {
-                ...options,
-                signal: controller.signal
-            });
-            return response;
-        } catch (e) {
-            if (e.name === 'AbortError') {
-                throw new Error('请求超时（' + (timeoutMs / 1000) + '秒），请检查网络连接');
-            }
-            throw e;
-        } finally {
-            clearTimeout(timeoutId);
-        }
     }
 
     async function login(username, password, options = {}) {
@@ -655,6 +740,8 @@
             const result = await adapter.authenticate(username, password);
 
             if (!result.success || !result.user) {
+                // ★ 优化3：审计日志 - 登录失败
+                try { AuditLog.record('login_failure', username + ': ' + (result.error || '认证失败')); } catch(e) {}
                 return { success: false, error: result.error || '认证失败' };
             }
 
@@ -696,6 +783,8 @@
     // ==================== 退出登录 ====================
 
     async function logout() {
+        // ★ 优化3：审计日志 - 退出登录
+        try { AuditLog.record('logout', ''); } catch(e) {}
         const allKeys = [
             'auth:currentUser', 'auth:isLoggedIn', 'auth:loginData',
             // 兼容旧key也清除
@@ -773,17 +862,12 @@
         PASSWORD_SALT,
         SESSION_TIMEOUT_MS,
         CLOUD_API_BASE,
-        // P2-8 角色常量
-        ROLE_PLATFORM_ADMIN,
-        ROLE_CLINIC_ADMIN,
-        ROLE_DOCTOR,
-        ROLE_ADMIN,
-        ROLE_USER,
-        // P2-10 fetch 超时工具
-        fetchWithTimeout,
 
         // 存储适配器
         StorageAdapter,
+
+        // safeStorage 桥（P0-2）
+        SafeStorageBridge,
 
         // 密码加密
         hashPassword,
@@ -826,4 +910,94 @@
         migrateOldKeys
     };
 
+})(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
+
+// ============================================================================
+// LicenseCheck — License 启动校验与自动激活（4端桌面版 + APP 端通用）
+// 启动后延迟 2 秒校验 license，失效时自动弹出激活窗口
+// 桌面版：调用 activate.show() 打开独立 BrowserWindow（activate-window.html）
+// APP 端：activate.show() 触发 'app:show-activate' 事件，本模块用 prompt 实现激活
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    // 避免重复初始化
+    if (global.__licenseCheckInitialized) return;
+    global.__licenseCheckInitialized = true;
+
+    async function checkLicenseAndShowActivate() {
+        try {
+            // 检查 license API 是否存在（APP 端无 window.electronAPI 时自动跳过）
+            if (!global.electronAPI || !global.electronAPI.license ||
+                typeof global.electronAPI.license.validate !== 'function') {
+                console.log('[LicenseCheck] 未检测到 license API，跳过校验');
+                return;
+            }
+            const result = await global.electronAPI.license.validate();
+            if (result && result.valid) {
+                console.log('[LicenseCheck] 授权有效:', result.message || '');
+                return;
+            }
+            // license 失效，显示提示并弹激活窗口
+            const msg = (result && result.message) ? result.message : '授权已失效，请激活';
+            console.warn('[LicenseCheck] 授权失效:', msg);
+            // 桌面版：activate.show() 打开独立 BrowserWindow
+            // APP 端：activate.show() 触发 'app:show-activate' 事件
+            if (global.electronAPI.activate && typeof global.electronAPI.activate.show === 'function') {
+                try { alert(msg); } catch (e) {}
+                global.electronAPI.activate.show();
+            } else {
+                try { alert(msg + '\n\n请联系管理员获取激活码'); } catch (e) {}
+            }
+        } catch (e) {
+            console.error('[LicenseCheck] 校验异常:', e);
+        }
+    }
+
+    // APP 端监听 'app:show-activate' 事件，用 prompt 实现简单激活流程
+    // 桌面版的 activate.show() 由 main.js 处理（打开 BrowserWindow），不会触发此事件
+    if (typeof global.addEventListener === 'function') {
+        global.addEventListener('app:show-activate', async function () {
+            try {
+                if (!global.electronAPI || !global.electronAPI.activate) return;
+                // 获取机器 ID（显示给用户，方便客服查证）
+                let machineId = '';
+                try {
+                    const r = await global.electronAPI.activate.getMachineId();
+                    machineId = (r && r.machineId) ? r.machineId : (r || '');
+                } catch (e) {}
+                const code = prompt('请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）：\n\n机器ID：' + (machineId || '未知') + '\n\n如有疑问请联系客服');
+                if (!code || !code.trim()) return;
+                // 获取用户名（从 CONFIG 或 localStorage）
+                let user = '';
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG.doctorName) {
+                        user = CONFIG.doctorName;
+                    } else {
+                        user = localStorage.getItem('auth:rememberedUsername') || '';
+                    }
+                } catch (e) {}
+                const result = await global.electronAPI.activate.submit(code.trim(), user);
+                if (result && result.success) {
+                    try { alert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启'); } catch (e) {}
+                    global.electronAPI.activate.restart();
+                } else {
+                    try { alert('激活失败：\n' + (result && result.error ? result.error : '未知错误')); } catch (e) {}
+                }
+            } catch (e) {
+                try { alert('激活过程出错：' + e.message); } catch (er) {}
+            }
+        });
+    }
+
+    // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
+    function startLicenseCheck() {
+        setTimeout(checkLicenseAndShowActivate, 2000);
+    }
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        startLicenseCheck();
+    } else {
+        document.addEventListener('DOMContentLoaded', startLicenseCheck);
+    }
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
