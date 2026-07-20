@@ -182,7 +182,8 @@ public class LicenseManager {
                 return true;
             }
             // 2. 系统属性 ro.debuggable（release 版应为 0）
-            String debuggable = android.os.SystemProperties.get("ro.debuggable", "0");
+            // SystemProperties 是 Android 隐藏 API，需通过反射调用
+            String debuggable = getSystemProperty("ro.debuggable", "0");
             if ("1".equals(debuggable)) {
                 Log.w(TAG, "调试器检测：ro.debuggable=1");
                 return true;
@@ -191,6 +192,23 @@ public class LicenseManager {
             // SystemProperties 可能不可访问，忽略
         }
         return false;
+    }
+
+    /**
+     * 反射读取 Android 系统属性（替代隐藏 API android.os.SystemProperties）
+     * @param key 属性名
+     * @param def 默认值
+     * @return 属性值；反射失败返回 def
+     */
+    private String getSystemProperty(String key, String def) {
+        try {
+            Class<?> cls = Class.forName("android.os.SystemProperties");
+            java.lang.reflect.Method m = cls.getMethod("get", String.class, String.class);
+            Object val = m.invoke(null, key, def);
+            return val != null ? val.toString() : def;
+        } catch (Exception e) {
+            return def;
+        }
     }
 
     // ========================================================================
