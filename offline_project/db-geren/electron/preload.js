@@ -90,6 +90,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // ★ License 授权管理
     license: {
         getStatus: () => ipcRenderer.invoke('license:get-status'),
-        activate: (base64Content) => ipcRenderer.invoke('license:activate', base64Content)
+        activate: (base64Content) => ipcRenderer.invoke('license:activate', base64Content),
+        // v2 新增：处方数量限制
+        canPrescribe: () => ipcRenderer.invoke('license:can-prescribe'),
+        incrementPrescription: () => ipcRenderer.invoke('license:increment-prescription'),
+        decrementPrescription: () => ipcRenderer.invoke('license:decrement-prescription'),
+        getPrescriptionStatus: () => ipcRenderer.invoke('license:get-prescription-status'),
+        // v2 新增：功能权限校验
+        checkFeature: (featureName) => ipcRenderer.invoke('license:check-feature', featureName),
+        getFeatureStatus: () => ipcRenderer.invoke('license:get-feature-status')
     }
 });

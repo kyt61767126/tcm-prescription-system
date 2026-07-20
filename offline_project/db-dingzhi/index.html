@@ -4112,6 +4112,10 @@ if (window.Permission) {
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             // ★ 优化3：审计日志 - 处方删除
             try { if (window.AuditLog) AuditLog.record('delete_prescription', (record.patientName || '') + ' [' + (record.prescriptionNo || '') + ']'); } catch(e) {}
+            // ★ v2: 处方计数-1（试用版限制）
+            if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.decrementPrescription) {
+                try { await window.electronAPI.license.decrementPrescription(); } catch(e) { console.warn('[License] 处方计数-1失败:', e); }
+            }
 
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
             const year = String(new Date().getFullYear()).slice(-2);
@@ -4336,6 +4340,18 @@ if (window.Permission) {
                 alert('请先登录后再保存处方');
                 return;
             }
+            // ★ v2: 处方数量限制检查（试用版 30 张/月）
+            if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.canPrescribe) {
+                try {
+                    const prescribeStatus = await window.electronAPI.license.canPrescribe();
+                    if (!prescribeStatus.allowed) {
+                        alert('本月处方数量已达上限（' + prescribeStatus.max + ' 张）。\n当前已开：' + prescribeStatus.current + ' 张\n\n请升级到个人版或专业版后继续使用。');
+                        return;
+                    }
+                } catch (e) {
+                    console.warn('[License] 处方数量检查失败，默认放行:', e);
+                }
+            }
             const name = document.getElementById('patientName').value;
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
             
@@ -4416,6 +4432,10 @@ if (window.Permission) {
             if (prescriptionHistory.length > 100000) prescriptionHistory = prescriptionHistory.slice(0, 100000);
             // ★ 优化3：审计日志 - 处方保存成功
             try { if (window.AuditLog) AuditLog.record('save_prescription', (record.patientName || '') + ' [' + (record.prescriptionNo || '') + '] ' + (record.items || []).length + '味药'); } catch(e) {}
+            // ★ v2: 处方计数+1（试用版限制检查）
+            if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.incrementPrescription) {
+                try { await window.electronAPI.license.incrementPrescription(); } catch(e) { console.warn('[License] 处方计数+1失败:', e); }
+            }
             
             // 9. 重新读取存储内当日最新序号，算出下一条待使用编号，赋值到编号、门诊号输入框，强制页面刷新显示
             const nextPresNo = await generatePrescriptionNo();
@@ -5651,6 +5671,10 @@ if (window.Permission) {
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             // ★ 优化3：审计日志 - 病历删除
             try { if (window.AuditLog) AuditLog.record('delete_case', (record.patientName || '') + ' [' + (record.prescriptionNo || '') + ']'); } catch(e) {}
+            // ★ v2: 处方计数-1（试用版限制）
+            if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.decrementPrescription) {
+                try { await window.electronAPI.license.decrementPrescription(); } catch(e) { console.warn('[License] 处方计数-1失败:', e); }
+            }
 
             renderCaseList(prescriptionHistory);
         }

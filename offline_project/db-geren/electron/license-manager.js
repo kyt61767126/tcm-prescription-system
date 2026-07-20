@@ -1,8 +1,8 @@
 // ============================================================================
-//  license-manager.js — 授权管理模块
-//  功能：license 文件校验 + 试用模式 + 防时间回拨
+//  license-manager.js — 授权管理模块（v2 支持版本分级）
+//  功能：license 文件校验 + 试用模式 + 防时间回拨 + 版本分级
 //  方案：HMAC-SHA256 签名 + XOR 混淆（简单高效，配合 asarmor 增加逆向难度）
-//  后续可升级为非对称签名（私钥生成，公钥验证）
+//  v2 新增：type (trial/personal/pro) + maxPrescriptions + features
 // ============================================================================
 
 const fs = require('fs');
@@ -11,14 +11,31 @@ const crypto = require('crypto');
 const { app } = require('electron');
 
 // ★ HMAC 密钥（混淆用，配合 asarmor 增加逆向难度）
-// 注意：此密钥会被打包到 asar 中，攻击者破解 asarmor 后可获取
-// 这是"简单高效"方案的权衡，后续可升级为非对称签名
 const LICENSE_HMAC_KEY = 'bnzc_tcm_license_key_v1_2026';
 const TRIAL_DAYS = 7;                                        // 试用期 7 天
 const TIME_TAMPER_THRESHOLD = 24 * 60 * 60 * 1000;           // 时间回拨阈值：1 天
 
 const TRIAL_KEY = 'bnzc_trial_key_v1';
 const LASTRUN_KEY = 'bnzc_lastrun_key_v1';
+
+// ★ v2: 版本类型默认配置（功能差异矩阵）
+// trial: 试用版，限 30 张/月处方，无高级功能
+// personal: 个人版，无限处方，支持数据备份
+// pro: 专业版，无限处方，支持云端同步+多设备+优先支持
+const LICENSE_TYPE_CONFIG = {
+    trial: {
+        maxPrescriptions: 30,
+        features: []  // 试用版无高级功能
+    },
+    personal: {
+        maxPrescriptions: 0,  // 0 = 无限
+        features: ['backup']
+    },
+    pro: {
+        maxPrescriptions: 0,
+        features: ['backup', 'sync', 'multi-device', 'priority-support']
+    }
+};
 
 // ============================================================================
 //  路径工具
@@ -52,7 +69,6 @@ function getLastRunPath() {
 
 // ============================================================================
 //  XOR 混淆（用于 trial.dat 和 last-run.dat，防止用户直接查看/篡改）
-//  注意：这不是安全加密，仅用于混淆。license.dat 用 HMAC 签名保证完整性。
 // ============================================================================
 function xorEncrypt(text, key) {
     const buf = Buffer.from(text, 'utf8');
@@ -80,20 +96,47 @@ function xorDecrypt(base64, key) {
 
 // ============================================================================
 //  HMAC 签名（用于 license.dat 完整性校验）
+//  v2: 签名包含 type/maxPrescriptions/features，防篡改版本分级
+//  向后兼容：旧版 license（无 maxPrescriptions/features）用 v1 签名逻辑验证
 // ============================================================================
 function generateSignature(data) {
+    // 签名内容包含所有关键字段，任一字段被篡改都会导致签名不匹配
+    const content = [
+        data.user,
+        data.type,
+        data.issuedAt,
+        data.expiresAt,
+        String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
+        Array.isArray(data.features) ? data.features.join(',') : ''
+    ].join('|');
+    return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
+}
+
+// v1 签名逻辑（向后兼容旧版 license）
+function generateSignatureV1(data) {
     const content = [data.user, data.type, data.issuedAt, data.expiresAt].join('|');
     return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
 }
 
 function verifySignature(data) {
     if (!data.signature) return false;
-    const expected = generateSignature(data);
+    // v2 签名校验
+    const expectedV2 = generateSignature(data);
     try {
-        return crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expected, 'hex'));
-    } catch (e) {
-        return data.signature === expected;
+        if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV2, 'hex'))) {
+            return true;
+        }
+    } catch (e) { /* 长度不匹配，继续尝试 v1 */ }
+    // v1 签名向后兼容（旧版 license 无 maxPrescriptions/features 字段）
+    if (data.maxPrescriptions === undefined && !Array.isArray(data.features)) {
+        const expectedV1 = generateSignatureV1(data);
+        try {
+            return crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV1, 'hex'));
+        } catch (e) {
+            return data.signature === expectedV1;
+        }
     }
+    return data.signature === expectedV2;
 }
 
 // ============================================================================
@@ -161,6 +204,24 @@ function writeLastRun(data) {
 }
 
 // ============================================================================
+//  版本类型规范化（兼容旧版 license 无 type/maxPrescriptions/features 字段）
+// ============================================================================
+function normalizeLicense(license) {
+    if (!license) return null;
+    const config = LICENSE_TYPE_CONFIG[license.type] || LICENSE_TYPE_CONFIG.personal;
+    return {
+        user: license.user || '',
+        type: license.type || 'personal',
+        issuedAt: license.issuedAt,
+        expiresAt: license.expiresAt,
+        // v2 新字段（旧版 license 缺失时用默认值）
+        maxPrescriptions: license.maxPrescriptions !== undefined ? license.maxPrescriptions : config.maxPrescriptions,
+        features: Array.isArray(license.features) ? license.features : config.features,
+        signature: license.signature
+    };
+}
+
+// ============================================================================
 //  校验主逻辑
 // ============================================================================
 function validateLicense() {
@@ -171,7 +232,6 @@ function validateLicense() {
     if (lastRun && lastRun.timestamp) {
         const diff = now - lastRun.timestamp;
         if (diff < -TIME_TAMPER_THRESHOLD) {
-            // 时间被回拨超过 1 天，判定为篡改
             return {
                 valid: false,
                 message: '检测到系统时间异常（时间回拨），软件已锁定。\n请恢复系统时间后重启，或联系客服重新激活。',
@@ -181,16 +241,19 @@ function validateLicense() {
     }
 
     // 2. 尝试读取 license 文件（正式授权）
-    const license = readLicense();
-    if (license) {
-        // 验证签名
-        if (!verifySignature(license)) {
+    const rawLicense = readLicense();
+    if (rawLicense) {
+        // 先用原始字段验证签名（保留向后兼容：旧版 license 走 v1 签名）
+        if (!verifySignature(rawLicense)) {
             return {
                 valid: false,
                 message: '授权文件已损坏或被篡改，请联系客服重新激活。',
                 type: 'tampered'
             };
         }
+
+        // 签名验证通过后，规范化字段（补全 v2 新字段默认值）
+        const license = normalizeLicense(rawLicense);
 
         // 校验到期时间
         const expiresAtMs = new Date(license.expiresAt).getTime();
@@ -218,6 +281,9 @@ function validateLicense() {
             valid: true,
             message: `授权有效\n用户：${license.user}\n类型：${license.type}\n到期：${license.expiresAt}\n剩余：${remainingDays} 天`,
             type: 'licensed',
+            licenseType: license.type,           // v2: 版本类型
+            maxPrescriptions: license.maxPrescriptions,  // v2: 处方数量限制
+            features: license.features,          // v2: 功能列表
             license: license,
             remainingDays: remainingDays
         };
@@ -226,7 +292,6 @@ function validateLicense() {
     // 3. 没有 license 文件，进入试用模式
     let trial = readTrial();
     if (!trial) {
-        // 首次启动，记录试用开始时间
         trial = {
             startTime: now,
             expiresAt: now + TRIAL_DAYS * 24 * 60 * 60 * 1000
@@ -245,27 +310,35 @@ function validateLicense() {
         };
     }
 
-    // 试用有效
+    // 试用有效（v2: 试用版也有处方数量限制）
     writeLastRun({ timestamp: now });
     const remainingDays = Math.ceil((trialExpiresAtMs - now) / (24 * 60 * 60 * 1000));
     return {
         valid: true,
         message: `试用模式（剩余 ${remainingDays} 天）\n请联系客服购买正式授权。`,
         type: 'trial',
+        licenseType: 'trial',                   // v2: 试用版类型
+        maxPrescriptions: LICENSE_TYPE_CONFIG.trial.maxPrescriptions,  // v2: 30 张/月
+        features: LICENSE_TYPE_CONFIG.trial.features,
         trial: { ...trial, remainingDays },
         remainingDays: remainingDays
     };
 }
 
 // ============================================================================
-//  生成 license（供 license-generator 工具使用）
+//  生成 license（v2 支持版本分级字段）
 // ============================================================================
-function generateLicense(user, type, expiresAt) {
+function generateLicense(user, type, expiresAt, options) {
+    options = options || {};
+    const config = LICENSE_TYPE_CONFIG[type] || LICENSE_TYPE_CONFIG.personal;
     const data = {
         user: String(user || ''),
         type: String(type || 'personal'),   // trial / personal / pro
         issuedAt: new Date().toISOString(),
-        expiresAt: new Date(expiresAt).toISOString()
+        expiresAt: new Date(expiresAt).toISOString(),
+        // v2 新字段：允许 options 覆盖默认配置
+        maxPrescriptions: options.maxPrescriptions !== undefined ? options.maxPrescriptions : config.maxPrescriptions,
+        features: Array.isArray(options.features) ? options.features : config.features
     };
     data.signature = generateSignature(data);
     const json = JSON.stringify(data);
@@ -283,11 +356,35 @@ function writeLicenseContent(base64Content) {
     }
 }
 
+// ★ v2: 检查功能权限（供 feature-guard.js 使用）
+function hasFeature(featureName) {
+    const license = readLicense();
+    if (!license) return false;
+    // 先用原始字段验证签名（向后兼容旧版 license）
+    if (!verifySignature(license)) return false;
+    const normalized = normalizeLicense(license);
+    return Array.isArray(normalized.features) && normalized.features.indexOf(featureName) !== -1;
+}
+
+// ★ v2: 获取当前版本类型
+function getLicenseType() {
+    const license = readLicense();
+    if (!license) return 'trial';  // 无 license 视为试用
+    // 先用原始字段验证签名（向后兼容旧版 license）
+    if (!verifySignature(license)) return 'trial';
+    const normalized = normalizeLicense(license);
+    return normalized.type || 'personal';
+}
+
 module.exports = {
     validateLicense,
     generateLicense,
     readLicense,
     writeLicenseContent,
     getLicensePath,
+    hasFeature,           // v2 新增
+    getLicenseType,       // v2 新增
+    normalizeLicense,     // v2 新增
+    LICENSE_TYPE_CONFIG,  // v2 新增
     TRIAL_DAYS
 };

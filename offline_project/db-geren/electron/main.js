@@ -17,6 +17,8 @@ const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
 const licenseManager = require('./license-manager');
+const prescriptionCounter = require('./prescription-counter');
+const featureGuard = require('./feature-guard');
 
 let mainWindow;
 let loginWindow;
@@ -477,6 +479,64 @@ ipcMain.handle('license:activate', (event, base64Content) => {
         return { success: false, error: result.error };
     } catch (e) {
         return { success: false, error: e.message };
+    }
+});
+
+// ★ v2: 处方数量限制 IPC
+ipcMain.handle('license:can-prescribe', () => {
+    try {
+        return prescriptionCounter.canPrescribe();
+    } catch (e) {
+        console.error('[IPC] can-prescribe 异常:', e);
+        return { allowed: true, current: 0, max: 0, remaining: -1 };  // 出错时放行，避免阻塞用户
+    }
+});
+
+ipcMain.handle('license:increment-prescription', () => {
+    try {
+        const newCount = prescriptionCounter.increment();
+        return { success: true, count: newCount };
+    } catch (e) {
+        console.error('[IPC] increment-prescription 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('license:decrement-prescription', () => {
+    try {
+        const newCount = prescriptionCounter.decrement();
+        return { success: true, count: newCount };
+    } catch (e) {
+        console.error('[IPC] decrement-prescription 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+ipcMain.handle('license:get-prescription-status', () => {
+    try {
+        return prescriptionCounter.getStatus();
+    } catch (e) {
+        console.error('[IPC] get-prescription-status 异常:', e);
+        return { current: 0, max: 0, remaining: -1, licenseType: 'unknown', month: '' };
+    }
+});
+
+// ★ v2: 功能权限校验 IPC
+ipcMain.handle('license:check-feature', (event, featureName) => {
+    try {
+        return featureGuard.checkFeature(featureName);
+    } catch (e) {
+        console.error('[IPC] check-feature 异常:', e);
+        return { allowed: true, message: '功能可用（校验异常，默认放行）', feature: featureName };
+    }
+});
+
+ipcMain.handle('license:get-feature-status', () => {
+    try {
+        return featureGuard.getFeatureStatus();
+    } catch (e) {
+        console.error('[IPC] get-feature-status 异常:', e);
+        return [];
     }
 });
 
