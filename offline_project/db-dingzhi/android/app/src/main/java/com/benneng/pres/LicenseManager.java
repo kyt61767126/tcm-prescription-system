@@ -1126,16 +1126,6 @@ public class LicenseManager {
         }
     }
 
-    private String readStream(InputStream is) throws Exception {
-        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
-        byte[] buffer = new byte[8192];
-        int len;
-        while ((len = is.read(buffer)) > 0) {
-            baos.write(buffer, 0, len);
-        }
-        return baos.toString("UTF-8");
-    }
-
     private JSONObject failResult(String msg) {
         try {
             JSONObject r = new JSONObject();

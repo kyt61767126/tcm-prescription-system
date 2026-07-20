@@ -246,31 +246,75 @@ function Edit-ClinicConfig {
     # Read config
     $config = [System.IO.File]::ReadAllText($configPath, $script:UTF8NoBom) | ConvertFrom-Json
     $currentClinic = $config.clinicName
+    $currentDoctor = $config.doctorName
 
-    Write-Host "  当前诊所名称: $currentClinic"
-    Write-Host "  (按回车键保留当前值)"
-    $newClinic = Read-Host "  请输入诊所名称"
+    Write-Host ""
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host "   当前诊所信息确认" -ForegroundColor Cyan
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host "    诊所名称: $currentClinic" -ForegroundColor Yellow
+    Write-Host "    医师姓名: $currentDoctor" -ForegroundColor Yellow
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host "  (按回车键保留当前值，或输入新值修改)" -ForegroundColor DarkGray
+    Write-Host ""
 
+    # 编辑诊所名称
+    $newClinic = Read-Host "  请输入诊所名称 [$currentClinic]"
     if ([string]::IsNullOrWhiteSpace($newClinic)) {
         $newClinic = $currentClinic
-        Write-Host "  [SKIP] 使用当前名称: $newClinic" -ForegroundColor Yellow
-    } else {
-        # Update config.json (with BOM for JSON compatibility)
-        $config.clinicName = $newClinic
-        $json = $config | ConvertTo-Json -Depth 10
-        [System.IO.File]::WriteAllText($configPath, $json, $script:UTF8WithBom)
+        Write-Host "  [SKIP] 诊所名称保持不变: $newClinic" -ForegroundColor Yellow
+    }
 
-        # Update index.html (NO BOM - critical!)
-        # Use single-quoted strings and concatenation to avoid quote-in-string issues
-        $html = [System.IO.File]::ReadAllText($htmlPath, $script:UTF8NoBom)
+    # 编辑医生姓名
+    $newDoctor = Read-Host "  请输入医师姓名 [$currentDoctor]"
+    if ([string]::IsNullOrWhiteSpace($newDoctor)) {
+        $newDoctor = $currentDoctor
+        Write-Host "  [SKIP] 医师姓名保持不变: $newDoctor" -ForegroundColor Yellow
+    }
 
+    # 最终确认
+    Write-Host ""
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host "   请确认信息" -ForegroundColor Cyan
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host "    诊所名称: $newClinic" -ForegroundColor Green
+    Write-Host "    医师姓名: $newDoctor" -ForegroundColor Green
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host ""
+    $confirm = Read-Host "  确认以上信息吗？(Y=确认 / N=重新输入 / 回车=确认)"
+    if ($confirm -ieq 'N') {
+        Write-Host "  [INFO] 用户选择重新输入..." -ForegroundColor Yellow
+        # 递归调用重新输入
+        Edit-ClinicConfig
+        return
+    }
+
+    # 检查是否有变化
+    $clinicChanged = ($newClinic -ne $currentClinic)
+    $doctorChanged = ($newDoctor -ne $currentDoctor)
+
+    if (-not $clinicChanged -and -not $doctorChanged) {
+        Write-Host "  [SKIP] 诊所信息和医师姓名均无变化" -ForegroundColor Yellow
+        Write-Log "Config: no changes (clinic=$newClinic, doctor=$newDoctor)"
+        return
+    }
+
+    # 更新 config.json (with BOM for JSON compatibility)
+    if ($clinicChanged) { $config.clinicName = $newClinic }
+    if ($doctorChanged) { $config.doctorName = $newDoctor }
+    $json = $config | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($configPath, $json, $script:UTF8WithBom)
+
+    # 更新 index.html (NO BOM - critical!)
+    $html = [System.IO.File]::ReadAllText($htmlPath, $script:UTF8NoBom)
+
+    if ($clinicChanged) {
         # Pattern: clinicName: 'xxx' -> clinicName: 'newClinic'
         $pattern1 = "clinicName:\s*'[^']*'"
         $replacement1 = "clinicName: '$newClinic'"
         $html = $html -replace $pattern1, $replacement1
 
         # Pattern: clinic-info-name">xxx< -> clinic-info-name">newClinic<
-        # Use single-quoted string + concatenation to avoid " inside " issue
         $pattern2 = 'clinic-info-name">[^<]*<'
         $replacement2 = 'clinic-info-name">' + $newClinic + '<'
         $html = $html -replace $pattern2, $replacement2
@@ -279,12 +323,22 @@ function Edit-ClinicConfig {
         $pattern3 = 'clinicNameDisplay">[^<]*<'
         $replacement3 = 'clinicNameDisplay">' + $newClinic + '<'
         $html = $html -replace $pattern3, $replacement3
-
-        [System.IO.File]::WriteAllText($htmlPath, $html, $script:UTF8NoBom)
-
-        Write-Host "  [OK] 配置已更新: $newClinic" -ForegroundColor Green
+        Write-Host "  [OK] 诊所名称已更新: $currentClinic -> $newClinic" -ForegroundColor Green
     }
-    Write-Log "Config: clinic name = $newClinic"
+
+    if ($doctorChanged) {
+        # Pattern: doctorName: 'xxx' -> doctorName: 'newDoctor'
+        $pattern4 = "doctorName:\s*'[^']*'"
+        $replacement4 = "doctorName: '$newDoctor'"
+        $html = $html -replace $pattern4, $replacement4
+        Write-Host "  [OK] 医师姓名已更新: $currentDoctor -> $newDoctor" -ForegroundColor Green
+    }
+
+    [System.IO.File]::WriteAllText($htmlPath, $html, $script:UTF8NoBom)
+
+    Write-Host ""
+    Write-Host "  [完成] 配置已写入 config.json 和 index.html" -ForegroundColor Green
+    Write-Log "Config: clinic name = $newClinic, doctor name = $newDoctor"
 }
 
 # ============================================================================
