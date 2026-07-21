@@ -855,9 +855,10 @@ function Build-AllStrict {
     }
 
     # Step B: Mobile build (first-lock)
+    # 跳过配置修改（Step A 已执行过 Edit-ClinicConfig，避免重复要求用户回车确认）
     Write-Host ""
     Write-Host "  [步骤 B] 打包手机 APP (首次锁定模式)..." -ForegroundColor Cyan
-    $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $false -SkipEnc $true
+    $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
     if ($rc -ne 0) {
         Write-Host "[错误] 手机 APP 打包失败，终止" -ForegroundColor Red
         return 1

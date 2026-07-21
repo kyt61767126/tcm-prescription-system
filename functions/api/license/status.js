@@ -13,7 +13,8 @@
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
-    getKV, getLicense, updateLicense, sanitizeRecord, KV_LICENSE_PREFIX, KV_LICENSE_INDEX
+    getKV, getLicense, updateLicense, sanitizeRecord, KV_LICENSE_PREFIX, KV_LICENSE_INDEX,
+    getDevices, getMaxDevices
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -95,14 +96,45 @@ export async function onRequest(context) {
 
             switch (action) {
                 case 'unbind':
-                    // 解绑机器 ID，重置为未使用
-                    updates = {
-                        status: 'unused',
-                        machineId: null,
-                        activatedAt: null,
-                        activatedIp: null
-                    };
-                    message = '激活码已解绑，可重新激活';
+                    // ★ v4 新增：支持指定 machineId 解绑单台设备（多设备授权场景）
+                    // 不传 machineId 时解绑所有设备（向后兼容旧行为）
+                    const targetMachineId = body.machineId;
+                    if (targetMachineId) {
+                        // 解绑单台设备：从 devices 数组中移除
+                        const devices = getDevices(record);
+                        const newDevices = devices.filter(d => d.machineId !== targetMachineId);
+                        if (newDevices.length === devices.length) {
+                            return json({ success: false, error: '未找到指定的 machineId' }, 404);
+                        }
+                        updates = {
+                            devices: newDevices,
+                            maxDevices: getMaxDevices(record)
+                        };
+                        // 如果还有剩余设备，保持 used 状态；否则重置为 unused
+                        if (newDevices.length === 0) {
+                            updates.status = 'unused';
+                            updates.machineId = null;
+                            updates.activatedAt = null;
+                            updates.activatedIp = null;
+                            message = '已解绑该设备（最后一台），激活码重置为未使用';
+                        } else {
+                            // 更新 machineId 字段为剩余设备的第一台（向后兼容）
+                            updates.machineId = newDevices[0].machineId;
+                            updates.activatedAt = newDevices[0].activatedAt;
+                            message = `已解绑 1 台设备，剩余 ${newDevices.length} 台`;
+                        }
+                    } else {
+                        // 解绑所有设备（旧行为）
+                        updates = {
+                            status: 'unused',
+                            machineId: null,
+                            activatedAt: null,
+                            activatedIp: null,
+                            devices: [],
+                            maxDevices: getMaxDevices(record)
+                        };
+                        message = '激活码已解绑所有设备，可重新激活';
+                    }
                     break;
 
                 case 'disable':
@@ -112,8 +144,9 @@ export async function onRequest(context) {
 
                 case 'enable':
                     // 启用：如果已绑定机器则恢复 used 状态，否则 unused
+                    const devices = getDevices(record);
                     updates = {
-                        status: record.machineId ? 'used' : 'unused'
+                        status: devices.length > 0 ? 'used' : 'unused'
                     };
                     message = '激活码已启用';
                     break;

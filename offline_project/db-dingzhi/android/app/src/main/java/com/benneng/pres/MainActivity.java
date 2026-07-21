@@ -854,12 +854,39 @@ public class MainActivity extends AppCompatActivity {
                     case "license_activateOnline":
                         // JavascriptInterface 在 JavaBridge 线程执行，可直接网络请求
                         // ★ v3 新增：APP 端 clinicName 为只读配置，直接从本地 config.json 读取（避免 JS 层篡改）
-                        return licenseManager.activateOnline(
+                        String activateResult = licenseManager.activateOnline(
                                 args.optString("code", ""),
                                 licenseManager.getMachineId(),
                                 args.optString("user", ""),
                                 licenseManager.getLocalClinicName()
                         ).toString();
+                        // ★ v4 新增：激活成功后 Toast 显示"已绑定 X/N 台设备"
+                        try {
+                            JSONObject resultObj = new JSONObject(activateResult);
+                            if (resultObj.optBoolean("success", false)) {
+                                JSONObject info = resultObj.optJSONObject("licenseInfo");
+                                if (info != null) {
+                                    int maxDev = info.optInt("maxDevices", 1);
+                                    int devCount = info.optInt("devicesCount", 1);
+                                    // 多设备授权时显示配额信息（单设备时不显示，保持原行为）
+                                    if (maxDev > 1) {
+                                        final int fd = devCount, fm = maxDev;
+                                        mainHandler.post(() -> {
+                                            try {
+                                                android.widget.Toast.makeText(MainActivity.this,
+                                                        "激活成功！已绑定 " + fd + "/" + fm + " 台设备",
+                                                        android.widget.Toast.LENGTH_LONG).show();
+                                            } catch (Exception e) {
+                                                Log.w(TAG, "Toast 显示失败", e);
+                                            }
+                                        });
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            Log.w(TAG, "解析 activateOnline result 失败", e);
+                        }
+                        return activateResult;
                     case "license_restart":
                         // 重启 APP
                         mainHandler.post(() -> {
@@ -1024,7 +1051,7 @@ public class MainActivity extends AppCompatActivity {
 
                 String safeName = sanitize(fileName);
                 if (safeName.isEmpty()) {
-                    safeName = "prescription_" + System.currentTimeMillis() + ".png";
+                    safeName = "prescription_" + System.currentTimeMillis() + ".jpg";
                 }
 
                 File dir = getImageDir();
@@ -1298,18 +1325,10 @@ public class MainActivity extends AppCompatActivity {
 
         private void notifyMediaScanner(File file) {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                String mimeType = "application/json";
-                if (file.getName().endsWith(".png")) {
-                    mimeType = "image/png";
-                } else if (file.getName().endsWith(".jpg") || file.getName().endsWith(".jpeg")) {
-                    mimeType = "image/jpeg";
-                } else if (file.getName().endsWith(".webm")) {
-                    mimeType = "video/webm";
-                }
                 android.media.MediaScannerConnection.scanFile(
                         getApplicationContext(),
                         new String[]{file.getAbsolutePath()},
-                        new String[]{mimeType},
+                        new String[]{(file.getName().endsWith(".webm") || file.getName().endsWith(".mp4")) ? (file.getName().endsWith(".mp4") ? "video/mp4" : "video/webm") : (file.getName().endsWith(".jpg") || file.getName().endsWith(".jpeg")) ? "image/jpeg" : "image/png"},
                         null);
             }
         }
@@ -1422,7 +1441,7 @@ public class MainActivity extends AppCompatActivity {
                         JSONObject fileObj = new JSONObject();
                         fileObj.put("name", fileName);
                         fileObj.put("path", filePath);
-                        fileObj.put("type", fileName.endsWith(".webm") ? "video" : "image");
+                        fileObj.put("type", fileName.endsWith(".webm") || fileName.endsWith(".mp4") ? "video" : "image");
                         fileObj.put("size", f.length());
                         fileObj.put("lastModified", lastMod);
                         files.put(fileObj);

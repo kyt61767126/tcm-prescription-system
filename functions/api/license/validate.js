@@ -33,7 +33,8 @@
 
 import {
     getKV, getLicense, updateLicense, saveLicense,
-    buildLicenseData, encodeLicenseBase64, checkRateLimit
+    buildLicenseData, encodeLicenseBase64, checkRateLimit,
+    getDevices, getMaxDevices
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -155,23 +156,26 @@ export async function onRequest(context) {
             }
         }
 
-        // 已使用：仅允许同一机器 + 同一诊所重激活
-        if (record.status === 'used') {
-            if (record.machineId !== machineId) {
+        // ★ v4 新增：多设备授权校验
+        // 1. 获取已绑定设备列表（兼容旧 record.machineId 单值字段）
+        const devices = getDevices(record);
+        const maxDevices = getMaxDevices(record);
+        const existingDevice = devices.find(d => d.machineId === machineId);
+
+        if (record.status === 'used' && !existingDevice) {
+            // 新设备激活：检查是否还有配额
+            if (devices.length >= maxDevices) {
                 return json({
                     success: false,
-                    error: '激活码已绑定其他设备，如需换机请联系管理员解绑'
+                    error: `已达最大设备数（${maxDevices} 台），无法绑定新设备。请联系管理员解绑旧设备后重试`,
+                    maxDevices: maxDevices,
+                    devicesCount: devices.length
                 }, 403);
             }
-            // ★ v3 新增：同机器重激活时，诊所名也必须一致
-            if (record.clinicName && record.clinicName !== clinicName) {
-                return json({
-                    success: false,
-                    error: '诊所名与已激活记录不一致，无法重新激活'
-                }, 403);
-            }
-            // 同机器 + 同诊所重激活，允许重新生成 license
+            // 配额充足，允许新设备激活（在后续 updateLicense 中添加到 devices 数组）
         }
+        // existingDevice 存在 → 同设备重激活，允许（不增加设备数）
+        // record.status === 'unused' → 首次激活，允许
 
         // 到期校验（如果激活码本身有 expiresAt）
         if (record.expiresAt) {
@@ -188,6 +192,7 @@ export async function onRequest(context) {
         // 生成 license 数据
         // ★ v3 新增：将 clinicName + machineId + licenseBinding 传给 buildLicenseData
         // 仅当激活码已绑定诊所名时才启用 v3 签名（含绑定字段）
+        // ★ v4 新增：将 maxDevices + devicesCount 传给 buildLicenseData（仅显示用，不参与签名）
         const licenseRecord = { ...record, user: licenseUser };
         const licenseOptions = {};
         if (record.clinicName) {
@@ -195,12 +200,16 @@ export async function onRequest(context) {
             licenseOptions.machineId = machineId;
             licenseOptions.licenseBinding = 'clinic+user+machine';
         }
+        // ★ v4 新增：多设备授权信息（仅显示用）
+        licenseOptions.maxDevices = maxDevices;
+        licenseOptions.devicesCount = existingDevice ? devices.length : devices.length + 1;
         const licenseData = await buildLicenseData(licenseRecord, licenseOptions);
 
         // 更新激活码记录：标记为已使用，绑定机器 ID + 诊所名
+        // ★ v4 新增：如果是新设备激活，添加到 devices 数组
         const updates = {
             status: 'used',
-            machineId: machineId,
+            machineId: machineId,  // 保留旧字段（向后兼容，= devices[0].machineId）
             activatedAt: getNowISO(),
             activatedIp: ip,
             user: licenseUser
@@ -209,6 +218,23 @@ export async function onRequest(context) {
         if (record.clinicName && !record.activatedClinicName) {
             updates.activatedClinicName = record.clinicName;
         }
+        // ★ v4 新增：更新 devices 数组
+        const newDevices = devices.slice();  // 复制现有设备列表
+        if (existingDevice) {
+            // 同设备重激活：更新该设备的激活时间
+            existingDevice.activatedAt = getNowISO();
+            existingDevice.clinicName = record.clinicName || existingDevice.clinicName;
+        } else {
+            // 新设备激活：添加到数组
+            newDevices.push({
+                machineId: machineId,
+                activatedAt: getNowISO(),
+                clinicName: record.clinicName || clinicName || null,
+                activatedIp: ip
+            });
+        }
+        updates.devices = newDevices;
+        updates.maxDevices = maxDevices;
         await updateLicense(kv, code, updates);
 
         // 编码为 base64（客户端写入 license.dat 的格式）
@@ -225,7 +251,9 @@ export async function onRequest(context) {
                 maxPrescriptions: licenseData.maxPrescriptions,
                 features: licenseData.features,
                 clinicName: licenseData.clinicName || null,           // ★ v3 新增
-                licenseBinding: licenseData.licenseBinding || null    // ★ v3 新增
+                licenseBinding: licenseData.licenseBinding || null,   // ★ v3 新增
+                maxDevices: licenseData.maxDevices || 1,                // ★ v4 新增
+                devicesCount: licenseData.devicesCount || 1             // ★ v4 新增
             }
         });
 

@@ -15,7 +15,8 @@
 //      "note": "客户备注",                // 备注（可选）
 //      "maxPrescriptions": 0,             // 覆盖默认处方限制（可选）
 //      "features": ["backup","sync"],     // 覆盖默认功能列表（可选）
-//      "clinicName": "本能堂中医诊所"      // ★ v3 新增：绑定诊所名（可选，激活时校验）
+//      "clinicName": "本能堂中医诊所",      // ★ v3 新增：绑定诊所名（可选，激活时校验）
+//      "maxDevices": 3                    // ★ v4 新增：最大设备数（可选，默认 1，最大 10）
 //    }
 //
 //  返回：
@@ -76,7 +77,7 @@ export async function onRequest(context) {
         }
 
         const body = await context.request.json().catch(() => ({}));
-        const { user, type, days, expiresAt, count, note, maxPrescriptions, features, clinicName } = body;
+        const { user, type, days, expiresAt, count, note, maxPrescriptions, features, clinicName, maxDevices } = body;
 
         // 参数校验
         if (!user) {
@@ -98,6 +99,14 @@ export async function onRequest(context) {
             }
             if (clinicName.length > 100) {
                 return json({ success: false, error: 'clinicName 长度不能超过 100 字符' }, 400);
+            }
+        }
+        // ★ v4 新增：maxDevices 校验（默认 1，范围 1-10）
+        let parsedMaxDevices = 1;
+        if (maxDevices !== undefined && maxDevices !== null) {
+            parsedMaxDevices = parseInt(maxDevices, 10);
+            if (isNaN(parsedMaxDevices) || parsedMaxDevices < 1 || parsedMaxDevices > 10) {
+                return json({ success: false, error: 'maxDevices 必须是 1-10 之间的整数' }, 400);
             }
         }
 
@@ -124,6 +133,8 @@ export async function onRequest(context) {
                 activatedAt: null,
                 machineId: null,
                 clinicName: clinicName || null,  // ★ v3 新增：绑定的诊所名（null 表示不绑定）
+                maxDevices: parsedMaxDevices,    // ★ v4 新增：最大设备数（默认 1，最大 10）
+                devices: [],                     // ★ v4 新增：已绑定设备数组（初始为空）
                 status: 'unused',  // unused / used / expired / disabled
                 maxPrescriptions: maxPrescriptions !== undefined ? maxPrescriptions : undefined,
                 features: features || undefined,

@@ -589,6 +589,24 @@ ipcMain.handle('license:submit-activate', async (event, code, user, clinicName) 
         const machineId = activateManager.getMachineId();
         // ★ v3 新增：透传 clinicName 给云端做绑定校验
         const result = await activateManager.activateOnline(code, machineId, user, clinicName);
+        // ★ v4 新增：激活成功后弹窗显示"已绑定 X/N 台设备"
+        if (result && result.success && result.licenseInfo) {
+            const info = result.licenseInfo;
+            const maxDevices = info.maxDevices || 1;
+            const devicesCount = info.devicesCount || 1;
+            // 多设备授权时显示配额信息（单设备时不显示，保持原行为）
+            if (maxDevices > 1) {
+                const { dialog } = require('electron');
+                dialog.showMessageBoxSync(mainWindow, {
+                    type: 'info',
+                    title: '激活成功',
+                    message: `激活成功！\n已绑定 ${devicesCount}/${maxDevices} 台设备`,
+                    detail: `剩余可用设备数：${maxDevices - devicesCount} 台\n如需解绑旧设备，请联系管理员。`,
+                    buttons: ['确定'],
+                    defaultId: 0
+                });
+            }
+        }
         return result;
     } catch (e) {
         console.error('[IPC] submit-activate 异常:', e);

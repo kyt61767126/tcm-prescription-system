@@ -854,12 +854,39 @@ public class MainActivity extends AppCompatActivity {
                     case "license_activateOnline":
                         // JavascriptInterface 在 JavaBridge 线程执行，可直接网络请求
                         // ★ v3 新增：APP 端 clinicName 为只读配置，直接从本地 config.json 读取（避免 JS 层篡改）
-                        return licenseManager.activateOnline(
+                        String activateResult = licenseManager.activateOnline(
                                 args.optString("code", ""),
                                 licenseManager.getMachineId(),
                                 args.optString("user", ""),
                                 licenseManager.getLocalClinicName()
                         ).toString();
+                        // ★ v4 新增：激活成功后 Toast 显示"已绑定 X/N 台设备"
+                        try {
+                            JSONObject resultObj = new JSONObject(activateResult);
+                            if (resultObj.optBoolean("success", false)) {
+                                JSONObject info = resultObj.optJSONObject("licenseInfo");
+                                if (info != null) {
+                                    int maxDev = info.optInt("maxDevices", 1);
+                                    int devCount = info.optInt("devicesCount", 1);
+                                    // 多设备授权时显示配额信息（单设备时不显示，保持原行为）
+                                    if (maxDev > 1) {
+                                        final int fd = devCount, fm = maxDev;
+                                        mainHandler.post(() -> {
+                                            try {
+                                                android.widget.Toast.makeText(MainActivity.this,
+                                                        "激活成功！已绑定 " + fd + "/" + fm + " 台设备",
+                                                        android.widget.Toast.LENGTH_LONG).show();
+                                            } catch (Exception e) {
+                                                Log.w(TAG, "Toast 显示失败", e);
+                                            }
+                                        });
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            Log.w(TAG, "解析 activateOnline result 失败", e);
+                        }
+                        return activateResult;
                     case "license_restart":
                         // 重启 APP
                         mainHandler.post(() -> {

@@ -140,6 +140,7 @@ function generateActivationCode() {
 // 根据激活码记录生成 license 数据（用于 validate API 返回给客户端）
 // ★ v3 新增：options.clinicName + options.machineId + options.licenseBinding
 // 三者同时存在时启用 v3 签名（含绑定字段），否则走 v2 签名（向后兼容）
+// ★ v4 新增：options.maxDevices + options.devicesCount（多设备授权，仅显示用，不参与签名）
 async function buildLicenseData(record, options = {}) {
     const config = LICENSE_TYPE_CONFIG[record.type] || LICENSE_TYPE_CONFIG.personal;
     const maxPrescriptions = record.maxPrescriptions !== undefined ? record.maxPrescriptions : config.maxPrescriptions;
@@ -173,6 +174,13 @@ async function buildLicenseData(record, options = {}) {
         data.clinicName = options.clinicName;
         data.machineId = options.machineId;
         data.licenseBinding = options.licenseBinding || 'clinic+user+machine';
+    }
+
+    // ★ v4 新增：多设备授权信息（仅显示用，不参与签名）
+    // 客户端激活成功后可显示"已绑定 X/N 台设备"
+    if (options.maxDevices !== undefined) {
+        data.maxDevices = options.maxDevices;
+        data.devicesCount = options.devicesCount || 1;
     }
 
     // ★ 自动选择 v3 / v2 签名
@@ -238,7 +246,9 @@ async function listLicenses(kv) {
 }
 
 // 隐藏敏感字段，返回安全的记录对象
+// ★ v4 新增：maxDevices + devices 数组（多设备授权）
 function sanitizeRecord(record) {
+    const devices = getDevices(record);
     return {
         code: record.code,
         user: record.user || record.username,
@@ -252,8 +262,46 @@ function sanitizeRecord(record) {
         status: record.status,
         maxPrescriptions: record.maxPrescriptions,
         features: record.features,
-        note: record.note || ''
+        note: record.note || '',
+        // ★ v4 新增：多设备授权字段
+        maxDevices: record.maxDevices !== undefined ? record.maxDevices : 1,  // 默认 1（向后兼容旧激活码）
+        devicesCount: devices.length,                                           // 已绑定设备数
+        devices: devices.map(d => ({                                           // 已绑定设备列表（脱敏）
+            machineId: d.machineId ? d.machineId.substring(0, 8) + '...' : null,
+            activatedAt: d.activatedAt || null,
+            clinicName: d.clinicName || null
+        }))
     };
+}
+
+// ★ v4 新增：获取激活码已绑定的设备数组（向后兼容旧 record.machineId 单值字段）
+// 旧格式：record.machineId（单值）→ 返回 [{ machineId, activatedAt, clinicName }]
+// 新格式：record.devices（数组）→ 直接返回
+// 混合格式：优先 devices，若为空则从 machineId 转换
+function getDevices(record) {
+    if (!record) return [];
+    // 新格式：devices 数组
+    if (Array.isArray(record.devices) && record.devices.length > 0) {
+        return record.devices;
+    }
+    // 旧格式：machineId 单值 → 转换为单元素数组
+    if (record.machineId) {
+        return [{
+            machineId: record.machineId,
+            activatedAt: record.activatedAt,
+            clinicName: record.activatedClinicName || record.clinicName
+        }];
+    }
+    return [];
+}
+
+// ★ v4 新增：获取激活码的最大设备数（默认 1，向后兼容）
+function getMaxDevices(record) {
+    if (!record) return 1;
+    const n = parseInt(record.maxDevices, 10);
+    if (isNaN(n) || n < 1) return 1;
+    if (n > 10) return 10;  // 上限 10 台
+    return n;
 }
 
 // ============================================================================
@@ -291,5 +339,7 @@ export {
     updateLicense,
     listLicenses,
     sanitizeRecord,
-    checkRateLimit
+    checkRateLimit,
+    getDevices,        // ★ v4 新增：获取激活码已绑定的设备数组
+    getMaxDevices      // ★ v4 新增：获取激活码的最大设备数
 };
