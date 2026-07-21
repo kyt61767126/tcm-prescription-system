@@ -24,19 +24,39 @@ function Write-Step {
 
 # Run external .bat file and return exit code (stderr displayed as yellow warnings)
 function Invoke-BatFile {
-    param([string]$BatPath, [string]$Context = "external command")
+    param(
+        [string]$BatPath,
+        [string]$Context = "external command",
+        [switch]$NoPause
+    )
     if (-not (Test-Path $BatPath)) {
         Write-Host "[ERROR] 文件未找到: $BatPath" -ForegroundColor Red
         return 1
     }
-    & cmd /c "$BatPath" 2>&1 | ForEach-Object {
-        if ($_ -is [System.Management.Automation.ErrorRecord]) {
-            Write-Host $_.Exception.Message -ForegroundColor Yellow
-        } else {
-            Write-Host $_
+    # NoPause 模式：设置 NO_PAUSE 环境变量，让 build.bat / build-app.bat 跳过末尾 pause
+    # 用于 Build-AllStrict / Build-All 连续流程，避免中间回车打断
+    $prevNoPause = $env:NO_PAUSE
+    if ($NoPause) {
+        $env:NO_PAUSE = '1'
+    }
+    try {
+        & cmd /c "$BatPath" 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) {
+                Write-Host $_.Exception.Message -ForegroundColor Yellow
+            } else {
+                Write-Host $_
+            }
+        }
+        return $LASTEXITCODE
+    } finally {
+        if ($NoPause) {
+            if ($prevNoPause) {
+                $env:NO_PAUSE = $prevNoPause
+            } else {
+                Remove-Item Env:\NO_PAUSE -ErrorAction SilentlyContinue
+            }
         }
     }
-    return $LASTEXITCODE
 }
 
 # ============================================================================
@@ -441,7 +461,7 @@ function Build-Desktop {
     Write-Host ""
     # P1-易用：分步耗时统计
     $stepStart = Get-Date
-    $code = Invoke-BatFile "$scriptDir\cloud_desktop\build.bat" "桌面版打包"
+    $code = Invoke-BatFile "$scriptDir\cloud_desktop\build.bat" "桌面版打包" -NoPause:$SkipConfirm
     $stepElapsed = (Get-Date) - $stepStart
     if ($code -ne 0) {
         Write-Host ""
@@ -491,7 +511,7 @@ function Build-App {
     Write-Host ""
     # P1-易用：分步耗时统计
     $stepStart = Get-Date
-    $code = Invoke-BatFile "$scriptDir\build-app.bat" "APP 打包"
+    $code = Invoke-BatFile "$scriptDir\build-app.bat" "APP 打包" -NoPause:$SkipConfirm
     $stepElapsed = (Get-Date) - $stepStart
     if ($code -ne 0) {
         Write-Host ""

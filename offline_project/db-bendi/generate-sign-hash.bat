@@ -5,4 +5,4 @@ cd /d "%~dp0"
 powershell -ExecutionPolicy Bypass -File "%~dp0generate-sign-hash.ps1"
 
 echo.
-pause
+if not defined NO_PAUSE pause

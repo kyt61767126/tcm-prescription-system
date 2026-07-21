@@ -105,10 +105,18 @@ function Invoke-External {
         [string]$WorkDir,
         [Parameter(ParameterSetName='ScriptBlock', Position=1)]
         [Parameter(ParameterSetName='FilePath', Position=2)]
-        [string]$Context = "external command"
+        [string]$Context = "external command",
+        [switch]$NoPause
     )
     $prevEAP = $ErrorActionPreference
     $ErrorActionPreference = 'Continue'
+
+    # NoPause 模式：设置 NO_PAUSE 环境变量，让 build.bat / build-app.bat 跳过末尾 pause
+    # 用于 Build-AllStrict / Build-All 连续流程，避免中间回车打断
+    $prevNoPause = $env:NO_PAUSE
+    if ($NoPause) {
+        $env:NO_PAUSE = '1'
+    }
 
     # Resolve FilePath to absolute path and verify existence
     if ($PSCmdlet.ParameterSetName -eq 'FilePath') {
@@ -152,6 +160,13 @@ function Invoke-External {
     } finally {
         if ($prevLocation) { Set-Location $prevLocation }
         $ErrorActionPreference = $prevEAP
+        if ($NoPause) {
+            if ($prevNoPause) {
+                $env:NO_PAUSE = $prevNoPause
+            } else {
+                Remove-Item Env:\NO_PAUSE -ErrorAction SilentlyContinue
+            }
+        }
     }
     if ($code -ne 0 -and $code -ne $null) {
         Write-Log "[FAIL] $Context (exit code: $code)" "ERROR"
@@ -872,7 +887,7 @@ function Build-AllStrict {
         Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
         return 1
     }
-    Invoke-External -FilePath $hashBat -WorkDir $versionDir
+    Invoke-External -FilePath $hashBat -WorkDir $versionDir -NoPause
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[错误] 哈希提取失败，跳过严格模式" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
