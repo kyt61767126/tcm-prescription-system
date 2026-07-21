@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>惠康中医 - 激活码管理后台</title>
+<title>惠康中医 - 平台管理后台</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body {
@@ -140,6 +140,14 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 
 .hidden { display: none !important; }
 
+/* 标签页 */
+.tab-bar { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid #ebeef5; }
+.tab-btn { padding: 10px 20px; background: none; border: none; cursor: pointer; font-size: 14px; color: #606266; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+.tab-btn:hover { color: #3498db; }
+.tab-btn.active { color: #3498db; border-bottom-color: #3498db; font-weight: 600; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
 @media (max-width: 768px) {
     body { padding: 10px; }
     .gen-row { grid-template-columns: 1fr; }
@@ -152,7 +160,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 <div class="container">
     <!-- 登录区域 -->
     <div id="loginSection" class="login-box">
-        <h1>惠康中医 激活码管理</h1>
+        <h1>惠康中医 平台管理</h1>
         <div id="loginAlert" class="alert"></div>
         <div class="form-group">
             <label>管理员账号</label>
@@ -168,7 +176,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
     <!-- 主界面 -->
     <div id="mainSection" class="hidden">
         <div class="top-bar">
-            <h1>惠康中医 激活码管理后台</h1>
+            <h1>惠康中医 平台管理后台</h1>
             <div>
                 <span class="user-info">已登录：<strong id="currentAdmin"></strong></span>
                 <button class="btn btn-sm logout-btn" onclick="doLogout()" style="margin-left:10px;">退出</button>
@@ -177,6 +185,15 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 
         <div id="mainAlert" class="alert"></div>
 
+        <!-- 标签栏 -->
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="License" onclick="switchTab('License')">📋 激活码管理</button>
+            <button class="tab-btn" data-tab="Clinics" onclick="switchTab('Clinics')">🏥 诊所管理</button>
+            <button class="tab-btn" data-tab="Users" onclick="switchTab('Users')">👥 用户管理</button>
+        </div>
+
+        <!-- 激活码管理标签页（原有内容） -->
+        <div id="tabLicense" class="tab-content active">
         <!-- 统计 -->
         <h2>统计概览</h2>
         <div class="stats" id="statsBox">
@@ -269,6 +286,68 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </tbody>
             </table>
         </div>
+        </div><!-- /tabLicense -->
+
+        <!-- 诊所管理标签页 -->
+        <div id="tabClinics" class="tab-content">
+            <div id="clinicAlert" class="alert"></div>
+            <h2>创建新诊所</h2>
+            <div class="gen-box">
+                <div class="gen-row">
+                    <div class="form-group">
+                        <label>诊所名称 *</label>
+                        <input type="text" id="newClinicName" placeholder="如：惠康中医诊所">
+                    </div>
+                    <div class="form-group">
+                        <label>管理员账号 *</label>
+                        <input type="text" id="newClinicAdminUsername" placeholder="英文/拼音，不可中文">
+                    </div>
+                    <div class="form-group">
+                        <label>管理员密码 *</label>
+                        <input type="password" id="newClinicAdminPassword" placeholder="初始密码">
+                    </div>
+                    <div class="form-group">
+                        <label>管理员姓名</label>
+                        <input type="text" id="newClinicAdminName" placeholder="如：张三">
+                    </div>
+                </div>
+                <div class="gen-actions">
+                    <button class="btn btn-success" onclick="handleCreateClinic()">创建诊所</button>
+                    <button class="btn" onclick="clearClinicForm()">清空</button>
+                </div>
+            </div>
+
+            <h2>诊所列表</h2>
+            <div id="clinicList" class="table-box" style="padding: 10px;">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+
+        <!-- 用户管理标签页 -->
+        <div id="tabUsers" class="tab-content">
+            <div id="userAlert" class="alert"></div>
+            <div class="filter-bar">
+                <button class="btn btn-sm" onclick="loadUsersList()" style="margin-left:auto;">刷新</button>
+            </div>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>用户名</th>
+                            <th>姓名</th>
+                            <th>角色</th>
+                            <th>所属诊所</th>
+                            <th>允许模式</th>
+                            <th>创建时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersListBody">
+                        <tr><td colspan="6" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">提示：用户管理（创建/编辑/删除）请到对应诊所内操作，或使用主应用的用户管理界面。此处仅用于查看所有用户列表。</p>
+        </div>
     </div>
 </div>
 
@@ -290,8 +369,8 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 <script>
 // API 基础路径（与 Pages Functions 路径一致）
 const API_BASE = '/api';
-let token = localStorage.getItem('license_admin_token') || '';
-let currentUser = localStorage.getItem('license_admin_user') || '';
+let token = localStorage.getItem('cloud_token') || localStorage.getItem('license_admin_token') || '';
+let currentUser = localStorage.getItem('cloud_user') || localStorage.getItem('license_admin_user') || '';
 
 // 显示提示
 function showAlert(elementId, message, type) {
@@ -324,6 +403,8 @@ async function doLogin() {
             }
             token = data.token;
             currentUser = username;
+            localStorage.setItem('cloud_token', token);
+            localStorage.setItem('cloud_user', username);
             localStorage.setItem('license_admin_token', token);
             localStorage.setItem('license_admin_user', username);
             showMain();
@@ -338,6 +419,8 @@ async function doLogin() {
 function doLogout() {
     token = '';
     currentUser = '';
+    localStorage.removeItem('cloud_token');
+    localStorage.removeItem('cloud_user');
     localStorage.removeItem('license_admin_token');
     localStorage.removeItem('license_admin_user');
     location.reload();
@@ -609,6 +692,206 @@ function clearFilter() {
     document.getElementById('filterType').value = '';
     document.getElementById('filterQ').value = '';
     loadList();
+}
+
+// ===== 标签页切换 =====
+function switchTab(tabName) {
+    // 隐藏所有标签页内容
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    // 显示选中标签页
+    const tabContent = document.getElementById('tab' + tabName);
+    const tabBtn = document.querySelector('.tab-btn[data-tab="' + tabName + '"]');
+    if (tabContent) tabContent.classList.add('active');
+    if (tabBtn) tabBtn.classList.add('active');
+    // 按需加载数据
+    if (tabName === 'Clinics') loadClinicsList();
+    else if (tabName === 'Users') loadUsersList();
+    else if (tabName === 'License') loadList();
+}
+
+// ===== 诊所管理 =====
+async function loadClinicsList() {
+    const listEl = document.getElementById('clinicList');
+    if (!listEl) return;
+    listEl.innerHTML = '<div class="loading">加载中...</div>';
+    try {
+        const res = await fetch(API_BASE + '/users?clinics=true', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+            if (data.data.length === 0) {
+                listEl.innerHTML = '<div class="empty">暂无诊所</div>';
+                return;
+            }
+            listEl.innerHTML = data.data.map(c => {
+                const statusBadge = c.status === 'active'
+                    ? '<span style="color:#27ae60;font-weight:bold;">●正常</span>'
+                    : '<span style="color:#e74c3c;font-weight:bold;">●已停用</span>';
+                const toggleBtn = c.status === 'active'
+                    ? '<button class="btn btn-sm btn-warning" onclick="toggleClinicStatus(\'' + c.id + '\',\'disabled\')">停用</button>'
+                    : '<button class="btn btn-sm btn-success" onclick="toggleClinicStatus(\'' + c.id + '\',\'active\')">启用</button>';
+                const editBtn = '<button class="btn btn-sm" onclick=\'editClinic(' + JSON.stringify({id:c.id,name:c.name,adminUsername:c.adminUsername,adminName:c.adminName}).replace(/'/g, "&#39;") + ')\'>编辑</button>';
+                const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '-';
+                return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+                    '<div style="flex:1;min-width:200px;">' +
+                        '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + statusBadge + '</div>' +
+                        '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + escapeHtml(c.adminUsername || '-') + '</strong>（' + escapeHtml(c.adminName || '-') + '）| 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
+                    '</div>' +
+                    '<div style="white-space:nowrap;">' + editBtn + ' ' + toggleBtn + '</div>' +
+                '</div>';
+            }).join('');
+        } else {
+            if (res.status === 401) {
+                showAlert('mainAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(doLogout, 1500);
+            } else {
+                listEl.innerHTML = '<div class="empty">' + escapeHtml(data.error || '加载失败') + '</div>';
+            }
+        }
+    } catch (e) {
+        listEl.innerHTML = '<div class="empty">网络错误：' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+async function handleCreateClinic() {
+    const clinicName = document.getElementById('newClinicName').value.trim();
+    const adminUsername = document.getElementById('newClinicAdminUsername').value.trim();
+    const adminPassword = document.getElementById('newClinicAdminPassword').value;
+    const adminName = document.getElementById('newClinicAdminName').value.trim();
+    if (!clinicName || !adminUsername || !adminPassword) {
+        showAlert('clinicAlert', '请填写诊所名称、管理员账号、管理员密码', 'error');
+        return;
+    }
+    if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
+        showAlert('clinicAlert', '管理员登录账号不能使用中文', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(API_BASE + '/users?clinic=create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ clinicName, adminUsername, adminPassword, adminName: adminName || adminUsername })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('clinicAlert', '诊所创建成功！\n\n诊所：' + data.clinic.name + '\nID：' + data.clinic.id + '\n管理员：' + data.admin.username, 'success');
+            clearClinicForm();
+            loadClinicsList();
+        } else {
+            showAlert('clinicAlert', data.error || '创建失败', 'error');
+        }
+    } catch (e) {
+        showAlert('clinicAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+function clearClinicForm() {
+    document.getElementById('newClinicName').value = '';
+    document.getElementById('newClinicAdminUsername').value = '';
+    document.getElementById('newClinicAdminPassword').value = '';
+    document.getElementById('newClinicAdminName').value = '';
+}
+
+async function toggleClinicStatus(clinicId, newStatus) {
+    const action = newStatus === 'active' ? '启用' : '停用';
+    if (!confirm('确定' + action + '该诊所？')) return;
+    try {
+        const res = await fetch(API_BASE + '/users?clinic=update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ clinicId, status: newStatus })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('clinicAlert', '诊所已' + action, 'success');
+            loadClinicsList();
+        } else {
+            showAlert('clinicAlert', data.error || '操作失败', 'error');
+        }
+    } catch (e) {
+        showAlert('clinicAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// 编辑诊所（使用 prompt 简化实现）
+async function editClinic(clinic) {
+    const name = prompt('诊所名称：', clinic.name || '');
+    if (name === null) return;
+    const adminUsername = prompt('管理员账号：', clinic.adminUsername || '');
+    if (adminUsername === null) return;
+    const adminName = prompt('管理员姓名：', clinic.adminName || '');
+    if (adminName === null) return;
+    const adminPassword = prompt('新密码（留空表示不修改）：', '');
+    if (adminPassword === null) return;
+    if (!name || !adminUsername) { showAlert('clinicAlert', '诊所名称和管理员账号不能为空', 'error'); return; }
+    const body = { clinicId: clinic.id, name };
+    if (adminUsername !== clinic.adminUsername) body.adminUsername = adminUsername;
+    if (adminName && adminName !== clinic.adminName) body.adminName = adminName;
+    if (adminPassword) body.adminPassword = adminPassword;
+    try {
+        const res = await fetch(API_BASE + '/users?clinic=update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('clinicAlert', '诊所信息已更新', 'success');
+            loadClinicsList();
+        } else {
+            showAlert('clinicAlert', data.error || '更新失败', 'error');
+        }
+    } catch (e) {
+        showAlert('clinicAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 用户管理 =====
+async function loadUsersList() {
+    const tbody = document.getElementById('usersListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" class="loading">加载中...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + '/users', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+            if (data.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无用户</td></tr>';
+                return;
+            }
+            const roleNames = { platform_admin: '平台总管理员', clinic_admin: '诊所管理员', doctor: '医师' };
+            const modeNames = { both: '云端+本地', cloud: '仅云端', local: '仅本地' };
+            tbody.innerHTML = data.data.map(u => {
+                const roleTag = u.role === 'platform_admin'
+                    ? '<span class="tag tag-pro">' + (roleNames[u.role] || u.role) + '</span>'
+                    : (u.role === 'clinic_admin'
+                        ? '<span class="tag tag-personal">' + (roleNames[u.role] || u.role) + '</span>'
+                        : '<span class="tag tag-trial">' + (roleNames[u.role] || u.role) + '</span>');
+                const created = u.createdAt ? new Date(u.createdAt).toLocaleString('zh-CN') : '-';
+                return '<tr>' +
+                    '<td class="code">' + escapeHtml(u.username) + '</td>' +
+                    '<td>' + escapeHtml(u.name || '-') + '</td>' +
+                    '<td>' + roleTag + '</td>' +
+                    '<td>' + escapeHtml(u.clinicName || '-') + '</td>' +
+                    '<td>' + escapeHtml(modeNames[u.allowedMode] || u.allowedMode || '-') + '</td>' +
+                    '<td>' + escapeHtml(created) + '</td>' +
+                '</tr>';
+            }).join('');
+        } else {
+            if (res.status === 401) {
+                showAlert('userAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(doLogout, 1500);
+            } else {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty">' + escapeHtml(data.error || '加载失败') + '</td></tr>';
+            }
+        }
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+    }
 }
 
 // 回车键登录
