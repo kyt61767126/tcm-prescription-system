@@ -1,4 +1,4 @@
-# generate-sign-hash.ps1 - 从 APK 提取签名哈希，注入到 LicenseManager.java
+﻿# generate-sign-hash.ps1 - 从 APK 提取签名哈希，注入到 LicenseManager.java
 # 启用签名严格模式：APP 启动时与硬编码哈希严格比对，任何二次打包都会被拒绝
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
@@ -128,14 +128,21 @@ Write-Host "================================================================"
 Write-Host ""
 Write-Host "  签名 SHA-256: $signSha256"
 Write-Host ""
-Write-Host "  下一步："
-Write-Host "  1. 重新打包 APK（运行 pack.bat 选择 [2] 或 [9]）"
-Write-Host "  2. 新 APK 将启用签名严格模式："
-Write-Host "     - APK 签名必须与上述哈希完全一致"
-Write-Host "     - 任何二次打包、调试器附加、Root 设备都会导致 APP 自动退出"
-Write-Host ""
-Write-Host "  注意："
-Write-Host "  - 更换签名证书后签名哈希会变化，需重新运行本工具"
-Write-Host "  - 修改 Java 代码不影响签名哈希（仅影响 dex 内容，本工具不校验 dex）"
-Write-Host ""
-Read-Host "按回车键继续"
+# NO_PAUSE 已设置（被 Build-AllStrict/Build-All 调用）：不显示下一步提示和回车
+# 因为后续会自动执行 Step D 重新打包 APK，无需用户手动操作
+# NO_PAUSE 未设置（用户单独运行）：显示完整提示，用户需手动重新打包
+if (-not $env:NO_PAUSE) {
+    Write-Host "  下一步："
+    Write-Host "  1. 重新打包 APK（运行 pack.bat 选择 [2] 或 [9]）"
+    Write-Host "  2. 新 APK 将启用签名严格模式："
+    Write-Host "     - APK 签名必须与上述哈希完全一致"
+    Write-Host "     - 任何二次打包、调试器附加、Root 设备都会导致 APP 自动退出"
+    Write-Host ""
+    Write-Host "  注意："
+    Write-Host "  - 更换签名证书后签名哈希会变化，需重新运行本工具"
+    Write-Host "  - 修改 Java 代码不影响签名哈希（仅影响 dex 内容，本工具不校验 dex）"
+    Read-Host "按回车键继续"
+} else {
+    Write-Host "  将在下一步自动重新打包 APK..."
+    Write-Host "  新 APK 将启用签名严格模式（二次打包/调试器/Root 将自动退出）"
+}
