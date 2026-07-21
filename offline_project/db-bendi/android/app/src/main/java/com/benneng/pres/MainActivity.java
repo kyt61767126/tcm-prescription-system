@@ -30,6 +30,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.EditText;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
 import androidx.annotation.NonNull;
@@ -111,28 +112,36 @@ public class MainActivity extends AppCompatActivity {
 
         // 创建 WebView 并立即配置
         webView = new WebView(this);
-        // ★ 适配状态栏（彻底解决顶部按钮与信号/电量重合）：
-        // 双保险方案：
-        //   1. 立即通过资源 ID 读取状态栏高度并应用 padding（不依赖 insets 派发）
-        //   2. 注册 WindowInsetsListener 动态更新（处理挖孔/刘海屏，取最大值）
-        //   3. setContentView 后主动 requestApplyInsets 触发 listener
-        //   4. onAttachedToWindow 兜底再次触发（应对某些 ROM 拦截 insets）
+        // ★ 适配状态栏（彻底解决顶部按钮与信号/电量重合 - FrameLayout 方案）：
+        // Android 15+ (API 35+) 强制 edge-to-edge 模式，WebView.setPadding 作为
+        // ContentView 时可能被 DecorView 布局过程覆盖。
+        // 方案：用 FrameLayout 包裹 WebView，在 FrameLayout 上设置 padding，
+        // WebView MATCH_PARENT 填充 FrameLayout 的内容区域（不含 padding）。
+        // 这是 View 层面的 padding，与 edge-to-edge / fitsSystemWindows 无关，100% 可靠。
+        final FrameLayout container = new FrameLayout(this);
         int statusBarHeight = getStatusBarHeight();
-        webView.setPadding(0, statusBarHeight, 0, 0);
-        ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
+        container.setPadding(0, statusBarHeight, 0, 0);
+        container.setLayoutParams(new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        webView.setLayoutParams(new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        container.addView(webView);
+        // ★ WindowInsetsListener 动态更新 padding（处理挖孔/刘海屏）
+        ViewCompat.setOnApplyWindowInsetsListener(container, (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
             int insetTop = Math.max(systemBars.top, cutout.top);
-            // 取 insets 和资源 ID 两者最大值，防止某些机型 insets=0
             int finalTop = Math.max(insetTop, statusBarHeight);
             if (v.getPaddingTop() != finalTop) {
                 v.setPadding(0, finalTop, 0, 0);
             }
             return insets;
         });
-        setContentView(webView);
-        // ★ 主动触发 insets 分发，否则 listener 可能永远不会被调用
-        ViewCompat.requestApplyInsets(webView);
+        setContentView(container);
+        // ★ 主动触发 insets 分发
+        ViewCompat.requestApplyInsets(container);
         getWindow().setBackgroundDrawable(null);
         configureWebView();
 
