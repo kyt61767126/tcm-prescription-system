@@ -7066,6 +7066,19 @@ if (window.Permission) {
     <div class="prescription-paper">${printContent}</div>
 </body>
 </html>`;
+            // ★ APP 端（Android Capacitor）：Android WebView 不支持 window.print()，需通过 NativeBridge 调用 Android 原生 PrintManager
+            if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
+                try {
+                    const result = JSON.parse(window.AndroidNative.invoke('printPrescription', JSON.stringify({ html: htmlContent, orientation: orientation })));
+                    if (!result || result.success !== true) {
+                        alert('打印失败：' + (result && result.error ? result.error : '未知错误'));
+                    }
+                    return;
+                } catch (e) {
+                    console.error('[print] NativeBridge 调用失败，回退到 iframe 方案:', e);
+                    // 回退到 iframe 方案（虽然 APP 端 iframe 也不工作，但保留兜底）
+                }
+            }
             // 创建隐藏 iframe 写入内容并调用打印
             let printFrame = document.getElementById('__printFrame__');
             if (printFrame) printFrame.remove();

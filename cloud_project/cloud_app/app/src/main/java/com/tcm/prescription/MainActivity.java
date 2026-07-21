@@ -14,6 +14,9 @@ import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
@@ -731,6 +734,9 @@ public class MainActivity extends BridgeActivity {
                                 args.optString("newNo", "")).toString();
                     case "deleteFile":
                         return deleteFile(args.optString("filePath", "")).toString();
+                    case "printPrescription":
+                        return printPrescription(args.optString("html", ""),
+                                args.optString("orientation", "portrait")).toString();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -791,6 +797,56 @@ public class MainActivity extends BridgeActivity {
                 return r;
             } catch (Exception e) {
                 Log.e("TCM-Pres", "savePrescriptionImage 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 打印处方：通过 Android 原生 PrintManager API 调起系统打印对话框
+        // 背景：Android WebView 默认不支持 window.print()，iframe.print() 会静默失败
+        // 实现：创建临时 WebView 加载 HTML，使用其 PrintDocumentAdapter 交给 PrintManager
+        // ------------------------------------------------------------------
+        private JSONObject printPrescription(String html, String orientation) {
+            try {
+                if (html == null || html.isEmpty()) {
+                    return fail("打印内容为空");
+                }
+                // 必须在主线程创建 WebView 和调用 PrintManager
+                final String htmlContent = html;
+                final boolean isLandscape = "landscape".equals(orientation);
+                final String jobName = "惠康中医处方 " + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.CHINA).format(new java.util.Date());
+
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            WebView printWebView = new WebView(MainActivity.this);
+                            printWebView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null);
+
+                            PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                            PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter();
+
+                            PrintAttributes attrs = new PrintAttributes.Builder()
+                                .setMediaSize(isLandscape ? PrintAttributes.MediaSize.ISO_A5.asLandscape() : PrintAttributes.MediaSize.ISO_A5)
+                                .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
+                                .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                                .build();
+
+                            printManager.print(jobName, printAdapter, attrs);
+                            Log.d("TCM-Pres", "printPrescription 已调起系统打印: " + jobName);
+                        } catch (Exception e) {
+                            Log.e("TCM-Pres", "printPrescription 调起打印失败", e);
+                            Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("message", "已调起系统打印对话框");
+                return r;
+            } catch (Exception e) {
+                Log.e("TCM-Pres", "printPrescription 失败", e);
                 return fail(e.getMessage());
             }
         }
