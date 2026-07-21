@@ -77,6 +77,83 @@ async function hmacSign(message, secret) {
     return bytesToHex(new Uint8Array(sig));
 }
 
+// ============================================================================
+//  ★ 任务2 新增：ECDSA P-256 非对称签名（v5）
+//  - 私钥仅云端持有（Cloudflare Secrets: LICENSE_SIGN_PRIVATE_KEY）
+//  - 公钥嵌入客户端（license-manager.js + LicenseManager.java）
+//  - 现有 v1/v2/v3/v4 HMAC 签名继续工作（向后兼容）
+//  - 新 license 同时包含 v4 HMAC + v5 ECDSA 双签名
+//  - 客户端优先验 ECDSA，失败 fallback HMAC（兼容旧 license）
+// ============================================================================
+const ECDSA_CURVE = 'P-256';  // alias: 'prime256v1' / 'secp256r1'
+const ECDSA_HASH = 'SHA-256';
+
+// 从环境变量读取 ECDSA 私钥（PEM 格式 PKCS#8）
+// 在 Cloudflare Pages 后台设置环境变量 LICENSE_SIGN_PRIVATE_KEY
+function getEcdsaPrivateKeyPem(context) {
+    if (context && context.env && context.env.LICENSE_SIGN_PRIVATE_KEY) {
+        return context.env.LICENSE_SIGN_PRIVATE_KEY;
+    }
+    if (typeof process !== 'undefined' && process.env && process.env.LICENSE_SIGN_PRIVATE_KEY) {
+        return process.env.LICENSE_SIGN_PRIVATE_KEY;
+    }
+    return null;  // 未配置 ECDSA 私钥时跳过 v5 签名
+}
+
+// 从 PEM 提取 base64 DER（去掉 BEGIN/END 头）
+function pemToDer(pem) {
+    return pem.replace(/-----BEGIN [A-Z ]+-----/g, '')
+              .replace(/-----END [A-Z ]+-----/g, '')
+              .replace(/\s+/g, '');
+}
+
+// base64 → Uint8Array
+function base64ToBytes(b64) {
+    const bin = atob(b64);
+    const arr = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+    return arr;
+}
+
+// 用 ECDSA P-256 私钥签名消息，返回 hex
+async function ecdsaSign(message, privateKeyPem) {
+    if (!privateKeyPem) throw new Error('ECDSA 私钥未配置');
+    const derB64 = pemToDer(privateKeyPem);
+    const derBytes = base64ToBytes(derB64);
+
+    const key = await crypto.subtle.importKey(
+        'pkcs8',
+        derBytes,
+        { name: 'ECDSA', namedCurve: ECDSA_CURVE },
+        false,
+        ['sign']
+    );
+    const sig = await crypto.subtle.sign(
+        { name: 'ECDSA', hash: ECDSA_HASH },
+        key,
+        strToBytes(message)
+    );
+    // ECDSA 签名输出为 raw r||s 格式（Web Crypto 默认），转 hex
+    return bytesToHex(new Uint8Array(sig));
+}
+
+// ★ v5 签名内容：与 v3 相同的字段（user|type|issuedAt|expiresAt|maxPrescriptions|features|clinicName|machineId|licenseBinding）
+// 但用 ECDSA P-256 而非 HMAC。验签时用同样的 content。
+async function generateSignatureV5(data, privateKeyPem) {
+    const content = [
+        data.user,
+        data.type,
+        data.issuedAt,
+        data.expiresAt,
+        String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
+        Array.isArray(data.features) ? data.features.join(',') : '',
+        data.clinicName || '',
+        data.machineId || '',
+        data.licenseBinding || ''
+    ].join('|');
+    return ecdsaSign(content, privateKeyPem);
+}
+
 // ★ v2 签名：与客户端 generateSignature 一致
 // 内容：user|type|issuedAt|expiresAt|maxPrescriptions|features
 async function generateSignature(data, secret) {
@@ -199,6 +276,22 @@ async function buildLicenseData(record, options = {}) {
     // 优先使用 options.secret，否则从 options.context 读取环境变量
     const secret = options.secret || (options.context ? getLicenseHmacKey(options.context) : undefined);
     data.signature = await generateSignatureAuto(data, secret);
+
+    // ★ 任务2 新增：附加 v5 ECDSA 签名（如果配置了 ECDSA 私钥）
+    // 仅在配置了 LICENSE_SIGN_PRIVATE_KEY 环境变量时启用
+    // 客户端优先验 v5，失败 fallback v3/v4 HMAC（向后兼容）
+    if (options.context) {
+        const ecdsaPrivateKey = getEcdsaPrivateKeyPem(options.context);
+        if (ecdsaPrivateKey) {
+            try {
+                data.signatureV5 = await generateSignatureV5(data, ecdsaPrivateKey);
+                data.signatureVersion = 5;
+                console.log('[License] 已附加 v5 ECDSA 签名');
+            } catch (e) {
+                console.warn('[License] v5 ECDSA 签名失败（降级为 HMAC）:', e.message);
+            }
+        }
+    }
     return data;
 }
 
@@ -417,5 +510,9 @@ export {
     // ★ 任务5 新增：操作日志
     appendLicenseLog,  // 追加激活码操作日志
     getLicenseLogs,    // 查询激活码操作日志
-    deleteLicenseLogs  // 删除激活码日志（删激活码时调用）
+    deleteLicenseLogs, // 删除激活码日志（删激活码时调用）
+    // ★ 任务2 新增：ECDSA P-256 非对称签名
+    ecdsaSign,              // 用 ECDSA 私钥签名消息
+    generateSignatureV5,    // 生成 v5 签名（ECDSA P-256）
+    getEcdsaPrivateKeyPem    // 从环境变量读取 ECDSA 私钥（PEM 格式）
 };

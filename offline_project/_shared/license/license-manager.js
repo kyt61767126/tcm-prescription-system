@@ -19,6 +19,16 @@ const LICENSE_HMAC_KEY = 'bnzc_tcm_license_key_v1_2026';
 const DEFAULT_TRIAL_DAYS = 7;                                 // 默认试用期 7 天（可通过 trial-config.json 修改，测试时设为 0）
 const TIME_TAMPER_THRESHOLD = 24 * 60 * 60 * 1000;           // 时间回拨阈值：1 天
 
+// ★ 任务2 新增：ECDSA P-256 验签公钥（PEM SPKI 格式）
+// 用于验证 license 中的 signatureV5 字段（云端 ECDSA 私钥签发）
+// 默认为空：未配置时跳过 v5 验签，仅用 HMAC v4（向后兼容）
+// 启用步骤：
+//   1. 运行 node tools/gen-ecdsa-keys.cjs 生成密钥对
+//   2. 私钥 LICENSE_SIGN_PRIVATE_KEY 存 Cloudflare Secrets
+//   3. 公钥（-----BEGIN PUBLIC KEY----- 整段）填入此常量
+//   4. 重新打包 exe
+const ECDSA_VERIFY_PUBLIC_KEY_PEM = '';
+
 const TRIAL_KEY = 'bnzc_trial_key_v1';
 const LASTRUN_KEY = 'bnzc_lastrun_key_v1';
 
@@ -474,6 +484,17 @@ function generateSignatureV1(data) {
 
 function verifySignature(data) {
     if (!data.signature) return false;
+
+    // ★ 任务2 新增：v5 ECDSA 签名优先校验
+    // 如果 license 包含 signatureV5 字段且配置了 ECDSA 公钥，优先用非对称验签
+    // 失败则 fallback 到 HMAC v3/v2/v1（向后兼容旧 license）
+    if (data.signatureV5 && ECDSA_VERIFY_PUBLIC_KEY_PEM) {
+        if (verifyECDSASignature(data)) {
+            return true;
+        }
+        console.warn('[License] v5 ECDSA 验签失败，降级为 HMAC');
+    }
+
     // ★ v3 签名优先校验（含 clinicName/machineId/licenseBinding 时使用）
     if (data.clinicName !== undefined && data.machineId !== undefined && data.licenseBinding) {
         const expectedV3 = generateSignatureV3(data);
@@ -500,6 +521,80 @@ function verifySignature(data) {
         }
     }
     return data.signature === expectedV2;
+}
+
+// ★ 任务2 新增：ECDSA P-256 非对称验签（v5）
+// 用 ECDSA_VERIFY_PUBLIC_KEY_PEM 验证 license 中的 signatureV5 字段
+// 签名内容与 v3 一致（user|type|issuedAt|expiresAt|maxPrescriptions|features|clinicName|machineId|licenseBinding）
+// 但用非对称算法：云端私钥签，客户端公钥验
+// ★ 优势：即使客户端被反编译拿到公钥，也无法伪造签名（公钥只能验不能签）
+function verifyECDSASignature(data) {
+    if (!data.signatureV5 || !ECDSA_VERIFY_PUBLIC_KEY_PEM) return false;
+    try {
+        const content = [
+            data.user,
+            data.type,
+            data.issuedAt,
+            data.expiresAt,
+            String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
+            Array.isArray(data.features) ? data.features.join(',') : '',
+            data.clinicName || '',
+            data.machineId || '',
+            data.licenseBinding || ''
+        ].join('|');
+
+        // Web Crypto API 输出 raw r||s 格式（64 字节）
+        // Node.js crypto.verify 默认期望 DER 格式
+        // 需要把 raw 转 DER，或用 crypto.verify 的 ECDSA-Sig-Value 选项
+        // 简化方案：用 crypto.createVerify + DER 签名
+        // 但云端 Web Crypto 输出 raw，需要客户端转换
+        const rawSigHex = data.signatureV5;
+        const rawSigBytes = Buffer.from(rawSigHex, 'hex');
+        // raw 格式：r (32 bytes) || s (32 bytes) = 64 bytes total
+        // 转 DER 格式
+        if (rawSigBytes.length !== 64) {
+            console.warn('[License] v5 签名长度异常:', rawSigBytes.length);
+            return false;
+        }
+        const r = rawSigBytes.slice(0, 32);
+        const s = rawSigBytes.slice(32, 64);
+        const derSig = encodeEcdsaSigToDER(r, s);
+
+        const verify = crypto.createVerify('SHA256');
+        verify.update(content);
+        verify.end();
+        return verify.verify(ECDSA_VERIFY_PUBLIC_KEY_PEM, derSig);
+    } catch (e) {
+        console.warn('[License] v5 ECDSA 验签异常:', e.message);
+        return false;
+    }
+}
+
+// 将 ECDSA 的 raw r||s 转换为 DER 编码（Node.js crypto 期望的格式）
+function encodeEcdsaSigToDER(r, s) {
+    // 确保 r 和 s 是正数（前导字节 ≥ 0x80 时需补 0x00）
+    function toDERInt(buf) {
+        // 去除前导 0
+        let i = 0;
+        while (i < buf.length - 1 && buf[i] === 0) i++;
+        let trimmed = buf.slice(i);
+        // 如果最高位是 1，需要补 0x00 前缀
+        if (trimmed[0] & 0x80) {
+            trimmed = Buffer.concat([Buffer.from([0x00]), trimmed]);
+        }
+        return trimmed;
+    }
+    const rDER = toDERInt(r);
+    const sDER = toDERInt(s);
+    // DER 编码：30 <总长度> 02 <r 长度> <r> 02 <s 长度> <s>
+    const totalLen = 2 + rDER.length + 2 + sDER.length;
+    return Buffer.concat([
+        Buffer.from([0x30, totalLen]),
+        Buffer.from([0x02, rDER.length]),
+        rDER,
+        Buffer.from([0x02, sDER.length]),
+        sDER
+    ]);
 }
 
 // ============================================================================
