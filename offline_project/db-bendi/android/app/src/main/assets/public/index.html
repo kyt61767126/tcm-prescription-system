@@ -3058,6 +3058,7 @@ let currentUser = null;
         }
 
         async function init() {
+            injectRecycleBinButton();
             checkLoginStatus();
             // 不在init中调用loadData()，因为用户还没登录
             // loadData()会在handleLogin成功后调用
@@ -4066,7 +4067,7 @@ let currentUser = null;
             // P0-5 安全修复：添加确认弹窗，防止误删导致数据永久丢失
             const patientName = record.patientName || '未知患者';
             const prescriptionNo = record.prescriptionNo || record.clinicNo || '无编号';
-            const confirmMsg = `确定要删除该处方吗？\n\n患者：${patientName}\n编号：${prescriptionNo}\n\n删除后将移入回收站，可通过 IndexedDB prescriptions_trash store 恢复。`;
+            const confirmMsg = `确定要删除该处方吗？\n\n患者：${patientName}\n编号：${prescriptionNo}\n\n删除后可点击标题栏🗑️按钮从回收站恢复。`;
             if (!confirm(confirmMsg)) {
                 return;
             }
@@ -4090,6 +4091,22 @@ let currentUser = null;
                 console.error('[P0-5] 保存到回收站失败（继续硬删除）:', e);
             }
 
+            // 同时保存到 localStorage 回收站（供UI读取）
+            try {
+                const record = prescriptionHistory.find(p => p.id === id);
+                if (record) {
+                    const rbKey = 'recycleBin_' + (currentUser ? currentUser.username : 'default');
+                    const bin = JSON.parse(localStorage.getItem(rbKey) || '[]');
+                    if (!bin.some(r => r.id === id)) {
+                        record._deletedAt = new Date().toISOString();
+                        record._deletedBy = currentUser ? currentUser.username : 'unknown';
+                        bin.unshift(record);
+                        if (bin.length > 50) bin.splice(50);
+                        localStorage.setItem(rbKey, JSON.stringify(bin));
+                    }
+                }
+            } catch(e) { console.warn('保存到处方回收站失败:', e); }
+
             // P7: 单条从 prescriptions store 删除
             await deletePrescriptionFromDB(id);
 
@@ -4108,6 +4125,110 @@ let currentUser = null;
             const newPresNo = await generatePrescriptionNo();
             document.getElementById('prescriptionNo').value = newPresNo;
             document.getElementById('paperClinicNo').textContent = newPresNo;
+        }
+
+        // ============ 回收站功能 ============
+        function getRecycleBin() {
+            try {
+                const key = 'recycleBin_' + (currentUser ? currentUser.username : 'default');
+                return JSON.parse(localStorage.getItem(key) || '[]');
+            } catch(e) { return []; }
+        }
+
+        function saveRecycleBin(bin) {
+            try {
+                const key = 'recycleBin_' + (currentUser ? currentUser.username : 'default');
+                localStorage.setItem(key, JSON.stringify(bin));
+            } catch(e) { console.warn('保存回收站失败:', e); }
+        }
+
+        function showRecycleBin() {
+            const bin = getRecycleBin();
+            const now = Date.now();
+            const validBin = bin.filter(r => {
+                const deletedTime = r._deletedAt ? new Date(r._deletedAt).getTime() : 0;
+                return (now - deletedTime) < 30 * 24 * 60 * 60 * 1000;
+            });
+            if (validBin.length !== bin.length) saveRecycleBin(validBin);
+
+            let modal = document.getElementById('recycleBinModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'recycleBinModal';
+                modal.className = 'modal';
+                modal.style.cssText = 'display:flex;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;';
+                document.body.appendChild(modal);
+            }
+
+            let listHtml = '';
+            if (validBin.length === 0) {
+                listHtml = '<p style="text-align:center;color:#999;padding:30px;">回收站为空</p>';
+            } else {
+                listHtml = validBin.map(r => {
+                    const deletedDate = r._deletedAt ? new Date(r._deletedAt).toLocaleString('zh-CN') : '未知';
+                    const rxNo = r.prescriptionNo || r.outpatientNo || r.clinicNo || '无编号';
+                    const patientName = r.patientName || '未知患者';
+                    const rxDate = r.date || '';
+                    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #eee;"><div style="flex:1;"><div style="font-weight:bold;font-size:14px;">' + patientName + ' <span style="color:#999;font-size:12px;">' + rxNo + '</span></div><div style="font-size:12px;color:#666;">处方日期: ' + rxDate + ' | 删除时间: ' + deletedDate + '</div></div><div style="display:flex;gap:5px;"><button onclick="restoreFromRecycleBin(' + r.id + ')" style="background:#4CAF50;color:white;border:none;padding:6px 14px;border-radius:4px;cursor:pointer;font-size:13px;">恢复</button><button onclick="deleteFromRecycleBin(' + r.id + ')" style="background:#f44336;color:white;border:none;padding:6px 10px;border-radius:4px;cursor:pointer;font-size:13px;">彻底删除</button></div></div>';
+                }).join('');
+            }
+
+            modal.innerHTML = '<div style="background:white;border-radius:10px;padding:20px;width:90%;max-width:550px;max-height:80vh;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.2);"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px;border-bottom:2px solid #4CAF50;padding-bottom:10px;"><h3 style="margin:0;color:#333;">🗑️ 处方回收站 (' + validBin.length + ')</h3><button onclick="document.getElementById(\'recycleBinModal\').style.display=\'none\'" style="background:none;border:none;font-size:24px;cursor:pointer;color:#999;">&times;</button></div><p style="font-size:12px;color:#999;margin-bottom:10px;">💡 回收站保留最近30天的删除记录，最多50条</p><div id="recycleBinList">' + listHtml + '</div>' + (validBin.length > 0 ? '<div style="text-align:center;margin-top:15px;padding-top:10px;border-top:1px solid #eee;"><button onclick="clearRecycleBin()" style="background:#f44336;color:white;border:none;padding:8px 20px;border-radius:4px;cursor:pointer;font-size:13px;">清空回收站</button></div>' : '') + '</div>';
+            modal.style.display = 'flex';
+        }
+
+        function restoreFromRecycleBin(id) {
+            const bin = getRecycleBin();
+            const record = bin.find(r => r.id === id);
+            if (!record) { showToast('❌ 未找到该处方'); return; }
+            delete record._deletedAt;
+            delete record._deletedBy;
+            const exists = prescriptionHistory.some(p => p.id === id);
+            if (!exists) {
+                prescriptionHistory.unshift(record);
+            }
+            try {
+                const delKey = 'deletedRxIds_' + (currentUser ? currentUser.username : 'default');
+                const deletedIds = JSON.parse(localStorage.getItem(delKey) || '[]');
+                const newDeletedIds = deletedIds.filter(did => did !== id);
+                localStorage.setItem(delKey, JSON.stringify(newDeletedIds));
+            } catch(e) { console.warn('移除删除标记失败:', e); }
+            const newBin = bin.filter(r => r.id !== id);
+            saveRecycleBin(newBin);
+            if (typeof savePrescriptionHistory === 'function') { savePrescriptionHistory(); }
+            else if (typeof savePrescriptionToDB === 'function') { savePrescriptionToDB(record).catch(e => console.warn('恢复保存失败:', e)); }
+            renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, typeof historyDisplayCount !== 'undefined' ? historyDisplayCount : 15));
+            showToast('✅ 处方已恢复');
+            showRecycleBin();
+        }
+
+        function deleteFromRecycleBin(id) {
+            if (!confirm('彻底删除后无法恢复，确定吗？')) return;
+            const bin = getRecycleBin();
+            const newBin = bin.filter(r => r.id !== id);
+            saveRecycleBin(newBin);
+            showToast('已彻底删除');
+            showRecycleBin();
+        }
+
+        function clearRecycleBin() {
+            if (!confirm('清空回收站后所有已删除处方将无法恢复，确定吗？')) return;
+            saveRecycleBin([]);
+            showToast('回收站已清空');
+            showRecycleBin();
+        }
+
+        function injectRecycleBinButton() {
+            const header = document.querySelector('.history-header');
+            if (!header) return;
+            if (header.querySelector('.recycle-bin-btn')) return;
+            const btn = document.createElement('button');
+            btn.className = 'recycle-bin-btn';
+            btn.innerHTML = '🗑️';
+            btn.title = '回收站';
+            btn.style.cssText = 'background:none;border:none;color:white;font-size:12px;cursor:pointer;padding:2px 4px;margin-left:4px;';
+            btn.onclick = showRecycleBin;
+            header.appendChild(btn);
         }
 
         async function loadHistory(id) {
