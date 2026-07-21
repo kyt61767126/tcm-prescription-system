@@ -739,7 +739,8 @@ function Show-Menu {
     Write-Host "  [6] 仅编码检查"
     Write-Host "  [7] 查看当前配置"
     Write-Host "  [8] 启用严格模式 (提取并注入哈希)"
-    Write-Host "  [9] 一键打包严格模式 (A->B->哈希->重打包)"
+    Write-Host "  [9] 一键打包严格模式 (桌面+APP+哈希+重打包)"
+    Write-Host " [10] APP 严格模式 (APP+哈希+重打包，无桌面)"
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  快捷选项:"
@@ -747,7 +748,7 @@ function Show-Menu {
     Write-Host "    [d] 仅桌面快速打包 (跳过编码检查)"
     Write-Host "    [p] 仅 APP 快速打包 (跳过编码检查/配置)"
     Write-Host ""
-    $choice = Read-Host "  请选择 [0-9]"
+    $choice = Read-Host "  请选择 [0-10]"
     return $choice
 }
 
@@ -908,6 +909,69 @@ function Build-AllStrict {
     return 0
 }
 
+function Build-AppStrict {
+    param([string]$Ver)
+    $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
+    $hashBat = "$versionDir\generate-sign-hash.bat"
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host "  APP 严格模式 ($Ver)" -ForegroundColor Yellow
+    Write-Host "  (APP + 签名严格模式，无桌面)" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "  自动执行流程："
+    Write-Host "    A. 打包手机 APP（默认模式 APK：Root+调试器检测）"
+    Write-Host "    B. 提取 APK 签名哈希并注入 LicenseManager.java"
+    Write-Host "    C. 重新打包手机 APP（签名严格模式 APK）"
+    Write-Host ""
+    Write-Host "  最终输出："
+    Write-Host "    - 手机 APP: $versionDir\*.apk（已启用签名严格模式）"
+    Write-Host ""
+    Write-Host "  [INFO] 自动开始 APP 严格模式打包..." -ForegroundColor Green
+
+    # Step A: Mobile build (first-lock mode)
+    Write-Host ""
+    Write-Host "  [步骤 A] 打包手机 APP (首次锁定模式)..." -ForegroundColor Cyan
+    $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $false -SkipEnc $false
+    if ($rc -ne 0) {
+        Write-Host "[错误] 手机 APP 打包失败，终止" -ForegroundColor Red
+        return 1
+    }
+
+    # Step B: Extract & inject hash
+    Write-Host ""
+    Write-Host "  [步骤 B] 提取并注入哈希..." -ForegroundColor Cyan
+    if (-not (Test-Path $hashBat)) {
+        Write-Host "[错误] 未找到 generate-sign-hash.bat，跳过严格模式" -ForegroundColor Red
+        Write-Host "  您仍可使用步骤 A 的 APK (首次锁定模式)"
+        return 1
+    }
+    Invoke-External -FilePath $hashBat -WorkDir $versionDir -NoPause
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[错误] 哈希提取失败，跳过严格模式" -ForegroundColor Red
+        Write-Host "  您仍可使用步骤 A 的 APK (首次锁定模式)"
+        return 1
+    }
+
+    # Step C: Rebuild mobile (strict)
+    Write-Host ""
+    Write-Host "  [步骤 C] 重新打包手机 APP (严格模式)..." -ForegroundColor Cyan
+    $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
+    if ($rc -ne 0) {
+        Write-Host "[错误] 严格模式重新打包失败" -ForegroundColor Red
+        Write-Host "  您仍可使用步骤 A 的 APK (首次锁定模式)"
+        return 1
+    }
+
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "  APP 严格模式打包完成!" -ForegroundColor Green
+    Write-Host "  手机版: $versionDir\*.apk (严格模式)" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Green
+    return 0
+}
+
 function Invoke-Packaging {
     param(
         [string]$Ver,
@@ -1033,6 +1097,7 @@ if ($Interactive) {
             '7' { Show-CurrentConfig -Ver $Version }
             '8' { Enable-StrictMode -Ver $Version }
             '9' { Build-AllStrict -Ver $Version }
+            '10' { Build-AppStrict -Ver $Version }
             # P1-易用：快捷选项 - 跳过耗时步骤，专注打包
             'a' { Invoke-Packaging -Ver $Version -Tgt 'all' -SkipCfg $true -SkipEnc $true }
             'd' { Invoke-Packaging -Ver $Version -Tgt 'desktop' -SkipCfg $true -SkipEnc $true }

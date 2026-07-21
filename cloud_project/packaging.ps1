@@ -213,7 +213,8 @@ function Show-Menu {
     Write-Host "  [6] 仅编码检查"
     Write-Host "  [7] 查看当前配置"
     Write-Host "  [8] 启用严格模式 (提取并注入哈希)"
-    Write-Host "  [9] 一键打包严格模式 (A->B->哈希->重打包)"
+    Write-Host "  [9] 一键打包严格模式 (桌面+APP+哈希+重打包)"
+    Write-Host " [10] APP 严格模式 (APP+哈希+重打包，无桌面)"
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  快捷选项:"
@@ -225,9 +226,10 @@ function Show-Menu {
     Write-Host "  防护说明："
     Write-Host "    [2] 默认启用 Root 检测 + 调试器检测（详见 SecurityGuard.java）"
     Write-Host "    [8] 启用严格模式后，APK 内硬编码签名哈希，任何二次打包即拒绝运行"
-    Write-Host "    [9] 自动完成：打包->提取哈希->注入->重新打包"
+    Write-Host "    [9] 自动完成：桌面+APP+哈希+重新打包"
+    Write-Host "   [10] 自动完成：APP+哈希+重新打包（无桌面）"
     Write-Host "----------------------------------------------------------------"
-    $choice = Read-Host "请选择 [0-9]"
+    $choice = Read-Host "请选择 [0-10]"
     return $choice
 }
 
@@ -455,7 +457,7 @@ function Build-Desktop {
     Write-Host ""
     # P1-易用：分步耗时统计
     $stepStart = Get-Date
-    $code = Invoke-BatFile "$scriptDir\cloud_desktop\build.bat" "桌面版打包" -NoPause:$SkipConfirm
+    $code = Invoke-BatFile "$scriptDir\cloud_desktop\build.bat" "桌面版打包" -NoPause
     $stepElapsed = (Get-Date) - $stepStart
     if ($code -ne 0) {
         Write-Host ""
@@ -505,7 +507,7 @@ function Build-App {
     Write-Host ""
     # P1-易用：分步耗时统计
     $stepStart = Get-Date
-    $code = Invoke-BatFile "$scriptDir\build-app.bat" "APP 打包" -NoPause:$SkipConfirm
+    $code = Invoke-BatFile "$scriptDir\build-app.bat" "APP 打包" -NoPause
     $stepElapsed = (Get-Date) - $stepStart
     if ($code -ne 0) {
         Write-Host ""
@@ -673,7 +675,7 @@ function Enable-StrictMode {
     Write-Host "  说明：Root 检测 + 调试器检测默认已启用，无需此步骤"
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
-    $code = Invoke-BatFile "$scriptDir\generate-sign-hash.bat" "签名哈希提取"
+    $code = Invoke-BatFile "$scriptDir\generate-sign-hash.bat" "签名哈希提取" -NoPause
     Write-Host ""
     return $code
 }
@@ -717,7 +719,7 @@ function Build-AllStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step C. 提取 APK 签名哈希并注入 SecurityGuard.java" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
-    $rc = Invoke-BatFile "$scriptDir\generate-sign-hash.bat" "签名哈希提取"
+    $rc = Invoke-BatFile "$scriptDir\generate-sign-hash.bat" "签名哈希提取" -NoPause
     if ($rc -ne 0) {
         Write-Host "[ERROR] 签名哈希提取失败，终止一键打包" -ForegroundColor Red
         Write-Host "  您仍可使用 Step B 的 APK（默认模式）" -ForegroundColor Yellow
@@ -746,6 +748,61 @@ function Build-AllStrict {
     return 0
 }
 
+function Build-AppStrict {
+    Write-Step "APP 严格模式（APP + 签名严格模式，无桌面）"
+    Write-Host ""
+    Write-Host "  自动执行流程："
+    Write-Host "  Step A. 打包手机 APP（默认模式 APK：Root+调试器检测）"
+    Write-Host "  Step B. 提取 APK 签名哈希并注入 SecurityGuard.java"
+    Write-Host "  Step C. 重新打包手机 APP（签名严格模式 APK）"
+    Write-Host ""
+    Write-Host "  最终输出："
+    Write-Host "  - 手机 APP: 当前目录\*.apk（已启用签名严格模式）"
+    Write-Host ""
+    Write-Host "  [INFO] 自动开始 APP 严格模式打包..." -ForegroundColor Green
+
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host "  Step A. 打包手机 APP（默认模式：Root+调试器检测）" -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    $rc = Build-App -SkipConfirm
+    if ($rc -ne 0) {
+        Write-Host "[ERROR] APP 打包失败，终止 APP 严格模式" -ForegroundColor Red
+        return 1
+    }
+
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host "  Step B. 提取 APK 签名哈希并注入 SecurityGuard.java" -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    $rc = Invoke-BatFile "$scriptDir\generate-sign-hash.bat" "签名哈希提取" -NoPause
+    if ($rc -ne 0) {
+        Write-Host "[ERROR] 签名哈希提取失败，终止 APP 严格模式" -ForegroundColor Red
+        Write-Host "  您仍可使用 Step A 的 APK（默认模式）" -ForegroundColor Yellow
+        return 1
+    }
+
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Cyan
+    Write-Host "  Step C. 重新打包手机 APP（签名严格模式 APK）" -ForegroundColor Cyan
+    Write-Host "================================================================" -ForegroundColor Cyan
+    $rc = Build-App -SkipConfirm
+    if ($rc -ne 0) {
+        Write-Host "[ERROR] 签名严格模式重新打包失败" -ForegroundColor Red
+        Write-Host "  您仍可使用 Step A 的 APK（默认模式）" -ForegroundColor Yellow
+        return 1
+    }
+
+    Write-Host ""
+    Write-Host "================================================================" -ForegroundColor Green
+    Write-Host "  APP 严格模式打包完成！" -ForegroundColor Green
+    Write-Host "================================================================" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  手机 APP: $scriptDir\*.apk（签名严格模式）" -ForegroundColor Green
+    Write-Host ""
+    return 0
+}
+
 # ============================================================================
 # Section 8: Main Loop (对齐离线版 pack.ps1 Interactive 入口)
 # ============================================================================
@@ -764,6 +821,7 @@ while ($true) {
         '7' { Show-Config | Out-Null }
         '8' { Enable-StrictMode | Out-Null }
         '9' { Build-AllStrict | Out-Null }
+        '10' { Build-AppStrict | Out-Null }
         # P1-易用：快捷选项 - 跳过编码检查，直接打包
         'a' {
             Write-Host "[快捷] 快速全部打包（跳过编码检查）..." -ForegroundColor Cyan
