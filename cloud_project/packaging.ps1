@@ -189,7 +189,7 @@ function Show-Menu {
     Write-Host "  [2] 打包手机 APP (Android APK)"
     Write-Host "  [3] 全部打包 (桌面 + APP)"
     Write-Host "  [4] 仅同步文件到 cloud_app"
-    Write-Host "  [5] (云端不适用) 修改诊所配置"
+    Write-Host "  [5] 修改云端配置 (URL/产品名/版本号)"
     Write-Host "  [6] 仅编码检查"
     Write-Host "  [7] 查看当前配置"
     Write-Host "  [8] 启用严格模式 (提取并注入哈希)"
@@ -214,6 +214,152 @@ function Show-Menu {
 # ============================================================================
 # Section 5: Build Functions
 # ============================================================================
+
+# ============================================================================
+# Section 5.1: 配置修改（参考离线版 Edit-ClinicConfig）
+# ============================================================================
+
+# 修改云端配置（云端URL、产品名称、桌面版本号）
+# 云端版没有 config.json（动态从服务器加载），但 capacitor.config.json 中的
+# 云端URL、package.json 中的产品名/版本号都是可配置项
+function Edit-CloudConfig {
+    Write-Step "云端配置修改"
+
+    # ----- 读取当前配置 -----
+    $capFile = Join-Path $scriptDir 'cloud_app\app\src\main\assets\capacitor.config.json'
+    $pkgFile = Join-Path $scriptDir 'cloud_desktop\package.json'
+
+    if (-not (Test-Path $capFile)) {
+        Write-Host "  [错误] 未找到 capacitor.config.json: $capFile" -ForegroundColor Red
+        Write-Host "  请确认 cloud_app 目录结构完整" -ForegroundColor White
+        return 1
+    }
+    if (-not (Test-Path $pkgFile)) {
+        Write-Host "  [错误] 未找到 cloud_desktop/package.json: $pkgFile" -ForegroundColor Red
+        return 1
+    }
+
+    $cap = Get-Content $capFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    $pkg = Get-Content $pkgFile -Raw -Encoding UTF8 | ConvertFrom-Json
+
+    $currentUrl = $cap.server.url
+    $currentAppName = $cap.appName
+    $currentProductName = $pkg.build.productName
+    $currentVersion = $pkg.version
+
+    Write-Host ""
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host "   当前云端配置" -ForegroundColor Cyan
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host "    云端URL:    $currentUrl" -ForegroundColor Yellow
+    Write-Host "    应用名称:   $currentAppName" -ForegroundColor Yellow
+    Write-Host "    产品名称:   $currentProductName" -ForegroundColor Yellow
+    Write-Host "    桌面版本号: $currentVersion" -ForegroundColor Yellow
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host "  (按回车键保留当前值，或输入新值修改)" -ForegroundColor DarkGray
+    Write-Host "  提示: 云端URL决定 APP 加载的服务器地址" -ForegroundColor DarkGray
+    Write-Host "        修改后需重新打包 APK 才生效" -ForegroundColor DarkGray
+    Write-Host ""
+
+    # ----- 编辑云端URL -----
+    $newUrl = Read-Host "  请输入云端URL [$currentUrl]"
+    if ([string]::IsNullOrWhiteSpace($newUrl)) {
+        $newUrl = $currentUrl
+        Write-Host "  [SKIP] 云端URL保持不变: $newUrl" -ForegroundColor Yellow
+    } else {
+        # 简单校验：必须以 http:// 或 https:// 开头
+        if ($newUrl -notmatch '^https?://') {
+            Write-Host "  [警告] URL 应以 http:// 或 https:// 开头" -ForegroundColor Yellow
+            $confirm2 = Read-Host "  仍要使用此 URL 吗？(Y/N) [N]"
+            if ($confirm2 -ieq 'Y') {
+                Write-Host "  [INFO] 已接受 URL: $newUrl" -ForegroundColor Green
+            } else {
+                $newUrl = $currentUrl
+                Write-Host "  [SKIP] 云端URL保持不变: $newUrl" -ForegroundColor Yellow
+            }
+        }
+    }
+
+    # ----- 编辑应用名称（capacitor.config.json 的 appName）-----
+    $newAppName = Read-Host "  请输入应用名称(APP) [$currentAppName]"
+    if ([string]::IsNullOrWhiteSpace($newAppName)) {
+        $newAppName = $currentAppName
+        Write-Host "  [SKIP] 应用名称保持不变: $newAppName" -ForegroundColor Yellow
+    }
+
+    # ----- 编辑产品名称（package.json 的 build.productName）-----
+    $newProductName = Read-Host "  请输入产品名称(桌面) [$currentProductName]"
+    if ([string]::IsNullOrWhiteSpace($newProductName)) {
+        $newProductName = $currentProductName
+        Write-Host "  [SKIP] 产品名称保持不变: $newProductName" -ForegroundColor Yellow
+    }
+
+    # ----- 编辑桌面版本号 -----
+    $newVersion = Read-Host "  请输入桌面版本号 [$currentVersion]"
+    if ([string]::IsNullOrWhiteSpace($newVersion)) {
+        $newVersion = $currentVersion
+        Write-Host "  [SKIP] 桌面版本号保持不变: $newVersion" -ForegroundColor Yellow
+    }
+
+    # ----- 最终确认 -----
+    Write-Host ""
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host "   请确认新配置" -ForegroundColor Cyan
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host "    云端URL:    $newUrl" -ForegroundColor Green
+    Write-Host "    应用名称:   $newAppName" -ForegroundColor Green
+    Write-Host "    产品名称:   $newProductName" -ForegroundColor Green
+    Write-Host "    桌面版本号: $newVersion" -ForegroundColor Green
+    Write-Host "  ===========================================" -ForegroundColor Cyan
+    Write-Host ""
+    $confirm = Read-Host "  确认以上配置吗？(Y=确认 / N=重新输入 / 回车=确认)"
+    if ([string]::IsNullOrWhiteSpace($confirm)) { $confirm = 'Y' }
+    if ($confirm -ieq 'N') {
+        Write-Host "  [INFO] 用户选择重新输入..." -ForegroundColor Yellow
+        Edit-CloudConfig
+        return
+    }
+
+    # ----- 检查是否有变化 -----
+    $urlChanged = ($newUrl -ne $currentUrl)
+    $appNameChanged = ($newAppName -ne $currentAppName)
+    $productNameChanged = ($newProductName -ne $currentProductName)
+    $versionChanged = ($newVersion -ne $currentVersion)
+
+    if (-not ($urlChanged -or $appNameChanged -or $productNameChanged -or $versionChanged)) {
+        Write-Host "  [SKIP] 所有配置均无变化" -ForegroundColor Yellow
+        return 0
+    }
+
+    # ----- 写入 capacitor.config.json -----
+    if ($urlChanged) { $cap.server.url = $newUrl }
+    if ($appNameChanged) { $cap.appName = $newAppName }
+    $capJson = $cap | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($capFile, $capJson, $script:UTF8NoBom)
+    if ($urlChanged) {
+        Write-Host "  [OK] 云端URL已更新: $currentUrl -> $newUrl" -ForegroundColor Green
+    }
+    if ($appNameChanged) {
+        Write-Host "  [OK] 应用名称已更新: $currentAppName -> $newAppName" -ForegroundColor Green
+    }
+
+    # ----- 写入 cloud_desktop/package.json -----
+    if ($productNameChanged) { $pkg.build.productName = $newProductName }
+    if ($versionChanged) { $pkg.version = $newVersion }
+    $pkgJson = $pkg | ConvertTo-Json -Depth 10
+    [System.IO.File]::WriteAllText($pkgFile, $pkgJson, $script:UTF8NoBom)
+    if ($productNameChanged) {
+        Write-Host "  [OK] 产品名称已更新: $currentProductName -> $newProductName" -ForegroundColor Green
+    }
+    if ($versionChanged) {
+        Write-Host "  [OK] 桌面版本号已更新: $currentVersion -> $newVersion" -ForegroundColor Green
+    }
+
+    Write-Host ""
+    Write-Host "  [完成] 配置已写入 capacitor.config.json 和 package.json" -ForegroundColor Green
+    Write-Host "  提示: 修改后请重新打包桌面版或 APP 使配置生效" -ForegroundColor DarkGray
+    return 0
+}
 
 # 打包前配置确认（显示当前版本号+关键信息，要求用户确认）
 function Confirm-BuildConfig {
@@ -597,12 +743,7 @@ while ($true) {
         '2' { Build-App | Out-Null }
         '3' { Build-All | Out-Null }
         '4' { Sync-FilesToCloudApp | Out-Null }
-        '5' {
-            Write-Host ""
-            Write-Host "  [云端不适用] 云端版使用账号登录，无需本地诊所配置" -ForegroundColor Yellow
-            Write-Host "  如需修改诊所信息，请登录云端网页版后台管理" -ForegroundColor White
-            Write-Host ""
-        }
+        '5' { Edit-CloudConfig | Out-Null }
         '6' { Invoke-EncodingCheck | Out-Null }
         '7' { Show-Config | Out-Null }
         '8' { Enable-StrictMode | Out-Null }
