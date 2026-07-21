@@ -4529,13 +4529,13 @@ if (window.Permission) {
                     btn2.onclick = function() { showPlatformPrescriptionModal(); };
                     btn2.style.display = '';
                 } else if (isClinicAdmin(currentUser)) {
-                    btn1.innerHTML = '📊 数据统计';
+                    btn1.innerHTML = '📊 统计';
                     btn1.onclick = function() { showModal('analyticsModal'); };
                     btn2.innerHTML = '👤 用户';
                     btn2.onclick = function() { showUserManageModal(); };
                     btn2.style.display = '';
                 } else {
-                    btn1.innerHTML = '📊 数据统计';
+                    btn1.innerHTML = '📊 统计';
                     btn1.onclick = function() { showModal('analyticsModal'); };
                     btn2.innerHTML = '🔐 修改密码';
                     btn2.onclick = function() { showModal('changePwdModal'); };
