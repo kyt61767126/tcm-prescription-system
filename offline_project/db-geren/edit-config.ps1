@@ -58,7 +58,9 @@ if ($confirm -eq 'Y' -or $confirm -eq 'y') {
     $config.clinicName = $newClinic
     $config.doctorName = $newDoctor
     # ★ v3 新增：写入签名时间戳（用于签名内容）
-    $config.configIssuedAt = (Get-Date).ToUniversalTime().ToString("o")
+    # 使用 Add-Member -Force 避免属性不存在时报错（PowerShell 5.1 PSCustomObject 限制）
+    $issuedAt = (Get-Date).ToUniversalTime().ToString("o")
+    $config | Add-Member -NotePropertyName configIssuedAt -NotePropertyValue $issuedAt -Force
 
     # 先序列化（不含签名），计算签名，再写入签名
     $configJsonTemp = $config | ConvertTo-Json -Depth 10

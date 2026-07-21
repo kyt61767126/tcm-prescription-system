@@ -336,7 +336,9 @@ function Edit-ClinicConfig {
         if ($doctorChanged) { $config.doctorName = $newDoctor }
 
         # ★ v3 安全：写入签名时间戳（UTC ISO 8601，与 license-manager.js 验签逻辑匹配）
-        $config.configIssuedAt = (Get-Date).ToUniversalTime().ToString("o")
+        # 使用 Add-Member -Force 避免属性不存在时报错（PowerShell 5.1 PSCustomObject 限制）
+        $issuedAt = (Get-Date).ToUniversalTime().ToString("o")
+        $config | Add-Member -NotePropertyName configIssuedAt -NotePropertyValue $issuedAt -Force
         Write-Log "Config: writing config.json (clinic=$($config.clinicName), doctor=$($config.doctorName))"
 
         # 先写入不含签名的 config.json（清掉可能存在的旧 configSignature）
