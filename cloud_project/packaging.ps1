@@ -422,13 +422,7 @@ function Confirm-BuildConfig {
 
     Write-Host "==========================================" -ForegroundColor Cyan
     Write-Host ""
-    $confirm = Read-Host "  确认开始打包吗？(Y=确认 / N=取消 / 回车=确认) [Y]"
-    if ([string]::IsNullOrWhiteSpace($confirm)) { $confirm = 'Y' }
-    if ($confirm -ieq 'N') {
-        Write-Host "  [SKIP] 用户取消打包" -ForegroundColor Yellow
-        return $false
-    }
-    Write-Host "  [INFO] 开始打包..." -ForegroundColor Green
+    Write-Host "  [INFO] 配置确认完成，开始打包..." -ForegroundColor Green
     Write-Host ""
     return $true
 }
@@ -548,11 +542,7 @@ function Build-All {
     Write-Host "  - 桌面版: cloud_desktop\dist\*.exe"
     Write-Host "  - 手机 APP: 当前目录\*.apk"
     Write-Host ""
-    $confirm = Read-Host "确认开始全部打包？(Y/n) [默认回车=开始]"
-    if ($confirm -eq "n" -or $confirm -eq "N") {
-        Write-Host "  已取消" -ForegroundColor Yellow
-        return 0
-    }
+    Write-Host "  [INFO] 自动开始全部打包..." -ForegroundColor Green
 
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
@@ -701,11 +691,7 @@ function Build-AllStrict {
     Write-Host "  - 桌面版: cloud_desktop\dist\*.exe"
     Write-Host "  - 手机 APP: 当前目录\*.apk（已启用签名严格模式）"
     Write-Host ""
-    $confirm = Read-Host "确认开始一键打包？(Y/n) [默认回车=开始]"
-    if ($confirm -eq "n" -or $confirm -eq "N") {
-        Write-Host "  已取消" -ForegroundColor Yellow
-        return 0
-    }
+    Write-Host "  [INFO] 自动开始一键打包..." -ForegroundColor Green
 
     Write-Host ""
     Write-Host "================================================================" -ForegroundColor Cyan
@@ -809,8 +795,6 @@ while ($true) {
         Write-Host ""
         Write-Host "  本次操作总耗时: $($totalElapsed.ToString('hh\:mm\:ss'))" -ForegroundColor DarkGray
     }
-    if ($choice -ne '0') {
-        Write-Host ""
-        Read-Host "按回车键继续"
-    }
+    # P1-易用：选项 1/2/3/9 等打包完成后直接返回菜单，不需回车确认
+    # 仅在错误或异常时才暂停（由各 Build 函数内部 pause）
 }

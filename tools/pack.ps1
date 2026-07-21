@@ -853,12 +853,7 @@ function Build-AllStrict {
     Write-Host "    - 桌面版: dist\*.exe"
     Write-Host "    - 手机版: <versionDir>\*.apk (签名严格模式)"
     Write-Host ""
-
-    $confirm = Read-Host "确认开始一键打包严格模式? (Y/n) [默认回车=开始]"
-    if ($confirm -eq 'n' -or $confirm -eq 'N') {
-        Write-Host "  已取消"
-        return 0
-    }
+    Write-Host "  [INFO] 自动开始一键打包..." -ForegroundColor Green
 
     # Step A: Desktop build
     Write-Host ""
@@ -1045,10 +1040,8 @@ if ($Interactive) {
             '0' { exit 0 }
             default { Write-Host "  [错误] 无效选项，请重新选择" -ForegroundColor Red }
         }
-        if ($choice -ne '0') {
-            Write-Host ""
-            Read-Host "按回车键继续"
-        }
+        # P1-易用：选项 1/2/3/9 等打包完成后直接返回菜单，不需回车确认
+        # 仅在错误或异常时才暂停（由各 Build 函数内部 pause）
     }
 } else {
     # Direct execution mode
