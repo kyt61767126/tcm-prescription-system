@@ -570,6 +570,36 @@ function Build-Desktop {
         Pop-Location
     }
 
+    # ★ 证书存在性检查（防止证书丢失时 electron-builder 签名失败）
+    $certPath = "$script:ProjectRoot\tools\certs\惠康中医-codesign.pfx"
+    $pkgPath = "$script:VersionDir\package.json"
+    $certBackupPath = "$script:VersionDir\package.json.certbak"
+    if (-not (Test-Path $certPath)) {
+        Write-Host "  [WARN] 代码签名证书未找到，将跳过签名" -ForegroundColor Yellow
+        Write-Host "         证书路径: $certPath" -ForegroundColor Yellow
+        Write-Host "         如需启用签名，请运行: powershell -File tools\gen-code-sign-cert.ps1" -ForegroundColor Yellow
+        Write-Host "         临时从 package.json 移除 certificateFile 配置..." -ForegroundColor Yellow
+        Copy-Item -Path $pkgPath -Destination $certBackupPath -Force
+        try {
+            $pkg = Get-Content $pkgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($pkg.build.win.PSObject.Properties.Name -contains 'certificateFile') {
+                $pkg.build.win.PSObject.Properties.Remove('certificateFile')
+            }
+            if ($pkg.build.win.PSObject.Properties.Name -contains 'certificatePassword') {
+                $pkg.build.win.PSObject.Properties.Remove('certificatePassword')
+            }
+            $pkg | ConvertTo-Json -Depth 10 | Set-Content $pkgPath -Encoding UTF8
+            Write-Host "  [OK] 已临时移除证书配置，构建后将恢复" -ForegroundColor Green
+        } catch {
+            Write-Host "  [ERROR] 修改 package.json 失败: $($_.Exception.Message)" -ForegroundColor Red
+            if (Test-Path $certBackupPath) {
+                Copy-Item -Path $certBackupPath -Destination $pkgPath -Force
+                Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue
+            }
+            return 1
+        }
+    }
+
     # Build with electron-builder (use cache via mirror)
     Write-Host "  运行 electron-builder 中..." -ForegroundColor Yellow
     Push-Location $script:VersionDir
@@ -591,6 +621,13 @@ function Build-Desktop {
         }
     } finally {
         Pop-Location
+    }
+
+    # ★ 构建后恢复 package.json
+    if (Test-Path $certBackupPath) {
+        Copy-Item -Path $certBackupPath -Destination $pkgPath -Force
+        Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue
+        Write-Host "  [OK] 已恢复 package.json 原始配置" -ForegroundColor Green
     }
 
     # P1-易用：验证产物存在并显示大小
