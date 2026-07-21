@@ -1,71 +1,34 @@
-@echo off
-setlocal enableextensions
-cd /d "%~dp0"
-title ?????????? - ???????
-
-echo ============================================
-echo   ?????????? - ???????
-echo   (????+APP ?????)
-echo ============================================
-echo.
-
-REM [1] ??? packaging.ps1 ??????
-set "PACK_PS1=%~dp0packaging.ps1"
-if not exist "%PACK_PS1%" (
-    echo [????] ��??? packaging.ps1
-    echo        ��??: %PACK_PS1%
-    echo        ????????��?? cloud_project ??
-    pause
-    exit /b 1
-)
-echo [OK] ??? packaging.ps1
-
-REM [2] ??? Node.js ????
-where node >nul 2>nul
-if errorlevel 1 (
-    echo [????] ��??? Node.js
-    echo        ????? https://nodejs.org/ ??? Node.js
-    pause
-    exit /b 1
-)
-echo [OK] ??? Node.js:
-node --version
-
-REM [3] ????????????
-if exist "%~dp0cloud_desktop\package.json" (
-    echo [OK] ??? cloud_desktop/package.json
-) else (
-    echo [????] ��??? cloud_desktop/package.json
-    echo        ????? cloud_desktop ??????
-    pause
-    exit /b 1
-)
-
-if exist "%~dp0cloud_app\app\src\main\assets\capacitor.config.json" (
-    echo [OK] ??? capacitor.config.json
-) else (
-    echo [????] ��??? capacitor.config.json??APP ???URL?????
-    echo        APP ??????????
-)
-
-echo.
-echo ???????????...
-echo ============================================
-echo.
-
-REM ??? packaging.ps1
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%"
-set "EXIT_CODE=%errorlevel%"
-
-echo.
-echo ============================================
-if %EXIT_CODE% equ 0 (
-    echo [???] ??????????????
-) else (
-    echo [????] ????????????????: %EXIT_CODE%
-    echo        ???????????????????:
-    echo          chcp 65001 ^&^& pack.bat
-)
-echo ============================================
-echo.
-pause
+@echo off
+chcp 65001 >nul
+setlocal enableextensions
+cd /d "%~dp0"
+title 惠康中医云端版 - 打包工具
+
+REM [1] 检查 packaging.ps1 是否存在
+set "PACK_PS1=%~dp0packaging.ps1"
+if not exist "%PACK_PS1%" (
+    echo [错误] 未找到 packaging.ps1
+    echo   路径: %PACK_PS1%
+    pause
+    exit /b 1
+)
+
+REM [2] 检查 Node.js 环境
+where node >nul 2>nul
+if errorlevel 1 (
+    echo [错误] 未找到 Node.js，请从 https://nodejs.org/ 安装
+    pause
+    exit /b 1
+)
+
+REM [3] 启动 packaging.ps1（UTF-8 中文菜单）
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%"
+set "EXIT_CODE=%errorlevel%"
+
+if %EXIT_CODE% neq 0 (
+    echo.
+    echo [错误] 打包异常退出，退出码: %EXIT_CODE%
+    echo   提示: 请尝试 chcp 65001 ^&^& pack.bat
+)
+echo.
+pause

@@ -1,61 +1,34 @@
 @echo off
+chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
-title »İ¿µÖĞÒ½¶¨ÖÆ°æ - ´ò°ü¹¤¾ß
+title æƒ åº·ä¸­åŒ»å®šåˆ¶ç‰ˆ - æ‰“åŒ…å·¥å…·
 
-echo ============================================
-echo   »İ¿µÖĞÒ½¶¨ÖÆ°æ - ´ò°ü¹¤¾ß
-echo   (×ÀÃæ+APP Í³Ò»Èë¿Ú)
-echo ============================================
-echo.
-
-REM [1] ¼ì²é pack.ps1 ÊÇ·ñ´æÔÚ
+REM [1] æ£€æŸ¥ pack.ps1 æ˜¯å¦å­˜åœ¨
 set "PACK_PS1=%~dp0..\..\tools\pack.ps1"
 if not exist "%PACK_PS1%" (
-    echo [´íÎó] Î´ÕÒµ½ pack.ps1£¡
-    echo        Â·¾¶: %PACK_PS1%
-    echo        ÇëÈ·±£ tools Ä¿Â¼ÍêÕû¡£
+    echo [é”™è¯¯] æœªæ‰¾åˆ° pack.ps1
+    echo   è·¯å¾„: %PACK_PS1%
     pause
     exit /b 1
 )
-echo [OK] ÒÑÕÒµ½ pack.ps1
 
-REM [2] ¼ì²é Node.js »·¾³
+REM [2] æ£€æŸ¥ Node.js ç¯å¢ƒ
 where node >nul 2>nul
 if errorlevel 1 (
-    echo [´íÎó] Î´ÕÒµ½ Node.js£¡
-    echo        Çë´Ó https://nodejs.org/ °²×° Node.js
+    echo [é”™è¯¯] æœªæ‰¾åˆ° Node.jsï¼Œè¯·ä» https://nodejs.org/ å®‰è£…
     pause
     exit /b 1
 )
-echo [OK] ÒÑÕÒµ½ Node.js:
-node --version
 
-REM [3] ¼ì²é config.json
-if not exist "%~dp0config.json" (
-    echo [¾¯¸æ] Î´ÕÒµ½ config.json£¬½«Ê¹ÓÃÄ¬ÈÏÖµ
-) else (
-    echo [OK] ÒÑÕÒµ½ config.json
-)
-
-echo.
-echo ÕıÔÚÆô¶¯´ò°üÄ£¿é...
-echo ============================================
-echo.
-
-REM ÔËĞĞ pack.ps1£¬Ê¹ÓÃ -Interactive Ä£Ê½£¨ÏÔÊ¾²Ëµ¥£©
+REM [3] å¯åŠ¨ pack.ps1ï¼ˆUTF-8 ä¸­æ–‡èœå•ï¼‰
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -Version dingzhi -Interactive
 set "EXIT_CODE=%errorlevel%"
 
-echo.
-echo ============================================
-if %EXIT_CODE% equ 0 (
-    echo [Íê³É] ´ò°üÁ÷³ÌÒÑÕı³£½áÊø£¡
-) else (
-    echo [´íÎó] ´ò°üÒì³£ÍË³ö£¬ÍË³öÂë: %EXIT_CODE%
-    echo        Èô³öÏÖ±àÂëÂÒÂë£¬ÇëÔËĞĞ:
-    echo          chcp 65001 ^&^& pack.bat
+if %EXIT_CODE% neq 0 (
+    echo.
+    echo [é”™è¯¯] æ‰“åŒ…å¼‚å¸¸é€€å‡ºï¼Œé€€å‡ºç : %EXIT_CODE%
+    echo   æç¤º: è¯·å°è¯• chcp 65001 ^&^& pack.bat
 )
-echo ============================================
 echo.
 pause
