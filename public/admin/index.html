@@ -107,6 +107,37 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 .logout-btn { background: #95a5a6; }
 .logout-btn:hover { background: #7f8c8d; }
 
+/* ★ 任务5：日志弹窗 + v3/v4 字段样式 */
+.modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 999; justify-content: center; align-items: center;
+}
+.modal-overlay.show { display: flex; }
+.modal-box {
+    background: white; border-radius: 8px; padding: 24px; max-width: 720px; width: 90%;
+    max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+.modal-box h3 { color: #2c3e50; margin-bottom: 16px; border-left: 4px solid #3498db; padding-left: 10px; }
+.modal-close { float: right; cursor: pointer; color: #95a5a6; font-size: 20px; }
+.modal-close:hover { color: #e74c3c; }
+.timeline { list-style: none; padding: 0; }
+.timeline li {
+    padding: 10px 14px; border-left: 3px solid #3498db; margin-bottom: 8px;
+    background: #f9fafc; border-radius: 0 4px 4px 0; font-size: 13px;
+}
+.timeline li .tl-action { font-weight: 600; color: #2c3e50; text-transform: uppercase; }
+.timeline li .tl-time { color: #909399; font-size: 12px; margin-top: 4px; }
+.timeline li .tl-detail { color: #606266; margin-top: 4px; word-break: break-all; }
+.timeline li .tl-meta { color: #909399; font-size: 11px; margin-top: 4px; }
+.tl-tag-generate { color: #27ae60; }
+.tl-tag-activate, .tl-tag-reactivate { color: #3498db; }
+.tl-tag-unbind { color: #f39c12; }
+.tl-tag-disable { color: #e74c3c; }
+.tl-tag-enable { color: #27ae60; }
+.dev-count { font-size: 11px; color: #909399; margin-top: 2px; }
+.dev-count strong { color: #3498db; }
+.clinic-name { font-size: 11px; color: #8e44ad; margin-top: 2px; }
+
 .hidden { display: none !important; }
 
 @media (max-width: 768px) {
@@ -227,16 +258,32 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         <th>签发时间</th>
                         <th>激活时间</th>
                         <th>到期时间</th>
-                        <th>机器ID</th>
+                        <th>机器ID / 设备</th>
+                        <th>诊所名</th>
                         <th>备注</th>
                         <th>操作</th>
                     </tr>
                 </thead>
                 <tbody id="listBody">
-                    <tr><td colspan="10" class="loading">加载中...</td></tr>
+                    <tr><td colspan="11" class="loading">加载中...</td></tr>
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<!-- ★ 任务5：日志弹窗 -->
+<div id="logModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeLogModal()">&times;</span>
+        <h3>激活码操作日志</h3>
+        <div id="logModalAlert" class="alert"></div>
+        <div style="margin-bottom:12px;color:#606266;font-size:13px;">
+            <strong>激活码：</strong><span id="logModalCode" style="font-family:Courier New,monospace;"></span>
+        </div>
+        <ul class="timeline" id="logTimeline">
+            <li style="border-left-color:#95a5a6;">加载中...</li>
+        </ul>
     </div>
 </div>
 
@@ -394,7 +441,7 @@ function renderStats(stats) {
 function renderList(records) {
     const tbody = document.getElementById('listBody');
     if (!records || records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" class="empty">暂无激活码</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="empty">暂无激活码</td></tr>';
         return;
     }
     const typeNames = { trial: '试用版', personal: '个人版', pro: '专业版' };
@@ -407,7 +454,19 @@ function renderList(records) {
         const activatedAt = r.activatedAt ? new Date(r.activatedAt).toLocaleString('zh-CN') : '-';
         const expiresAt = r.expiresAt ? new Date(r.expiresAt).toLocaleDateString('zh-CN') : '-';
 
+        // ★ v4 新增：机器ID + 设备数显示
+        const maxDev = r.maxDevices || 1;
+        const devCount = r.devicesCount || 0;
+        let machineCell = '<span style="font-family:Courier New,monospace;">' + escapeHtml(r.machineId || '-') + '</span>';
+        if (maxDev > 1 || devCount > 0) {
+            machineCell += '<div class="dev-count">设备：<strong>' + devCount + '</strong>/' + maxDev + '</div>';
+        }
+
+        // ★ v3 新增：诊所名显示
+        const clinicCell = r.clinicName ? '<span style="color:#8e44ad;">' + escapeHtml(r.clinicName) + '</span>' : '-';
+
         let actions = '<button class="btn btn-sm" onclick="copyCode(\'' + r.code + '\')">复制</button>';
+        actions += '<button class="btn btn-sm" onclick="showLogs(\'' + r.code + '\')">日志</button>';
         if (r.status === 'used') {
             actions += '<button class="btn btn-sm btn-warning" onclick="manageCode(\'' + r.code + '\',\'unbind\')">解绑</button>';
         }
@@ -426,11 +485,67 @@ function renderList(records) {
             '<td>' + issuedAt + '</td>' +
             '<td>' + activatedAt + '</td>' +
             '<td>' + expiresAt + '</td>' +
-            '<td>' + (r.machineId || '-') + '</td>' +
+            '<td>' + machineCell + '</td>' +
+            '<td>' + clinicCell + '</td>' +
             '<td>' + escapeHtml(r.note || '-') + '</td>' +
             '<td style="white-space:nowrap;">' + actions + '</td>' +
             '</tr>';
     }).join('');
+}
+
+// ★ 任务5：查看操作日志
+async function showLogs(code) {
+    document.getElementById('logModalCode').textContent = code;
+    document.getElementById('logModal').classList.add('show');
+    document.getElementById('logTimeline').innerHTML = '<li style="border-left-color:#95a5a6;">加载中...</li>';
+    try {
+        const res = await fetch(API_BASE + '/license/logs?code=' + encodeURIComponent(code), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success) {
+            renderLogs(data.logs || []);
+        } else {
+            if (res.status === 403) {
+                showAlert('logModalAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(() => { closeLogModal(); doLogout(); }, 1500);
+            } else {
+                document.getElementById('logTimeline').innerHTML = '<li style="border-left-color:#e74c3c;">' + escapeHtml(data.error || '加载失败') + '</li>';
+            }
+        }
+    } catch (e) {
+        document.getElementById('logTimeline').innerHTML = '<li style="border-left-color:#e74c3c;">网络错误：' + escapeHtml(e.message) + '</li>';
+    }
+}
+
+function renderLogs(logs) {
+    const ul = document.getElementById('logTimeline');
+    if (!logs || logs.length === 0) {
+        ul.innerHTML = '<li style="border-left-color:#95a5a6;">暂无操作记录</li>';
+        return;
+    }
+    const actionNames = {
+        generate: '生成激活码',
+        activate: '激活',
+        reactivate: '重激活',
+        unbind: '解绑机器',
+        disable: '禁用',
+        enable: '启用',
+        delete: '删除'
+    };
+    ul.innerHTML = logs.map(log => {
+        const time = new Date(log.time).toLocaleString('zh-CN');
+        return '<li>' +
+            '<div class="tl-action tl-tag-' + log.action + '">' + (actionNames[log.action] || log.action) + '</div>' +
+            '<div class="tl-time">' + time + '</div>' +
+            (log.detail ? '<div class="tl-detail">' + escapeHtml(log.detail) + '</div>' : '') +
+            '<div class="tl-meta">操作人：' + escapeHtml(log.operator || '-') + ' · IP：' + escapeHtml(log.ip || '-') + '</div>' +
+            '</li>';
+    }).join('');
+}
+
+function closeLogModal() {
+    document.getElementById('logModal').classList.remove('show');
 }
 
 function escapeHtml(str) {

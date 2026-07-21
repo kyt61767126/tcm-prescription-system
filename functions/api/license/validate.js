@@ -34,7 +34,7 @@
 import {
     getKV, getLicense, updateLicense, saveLicense,
     buildLicenseData, encodeLicenseBase64, checkRateLimit,
-    getDevices, getMaxDevices
+    getDevices, getMaxDevices, appendLicenseLog
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -203,10 +203,13 @@ export async function onRequest(context) {
         // ★ v4 新增：多设备授权信息（仅显示用）
         licenseOptions.maxDevices = maxDevices;
         licenseOptions.devicesCount = existingDevice ? devices.length : devices.length + 1;
+        // ★ 新增：传递 context 以支持环境变量动态密钥
+        licenseOptions.context = context;
         const licenseData = await buildLicenseData(licenseRecord, licenseOptions);
 
         // 更新激活码记录：标记为已使用，绑定机器 ID + 诊所名
         // ★ v4 新增：如果是新设备激活，添加到 devices 数组
+        const isReactivation = !!existingDevice;  // 同设备重激活 vs 新设备首次激活
         const updates = {
             status: 'used',
             machineId: machineId,  // 保留旧字段（向后兼容，= devices[0].machineId）
@@ -236,6 +239,15 @@ export async function onRequest(context) {
         updates.devices = newDevices;
         updates.maxDevices = maxDevices;
         await updateLicense(kv, code, updates);
+
+        // ★ 任务5：记录激活/重激活日志
+        await appendLicenseLog(kv, code, {
+            action: isReactivation ? 'reactivate' : 'activate',
+            time: updates.activatedAt,
+            ip: ip,
+            operator: licenseUser,
+            detail: `machineId=${machineId.substring(0, 8)}..., clinicName=${record.clinicName || 'null'}, devicesCount=${newDevices.length}/${maxDevices}`
+        });
 
         // 编码为 base64（客户端写入 license.dat 的格式）
         const licenseBase64 = encodeLicenseBase64(licenseData);

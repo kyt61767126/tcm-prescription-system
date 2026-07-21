@@ -13,7 +13,18 @@
 // ============================================================================
 
 // ★ 必须与客户端 license-manager.js 中的 LICENSE_HMAC_KEY 保持一致
-const LICENSE_HMAC_KEY = 'bnzc_tcm_license_key_v1_2026';
+// 优先从环境变量读取（Cloudflare Secrets），硬编码作为默认值（向后兼容）
+function getLicenseHmacKey(context) {
+    if (context && context.env && context.env.LICENSE_HMAC_KEY) {
+        return context.env.LICENSE_HMAC_KEY;
+    }
+    if (process.env.LICENSE_HMAC_KEY) {
+        return process.env.LICENSE_HMAC_KEY;
+    }
+    return 'bnzc_trial_key_v1_2026';
+}
+
+const LICENSE_HMAC_KEY = 'bnzc_trial_key_v1_2026';
 
 // ★ v2: 版本类型默认配置（必须与 license-manager.js 中 LICENSE_TYPE_CONFIG 一致）
 const LICENSE_TYPE_CONFIG = {
@@ -68,7 +79,7 @@ async function hmacSign(message, secret) {
 
 // ★ v2 签名：与客户端 generateSignature 一致
 // 内容：user|type|issuedAt|expiresAt|maxPrescriptions|features
-async function generateSignature(data) {
+async function generateSignature(data, secret) {
     const content = [
         data.user,
         data.type,
@@ -77,13 +88,13 @@ async function generateSignature(data) {
         String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
         Array.isArray(data.features) ? data.features.join(',') : ''
     ].join('|');
-    return hmacSign(content, LICENSE_HMAC_KEY);
+    return hmacSign(content, secret || LICENSE_HMAC_KEY);
 }
 
 // ★ v3 签名：在 v2 基础上增加 clinicName/machineId/licenseBinding 三个绑定字段
 // 内容：user|type|issuedAt|expiresAt|maxPrescriptions|features|clinicName|machineId|licenseBinding
 // 仅当 clinicName/machineId/licenseBinding 同时存在时才使用 v3 签名
-async function generateSignatureV3(data) {
+async function generateSignatureV3(data, secret) {
     const content = [
         data.user,
         data.type,
@@ -95,16 +106,16 @@ async function generateSignatureV3(data) {
         data.machineId || '',
         data.licenseBinding || ''
     ].join('|');
-    return hmacSign(content, LICENSE_HMAC_KEY);
+    return hmacSign(content, secret || LICENSE_HMAC_KEY);
 }
 
 // ★ 统一签名生成入口：自动选择 v3 / v2
 // 含 clinicName + machineId + licenseBinding → v3，否则 → v2
-async function generateSignatureAuto(data) {
+async function generateSignatureAuto(data, secret) {
     if (data.clinicName && data.machineId && data.licenseBinding) {
-        return generateSignatureV3(data);
+        return generateSignatureV3(data, secret);
     }
-    return generateSignature(data);
+    return generateSignature(data, secret);
 }
 
 // ============================================================================
@@ -141,6 +152,7 @@ function generateActivationCode() {
 // ★ v3 新增：options.clinicName + options.machineId + options.licenseBinding
 // 三者同时存在时启用 v3 签名（含绑定字段），否则走 v2 签名（向后兼容）
 // ★ v4 新增：options.maxDevices + options.devicesCount（多设备授权，仅显示用，不参与签名）
+// ★ 新增：支持通过 options.secret 或 options.context 传入动态密钥（环境变量）
 async function buildLicenseData(record, options = {}) {
     const config = LICENSE_TYPE_CONFIG[record.type] || LICENSE_TYPE_CONFIG.personal;
     const maxPrescriptions = record.maxPrescriptions !== undefined ? record.maxPrescriptions : config.maxPrescriptions;
@@ -184,7 +196,9 @@ async function buildLicenseData(record, options = {}) {
     }
 
     // ★ 自动选择 v3 / v2 签名
-    data.signature = await generateSignatureAuto(data);
+    // 优先使用 options.secret，否则从 options.context 读取环境变量
+    const secret = options.secret || (options.context ? getLicenseHmacKey(options.context) : undefined);
+    data.signature = await generateSignatureAuto(data, secret);
     return data;
 }
 
@@ -305,6 +319,64 @@ function getMaxDevices(record) {
 }
 
 // ============================================================================
+//  ★ 操作日志（任务5 新增）：记录每个激活码的所有操作历史
+//  KV key: license_log:{code}，值为 JSON 数组
+//  每条记录：{ action, time, ip, operator, detail }
+//  最多保留 200 条（防止无限增长），FIFO 队列
+// ============================================================================
+const KV_LICENSE_LOG_PREFIX = 'license_log:';
+const LICENSE_LOG_MAX_ENTRIES = 200;
+
+// 追加操作日志（fire-and-forget，不阻塞主流程）
+async function appendLicenseLog(kv, code, entry) {
+    if (!kv || !code || !entry || !entry.action) return;
+    try {
+        const logKey = KV_LICENSE_LOG_PREFIX + code;
+        const logs = (await kv.get(logKey, 'json')) || [];
+        // 补全字段
+        const logEntry = {
+            action: entry.action,
+            time: entry.time || new Date().toISOString(),
+            ip: entry.ip || 'unknown',
+            operator: entry.operator || 'system',
+            detail: entry.detail || ''
+        };
+        logs.push(logEntry);
+        // 超过上限时丢弃最旧的（FIFO）
+        if (logs.length > LICENSE_LOG_MAX_ENTRIES) {
+            logs.splice(0, logs.length - LICENSE_LOG_MAX_ENTRIES);
+        }
+        await kv.put(logKey, JSON.stringify(logs));
+    } catch (e) {
+        console.warn('[LicenseLog] 追加日志失败:', e.message);
+    }
+}
+
+// 查询激活码操作日志
+async function getLicenseLogs(kv, code) {
+    if (!kv || !code) return [];
+    try {
+        const logKey = KV_LICENSE_LOG_PREFIX + code;
+        const logs = (await kv.get(logKey, 'json')) || [];
+        // 按时间倒序（最新的在前）
+        return logs.slice().reverse();
+    } catch (e) {
+        console.warn('[LicenseLog] 查询日志失败:', e.message);
+        return [];
+    }
+}
+
+// 删除激活码日志（删除激活码时同步清理）
+async function deleteLicenseLogs(kv, code) {
+    if (!kv || !code) return;
+    try {
+        await kv.delete(KV_LICENSE_LOG_PREFIX + code);
+    } catch (e) {
+        console.warn('[LicenseLog] 删除日志失败:', e.message);
+    }
+}
+
+// ============================================================================
 //  速率限制（简单 KV 实现，防止暴力破解）
 // ============================================================================
 // 记录 IP 的校验请求次数
@@ -341,5 +413,9 @@ export {
     sanitizeRecord,
     checkRateLimit,
     getDevices,        // ★ v4 新增：获取激活码已绑定的设备数组
-    getMaxDevices      // ★ v4 新增：获取激活码的最大设备数
+    getMaxDevices,     // ★ v4 新增：获取激活码的最大设备数
+    // ★ 任务5 新增：操作日志
+    appendLicenseLog,  // 追加激活码操作日志
+    getLicenseLogs,    // 查询激活码操作日志
+    deleteLicenseLogs  // 删除激活码日志（删激活码时调用）
 };

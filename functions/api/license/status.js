@@ -1,5 +1,5 @@
 // ============================================================================
-//  status.js — 激活码状态查询 + 管理 API（管理员专用）
+//  status.js — 激活码状态查询 + 管理 API（管理员专用）+ 客户端心跳检测
 //
 //  路由：
 //    GET  /api/license/status?code=BNZC-XXXX-XXXX-XXXX-XXXX   查询单个激活码状态
@@ -7,14 +7,16 @@
 //    POST /api/license/status?action=disable                  禁用激活码
 //    POST /api/license/status?action=enable                   启用激活码
 //    POST /api/license/status?action=delete                   删除激活码
+//    POST /api/license/status                                 客户端心跳检测（无需认证）
 //
-//  认证：Bearer token（platform_admin）
+//  认证：Bearer token（platform_admin）— 管理操作
+//        无需认证 — 客户端心跳检测
 // ============================================================================
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, getLicense, updateLicense, sanitizeRecord, KV_LICENSE_PREFIX, KV_LICENSE_INDEX,
-    getDevices, getMaxDevices
+    getDevices, getMaxDevices, appendLicenseLog, deleteLicenseLogs
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -44,6 +46,58 @@ async function deleteLicense(kv, code) {
     }
 }
 
+// 获取客户端 IP（用于日志记录）
+function getClientIP(context) {
+    return context.request.headers.get('CF-Connecting-IP') ||
+           context.request.headers.get('X-Forwarded-For') ||
+           context.request.headers.get('X-Real-IP') ||
+           'unknown';
+}
+
+// ★ 客户端心跳检测：根据 machineId 查询授权状态，支持远程撤销
+async function handleHeartbeat(kv, body) {
+    const { machineId } = body;
+    if (!machineId) {
+        return json({ revoked: false, warning: '未提供 machineId' });
+    }
+
+    const index = (await kv.get(KV_LICENSE_INDEX, 'json')) || [];
+    for (const code of index) {
+        const record = await getLicense(kv, code);
+        if (!record) continue;
+
+        const devices = getDevices(record);
+        const matchedDevice = devices.find(d => d.machineId === machineId);
+        if (matchedDevice) {
+            if (record.status === 'disabled') {
+                return json({
+                    revoked: true,
+                    reason: '授权已被禁用，请联系客服',
+                    code: code
+                });
+            }
+
+            const expiresAt = record.expiresAt;
+            if (expiresAt && new Date(expiresAt) < new Date()) {
+                return json({
+                    revoked: true,
+                    reason: '授权已过期',
+                    code: code
+                });
+            }
+
+            return json({
+                revoked: false,
+                code: code,
+                type: record.type,
+                expiresAt: expiresAt
+            });
+        }
+    }
+
+    return json({ revoked: false, warning: '未找到绑定的授权记录' });
+}
+
 export async function onRequest(context) {
     const method = context.request.method;
     const url = new URL(context.request.url);
@@ -53,15 +107,25 @@ export async function onRequest(context) {
     }
 
     try {
-        // 管理员认证
-        const currentUser = await parseAuthHeader(context.request, context.env);
-        if (!currentUser || !isPlatformAdmin(currentUser)) {
-            return json({ success: false, error: '仅平台总管理员可管理激活码' }, 403);
-        }
-
         const kv = getKV(context);
         if (!kv) {
             return json({ success: false, error: 'KV binding not found' }, 500);
+        }
+
+        // ★ 客户端心跳检测：POST /api/license/status（无需认证）
+        if (method === 'POST') {
+            const body = await context.request.json().catch(() => ({}));
+            const { action, machineId } = body;
+
+            if (!action && machineId) {
+                return handleHeartbeat(kv, body);
+            }
+        }
+
+        // 管理员认证（仅管理操作需要）
+        const currentUser = await parseAuthHeader(context.request, context.env);
+        if (!currentUser || !isPlatformAdmin(currentUser)) {
+            return json({ success: false, error: '仅平台总管理员可管理激活码' }, 403);
         }
 
         // ===== GET：查询单个激活码状态 =====
@@ -93,6 +157,7 @@ export async function onRequest(context) {
 
             let updates = {};
             let message = '';
+            let logDetail = '';
 
             switch (action) {
                 case 'unbind':
@@ -123,6 +188,7 @@ export async function onRequest(context) {
                             updates.activatedAt = newDevices[0].activatedAt;
                             message = `已解绑 1 台设备，剩余 ${newDevices.length} 台`;
                         }
+                        logDetail = `machineId=${targetMachineId.substring(0, 8)}..., remaining=${newDevices.length}/${getMaxDevices(record)}`;
                     } else {
                         // 解绑所有设备（旧行为）
                         updates = {
@@ -134,12 +200,14 @@ export async function onRequest(context) {
                             maxDevices: getMaxDevices(record)
                         };
                         message = '激活码已解绑所有设备，可重新激活';
+                        logDetail = 'all devices';
                     }
                     break;
 
                 case 'disable':
                     updates = { status: 'disabled' };
                     message = '激活码已禁用';
+                    logDetail = 'disabled by admin';
                     break;
 
                 case 'enable':
@@ -149,10 +217,15 @@ export async function onRequest(context) {
                         status: devices.length > 0 ? 'used' : 'unused'
                     };
                     message = '激活码已启用';
+                    logDetail = `enabled, status=${updates.status}, devices=${devices.length}`;
                     break;
 
                 case 'delete':
                     await deleteLicense(kv, code);
+                    // ★ 任务5：删除激活码时同步删除日志
+                    await deleteLicenseLogs(kv, code);
+                    // 删除操作无法记录日志（KV 已被删除），只能在管理员操作日志中体现
+                    console.log(`[LicenseLog] 激活码 ${code} 已被 ${currentUser.username} 删除（IP: ${getClientIP(context)}）`);
                     return json({ success: true, message: '激活码已删除' });
 
                 default:
@@ -160,6 +233,14 @@ export async function onRequest(context) {
             }
 
             const updated = await updateLicense(kv, code, updates);
+            // ★ 任务5：记录管理操作日志
+            await appendLicenseLog(kv, code, {
+                action: action,
+                time: new Date().toISOString(),
+                ip: getClientIP(context),
+                operator: currentUser.username,
+                detail: logDetail
+            });
             return json({
                 success: true,
                 message: message,

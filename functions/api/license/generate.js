@@ -32,7 +32,7 @@
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, saveLicense, sanitizeRecord,
-    generateActivationCode, LICENSE_TYPE_CONFIG
+    generateActivationCode, LICENSE_TYPE_CONFIG, appendLicenseLog
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -51,6 +51,14 @@ function json(data, status = 200) {
 
 function getNowISO() {
     return new Date().toISOString();
+}
+
+// 获取客户端 IP（用于日志记录）
+function getClientIP(context) {
+    return context.request.headers.get('CF-Connecting-IP') ||
+           context.request.headers.get('X-Forwarded-For') ||
+           context.request.headers.get('X-Real-IP') ||
+           'unknown';
 }
 
 export async function onRequest(context) {
@@ -76,6 +84,7 @@ export async function onRequest(context) {
             return json({ success: false, error: 'KV binding not found' }, 500);
         }
 
+        const ip = getClientIP(context);
         const body = await context.request.json().catch(() => ({}));
         const { user, type, days, expiresAt, count, note, maxPrescriptions, features, clinicName, maxDevices } = body;
 
@@ -142,6 +151,14 @@ export async function onRequest(context) {
             };
 
             await saveLicense(kv, record);
+            // ★ 任务5：记录生成日志
+            await appendLicenseLog(kv, code, {
+                action: 'generate',
+                time: record.issuedAt,
+                ip: ip,
+                operator: currentUser.username,
+                detail: `type=${type}, days=${days || 0}, expiresAt=${recordExpiresAt || 'null'}, clinicName=${clinicName || ''}, maxDevices=${parsedMaxDevices}`
+            });
             codes.push(sanitizeRecord(record));
         }
 
