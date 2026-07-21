@@ -231,7 +231,7 @@ function installCSP(sess) {
             "img-src 'self' data:",
             "media-src 'self' blob:",          // 新增：允许 blob: 视频源
             "font-src 'self' data:",
-            "connect-src 'self'",
+            "connect-src 'self' https://tcm-prescription-system.pages.dev",  // ★修复：必须保留云端 API 域名白名单，否则 fetch 调用被 CSP 阻止触发 "Failed to fetch"
             "object-src 'none'",
             "base-uri 'self'"
         ].join('; ');
