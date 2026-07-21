@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -638,18 +638,31 @@ function Build-App {
     }
     Start-Sleep -Milliseconds 500  # reduced from 1s
 
-    # Skip clean for incremental build - only clean if --clean flag was passed
-    # Gradle's incremental build + build cache handles dependency changes automatically
-    if ($env:TCM_GRADLE_CLEAN -eq '1') {
-        Write-Host "  [深度清理] 清理构建缓存 (TCM_GRADLE_CLEAN=1)..." -ForegroundColor Yellow
+    # ★ 默认强制 clean 全量构建（解决 Gradle 增量构建缓存导致 Java 修改不生效的问题）
+    # 原因：Gradle 增量构建通过输入哈希判断是否重新编译，但 Android 资源/Manifest/Java
+    #       同时修改时可能漏掉依赖，导致修改不生效（用户反馈状态栏修复打包后无变化）
+    # 开发调试时可设置 TCM_GRADLE_SKIP_CLEAN=1 跳过 clean 加速打包
+    if ($env:TCM_GRADLE_SKIP_CLEAN -eq '1') {
+        Write-Host "  [增量构建] 跳过 clean (TCM_GRADLE_SKIP_CLEAN=1，仅开发调试用)..." -ForegroundColor Cyan
+    } else {
+        Write-Host "  [全量清理] 清理构建缓存（默认强制，确保 Java/资源修改全部生效）..." -ForegroundColor Yellow
+        # 先删除 javac 缓存目录（强制 Java 重新编译，比 gradlew clean 快）
+        $javacCache = "$script:AndroidDir\app\build\intermediates\javac"
+        if (Test-Path $javacCache) {
+            try {
+                Remove-Item -Path $javacCache -Recurse -Force -ErrorAction SilentlyContinue
+                Write-Host "    [OK] 已清理 javac 缓存" -ForegroundColor Green
+            } catch {
+                Write-Host "    [WARN] 清理 javac 缓存失败: $($_.Exception.Message)" -ForegroundColor Yellow
+            }
+        }
+        # 再执行 gradlew clean 全量清理（含资源、依赖缓存）
         Push-Location $script:AndroidDir
         try {
             Invoke-External { & ".\gradlew.bat" clean } "gradlew clean"
         } finally {
             Pop-Location
         }
-    } else {
-        Write-Host "  [增量构建] 跳过 clean (设置 TCM_GRADLE_CLEAN=1 进行全量清理)" -ForegroundColor Cyan
     }
 
     # P1: 混淆 JS 代码（含 Android assets/public，防 APK 内 JS 被直接读取）
@@ -671,7 +684,8 @@ function Build-App {
         try {
             # Using daemon (no --no-daemon) enables 2-3x faster incremental builds
             # --parallel enables parallel task execution
-            Invoke-External { & ".\gradlew.bat" assembleRelease --parallel --build-cache } "gradlew assembleRelease"
+            # --rerun-tasks 强制重新执行所有任务（忽略增量缓存，确保修改全部生效）
+            Invoke-External { & ".\gradlew.bat" assembleRelease --parallel --rerun-tasks } "gradlew assembleRelease"
         } catch {
             Restore-VersionCode
             throw

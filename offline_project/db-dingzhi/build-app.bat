@@ -76,12 +76,20 @@ taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] Cleanup completed
 echo.
 
-echo [5/8] Cleaning build cache...
-call gradlew.bat clean --no-daemon
-if errorlevel 1 (
-    echo [WARN] Clean failed, continuing with incremental build
+echo [5/8] Cleaning build cache (强制全量清理，确保修改生效)...
+if defined TCM_GRADLE_SKIP_CLEAN (
+    echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, 跳过 clean (仅开发调试用)
 ) else (
-    echo [OK] Old cache cleared
+    if exist "app\build\intermediates\javac" (
+        rmdir /S /Q "app\build\intermediates\javac" 2>nul
+        echo       [OK] 已清理 javac 缓存
+    )
+    call gradlew.bat clean --no-daemon
+    if errorlevel 1 (
+        echo [WARN] Clean failed, continuing with incremental build
+    ) else (
+        echo [OK] Old cache cleared
+    )
 )
 echo.
 
@@ -91,7 +99,7 @@ echo.
 
 echo [6/8] Building signed APK...
 echo.
-call gradlew.bat assembleRelease --no-daemon
+call gradlew.bat assembleRelease --no-daemon --rerun-tasks
 if errorlevel 1 (
     echo.
     echo [ERROR] Build failed! Please check error messages
