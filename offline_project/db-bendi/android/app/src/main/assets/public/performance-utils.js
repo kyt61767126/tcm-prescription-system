@@ -301,57 +301,58 @@
 
     // ==================== 移动端键盘遮挡修复 ====================
     // 当药物表格内输入框获得焦点时，自动滚动到可见区域中央，避免被软键盘遮挡
-    // 纯 JS 逻辑，不修改 HTML/CSS，仅监听 focusin 事件并调用 scrollIntoView
+    // 配合 AndroidManifest.xml 的 adjustResize 使用效果最佳
     function setupMobileKeyboardScroll() {
         // 仅在移动端（窄屏）启用，桌面端不需要
         if (window.innerWidth >= 769) return;
 
         var scrollTimer = null;
 
-        // 监听整个 document 的 focusin 事件（事件冒泡）
+        // 监听 focusin 事件（捕获阶段，确保最早收到）
         document.addEventListener('focusin', function(e) {
             var target = e.target;
-            if (!target || target.tagName !== 'INPUT') return;
+            if (!target) return;
+            if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && target.tagName !== 'SELECT') return;
 
             // 检查是否在 medicine-table 内（药物输入表格）
             var table = target.closest ? target.closest('.medicine-table') : null;
             if (!table) return;
 
-            // 延迟滚动，等待键盘动画完成（Android 键盘弹出约 250-300ms）
-            if (scrollTimer) clearTimeout(scrollTimer);
-            scrollTimer = setTimeout(function() {
+            // 多次尝试滚动，适配不同设备的键盘弹出速度
+            var doScroll = function() {
                 try {
-                    // scrollIntoView block:center 将输入框滚动到可见区域中央
-                    // 浏览器会自动避开软键盘区域
                     target.scrollIntoView({ block: 'center', behavior: 'smooth' });
                 } catch(err) {
-                    // 降级：旧版 WebView 不支持 options 参数
                     try { target.scrollIntoView(false); } catch(e2) {}
                 }
-            }, 350);
+            };
+            if (scrollTimer) clearTimeout(scrollTimer);
+            // 300ms: 快速设备，500ms: 慢速设备
+            scrollTimer = setTimeout(doScroll, 300);
+            setTimeout(doScroll, 500);
         }, true);
 
-        // 使用 Visual Viewport API 动态调整表格容器高度（如果可用）
-        // 当键盘弹出时，visualViewport.height 会减小，据此调整 max-height
-        if (window.visualViewport) {
-            var vvTimer = null;
-            var adjustContainer = function() {
-                if (vvTimer) clearTimeout(vvTimer);
-                vvTimer = setTimeout(function() {
-                    var containers = document.querySelectorAll('.medicine-table-container');
-                    if (!containers.length) return;
-                    // 可见高度减去其他界面元素估算高度（患者信息区+症状区+操作栏 约 280px）
-                    var vh = window.visualViewport.height;
-                    var maxH = Math.max(120, Math.min(400, vh - 280));
-                    for (var i = 0; i < containers.length; i++) {
-                        containers[i].style.maxHeight = maxH + 'px';
-                    }
-                }, 100);
-            };
-            window.visualViewport.addEventListener('resize', adjustContainer);
-            // 延迟初始调整，等 DOM 完全加载
-            setTimeout(adjustContainer, 500);
+        // 动态调整表格容器高度：键盘弹出时缩小 max-height
+        function adjustContainerHeight() {
+            var containers = document.querySelectorAll('.medicine-table-container');
+            if (!containers.length) return;
+            // 优先用 visualViewport.height，回退到 window.innerHeight
+            var vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+            // 可见高度减去其他界面元素估算高度（患者信息+症状+操作栏 约 280px）
+            var maxH = Math.max(120, Math.min(400, vh - 280));
+            for (var i = 0; i < containers.length; i++) {
+                containers[i].style.maxHeight = maxH + 'px';
+            }
         }
+
+        // Visual Viewport API（现代浏览器）
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', adjustContainerHeight);
+        }
+        // 传统 resize 事件（回退方案）
+        window.addEventListener('resize', adjustContainerHeight);
+        // 延迟初始调整
+        setTimeout(adjustContainerHeight, 500);
     }
 
     // 自动初始化
