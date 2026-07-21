@@ -134,12 +134,12 @@
         .version-tag { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; }
         .main-content { position: relative; z-index: 1; padding: 24px 18px; }
         .login-box { background: white; border-radius: 10px; padding: 20px 15px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.2); }
-        .login-field { margin-bottom: 18px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
-        .login-field label { font-size: 12px; font-weight: bold; color: #555; }
-        .login-field input, .login-field select { width: 33%; padding: 10px 9px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; background: #fafafa; transition: all 0.2s; }
+        .login-field { margin-bottom: 18px; display: flex; flex-direction: row; align-items: center; gap: 6px; }
+        .login-field label { width: 36px; font-size: 12px; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; }
+        .login-field input, .login-field select { width: 100%; padding: 10px 9px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; background: #fafafa; transition: all 0.2s; }
         .login-field input:focus, .login-field select:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); background: white; }
-        .username-input-wrapper { position: relative; }
-        .username-input-wrapper input { padding-right: 30px; }
+        .username-input-wrapper { position: relative; flex: 1; }
+        .username-input-wrapper input { width: 100%; padding-right: 30px; box-sizing: border-box; }
         .username-dropdown-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 27px; padding: 0; border: 2px solid #e0e0e0; border-left: none; border-radius: 0 8px 8px 0; background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; transition: all 0.2s; }
         .username-dropdown-btn:hover { background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%); }
         .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 2px solid #667eea; border-radius: 8px; top: calc(100% + 4px); left: 0; right: 0; box-shadow: 0 8px 20px rgba(102, 126, 234, 0.25); max-height: 150px; overflow-y: auto; }
@@ -167,11 +167,13 @@
             .version-tag { font-size: 13px; }
             .main-content { padding: 28px 20px; }
             .login-box { padding: 24px; }
-            .login-field { margin-bottom: 22px; gap: 8px; }
-            .login-field label { font-size: 14px; }
-            .login-field input, .login-field select { padding: 14px 15px; font-size: 15px; border-radius: 10px; }
+            .login-field { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 22px; }
+            .login-field label { width: 40px; font-size: 14px; text-align: right; flex-shrink: 0; }
+            .login-field input, .login-field select { width: 100%; padding: 12px 14px; font-size: 14px; border-radius: 8px; }
+            .username-input-wrapper { flex: 1; }
+            .username-input-wrapper input { width: 100%; padding-right: 34px; box-sizing: border-box; }
             .login-buttons { gap: 15px; }
-            .login-btn { padding: 14px; font-size: 15px; border-radius: 10px; }
+            .login-btn { padding: 12px; font-size: 14px; border-radius: 8px; }
             .login-footer { font-size: 12px; margin-top: 15px; }
             .login-error { font-size: 12px; padding: 10px; border-radius: 6px; }
         }
@@ -608,9 +610,9 @@
             .system-title { font-size: 16px; }
             .version-tag { font-size: 11px; }
             .login-box { padding: 15px 12px; }
-            .login-field { margin-bottom: 12px; gap: 6px; }
-            .login-field label { width: 38px; font-size: 12px; }
-            .login-field input, .login-field select { padding: 8px 10px; font-size: 13px; min-width: 100px; }
+            .login-field { flex-direction: row; align-items: center; gap: 6px; margin-bottom: 12px; }
+            .login-field label { width: 38px; font-size: 12px; text-align: right; flex-shrink: 0; }
+            .login-field input, .login-field select { width: 100%; padding: 8px 10px; font-size: 13px; }
             .login-buttons { gap: 12px; margin-top: 15px; }
             .login-btn { padding: 8px 18px; min-width: 70px; font-size: 13px; }
             .login-footer { font-size: 10px; }
@@ -655,7 +657,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【云端】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【云端】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
