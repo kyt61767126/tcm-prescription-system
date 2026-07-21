@@ -299,4 +299,66 @@
 
     global.PerfUtils = PerfUtils;
 
+    // ==================== 移动端键盘遮挡修复 ====================
+    // 当药物表格内输入框获得焦点时，自动滚动到可见区域中央，避免被软键盘遮挡
+    // 纯 JS 逻辑，不修改 HTML/CSS，仅监听 focusin 事件并调用 scrollIntoView
+    function setupMobileKeyboardScroll() {
+        // 仅在移动端（窄屏）启用，桌面端不需要
+        if (window.innerWidth >= 769) return;
+
+        var scrollTimer = null;
+
+        // 监听整个 document 的 focusin 事件（事件冒泡）
+        document.addEventListener('focusin', function(e) {
+            var target = e.target;
+            if (!target || target.tagName !== 'INPUT') return;
+
+            // 检查是否在 medicine-table 内（药物输入表格）
+            var table = target.closest ? target.closest('.medicine-table') : null;
+            if (!table) return;
+
+            // 延迟滚动，等待键盘动画完成（Android 键盘弹出约 250-300ms）
+            if (scrollTimer) clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(function() {
+                try {
+                    // scrollIntoView block:center 将输入框滚动到可见区域中央
+                    // 浏览器会自动避开软键盘区域
+                    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                } catch(err) {
+                    // 降级：旧版 WebView 不支持 options 参数
+                    try { target.scrollIntoView(false); } catch(e2) {}
+                }
+            }, 350);
+        }, true);
+
+        // 使用 Visual Viewport API 动态调整表格容器高度（如果可用）
+        // 当键盘弹出时，visualViewport.height 会减小，据此调整 max-height
+        if (window.visualViewport) {
+            var vvTimer = null;
+            var adjustContainer = function() {
+                if (vvTimer) clearTimeout(vvTimer);
+                vvTimer = setTimeout(function() {
+                    var containers = document.querySelectorAll('.medicine-table-container');
+                    if (!containers.length) return;
+                    // 可见高度减去其他界面元素估算高度（患者信息区+症状区+操作栏 约 280px）
+                    var vh = window.visualViewport.height;
+                    var maxH = Math.max(120, Math.min(400, vh - 280));
+                    for (var i = 0; i < containers.length; i++) {
+                        containers[i].style.maxHeight = maxH + 'px';
+                    }
+                }, 100);
+            };
+            window.visualViewport.addEventListener('resize', adjustContainer);
+            // 延迟初始调整，等 DOM 完全加载
+            setTimeout(adjustContainer, 500);
+        }
+    }
+
+    // 自动初始化
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupMobileKeyboardScroll);
+    } else {
+        setupMobileKeyboardScroll();
+    }
+
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

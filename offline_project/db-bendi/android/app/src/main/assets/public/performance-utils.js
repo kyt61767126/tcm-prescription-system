@@ -299,48 +299,66 @@
 
     global.PerfUtils = PerfUtils;
 
-})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+    // ==================== 移动端键盘遮挡修复 ====================
+    // 当药物表格内输入框获得焦点时，自动滚动到可见区域中央，避免被软键盘遮挡
+    // 纯 JS 逻辑，不修改 HTML/CSS，仅监听 focusin 事件并调用 scrollIntoView
+    function setupMobileKeyboardScroll() {
+        // 仅在移动端（窄屏）启用，桌面端不需要
+        if (window.innerWidth >= 769) return;
 
-// ============================================================================
-// ★ 优化4：safe-area-inset 适配（仅 Capacitor APP 端生效，动态注入 style，不改原 HTML/CSS）
-// 适配刘海屏顶部、底部 Home 指示器、横屏左右安全区
-// ============================================================================
-(function (global) {
-    'use strict';
-    // 仅在 Capacitor APP 环境下生效，桌面/网页端跳过
-    if (typeof global.Capacitor === 'undefined') return;
-    function applySafeArea() {
-        try {
-            // 已注入则跳过，避免重复
-            if (document.getElementById('__safe_area_style__')) return;
-            const style = document.createElement('style');
-            style.id = '__safe_area_style__';
-            // 利用 env(safe-area-inset-*) 自动适配刘海屏/底部 Home 指示器
-            style.textContent = [
-                'body {',
-                '  padding-top: env(safe-area-inset-top);',
-                '  padding-bottom: env(safe-area-inset-bottom);',
-                '  padding-left: env(safe-area-inset-left);',
-                '  padding-right: env(safe-area-inset-right);',
-                '}',
-                /* 底部固定导航条额外加 padding，避免被 Home 指示器遮挡 */
-                '.mobile-nav, .bottom-nav, .nav-bar, [class*="mobile-action-bar"], [class*="bottom-action"] {',
-                '  padding-bottom: env(safe-area-inset-bottom) !important;',
-                '}',
-                /* 顶部固定 header 额外加 padding，避免被状态栏遮挡 */
-                '.app-header, .top-bar, [class*="app-title"], header {',
-                '  padding-top: env(safe-area-inset-top) !important;',
-                '}'
-            ].join('\n');
-            (document.head || document.documentElement).appendChild(style);
-            console.log('[SafeArea] safe-area-inset 样式已注入');
-        } catch (e) {
-            console.warn('[SafeArea] 注入失败:', e);
+        var scrollTimer = null;
+
+        // 监听整个 document 的 focusin 事件（事件冒泡）
+        document.addEventListener('focusin', function(e) {
+            var target = e.target;
+            if (!target || target.tagName !== 'INPUT') return;
+
+            // 检查是否在 medicine-table 内（药物输入表格）
+            var table = target.closest ? target.closest('.medicine-table') : null;
+            if (!table) return;
+
+            // 延迟滚动，等待键盘动画完成（Android 键盘弹出约 250-300ms）
+            if (scrollTimer) clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(function() {
+                try {
+                    // scrollIntoView block:center 将输入框滚动到可见区域中央
+                    // 浏览器会自动避开软键盘区域
+                    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                } catch(err) {
+                    // 降级：旧版 WebView 不支持 options 参数
+                    try { target.scrollIntoView(false); } catch(e2) {}
+                }
+            }, 350);
+        }, true);
+
+        // 使用 Visual Viewport API 动态调整表格容器高度（如果可用）
+        // 当键盘弹出时，visualViewport.height 会减小，据此调整 max-height
+        if (window.visualViewport) {
+            var vvTimer = null;
+            var adjustContainer = function() {
+                if (vvTimer) clearTimeout(vvTimer);
+                vvTimer = setTimeout(function() {
+                    var containers = document.querySelectorAll('.medicine-table-container');
+                    if (!containers.length) return;
+                    // 可见高度减去其他界面元素估算高度（患者信息区+症状区+操作栏 约 280px）
+                    var vh = window.visualViewport.height;
+                    var maxH = Math.max(120, Math.min(400, vh - 280));
+                    for (var i = 0; i < containers.length; i++) {
+                        containers[i].style.maxHeight = maxH + 'px';
+                    }
+                }, 100);
+            };
+            window.visualViewport.addEventListener('resize', adjustContainer);
+            // 延迟初始调整，等 DOM 完全加载
+            setTimeout(adjustContainer, 500);
         }
     }
+
+    // 自动初始化
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', applySafeArea);
+        document.addEventListener('DOMContentLoaded', setupMobileKeyboardScroll);
     } else {
-        applySafeArea();
+        setupMobileKeyboardScroll();
     }
+
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
