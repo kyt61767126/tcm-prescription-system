@@ -1,17 +1,23 @@
+; ============================================================================
+;  installer.nsh - NSIS 自定义安装初始化
+;  ★ 数据安全策略：默认安装位置必须为 D 盘或 E 盘，禁止 C 盘
+;    1) 优先安装到 D:\Program Files\惠康中医-云端
+;    2) D 盘不存在时尝试 E:\Program Files\惠康中医-云端
+;    3) D 盘和 E 盘都不存在时中止安装，保证数据安全
+; ============================================================================
 !macro customInit
-  ; 64位 Electron 应用应安装到 64位 Program Files（不是 Program Files (x86)）
-  ; 优先 D:\Program Files（用户常有 SSD D 盘），其次 64位 Program Files
-  IfFileExists "D:\" D盘存在 继续
-  Goto 继续
-  D盘存在:
+  ; 优先 D 盘
+  IfFileExists "D:\" 0 tryE
     StrCpy $INSTDIR "D:\Program Files\惠康中医-云端"
-    Goto 结束
-  继续:
-    ; 优先使用 ProgramW6432 环境变量（64位 Windows 总是存在），回退到注册表
-    ReadEnvStr $R0 "ProgramW6432"
-    StrCmp $R0 "" 0 设置路径
-      ReadRegStr $R0 HKLM "SOFTWARE\Microsoft\Windows\CurrentVersion" "ProgramFilesDir"
-    设置路径:
-    StrCpy $INSTDIR "$R0\惠康中医-云端"
-  结束:
+    Goto done
+  tryE:
+  ; 其次 E 盘
+  IfFileExists "E:\" 0 noDE
+    StrCpy $INSTDIR "E:\Program Files\惠康中医-云端"
+    Goto done
+  noDE:
+  ; D 盘和 E 盘都不存在，禁止安装到 C 盘，中止安装
+    MessageBox MB_OK|MB_ICONSTOP "为保证数据安全，本程序禁止安装到 C 盘！$\n$\n请确保系统中存在 D 盘或 E 盘后重新运行安装程序。"
+    Abort
+  done:
 !macroend
