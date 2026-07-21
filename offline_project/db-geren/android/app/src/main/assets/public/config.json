@@ -1,6 +1,6 @@
 {
-    "clinicName":  "鹏博堂中医诊所",
-    "doctorName":  "李万鹏",
+    "clinicName":  "卢二灼中医诊所",
+    "doctorName":  "卢二灼",
     "edition":  "personal",
     "productName":  "惠康中医-个人",
     "versionLabel":  "离线桌面个人版",
@@ -11,5 +11,7 @@
                       "name":  "管理员",
                       "role":  "admin"
                   }
-              ]
+              ],
+    "configIssuedAt":  "2026-07-21T11:40:23.0203034Z",
+    "configSignature":  "00ee22eb96eec80816ff6a3c018153110bd193b7ec36f4c4ed70e0f56e6117a7"
 }

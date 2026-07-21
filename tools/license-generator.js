@@ -22,7 +22,8 @@ const path = require('path');
 const crypto = require('crypto');
 
 // ★ 必须与 license-manager.js 中的密钥保持一致
-const LICENSE_HMAC_KEY = 'bnzc_tcm_license_key_v1_2026';
+// 优先从环境变量读取，硬编码作为默认值（向后兼容）
+const LICENSE_HMAC_KEY = process.env.LICENSE_HMAC_KEY || 'bnzc_trial_key_v1_2026';
 
 // ★ v2: 版本类型默认配置（必须与 license-manager.js 中 LICENSE_TYPE_CONFIG 一致）
 const LICENSE_TYPE_CONFIG = {
@@ -52,14 +53,17 @@ function parseArgs() {
         else if (args[i] === '--max-prescriptions') opts.maxPrescriptions = parseInt(args[++i], 10);
         else if (args[i] === '--features') opts.features = args[++i];
         else if (args[i] === '--output' || args[i] === '-o') opts.output = args[++i];
+        else if (args[i] === '--machine-id') opts.machineId = args[++i];
+        else if (args[i] === '--clinic-name') opts.clinicName = args[++i];
         else if (args[i] === '--help' || args[i] === '-h') {
             console.log(`
-授权文件生成工具 v2（支持版本分级）
+授权文件生成工具 v3（支持版本分级 + 设备绑定）
 
 用法：
   node tools/license-generator.js --user "用户名" --expire "2027-07-20" --type "pro"
   node tools/license-generator.js --user "用户名" --days 365 --type "personal"
   node tools/license-generator.js --user "用户名" --days 30 --type "trial"
+  node tools/license-generator.js --user "张三" --days 365 --type "pro" --machine-id "abc123" --clinic-name "本能堂"
 
 参数：
   --user              用户名（必填）
@@ -69,11 +73,17 @@ function parseArgs() {
   --max-prescriptions 处方数量限制（覆盖默认值，0=无限，试用版默认30）
   --features          功能列表，逗号分隔（覆盖默认值，如 "backup,sync"）
   --output, -o        输出文件路径（默认 ./license.dat）
+  --machine-id        机器 ID（可选，绑定后仅该机器可用）
+  --clinic-name       诊所名称（可选，绑定后仅该诊所可用，需配合 --machine-id）
 
 版本类型默认配置：
   trial    : 30 张/月处方，无高级功能
   personal : 无限处方，支持数据备份
   pro      : 无限处方，支持备份+同步+多设备+优先支持
+
+设备绑定说明：
+  同时提供 --machine-id 和 --clinic-name 时，授权文件将绑定到特定设备和诊所，
+  复制到其他机器或修改诊所名后授权无效。
 
 示例：
   # 生成专业版授权（1年）
@@ -82,8 +92,11 @@ function parseArgs() {
   # 生成个人版授权（到 2027-12-31）
   node tools/license-generator.js --user "李四" --expire "2027-12-31" --type "personal"
 
+  # 生成绑定设备的专业版授权
+  node tools/license-generator.js --user "王五" --days 365 --type "pro" --machine-id "abc123def456" --clinic-name "惠康中医诊所"
+
   # 生成自定义处方限制的授权
-  node tools/license-generator.js --user "王五" --days 365 --type "personal" --max-prescriptions 100
+  node tools/license-generator.js --user "赵六" --days 365 --type "personal" --max-prescriptions 100
 `);
             process.exit(0);
         }
@@ -100,6 +113,22 @@ function generateSignature(data) {
         data.expiresAt,
         String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
         Array.isArray(data.features) ? data.features.join(',') : ''
+    ].join('|');
+    return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
+}
+
+// v3 生成 HMAC 签名（含 clinicName/machineId/licenseBinding，与 license-manager.js 一致）
+function generateSignatureV3(data) {
+    const content = [
+        data.user,
+        data.type,
+        data.issuedAt,
+        data.expiresAt,
+        String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
+        Array.isArray(data.features) ? data.features.join(',') : '',
+        data.clinicName || '',
+        data.machineId || '',
+        data.licenseBinding || ''
     ].join('|');
     return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
 }
@@ -149,7 +178,16 @@ function main() {
         maxPrescriptions: maxPrescriptions,
         features: features
     };
-    data.signature = generateSignature(data);
+
+    // v3: 如果提供了 machineId 和 clinicName，启用设备绑定
+    if (opts.machineId && opts.clinicName) {
+        data.clinicName = opts.clinicName;
+        data.machineId = opts.machineId;
+        data.licenseBinding = 'clinic+user+machine';
+        data.signature = generateSignatureV3(data);
+    } else {
+        data.signature = generateSignature(data);
+    }
 
     // 编码为 base64
     const json = JSON.stringify(data, null, 2);
@@ -165,7 +203,7 @@ function main() {
     const maxDisplay = maxPrescriptions === 0 ? '无限' : maxPrescriptions + ' 张/月';
 
     console.log('========================================');
-    console.log('  授权文件生成成功 v2');
+    console.log('  授权文件生成成功 v3');
     console.log('========================================');
     console.log(`  用户名：${data.user}`);
     console.log(`  类  型：${data.type}（${typeNames[type]}）`);
@@ -174,6 +212,11 @@ function main() {
     console.log(`  有效期：${Math.ceil((expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))} 天`);
     console.log(`  处方限制：${maxDisplay}`);
     console.log(`  功能列表：${featuresDisplay}`);
+    if (data.machineId && data.clinicName) {
+        console.log(`  诊所名称：${data.clinicName}`);
+        console.log(`  绑定机器：${data.machineId}`);
+        console.log(`  绑定方式：${data.licenseBinding}`);
+    }
     console.log('----------------------------------------');
     console.log(`  文件路径：${path.resolve(outputPath)}`);
     console.log('========================================');

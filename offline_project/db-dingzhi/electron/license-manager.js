@@ -27,7 +27,10 @@ const TIME_TAMPER_THRESHOLD = 24 * 60 * 60 * 1000;           // 时间回拨阈�
 //   2. 私钥 LICENSE_SIGN_PRIVATE_KEY 存 Cloudflare Secrets
 //   3. 公钥（-----BEGIN PUBLIC KEY----- 整段）填入此常量
 //   4. 重新打包 exe
-const ECDSA_VERIFY_PUBLIC_KEY_PEM = '';
+const ECDSA_VERIFY_PUBLIC_KEY_PEM =`-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXqspDCFxlyS9wH0Kyb/fR9sqOeAG
+DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==
+-----END PUBLIC KEY-----`;
 
 const TRIAL_KEY = 'bnzc_trial_key_v1';
 const LASTRUN_KEY = 'bnzc_lastrun_key_v1';

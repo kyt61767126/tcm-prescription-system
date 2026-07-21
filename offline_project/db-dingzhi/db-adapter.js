@@ -48,16 +48,6 @@
                 };
                 request.onsuccess = function (event) {
                     _db = event.target.result;
-                    // ★修复历史处方消失（第6轮）：添加 onversionchange 处理器
-                    // 原因：当其他代码用更高版本打开数据库时，必须主动关闭当前连接，
-                    //       否则会阻塞版本升级，导致 onblocked → openDB 超时 → 处方消失。
-                    _db.onversionchange = function () {
-                        if (_db) {
-                            try { _db.close(); } catch (e) { /* 忽略关闭错误 */ }
-                            _db = null;
-                            _initPromise = null;
-                        }
-                    };
                     resolve(_db);
                 };
                 request.onerror = function (event) {
@@ -561,11 +551,9 @@
     // ==================== 导出 ====================
     global.DbAdapter = DbAdapter;
 
-    // ★修复历史处方消失（第6轮）：删除自动初始化
-    // 原因：db-adapter.js 用 DB_VERSION=2 自动打开 PrescriptionDB 并保持连接，
-    //       没有 onversionchange 处理器，导致 index.html 用 DB_VERSION=3 打开时被阻塞，
-    //       触发 onblocked → 3s 超时 → getAllPrescriptionsFromDB 失败 → 处方消失。
-    //       DbAdapter 是"幽灵模块"，未被任何应用代码调用（grep 验证 DbAdapter. 在 index.html/login.js/main.js 中无匹配），
-    //       删除自动初始化不影响功能。如果需要使用 DbAdapter，请显式调用 DbAdapter.init()。
+    // 自动初始化（异步，不阻塞）
+    if (typeof window !== 'undefined') {
+        DbAdapter.init().catch(e => console.warn('[DbAdapter] 自动初始化失败:', e));
+    }
 
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
