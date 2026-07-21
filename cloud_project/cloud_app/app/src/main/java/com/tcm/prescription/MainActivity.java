@@ -44,6 +44,9 @@ import android.widget.Toast;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.BridgeActivity;
 
@@ -133,6 +136,24 @@ public class MainActivity extends BridgeActivity {
             }
             return;
         }
+
+        // ★ 适配状态栏（与离线APP一致方案，解决 Android 16 edge-to-edge 强制模式）
+        // Capacitor BridgeActivity 内部管理 WebView 布局，但 Android 15+ targetSdk=36
+        // 强制 edge-to-edge，WebView 内容会延伸到状态栏下方。
+        // 通过 WindowInsetsListener + 资源 ID 双保险设置 WebView 顶部 padding。
+        final int statusBarHeight = getStatusBarHeightPx();
+        webView.setPadding(0, statusBarHeight, 0, 0);
+        ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+            int insetTop = Math.max(systemBars.top, cutout.top);
+            int finalTop = Math.max(insetTop, statusBarHeight);
+            if (v.getPaddingTop() != finalTop) {
+                v.setPadding(0, finalTop, 0, 0);
+            }
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(webView);
 
         // 创建加载进度布局（覆盖在 WebView 上方，加载完成后隐藏）
         // 优化：有缓存时不显示loading，直接让WebView显示缓存内容（与离线APP相同速度）
