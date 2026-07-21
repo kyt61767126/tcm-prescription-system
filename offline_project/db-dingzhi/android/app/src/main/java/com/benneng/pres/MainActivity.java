@@ -37,6 +37,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -108,6 +111,16 @@ public class MainActivity extends AppCompatActivity {
 
         // 创建 WebView 并立即配置
         webView = new WebView(this);
+        // ★ 适配状态栏：避免 WebView 顶部内容与状态栏图标（信号/电量）重合
+        // 通过 WindowInsets 动态获取状态栏 + 刘海/挖孔高度，应用到 WebView 顶部 padding
+        // 兼容所有 Android 版本（含 Android 16 + HyperOS / MIUI + 灵动岛 / 挖孔屏）
+        ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+            int topInset = Math.max(systemBars.top, cutout.top);
+            v.setPadding(0, topInset, 0, 0);
+            return insets;
+        });
         setContentView(webView);
         getWindow().setBackgroundDrawable(null);
         configureWebView();
