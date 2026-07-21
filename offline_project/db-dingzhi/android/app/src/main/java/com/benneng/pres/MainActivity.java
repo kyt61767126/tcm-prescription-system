@@ -111,17 +111,28 @@ public class MainActivity extends AppCompatActivity {
 
         // 创建 WebView 并立即配置
         webView = new WebView(this);
-        // ★ 适配状态栏：避免 WebView 顶部内容与状态栏图标（信号/电量）重合
-        // 通过 WindowInsets 动态获取状态栏 + 刘海/挖孔高度，应用到 WebView 顶部 padding
-        // 兼容所有 Android 版本（含 Android 16 + HyperOS / MIUI + 灵动岛 / 挖孔屏）
+        // ★ 适配状态栏（彻底解决顶部按钮与信号/电量重合）：
+        // 双保险方案：
+        //   1. 立即通过资源 ID 读取状态栏高度并应用 padding（不依赖 insets 派发）
+        //   2. 注册 WindowInsetsListener 动态更新（处理挖孔/刘海屏，取最大值）
+        //   3. setContentView 后主动 requestApplyInsets 触发 listener
+        //   4. onAttachedToWindow 兜底再次触发（应对某些 ROM 拦截 insets）
+        int statusBarHeight = getStatusBarHeight();
+        webView.setPadding(0, statusBarHeight, 0, 0);
         ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
             Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
-            int topInset = Math.max(systemBars.top, cutout.top);
-            v.setPadding(0, topInset, 0, 0);
+            int insetTop = Math.max(systemBars.top, cutout.top);
+            // 取 insets 和资源 ID 两者最大值，防止某些机型 insets=0
+            int finalTop = Math.max(insetTop, statusBarHeight);
+            if (v.getPaddingTop() != finalTop) {
+                v.setPadding(0, finalTop, 0, 0);
+            }
             return insets;
         });
         setContentView(webView);
+        // ★ 主动触发 insets 分发，否则 listener 可能永远不会被调用
+        ViewCompat.requestApplyInsets(webView);
         getWindow().setBackgroundDrawable(null);
         configureWebView();
 
@@ -133,6 +144,28 @@ public class MainActivity extends AppCompatActivity {
 
         // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
         preloadVideoRecorderScript();
+    }
+
+    // ★ 适配状态栏：通过资源 ID 获取状态栏高度（兜底，HyperOS / MIUI 也用此标准资源）
+    private int getStatusBarHeight() {
+        try {
+            int resId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+            if (resId > 0) {
+                return getResources().getDimensionPixelSize(resId);
+            }
+        } catch (Exception e) { /* 忽略 */ }
+        // 兜底：24dp 转 px（Android 标准状态栏高度）
+        return (int) (24 * getResources().getDisplayMetrics().density);
+    }
+
+    // ★ 适配状态栏：onAttachedToWindow 兜底再次触发 insets 分发
+    // 应对某些 ROM 在 onCreate 时拦截 insets 派发导致 listener 不触发
+    @Override
+    public void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        if (webView != null) {
+            ViewCompat.requestApplyInsets(webView);
+        }
     }
 
     // 初始化媒体文件读取白名单：缓存所有可能的目录（外部 + 内部 fallback）
