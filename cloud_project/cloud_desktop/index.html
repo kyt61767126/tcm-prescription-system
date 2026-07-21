@@ -3179,7 +3179,7 @@ if (window.Permission) {
 
         async function loadRememberedUsers() {
             try {
-                // 优先使用 AuthCore（统一存储适配器）
+                // 优先使用 AuthCore（已并行优化，单次延迟）
                 if (window.AuthCore && AuthCore.loadRememberedUsers) {
                     try {
                         const authList = await AuthCore.loadRememberedUsers();
@@ -3189,9 +3189,9 @@ if (window.Permission) {
                                 renderRememberedUsers(stringUsernames);
                                 document.getElementById('loginUsername').value = stringUsernames[0];
                                 document.getElementById('rememberUser').checked = true;
-                                // 同步到 cloud_rememberedUsers 作为备份
-                                await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(stringUsernames));
-                                await asyncStorage.set('cloud_rememberedUsername', stringUsernames[0]);
+                                // 同步到 cloud_rememberedUsers 作为备份（不阻塞）
+                                asyncStorage.set('cloud_rememberedUsers', JSON.stringify(stringUsernames));
+                                asyncStorage.set('cloud_rememberedUsername', stringUsernames[0]);
                                 return;
                             }
                         }
@@ -3199,8 +3199,11 @@ if (window.Permission) {
                         console.warn('AuthCore.loadRememberedUsers 失败，回退到 asyncStorage:', e);
                     }
                 }
-                // 回退：从 asyncStorage 读取
-                const localList = await asyncStorage.get('cloud_rememberedUsers');
+                // 回退：并行读取 cloud_rememberedUsers 和 cloud_rememberedUsername
+                const [localList, localUsername] = await Promise.all([
+                    asyncStorage.get('cloud_rememberedUsers'),
+                    asyncStorage.get('cloud_rememberedUsername')
+                ]);
                 if (localList) {
                     try {
                         const parsed = JSON.parse(localList);
@@ -3221,13 +3224,12 @@ if (window.Permission) {
                         console.warn('解析本地记住的用户名失败:', e);
                     }
                 }
-                const localUsername = await asyncStorage.get('cloud_rememberedUsername');
                 if (localUsername) {
                     const singleList = [localUsername];
                     renderRememberedUsers(singleList);
                     document.getElementById('loginUsername').value = localUsername;
                     document.getElementById('rememberUser').checked = true;
-                    await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(singleList));
+                    asyncStorage.set('cloud_rememberedUsers', JSON.stringify(singleList));
                 }
             } catch (e) {
                 console.warn('loadRememberedUsers error:', e);
@@ -5760,8 +5762,8 @@ if (window.Permission) {
         }
 
         async function init() {
-            // 先初始化用户下拉框
-            await initLoginDropdown();
+            // 初始化用户下拉框（不阻塞，后台并行加载，下拉按钮加载完即显示）
+            initLoginDropdown();
 
             // APP 端（Capacitor）：账户管理入口由 updateUserDisplay 根据角色控制
             // 管理员显示（顶部tab+底部按钮），普通用户隐藏

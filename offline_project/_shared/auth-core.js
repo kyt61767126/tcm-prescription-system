@@ -821,22 +821,27 @@
     }
 
     async function loadRememberedUsers() {
+        // 并行读取所有 key，避免串行 await 导致的累积延迟
         try {
-            const stored = await StorageAdapter.getItem('auth:rememberedUsers');
-            if (stored) {
-                const arr = JSON.parse(stored);
-                if (Array.isArray(arr)) return arr;
-            }
-        } catch (e) { /* 忽略 */ }
+            const [stored, single, cloudOld, localOld, legacyOld] = await Promise.all([
+                StorageAdapter.getItem('auth:rememberedUsers'),
+                StorageAdapter.getItem('auth:rememberedUsername'),
+                StorageAdapter.getItem('cloud_rememberedUsername'),
+                StorageAdapter.getItem('local_rememberedUsername'),
+                StorageAdapter.getItem('rememberedUsername')
+            ]);
 
-        // 回退到单个用户名
-        const single = await StorageAdapter.getItem('auth:rememberedUsername');
-        // 兼容旧key
-        const oldSingle = single ||
-            await StorageAdapter.getItem('cloud_rememberedUsername') ||
-            await StorageAdapter.getItem('local_rememberedUsername') ||
-            await StorageAdapter.getItem('rememberedUsername');
-        return oldSingle ? [oldSingle] : [];
+            if (stored) {
+                try {
+                    const arr = JSON.parse(stored);
+                    if (Array.isArray(arr) && arr.length > 0) return arr;
+                } catch (e) { /* 忽略解析错误 */ }
+            }
+
+            const oldSingle = single || cloudOld || localOld || legacyOld;
+            return oldSingle ? [oldSingle] : [];
+        } catch (e) { /* 忽略 */ }
+        return [];
     }
 
     async function clearRememberedUsers() {
