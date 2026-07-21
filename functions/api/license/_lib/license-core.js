@@ -21,10 +21,10 @@ function getLicenseHmacKey(context) {
     if (process.env.LICENSE_HMAC_KEY) {
         return process.env.LICENSE_HMAC_KEY;
     }
-    return 'bnzc_trial_key_v1_2026';
+    return 'bnzc_tcm_license_key_v1_2026';
 }
 
-const LICENSE_HMAC_KEY = 'bnzc_trial_key_v1_2026';
+const LICENSE_HMAC_KEY = 'bnzc_tcm_license_key_v1_2026';
 
 // ★ v2: 版本类型默认配置（必须与 license-manager.js 中 LICENSE_TYPE_CONFIG 一致）
 const LICENSE_TYPE_CONFIG = {

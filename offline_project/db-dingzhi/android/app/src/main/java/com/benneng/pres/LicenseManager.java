@@ -35,7 +35,12 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
+import java.security.KeyFactory;
 import java.security.MessageDigest;
+import java.security.PublicKey;
+import java.security.Signature;
+import java.security.spec.X509EncodedKeySpec;
+import java.util.Arrays;
 import java.util.Iterator;
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
@@ -48,6 +53,15 @@ public class LicenseManager {
 
     // ★ HMAC 密钥（与桌面版 license-manager.js / 云端 license-core.js 完全一致）
     private static final String LICENSE_HMAC_KEY = "bnzc_tcm_license_key_v1_2026";
+
+    // ★ v5 新增：ECDSA P-256 验签公钥（PEM SPKI 格式，与桌面版 license-manager.js 一致）
+    // 用于验证 license 中 signatureV5 字段（云端 ECDSA 私钥签发）
+    // 公钥只能验签不能签发，即使被反编译提取也无法伪造 license
+    private static final String ECDSA_VERIFY_PUBLIC_KEY_PEM =
+            "-----BEGIN PUBLIC KEY-----\n" +
+            "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXqspDCFxlyS9wH0Kyb/fR9sqOeAG\n" +
+            "DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==\n" +
+            "-----END PUBLIC KEY-----";
 
     // ★ v3 新增：config.json 完整性签名密钥（与桌面版 license-manager.js / edit-config.ps1 完全一致）
     private static final String CONFIG_SIGN_KEY = "bnzc_config_sign_key_v1_2026";
@@ -900,10 +914,19 @@ public class LicenseManager {
         }
     }
 
-    // 签名验证（先 v3，再 v2，最后 v1 向后兼容）
+    // 签名验证（先 v5 ECDSA，再 v3，再 v2，最后 v1 向后兼容）
     private boolean verifySignature(JSONObject data) {
         String sig = data.optString("signature", "");
         if (sig == null || sig.isEmpty()) return false;
+        // ★ v5 ECDSA 非对称验签优先校验（云端私钥签，客户端公钥验）
+        // 优势：即使 APP 被反编译拿到公钥，也无法伪造签名（公钥只能验不能签）
+        if (data.has("signatureV5") && ECDSA_VERIFY_PUBLIC_KEY_PEM != null
+                && !ECDSA_VERIFY_PUBLIC_KEY_PEM.isEmpty()) {
+            if (verifyECDSASignature(data)) {
+                return true;
+            }
+            Log.w(TAG, "v5 ECDSA 验签失败，降级为 HMAC");
+        }
         // ★ v3 签名优先校验（含 clinicName/machineId/licenseBinding 时使用）
         if (data.has("clinicName") && data.has("machineId") && data.has("licenseBinding")) {
             String expectedV3 = generateSignatureV3(data);
@@ -918,6 +941,94 @@ public class LicenseManager {
             return sig.equalsIgnoreCase(expectedV1);
         }
         return false;
+    }
+
+    // ★ v5 新增：ECDSA P-256 非对称验签（与桌面版 license-manager.js verifyECDSASignature 一致）
+    // 云端用私钥签，客户端用公钥验；即使公钥被提取也无法伪造签名
+    // 签名内容与 v3 一致（user|type|issuedAt|expiresAt|maxPrescriptions|features|clinicName|machineId|licenseBinding）
+    // 签名值 signatureV5 为 hex(raw r||s 64字节)，需转为 DER 格式供 Java Signature.verify 使用
+    private boolean verifyECDSASignature(JSONObject data) {
+        String sigV5 = data.optString("signatureV5", "");
+        if (sigV5 == null || sigV5.isEmpty() ||
+                ECDSA_VERIFY_PUBLIC_KEY_PEM == null || ECDSA_VERIFY_PUBLIC_KEY_PEM.isEmpty()) {
+            return false;
+        }
+        try {
+            // 1. 构造签名内容（与云端 generateSignatureV5 一致）
+            String content = buildSignatureContent(data, true, true);
+            // 2. hex(raw) → raw bytes → DER
+            byte[] rawSig = hexToBytes(sigV5);
+            if (rawSig == null || rawSig.length != 64) return false;
+            byte[] derSig = ecdsaRawToDer(rawSig);
+            if (derSig == null) return false;
+            // 3. 解析公钥 PEM（去头尾与空白后 Base64 解码）
+            String b64 = ECDSA_VERIFY_PUBLIC_KEY_PEM
+                    .replace("-----BEGIN PUBLIC KEY-----", "")
+                    .replace("-----END PUBLIC KEY-----", "")
+                    .replaceAll("\\s+", "");
+            byte[] pubKeyBytes = Base64.decode(b64, Base64.DEFAULT);
+            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(pubKeyBytes);
+            KeyFactory kf = KeyFactory.getInstance("EC");
+            PublicKey publicKey = kf.generatePublic(keySpec);
+            // 4. 验签
+            Signature sig = Signature.getInstance("SHA256withECDSA");
+            sig.initVerify(publicKey);
+            sig.update(content.getBytes(StandardCharsets.UTF_8));
+            return sig.verify(derSig);
+        } catch (Exception e) {
+            Log.w(TAG, "v5 ECDSA 验签异常: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // ECDSA raw(r||s 64字节) → ASN.1 DER 编码（Java Signature.verify 需要 DER）
+    // Web Crypto 输出 raw 格式，Java 期望 DER，需手动转换
+    private byte[] ecdsaRawToDer(byte[] rawSig) {
+        if (rawSig == null || rawSig.length != 64) return null;
+        byte[] r = encodeEcdsaInteger(Arrays.copyOfRange(rawSig, 0, 32));
+        byte[] s = encodeEcdsaInteger(Arrays.copyOfRange(rawSig, 32, 64));
+        // SEQUENCE { INTEGER r, INTEGER s }
+        ByteArrayOutputStream seq = new ByteArrayOutputStream();
+        seq.write(0x30); // SEQUENCE tag
+        int contentLen = r.length + s.length + 4; // 2 个 (0x02 tag + 1字节长度)
+        seq.write(contentLen & 0xFF);
+        seq.write(0x02); seq.write(r.length);
+        seq.write(r, 0, r.length);
+        seq.write(0x02); seq.write(s.length);
+        seq.write(s, 0, s.length);
+        return seq.toByteArray();
+    }
+
+    // DER INTEGER 编码：去掉前导零，最高位为1时补0（保证非负）
+    private byte[] encodeEcdsaInteger(byte[] raw) {
+        int offset = 0;
+        while (offset < raw.length - 1 && raw[offset] == 0) offset++;
+        int len = raw.length - offset;
+        byte[] result;
+        if ((raw[offset] & 0x80) != 0) {
+            // 最高位为1，补前导0表示非负
+            result = new byte[len + 1];
+            result[0] = 0;
+            System.arraycopy(raw, offset, result, 1, len);
+        } else {
+            result = new byte[len];
+            System.arraycopy(raw, offset, result, 0, len);
+        }
+        return result;
+    }
+
+    // hex 字符串 → byte[]（小写/大写兼容）
+    private byte[] hexToBytes(String hex) {
+        if (hex == null || hex.length() % 2 != 0) return null;
+        hex = hex.toLowerCase();
+        byte[] result = new byte[hex.length() / 2];
+        for (int i = 0; i < result.length; i++) {
+            int hi = Character.digit(hex.charAt(i * 2), 16);
+            int lo = Character.digit(hex.charAt(i * 2 + 1), 16);
+            if (hi < 0 || lo < 0) return null;
+            result[i] = (byte) ((hi << 4) | lo);
+        }
+        return result;
     }
 
     // ========================================================================
