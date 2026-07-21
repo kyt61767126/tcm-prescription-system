@@ -414,11 +414,16 @@ function Confirm-BuildConfig {
 }
 
 function Build-Desktop {
+    param([switch]$SkipConfirm)
     Write-Step "打包云端桌面版 exe (Electron)"
 
-    # 打包前配置确认
-    if (-not (Confirm-BuildConfig -Target "云端桌面版")) {
-        return 1
+    # 打包前配置确认（Build-AllStrict/Build-All 连续流程时跳过，避免中间回车打断）
+    if (-not $SkipConfirm) {
+        if (-not (Confirm-BuildConfig -Target "云端桌面版")) {
+            return 1
+        }
+    } else {
+        Write-Host "  [SKIP] 跳过配置确认（连续打包模式）" -ForegroundColor Cyan
     }
 
     Write-Host "  将执行以下步骤："
@@ -457,11 +462,16 @@ function Build-Desktop {
 }
 
 function Build-App {
+    param([switch]$SkipConfirm)
     Write-Step "打包云端手机 APP (APK)"
 
-    # 打包前配置确认
-    if (-not (Confirm-BuildConfig -Target "云端手机 APP")) {
-        return 1
+    # 打包前配置确认（Build-AllStrict/Build-All 连续流程时跳过，避免中间回车打断）
+    if (-not $SkipConfirm) {
+        if (-not (Confirm-BuildConfig -Target "云端手机 APP")) {
+            return 1
+        }
+    } else {
+        Write-Host "  [SKIP] 跳过配置确认（连续打包模式）" -ForegroundColor Cyan
     }
 
     Write-Host "  将执行以下步骤："
@@ -528,7 +538,7 @@ function Build-All {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step A. 打包桌面版 exe" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
-    $rc = Build-Desktop
+    $rc = Build-Desktop -SkipConfirm
     if ($rc -ne 0) {
         Write-Host "[ERROR] 桌面版打包失败，终止全部打包" -ForegroundColor Red
         return 1
@@ -538,7 +548,7 @@ function Build-All {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step B. 打包手机 APP" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
-    $rc = Build-App
+    $rc = Build-App -SkipConfirm
     if ($rc -ne 0) {
         Write-Host "[ERROR] APP 打包失败，终止全部打包" -ForegroundColor Red
         return 1
@@ -681,7 +691,7 @@ function Build-AllStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step A. 打包桌面版 exe" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
-    $rc = Build-Desktop
+    $rc = Build-Desktop -SkipConfirm
     if ($rc -ne 0) {
         Write-Host "[ERROR] 桌面版打包失败，终止一键打包" -ForegroundColor Red
         return 1
@@ -691,7 +701,7 @@ function Build-AllStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step B. 打包手机 APP（默认模式：Root+调试器检测）" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
-    $rc = Build-App
+    $rc = Build-App -SkipConfirm
     if ($rc -ne 0) {
         Write-Host "[ERROR] APP 打包失败，终止一键打包" -ForegroundColor Red
         return 1
@@ -712,7 +722,7 @@ function Build-AllStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step D. 重新打包手机 APP（签名严格模式 APK）" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
-    $rc = Build-App
+    $rc = Build-App -SkipConfirm
     if ($rc -ne 0) {
         Write-Host "[ERROR] 签名严格模式重新打包失败" -ForegroundColor Red
         Write-Host "  您仍可使用 Step B 的 APK（默认模式）" -ForegroundColor Yellow
