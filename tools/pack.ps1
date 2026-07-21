@@ -262,10 +262,17 @@ function Edit-ClinicConfig {
         return
     }
 
-    # Read config
-    $config = [System.IO.File]::ReadAllText($configPath, $script:UTF8NoBom) | ConvertFrom-Json
-    $currentClinic = $config.clinicName
-    $currentDoctor = $config.doctorName
+    try {
+        # Read config
+        $config = [System.IO.File]::ReadAllText($configPath, $script:UTF8NoBom) | ConvertFrom-Json
+        $currentClinic = $config.clinicName
+        $currentDoctor = $config.doctorName
+        Write-Log "Config read: clinic=$currentClinic, doctor=$currentDoctor"
+    } catch {
+        Write-Log "[ERROR] Failed to read config.json: $_" "ERROR"
+        Write-Host "  [错误] 读取 config.json 失败: $_" -ForegroundColor Red
+        return
+    }
 
     Write-Host ""
     Write-Host "  ===========================================" -ForegroundColor Cyan
@@ -312,72 +319,98 @@ function Edit-ClinicConfig {
     $clinicChanged = ($newClinic -ne $currentClinic)
     $doctorChanged = ($newDoctor -ne $currentDoctor)
 
+    Write-Log "Config change check: clinicChanged=$clinicChanged, doctorChanged=$doctorChanged (old=$currentClinic/$currentDoctor, new=$newClinic/$newDoctor)"
+
     if (-not $clinicChanged -and -not $doctorChanged) {
         Write-Host "  [SKIP] 诊所信息和医师姓名均无变化" -ForegroundColor Yellow
         Write-Log "Config: no changes (clinic=$newClinic, doctor=$newDoctor)"
         return
     }
 
-    # 更新 config.json（必须计算 HMAC-SHA256 签名，与 edit-config.ps1 保持一致）
-    if ($clinicChanged) { $config.clinicName = $newClinic }
-    if ($doctorChanged) { $config.doctorName = $newDoctor }
+    Write-Host "  [INFO] 检测到配置变化，开始更新..." -ForegroundColor Cyan
+    Write-Log "Config: proceeding with update (clinicChanged=$clinicChanged, doctorChanged=$doctorChanged)"
 
-    # ★ v3 安全：写入签名时间戳（UTC ISO 8601，与 license-manager.js 验签逻辑匹配）
-    $config.configIssuedAt = (Get-Date).ToUniversalTime().ToString("o")
+    try {
+        # 更新 config.json（必须计算 HMAC-SHA256 签名，与 edit-config.ps1 保持一致）
+        if ($clinicChanged) { $config.clinicName = $newClinic }
+        if ($doctorChanged) { $config.doctorName = $newDoctor }
 
-    # 先写入不含签名的 config.json（清掉可能存在的旧 configSignature）
-    $config | Select-Object -Property * -ExcludeProperty configSignature |
-        ConvertTo-Json -Depth 10 |
-        Set-Content -Path $configPath -Encoding UTF8
+        # ★ v3 安全：写入签名时间戳（UTC ISO 8601，与 license-manager.js 验签逻辑匹配）
+        $config.configIssuedAt = (Get-Date).ToUniversalTime().ToString("o")
+        Write-Log "Config: writing config.json (clinic=$($config.clinicName), doctor=$($config.doctorName))"
 
-    # ★ v3 安全：计算 HMAC-SHA256 签名
-    # 签名内容：clinicName|doctorName|edition|configIssuedAt
-    $signContent = "$($config.clinicName)|$($config.doctorName)|$($config.edition)|$($config.configIssuedAt)"
-    $hmac = New-Object System.Security.Cryptography.HMACSHA256
-    $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($script:CONFIG_SIGN_KEY)
-    $hashBytes = $hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($signContent))
-    $configSignature = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ''
-    $config | Add-Member -NotePropertyName configSignature -NotePropertyValue $configSignature -Force
+        # 先写入不含签名的 config.json（清掉可能存在的旧 configSignature）
+        $config | Select-Object -Property * -ExcludeProperty configSignature |
+            ConvertTo-Json -Depth 10 |
+            Set-Content -Path $configPath -Encoding UTF8
 
-    # 重新写入带签名的 config.json（无 BOM，与 edit-config.ps1 保持一致）
-    $configJson = $config | ConvertTo-Json -Depth 10
-    [System.IO.File]::WriteAllText($configPath, $configJson, $script:UTF8NoBom)
+        # ★ v3 安全：计算 HMAC-SHA256 签名
+        # 签名内容：clinicName|doctorName|edition|configIssuedAt
+        Write-Log "Config: computing HMAC-SHA256 signature..."
+        $signContent = "$($config.clinicName)|$($config.doctorName)|$($config.edition)|$($config.configIssuedAt)"
+        $hmac = New-Object System.Security.Cryptography.HMACSHA256
+        $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($script:CONFIG_SIGN_KEY)
+        $hashBytes = $hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($signContent))
+        $configSignature = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ''
+        $config | Add-Member -NotePropertyName configSignature -NotePropertyValue $configSignature -Force
+        Write-Log "Config: HMAC signature computed: $configSignature"
 
-    Write-Host "  [OK] config.json 签名已生成: $configSignature" -ForegroundColor Green
+        # 重新写入带签名的 config.json（无 BOM，与 edit-config.ps1 保持一致）
+        $configJson = $config | ConvertTo-Json -Depth 10
+        [System.IO.File]::WriteAllText($configPath, $configJson, $script:UTF8NoBom)
+        Write-Log "Config: config.json written successfully"
 
-    # 更新 index.html (NO BOM - critical!)
-    $html = [System.IO.File]::ReadAllText($htmlPath, $script:UTF8NoBom)
+        Write-Host "  [OK] config.json 签名已生成: $configSignature" -ForegroundColor Green
 
-    if ($clinicChanged) {
-        # Pattern: clinicName: 'xxx' -> clinicName: 'newClinic'
-        $pattern1 = "clinicName:\s*'[^']*'"
-        $replacement1 = "clinicName: '$newClinic'"
-        $html = $html -replace $pattern1, $replacement1
+        # 更新 index.html (NO BOM - critical!)
+        $html = [System.IO.File]::ReadAllText($htmlPath, $script:UTF8NoBom)
+        Write-Log "Config: index.html read, length=$($html.Length)"
 
-        # Pattern: clinic-info-name">xxx< -> clinic-info-name">newClinic<
-        $pattern2 = 'clinic-info-name">[^<]*<'
-        $replacement2 = 'clinic-info-name">' + $newClinic + '<'
-        $html = $html -replace $pattern2, $replacement2
+        if ($clinicChanged) {
+            # Pattern: clinicName: 'xxx' -> clinicName: 'newClinic'
+            $pattern1 = "clinicName:\s*'[^']*'"
+            $replacement1 = "clinicName: '$newClinic'"
+            $html = $html -replace $pattern1, $replacement1
 
-        # Pattern: clinicNameDisplay">xxx< -> clinicNameDisplay">newClinic<
-        $pattern3 = 'clinicNameDisplay">[^<]*<'
-        $replacement3 = 'clinicNameDisplay">' + $newClinic + '<'
-        $html = $html -replace $pattern3, $replacement3
-        Write-Host "  [OK] 诊所名称已更新: $currentClinic -> $newClinic" -ForegroundColor Green
+            # Pattern: clinic-info-name">xxx< -> clinic-info-name">newClinic<
+            $pattern2 = 'clinic-info-name">[^<]*<'
+            $replacement2 = 'clinic-info-name">' + $newClinic + '<'
+            $html = $html -replace $pattern2, $replacement2
+
+            # Pattern: clinicNameDisplay">xxx< -> clinicNameDisplay">newClinic<
+            $pattern3 = 'clinicNameDisplay">[^<]*<'
+            $replacement3 = 'clinicNameDisplay">' + $newClinic + '<'
+            $html = $html -replace $pattern3, $replacement3
+            Write-Host "  [OK] 诊所名称已更新: $currentClinic -> $newClinic" -ForegroundColor Green
+        }
+
+        if ($doctorChanged) {
+            # Pattern: doctorName: 'xxx' -> doctorName: 'newDoctor'
+            $pattern4 = "doctorName:\s*'[^']*'"
+            $replacement4 = "doctorName: '$newDoctor'"
+            $html = $html -replace $pattern4, $replacement4
+            Write-Host "  [OK] 医师姓名已更新: $currentDoctor -> $newDoctor" -ForegroundColor Green
+        }
+
+        # 写入 index.html 前日志
+        Write-Log "Config: writing index.html (length=$($html.Length))"
+        [System.IO.File]::WriteAllText($htmlPath, $html, $script:UTF8NoBom)
+        # 写入 index.html 后日志
+        Write-Log "Config: index.html written successfully"
     }
-
-    if ($doctorChanged) {
-        # Pattern: doctorName: 'xxx' -> doctorName: 'newDoctor'
-        $pattern4 = "doctorName:\s*'[^']*'"
-        $replacement4 = "doctorName: '$newDoctor'"
-        $html = $html -replace $pattern4, $replacement4
-        Write-Host "  [OK] 医师姓名已更新: $currentDoctor -> $newDoctor" -ForegroundColor Green
+    catch {
+        Write-Log "[ERROR] Config update failed: $_" "ERROR"
+        Write-Host ""
+        Write-Host "  [错误] 配置更新失败: $_" -ForegroundColor Red
+        Write-Host "  请检查错误信息后重试" -ForegroundColor Yellow
+        pause
+        return
     }
-
-    [System.IO.File]::WriteAllText($htmlPath, $html, $script:UTF8NoBom)
 
     Write-Host ""
-    Write-Host "  [完成] 配置已写入 config.json 和 index.html" -ForegroundColor Green
+    Write-Host "  ===========================================" -ForegroundColor Green
+    Write-Host "   [完成] 配置已写入 config.json 和 index.html" -ForegroundColor Green
+    Write-Host "  ===========================================" -ForegroundColor Green
     Write-Log "Config: clinic name = $newClinic, doctor name = $newDoctor"
 }
 
