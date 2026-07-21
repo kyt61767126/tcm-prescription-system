@@ -4616,28 +4616,12 @@ if (window.Permission) {
 
             if (!btn1 || !btn2) return;
 
-            // APP 端（Capacitor）：总管理员显示"平台管理、处方监管"，诊所管理员显示"统计分析、账户管理"，普通用户只显示"统计分析"
+            // APP 端（Capacitor）：保持底部按钮为"保存/打印"（HTML 默认），其他功能（数据统计/用户管理/改密/处方监管/平台管理）通过顶部菜单访问
+            // 原设计：登录后覆盖 btn1/btn2 为"数据统计/用户管理/改密"等，导致打印按钮失效
+            // 修复：APP 端不再覆盖 btn1/btn2，保留 HTML 默认的 onclick=savePrescription() / printPrescription()
             if (window.Capacitor) {
-                if (isPlatformAdmin(currentUser)) {
-                    // 平台总管理员：平台管理 + 处方监管
-                    btn1.innerHTML = '📋 平台管理';
-                    btn1.onclick = function() { showPlatformManageModal(); };
-                    btn2.innerHTML = '📊 处方监管';
-                    btn2.onclick = function() { showPlatformPrescriptionModal(); };
-                    btn2.style.display = '';
-                } else if (isClinicAdmin(currentUser)) {
-                    btn1.innerHTML = '📊 数据统计';
-                    btn1.onclick = function() { showModal('analyticsModal'); };
-                    btn2.innerHTML = '👤 用户';
-                    btn2.onclick = function() { showUserManageModal(); };
-                    btn2.style.display = '';
-                } else {
-                    btn1.innerHTML = '📊 数据统计';
-                    btn1.onclick = function() { showModal('analyticsModal'); };
-                    btn2.innerHTML = '🔐 修改密码';
-                    btn2.onclick = function() { showModal('changePwdModal'); };
-                    btn2.style.display = '';
-                }
+                btn1.style.display = '';
+                btn2.style.display = '';
                 return;
             }
 
