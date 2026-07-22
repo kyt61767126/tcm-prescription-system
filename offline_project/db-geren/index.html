@@ -1569,7 +1569,7 @@ if (window.Permission) {
             }
 
             await loadRememberedUsers();
-            document.getElementById('loginPassword').value = '';
+            // 不清除密码：保留记住的密码（由 initRememberedCredentials 填充）
             document.getElementById('loginOverlay').style.display = 'flex';
             document.querySelector('.main-container').style.display = 'none';
             currentUser = null;
