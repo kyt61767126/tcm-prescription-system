@@ -16,7 +16,7 @@ if /i "%1"=="--skip-config" (
     powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
     if errorlevel 1 (
         echo [ERROR] edit-config.ps1 failed, aborting
-        pause
+        if not defined NO_PAUSE pause
         exit /b 1
     )
 )
@@ -26,7 +26,7 @@ echo [2/8] Synchronizing files to Android...
 call "sync-to-app.bat"
 if errorlevel 1 (
     echo [ERROR] sync-to-app.bat failed, aborting
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo.
@@ -37,25 +37,25 @@ echo [3/8] Checking environment...
 if not exist "gradlew.bat" (
     echo [ERROR] gradlew.bat not found
     echo   Path: %CD%\gradlew.bat
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 if not exist "app\signing.properties" (
     echo [ERROR] signing.properties not found
     echo   Path: %CD%\app\signing.properties
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 if not exist "app\app-release.jks" (
     echo [ERROR] app-release.jks not found
     echo   Path: %CD%\app\app-release.jks
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 if not exist "app\src\main\assets\public\index.html" (
     echo [ERROR] index.html not found
     echo   Path: %CD%\app\src\main\assets\public\index.html
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 if not exist "app\src\main\assets\video-recorder-inject.js" (
@@ -76,13 +76,13 @@ taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] Cleanup completed
 echo.
 
-echo [5/8] Cleaning build cache (强制全量清理，确保修改生效)...
+echo [5/8] Cleaning build cache (强制全量清理，确保修改生�?...
 if defined TCM_GRADLE_SKIP_CLEAN (
     echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, 跳过 clean (仅开发调试用)
 ) else (
     if exist "app\build\intermediates\javac" (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
-        echo       [OK] 已清理 javac 缓存
+        echo       [OK] 已清�?javac 缓存
     )
     call gradlew.bat clean --no-daemon
     if errorlevel 1 (
@@ -103,7 +103,7 @@ call gradlew.bat assembleRelease --no-daemon --rerun-tasks
 if errorlevel 1 (
     echo.
     echo [ERROR] Build failed! Please check error messages
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo.
@@ -124,7 +124,7 @@ if exist "%APK_DIR%\app-release.apk" (
 if "%APK_FILE%"=="" (
     echo [ERROR] APK file not found
     echo   Search dir: %CD%\%APK_DIR%
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -157,7 +157,7 @@ if %SRC_SIZE% EQU 0 (
     echo [ERROR] Source APK is 0 bytes or not accessible!
     echo   Source: %CD%\%APK_FILE%
     echo   Gradle build may have failed. Please check build log above.
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo Source APK size: %SRC_SIZE% bytes
@@ -172,7 +172,7 @@ if errorlevel 1 (
     if errorlevel 1 (
         echo [ERROR] Copy failed, please manually get APK from:
         echo   %CD%\%APK_DIR%
-        pause
+        if not defined NO_PAUSE pause
         exit /b 1
     )
 )
@@ -188,3 +188,4 @@ echo   This APK is signed and ready for installation
 echo ============================================
 echo.
 if not defined NO_PAUSE pause
+exit /b 0

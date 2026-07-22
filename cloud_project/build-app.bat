@@ -18,7 +18,7 @@ REM P1-16: Check JDK/JAVA_HOME, required by Gradle build
 if defined JAVA_HOME (
     if not exist "%JAVA_HOME%\bin\java.exe" (
         echo [ERROR] JAVA_HOME points to invalid path: %JAVA_HOME%
-        pause
+        if not defined NO_PAUSE pause
         exit /b 1
     )
     echo       JAVA_HOME: %JAVA_HOME%
@@ -26,7 +26,7 @@ if defined JAVA_HOME (
     java -version >nul 2>&1
     if errorlevel 1 (
         echo [ERROR] Java not found. Please install JDK 17+ and set JAVA_HOME, or add java to PATH
-        pause
+        if not defined NO_PAUSE pause
         exit /b 1
     )
     echo       java OK ^(JAVA_HOME not set, using PATH^)
@@ -34,25 +34,25 @@ if defined JAVA_HOME (
 if not exist "gradlew.bat" (
     echo [ERROR] gradlew.bat not found
     echo   Path: %ANDROID_DIR%\gradlew.bat
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 if not exist "app\signing.properties" (
     echo [ERROR] signing.properties not found
     echo   Path: %ANDROID_DIR%\app\signing.properties
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 if not exist "app\app-release.jks" (
     echo [ERROR] app-release.jks not found
     echo   Path: %ANDROID_DIR%\app\app-release.jks
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 if not exist "app\src\main\assets\capacitor.config.json" (
     echo [ERROR] Capacitor config not found
     echo   Path: %ANDROID_DIR%\app\src\main\assets\capacitor.config.json
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo [OK] Environment check passed
@@ -102,13 +102,13 @@ taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] Cleanup completed
 echo.
 
-echo [4/6] Cleaning build cache (强制全量清理，确保修改生效)...
+echo [4/6] Cleaning build cache (强制全量清理，确保修改生�?...
 if defined TCM_GRADLE_SKIP_CLEAN (
     echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, 跳过 clean (仅开发调试用)
 ) else (
     if exist "app\build\intermediates\javac" (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
-        echo       [OK] 已清理 javac 缓存
+        echo       [OK] 已清�?javac 缓存
     )
     call gradlew.bat clean --no-daemon
     if errorlevel 1 (
@@ -120,12 +120,12 @@ if defined TCM_GRADLE_SKIP_CLEAN (
 echo.
 
 echo [4.5/6] Obfuscating JavaScript (cloud target - includes cloud_app assets)...
-REM P1: 混淆 cloud_app assets 内 JS（auth-core.js / permission.js / video-recorder-inject.js）
-REM 防 APK 内 JS 被直接反编译读取，攻击难度提升
+REM P1: 混淆 cloud_app assets �?JS（auth-core.js / permission.js / video-recorder-inject.js�?
+REM �?APK �?JS 被直接反编译读取，攻击难度提�?
 call node "%~dp0..\tools\obfuscate.js" --target=cloud
 if errorlevel 1 (
     echo [ERROR] JS obfuscation failed
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo [OK] JS obfuscation complete
@@ -141,7 +141,7 @@ if errorlevel 1 (
     echo [WARN] Restoring JavaScript due to build failure...
     call node "%~dp0..\tools\obfuscate.js" restore --target=cloud
     echo [ERROR] Build failed! Please check error messages
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 REM P1-12: Clean up versionCode rollback temp file after successful build
@@ -149,7 +149,7 @@ if exist "%~dp0.build_vcode_prev" del "%~dp0.build_vcode_prev"
 echo.
 
 echo [5.5/6] Restoring JavaScript (cloud target)...
-REM P1: 无论构建成功或失败，都恢复原始 JS 代码（防源码污染开发环境）
+REM P1: 无论构建成功或失败，都恢复原�?JS 代码（防源码污染开发环境）
 call node "%~dp0..\tools\obfuscate.js" restore --target=cloud
 if errorlevel 1 (
     echo [WARN] JS restore failed - may need manual restore: node tools\obfuscate.js restore --target=cloud
@@ -171,7 +171,7 @@ if exist "%APK_OUTPUT_DIR%\app-release.apk" (
 if "%APK_FILE%"=="" (
     echo [ERROR] APK file not found
     echo   Search dir: %APK_OUTPUT_DIR%
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -213,3 +213,4 @@ echo   This APK is signed and ready for installation
 echo ============================================
 echo.
 if not defined NO_PAUSE pause
+exit /b 0

@@ -6,7 +6,7 @@
 #    避免手工修改 4 份文件容易遗漏的问题
 #
 #  使用：
-#    cd c:\Users\61767\Documents\trae_projects\kyt-zy\offline_project\_shared\license
+#    cd D:\trae_projects\kyt-zy\offline_project\_shared\license
 #    .\sync-license.ps1                # 同步到全部 4 端
 #    .\sync-license.ps1 -VerifyOnly    # 仅校验，不同步（CI/CD 用）
 #

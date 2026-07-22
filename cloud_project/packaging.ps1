@@ -488,7 +488,21 @@ function Build-Desktop {
 
     # P1-易用：分步耗时统计
     $stepStart = Get-Date
+    # ★ 修复 NSIS "Error writing temporary file" 错误
+    # 原因：TRAE 沙箱阻止 NSIS 编译器写入系统 %TEMP% 目录
+    # 方案：在 PowerShell 层面将 TEMP/TMP 重定向到项目本地目录
+    $cloudTemp = "$scriptDir\cloud_desktop\tmp"
+    if (-not (Test-Path $cloudTemp)) { New-Item -ItemType Directory -Path $cloudTemp -Force | Out-Null }
+    $prevTemp = $env:TEMP
+    $prevTmp = $env:TMP
+    $env:TEMP = $cloudTemp
+    $env:TMP = $cloudTemp
     $code = Invoke-BatFile "$scriptDir\cloud_desktop\build.bat" "桌面版打包" -NoPause
+    # 恢复原始 TEMP/TMP
+    $env:TEMP = $prevTemp
+    $env:TMP = $prevTmp
+    # 清理本地临时目录
+    if (Test-Path $cloudTemp) { Remove-Item $cloudTemp -Recurse -Force -ErrorAction SilentlyContinue }
 
     # ★ 构建后恢复 package.json
     if (Test-Path $certBackupPath) {

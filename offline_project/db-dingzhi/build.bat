@@ -17,7 +17,7 @@ echo [1/7] Checking environment...
 where npm >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] npm not found, please install Node.js first
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo       npm OK
@@ -29,7 +29,7 @@ taskkill /F /IM "app-custom.exe" >nul 2>&1
 taskkill /F /IM "惠康中医定制.exe" >nul 2>&1
 REM P0-优化：替换 wmic（Windows 11 已弃用且慢）为 PowerShell Get-Process（精确路径匹配）
 powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-dingzhi*dist*' -or $_.Path -like '*db-dingzhi*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
-timeout /t 2 /nobreak >nul
+ping -n 3 127.0.0.1 >nul 2>nul
 echo [OK] Processes cleaned
 echo.
 
@@ -67,7 +67,7 @@ if exist "%OUTPUT_DIR%" (
             echo [ERROR] Cannot clean or rename %OUTPUT_DIR% directory
             echo         Please manually close any program using %OUTPUT_DIR%\ and retry
             echo         Or manually delete/rename the %OUTPUT_DIR% folder
-            pause
+            if not defined NO_PAUSE pause
             exit /b 1
         )
     )
@@ -81,7 +81,7 @@ if errorlevel 1 (
     echo [ERROR] Obfuscation failed
     echo Restoring original files...
     node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo [OK] Obfuscation completed
@@ -102,7 +102,7 @@ if not "%BUILD_RC%"=="0" (
     echo [ERROR] Build failed, please check logs above
     echo Restoring original JavaScript code...
     node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo.
@@ -112,7 +112,7 @@ node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi
 if errorlevel 1 (
     echo [ERROR] Restore failed! Source code may remain obfuscated.
     echo Please manually run: node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo [OK] Original code restored
@@ -139,3 +139,4 @@ for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy
 echo Start: %BUILD_START_TIME%
 echo End:   %BUILD_END_TIME%
 if not defined NO_PAUSE pause
+exit /b 0
