@@ -134,6 +134,12 @@ echo [OK] win-unpacked prepared
 echo.
 
 echo [6.5/8] Running electron-builder --prepackaged...
+REM Read actual win-unpacked path (may differ if original was locked)
+set "WIN_UNPACKED_PATH=dist/win-unpacked"
+if exist "dist\win-unpacked-path.txt" (
+    set /p WIN_UNPACKED_PATH=<dist\win-unpacked-path.txt
+)
+echo       Using prepackaged: %WIN_UNPACKED_PATH%
 REM P1-安全加固: 证书密码从本地gitignore文件读取，避免硬编码泄露
 if exist "%~dp0..\..\tools\certs\cert-password.txt" (
     for /f "delims=" %%p in (%~dp0..\..\tools\certs\cert-password.txt) do set "CSC_KEY_PASSWORD=%%p"
@@ -145,7 +151,7 @@ set "PREV_TMP=%TMP%"
 if not exist "tmp" mkdir tmp
 set "TEMP=%CD%\tmp"
 set "TMP=%CD%\tmp"
-node "node_modules\electron-builder\cli.js" --win --prepackaged dist/win-unpacked
+node "node_modules\electron-builder\cli.js" --win --prepackaged "%WIN_UNPACKED_PATH%"
 set "BUILD_RC=%errorlevel%"
 set NODE_TLS_REJECT_UNAUTHORIZED=
 set "TEMP=%PREV_TEMP%"

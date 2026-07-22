@@ -546,8 +546,15 @@ function Build-Desktop {
         if (-not (Test-Path $localTemp)) { New-Item -ItemType Directory -Path $localTemp -Force | Out-Null }
         $prevTemp = $env:TEMP; $prevTmp = $env:TMP
         $env:TEMP = $localTemp; $env:TMP = $localTemp
+        # Read actual win-unpacked path (may differ if original was locked)
+        $prepackagedPath = "dist/win-unpacked"
+        $pathFile = "$desktopDir\dist\win-unpacked-path.txt"
+        if (Test-Path $pathFile) {
+            $prepackagedPath = (Get-Content $pathFile -Raw).Trim()
+        }
+        Write-Host "        Using prepackaged: $prepackagedPath" -ForegroundColor White
         try {
-            & node "node_modules\electron-builder\cli.js" --win --prepackaged dist/win-unpacked 2>&1 | ForEach-Object { Write-Host "  $_" }
+            & node "node_modules\electron-builder\cli.js" --win --prepackaged "$prepackagedPath" 2>&1 | ForEach-Object { Write-Host "  $_" }
             $buildRC = $LASTEXITCODE
         } finally {
             Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue

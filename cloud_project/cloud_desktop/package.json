@@ -50,19 +50,15 @@
         "nsis",
         "portable"
       ],
-      "certificateFile": "../../tools/certs/惠康中医-codesign.pfx",
-      "signingHashAlgorithms": [
-        "sha256"
-      ],
-      "rfc3161TimeStampServer": "http://timestamp.digicert.com"
+      "signAndEditExecutable": false
     },
     "nsis": {
       "oneClick": false,
+      "perMachine": true,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "include": "installer.nsh",
-      "useZip": true,
       "differentialPackage": false
     }
   },

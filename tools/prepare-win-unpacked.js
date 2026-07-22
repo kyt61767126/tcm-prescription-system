@@ -81,18 +81,19 @@ async function main() {
   // Handle EBUSY/EPERM (file locked by IDE indexer): use new dir name if locked
   let actualWinUnpacked = winUnpacked;
   if (fs.existsSync(winUnpacked)) {
+    let removed = false;
     try {
       fs.rmSync(winUnpacked, { recursive: true, force: true });
+      removed = !fs.existsSync(winUnpacked);
     } catch (e) {
-      if (e.code === 'EBUSY' || e.code === 'EPERM') {
-        // Directory is locked (IDE indexer). Use a fresh directory name instead.
-        actualWinUnpacked = `${winUnpacked}.${Date.now()}`;
-        console.log(`  [WARN] win-unpacked was locked, using ${path.basename(actualWinUnpacked)} instead`);
-        // Best-effort async cleanup of old dir (don't wait)
-        require('child_process').exec(`rd /s /q "${winUnpacked}"`, () => {});
-      } else {
-        throw e;
-      }
+      // rmSync failed (EBUSY/EPERM or partial delete)
+    }
+    if (!removed) {
+      // Directory still exists (locked or partially deleted): use a fresh directory name
+      actualWinUnpacked = `${winUnpacked}.${Date.now()}`;
+      console.log(`  [WARN] win-unpacked was locked, using ${path.basename(actualWinUnpacked)} instead`);
+      // Best-effort async cleanup of old dir (don't wait)
+      require('child_process').exec(`rd /s /q "${winUnpacked}"`, () => {});
     }
   }
   // Always create fresh dir (actualWinUnpacked may differ from winUnpacked if locked)
