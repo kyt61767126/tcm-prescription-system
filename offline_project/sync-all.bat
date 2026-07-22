@@ -61,4 +61,4 @@ echo   Next steps:
 echo   - Run build-app.bat in each version (sync is now built-in)
 echo   - Or run pack.bat in each version to build
 echo.
-pause
+if not defined NO_PAUSE pause

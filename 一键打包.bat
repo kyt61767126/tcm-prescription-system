@@ -20,4 +20,4 @@ if %EXIT_CODE% neq 0 (
     echo [ERROR] One-click packaging exited with code: %EXIT_CODE%
 )
 echo.
-pause
+if not defined NO_PAUSE pause
