@@ -1,4 +1,4 @@
-# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-bendi/db-dingzhi）
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
