@@ -134,7 +134,7 @@ set "PREV_TMP=%TMP%"
 if not exist "tmp" mkdir tmp
 set "TEMP=%CD%\tmp"
 set "TMP=%CD%\tmp"
-call node_modules\.bin\electron-builder.cmd --win --prepackaged dist/win-unpacked
+node "node_modules\electron-builder\cli.js" --win --prepackaged dist/win-unpacked
 set "BUILD_RC=%errorlevel%"
 REM P1-安全：立即清�?TLS 临时变量，避免污染后续命令环�?
 set NODE_TLS_REJECT_UNAUTHORIZED=

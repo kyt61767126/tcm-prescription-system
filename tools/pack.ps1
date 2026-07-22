@@ -629,7 +629,7 @@ function Build-Desktop {
         $env:TEMP = $localTemp
         $env:TMP = $localTemp
         try {
-            Invoke-External { npx electron-builder --win --prepackaged dist/win-unpacked } "electron-builder --prepackaged"
+            Invoke-External { node "node_modules\electron-builder\cli.js" --win --prepackaged dist/win-unpacked } "electron-builder --prepackaged"
         } catch {
             Write-Host ""
             Write-Host "  [ERROR] electron-builder 失败: $_" -ForegroundColor Red
