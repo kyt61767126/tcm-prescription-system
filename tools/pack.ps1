@@ -629,7 +629,20 @@ function Build-Desktop {
         $env:TEMP = $localTemp
         $env:TMP = $localTemp
         try {
-            Invoke-External { node "node_modules\electron-builder\cli.js" --win --prepackaged dist/win-unpacked } "electron-builder --prepackaged"
+            # Read actual win-unpacked path (may differ if dir was locked and renamed)
+            $unpackPath = "dist/win-unpacked"
+            $pathFile = "$script:VersionDir\dist\win-unpacked-path.txt"
+            if (Test-Path $pathFile) {
+                $actualPath = Get-Content $pathFile -Raw -Encoding UTF8 | ForEach-Object { $_.Trim() }
+                if ($actualPath -and (Test-Path $actualPath)) {
+                    $unpackPath = $actualPath
+                    # Convert to relative path for electron-builder
+                    $unpackPath = $unpackPath.Replace("$script:VersionDir\", "").Replace($script:VersionDir, "")
+                    $unpackPath = $unpackPath.Replace("\", "/")
+                    Write-Host "  [INFO] Using win-unpacked: $unpackPath" -ForegroundColor Cyan
+                }
+            }
+            Invoke-External { node "node_modules\electron-builder\cli.js" --win --prepackaged $unpackPath } "electron-builder --prepackaged"
         } catch {
             Write-Host ""
             Write-Host "  [ERROR] electron-builder 失败: $_" -ForegroundColor Red

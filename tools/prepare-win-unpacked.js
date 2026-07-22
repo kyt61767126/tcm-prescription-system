@@ -78,29 +78,33 @@ async function main() {
 
   console.log('Copying electron dist to win-unpacked...');
   // Clean win-unpacked to remove stale files from previous runs
-  // Handle EBUSY (file locked by IDE indexer): rename then async delete
+  // Handle EBUSY/EPERM (file locked by IDE indexer): use new dir name if locked
+  let actualWinUnpacked = winUnpacked;
   if (fs.existsSync(winUnpacked)) {
     try {
       fs.rmSync(winUnpacked, { recursive: true, force: true });
     } catch (e) {
       if (e.code === 'EBUSY' || e.code === 'EPERM') {
-        // Rename to temp name and delete asynchronously (IDE may hold lock)
-        const staleDir = `${winUnpacked}.old.${Date.now()}`;
-        fs.renameSync(winUnpacked, staleDir);
-        console.log(`  [WARN] win-unpacked was locked, renamed to ${path.basename(staleDir)} for async cleanup`);
-        // Best-effort async delete (don't wait)
-        require('child_process').exec(`rd /s /q "${staleDir}"`, () => {});
+        // Directory is locked (IDE indexer). Use a fresh directory name instead.
+        actualWinUnpacked = `${winUnpacked}.${Date.now()}`;
+        console.log(`  [WARN] win-unpacked was locked, using ${path.basename(actualWinUnpacked)} instead`);
+        // Best-effort async cleanup of old dir (don't wait)
+        require('child_process').exec(`rd /s /q "${winUnpacked}"`, () => {});
       } else {
         throw e;
       }
     }
   }
-  fs.mkdirSync(winUnpacked, { recursive: true });
-  fs.mkdirSync(resourcesDir, { recursive: true });
-  fs.cpSync(electronDist, winUnpacked, { recursive: true, force: true });
+  // Always create fresh dir (actualWinUnpacked may differ from winUnpacked if locked)
+  const actualResourcesDir = path.join(actualWinUnpacked, 'resources');
+  fs.mkdirSync(actualWinUnpacked, { recursive: true });
+  fs.mkdirSync(actualResourcesDir, { recursive: true });
+  fs.cpSync(electronDist, actualWinUnpacked, { recursive: true, force: true });
+  // Write the actual path to a temp file for pack.ps1 to read
+  fs.writeFileSync(path.join(versionDir, 'dist', 'win-unpacked-path.txt'), actualWinUnpacked, 'utf8');
 
-  const electronExe = path.join(winUnpacked, 'electron.exe');
-  const productExe = path.join(winUnpacked, `${exeName}.exe`);
+  const electronExe = path.join(actualWinUnpacked, 'electron.exe');
+  const productExe = path.join(actualWinUnpacked, `${exeName}.exe`);
   if (fs.existsSync(electronExe)) {
     if (fs.existsSync(productExe)) fs.unlinkSync(productExe);
     fs.renameSync(electronExe, productExe);
@@ -126,7 +130,7 @@ async function main() {
     includedFiles.push(f);
   }
 
-  const asarPath = path.join(resourcesDir, 'app.asar');
+  const asarPath = path.join(actualResourcesDir, 'app.asar');
   try {
     await createPackage(tmpDir, asarPath);
     const stat = fs.statSync(asarPath);
@@ -140,8 +144,8 @@ async function main() {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
   const ok = fs.existsSync(productExe) && fs.existsSync(asarPath) &&
-             fs.existsSync(path.join(resourcesDir, 'default_app.asar')) &&
-             fs.existsSync(path.join(winUnpacked, 'locales'));
+             fs.existsSync(path.join(actualResourcesDir, 'default_app.asar')) &&
+             fs.existsSync(path.join(actualWinUnpacked, 'locales'));
   if (ok) {
     console.log(`win-unpacked prepared successfully for ${productName}`);
     process.exit(0);
