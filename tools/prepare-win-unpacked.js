@@ -31,10 +31,10 @@ if (!versionDir) {
 const pkgPath = path.join(versionDir, 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 const productName = pkg.build.productName || pkg.name;
-// 7z (used by electron-builder NSIS) cannot handle non-ASCII filenames on Windows.
-// Use pkg.name (ASCII-safe) for the exe inside win-unpacked to avoid NSIS compression failure.
-// The installer package filename is still determined by productName (e.g. 惠康中医-云端-Setup-x.x.x.exe).
-const exeName = pkg.name || productName;
+// exe name MUST match productName: electron-builder NSIS shortcut Target is hardcoded
+// to ${productName}.exe. If exe name differs (e.g. pkg.name), shortcut will be broken
+// after installation ("Windows cannot find 惠康中医-个人.exe").
+const exeName = productName;
 const buildFiles = pkg.build.files || [];
 
 // Extract file list from build.files (handles both string and {filter:[]} formats)
