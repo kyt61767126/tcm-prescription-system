@@ -2317,7 +2317,6 @@ if (window.Permission) {
                 case 'history':
                     rightPanel.style.display = 'flex';
                     rightPanel.style.flexDirection = 'column';
-                    injectRecycleBinButton();
                     // 确保渲染历史列表
                     renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
                     break;
@@ -4990,26 +4989,8 @@ if (window.Permission) {
             showRecycleBin();
         }
 
-        // 动态注入回收站按钮到历史处方标题栏（不修改HTML结构）
-        function injectRecycleBinButton() {
-            const header = document.querySelector('.history-header');
-            if (!header) return;
-            // 避免重复注入
-            if (header.querySelector('.recycle-bin-btn')) return;
-            const refreshBtn = header.querySelector('.history-refresh-btn');
-            const btn = document.createElement('button');
-            btn.className = 'recycle-bin-btn';
-            btn.innerHTML = '🗑️';
-            btn.title = '回收站';
-            btn.style.cssText = 'background:none;border:none;color:white;font-size:14px;cursor:pointer;padding:2px 6px;margin-left:4px;';
-            btn.onclick = showRecycleBin;
-            if (refreshBtn && refreshBtn.parentNode) {
-                refreshBtn.parentNode.insertBefore(btn, refreshBtn.nextSibling);
-            } else {
-                header.appendChild(btn);
-            }
-        }
-        
+        // 回收站按钮已在 HTML 静态定义（history-header 内），无需动态注入
+
         let saveTimeout = null;
         function debouncedSave(key, value, delay = 100) {
             if (saveTimeout) clearTimeout(saveTimeout);
@@ -5937,9 +5918,6 @@ if (window.Permission) {
         async function init() {
             // 初始化用户下拉框（不阻塞，后台并行加载，下拉按钮加载完即显示）
             initLoginDropdown();
-
-            // 注入回收站按钮到历史处方标题栏
-            injectRecycleBinButton();
 
             // APP 端（Capacitor）：账户管理入口由 updateUserDisplay 根据角色控制
             // 管理员显示（顶部tab+底部按钮），普通用户隐藏
