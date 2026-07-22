@@ -271,6 +271,9 @@ function createMainWindow() {
         webPreferences: getSharedWebPrefs()
     });
 
+    // ★ P1-A6：DevTools 反调试（仅打包环境生效）
+    installDevToolsGuard(mainWindow.webContents);
+
     mainWindow.webContents.on('dom-ready', async () => {
         // ★修复登录界面闪现（2026-07-19）：
         // 原因：index.html 中 loginOverlay 默认 style="display:flex;visibility:visible;"
@@ -342,6 +345,39 @@ function getSharedWebPrefs() {
 }
 
 // ============================================================================
+//  ★ P1-A6 安全增强：DevTools 反调试（仅打包环境启用）
+//  策略：
+//   1. 仅在 app.isPackaged 时启用，开发环境保留 DevTools 调试能力
+//   2. 监听 devtools-opened 事件，立即关闭 DevTools 窗口
+//   3. 拦截 F12 / Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+U 等快捷键
+// ============================================================================
+const IS_PROD_PACKAGED = app.isPackaged;
+
+function installDevToolsGuard(webContents) {
+    if (!IS_PROD_PACKAGED) return;  // 开发环境跳过
+    try {
+        webContents.on('devtools-opened', () => {
+            try {
+                webContents.closeDevTools();
+                console.warn('[Security] DevTools 已被阻止');
+            } catch (e) { /* 忽略 */ }
+        });
+        webContents.on('before-input-event', (event, input) => {
+            if (!input || !event) return;
+            const key = (input.key || '').toLowerCase();
+            const ctrl = input.control || input.meta;
+            const shift = input.shift;
+            if (key === 'f12') { event.preventDefault(); return; }
+            if (ctrl && shift && (key === 'i' || key === 'j')) { event.preventDefault(); return; }
+            if (ctrl && shift && key === 'r') { event.preventDefault(); return; }
+            if (ctrl && !shift && key === 'u') { event.preventDefault(); return; }
+        });
+    } catch (e) {
+        console.warn('[Security] installDevToolsGuard 异常:', e.message);
+    }
+}
+
+// ============================================================================
 //  视频录制模块注入（新增）
 // ============================================================================
 async function injectVideoRecorder(win) {
@@ -375,6 +411,9 @@ function createLoginWindow() {
             partition: SESSION_PARTITION
         }
     });
+
+    // ★ P1-A6：DevTools 反调试（仅打包环境生效）
+    installDevToolsGuard(loginWindow.webContents);
 
     loginWindow.loadFile(path.join(__dirname, 'login.html'));
 

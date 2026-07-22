@@ -184,6 +184,13 @@ function loadObfuscator() {
 
 /**
  * 混淆单个 JS 文件
+ *
+ * P0-A3 修复：处理 .bak 残留导致二次打包失败的 bug
+ * - 旧逻辑：仅在 .bak 不存在时备份。若上次打包被 Ctrl+C 中断，.bak 残留而
+ *   源文件已是混淆状态，下次打包会跳过备份，导致 restore 还原的是混淆版本
+ * - 新逻辑：每次混淆前先校验 .bak 与当前文件内容是否一致：
+ *   - 一致：原始状态，正常备份并混淆
+ *   - 不一致：上次未还原，自动 restore 一次再混淆
  */
 function obfuscateFile(filePath, config) {
     const code = fs.readFileSync(filePath, 'utf8');
@@ -191,17 +198,34 @@ function obfuscateFile(filePath, config) {
         console.log(`  [SKIP] 空文件: ${filePath}`);
         return false;
     }
-    try {
-        const result = JavaScriptObfuscator.obfuscate(code, config);
-        // 备份原文件（仅首次）
-        const bakPath = filePath + '.bak';
-        if (!fs.existsSync(bakPath)) {
-            fs.writeFileSync(bakPath, code, 'utf8');
+    const bakPath = filePath + '.bak';
+
+    // 校验 .bak 残留状态
+    let sourceCode = code;
+    if (fs.existsSync(bakPath)) {
+        const bakContent = fs.readFileSync(bakPath, 'utf8');
+        if (bakContent !== code) {
+            // 当前文件与备份不一致，可能是上次打包未还原
+            console.log(`  [WARN] .bak 残留且文件已变化，自动还原后再混淆: ${path.basename(filePath)}`);
+            fs.copyFileSync(bakPath, filePath);
+            sourceCode = bakContent;
         }
+        // .bak 存在且与当前一致：原始状态，无需重新备份
+    } else {
+        // 首次备份
+        fs.writeFileSync(bakPath, code, 'utf8');
+    }
+
+    try {
+        const result = JavaScriptObfuscator.obfuscate(sourceCode, config);
         fs.writeFileSync(filePath, result.getObfuscatedCode(), 'utf8');
         return true;
     } catch (e) {
         console.error(`  [FAIL] ${filePath}: ${e.message}`);
+        // 混淆失败时还原原始内容，避免污染开发环境
+        if (fs.existsSync(bakPath)) {
+            try { fs.copyFileSync(bakPath, filePath); } catch (_) {}
+        }
         return false;
     }
 }

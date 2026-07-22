@@ -58,7 +58,7 @@ echo   All versions synced successfully!
 echo ================================================================
 echo.
 echo   Next steps:
-echo   - Run sync-to-app.bat in each version to sync index.html
+echo   - Run build-app.bat in each version (sync is now built-in)
 echo   - Or run pack.bat in each version to build
 echo.
 pause

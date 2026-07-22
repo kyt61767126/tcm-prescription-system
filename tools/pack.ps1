@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -677,6 +677,21 @@ function Build-Desktop {
             Write-Host ""
             Write-Host "  [ERROR] electron-builder 失败: $_" -ForegroundColor Red
             Write-Log "[ERROR] electron-builder --prepackaged failed" "ERROR"
+            # ★ P1-B5 修复：构建失败时恢复 package.json 原始配置
+            if (Test-Path $certBackupPath) {
+                Copy-Item -Path $certBackupPath -Destination $pkgPath -Force
+                Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue
+                Write-Host "  [OK] 已恢复 package.json 原始配置" -ForegroundColor Green
+            }
+            # ★ P1-B5 修复：构建失败时恢复 JS 源码（避免 .bak 残留）
+            Push-Location $script:ProjectRoot
+            try {
+                Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore (failure recovery)"
+            } catch {
+                Write-Log "[WARN] JS restore failed after desktop build failure" "WARN"
+            } finally {
+                Pop-Location
+            }
             throw
         } finally {
             Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue

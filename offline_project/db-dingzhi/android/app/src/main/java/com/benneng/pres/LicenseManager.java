@@ -27,12 +27,16 @@ import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
+import java.net.InetSocketAddress;
+import java.net.Socket;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyFactory;
@@ -294,6 +298,72 @@ public class LicenseManager {
         return false;
     }
 
+    // ========================================================================
+    //  ★ P1-A4 新增：Frida 注入检测（防动态 hook 绕过 license 校验）
+    //  策略：
+    //   1. 检测默认端口 27042 是否可连接（Frida server 默认监听）
+    //   2. 扫描 /proc/self/maps 中是否含 frida-gadget / frida-agent 字符串
+    //  返回：true 表示检测到 Frida（阻塞运行）
+    // ========================================================================
+    public boolean isFridaInjected() {
+        // 检测 1：尝试连接默认端口（5ms 超时，不影响启动速度）
+        try (Socket socket = new Socket()) {
+            socket.connect(new InetSocketAddress("127.0.0.1", 27042), 5);
+            if (socket.isConnected()) {
+                Log.w(TAG, "Frida 检测：端口 27042 可连接，疑似 Frida server");
+                return true;
+            }
+        } catch (Exception e) {
+            // 端口未开放，正常
+        }
+        // 检测 2：扫描 /proc/self/maps
+        try (BufferedReader reader = new BufferedReader(new FileReader("/proc/self/maps"))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (line.contains("frida-gadget") || line.contains("frida-agent") ||
+                    line.contains("frida-server")) {
+                    Log.w(TAG, "Frida 检测：/proc/self/maps 含 frida 特征: " + line.trim());
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            // 读取失败，忽略
+        }
+        return false;
+    }
+
+    // ========================================================================
+    //  ★ P1-A4 新增：Xposed 注入检测（防方法 hook 绕过 license 校验）
+    //  策略：
+    //   1. 检查 de.robv.android.xposed.XposedBridge 类是否已加载
+    //   2. 检查堆栈中是否含 Xposed 相关帧
+    //  返回：true 表示检测到 Xposed（阻塞运行）
+    // ========================================================================
+    public boolean isXposedInjected() {
+        try {
+            // 检测 1：尝试加载 XposedBridge 类
+            Class.forName("de.robv.android.xposed.XposedBridge");
+            Log.w(TAG, "Xposed 检测：de.robv.android.xposed.XposedBridge 类已加载");
+            return true;
+        } catch (ClassNotFoundException e) {
+            // 未加载，正常
+        }
+        // 检测 2：检查当前堆栈是否含 Xposed 帧
+        try {
+            StackTraceElement[] stack = Thread.currentThread().getStackTrace();
+            for (StackTraceElement elem : stack) {
+                if (elem.getClassName().startsWith("de.robv.android.xposed") ||
+                    elem.getClassName().contains("xposed")) {
+                    Log.w(TAG, "Xposed 检测：堆栈含 Xposed 帧: " + elem.getClassName());
+                    return true;
+                }
+            }
+        } catch (Exception e) {
+            // 忽略
+        }
+        return false;
+    }
+
     /**
      * 反射读取 Android 系统属性（替代隐藏 API android.os.SystemProperties）
      * @param key 属性名
@@ -313,6 +383,8 @@ public class LicenseManager {
 
     // ========================================================================
     //  ★ 安全检测：APK 签名校验（防反编译重打包）
+    //  P1-A5 升级：优先使用 GET_SIGNING_CERTIFICATES（API 28+）支持 v2/v3 签名方案，
+    //             旧版本回退到 GET_SIGNATURES（仅支持 v1）
     // ========================================================================
     public boolean verifyApkSignature() {
         if (EXPECTED_APK_SIGNATURE_SHA256 == null || EXPECTED_APK_SIGNATURE_SHA256.isEmpty()) {
@@ -320,13 +392,12 @@ public class LicenseManager {
             return true;
         }
         try {
-            android.content.pm.PackageInfo pi = context.getPackageManager().getPackageInfo(
-                    packageName, android.content.pm.PackageManager.GET_SIGNATURES);
-            if (pi == null || pi.signatures == null || pi.signatures.length == 0) {
+            android.content.pm.Signature[] signatures = getApkSignatures();
+            if (signatures == null || signatures.length == 0) {
                 Log.e(TAG, "APK 签名校验：未找到签名");
                 return false;
             }
-            for (android.content.pm.Signature sig : pi.signatures) {
+            for (android.content.pm.Signature sig : signatures) {
                 MessageDigest md = MessageDigest.getInstance("SHA-256");
                 byte[] digest = md.digest(sig.toByteArray());
                 StringBuilder sb = new StringBuilder();
@@ -345,6 +416,35 @@ public class LicenseManager {
             Log.e(TAG, "APK 签名校验异常", e);
             return false;
         }
+    }
+
+    /**
+     * 获取 APK 签名数组
+     * API 28+ 使用 GET_SIGNING_CERTIFICATES（支持 v2/v3 签名方案，防篡改更强）
+     * API < 28 回退到 GET_SIGNATURES（仅 v1）
+     */
+    private android.content.pm.Signature[] getApkSignatures() {
+        try {
+            android.content.pm.PackageManager pm = context.getPackageManager();
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                // API 28+：使用 GET_SIGNING_CERTIFICATES 获取完整签名链
+                android.content.pm.PackageInfo pi = pm.getPackageInfo(
+                        packageName, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES);
+                if (pi != null && pi.signingInfo != null) {
+                    android.content.pm.Signature[] sigs = pi.signingInfo.getApkContentsSigners();
+                    if (sigs != null && sigs.length > 0) return sigs;
+                }
+            }
+            // API < 28：回退到 GET_SIGNATURES（仅支持 v1 签名）
+            android.content.pm.PackageInfo pi = pm.getPackageInfo(
+                    packageName, android.content.pm.PackageManager.GET_SIGNATURES);
+            if (pi != null && pi.signatures != null && pi.signatures.length > 0) {
+                return pi.signatures;
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "获取 APK 签名失败", e);
+        }
+        return null;
     }
 
     // ========================================================================
@@ -1542,6 +1642,18 @@ public class LicenseManager {
                 return failValidation(
                         "APK 签名校验失败，软件可能被篡改。\n请从官方渠道重新下载安装。",
                         "signature_mismatch");
+            }
+            // ★ P1-A4 新增：安全检测 4 - Frida Hook 框架检测（防动态注入绕过 license）
+            if (isFridaInjected()) {
+                return failValidation(
+                        "检测到 Frida 注入框架，软件无法运行。\n请关闭相关工具后重启。",
+                        "frida_injected");
+            }
+            // ★ P1-A4 新增：安全检测 5 - Xposed Hook 框架检测（防方法 hook 绕过 license）
+            if (isXposedInjected()) {
+                return failValidation(
+                        "检测到 Xposed 注入框架，软件无法运行。\n请关闭相关工具后重启。",
+                        "xposed_injected");
             }
 
             // ★ P3-B 新增：模拟器检测（仅记录日志，不阻塞运行）

@@ -1,4 +1,4 @@
-﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-bendi/db-dingzhi）
 param(
     [switch]$AutoDesktop,
@@ -569,6 +569,8 @@ function Build-Desktop {
             if (-not $exeFiles) {
                 Write-Host "  [ERROR] No exe files found" -ForegroundColor Red
                 & node "$toolsDir\obfuscate.js" restore --target=cloud 2>&1 | Out-Null
+                # ★ P1-B5 修复：构建失败时恢复 package.json（return 前执行，避免残留 certificateFile 移除状态）
+                if (Test-Path $certBackupPath) { Copy-Item -Path $certBackupPath -Destination $pkgPath -Force; Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue }
                 return 1
             }
             Write-Host "  [OK] exe files found despite exit code $buildRC" -ForegroundColor Green
@@ -576,7 +578,12 @@ function Build-Desktop {
 
         Write-Host "  [7/8] Restoring original code..." -ForegroundColor White
         & node "$toolsDir\obfuscate.js" restore --target=cloud 2>&1 | ForEach-Object { Write-Host "  $_" }
-        if ($LASTEXITCODE -ne 0) { Write-Host "  [ERROR] Restore failed" -ForegroundColor Red; return 1 }
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [ERROR] Restore failed" -ForegroundColor Red
+            # ★ P1-B5 修复：restore 失败时也恢复 package.json
+            if (Test-Path $certBackupPath) { Copy-Item -Path $certBackupPath -Destination $pkgPath -Force; Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue }
+            return 1
+        }
         Write-Host "        [OK]"
 
         Write-Host "  [8/8] Verifying output..." -ForegroundColor White
@@ -589,8 +596,11 @@ function Build-Desktop {
             $buildSuccess = $true
         }
 
+        # ★ P1-B5 修复：构建成功时恢复 package.json（保留原逻辑）
         if (Test-Path $certBackupPath) { Copy-Item -Path $certBackupPath -Destination $pkgPath -Force; Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue }
     } finally {
+        # ★ P1-B5 修复：finally 兜底，确保任何异常路径下 package.json 都被恢复
+        if (Test-Path $certBackupPath) { Copy-Item -Path $certBackupPath -Destination $pkgPath -Force; Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue }
         Pop-Location
     }
 

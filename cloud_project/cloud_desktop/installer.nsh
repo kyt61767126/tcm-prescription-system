@@ -1,20 +1,22 @@
-﻿; ============================================================================
+; ============================================================================
 ;  installer.nsh - NSIS 自定义安装初始化
 ;  ★ 数据安全策略：推荐安装到 D 盘或 E 盘，避免 C 盘
-;    1) 优先安装到 D:\Program Files\惠康中医-云端
-;    2) D 盘不存在时尝试 E:\Program Files\惠康中医-云端
+;    1) 优先安装到 D:\Program Files\tcm-prescription-cloud
+;    2) D 盘不存在时尝试 E:\Program Files\tcm-prescription-cloud
 ;    3) D 盘和 E 盘都不存在时使用默认安装目录（用户可自行修改）
-;  注意：不强制 Abort，让用户通过 allowToChangeInstallationDirectory 自行选择
+;  注意：安装目录用英文 tcm-prescription-cloud（与 package.json name 一致），
+;        避免中文目录名导致的路径编码问题；exe 名仍为 productName（惠康中医-云端.exe）
+;  不强制 Abort，让用户通过 allowToChangeInstallationDirectory 自行选择
 ; ============================================================================
 !macro customInit
   ; 优先 D 盘（用 D:\nul 检测更可靠，D:\ 在某些 NSIS 版本下不可靠）
   IfFileExists "D:\nul" 0 tryE
-    StrCpy $INSTDIR "D:\Program Files\惠康中医-云端"
+    StrCpy $INSTDIR "D:\Program Files\tcm-prescription-cloud"
     Goto done
   tryE:
   ; 其次 E 盘
   IfFileExists "E:\nul" 0 useDefault
-    StrCpy $INSTDIR "E:\Program Files\惠康中医-云端"
+    StrCpy $INSTDIR "E:\Program Files\tcm-prescription-cloud"
     Goto done
   useDefault:
   ; D 盘和 E 盘都不存在，使用默认安装目录

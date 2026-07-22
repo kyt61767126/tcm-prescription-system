@@ -42,7 +42,7 @@
         "nsis",
         "portable"
       ],
-      "signAndEditExecutable": false
+      "certificateFile": "../../tools/certs/惠康中医-codesign.pfx"
     },
     "nsis": {
       "oneClick": false,
