@@ -77,9 +77,24 @@ async function main() {
   fs.mkdirSync(resourcesDir, { recursive: true });
 
   console.log('Copying electron dist to win-unpacked...');
-  // Clean win-unpacked to remove stale non-ASCII exe from previous runs
-  // (7z in electron-builder cannot handle Chinese filenames like 惠康中医-云端.exe)
-  fs.rmSync(winUnpacked, { recursive: true, force: true });
+  // Clean win-unpacked to remove stale files from previous runs
+  // Handle EBUSY (file locked by IDE indexer): rename then async delete
+  if (fs.existsSync(winUnpacked)) {
+    try {
+      fs.rmSync(winUnpacked, { recursive: true, force: true });
+    } catch (e) {
+      if (e.code === 'EBUSY' || e.code === 'EPERM') {
+        // Rename to temp name and delete asynchronously (IDE may hold lock)
+        const staleDir = `${winUnpacked}.old.${Date.now()}`;
+        fs.renameSync(winUnpacked, staleDir);
+        console.log(`  [WARN] win-unpacked was locked, renamed to ${path.basename(staleDir)} for async cleanup`);
+        // Best-effort async delete (don't wait)
+        require('child_process').exec(`rd /s /q "${staleDir}"`, () => {});
+      } else {
+        throw e;
+      }
+    }
+  }
   fs.mkdirSync(winUnpacked, { recursive: true });
   fs.mkdirSync(resourcesDir, { recursive: true });
   fs.cpSync(electronDist, winUnpacked, { recursive: true, force: true });
