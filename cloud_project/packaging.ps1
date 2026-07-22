@@ -40,7 +40,7 @@ function Invoke-BatFile {
         $env:NO_PAUSE = '1'
     }
     try {
-        & cmd /c "$BatPath" 2>&1 | ForEach-Object {
+        & $BatPath 2>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) {
                 Write-Host $_.Exception.Message -ForegroundColor Yellow
             } else {
@@ -433,99 +433,126 @@ function Build-Desktop {
     param([switch]$SkipConfirm)
     Write-Step "打包云端桌面版 exe (Electron)"
 
-    # 打包前配置确认（Build-AllStrict/Build-All 连续流程时跳过，避免中间回车打断）
     if (-not $SkipConfirm) {
-        if (-not (Confirm-BuildConfig -Target "云端桌面版")) {
-            return 1
-        }
+        if (-not (Confirm-BuildConfig -Target "云端桌面版")) { return 1 }
     } else {
         Write-Host "  [SKIP] 跳过配置确认（连续打包模式）" -ForegroundColor Cyan
     }
 
-    Write-Host "  将执行以下步骤："
-    Write-Host "  1. 检查环境（npm）"
-    Write-Host "  2. 检查 node_modules（缺失时自动 npm ci/install）"
-    Write-Host "  3. 关闭残留进程"
-    Write-Host "  4. 清理旧构建产物"
-    Write-Host "  5. JavaScript 代码混淆"
-    Write-Host "  6. npm build 打包（含 better-sqlite3 SSL 修复）"
-    Write-Host "  7. 恢复原始代码"
-    Write-Host ""
-    Write-Host "  输出目录: cloud_desktop\dist\"
-    Write-Host ""
-    Write-Host "----------------------------------------------------------------"
-    Write-Host ""
+    $stepStart = Get-Date
+    $desktopDir = "$scriptDir\cloud_desktop"
+    $toolsDir = "$scriptDir\..\tools"
 
-    # ★ 证书存在性检查（防止证书丢失时 electron-builder 签名失败）
-    $certPath = "$scriptDir\..\tools\certs\惠康中医-codesign.pfx"
-    $pkgPath = "$scriptDir\cloud_desktop\package.json"
-    $certBackupPath = "$scriptDir\cloud_desktop\package.json.certbak"
+    $certPath = "$toolsDir\certs\惠康中医-codesign.pfx"
+    $pkgPath = "$desktopDir\package.json"
+    $certBackupPath = "$desktopDir\package.json.certbak"
     if (-not (Test-Path $certPath)) {
-        Write-Host "  [WARN] 代码签名证书未找到，将跳过签名" -ForegroundColor Yellow
-        Write-Host "         证书路径: $certPath" -ForegroundColor Yellow
-        Write-Host "         如需启用签名，请运行: powershell -File tools\gen-code-sign-cert.ps1" -ForegroundColor Yellow
-        Write-Host "         临时从 package.json 移除 certificateFile 配置..." -ForegroundColor Yellow
         Copy-Item -Path $pkgPath -Destination $certBackupPath -Force
         try {
             $pkg = Get-Content $pkgPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            if ($pkg.build.win.PSObject.Properties.Name -contains 'certificateFile') {
-                $pkg.build.win.PSObject.Properties.Remove('certificateFile')
-            }
-            if ($pkg.build.win.PSObject.Properties.Name -contains 'certificatePassword') {
-                $pkg.build.win.PSObject.Properties.Remove('certificatePassword')
-            }
+            if ($pkg.build.win.PSObject.Properties.Name -contains "certificateFile") { $pkg.build.win.PSObject.Properties.Remove("certificateFile") }
+            if ($pkg.build.win.PSObject.Properties.Name -contains "certificatePassword") { $pkg.build.win.PSObject.Properties.Remove("certificatePassword") }
             $pkg | ConvertTo-Json -Depth 10 | Set-Content $pkgPath -Encoding UTF8
-            Write-Host "  [OK] 已临时移除证书配置，构建后将恢复" -ForegroundColor Green
         } catch {
-            Write-Host "  [ERROR] 修改 package.json 失败: $($_.Exception.Message)" -ForegroundColor Red
-            if (Test-Path $certBackupPath) {
-                Copy-Item -Path $certBackupPath -Destination $pkgPath -Force
-                Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue
-            }
+            if (Test-Path $certBackupPath) { Copy-Item -Path $certBackupPath -Destination $pkgPath -Force; Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue }
             return 1
         }
     }
 
-    # P1-易用：分步耗时统计
-    $stepStart = Get-Date
-    # ★ 修复 NSIS "Error writing temporary file" 错误
-    # 原因：TRAE 沙箱阻止 NSIS 编译器写入系统 %TEMP% 目录
-    # 方案：在 PowerShell 层面将 TEMP/TMP 重定向到项目本地目录
-    $cloudTemp = "$scriptDir\cloud_desktop\tmp"
-    if (-not (Test-Path $cloudTemp)) { New-Item -ItemType Directory -Path $cloudTemp -Force | Out-Null }
-    $prevTemp = $env:TEMP
-    $prevTmp = $env:TMP
-    $env:TEMP = $cloudTemp
-    $env:TMP = $cloudTemp
-    $code = Invoke-BatFile "$scriptDir\cloud_desktop\build.bat" "桌面版打包" -NoPause
-    # 恢复原始 TEMP/TMP
-    $env:TEMP = $prevTemp
-    $env:TMP = $prevTmp
-    # 清理本地临时目录
-    if (Test-Path $cloudTemp) { Remove-Item $cloudTemp -Recurse -Force -ErrorAction SilentlyContinue }
+    Push-Location $desktopDir
+    $buildSuccess = $false
+    try {
+        Write-Host "  [1/8] Checking environment..." -ForegroundColor White
+        if (-not (Get-Command npm -ErrorAction SilentlyContinue)) { Write-Host "  [ERROR] npm not found" -ForegroundColor Red; return 1 }
+        Write-Host "        npm OK"
 
-    # ★ 构建后恢复 package.json
-    if (Test-Path $certBackupPath) {
-        Copy-Item -Path $certBackupPath -Destination $pkgPath -Force
-        Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue
-        Write-Host "  [OK] 已恢复 package.json 原始配置" -ForegroundColor Green
+        Write-Host "  [2/8] Checking node_modules..." -ForegroundColor White
+        if (-not (Test-Path "node_modules")) {
+            if (Test-Path "package-lock.json") { & npm ci --no-audit --no-fund --prefer-offline } else { & npm install --no-audit --no-fund --prefer-offline }
+            if ($LASTEXITCODE -ne 0) { Write-Host "  [ERROR] npm install failed" -ForegroundColor Red; return 1 }
+        }
+        Write-Host "        [OK]"
+
+        Write-Host "  [3/8] Closing processes..." -ForegroundColor White
+        Get-Process | Where-Object { try { $_.Path -like "*cloud_desktop*dist*" } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue
+        Write-Host "        [OK]"
+
+        Write-Host "  [4/8] Cleaning old artifacts..." -ForegroundColor White
+        if (Test-Path "dist") {
+            Remove-Item "dist" -Recurse -Force -ErrorAction SilentlyContinue
+            if (Test-Path "dist") { Rename-Item "dist" ("dist_old_" + (Get-Date -Format "yyyyMMdd_HHmmss")) -ErrorAction SilentlyContinue }
+        }
+        Write-Host "        [OK]"
+
+        Write-Host "  [5/8] Obfuscating JavaScript..." -ForegroundColor White
+        & node "$toolsDir\obfuscate.js" --target=cloud
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [ERROR] Obfuscation failed" -ForegroundColor Red
+            & node "$toolsDir\obfuscate.js" restore --target=cloud 2>&1 | Out-Null
+            return 1
+        }
+        Write-Host "        [OK]"
+
+        Write-Host "  [6/8] Preparing win-unpacked..." -ForegroundColor White
+        $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://registry.npmmirror.com/-/binary/electron-builder-binaries/"
+        $env:NODE_TLS_REJECT_UNAUTHORIZED = "0"
+        & node "$toolsDir\prepare-win-unpacked.js" $desktopDir.TrimEnd("\")
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [ERROR] prepare-win-unpacked failed" -ForegroundColor Red
+            Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
+            & node "$toolsDir\obfuscate.js" restore --target=cloud 2>&1 | Out-Null
+            return 1
+        }
+        Write-Host "        [OK]"
+
+        Write-Host "  [6.5/8] Running electron-builder --prepackaged..." -ForegroundColor White
+        $localTemp = "$desktopDir\tmp"
+        if (-not (Test-Path $localTemp)) { New-Item -ItemType Directory -Path $localTemp -Force | Out-Null }
+        $prevTemp = $env:TEMP; $prevTmp = $env:TMP
+        $env:TEMP = $localTemp; $env:TMP = $localTemp
+        try {
+            & node "node_modules\electron-builder\cli.js" --win --prepackaged dist/win-unpacked 2>&1 | ForEach-Object { Write-Host "  $_" }
+            $buildRC = $LASTEXITCODE
+        } finally {
+            Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
+            $env:TEMP = $prevTemp; $env:TMP = $prevTmp
+            if (Test-Path $localTemp) { Remove-Item $localTemp -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+
+        if ($buildRC -ne 0) {
+            Write-Host "  [WARNING] electron-builder exit code: $buildRC" -ForegroundColor Yellow
+            $exeFiles = Get-ChildItem "dist\*.exe" -ErrorAction SilentlyContinue
+            if (-not $exeFiles) {
+                Write-Host "  [ERROR] No exe files found" -ForegroundColor Red
+                & node "$toolsDir\obfuscate.js" restore --target=cloud 2>&1 | Out-Null
+                return 1
+            }
+            Write-Host "  [OK] exe files found despite exit code $buildRC" -ForegroundColor Green
+        }
+
+        Write-Host "  [7/8] Restoring original code..." -ForegroundColor White
+        & node "$toolsDir\obfuscate.js" restore --target=cloud
+        if ($LASTEXITCODE -ne 0) { Write-Host "  [ERROR] Restore failed" -ForegroundColor Red; return 1 }
+        Write-Host "        [OK]"
+
+        Write-Host "  [8/8] Verifying output..." -ForegroundColor White
+        $exeFiles = Get-ChildItem "dist\*.exe" -ErrorAction SilentlyContinue
+        if ($exeFiles) {
+            foreach ($f in $exeFiles) {
+                $sizeMB = [math]::Round($f.Length / 1MB, 2)
+                Write-Host "  [OK] $($f.Name)  $sizeMB MB" -ForegroundColor Green
+            }
+            $buildSuccess = $true
+        }
+
+        if (Test-Path $certBackupPath) { Copy-Item -Path $certBackupPath -Destination $pkgPath -Force; Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue }
+    } finally {
+        Pop-Location
     }
+
     $stepElapsed = (Get-Date) - $stepStart
-    if ($code -ne 0) {
-        Write-Host ""
-        Write-Host "================================================================" -ForegroundColor Red
-        Write-Host "  [ERROR] 桌面版打包失败！退出码: $code" -ForegroundColor Red
-        Write-Host "  耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Red
-        Write-Host "  请查看上方错误日志" -ForegroundColor Red
-        Write-Host "================================================================" -ForegroundColor Red
-        return 1
-    }
-    Write-Host ""
-    Write-Host "================================================================" -ForegroundColor Green
-    Write-Host "  桌面版打包完成！" -ForegroundColor Green
-    Write-Host "  输出目录: $scriptDir\cloud_desktop\dist\" -ForegroundColor Green
-    Write-Host "  耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Green
-    Write-Host "================================================================" -ForegroundColor Green
+    if (-not $buildSuccess) { Write-Host "  [ERROR] 桌面版打包失败！耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Red; return 1 }
+    Write-Host "  桌面版打包完成！耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Green
     return 0
 }
 
@@ -559,7 +586,18 @@ function Build-App {
     Write-Host ""
     # P1-易用：分步耗时统计
     $stepStart = Get-Date
-    $code = Invoke-BatFile "$scriptDir\build-app.bat" "APP 打包" -NoPause
+    $env:NO_PAUSE = '1'
+        try {
+            Push-Location $scriptDir
+            & "$scriptDir\build-app.bat" 2>&1 | ForEach-Object {
+                if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.Exception.Message -ForegroundColor Yellow }
+                else { Write-Host $_ }
+            }
+            $code = $LASTEXITCODE
+        } finally {
+            Pop-Location
+            Remove-Item Env:\NO_PAUSE -ErrorAction SilentlyContinue
+        }
     $stepElapsed = (Get-Date) - $stepStart
     if ($code -ne 0) {
         Write-Host ""
@@ -771,7 +809,18 @@ function Build-AllStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step C. 提取 APK 签名哈希并注入 SecurityGuard.java" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
-    $rc = Invoke-BatFile "$scriptDir\generate-sign-hash.bat" "签名哈希提取" -NoPause
+    $env:NO_PAUSE = '1'
+    try {
+        Push-Location $scriptDir
+        & "$scriptDir\generate-sign-hash.bat" 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.Exception.Message -ForegroundColor Yellow }
+            else { Write-Host $_ }
+        }
+        $rc = $LASTEXITCODE
+    } finally {
+        Pop-Location
+        Remove-Item Env:\NO_PAUSE -ErrorAction SilentlyContinue
+    }
     if ($rc -ne 0) {
         Write-Host "[ERROR] 签名哈希提取失败，终止一键打包" -ForegroundColor Red
         Write-Host "  您仍可使用 Step B 的 APK（默认模式）" -ForegroundColor Yellow
@@ -827,7 +876,18 @@ function Build-AppStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step B. 提取 APK 签名哈希并注入 SecurityGuard.java" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
-    $rc = Invoke-BatFile "$scriptDir\generate-sign-hash.bat" "签名哈希提取" -NoPause
+    $env:NO_PAUSE = '1'
+    try {
+        Push-Location $scriptDir
+        & "$scriptDir\generate-sign-hash.bat" 2>&1 | ForEach-Object {
+            if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.Exception.Message -ForegroundColor Yellow }
+            else { Write-Host $_ }
+        }
+        $rc = $LASTEXITCODE
+    } finally {
+        Pop-Location
+        Remove-Item Env:\NO_PAUSE -ErrorAction SilentlyContinue
+    }
     if ($rc -ne 0) {
         Write-Host "[ERROR] 签名哈希提取失败，终止 APP 严格模式" -ForegroundColor Red
         Write-Host "  您仍可使用 Step A 的 APK（默认模式）" -ForegroundColor Yellow

@@ -139,7 +139,7 @@ function Invoke-External {
 
     try {
         if ($PSCmdlet.ParameterSetName -eq 'FilePath') {
-            & cmd /c "$FilePath" 2>&1 | ForEach-Object {
+            & $FilePath 2>&1 | ForEach-Object {
                 if ($_ -is [System.Management.Automation.ErrorRecord]) {
                     Write-Host $_.Exception.Message -ForegroundColor Yellow
                 } else {
