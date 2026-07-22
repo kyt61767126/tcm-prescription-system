@@ -1,4 +1,4 @@
-﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-bendi/db-dingzhi）
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
@@ -205,31 +205,28 @@ function Show-Menu {
     Write-Host "  (桌面+APP 统一入口)" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
+    Write-Host "  ★ 核心打包选项:" -ForegroundColor Yellow
     Write-Host "  [1] 打包桌面版 (Electron exe)"
     Write-Host "  [2] 打包手机 APP (Android APK)"
     Write-Host "  [3] 全部打包 (桌面 + APP)"
-    Write-Host "  [4] 仅同步文件到 cloud_app"
-    Write-Host "  [5] 修改云端配置 (URL/产品名/版本号)"
-    Write-Host "  [6] 仅编码检查"
-    Write-Host "  [7] 查看当前配置"
-    Write-Host "  [8] 启用严格模式 (提取并注入哈希)"
-    Write-Host "  [9] 一键打包严格模式 (桌面+APP+哈希+重打包)"
-    Write-Host " [10] APP 严格模式 (APP+哈希+重打包，无桌面)"
+    Write-Host "  [4] 严格模式 APP (APP+签名哈希+重打包)"
+    Write-Host ""
+    Write-Host "  --- 辅助工具 ---" -ForegroundColor DarkGray
+    Write-Host "  [5] 仅同步文件到 cloud_app"
+    Write-Host "  [6] 修改云端配置 (URL/产品名/版本号)"
+    Write-Host "  [7] 仅编码检查"
+    Write-Host "  [8] 查看当前配置"
+    Write-Host "  [9] 启用严格模式 (仅提取注入哈希)"
+    Write-Host "  [s] 严格模式全套 (桌面+APP+哈希+重打包)"
+    Write-Host ""
+    Write-Host "  快捷选项:" -ForegroundColor DarkGray
+    Write-Host "    [a] 快速全部打包 (跳过编码检查)"
+    Write-Host "    [d] 快速桌面打包 (跳过编码检查)"
+    Write-Host "    [p] 快速 APP 打包 (跳过编码检查)"
+    Write-Host ""
     Write-Host "  [0] 退出"
     Write-Host ""
-    Write-Host "  快捷选项:"
-    Write-Host "    [a] 快速全部打包 (跳过编码检查)"
-    Write-Host "    [d] 仅桌面快速打包 (跳过编码检查)"
-    Write-Host "    [p] 仅 APP 快速打包 (跳过编码检查)"
-    Write-Host ""
-    Write-Host "----------------------------------------------------------------"
-    Write-Host "  防护说明："
-    Write-Host "    [2] 默认启用 Root 检测 + 调试器检测（详见 SecurityGuard.java）"
-    Write-Host "    [8] 启用严格模式后，APK 内硬编码签名哈希，任何二次打包即拒绝运行"
-    Write-Host "    [9] 自动完成：桌面+APP+哈希+重新打包"
-    Write-Host "   [10] 自动完成：APP+哈希+重新打包（无桌面）"
-    Write-Host "----------------------------------------------------------------"
-    $choice = Read-Host "请选择 [0-10]"
+    $choice = Read-Host "请选择 [0-9/a/d/p/s]"
     return $choice
 }
 
@@ -933,13 +930,13 @@ while ($true) {
         '1' { Build-Desktop | Out-Null }
         '2' { Build-App | Out-Null }
         '3' { Build-All | Out-Null }
-        '4' { Sync-FilesToCloudApp | Out-Null }
-        '5' { Edit-CloudConfig | Out-Null }
-        '6' { Invoke-EncodingCheck | Out-Null }
-        '7' { Show-Config | Out-Null }
-        '8' { Enable-StrictMode | Out-Null }
-        '9' { Build-AllStrict | Out-Null }
-        '10' { Build-AppStrict | Out-Null }
+        '4' { Build-AppStrict | Out-Null }
+        '5' { Sync-FilesToCloudApp | Out-Null }
+        '6' { Edit-CloudConfig | Out-Null }
+        '7' { Invoke-EncodingCheck | Out-Null }
+        '8' { Show-Config | Out-Null }
+        '9' { Enable-StrictMode | Out-Null }
+        's' { Build-AllStrict | Out-Null }
         # P1-易用：快捷选项 - 跳过编码检查，直接打包
         'a' {
             Write-Host "[快捷] 快速全部打包（跳过编码检查）..." -ForegroundColor Cyan
@@ -966,7 +963,7 @@ while ($true) {
         }
     }
     # P1-易用：显示本次操作总耗时
-    if ($choice -ne '0' -and $choice -ne '7') {
+    if ($choice -ne '0' -and $choice -ne '8') {
         $totalElapsed = (Get-Date) - $totalStart
         Write-Host ""
         Write-Host "  本次操作总耗时: $($totalElapsed.ToString('hh\:mm\:ss'))" -ForegroundColor DarkGray

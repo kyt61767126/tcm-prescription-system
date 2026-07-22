@@ -869,24 +869,28 @@ function Show-Menu {
     Write-Host "  (桌面+APP 统一入口)" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
+    Write-Host "  ★ 核心打包选项:" -ForegroundColor Yellow
     Write-Host "  [1] 打包桌面版 (Electron exe)"
     Write-Host "  [2] 打包手机 APP (Android APK)"
     Write-Host "  [3] 全部打包 (桌面 + APP)"
-    Write-Host "  [4] 仅同步文件到 Android"
-    Write-Host "  [5] 仅修改诊所配置"
-    Write-Host "  [6] 仅编码检查"
-    Write-Host "  [7] 查看当前配置"
-    Write-Host "  [8] 启用严格模式 (提取并注入哈希)"
-    Write-Host "  [9] 一键打包严格模式 (桌面+APP+哈希+重打包)"
-    Write-Host " [10] APP 严格模式 (APP+哈希+重打包，无桌面)"
+    Write-Host "  [4] 严格模式 APP (APP+签名哈希+重打包)"
+    Write-Host ""
+    Write-Host "  --- 辅助工具 ---" -ForegroundColor DarkGray
+    Write-Host "  [5] 仅同步文件到 Android"
+    Write-Host "  [6] 修改诊所配置"
+    Write-Host "  [7] 仅编码检查"
+    Write-Host "  [8] 查看当前配置"
+    Write-Host "  [9] 启用严格模式 (仅提取注入哈希)"
+    Write-Host "  [s] 严格模式全套 (桌面+APP+哈希+重打包)"
+    Write-Host ""
+    Write-Host "  快捷选项:" -ForegroundColor DarkGray
+    Write-Host "    [a] 快速全部打包 (跳过编码检查/配置)"
+    Write-Host "    [d] 快速桌面打包 (跳过编码检查)"
+    Write-Host "    [p] 快速 APP 打包 (跳过编码检查/配置)"
+    Write-Host ""
     Write-Host "  [0] 退出"
     Write-Host ""
-    Write-Host "  快捷选项:"
-    Write-Host "    [a] 快速全部打包 (跳过编码检查/配置编辑)"
-    Write-Host "    [d] 仅桌面快速打包 (跳过编码检查)"
-    Write-Host "    [p] 仅 APP 快速打包 (跳过编码检查/配置)"
-    Write-Host ""
-    $choice = Read-Host "  请选择 [0-10]"
+    $choice = Read-Host "  请选择 [0-9/a/d/p/s]"
     return $choice
 }
 
@@ -1235,13 +1239,13 @@ if ($Interactive) {
             '1' { Invoke-Packaging -Ver $Version -Tgt 'desktop' -SkipCfg $false -SkipEnc $false }
             '2' { Invoke-Packaging -Ver $Version -Tgt 'app' -SkipCfg $false -SkipEnc $false }
             '3' { Invoke-Packaging -Ver $Version -Tgt 'all' -SkipCfg $false -SkipEnc $false }
-            '4' { Invoke-Packaging -Ver $Version -Tgt 'sync' -SkipCfg $true -SkipEnc $true }
-            '5' { Invoke-Packaging -Ver $Version -Tgt 'config' -SkipCfg $false -SkipEnc $true }
-            '6' { Invoke-Packaging -Ver $Version -Tgt 'encoding' -SkipCfg $true -SkipEnc $false }
-            '7' { Show-CurrentConfig -Ver $Version }
-            '8' { Enable-StrictMode -Ver $Version }
-            '9' { Build-AllStrict -Ver $Version }
-            '10' { Build-AppStrict -Ver $Version }
+            '4' { Build-AppStrict -Ver $Version }
+            '5' { Invoke-Packaging -Ver $Version -Tgt 'sync' -SkipCfg $true -SkipEnc $true }
+            '6' { Invoke-Packaging -Ver $Version -Tgt 'config' -SkipCfg $false -SkipEnc $true }
+            '7' { Invoke-Packaging -Ver $Version -Tgt 'encoding' -SkipCfg $true -SkipEnc $false }
+            '8' { Show-CurrentConfig -Ver $Version }
+            '9' { Enable-StrictMode -Ver $Version }
+            's' { Build-AllStrict -Ver $Version }
             # P1-易用：快捷选项 - 跳过耗时步骤，专注打包
             'a' { Invoke-Packaging -Ver $Version -Tgt 'all' -SkipCfg $true -SkipEnc $true }
             'd' { Invoke-Packaging -Ver $Version -Tgt 'desktop' -SkipCfg $true -SkipEnc $true }
