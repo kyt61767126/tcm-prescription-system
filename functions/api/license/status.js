@@ -113,12 +113,14 @@ export async function onRequest(context) {
         }
 
         // ★ 客户端心跳检测：POST /api/license/status（无需认证）
+        // ★ 注意：Request.body 是 stream 只能读一次，必须缓存供后续管理操作复用
+        let postBody = null;
         if (method === 'POST') {
-            const body = await context.request.json().catch(() => ({}));
-            const { action, machineId } = body;
+            postBody = await context.request.json().catch(() => ({}));
+            const { action, machineId } = postBody;
 
             if (!action && machineId) {
-                return handleHeartbeat(kv, body);
+                return handleHeartbeat(kv, postBody);
             }
         }
 
@@ -143,7 +145,8 @@ export async function onRequest(context) {
 
         // ===== POST：管理操作 =====
         if (method === 'POST') {
-            const body = await context.request.json().catch(() => ({}));
+            // ★ 复用心跳检测阶段已读取的 body（Request.body 只能读一次）
+            const body = postBody || await context.request.json().catch(() => ({}));
             const { code, action } = body;
 
             if (!code || !action) {

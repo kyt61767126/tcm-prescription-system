@@ -131,6 +131,21 @@ async function main() {
             console.error('请提供激活码: node tools/verify-ecdsa.cjs --code BNZC-XXXX-XXXX-XXXX-XXXX');
             process.exit(1);
         }
+    } else if (args[0] === '--delete') {
+        // 删除测试激活码：node tools/verify-ecdsa.cjs --delete <激活码> <用户名> <密码>
+        const code = args[1], username = args[2], password = args[3];
+        if (!code || !username || !password) {
+            console.error('用法: node tools/verify-ecdsa.cjs --delete <激活码> <用户名> <密码>');
+            process.exit(1);
+        }
+        console.log('登录云端...');
+        const token = await login(username, password);
+        console.log('登录成功，删除激活码', code);
+        const r = await http('POST', '/api/license/status', { code: code, action: 'delete' }, token);
+        console.log('─'.repeat(60));
+        console.log(r.json ? JSON.stringify(r.json, null, 2) : r.text);
+        console.log('─'.repeat(60));
+        process.exit(r.json && r.json.success ? 0 : 1);
     } else if (args[0] === '--admin') {
         const username = args[1], password = args[2];
         if (!username || !password) {
