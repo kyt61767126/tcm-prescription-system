@@ -1054,7 +1054,7 @@
                 const promptMsg = lastFailMessage +
                     '\n\n请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）：\n机器ID：' + (machineId || '未知') +
                     '\n\n如有疑问请联系客服';
-                const code = prompt(promptMsg);
+                const code = await prompt(promptMsg);
 
                 if (!code || !code.trim()) {
                     // ★ 用户取消激活，不清除 __licenseActivating（兜底定时器会重新弹窗）

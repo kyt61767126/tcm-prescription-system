@@ -4339,13 +4339,13 @@ let currentUser = null;
             prescriptionNoEl.focus();
         }
 
-        function saveAsFormula() {
-            const name = prompt('请输入验方名称：');
+        async function saveAsFormula() {
+            const name = await prompt('请输入验方名称：');
             if (!name) return;
-            const code = prompt('请输入验方简码：');
+            const code = await prompt('请输入验方简码：');
             if (!code) return;
-            const effect = prompt('请输入功效：');
-            const indication = prompt('请输入主治：');
+            const effect = await prompt('请输入功效：');
+            const indication = await prompt('请输入主治：');
             const items = prescriptionItems.filter(item =>item.name);
             formulas.push({name, code, effect:effect||'', indication:indication||'', composition:items.map(i =>({name:i.name, dosage:i.dosage, price:i.price, unit:i.unit}))});
             localStorage.setItem('local_formulas', JSON.stringify(formulas));
@@ -5702,13 +5702,13 @@ let currentUser = null;
             renderFormulaList();
         }
 
-        function showAddFormulaForm() {
-            const name = prompt('请输入验方名称：');
+        async function showAddFormulaForm() {
+            const name = await prompt('请输入验方名称：');
             if (!name) return;
-            const code = prompt('请输入验方简码：');
+            const code = await prompt('请输入验方简码：');
             if (!code) return;
-            const effect = prompt('请输入功效：');
-            const indication = prompt('请输入主治：');
+            const effect = await prompt('请输入功效：');
+            const indication = await prompt('请输入主治：');
             formulas.push({name,code,effect:effect||'',indication:indication||'',composition:[]});
             localStorage.setItem('local_formulas', JSON.stringify(formulas));
             renderFormulaList();
