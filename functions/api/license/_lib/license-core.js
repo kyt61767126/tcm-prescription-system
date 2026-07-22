@@ -27,6 +27,20 @@ function getLicenseHmacKey(context) {
 
 const LICENSE_HMAC_KEY = 'bnzc_tcm_license_key_v1_2026';
 
+// ★ P1 安全分发优化：从环境变量读取 masterKey（可选）
+// 用途：写入 license.dat，客户端运行时派生 HMAC/CONFIG_SIGN 密钥，避免硬编码
+// 未配置时 license 不含 masterKey 字段，客户端 fallback 到硬编码密钥（向后兼容）
+// 配置方法：在 Cloudflare Pages 后台设置环境变量 LICENSE_MASTER_KEY（32+ 字符随机字符串）
+function getLicenseMasterKey(context) {
+    if (context && context.env && context.env.LICENSE_MASTER_KEY) {
+        return context.env.LICENSE_MASTER_KEY;
+    }
+    if (typeof process !== 'undefined' && process.env && process.env.LICENSE_MASTER_KEY) {
+        return process.env.LICENSE_MASTER_KEY;
+    }
+    return null;  // 未配置时不下发 masterKey，客户端用硬编码 fallback
+}
+
 // ★ v2: 版本类型默认配置（必须与 license-manager.js 中 LICENSE_TYPE_CONFIG 一致）
 const LICENSE_TYPE_CONFIG = {
     trial: {
@@ -293,6 +307,18 @@ async function buildLicenseData(record, options = {}) {
             }
         }
     }
+
+    // ★ P1 安全分发优化：附加 masterKey（如果云端配置了 LICENSE_MASTER_KEY）
+    // 用途：客户端运行时派生 HMAC/CONFIG_SIGN 密钥，避免硬编码
+    // 注意：masterKey 不参与签名内容（在签名计算后添加），不影响验签逻辑
+    // 未配置时不下发，客户端 fallback 到硬编码 LICENSE_HMAC_KEY（向后兼容）
+    if (options.context) {
+        const masterKey = getLicenseMasterKey(options.context);
+        if (masterKey) {
+            data.masterKey = masterKey;
+            console.log('[License] 已附加 masterKey（客户端将派生动态密钥）');
+        }
+    }
     return data;
 }
 
@@ -515,5 +541,7 @@ export {
     // ★ 任务2 新增：ECDSA P-256 非对称签名
     ecdsaSign,              // 用 ECDSA 私钥签名消息
     generateSignatureV5,    // 生成 v5 签名（ECDSA P-256）
-    getEcdsaPrivateKeyPem    // 从环境变量读取 ECDSA 私钥（PEM 格式）
+    getEcdsaPrivateKeyPem,    // 从环境变量读取 ECDSA 私钥（PEM 格式）
+    // ★ P1 安全分发优化：masterKey 下发
+    getLicenseMasterKey     // 从环境变量读取 LICENSE_MASTER_KEY（可选，未配置返回 null）
 };

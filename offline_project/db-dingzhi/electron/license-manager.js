@@ -39,6 +39,31 @@ const LASTRUN_KEY = 'bnzc_lastrun_key_v1';
 // 用于校验 config.json 中的 clinicName/doctorName 未被篡改
 const CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026';
 
+// ★ P1 安全分发优化：运行时派生 HMAC/CONFIG_SIGN 密钥（避免硬编码）
+// 机制：
+//   1. 云端配置 LICENSE_MASTER_KEY 环境变量后，新激活的 license.dat 含 masterKey 字段
+//   2. 客户端验签时从 license 数据读取 masterKey，用 HKDF 派生 HMAC 密钥
+//   3. 旧 license 无 masterKey 字段 → fallback 到硬编码 LICENSE_HMAC_KEY（向后兼容）
+// 注意：masterKey 不参与 license 签名内容（在签名计算后添加），不影响验签逻辑
+let _cachedLicenseData = null;
+function setLicenseDataContext(licenseData) {
+    _cachedLicenseData = licenseData || null;
+}
+// 从 masterKey 派生 HMAC 密钥（SHA256 派生，避免硬编码）
+function getEffectiveHmacKey() {
+    if (_cachedLicenseData && _cachedLicenseData.masterKey) {
+        return crypto.createHash('sha256').update(_cachedLicenseData.masterKey + ':license-hmac:v1').digest('hex');
+    }
+    return LICENSE_HMAC_KEY;  // fallback 到硬编码（向后兼容旧 license）
+}
+// 从 masterKey 派生 config.json 签名密钥
+function getEffectiveConfigSignKey() {
+    if (_cachedLicenseData && _cachedLicenseData.masterKey) {
+        return crypto.createHash('sha256').update(_cachedLicenseData.masterKey + ':config-sign:v1').digest('hex');
+    }
+    return CONFIG_SIGN_KEY;  // fallback 到硬编码
+}
+
 // ★ v2: 版本类型默认配置（功能差异矩阵）
 // trial: 试用版，限 30 张/月处方，无高级功能
 // personal: 个人版，无限处方，支持数据备份
@@ -460,7 +485,7 @@ function generateSignature(data) {
         String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
         Array.isArray(data.features) ? data.features.join(',') : ''
     ].join('|');
-    return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
+    return crypto.createHmac('sha256', getEffectiveHmacKey()).update(content).digest('hex');
 }
 
 // ★ v3 签名：在 v2 基础上增加 clinicName/machineId/licenseBinding 三个绑定字段
@@ -476,17 +501,20 @@ function generateSignatureV3(data) {
         data.machineId || '',
         data.licenseBinding || ''
     ].join('|');
-    return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
+    return crypto.createHmac('sha256', getEffectiveHmacKey()).update(content).digest('hex');
 }
 
 // v1 签名逻辑（向后兼容旧版 license）
 function generateSignatureV1(data) {
     const content = [data.user, data.type, data.issuedAt, data.expiresAt].join('|');
-    return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
+    return crypto.createHmac('sha256', getEffectiveHmacKey()).update(content).digest('hex');
 }
 
 function verifySignature(data) {
     if (!data.signature) return false;
+
+    // ★ P1 安全分发优化：缓存 license 数据（含 masterKey），后续 generateSignature 用派生密钥
+    setLicenseDataContext(data);
 
     // ★ 任务2 新增：v5 ECDSA 签名优先校验
     // 如果 license 包含 signatureV5 字段且配置了 ECDSA 公钥，优先用非对称验签
@@ -844,7 +872,7 @@ function verifyConfigIntegrity() {
         if (!cfg.configIssuedAt) return false;
         // 签名内容：clinicName|doctorName|edition|configIssuedAt
         const signContent = [cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '', cfg.configIssuedAt].join('|');
-        const expected = crypto.createHmac('sha256', CONFIG_SIGN_KEY).update(signContent).digest('hex');
+        const expected = crypto.createHmac('sha256', getEffectiveConfigSignKey()).update(signContent).digest('hex');
         try {
             return crypto.timingSafeEqual(Buffer.from(cfg.configSignature, 'hex'), Buffer.from(expected, 'hex'));
         } catch (e) {

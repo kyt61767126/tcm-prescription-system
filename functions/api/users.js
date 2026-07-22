@@ -765,6 +765,188 @@ export async function onRequest(context) {
             return json({ success: true, message: '密码修改成功' });
         }
 
+        // ===== P1 安全分发优化：批量导出用户 GET /users?action=export =====
+        // 用途：clinic_admin 导出本诊所用户 / platform_admin 导出指定诊所或全部诊所用户
+        // 权限：clinic_admin（仅本诊所）/ platform_admin（任意诊所或全部）
+        // 返回：不含 passwordHash/salt 的安全用户列表（CSV 友好格式）
+        if (method === 'GET' && url.searchParams.get('action') === 'export') {
+            const currentUser = await parseAuthHeader(context.request, context.env);
+            if (!currentUser || !isAdmin(currentUser)) {
+                return json({ success: false, error: '未授权：仅管理员可导出用户' }, 401, context.request);
+            }
+
+            const requestedClinicId = url.searchParams.get('clinicId');
+            const exportData = [];
+            const now = getNowISO();
+
+            if (isPlatformAdmin(currentUser)) {
+                // platform_admin：可导出任意诊所
+                if (requestedClinicId) {
+                    // 导出指定诊所
+                    const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
+                    const clinic = clinics && clinics.find(c => c.id === requestedClinicId);
+                    if (!clinic) {
+                        return json({ success: false, error: '诊所不存在' }, 404, context.request);
+                    }
+                    const users = (await kv.get(`clinic:${requestedClinicId}:users`, 'json')) || [];
+                    users.forEach(u => exportData.push({
+                        clinicId: requestedClinicId,
+                        clinicName: clinic.name,
+                        ...sanitizeUser(u, requestedClinicId, clinic.name)
+                    }));
+                } else {
+                    // 导出全部诊所用户
+                    const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+                    for (const clinic of clinics) {
+                        if (clinic.status !== 'active') continue;
+                        const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
+                        if (users && Array.isArray(users)) {
+                            users.forEach(u => exportData.push({
+                                clinicId: clinic.id,
+                                clinicName: clinic.name,
+                                ...sanitizeUser(u, clinic.id, clinic.name)
+                            }));
+                        }
+                    }
+                }
+            } else {
+                // clinic_admin：仅导出本诊所
+                const clinicId = currentUser.clinicId;
+                if (!clinicId) {
+                    return json({ success: false, error: '当前用户未绑定诊所' }, 400, context.request);
+                }
+                const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
+                const clinic = clinics && clinics.find(c => c.id === clinicId);
+                const clinicName = clinic ? clinic.name : null;
+                const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
+                users.forEach(u => exportData.push({
+                    clinicId: clinicId,
+                    clinicName: clinicName,
+                    ...sanitizeUser(u, clinicId, clinicName)
+                }));
+            }
+
+            await writeAuditLog(kv, currentUser.clinicId, currentUser.username, currentUser.role, 'export_users', `count=${exportData.length}`, context.request);
+
+            return json({
+                success: true,
+                exportedAt: now,
+                count: exportData.length,
+                data: exportData
+            }, 200, context.request);
+        }
+
+        // ===== P1 安全分发优化：批量导入用户 POST /users?action=import =====
+        // 用途：clinic_admin 批量导入本诊所用户 / platform_admin 导入到指定诊所
+        // 权限：clinic_admin（仅本诊所，不能导入 platform_admin）/ platform_admin（任意诊所）
+        // 请求体：{ clinicId?: string, users: [{ username, password, name, role, allowedMode?, cloudEnabled?, allowSavePrescription? }] }
+        // 限制：单次最多 100 条；username 重复则跳过（不覆盖）
+        if (method === 'POST' && url.searchParams.get('action') === 'import') {
+            const currentUser = await parseAuthHeader(context.request, context.env);
+            if (!currentUser || !isAdmin(currentUser)) {
+                return json({ success: false, error: '未授权：仅管理员可导入用户' }, 401, context.request);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const { users: importUsers, clinicId: requestedClinicId } = body;
+
+            if (!Array.isArray(importUsers) || importUsers.length === 0) {
+                return json({ success: false, error: '请提供要导入的用户列表' }, 400, context.request);
+            }
+            if (importUsers.length > 100) {
+                return json({ success: false, error: '单次最多导入 100 条用户，请分批导入' }, 400, context.request);
+            }
+
+            // 确定目标诊所
+            let targetClinicId;
+            if (isPlatformAdmin(currentUser)) {
+                targetClinicId = requestedClinicId;
+                if (!targetClinicId) {
+                    return json({ success: false, error: 'platform_admin 导入时必须指定 clinicId' }, 400, context.request);
+                }
+            } else {
+                // clinic_admin：仅能导入到自己的诊所
+                targetClinicId = currentUser.clinicId;
+                if (!targetClinicId) {
+                    return json({ success: false, error: '当前用户未绑定诊所' }, 400, context.request);
+                }
+            }
+
+            // 验证目标诊所存在
+            const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
+            const clinic = clinics && clinics.find(c => c.id === targetClinicId);
+            if (!clinic) {
+                return json({ success: false, error: '目标诊所不存在' }, 404, context.request);
+            }
+
+            // 参数校验 + 权限校验
+            for (const u of importUsers) {
+                if (!u.username || !u.password) {
+                    return json({ success: false, error: `用户数据不完整：username 和 password 必填` }, 400, context.request);
+                }
+                if (/[\u4e00-\u9fa5]/.test(u.username)) {
+                    return json({ success: false, error: `登录账号不能使用中文: ${u.username}` }, 400, context.request);
+                }
+                // clinic_admin 不能导入 platform_admin
+                if (!isPlatformAdmin(currentUser) && u.role === ROLE_PLATFORM_ADMIN) {
+                    return json({ success: false, error: '权限不足：不能导入平台管理员' }, 403, context.request);
+                }
+            }
+
+            // 检查用户名冲突（跨诊所 + 平台管理员）
+            const existingAdmins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+            const existingClinicUsers = (await kv.get(`clinic:${targetClinicId}:users`, 'json')) || [];
+            const allExistingUsernames = new Set([
+                ...existingAdmins.map(u => u.username),
+                ...existingClinicUsers.map(u => u.username)
+            ]);
+            // 检查所有诊所用户名冲突（用户名全局唯一）
+            for (const c of (clinics || [])) {
+                if (c.id === targetClinicId) continue;
+                const otherUsers = await kv.get(`clinic:${c.id}:users`, 'json');
+                if (otherUsers) {
+                    otherUsers.forEach(u => allExistingUsernames.add(u.username));
+                }
+            }
+
+            const skipped = [];
+            const toImport = [];
+            for (const u of importUsers) {
+                if (allExistingUsernames.has(u.username)) {
+                    skipped.push({ username: u.username, reason: '用户名已存在' });
+                } else {
+                    toImport.push(u);
+                }
+            }
+
+            // 设置默认值 + 限制 role
+            const normalizedUsers = toImport.map(u => ({
+                username: u.username,
+                name: u.name || u.username,
+                password: u.password,
+                role: u.role || ROLE_DOCTOR,  // 默认 doctor
+                allowedMode: u.allowedMode || 'both',
+                cloudEnabled: u.cloudEnabled !== undefined ? u.cloudEnabled : true,
+                allowSavePrescription: u.allowSavePrescription !== undefined ? u.allowSavePrescription : true
+            }));
+
+            // 使用 processUsersForSave 哈希密码 + 合并
+            const savedUsers = await processUsersForSave(normalizedUsers, existingClinicUsers);
+            await kv.put(`clinic:${targetClinicId}:users`, JSON.stringify(savedUsers));
+
+            await writeAuditLog(kv, targetClinicId, currentUser.username, currentUser.role, 'import_users', `clinic=${clinic.name}, imported=${normalizedUsers.length}, skipped=${skipped.length}`, context.request);
+
+            return json({
+                success: true,
+                message: `导入完成：成功 ${normalizedUsers.length} 条，跳过 ${skipped.length} 条`,
+                imported: normalizedUsers.length,
+                skipped: skipped.length,
+                skippedDetails: skipped,
+                clinicId: targetClinicId,
+                clinicName: clinic.name
+            }, 200, context.request);
+        }
+
         return json({ success: false, error: 'Method not allowed' }, 405);
 
     } catch (error) {
