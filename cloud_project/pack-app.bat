@@ -10,7 +10,7 @@ set "PACK_PS1=%~dp0packaging.ps1"
 if not exist "%PACK_PS1%" (
     echo [ERROR] packaging.ps1 not found
     echo   Path: %PACK_PS1%
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -18,7 +18,7 @@ where node >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Node.js not found
     echo   Please install from https://nodejs.org/
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -37,4 +37,4 @@ if %EXIT_CODE% neq 0 (
     echo [OK] 手机APP打包完成！
 )
 echo.
-pause
+if not defined NO_PAUSE pause

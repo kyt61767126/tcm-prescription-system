@@ -1,9 +1,10 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Huikang TCM Personal - Offline Desktop Build
 
-REM ��¼�����ʼʱ�䣨���ں�ʱͳ�ƣ�- ʹ�� PowerShell ��� wmic��Windows 11 �����ã�
+REM 记录开始时间（用于耗时统计）- 使用 PowerShell 替代 wmic（Windows 11 已弃用）
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "BUILD_START_STAMP=%%t"
 
@@ -24,13 +25,12 @@ echo       npm OK
 echo.
 
 echo [2/7] Closing remaining processes...
-REM P0-�Ż�����ȷƥ����Ŀ��ؽ��̣�������ɱ���� Electron Ӧ�ã��� VSCode��Slack �ȣ�
+REM P0-优化：精确匹配项目相关进程，避免误杀其他 Electron 应用（如 VSCode、Slack 等）
 taskkill /F /IM "app-personal.exe" >nul 2>&1
-taskkill /F /IM "�ݿ���ҽ����.exe" >nul 2>&1
-REM P0-�Ż����滻 wmic��Windows 11 ������������Ϊ PowerShell Get-Process����ȷ·��ƥ�䣩
+taskkill /F /IM "惠康中医个人.exe" >nul 2>&1
+REM P0-优化：替换 wmic（Windows 11 已弃用），改为 PowerShell Get-Process（基于路径精确匹配）
 powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-geren*dist*' -or $_.Path -like '*db-geren*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 echo [OK] Processes cleaned
-ping -n 3 127.0.0.1 >nul 2>nul
 echo.
 
 echo [3/7] Configuring clinic info...
@@ -59,7 +59,7 @@ if exist "%OUTPUT_DIR%" (
         powershell -ExecutionPolicy Bypass -Command "try { [System.IO.Directory]::Delete('%CD%\%OUTPUT_DIR%', $true) } catch { Write-Host '[WARNING] PowerShell delete also failed' }" 2>nul
     )
     if exist "%OUTPUT_DIR%" (
-        REM P0-�Ż����滻 wmic�������ã�Ϊ PowerShell Get-Date ����ʱ���
+        REM P0-优化：替换 wmic 已弃用，改为 PowerShell Get-Date 生成时间戳
         for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "DSTAMP=%%t"
         echo [WARNING] Could not delete %OUTPUT_DIR%, renaming to dist_old_!DSTAMP!...
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
@@ -90,8 +90,8 @@ echo.
 echo [6/7] Running build...
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
-REM better-sqlite3 prebuild-install �� GitHub Releases ����Ԥ���������ʱ SSL ֤����֤ʧ��
-REM ��ʱ�ر� TLS ��֤���������ڼ䣩��ȷ�� prebuild-install �ܳɹ����� electron ABI ������
+REM better-sqlite3 prebuild-install 从 GitHub Releases 下载预编译包，有时 SSL 证书验证失败
+REM 临时关闭 TLS 证书验证（仅构建期间），确保 prebuild-install 成功下载匹配 electron ABI 的包
 REM P1-安全加固: 证书密码从本地gitignore文件读取，避免硬编码泄露
 if exist "%~dp0..\..\tools\certs\cert-password.txt" (
     for /f "delims=" %%p in (%~dp0..\..\tools\certs\cert-password.txt) do set "CSC_KEY_PASSWORD=%%p"
@@ -101,7 +101,7 @@ if exist "%~dp0..\..\tools\certs\cert-password.txt" (
 set NODE_TLS_REJECT_UNAUTHORIZED=0
 call npm run build
 set "BUILD_RC=%errorlevel%"
-REM P1-��ȫ��������� TLS ��ʱ������������Ⱦ���������
+REM P1-安全加固：清理 TLS 临时关闭，防止污染开发环境
 set NODE_TLS_REJECT_UNAUTHORIZED=
 if not "%BUILD_RC%"=="0" (
     echo.
@@ -124,7 +124,7 @@ if errorlevel 1 (
 echo [OK] Original code restored
 echo.
 
-REM P1-���ã���֤��������ҷǿ�
+REM P1-增强：验证产物存在且非空
 set "EXE_FILE="
 for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
 if not "%EXE_FILE%"=="" (
@@ -141,7 +141,7 @@ if exist "dist_old_*" (
     echo [NOTE] Old build artifacts saved as dist_old_* directories
     echo        These will be auto-cleaned in future builds (keeping latest 2)
 )
-REM P1-���ã���ʾ����ܺ�ʱ
+REM P1-增强：显示打包耗时
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 echo Start: %BUILD_START_TIME%
 echo End:   %BUILD_END_TIME%

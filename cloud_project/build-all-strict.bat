@@ -168,5 +168,5 @@ echo   Desktop dir: %~dp0cloud_desktop\dist\
 echo   APK dir: %~dp0
 echo ============================================
 echo.
-pause
+if not defined NO_PAUSE pause
 exit /b %TOTAL_RC%

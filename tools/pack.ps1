@@ -404,7 +404,7 @@ function Edit-ClinicConfig {
         Write-Host ""
         Write-Host "  [错误] 配置更新失败: $_" -ForegroundColor Red
         Write-Host "  请检查错误信息后重试" -ForegroundColor Yellow
-        pause
+        if (-not $env:NO_PAUSE) { pause }
         return
     }
 

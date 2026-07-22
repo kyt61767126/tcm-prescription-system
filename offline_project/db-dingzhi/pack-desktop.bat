@@ -7,13 +7,13 @@ REM pack-desktop.bat - 桌面版打包入口（Electron exe）
 set "PACK_PS1=%~dp0..\..\tools\pack.ps1"
 if not exist "%PACK_PS1%" (
     echo [ERROR] pack.ps1 not found
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 where node >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Node.js not found
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo ============================================

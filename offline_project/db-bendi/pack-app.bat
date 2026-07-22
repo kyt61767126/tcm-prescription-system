@@ -7,13 +7,13 @@ REM pack-app.bat - APP打包入口（Android APK）
 set "PACK_PS1=%~dp0..\..\tools\pack.ps1"
 if not exist "%PACK_PS1%" (
     echo [ERROR] pack.ps1 not found
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 where node >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Node.js not found
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 echo ============================================
@@ -29,4 +29,4 @@ if %EXIT_CODE% neq 0 (
     echo [OK] 手机APP打包完成！
 )
 echo.
-pause
+if not defined NO_PAUSE pause

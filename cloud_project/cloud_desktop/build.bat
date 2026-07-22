@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Huikang TCM Cloud - Desktop Build
@@ -67,7 +68,6 @@ taskkill /F /IM "HuikangTCM*.exe" >nul 2>&1
 taskkill /F /IM "Huikang*.exe" >nul 2>&1
 powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*cloud_desktop*dist*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 echo [OK] Processes cleaned
-ping -n 3 127.0.0.1 >nul 2>nul
 echo.
 
 echo [4/8] Cleaning old build artifacts...
