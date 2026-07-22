@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Huikang TCM Personal - Offline Desktop Build
 
-REM ¼ÇÂ¼´ò°ü¿ªÊ¼Ê±¼ä£¨ÓÃÓÚºÄÊ±Í³¼Æ£©- Ê¹ÓÃ PowerShell Ìæ´ú wmic£¨Windows 11 ÒÑÆúÓÃ£©
+REM ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½Ê¼Ê±ï¿½ä£¨ï¿½ï¿½ï¿½Úºï¿½Ê±Í³ï¿½Æ£ï¿½- Ê¹ï¿½ï¿½ PowerShell ï¿½ï¿½ï¿½ wmicï¿½ï¿½Windows 11 ï¿½ï¿½ï¿½ï¿½ï¿½Ã£ï¿½
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "BUILD_START_STAMP=%%t"
 
@@ -24,10 +24,10 @@ echo       npm OK
 echo.
 
 echo [2/7] Closing remaining processes...
-REM P0-ÓÅ»¯£º¾«È·Æ¥ÅäÏîÄ¿Ïà¹Ø½ø³Ì£¬±ÜÃâÎóÉ±ÆäËû Electron Ó¦ÓÃ£¨Èç VSCode¡¢Slack µÈ£©
+REM P0-ï¿½Å»ï¿½ï¿½ï¿½ï¿½ï¿½È·Æ¥ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½Ø½ï¿½ï¿½Ì£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É±ï¿½ï¿½ï¿½ï¿½ Electron Ó¦ï¿½Ã£ï¿½ï¿½ï¿½ VSCodeï¿½ï¿½Slack ï¿½È£ï¿½
 taskkill /F /IM "app-personal.exe" >nul 2>&1
-taskkill /F /IM "»İ¿µÖĞÒ½±¾µØ.exe" >nul 2>&1
-REM P0-ÓÅ»¯£ºÌæ»» wmic£¨Windows 11 ÒÑÆúÓÃÇÒÂı£©Îª PowerShell Get-Process£¨¾«È·Â·¾¶Æ¥Åä£©
+taskkill /F /IM "ï¿½İ¿ï¿½ï¿½ï¿½Ò½ï¿½ï¿½ï¿½ï¿½.exe" >nul 2>&1
+REM P0-ï¿½Å»ï¿½ï¿½ï¿½ï¿½æ»» wmicï¿½ï¿½Windows 11 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îª PowerShell Get-Processï¿½ï¿½ï¿½ï¿½È·Â·ï¿½ï¿½Æ¥ï¿½ä£©
 powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-geren*dist*' -or $_.Path -like '*db-geren*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 echo [OK] Processes cleaned
 ping -n 3 127.0.0.1 >nul 2>nul
@@ -59,7 +59,7 @@ if exist "%OUTPUT_DIR%" (
         powershell -ExecutionPolicy Bypass -Command "try { [System.IO.Directory]::Delete('%CD%\%OUTPUT_DIR%', $true) } catch { Write-Host '[WARNING] PowerShell delete also failed' }" 2>nul
     )
     if exist "%OUTPUT_DIR%" (
-        REM P0-ÓÅ»¯£ºÌæ»» wmic£¨ÒÑÆúÓÃ£©Îª PowerShell Get-Date Éú³ÉÊ±¼ä´Á
+        REM P0-ï¿½Å»ï¿½ï¿½ï¿½ï¿½æ»» wmicï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã£ï¿½Îª PowerShell Get-Date ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½
         for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "DSTAMP=%%t"
         echo [WARNING] Could not delete %OUTPUT_DIR%, renaming to dist_old_!DSTAMP!...
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
@@ -90,12 +90,18 @@ echo.
 echo [6/7] Running build...
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
-REM better-sqlite3 prebuild-install ´Ó GitHub Releases ÏÂÔØÔ¤±àÒë¶ş½øÖÆÊ± SSL Ö¤ÊéÑéÖ¤Ê§°Ü
-REM ÁÙÊ±¹Ø±Õ TLS ÑéÖ¤£¨½ö¹¹½¨ÆÚ¼ä£©£¬È·±£ prebuild-install ÄÜ³É¹¦ÏÂÔØ electron ABI ¶ş½øÖÆ
+REM better-sqlite3 prebuild-install ï¿½ï¿½ GitHub Releases ï¿½ï¿½ï¿½ï¿½Ô¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê± SSL Ö¤ï¿½ï¿½ï¿½ï¿½Ö¤Ê§ï¿½ï¿½
+REM ï¿½ï¿½Ê±ï¿½Ø±ï¿½ TLS ï¿½ï¿½Ö¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ú¼ä£©ï¿½ï¿½È·ï¿½ï¿½ prebuild-install ï¿½Ü³É¹ï¿½ï¿½ï¿½ï¿½ï¿½ electron ABI ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+REM P1-å®‰å…¨åŠ å›º: è¯ä¹¦å¯†ç ä»æœ¬åœ°gitignoreæ–‡ä»¶è¯»å–ï¼Œé¿å…ç¡¬ç¼–ç æ³„éœ²
+if exist "%~dp0..\..\tools\certs\cert-password.txt" (
+    for /f "delims=" %%p in (%~dp0..\..\tools\certs\cert-password.txt) do set "CSC_KEY_PASSWORD=%%p"
+) else (
+    echo [WARN] cert-password.txt not found, code signing may be skipped
+)
 set NODE_TLS_REJECT_UNAUTHORIZED=0
 call npm run build
 set "BUILD_RC=%errorlevel%"
-REM P1-°²È«£ºÁ¢¼´Çå³ı TLS ÁÙÊ±±äÁ¿£¬±ÜÃâÎÛÈ¾ºóĞøÃüÁî»·¾³
+REM P1-ï¿½ï¿½È«ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ TLS ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¾ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½î»·ï¿½ï¿½
 set NODE_TLS_REJECT_UNAUTHORIZED=
 if not "%BUILD_RC%"=="0" (
     echo.
@@ -118,7 +124,7 @@ if errorlevel 1 (
 echo [OK] Original code restored
 echo.
 
-REM P1-Ò×ÓÃ£ºÑéÖ¤²úÎï´æÔÚÇÒ·Ç¿Õ
+REM P1-ï¿½ï¿½ï¿½Ã£ï¿½ï¿½ï¿½Ö¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò·Ç¿ï¿½
 set "EXE_FILE="
 for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
 if not "%EXE_FILE%"=="" (
@@ -135,7 +141,7 @@ if exist "dist_old_*" (
     echo [NOTE] Old build artifacts saved as dist_old_* directories
     echo        These will be auto-cleaned in future builds (keeping latest 2)
 )
-REM P1-Ò×ÓÃ£ºÏÔÊ¾´ò°ü×ÜºÄÊ±
+REM P1-ï¿½ï¿½ï¿½Ã£ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½Üºï¿½Ê±
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 echo Start: %BUILD_START_TIME%
 echo End:   %BUILD_END_TIME%

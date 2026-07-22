@@ -45,7 +45,6 @@
       ],
       "publisherName": "本能堂中医诊所",
       "certificateFile": "../../tools/certs/惠康中医-codesign.pfx",
-      "certificatePassword": "bnzc2026",
       "signingHashAlgorithms": ["sha256"],
       "rfc3161TimeStampServer": "http://timestamp.digicert.com"
     },

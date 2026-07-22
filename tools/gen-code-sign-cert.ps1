@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  gen-code-sign-cert.ps1 — 生成 Windows 代码签名自签证书（任务3）
 #
 #  用途：
@@ -20,10 +20,19 @@
 #    tools\certs\惠康中医-codesign.cer       (证书公钥，可分发给用户)
 #
 #  密码：
-#    默认 "bnzc2026"（可在脚本下方 $CertPassword 修改）
+#    从 tools/certs/cert-password.txt 读取（该文件已被 .gitignore 排除，不会入库）
+#    若文件不存在，则交互式输入
 # ============================================================================
 
-$CertPassword = 'bnzc2026'  # ★ 修改此密码后需同步更新 4 端 package.json
+# P1-安全加固: 证书密码从本地 cert-password.txt 读取，避免硬编码泄露
+$CertPasswordFile = Join-Path $PSScriptRoot 'certs\cert-password.txt'
+if (Test-Path $CertPasswordFile) {
+    $CertPassword = (Get-Content $CertPasswordFile -Raw).Trim()
+} else {
+    Write-Host "⚠️  cert-password.txt 未找到，请输入证书密码：" -ForegroundColor Yellow
+    $securePwd = Read-Host -AsSecureString
+    $CertPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($securePwd))
+}
 $CertSubject = 'CN=惠康中医软件, O=本能堂中医诊所, C=CN'
 $CertName = '惠康中医-代码签名证书'
 $PfxPath = Join-Path $PSScriptRoot 'certs\惠康中医-codesign.pfx'
@@ -132,10 +141,11 @@ Get-ChildItem $CertDir | ForEach-Object {
     Write-Host "  $($_.Name)  ($size)"
 }
 Write-Host ""
-Write-Host "【密码】 $CertPassword  ★请妥善保管，泄露后需重新生成"
+Write-Host "【密码】 已保存在 cert-password.txt（gitignore 排除，不会入库）"
 Write-Host ""
 Write-Host "【下一步操作】"
-Write-Host "1) 检查 4 端 package.json 是否已配置 win.certificateFile + win.certificatePassword"
+Write-Host "1) 检查 4 端 package.json 是否已配置 win.certificateFile"
+Write-Host "   证书密码通过 cert-password.txt + CSC_KEY_PASSWORD 环境变量自动注入"
 Write-Host "   - cloud_project/cloud_desktop/package.json"
 Write-Host "   - offline_project/db-bendi/package.json"
 Write-Host "   - offline_project/db-geren/package.json"

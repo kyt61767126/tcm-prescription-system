@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -598,6 +598,15 @@ function Build-Desktop {
             }
             return 1
         }
+    }
+
+    # ★ P1-安全加固: 证书密码从本地 cert-password.txt 读取
+    $certPwdFile = "$script:ProjectRoot\tools\certs\cert-password.txt"
+    if (Test-Path $certPwdFile) {
+        $env:CSC_KEY_PASSWORD = (Get-Content $certPwdFile -Raw).Trim()
+        Write-Host "  [OK] 证书密码已从 cert-password.txt 加载" -ForegroundColor Green
+    } else {
+        Write-Host "  [WARN] cert-password.txt 未找到，代码签名可能被跳过" -ForegroundColor Yellow
     }
 
     # ★ 修复：使用 --prepackaged 模式，跳过 app-builder.exe 解包步骤

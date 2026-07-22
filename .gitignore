@@ -59,6 +59,7 @@ _apk_verify/
 *.pfx
 signing.properties
 **/signing.properties
+**/cert-password.txt
 
 # Capacitor / Android 构建产物（覆盖根目录和子项目）
 android/app/build/

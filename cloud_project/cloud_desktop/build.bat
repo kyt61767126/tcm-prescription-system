@@ -115,6 +115,12 @@ echo [OK] win-unpacked prepared
 echo.
 
 echo [6.5/8] Running electron-builder --prepackaged...
+REM P1-安全加固: 证书密码从本地gitignore文件读取，避免硬编码泄露
+if exist "%~dp0..\..\tools\certs\cert-password.txt" (
+    for /f "delims=" %%p in (%~dp0..\..\tools\certs\cert-password.txt) do set "CSC_KEY_PASSWORD=%%p"
+) else (
+    echo [WARN] cert-password.txt not found, code signing may be skipped
+)
 set "PREV_TEMP=%TEMP%"
 set "PREV_TMP=%TMP%"
 if not exist "tmp" mkdir tmp
