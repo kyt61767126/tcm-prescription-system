@@ -33,6 +33,9 @@ tasks.whenTaskAdded { task ->
     }
 }
 
+// 构建时间戳（北京时间），用于 versionName 标识每次打包版本
+def BUILD_TIME = new Date().format('yyyyMMdd-HHmm', TimeZone.getTimeZone('Asia/Shanghai'))
+
 android {
     namespace = "com.benneng.pres"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -55,7 +58,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 20
-        versionName "1.0"
+        versionName "1.0.${BUILD_TIME}"
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.map'
         }

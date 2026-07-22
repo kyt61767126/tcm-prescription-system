@@ -1,8 +1,7 @@
 @echo off
 chcp 65001 >nul
-title Generate Sign Hash - Enable Strict Mode
+title Generate Sign Hash - Personal (Strict Mode)
 cd /d "%~dp0"
-powershell -ExecutionPolicy Bypass -File "%~dp0generate-sign-hash.ps1"
-
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\generate-sign-hash.ps1" -Version geren
 echo.
 if not defined NO_PAUSE pause

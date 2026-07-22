@@ -1,23 +1,54 @@
-# generate-sign-hash.ps1 - 从 APK 提取签名哈希，注入到 LicenseManager.java
-# 启用签名严格模式：APP 启动时与硬编码哈希严格比对，任何二次打包都会被拒绝
+﻿# generate-sign-hash.ps1 - Unified APK signature hash extraction and injection tool
+# Extracts SHA-256 from APK and injects into LicenseManager.java (offline) or SecurityGuard.java (cloud)
+# Enables strict signature mode: APP rejects any repackaged APK with mismatched signature
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
-$scriptDir = $PSScriptRoot
+
+param(
+    [Parameter(Mandatory=$true)]
+    [ValidateSet('cloud','bendi','dingzhi','geren')]
+    [string]$Version
+)
+
+$rootDir = $PSScriptRoot | Split-Path -Parent  # project root: d:\trae_projects\kyt-zy
+
+# Decide project directory, target file, and placeholder based on Version
+$verLabel = switch ($Version) {
+    'cloud'   { '云端' }
+    'bendi'   { '本地' }
+    'dingzhi' { '定制' }
+    'geren'   { '个人' }
+    default   { $Version }
+}
+
+if ($Version -eq 'cloud') {
+    $projectDir = Join-Path $rootDir "cloud_project"
+    $guardFileName = 'SecurityGuard.java'
+    $guardSearchPath = Join-Path $projectDir "cloud_app\app\src\main\java\com\tcm\prescription"
+    $placeholder = 'EXPECTED_SIGN_HASH'
+    $useRecurse = $true
+} else {
+    $projectDir = Join-Path $rootDir "offline_project\db-$Version"
+    $guardFileName = 'LicenseManager.java'
+    $guardSearchPath = Join-Path $projectDir "android\app\src\main\java\com\benneng\pres"
+    $placeholder = 'EXPECTED_APK_SIGNATURE_SHA256'
+    $useRecurse = $false
+}
 
 Write-Host ""
 Write-Host "================================================================"
-Write-Host "  签名哈希生成工具（启用签名严格模式）"
+Write-Host "  签名哈希生成工具（$verLabel 版 - 启用签名严格模式）"
 Write-Host "================================================================"
 Write-Host ""
 
 # ------------------------------------------------------------
-# [1/4] 查找最新的 APK 文件
+# [1/4] Find the latest APK file
 # ------------------------------------------------------------
 Write-Host "[1/4] 查找 APK 文件..."
-$apkFiles = Get-ChildItem -Path $scriptDir -Filter "*.apk" -File -ErrorAction SilentlyContinue |
+$apkFiles = Get-ChildItem -Path $projectDir -Filter "*.apk" -File -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending
 if (-not $apkFiles -or $apkFiles.Count -eq 0) {
-    Write-Host "  [错误] 当前目录下未找到 APK 文件"
+    Write-Host "  [错误] 未找到 APK 文件: $projectDir"
     Write-Host "  请先运行打包工具生成 APK 后再使用本工具"
     exit 1
 }
@@ -28,7 +59,7 @@ Write-Host "  路径: $($apkFile.FullName)"
 Write-Host ""
 
 # ------------------------------------------------------------
-# [2/4] 用 keytool 读取签名 SHA-256
+# [2/4] Read APK signature SHA-256 via keytool
 # ------------------------------------------------------------
 Write-Host "[2/4] 读取 APK 签名 SHA-256..."
 
@@ -79,14 +110,23 @@ Write-Host "  [OK] 签名 SHA-256: $signSha256"
 Write-Host ""
 
 # ------------------------------------------------------------
-# [3/4] 注入哈希到 LicenseManager.java
+# [3/4] Inject hash into target Java file
 # ------------------------------------------------------------
-Write-Host "[3/4] 注入哈希到 LicenseManager.java..."
+Write-Host "[3/4] 注入哈希到 $guardFileName..."
 
-$guardFiles = Get-ChildItem -Path "$scriptDir\android\app\src\main\java\com\benneng\pres" -Filter "LicenseManager.java" -ErrorAction SilentlyContinue
+if ($useRecurse) {
+    $guardFiles = Get-ChildItem -Path $projectDir -Recurse -Filter $guardFileName -ErrorAction SilentlyContinue
+} else {
+    $guardFiles = Get-ChildItem -Path $guardSearchPath -Filter $guardFileName -ErrorAction SilentlyContinue
+}
 if (-not $guardFiles -or $guardFiles.Count -eq 0) {
-    Write-Host "  [错误] 未找到 LicenseManager.java"
+    Write-Host "  [错误] 未找到 $guardFileName"
+    Write-Host "  搜索路径: $guardSearchPath"
     exit 1
+}
+if ($guardFiles.Count -gt 1) {
+    Write-Host "  [警告] 找到 $($guardFiles.Count) 个 $guardFileName，将注入第一个"
+    $guardFiles | ForEach-Object { Write-Host "    - $($_.FullName)" }
 }
 $guardFile = $guardFiles[0]
 Write-Host "  目标文件: $($guardFile.FullName)"
@@ -94,20 +134,19 @@ Write-Host "  目标文件: $($guardFile.FullName)"
 $content = Get-Content $guardFile.FullName -Raw -Encoding UTF8
 $updated = $false
 
-# 替换 EXPECTED_APK_SIGNATURE_SHA256（支持已填值或为空）
-$signPattern = 'private static final String EXPECTED_APK_SIGNATURE_SHA256 = "[^"]*";'
-$signReplacement = 'private static final String EXPECTED_APK_SIGNATURE_SHA256 = "' + $signSha256 + '";'
+$signPattern = 'private static final String ' + $placeholder + ' = "[^"]*";'
+$signReplacement = 'private static final String ' + $placeholder + ' = "' + $signSha256 + '";'
 if ($content -match $signPattern) {
     $newContent = $content -replace $signPattern, $signReplacement
     if ($newContent -ne $content) {
         $content = $newContent
         $updated = $true
-        Write-Host "  [OK] EXPECTED_APK_SIGNATURE_SHA256 = $signSha256"
+        Write-Host "  [OK] $placeholder = $signSha256"
     } else {
         Write-Host "  [警告] 哈希已与当前值一致，无需更新"
     }
 } else {
-    Write-Host "  [警告] 未找到 EXPECTED_APK_SIGNATURE_SHA256 占位符（可能已被修改过格式）"
+    Write-Host "  [警告] 未找到 $placeholder 占位符（可能已被修改过格式）"
 }
 
 if ($updated) {
@@ -118,19 +157,16 @@ if ($updated) {
 Write-Host ""
 
 # ------------------------------------------------------------
-# [4/4] 完成提示
+# [4/4] Done
 # ------------------------------------------------------------
 Write-Host "[4/4] 完成"
 Write-Host ""
 Write-Host "================================================================"
-Write-Host "  签名严格模式哈希已注入成功！"
+Write-Host "  $verLabel 版签名严格模式已启用！"
 Write-Host "================================================================"
 Write-Host ""
 Write-Host "  签名 SHA-256: $signSha256"
 Write-Host ""
-# NO_PAUSE 已设置（被 Build-AllStrict/Build-All 调用）：不显示下一步提示和回车
-# 因为后续会自动执行 Step D 重新打包 APK，无需用户手动操作
-# NO_PAUSE 未设置（用户单独运行）：显示完整提示，用户需手动重新打包
 if (-not $env:NO_PAUSE) {
     Write-Host "  下一步："
     Write-Host "  1. 重新打包 APK（运行 pack-app.bat 或 pack-app-strict.bat）"

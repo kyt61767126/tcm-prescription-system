@@ -56,7 +56,7 @@ function Build-Cloud {
     if ($Target -eq "all" -or $Target -eq "desktop") {
         Write-Host ""
         Write-Host "[Step 1/2] 打包云端桌面 exe..." -ForegroundColor Yellow
-        $rc = Invoke-BatFile "$script:RootDir\cloud_project\cloud_desktop\build.bat" "$script:RootDir\cloud_project\cloud_desktop" "cloud desktop build"
+        $rc = Invoke-BatFile "$script:RootDir\cloud_project\pack-desktop.bat" "$script:RootDir\cloud_project" "cloud desktop build"
         if ($rc -ne 0) {
             Write-Host ""
             Write-Host "[ERROR] 云端桌面打包失败，退出码: $rc" -ForegroundColor Red
@@ -142,7 +142,7 @@ function Build-Offline {
         } else {
             Write-Host "[Step 1/1] 打包离线$verLabel 桌面 exe..." -ForegroundColor Yellow
         }
-        $rc = Invoke-BatFile "$verDir\build.bat" $verDir "offline $verLabel desktop build"
+        $rc = Invoke-BatFile "$verDir\pack-desktop.bat" $verDir "offline $verLabel desktop build"
         if ($rc -ne 0) {
             Write-Host ""
             Write-Host "[ERROR] 离线$verLabel 桌面打包失败，退出码: $rc" -ForegroundColor Red

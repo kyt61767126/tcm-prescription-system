@@ -29,4 +29,4 @@ if %EXIT_CODE% neq 0 (
     echo [OK] 桌面版打包完成！
 )
 echo.
-pause
+if not defined NO_PAUSE pause
