@@ -390,8 +390,16 @@ function createLoginWindow() {
 app.whenReady().then(async () => {
     // ★ License 授权校验（启动时校验，未授权或过期则弹双按钮：前往激活/退出软件）
     // ★ v3 新增：传入 localMachineId 用于三因子绑定校验（clinicName + machineId）
-    const localMachineId = activateManager.getMachineId();
-    const licenseResult = licenseManager.validateLicense({ localMachineId });
+    // ★ 安全兜底：validateLicense 异常时默认放行进入试用模式，避免阻塞用户正常操作
+    let localMachineId = '';
+    let licenseResult;
+    try {
+        localMachineId = activateManager.getMachineId();
+        licenseResult = licenseManager.validateLicense({ localMachineId });
+    } catch (e) {
+        console.error('[License] validateLicense exception, fallback to trial:', e.message);
+        licenseResult = { valid: true, type: 'trial', message: '校验异常，进入试用模式' };
+    }
     console.log('[License]', licenseResult.type, licenseResult.message);
     if (!licenseResult.valid) {
         // ★ 启动时 license 失效：弹双按钮到期提示（前往激活/退出软件）

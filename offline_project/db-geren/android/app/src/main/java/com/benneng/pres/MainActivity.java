@@ -70,6 +70,7 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQ_CAMERA = 1003;
 
     private WebView webView;
+    private FrameLayout container;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private ValueCallback<Uri[]> filePathCallback;
     private static final int REQ_FILE_CHOOSER = 1002;
@@ -118,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
         // 方案：用 FrameLayout 包裹 WebView，在 FrameLayout 上设置 padding，
         // WebView MATCH_PARENT 填充 FrameLayout 的内容区域（不含 padding）。
         // 这是 View 层面的 padding，与 edge-to-edge / fitsSystemWindows 无关，100% 可靠。
-        final FrameLayout container = new FrameLayout(this);
+        container = new FrameLayout(this);
         int statusBarHeight = getStatusBarHeight();
         container.setPadding(0, statusBarHeight, 0, 0);
         container.setLayoutParams(new FrameLayout.LayoutParams(
@@ -142,7 +143,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(container);
         // ★ 主动触发 insets 分发
         ViewCompat.requestApplyInsets(container);
-        getWindow().setBackgroundDrawable(null);
         configureWebView();
 
         // ★ 初始化 License 管理器（APP 端授权校验）
@@ -173,7 +173,7 @@ public class MainActivity extends AppCompatActivity {
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (webView != null) {
-            ViewCompat.requestApplyInsets(webView);
+            ViewCompat.requestApplyInsets(container);
         }
     }
 
