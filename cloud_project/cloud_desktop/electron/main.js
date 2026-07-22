@@ -757,8 +757,12 @@ ipcMain.on('dialog:confirm-sync', (event, message) => {
 // 问题：Electron 中 window.prompt() 默认返回 null，导致 handleEditUser 等函数静默失败
 // 方案：创建模态子窗口（prompt-modal.html），返回 Promise<string|null>
 // 兼容：业务代码需用 `await prompt(...)`，preload.js 已暴露 electronAPI.prompt
-const PROMPT_HTML_PATH = path.resolve(__dirname, '../../../tools/prompt-modal.html');
-const PROMPT_PRELOAD_PATH = path.resolve(__dirname, '../../../tools/prompt-preload.js');
+// ★ P0 修复：prompt-modal 资源路径
+// 打包后 prompt-modal.html / prompt-preload.js 必须在 asar 内可访问
+// 原路径 '../../../tools/' 指向 asar 外不存在的目录，导致 loadURL 失败、await prompt 挂起（点击编辑无反应）
+// 修复：文件复制到 electron/ 目录（已在 package.json build.files 的 electron/**/* 中），路径用 __dirname
+const PROMPT_HTML_PATH = path.join(__dirname, 'prompt-modal.html');
+const PROMPT_PRELOAD_PATH = path.join(__dirname, 'prompt-preload.js');
 
 ipcMain.handle('dialog:prompt', async (event, message, defaultValue) => {
     const parentWin = BrowserWindow.fromWebContents(event.sender) || mainWindow;
