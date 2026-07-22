@@ -95,7 +95,7 @@ public class LicenseManager {
     // ★ APK 签名校验（防反编译重打包）
     // 留空则不校验；填入发布签名的 SHA-256 指纹（小写无冒号）后启用
     // 获取方式：keytool -printcert -jarfile your.apk （取 SHA256: 后的值，去冒号转小写）
-    private static final String EXPECTED_APK_SIGNATURE_SHA256 = "";
+    private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b71e8d3c1643dfa68deb2c2a3ed385e27779a4601b7b54e";
 
     // ★ 安全检测开关（root/debugger 检测）
     private static final boolean ENABLE_ROOT_CHECK = true;
