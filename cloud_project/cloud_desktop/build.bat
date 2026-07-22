@@ -28,9 +28,13 @@ if not exist "node_modules" (
     if exist "package-lock.json" (
         echo       Running npm ci ^(faster, deterministic^)...
         call npm ci --no-audit --no-fund --prefer-offline
+        if errorlevel 1 (
+            echo       [WARN] npm ci failed, fallback to npm install --ignore-scripts...
+            call npm install --no-audit --no-fund --prefer-offline --ignore-scripts
+        )
     ) else (
         echo       Running npm install...
-        call npm install --no-audit --no-fund --prefer-offline
+        call npm install --no-audit --no-fund --prefer-offline --ignore-scripts
     )
     if errorlevel 1 (
         echo [ERROR] npm install failed
