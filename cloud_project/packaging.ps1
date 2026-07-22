@@ -485,7 +485,7 @@ function Build-Desktop {
         Write-Host "        [OK]"
 
         Write-Host "  [5/8] Obfuscating JavaScript..." -ForegroundColor White
-        & node "$toolsDir\obfuscate.js" --target=cloud
+        & node "$toolsDir\obfuscate.js" --target=cloud 2>&1 | ForEach-Object { Write-Host "  $_" }
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [ERROR] Obfuscation failed" -ForegroundColor Red
             & node "$toolsDir\obfuscate.js" restore --target=cloud 2>&1 | Out-Null
@@ -496,7 +496,7 @@ function Build-Desktop {
         Write-Host "  [6/8] Preparing win-unpacked..." -ForegroundColor White
         $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://registry.npmmirror.com/-/binary/electron-builder-binaries/"
         $env:NODE_TLS_REJECT_UNAUTHORIZED = "0"
-        & node "$toolsDir\prepare-win-unpacked.js" $desktopDir.TrimEnd("\")
+        & node "$toolsDir\prepare-win-unpacked.js" $desktopDir.TrimEnd("\") 2>&1 | ForEach-Object { Write-Host "  $_" }
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [ERROR] prepare-win-unpacked failed" -ForegroundColor Red
             Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
@@ -531,7 +531,7 @@ function Build-Desktop {
         }
 
         Write-Host "  [7/8] Restoring original code..." -ForegroundColor White
-        & node "$toolsDir\obfuscate.js" restore --target=cloud
+        & node "$toolsDir\obfuscate.js" restore --target=cloud 2>&1 | ForEach-Object { Write-Host "  $_" }
         if ($LASTEXITCODE -ne 0) { Write-Host "  [ERROR] Restore failed" -ForegroundColor Red; return 1 }
         Write-Host "        [OK]"
 
