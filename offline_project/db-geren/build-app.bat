@@ -67,6 +67,16 @@ if not exist "app\src\main\assets\video-recorder-inject.js" (
 echo [OK] Environment check passed
 echo.
 
+echo [3.6/8] Patching Capacitor Java version (21 -> 17)...
+call node "%~dp0..\..\tools\patch-java-version.js" "%~dp0..\.."
+if errorlevel 1 (
+    echo [WARN] Java version patch had issues, continuing anyway
+) else (
+    echo [OK] Java version patched
+)
+echo.
+echo.
+
 echo [3.5/8] Current configuration...
 findstr "versionName" "app\build.gradle"
 echo.
@@ -76,15 +86,15 @@ taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] Cleanup completed
 echo.
 
-echo [5/8] Cleaning build cache (强制全量清理，确保修改生�?...
+echo [5/8] Cleaning build cache (force full clean)...
 if defined TCM_GRADLE_SKIP_CLEAN (
-    echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, 跳过 clean (仅开发调试用)
+    echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, skipping clean (debug only)
 ) else (
     if exist "app\build\intermediates\javac" (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
-        echo       [OK] 已清�?javac 缓存
+        echo       [OK] cleaned javac cache
     )
-    call gradlew.bat clean --no-daemon
+    call gradlew.bat clean --no-daemon --no-build-cache --no-configuration-cache
     if errorlevel 1 (
         echo [WARN] Clean failed, continuing with incremental build
     ) else (
@@ -99,7 +109,7 @@ echo.
 
 echo [6/8] Building signed APK...
 echo.
-call gradlew.bat assembleRelease --no-daemon --rerun-tasks
+call gradlew.bat assembleRelease --no-daemon --no-build-cache --no-configuration-cache
 if errorlevel 1 (
     echo.
     echo [ERROR] Build failed! Please check error messages
@@ -147,7 +157,7 @@ if "%VERSION_STR%"=="" set "VERSION_STR=1.0"
 for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Content '..\config.json' -Encoding UTF8 -Raw | ConvertFrom-Json).productName"`) do (
     set "PRODUCT_NAME=%%p"
 )
-if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-个人"
+if "%PRODUCT_NAME%"==" set "PRODUCT_NAME=Huikang-TCM-Personal"
 
 REM Verify source APK size (prevent copying empty file when Gradle fails or write incomplete)
 set "SRC_SIZE=0"

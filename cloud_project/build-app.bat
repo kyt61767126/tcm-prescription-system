@@ -58,6 +58,15 @@ if not exist "app\src\main\assets\capacitor.config.json" (
 echo [OK] Environment check passed
 echo.
 
+echo [1.5/6] Patching Capacitor Java version (21 -> 17)...
+call node "%~dp0..\tools\patch-java-version.js" "%~dp0.."
+if errorlevel 1 (
+    echo [WARN] Java version patch had issues, continuing anyway
+) else (
+    echo [OK] Java version patched
+)
+echo.
+
 echo [2/6] Syncing shared files...
 set "SHARED_DIR=%~dp0..\shared"
 set "ASSETS_PUBLIC=%ANDROID_DIR%\app\src\main\assets\public"
@@ -84,7 +93,11 @@ echo [2.6/6] Syncing APP version from index.html to MainActivity...
 REM Read __APP_VERSION__ from cloud_desktop/index.html, inject into MainActivity.EXPECTED_APP_VERSION
 REM Avoid cache clearing on every launch caused by MainActivity/index.html version mismatch
 REM Use standalone .ps1 script to avoid cmd/PowerShell double-escape issues
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sync-app-version.ps1" "%~dp0" "%ANDROID_DIR%"
+set "CLOUD_DIR_TMP=%~dp0"
+set "CLOUD_DIR_TMP=%CLOUD_DIR_TMP:~0,-1%"
+set "ANDROID_DIR_TMP=%ANDROID_DIR%"
+set "ANDROID_DIR_TMP=%ANDROID_DIR_TMP:~0,-1%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sync-app-version.ps1" "%CLOUD_DIR_TMP%" "%ANDROID_DIR%"
 echo.
 
 echo [2.7/6] Auto-incrementing versionCode...
@@ -102,15 +115,15 @@ taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] Cleanup completed
 echo.
 
-echo [4/6] Cleaning build cache (强制全量清理，确保修改生�?...
+echo [4/6] Cleaning build cache (force full clean)...
 if defined TCM_GRADLE_SKIP_CLEAN (
-    echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, 跳过 clean (仅开发调试用)
+    echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, skipping clean
 ) else (
     if exist "app\build\intermediates\javac" (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
-        echo       [OK] 已清�?javac 缓存
+        echo       [OK] cleaned javac cache
     )
-    call gradlew.bat clean --no-daemon
+    call gradlew.bat clean --no-daemon --no-build-cache --no-configuration-cache
     if errorlevel 1 (
         echo [WARN] clean failed, continuing with incremental build
     ) else (
@@ -120,8 +133,8 @@ if defined TCM_GRADLE_SKIP_CLEAN (
 echo.
 
 echo [4.5/6] Obfuscating JavaScript (cloud target - includes cloud_app assets)...
-REM P1: 混淆 cloud_app assets �?JS（auth-core.js / permission.js / video-recorder-inject.js�?
-REM �?APK �?JS 被直接反编译读取，攻击难度提�?
+REM P1: restore JS code after build
+REM P1: Obfuscate JS to prevent reverse engineering of APK assets
 call node "%~dp0..\tools\obfuscate.js" --target=cloud
 if errorlevel 1 (
     echo [ERROR] JS obfuscation failed
@@ -133,7 +146,7 @@ echo.
 
 echo [5/6] Building signed APK...
 echo.
-call gradlew.bat assembleRelease --no-daemon --rerun-tasks
+call gradlew.bat assembleRelease --no-daemon --no-build-cache --no-configuration-cache
 if errorlevel 1 (
     echo.
     echo [ERROR] Build failed! Rolling back versionCode...
@@ -149,7 +162,7 @@ if exist "%~dp0.build_vcode_prev" del "%~dp0.build_vcode_prev"
 echo.
 
 echo [5.5/6] Restoring JavaScript (cloud target)...
-REM P1: 无论构建成功或失败，都恢复原�?JS 代码（防源码污染开发环境）
+REM P1: restore JS code after build
 call node "%~dp0..\tools\obfuscate.js" restore --target=cloud
 if errorlevel 1 (
     echo [WARN] JS restore failed - may need manual restore: node tools\obfuscate.js restore --target=cloud
@@ -181,11 +194,11 @@ for %%A in ("%APK_FILE%") do (
 )
 
 echo [6.5/6] Reading product name and version...
-set "PRODUCT_NAME="
+set "PRODUCT_NAME=Huikang-TCM-Cloud"
 for /f "delims=" %%p in ('powershell -NoProfile -Command "(Get-Content '..\cloud_desktop\package.json' -Encoding UTF8 -Raw | ConvertFrom-Json).build.productName"') do (
-    set "PRODUCT_NAME=%%p"
+    set "PRODUCT_NAME=Huikang-TCM-Cloud"
 )
-if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-云端"
+if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=Huikang-TCM-Cloud"
 
 set "VERSION_STR="
 for /f "tokens=2 delims=:" %%v in ('findstr "versionName" "app\build.gradle"') do (

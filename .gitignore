@@ -88,3 +88,11 @@ cloud_project/tcm-prescription-system/
 _validate_*.cjs
 _validate_*.js
 check_syntax.cjs
+
+# Obfuscation backup files
+*.bak
+
+
+# Temporary directories
+tmp/
+
