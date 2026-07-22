@@ -31,6 +31,10 @@ if (!versionDir) {
 const pkgPath = path.join(versionDir, 'package.json');
 const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
 const productName = pkg.build.productName || pkg.name;
+// 7z (used by electron-builder NSIS) cannot handle non-ASCII filenames on Windows.
+// Use pkg.name (ASCII-safe) for the exe inside win-unpacked to avoid NSIS compression failure.
+// The installer package filename is still determined by productName (e.g. 惠康中医-云端-Setup-x.x.x.exe).
+const exeName = pkg.name || productName;
 const buildFiles = pkg.build.files || [];
 
 // Extract file list from build.files (handles both string and {filter:[]} formats)
@@ -73,14 +77,19 @@ async function main() {
   fs.mkdirSync(resourcesDir, { recursive: true });
 
   console.log('Copying electron dist to win-unpacked...');
+  // Clean win-unpacked to remove stale non-ASCII exe from previous runs
+  // (7z in electron-builder cannot handle Chinese filenames like 惠康中医-云端.exe)
+  fs.rmSync(winUnpacked, { recursive: true, force: true });
+  fs.mkdirSync(winUnpacked, { recursive: true });
+  fs.mkdirSync(resourcesDir, { recursive: true });
   fs.cpSync(electronDist, winUnpacked, { recursive: true, force: true });
 
   const electronExe = path.join(winUnpacked, 'electron.exe');
-  const productExe = path.join(winUnpacked, `${productName}.exe`);
+  const productExe = path.join(winUnpacked, `${exeName}.exe`);
   if (fs.existsSync(electronExe)) {
     if (fs.existsSync(productExe)) fs.unlinkSync(productExe);
     fs.renameSync(electronExe, productExe);
-    console.log(`Renamed electron.exe -> ${productName}.exe`);
+    console.log(`Renamed electron.exe -> ${exeName}.exe (productName: ${productName})`);
   }
 
   console.log('Creating app.asar...');
