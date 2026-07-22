@@ -108,9 +108,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$g='%ANDROID_DIR%\app\bu
 echo.
 
 echo [3/6] Stopping residual Gradle processes...
-REM P1-15: Prefer gradlew --stop to gracefully stop Gradle daemon; avoid taskkill java.exe killing other Java apps
-call gradlew.bat --stop >nul 2>&1
-REM Use taskkill + window title filter only if residuals remain (double safety)
+REM P1-15: Only kill java processes with gradle window title (keep daemon alive for faster rebuild)
+REM Do NOT call gradlew --stop (kills daemon, forces cold JVM start on next build)
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] Cleanup completed
 echo.
@@ -123,7 +122,7 @@ if defined TCM_GRADLE_SKIP_CLEAN (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
         echo       [OK] cleaned javac cache
     )
-    call gradlew.bat clean --no-daemon --no-build-cache --no-configuration-cache
+    call gradlew.bat clean
     if errorlevel 1 (
         echo [WARN] clean failed, continuing with incremental build
     ) else (
@@ -146,7 +145,7 @@ echo.
 
 echo [5/6] Building signed APK...
 echo.
-call gradlew.bat assembleRelease --no-daemon --no-build-cache --no-configuration-cache
+call gradlew.bat assembleRelease --rerun-tasks
 if errorlevel 1 (
     echo.
     echo [ERROR] Build failed! Rolling back versionCode...

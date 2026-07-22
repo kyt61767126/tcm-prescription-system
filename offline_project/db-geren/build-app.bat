@@ -109,7 +109,7 @@ echo.
 
 echo [6/8] Building signed APK...
 echo.
-call gradlew.bat assembleRelease --no-daemon --no-build-cache --no-configuration-cache
+call gradlew.bat assembleRelease --rerun-tasks
 if errorlevel 1 (
     echo.
     echo [ERROR] Build failed! Please check error messages

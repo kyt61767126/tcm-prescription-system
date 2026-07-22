@@ -831,7 +831,10 @@ function Build-AllStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step D. 重新打包手机 APP（签名严格模式 APK）" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
+    # Step C only modified SecurityGuard.java, skip clean for faster incremental build
+    $env:TCM_GRADLE_SKIP_CLEAN = '1'
     $rc = Build-App -SkipConfirm
+    Remove-Item Env:\TCM_GRADLE_SKIP_CLEAN -ErrorAction SilentlyContinue
     if ($rc -ne 0) {
         Write-Host "[ERROR] 签名严格模式重新打包失败" -ForegroundColor Red
         Write-Host "  您仍可使用 Step B 的 APK（默认模式）" -ForegroundColor Yellow
@@ -898,7 +901,10 @@ function Build-AppStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step C. 重新打包手机 APP（签名严格模式 APK）" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
+    # Step B only modified SecurityGuard.java, skip clean for faster incremental build
+    $env:TCM_GRADLE_SKIP_CLEAN = '1'
     $rc = Build-App -SkipConfirm
+    Remove-Item Env:\TCM_GRADLE_SKIP_CLEAN -ErrorAction SilentlyContinue
     if ($rc -ne 0) {
         Write-Host "[ERROR] 签名严格模式重新打包失败" -ForegroundColor Red
         Write-Host "  您仍可使用 Step A 的 APK（默认模式）" -ForegroundColor Yellow

@@ -1022,7 +1022,10 @@ function Build-AllStrict {
     # Step D: Rebuild mobile (strict)
     Write-Host ""
     Write-Host "  [步骤 D] 重新打包手机 APP (严格模式)..." -ForegroundColor Cyan
+    # Step C only modified SecurityGuard.java/LicenseManager.java, skip clean for faster incremental build
+    $env:TCM_GRADLE_SKIP_CLEAN = '1'
     $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
+    Remove-Item Env:\TCM_GRADLE_SKIP_CLEAN -ErrorAction SilentlyContinue
     if ($rc -ne 0) {
         Write-Host "[错误] 严格模式重新打包失败" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
@@ -1086,7 +1089,10 @@ function Build-AppStrict {
     # Step C: Rebuild mobile (strict)
     Write-Host ""
     Write-Host "  [步骤 C] 重新打包手机 APP (严格模式)..." -ForegroundColor Cyan
+    # Step B only modified SecurityGuard.java/LicenseManager.java, skip clean for faster incremental build
+    $env:TCM_GRADLE_SKIP_CLEAN = '1'
     $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
+    Remove-Item Env:\TCM_GRADLE_SKIP_CLEAN -ErrorAction SilentlyContinue
     if ($rc -ne 0) {
         Write-Host "[错误] 严格模式重新打包失败" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 A 的 APK (首次锁定模式)"
