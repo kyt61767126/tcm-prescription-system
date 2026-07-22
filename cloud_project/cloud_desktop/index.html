@@ -4402,9 +4402,10 @@ if (window.Permission) {
         }
 
         async function handleEditUser(username) {
+         try {
             const users = await getUsers();
             const user = users.find(u => u.username === username);
-            if (!user) return;
+            if (!user) { await alert('未找到该用户'); return; }
 
             const newUsername = await prompt('请输入新登录用户（英文或拼音）：', user.username);
             if (newUsername === null) return;
@@ -4461,6 +4462,10 @@ if (window.Permission) {
 
             await renderUserList();
             await alert(saveSuccess ? '✅ 用户信息修改成功！\n\n使用模式：' + modeText + '\n数据已自动同步到云端，其他设备登录也能看到此用户。' : '⚠️ 用户信息已保存到本地\n\n云端同步失败，可在设置中手动同步。');
+         } catch (err) {
+            console.error('[handleEditUser] 失败:', err);
+            try { await alert('编辑用户失败：' + (err && err.message ? err.message : String(err)) + '\n\n如已重新打包仍失败，请将此信息反馈给开发者。'); } catch(e2) {}
+         }
         }
 
         async function handleAddUser() {

@@ -787,8 +787,15 @@ ipcMain.handle('dialog:prompt', async (event, message, defaultValue) => {
 
     // 使用 hash 传递参数（避免 file:// query string 兼容问题）
     const params = encodeURIComponent(JSON.stringify({ message: message || '', defaultValue: defaultValue || '' }));
-    const fileUrl = 'file:///' + PROMPT_HTML_PATH.replace(/\\/g, '/').replace(/^\//, '');
-    await promptWin.loadURL(fileUrl + '#' + params);
+    // ★ P0 修复：loadURL(file://) 对 asar 内文件支持不可靠，打包后静默失败导致 await 挂起（点击编辑无反应）
+    // 改用 loadFile（Electron 原生 API，对 asar 路径有原生支持），与主窗口加载方式一致
+    try {
+        await promptWin.loadFile(PROMPT_HTML_PATH, { hash: params });
+    } catch (loadErr) {
+        console.error('[prompt] loadFile 失败:', PROMPT_HTML_PATH, loadErr);
+        try { promptWin.close(); } catch(e) {}
+        return null;
+    }
     promptWin.show();
 
     return new Promise((resolve) => {
