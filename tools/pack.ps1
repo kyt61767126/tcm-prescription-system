@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -772,7 +772,12 @@ function Build-App {
     if ($apkPath) {
         # Read productName from config.json (reference: cloud_app uses "惠康中医-云端")
         $configPath = "$script:VersionDir\config.json"
-        $productName = "惠康中医"
+        $productName = switch ($Version) {
+            'bendi'   { '惠康中医-本地' }
+            'geren'   { '惠康中医-个人' }
+            'dingzhi' { '惠康中医-定制' }
+            default   { '惠康中医' }
+        }
         if (Test-Path $configPath) {
             try {
                 $config = [System.IO.File]::ReadAllText($configPath, $script:UTF8NoBom) | ConvertFrom-Json

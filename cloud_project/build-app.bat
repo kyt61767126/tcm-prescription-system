@@ -194,11 +194,11 @@ for %%A in ("%APK_FILE%") do (
 )
 
 echo [6.5/6] Reading product name and version...
-set "PRODUCT_NAME=Huikang-TCM-Cloud"
+set "PRODUCT_NAME="
 for /f "delims=" %%p in ('powershell -NoProfile -Command "(Get-Content '..\cloud_desktop\package.json' -Encoding UTF8 -Raw | ConvertFrom-Json).build.productName"') do (
-    set "PRODUCT_NAME=Huikang-TCM-Cloud"
+    set "PRODUCT_NAME=%%p"
 )
-if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=Huikang-TCM-Cloud"
+if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-云端"
 
 set "VERSION_STR="
 for /f "tokens=2 delims=:" %%v in ('findstr "versionName" "app\build.gradle"') do (
