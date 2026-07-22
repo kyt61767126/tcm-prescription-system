@@ -176,6 +176,29 @@ async function main() {
 
   fs.rmSync(tmpDir, { recursive: true, force: true });
 
+  // Apply asarmor ASAR protection (防解包: 100GB bloat patch)
+  // afterPack.js doesn't execute in --prepackaged mode, so we apply it here
+  // ★关键修复：必须用 path.resolve() 生成绝对路径，require() 无法解析 path.join 的相对路径
+  // 历史bug：path.join(versionDir, ...) 产生 'cloud_project/cloud_desktop/node_modules/asarmor'
+  //          require() 把它当作模块名查找，报 Cannot find module，被 catch 静默跳过
+  try {
+    const asarmorPath = path.resolve(versionDir, 'node_modules', 'asarmor');
+    const asarmor = require(asarmorPath);
+    const bloatGb = parseInt(process.env.ASARMOR_BLOAT_GB || '100', 10);
+    console.log(`Applying asarmor protection (${bloatGb}GB bloat patch)...`);
+    console.log(`  asarmor module: ${asarmorPath}`);
+    const archive = await asarmor.open(asarPath);
+    const bloatPatch = asarmor.createBloatPatch(bloatGb);
+    archive.patch(bloatPatch);
+    await archive.write(asarPath);
+    const newSize = fs.statSync(asarPath).size;
+    console.log(`asarmor protection applied successfully (asar size: ${newSize} bytes)`);
+  } catch (e) {
+    console.error(`[ERROR] asarmor protection FAILED: ${e.message}`);
+    console.error('  ASAR 防解包保护未生效！app.asar 可被提取查看源码。');
+    // Non-fatal: app still works, just without anti-extraction protection
+  }
+
   const ok = fs.existsSync(productExe) && fs.existsSync(asarPath) &&
              fs.existsSync(path.join(actualResourcesDir, 'default_app.asar')) &&
              fs.existsSync(path.join(actualWinUnpacked, 'locales'));
