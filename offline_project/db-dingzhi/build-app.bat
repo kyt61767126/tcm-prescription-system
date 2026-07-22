@@ -107,14 +107,35 @@ echo [5.5/8] Auto-increment versionCode...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='app\build.gradle'; $c=[System.IO.File]::ReadAllText($f); if($c -match 'versionCode\s+(\d+)'){ $old=$matches[1]; $new=[int]$old+1; $c=$c -replace 'versionCode\s+\d+', ('versionCode '+$new); [System.IO.File]::WriteAllText($f,$c,(New-Object System.Text.UTF8Encoding($false))); Write-Host ('  versionCode: ' + $old + ' -> ' + $new) } else { Write-Host '  [WARN] versionCode not found, skip' }"
 echo.
 
+echo [5.6/8] Obfuscating JavaScript (target=dingzhi)...
+call node "%~dp0..\..\tools\obfuscate.js" --target=dingzhi
+if errorlevel 1 (
+    echo [ERROR] JS obfuscation failed
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] JS obfuscation complete
+echo.
+
 echo [6/8] Building signed APK...
 echo.
 call gradlew.bat assembleRelease --rerun-tasks
 if errorlevel 1 (
     echo.
+    echo [WARN] Restoring JavaScript due to build failure...
+    call node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi
     echo [ERROR] Build failed! Please check error messages
     if not defined NO_PAUSE pause
     exit /b 1
+)
+echo.
+
+echo [6.5/8] Restoring JavaScript...
+call node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi
+if errorlevel 1 (
+    echo [WARN] JS restore failed - may need manual restore
+) else (
+    echo [OK] JS restored to original state
 )
 echo.
 

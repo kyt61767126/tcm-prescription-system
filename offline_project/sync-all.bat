@@ -59,6 +59,6 @@ echo ================================================================
 echo.
 echo   Next steps:
 echo   - Run sync-to-app.bat in each version to sync index.html
-echo   - Or run packaging.bat in each version to build
+echo   - Or run pack.bat in each version to build
 echo.
 pause
