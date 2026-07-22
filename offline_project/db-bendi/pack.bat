@@ -12,4 +12,4 @@ echo    pack-desktop.bat       打包桌面版 (Electron exe)
 echo    pack-app.bat           打包手机 APP (Android APK)
 echo    pack-app-strict.bat    严格模式 APP (APK+签名哈希+重打包)
 echo.
-pause
+if not defined NO_PAUSE pause

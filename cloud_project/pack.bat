@@ -17,4 +17,4 @@ echo  高级用法 (PowerShell):
 echo    powershell -File packaging.ps1 -SyncOnly        仅同步文件
 echo    powershell -File packaging.ps1 -CheckEncoding   仅编码检查
 echo.
-pause
+if not defined NO_PAUSE pause

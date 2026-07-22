@@ -36,14 +36,14 @@ echo.
 
 if not exist "%DST%" (
     echo [ERROR] Target directory not found: %DST%
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
 REM [1/4] Sync files
 echo [1/4] Syncing index.html ...
 copy /Y "%SRC%index.html" "%DST%index.html" >nul
-if errorlevel 1 ( echo [ERROR] index.html sync failed & pause & exit /b 1 )
+if errorlevel 1 ( echo [ERROR] index.html sync failed & if not defined NO_PAUSE pause & exit /b 1 )
 
 echo [2/4] Syncing xlsx.full.min.js ...
 if exist "%SRC%xlsx.full.min.js" (
@@ -67,13 +67,13 @@ git diff --cached --quiet
 if %errorlevel% equ 0 (
     echo.
     echo [INFO] No changes to commit, files may be unmodified
-    pause
+    if not defined NO_PAUSE pause
     exit /b 0
 )
 
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss' -ca") do set "NOW=%%t"
 git commit -m "sync: cloud_desktop frontend sync (%NOW%)"
-if errorlevel 1 ( echo [ERROR] git commit failed & pause & exit /b 1 )
+if errorlevel 1 ( echo [ERROR] git commit failed & if not defined NO_PAUSE pause & exit /b 1 )
 
 REM [4/4] Push (unless --no-push)
 if "%NO_PUSH%"=="1" (
@@ -85,11 +85,11 @@ if "%NO_PUSH%"=="1" (
     git pull --rebase origin main
     if errorlevel 1 (
         echo [ERROR] git pull --rebase failed, please resolve conflicts manually
-        pause
+        if not defined NO_PAUSE pause
         exit /b 1
     )
     git push origin main
-    if errorlevel 1 ( echo [ERROR] git push failed & pause & exit /b 1 )
+    if errorlevel 1 ( echo [ERROR] git push failed & if not defined NO_PAUSE pause & exit /b 1 )
 )
 
 echo.
@@ -103,4 +103,4 @@ if "%NO_PUSH%"=="1" (
     echo  Visit https://tcm-prescription-system.pages.dev to verify.
 )
 echo.
-pause
+if not defined NO_PAUSE pause

@@ -7,7 +7,7 @@ set "PACK_PS1=%~dp0tools\one-click-pack.ps1"
 if not exist "%PACK_PS1%" (
     echo [ERROR] one-click-pack.ps1 not found
     echo   Path: %PACK_PS1%
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
