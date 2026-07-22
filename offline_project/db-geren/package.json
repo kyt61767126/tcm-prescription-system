@@ -55,7 +55,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "unicode": true,
-      "include": "installer.nsh"
+      "include": "installer.nsh",
+      "useZip": true,
+      "differentialPackage": false
     }
   },
   "dependencies": {

@@ -3,7 +3,7 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Huikang TCM Cloud - Desktop Build
 
-REM ¼ÇÂ¼´ò°ü¿ªÊ¼Ê±¼ä£¨ÓÃÓÚºÄÊ±Í³¼Æ£©- Ê¹ÓÃ PowerShell Ìæ´ú wmic£¨Windows 11 ÒÑÆúÓÃ£©
+REM ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½Ê¼Ê±ï¿½ä£¨ï¿½ï¿½ï¿½Úºï¿½Ê±Í³ï¿½Æ£ï¿½- Ê¹ï¿½ï¿½ PowerShell ï¿½ï¿½ï¿½ wmicï¿½ï¿½Windows 11 ï¿½ï¿½ï¿½ï¿½ï¿½Ã£ï¿½
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "BUILD_START_STAMP=%%t"
 
@@ -45,12 +45,12 @@ if not exist "node_modules" (
 echo.
 
 echo [3/8] Closing remaining processes...
-REM P0-ÓÅ»¯£º¾«È·Æ¥ÅäÏîÄ¿Ïà¹Ø½ø³Ì£¬±ÜÃâÎóÉ±ÆäËû Electron Ó¦ÓÃ£¨Èç VSCode¡¢Slack µÈ£©
-REM ½öÖÕÖ¹´Ó cloud_desktop/dist »ò build_output Ä¿Â¼Æô¶¯µÄ½ø³Ì
+REM P0-ï¿½Å»ï¿½ï¿½ï¿½ï¿½ï¿½È·Æ¥ï¿½ï¿½ï¿½ï¿½Ä¿ï¿½ï¿½Ø½ï¿½ï¿½Ì£ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É±ï¿½ï¿½ï¿½ï¿½ Electron Ó¦ï¿½Ã£ï¿½ï¿½ï¿½ VSCodeï¿½ï¿½Slack ï¿½È£ï¿½
+REM ï¿½ï¿½ï¿½ï¿½Ö¹ï¿½ï¿½ cloud_desktop/dist ï¿½ï¿½ build_output Ä¿Â¼ï¿½ï¿½ï¿½ï¿½ï¿½Ä½ï¿½ï¿½ï¿½
 taskkill /F /IM "HuikangTCM*.exe" >nul 2>&1
-taskkill /F /IM "»Ý¿µÖÐÒ½-ÔÆ¶Ë.exe" >nul 2>&1
-taskkill /F /IM "»Ý¿µÖÐÒ½*.exe" >nul 2>&1
-REM P0-ÓÅ»¯£ºÌæ»» wmic£¨Windows 11 ÒÑÆúÓÃÇÒÂý£©Îª PowerShell Get-Process£¨¾«È·Â·¾¶Æ¥Åä£©
+taskkill /F /IM "ï¿½Ý¿ï¿½ï¿½ï¿½Ò½-ï¿½Æ¶ï¿½.exe" >nul 2>&1
+taskkill /F /IM "ï¿½Ý¿ï¿½ï¿½ï¿½Ò½*.exe" >nul 2>&1
+REM P0-ï¿½Å»ï¿½ï¿½ï¿½ï¿½æ»» wmicï¿½ï¿½Windows 11 ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Îª PowerShell Get-Processï¿½ï¿½ï¿½ï¿½È·Â·ï¿½ï¿½Æ¥ï¿½ä£©
 powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*cloud_desktop*dist*' -or $_.Path -like '*cloud_desktop*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 echo [OK] Processes cleaned
 timeout /t 2 /nobreak >nul
@@ -81,7 +81,7 @@ if exist "%OUTPUT_DIR%" (
         powershell -ExecutionPolicy Bypass -Command "try { [System.IO.Directory]::Delete('%CD%\%OUTPUT_DIR%', $true) } catch { Write-Host '[WARNING] PowerShell delete also failed' }" 2>nul
     )
     if exist "%OUTPUT_DIR%" (
-        REM P0-ÓÅ»¯£ºÌæ»» wmic£¨ÒÑÆúÓÃ£©Îª PowerShell Get-Date Éú³ÉÊ±¼ä´Á
+        REM P0-ï¿½Å»ï¿½ï¿½ï¿½ï¿½æ»» wmicï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ã£ï¿½Îª PowerShell Get-Date ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½
         for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "DSTAMP=%%t"
         echo [WARNING] Could not delete %OUTPUT_DIR%, renaming to dist_old_!DSTAMP!...
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
@@ -110,16 +110,25 @@ if errorlevel 1 (
 echo [OK] Obfuscation completed
 echo.
 
-echo [6/8] Running build...
-REM Use domestic mirror to accelerate electron binary download (no need to disable TLS verification)
-set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
+echo [6/8] Preparing win-unpacked directory...
+REM â˜… ä¿®å¤ï¼šä½¿ç”¨ --prepackaged æ¨¡å¼ï¼Œè·³è¿‡ app-builder.exe è§£åŒ…æ­¥éª¤
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
-REM better-sqlite3 prebuild-install ´Ó GitHub Releases ÏÂÔØÔ¤±àÒë¶þ½øÖÆÊ± SSL Ö¤ÊéÑéÖ¤Ê§°Ü
-REM ÁÙÊ±¹Ø±Õ TLS ÑéÖ¤£¨½ö¹¹½¨ÆÚ¼ä£©£¬È·±£ prebuild-install ÄÜ³É¹¦ÏÂÔØ electron ABI ¶þ½øÖÆ
 set NODE_TLS_REJECT_UNAUTHORIZED=0
-call npm run build
+node "%~dp0..\..\tools\prepare-win-unpacked.js" "%~dp0"
+if errorlevel 1 (
+    echo [ERROR] prepare-win-unpacked failed
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    node "%~dp0..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    pause
+    exit /b 1
+)
+echo [OK] win-unpacked prepared
+echo.
+
+echo [6.5/8] Running electron-builder --prepackaged...
+npx electron-builder --win --prepackaged dist/win-unpacked
 set "BUILD_RC=%errorlevel%"
-REM P1-°²È«£ºÁ¢¼´Çå³ý TLS ÁÙÊ±±äÁ¿£¬±ÜÃâÎÛÈ¾ºóÐøÃüÁî»·¾³
+REM P1-å®‰å…¨ï¼šç«‹å³æ¸…é™¤ TLS ä¸´æ—¶å˜é‡ï¼Œé¿å…æ±¡æŸ“åŽç»­å‘½ä»¤çŽ¯å¢ƒ
 set NODE_TLS_REJECT_UNAUTHORIZED=
 if not "%BUILD_RC%"=="0" (
     echo.
@@ -142,7 +151,7 @@ if errorlevel 1 (
 echo [OK] Original code restored
 echo.
 
-REM P1-Ò×ÓÃ£ºÑéÖ¤²úÎï´æÔÚÇÒ·Ç¿Õ£¬Ê§°ÜÔòÌáÇ°ÍË³ö
+REM P1-ï¿½ï¿½ï¿½Ã£ï¿½ï¿½ï¿½Ö¤ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ò·Ç¿Õ£ï¿½Ê§ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ç°ï¿½Ë³ï¿½
 echo [7.5/8] Verifying build output...
 set "EXE_FILE="
 for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
@@ -166,7 +175,7 @@ if exist "build_output_old_*" (
     echo [NOTE] Legacy build_output_old_* directories detected, cleaning...
     rmdir /s /q "build_output_old_*" 2>nul
 )
-REM P1-Ò×ÓÃ£ºÏÔÊ¾´ò°ü×ÜºÄÊ±
+REM P1-ï¿½ï¿½ï¿½Ã£ï¿½ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½Üºï¿½Ê±
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 echo Start: %BUILD_START_TIME%
 echo End:   %BUILD_END_TIME%

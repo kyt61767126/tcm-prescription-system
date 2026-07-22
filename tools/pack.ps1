@@ -600,23 +600,34 @@ function Build-Desktop {
         }
     }
 
-    # Build with electron-builder (use cache via mirror)
-    Write-Host "  运行 electron-builder 中..." -ForegroundColor Yellow
+    # ★ 修复：使用 --prepackaged 模式，跳过 app-builder.exe 解包步骤
+    # 原因：TRAE IDE 沙箱阻止 app-builder.exe 创建目录，导致打包失败
+    # 方案：先用 prepare-win-unpacked.js 准备 win-unpacked 目录，
+    #       再用 electron-builder --prepackaged 跳过解包步骤
+    Write-Host "  准备 win-unpacked 目录..." -ForegroundColor Yellow
+    $prepareScript = "$script:ProjectRoot\tools\prepare-win-unpacked.js"
+    if (Test-Path $prepareScript) {
+        Invoke-External { node $prepareScript $script:VersionDir } "prepare-win-unpacked"
+    } else {
+        Write-Host "  [WARN] prepare-win-unpacked.js 未找到，使用传统构建模式" -ForegroundColor Yellow
+    }
+
+    # Build with electron-builder --prepackaged
+    Write-Host "  运行 electron-builder (--prepackaged)..." -ForegroundColor Yellow
     Push-Location $script:VersionDir
     try {
-        $env:ELECTRON_MIRROR = "https://registry.npmmirror.com/-/binary/electron/"
         $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://registry.npmmirror.com/-/binary/electron-builder-binaries/"
-        # Enable caching to skip re-download of electron binary
         $env:ELECTRON_BUILDER_CACHE = "$env:LOCALAPPDATA\electron-builder\Cache"
-        # better-sqlite3 prebuild-install 从 GitHub Releases 下载预编译二进制时 SSL 证书验证失败
-        # 临时关闭 TLS 验证（仅构建期间），确保 prebuild-install 成功下载 electron ABI 二进制
         $env:NODE_TLS_REJECT_UNAUTHORIZED = "0"
         try {
-            Invoke-External { npm run build } "electron-builder"
+            Invoke-External { npx electron-builder --win --prepackaged dist/win-unpacked } "electron-builder --prepackaged"
+        } catch {
+            Write-Host ""
+            Write-Host "  [ERROR] electron-builder 失败: $_" -ForegroundColor Red
+            Write-Log "[ERROR] electron-builder --prepackaged failed" "ERROR"
+            throw
         } finally {
-            # P1-安全：立即清除 TLS 临时变量，避免污染后续命令环境
             Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
-            Remove-Item Env:\ELECTRON_MIRROR -ErrorAction SilentlyContinue
             Remove-Item Env:\ELECTRON_BUILDER_BINARIES_MIRROR -ErrorAction SilentlyContinue
         }
     } finally {

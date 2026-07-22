@@ -45,7 +45,9 @@
       ],
       "certificateFile": "../../tools/certs/惠康中医-codesign.pfx",
       "certificatePassword": "bnzc2026",
-      "signingHashAlgorithms": ["sha256"],
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
       "rfc3161TimeStampServer": "http://timestamp.digicert.com"
     },
     "nsis": {
@@ -54,7 +56,9 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "unicode": true,
-      "include": "installer.nsh"
+      "include": "installer.nsh",
+      "useZip": true,
+      "differentialPackage": false
     }
   },
   "dependencies": {

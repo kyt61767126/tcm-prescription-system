@@ -12,6 +12,8 @@
   "author": "惠康堂",
   "license": "MIT",
   "devDependencies": {
+    "@electron/asar": "^4.2.1",
+    "archiver": "^7.0.1",
     "asarmor": "^3.0.2",
     "electron": "^35.0.0",
     "electron-builder": "^24.9.1"
@@ -50,7 +52,9 @@
       ],
       "certificateFile": "../../tools/certs/惠康中医-codesign.pfx",
       "certificatePassword": "bnzc2026",
-      "signingHashAlgorithms": ["sha256"],
+      "signingHashAlgorithms": [
+        "sha256"
+      ],
       "rfc3161TimeStampServer": "http://timestamp.digicert.com"
     },
     "nsis": {
@@ -58,7 +62,9 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "include": "installer.nsh"
+      "include": "installer.nsh",
+      "useZip": true,
+      "differentialPackage": false
     }
   },
   "dependencies": {
