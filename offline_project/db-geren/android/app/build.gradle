@@ -1,5 +1,10 @@
 apply plugin: 'com.android.application'
 
+// Fix javac Chinese output garbled text: force UTF-8 for source parsing and compile messages
+tasks.withType(JavaCompile) {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-J-Dfile.encoding=UTF-8']
+}
 def signingProperties = new Properties()
 def signingPropertiesFile = file('signing.properties')
 if (signingPropertiesFile.exists()) {
