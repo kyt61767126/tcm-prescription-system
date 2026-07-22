@@ -1,4 +1,4 @@
-﻿# generate-sign-hash.ps1 - 从 APK 提取签名哈希，注入到 LicenseManager.java
+# generate-sign-hash.ps1 - 从 APK 提取签名哈希，注入到 LicenseManager.java
 # 启用签名严格模式：APP 启动时与硬编码哈希严格比对，任何二次打包都会被拒绝
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
@@ -133,7 +133,7 @@ Write-Host ""
 # NO_PAUSE 未设置（用户单独运行）：显示完整提示，用户需手动重新打包
 if (-not $env:NO_PAUSE) {
     Write-Host "  下一步："
-    Write-Host "  1. 重新打包 APK（运行 pack.bat 选择 [2] 或 [9]）"
+    Write-Host "  1. 重新打包 APK（运行 pack-app.bat 或 pack-app-strict.bat）"
     Write-Host "  2. 新 APK 将启用签名严格模式："
     Write-Host "     - APK 签名必须与上述哈希完全一致"
     Write-Host "     - 任何二次打包、调试器附加、Root 设备都会导致 APP 自动退出"

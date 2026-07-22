@@ -18,7 +18,7 @@
 .EXAMPLE
     .\pack.ps1 -Version bendi -Target app
     .\pack.ps1 -Version bendi -Target app -SkipConfig
-    .\pack.ps1 -Version bendi -Interactive
+    .\pack.ps1 -Version bendi -Target appstrict
 #>
 
 param(
@@ -26,11 +26,10 @@ param(
     [ValidateSet('bendi','dingzhi','geren')]
     [string]$Version,
     [Parameter()]
-    [ValidateSet('desktop','app','all','sync','config','encoding')]
+    [ValidateSet('desktop','app','all','sync','config','encoding','appstrict')]
     [string]$Target,
     [switch]$SkipConfig,
-    [switch]$SkipEncodingCheck,
-    [switch]$Interactive
+    [switch]$SkipEncodingCheck
 )
 
 # ============================================================================
@@ -553,11 +552,33 @@ function Build-Desktop {
             if (Test-Path $lockFile) {
                 # npm ci is 2-3x faster than npm install when lock file exists
                 Invoke-External { npm ci --no-audit --no-fund --prefer-offline } "npm ci"
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "  [WARN] npm ci failed, fallback to npm install --ignore-scripts..." -ForegroundColor Yellow
+                    Invoke-External { npm install --no-audit --no-fund --prefer-offline --ignore-scripts } "npm install --ignore-scripts"
+                }
             } else {
-                Invoke-External { npm install --no-audit --no-fund --prefer-offline } "npm install"
+                Invoke-External { npm install --no-audit --no-fund --prefer-offline --ignore-scripts } "npm install"
             }
         } finally {
             Pop-Location
+        }
+    }
+    # 检查 electron dist（--ignore-scripts 安装时 postinstall 不执行，需手动下载）
+    if (-not (Test-Path "$script:VersionDir\node_modules\electron\dist\electron.exe")) {
+        Write-Host "  electron dist 缺失，下载二进制文件中..." -ForegroundColor Yellow
+        Push-Location $script:VersionDir
+        try {
+            $env:NODE_TLS_REJECT_UNAUTHORIZED = '0'
+            $env:ELECTRON_MIRROR = 'https://registry.npmmirror.com/-/binary/electron/'
+            Invoke-External { node "node_modules\electron\install.js" } "electron install"
+        } finally {
+            Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
+            Remove-Item Env:\ELECTRON_MIRROR -ErrorAction SilentlyContinue
+            Pop-Location
+        }
+        if (-not (Test-Path "$script:VersionDir\node_modules\electron\dist\electron.exe")) {
+            Write-Host "  [ERROR] electron 二进制文件下载失败" -ForegroundColor Red
+            exit 1
         }
     }
 
@@ -1227,42 +1248,33 @@ function Invoke-Packaging {
 # Entry Point
 # ============================================================================
 
-if ($Interactive) {
-    if (-not $Version) {
-        Write-Host "用法: pack.ps1 -Version <bendi|dingzhi|geren> -Interactive"
-        exit 1
-    }
+# 命令行模式（无交互菜单）
+if (-not $Version) {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  惠康中医打包工具 - 离线版" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  用法:" -ForegroundColor Yellow
+    Write-Host "    pack-desktop.bat        打包桌面版 (Electron exe)"
+    Write-Host "    pack-app.bat            打包手机 APP (Android APK)"
+    Write-Host "    pack-app-strict.bat     严格模式 APP (APK+签名哈希+重打包)"
+    Write-Host ""
+    Write-Host "  或直接调用:" -ForegroundColor DarkGray
+    Write-Host "    pack.ps1 -Version <bendi|dingzhi|geren> -Target <desktop|app|appstrict>"
+    Write-Host ""
+    exit 0
+}
 
-    while ($true) {
-        $choice = Show-Menu -Ver $Version
-        switch ($choice) {
-            '1' { Invoke-Packaging -Ver $Version -Tgt 'desktop' -SkipCfg $false -SkipEnc $false }
-            '2' { Invoke-Packaging -Ver $Version -Tgt 'app' -SkipCfg $false -SkipEnc $false }
-            '3' { Invoke-Packaging -Ver $Version -Tgt 'all' -SkipCfg $false -SkipEnc $false }
-            '4' { Build-AppStrict -Ver $Version }
-            '5' { Invoke-Packaging -Ver $Version -Tgt 'sync' -SkipCfg $true -SkipEnc $true }
-            '6' { Invoke-Packaging -Ver $Version -Tgt 'config' -SkipCfg $false -SkipEnc $true }
-            '7' { Invoke-Packaging -Ver $Version -Tgt 'encoding' -SkipCfg $true -SkipEnc $false }
-            '8' { Show-CurrentConfig -Ver $Version }
-            '9' { Enable-StrictMode -Ver $Version }
-            's' { Build-AllStrict -Ver $Version }
-            # P1-易用：快捷选项 - 跳过耗时步骤，专注打包
-            'a' { Invoke-Packaging -Ver $Version -Tgt 'all' -SkipCfg $true -SkipEnc $true }
-            'd' { Invoke-Packaging -Ver $Version -Tgt 'desktop' -SkipCfg $true -SkipEnc $true }
-            'p' { Invoke-Packaging -Ver $Version -Tgt 'app' -SkipCfg $true -SkipEnc $true }
-            '0' { exit 0 }
-            default { Write-Host "  [错误] 无效选项，请重新选择" -ForegroundColor Red }
-        }
-        # P1-易用：选项 1/2/3/9 等打包完成后直接返回菜单，不需回车确认
-        # 仅在错误或异常时才暂停（由各 Build 函数内部 pause）
-    }
-} else {
-    # Direct execution mode
-    if (-not $Version -or -not $Target) {
-        Write-Host "用法: pack.ps1 -Version <bendi|dingzhi|geren> -Target <desktop|app|all>"
-        Write-Host "     pack.ps1 -Version bendi -Interactive"
-        exit 1
-    }
-    $exitCode = Invoke-Packaging -Ver $Version -Tgt $Target -SkipCfg $SkipConfig -SkipEnc $SkipEncodingCheck
+if ($Target -eq 'appstrict') {
+    $exitCode = Build-AppStrict -Ver $Version
     exit $exitCode
 }
+
+if (-not $Target) {
+    Write-Host "[ERROR] 请指定 -Target 参数 (desktop|app|all|appstrict)"
+    exit 1
+}
+
+$exitCode = Invoke-Packaging -Ver $Version -Tgt $Target -SkipCfg $SkipConfig -SkipEnc $SkipEncodingCheck
+exit $exitCode

@@ -1,5 +1,12 @@
 ﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-bendi/db-dingzhi）
+param(
+    [switch]$AutoDesktop,
+    [switch]$AutoApp,
+    [switch]$AutoAppStrict,
+    [switch]$SyncOnly,
+    [switch]$CheckEncoding
+)
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
@@ -465,8 +472,32 @@ function Build-Desktop {
 
         Write-Host "  [2/8] Checking node_modules..." -ForegroundColor White
         if (-not (Test-Path "node_modules")) {
-            if (Test-Path "package-lock.json") { & npm ci --no-audit --no-fund --prefer-offline } else { & npm install --no-audit --no-fund --prefer-offline }
+            if (Test-Path "package-lock.json") {
+                & npm ci --no-audit --no-fund --prefer-offline
+                if ($LASTEXITCODE -ne 0) {
+                    Write-Host "  [WARN] npm ci failed, fallback to npm install --ignore-scripts..." -ForegroundColor Yellow
+                    & npm install --no-audit --no-fund --prefer-offline --ignore-scripts
+                }
+            } else {
+                & npm install --no-audit --no-fund --prefer-offline --ignore-scripts
+            }
             if ($LASTEXITCODE -ne 0) { Write-Host "  [ERROR] npm install failed" -ForegroundColor Red; return 1 }
+        }
+        # 检查 electron dist（--ignore-scripts 安装时 postinstall 不执行，需手动下载）
+        if (-not (Test-Path "node_modules\electron\dist\electron.exe")) {
+            Write-Host "        electron dist missing, downloading binary..." -ForegroundColor Yellow
+            $env:NODE_TLS_REJECT_UNAUTHORIZED = '0'
+            $env:ELECTRON_MIRROR = 'https://registry.npmmirror.com/-/binary/electron/'
+            try {
+                & node "node_modules\electron\install.js" 2>&1 | ForEach-Object { Write-Host "        $_" }
+            } finally {
+                Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
+                Remove-Item Env:\ELECTRON_MIRROR -ErrorAction SilentlyContinue
+            }
+            if (-not (Test-Path "node_modules\electron\dist\electron.exe")) {
+                Write-Host "  [ERROR] electron binary download failed" -ForegroundColor Red
+                return 1
+            }
         }
         Write-Host "        [OK]"
 
@@ -503,6 +534,14 @@ function Build-Desktop {
         Write-Host "        [OK]"
 
         Write-Host "  [6.5/8] Running electron-builder --prepackaged..." -ForegroundColor White
+        # P1-安全加固: 证书密码从本地 cert-password.txt 读取
+        $certPwdFile = "$toolsDir\certs\cert-password.txt"
+        if (Test-Path $certPwdFile) {
+            $env:CSC_KEY_PASSWORD = (Get-Content $certPwdFile -Raw).Trim()
+            Write-Host "        [OK] Certificate password loaded" -ForegroundColor Green
+        } else {
+            Write-Host "        [WARN] cert-password.txt not found, code signing may be skipped" -ForegroundColor Yellow
+        }
         $localTemp = "$desktopDir\tmp"
         if (-not (Test-Path $localTemp)) { New-Item -ItemType Directory -Path $localTemp -Force | Out-Null }
         $prevTemp = $env:TEMP; $prevTmp = $env:TMP
@@ -512,6 +551,7 @@ function Build-Desktop {
             $buildRC = $LASTEXITCODE
         } finally {
             Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
+            Remove-Item Env:\CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
             $env:TEMP = $prevTemp; $env:TMP = $prevTmp
             if (Test-Path $localTemp) { Remove-Item $localTemp -Recurse -Force -ErrorAction SilentlyContinue }
         }
@@ -919,55 +959,43 @@ function Build-AppStrict {
 }
 
 # ============================================================================
-# Section 8: Main Loop (对齐离线版 pack.ps1 Interactive 入口)
+# Section 8: Entry Point (命令行参数模式，无交互菜单)
 # ============================================================================
 
-while ($true) {
-    $choice = Show-Menu
-    # P1-易用：总耗时统计
-    $totalStart = Get-Date
-    switch ($choice) {
-        '1' { Build-Desktop | Out-Null }
-        '2' { Build-App | Out-Null }
-        '3' { Build-All | Out-Null }
-        '4' { Build-AppStrict | Out-Null }
-        '5' { Sync-FilesToCloudApp | Out-Null }
-        '6' { Edit-CloudConfig | Out-Null }
-        '7' { Invoke-EncodingCheck | Out-Null }
-        '8' { Show-Config | Out-Null }
-        '9' { Enable-StrictMode | Out-Null }
-        's' { Build-AllStrict | Out-Null }
-        # P1-易用：快捷选项 - 跳过编码检查，直接打包
-        'a' {
-            Write-Host "[快捷] 快速全部打包（跳过编码检查）..." -ForegroundColor Cyan
-            Build-All | Out-Null
-        }
-        'd' {
-            Write-Host "[快捷] 快速桌面打包（跳过编码检查）..." -ForegroundColor Cyan
-            Build-Desktop | Out-Null
-        }
-        'p' {
-            Write-Host "[快捷] 快速 APP 打包（跳过编码检查）..." -ForegroundColor Cyan
-            Build-App | Out-Null
-        }
-        '0' {
-            Write-Host ""
-            Write-Host "再见！" -ForegroundColor Cyan
-            Start-Sleep -Seconds 1
-            exit
-        }
-        default {
-            Write-Host ""
-            Write-Host "  [错误] 无效选择，请重新输入" -ForegroundColor Red
-            Start-Sleep -Seconds 2
-        }
-    }
-    # P1-易用：显示本次操作总耗时
-    if ($choice -ne '0' -and $choice -ne '8') {
-        $totalElapsed = (Get-Date) - $totalStart
-        Write-Host ""
-        Write-Host "  本次操作总耗时: $($totalElapsed.ToString('hh\:mm\:ss'))" -ForegroundColor DarkGray
-    }
-    # P1-易用：选项 1/2/3/9 等打包完成后直接返回菜单，不需回车确认
-    # 仅在错误或异常时才暂停（由各 Build 函数内部 pause）
+$totalStart = Get-Date
+$autoRC = 0
+
+if ($SyncOnly) {
+    $autoRC = Sync-FilesToCloudApp
+} elseif ($CheckEncoding) {
+    Invoke-EncodingCheck | Out-Null
+    $autoRC = 0
+} elseif ($AutoDesktop) {
+    $autoRC = Build-Desktop -SkipConfirm
+} elseif ($AutoApp) {
+    $autoRC = Build-App -SkipConfirm
+} elseif ($AutoAppStrict) {
+    $autoRC = Build-AppStrict
+} else {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  惠康中医打包工具 - 云端版" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  用法:" -ForegroundColor Yellow
+    Write-Host "    pack-desktop.bat        打包桌面版 (Electron exe)"
+    Write-Host "    pack-app.bat            打包手机 APP (Android APK)"
+    Write-Host "    pack-app-strict.bat     严格模式 APP (APK+签名哈希+重打包)"
+    Write-Host ""
+    Write-Host "  高级:" -ForegroundColor DarkGray
+    Write-Host "    powershell -File packaging.ps1 -SyncOnly        仅同步文件"
+    Write-Host "    powershell -File packaging.ps1 -CheckEncoding   仅编码检查"
+    Write-Host ""
+    exit 0
 }
+
+$totalElapsed = (Get-Date) - $totalStart
+Write-Host ""
+Write-Host "  本次操作总耗时: $($totalElapsed.ToString('hh\:mm\:ss'))" -ForegroundColor DarkGray
+Write-Host "  退出码: $autoRC" -ForegroundColor $(if ($autoRC -eq 0) { 'Green' } else { 'Red' })
+exit $autoRC

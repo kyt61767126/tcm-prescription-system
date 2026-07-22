@@ -1,4 +1,4 @@
-﻿# one-click-pack.ps1 - One-click packaging tool for all 4 versions
+# one-click-pack.ps1 - One-click packaging tool for all 4 versions
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -227,48 +227,37 @@ function Show-PickVersionMenu {
     }
 }
 
-# ============ Interactive Menu ============
-function Show-InteractiveMenu {
-    while ($true) {
-        Clear-Host
-        Write-Host ""
-        Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  请选择版本进入交互式菜单" -ForegroundColor Cyan
-        Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  [1] 云端版 (逐版本配置/严格模式等)"
-        Write-Host "  [2] 离线本地版"
-        Write-Host "  [3] 离线定制版"
-        Write-Host "  [4] 离线个人版"
-        Write-Host "  [0] 返回主菜单"
-        $choice = Read-Host "请选择"
-        switch ($choice) {
-            "1" {
-                Push-Location "$script:RootDir\cloud_project"
-                try {
-                    & powershell -NoProfile -ExecutionPolicy Bypass -File "packaging.ps1"
-                } finally { Pop-Location }
-            }
-            "2" {
-                Push-Location "$script:RootDir\offline_project\db-bendi"
-                try {
-                    & powershell -NoProfile -ExecutionPolicy Bypass -File "pack.bat"
-                } finally { Pop-Location }
-            }
-            "3" {
-                Push-Location "$script:RootDir\offline_project\db-dingzhi"
-                try {
-                    & powershell -NoProfile -ExecutionPolicy Bypass -File "pack.bat"
-                } finally { Pop-Location }
-            }
-            "4" {
-                Push-Location "$script:RootDir\offline_project\db-geren"
-                try {
-                    & powershell -NoProfile -ExecutionPolicy Bypass -File "pack.bat"
-                } finally { Pop-Location }
-            }
-            "0" { return }
-        }
-    }
+# ============ Show Standalone Usage ============
+function Show-StandaloneUsage {
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  各版本独立打包入口" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "  云端版 (cloud_project):" -ForegroundColor Yellow
+    Write-Host "    pack-desktop.bat       打包桌面版"
+    Write-Host "    pack-app.bat           打包手机APP"
+    Write-Host "    pack-app-strict.bat    严格模式APP"
+    Write-Host ""
+    Write-Host "  离线本地版 (db-bendi):" -ForegroundColor Yellow
+    Write-Host "    pack-desktop.bat       打包桌面版"
+    Write-Host "    pack-app.bat           打包手机APP"
+    Write-Host "    pack-app-strict.bat    严格模式APP"
+    Write-Host ""
+    Write-Host "  离线定制版 (db-dingzhi):" -ForegroundColor Yellow
+    Write-Host "    pack-desktop.bat       打包桌面版"
+    Write-Host "    pack-app.bat           打包手机APP"
+    Write-Host "    pack-app-strict.bat    严格模式APP"
+    Write-Host ""
+    Write-Host "  离线个人版 (db-geren):" -ForegroundColor Yellow
+    Write-Host "    pack-desktop.bat       打包桌面版"
+    Write-Host "    pack-app.bat           打包手机APP"
+    Write-Host "    pack-app-strict.bat    严格模式APP"
+    Write-Host ""
+    Write-Host "  提示: 直接双击对应目录下的 bat 文件即可" -ForegroundColor DarkGray
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host ""
+    pause
 }
 
 # ============ Main Menu ============
@@ -292,7 +281,7 @@ while ($true) {
     Write-Host "  --- 更多选项 ---"
     Write-Host "  [6] 单独某个版本打包 exe"
     Write-Host "  [7] 单独某个版本打 APP"
-    Write-Host "  [8] 进入交互式菜单 (逐版本配置/签名/严格模式)"
+    Write-Host "  [8] 查看各版本独立打包入口"
     Write-Host ""
     Write-Host "  菜单说明:"
     Write-Host "  - 桌面程序: 各版本目录\dist\*.exe"
@@ -310,7 +299,7 @@ while ($true) {
         "5" { Build-All }
         "6" { Show-PickVersionMenu -Mode "desktop" }
         "7" { Show-PickVersionMenu -Mode "app" }
-        "8" { Show-InteractiveMenu }
+        "8" { Show-StandaloneUsage }
         "0" { exit 0 }
         default { Write-Host "无效选择，请重试" -ForegroundColor Red; Start-Sleep -Seconds 1 }
     }

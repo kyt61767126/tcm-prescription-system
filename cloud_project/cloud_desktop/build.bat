@@ -45,6 +45,21 @@ if not exist "node_modules" (
 ) else (
     echo       [OK] node_modules exists
 )
+REM Check electron dist (--ignore-scripts skips postinstall, need manual download)
+if not exist "node_modules\electron\dist\electron.exe" (
+    echo       electron dist missing, downloading binary...
+    set NODE_TLS_REJECT_UNAUTHORIZED=0
+    set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
+    call node node_modules\electron\install.js
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    set ELECTRON_MIRROR=
+    if not exist "node_modules\electron\dist\electron.exe" (
+        echo [ERROR] electron binary download failed
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+    echo       [OK] electron dist downloaded
+)
 echo.
 
 echo [3/8] Closing remaining processes...
