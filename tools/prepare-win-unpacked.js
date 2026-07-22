@@ -51,11 +51,43 @@ for (const item of buildFiles) {
   }
 }
 
-// Add dependencies from package.json
-const deps = pkg.dependencies || {};
-for (const depName of Object.keys(deps)) {
-  fileList.push(path.join('node_modules', depName));
+// Recursively resolve all dependencies (direct + transitive) from node_modules
+// fs-extra depends on universalify, graceful-fs, jsonfile etc. — these must be included
+function resolveAllDeps(rootDir, depNames, visited = new Set()) {
+  const result = [];
+  for (const name of depNames) {
+    if (visited.has(name)) continue;
+    visited.add(name);
+    const depPath = path.join(rootDir, 'node_modules', name);
+    const depPkgPath = path.join(depPath, 'package.json');
+    if (!fs.existsSync(depPkgPath)) continue;
+    result.push(path.join('node_modules', name));
+    try {
+      const depPkg = JSON.parse(fs.readFileSync(depPkgPath, 'utf8'));
+      const subDeps = Object.keys(depPkg.dependencies || {});
+      for (const sub of subDeps) {
+        // Check node_modules/<dep>/node_modules/<sub> first (nested), then top-level
+        const nestedSubPath = path.join(depPath, 'node_modules', sub, 'package.json');
+        if (fs.existsSync(nestedSubPath)) {
+          // Nested dependency — include the whole nested node_modules path
+          if (!visited.has(`${name}/${sub}`)) {
+            visited.add(`${name}/${sub}`);
+            result.push(path.join('node_modules', name, 'node_modules', sub));
+          }
+        } else {
+          // Top-level dependency — recurse
+          result.push(...resolveAllDeps(rootDir, [sub], visited));
+        }
+      }
+    } catch (e) { /* ignore parse errors */ }
+  }
+  return result;
 }
+
+// Add direct + transitive dependencies from package.json
+const deps = pkg.dependencies || {};
+const depNames = Object.keys(deps);
+fileList.push(...resolveAllDeps(versionDir, depNames));
 
 // Deduplicate
 fileList = [...new Set(fileList)];
