@@ -18,7 +18,8 @@ function getLicenseHmacKey(context) {
     if (context && context.env && context.env.LICENSE_HMAC_KEY) {
         return context.env.LICENSE_HMAC_KEY;
     }
-    if (process.env.LICENSE_HMAC_KEY) {
+    // ★ typeof 保护：Cloudflare Workers/Pages runtime 无 process 全局，直接访问会抛 ReferenceError
+    if (typeof process !== 'undefined' && process.env && process.env.LICENSE_HMAC_KEY) {
         return process.env.LICENSE_HMAC_KEY;
     }
     return 'bnzc_tcm_license_key_v1_2026';
