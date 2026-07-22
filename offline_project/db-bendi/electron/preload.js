@@ -87,6 +87,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     alertSync: (message) => ipcRenderer.sendSync('dialog:alert-sync', String(message || '')),
     confirmSync: (message) => ipcRenderer.sendSync('dialog:confirm-sync', String(message || '')) === 1,
 
+    // ★ 异步 prompt 对话框（替代原生 window.prompt）
+    // 原因：Electron BrowserWindow 中 window.prompt() 默认返回 null（不弹框），
+    //      导致 handleEditUser / editMedicine 等函数静默失败（点击"编辑"无反应）
+    // 方案：创建独立 BrowserWindow（modal）作为 prompt 对话框，返回 Promise<string|null>
+    // 兼容：业务代码需用 `await prompt(...)`，同步调用会得到 Promise 对象
+    prompt: (message, defaultValue) => ipcRenderer.invoke('dialog:prompt', String(message || ''), String(defaultValue || '')),
+
     // ★ License 授权管理
     license: {
         getStatus: () => ipcRenderer.invoke('license:get-status'),

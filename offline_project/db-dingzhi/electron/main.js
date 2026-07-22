@@ -321,7 +321,14 @@ function createMainWindow() {
                         catch(e) { console.warn('[confirm] 同步 dialog 失败，回退原生:', e.message); return origConfirm(msg); }
                     };
                 }
-                console.log('[FIX] alert/confirm 已替换为 Electron 原生同步 dialog');
+                // ★ P0 修复：替换 window.prompt（Electron 原生 prompt 返回 null，导致编辑功能失效）
+                if (window.electronAPI && typeof window.electronAPI.prompt === 'function') {
+                    window.prompt = function(message, defaultValue) {
+                        return window.electronAPI.prompt(message, defaultValue);
+                    };
+                    console.log('[FIX] window.prompt 已替换为 Electron 异步 prompt');
+                }
+                console.log('[FIX] alert/confirm/prompt 已替换为 Electron 原生 dialog');
             })();`;
             await mainWindow.webContents.executeJavaScript(fixCode);
             console.log('[FIX] 原生同步 dialog 注入完成');
@@ -744,6 +751,75 @@ ipcMain.on('dialog:confirm-sync', (event, message) => {
         console.error('[dialog:confirm-sync] 失败:', e.message);
     }
     event.returnValue = result; // 0=取消, 1=确定
+});
+
+// ★ P0 修复：异步 prompt 对话框（替代原生 window.prompt）
+// 问题：Electron 中 window.prompt() 默认返回 null，导致 handleEditUser 等函数静默失败
+// 方案：创建模态子窗口（prompt-modal.html），返回 Promise<string|null>
+// 兼容：业务代码需用 `await prompt(...)`，preload.js 已暴露 electronAPI.prompt
+const PROMPT_HTML_PATH = path.resolve(__dirname, '../../../tools/prompt-modal.html');
+const PROMPT_PRELOAD_PATH = path.resolve(__dirname, '../../../tools/prompt-preload.js');
+
+ipcMain.handle('dialog:prompt', async (event, message, defaultValue) => {
+    const parentWin = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+    if (!parentWin || parentWin.isDestroyed()) {
+        return null;
+    }
+
+    const promptWin = new BrowserWindow({
+        width: 420,
+        height: 220,
+        parent: parentWin,
+        modal: true,
+        resizable: false,
+        minimizable: false,
+        maximizable: false,
+        autoHideMenuBar: true,
+        title: '请输入',
+        show: false,
+        webPreferences: {
+            contextIsolation: true,
+            nodeIntegration: false,
+            preload: PROMPT_PRELOAD_PATH
+        }
+    });
+
+    // 使用 hash 传递参数（避免 file:// query string 兼容问题）
+    const params = encodeURIComponent(JSON.stringify({ message: message || '', defaultValue: defaultValue || '' }));
+    const fileUrl = 'file:///' + PROMPT_HTML_PATH.replace(/\\/g, '/').replace(/^\//, '');
+    await promptWin.loadURL(fileUrl + '#' + params);
+    promptWin.show();
+
+    return new Promise((resolve) => {
+        let resolved = false;
+        const cleanup = () => {
+            ipcMain.removeListener('prompt:submit', handleSubmit);
+            ipcMain.removeListener('prompt:cancel', handleCancel);
+        };
+        const handleSubmit = (e, value) => {
+            if (resolved || e.sender !== promptWin.webContents) return;
+            resolved = true;
+            cleanup();
+            promptWin.close();
+            resolve(value);
+        };
+        const handleCancel = (e) => {
+            if (resolved || (e && e.sender !== promptWin.webContents)) return;
+            resolved = true;
+            cleanup();
+            promptWin.close();
+            resolve(null);
+        };
+        ipcMain.on('prompt:submit', handleSubmit);
+        ipcMain.on('prompt:cancel', handleCancel);
+        promptWin.on('closed', () => {
+            if (!resolved) {
+                resolved = true;
+                cleanup();
+                resolve(null);
+            }
+        });
+    });
 });
 
 ipcMain.handle('save-prescription-image', (event, imageData, fileName) => savePrescriptionImage(imageData, fileName));
