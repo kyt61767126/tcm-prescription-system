@@ -619,6 +619,15 @@ function Build-Desktop {
         $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://registry.npmmirror.com/-/binary/electron-builder-binaries/"
         $env:ELECTRON_BUILDER_CACHE = "$env:LOCALAPPDATA\electron-builder\Cache"
         $env:NODE_TLS_REJECT_UNAUTHORIZED = "0"
+        # ★ 修复 NSIS "Error writing temporary file" 错误
+        # 原因：TRAE 沙箱可能阻止 NSIS 编译器(makensis.exe)写入系统 %TEMP% 目录
+        # 方案：将 TEMP/TMP 重定向到项目本地的 tmp 目录
+        $localTemp = "$script:VersionDir\tmp"
+        if (-not (Test-Path $localTemp)) { New-Item -ItemType Directory -Path $localTemp -Force | Out-Null }
+        $prevTemp = $env:TEMP
+        $prevTmp = $env:TMP
+        $env:TEMP = $localTemp
+        $env:TMP = $localTemp
         try {
             Invoke-External { npx electron-builder --win --prepackaged dist/win-unpacked } "electron-builder --prepackaged"
         } catch {
@@ -629,6 +638,11 @@ function Build-Desktop {
         } finally {
             Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
             Remove-Item Env:\ELECTRON_BUILDER_BINARIES_MIRROR -ErrorAction SilentlyContinue
+            # 恢复原始 TEMP/TMP
+            $env:TEMP = $prevTemp
+            $env:TMP = $prevTmp
+            # 清理本地临时目录
+            if (Test-Path $localTemp) { Remove-Item $localTemp -Recurse -Force -ErrorAction SilentlyContinue }
         }
     } finally {
         Pop-Location

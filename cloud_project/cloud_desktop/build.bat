@@ -126,10 +126,20 @@ echo [OK] win-unpacked prepared
 echo.
 
 echo [6.5/8] Running electron-builder --prepackaged...
+REM ★ 修复 NSIS "Error writing temporary file" 错误：重定向 TEMP/TMP 到本地目录
+set "PREV_TEMP=%TEMP%"
+set "PREV_TMP=%TMP%"
+if not exist "tmp" mkdir tmp
+set "TEMP=%CD%\tmp"
+set "TMP=%CD%\tmp"
 npx electron-builder --win --prepackaged dist/win-unpacked
 set "BUILD_RC=%errorlevel%"
 REM P1-安全：立即清除 TLS 临时变量，避免污染后续命令环境
 set NODE_TLS_REJECT_UNAUTHORIZED=
+REM 恢复原始 TEMP/TMP
+set "TEMP=%PREV_TEMP%"
+set "TMP=%PREV_TMP%"
+if exist "tmp" rmdir /s /q "tmp" 2>nul
 if not "%BUILD_RC%"=="0" (
     echo.
     echo [ERROR] Build failed, please check logs above
