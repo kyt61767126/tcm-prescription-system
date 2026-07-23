@@ -521,25 +521,6 @@ app.whenReady().then(async () => {
     sharedSession = session.fromPartition(SESSION_PARTITION);
     installCSP(sharedSession);
 
-    // ============================================================================
-    //  ★ 安全防护：HTTPS 证书严格校验（防中间人攻击）
-    //  云端版必须加载 HTTPS 资源（tcm-prescription-system.pages.dev 等），
-    //  若不校验证书，攻击者可通过中间人代理替换响应内容
-    //  修复：仅信任有效证书，拒绝过期/自签名/被吊销的证书
-    // ============================================================================
-    sharedSession.setCertificateVerifyProc((request, callback) => {
-        // request 包含 hostname / certificate / validationResult / errorCode
-        const { validationResult, errorCode } = request;
-        // validationResult === 0 表示 Chromium 内置校验通过
-        // 非零值表示证书有问题（过期/域名不匹配/CA不可信/被吊销等）
-        if (validationResult !== 0) {
-            console.error(`[SECURITY] 证书校验失败: hostname=${request.hostname} validationResult=${validationResult} errorCode=${errorCode}`);
-            callback(-1);  // -1 = 拒绝连接
-            return;
-        }
-        callback(0);  // 0 = 信任证书
-    });
-
     // ★ 授予 camera/microphone 权限（视频录制所需）
     sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
         if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
