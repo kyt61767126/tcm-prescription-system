@@ -4618,21 +4618,23 @@ if (window.Permission) {
             prescriptionNoEl.blur();
             prescriptionNoEl.focus();
             
-            // 辅助操作失败不影响处方数据完整性（仅记录日志）
-            // 生成处方签图片并自动下载
-            try { savePrescriptionAsImage(record, newPrescriptionNo); } catch (e) { console.warn('生成处方图片失败:', e); }
-            // 收集媒体文件元数据并更新处方记录
-            try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) { console.warn('收集媒体文件失败:', e); }
-            // 更新药物使用频率
-            try { updateMedicineFrequency(record.items); } catch (e) { console.warn('更新药品频次失败:', e); }
-            // 10. 执行重输清空表单
-            clearPrescription();
-            // B1: 处方保存后自动备份
-            try { saveLocalBackup(); } catch (e) { console.warn('自动备份失败:', e); }
-            // 刷新历史列表显示，确保用户能立即看到刚才保存的处方
-            try {
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
-            } catch(e) { console.warn('刷新历史列表失败:', e); }
+            // ★ 优化：核心数据已保存到 IndexedDB，立即执行UI响应（清空表单+显示成功提示）
+            // 让用户立即感知保存成功，不等待耗时辅助操作
+            try { clearPrescription(); } catch (e) { console.warn('清空表单失败:', e); }
+            try { showToast('处方保存成功：' + newPrescriptionNo); } catch (e) {}
+
+            // ★ 优化：辅助操作异步化，不阻塞用户操作
+            // 生成处方签图片(canvas.toDataURL同步耗时)、收集媒体文件(扫描目录)、更新药品频次、自动备份(JSON.stringify同步耗时)、刷新历史列表
+            // 全部放到 setTimeout(0) 中，让 UI 先渲染清空表单+成功提示
+            setTimeout(function() {
+                try { savePrescriptionAsImage(record, newPrescriptionNo); } catch (e) { console.warn('生成处方图片失败:', e); }
+                try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) { console.warn('收集媒体文件失败:', e); }
+                try { updateMedicineFrequency(record.items); } catch (e) { console.warn('更新药品频次失败:', e); }
+                try { saveLocalBackup(); } catch (e) { console.warn('自动备份失败:', e); }
+                try {
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+                } catch(e) { console.warn('刷新历史列表失败:', e); }
+            }, 0);
         }
 
         function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
@@ -4878,6 +4880,15 @@ if (window.Permission) {
         }
 
         function saveLocalBackup() {
+            // ★ 优化：每日首次保存才触发完整备份，避免每次保存都序列化整个数据（大幅减少耗时）
+            // 之前每次保存处方都会 JSON.stringify 整个 prescriptionHistory 写入 localStorage，数据量大时阻塞 UI
+            const today = new Date().toISOString().slice(0, 10);
+            const lastBackupDate = localStorage.getItem('lastSaveBackupDate');
+            if (lastBackupDate === today) {
+                // 今天已备份过，跳过完整备份（处方数据已存 IndexedDB，安全）
+                return;
+            }
+            localStorage.setItem('lastSaveBackupDate', today);
             try {
                 let backups = JSON.parse(localStorage.getItem('localBackups') || '[]');
                 const backup = {
@@ -4892,7 +4903,7 @@ if (window.Permission) {
                 backups.unshift(backup);
                 backups = backups.slice(0, 10);
                 localStorage.setItem('localBackups', JSON.stringify(backups));
-                console.log('[Backup] 自动备份已保存, 共', backups.length, '个备份');
+                console.log('[Backup] 每日自动备份已保存, 共', backups.length, '个备份');
             } catch (error) {
                 console.warn('[Backup] 自动备份失败:', error);
             }
