@@ -819,9 +819,9 @@ function Enable-StrictMode {
     Write-Host "  说明：Root 检测 + 调试器检测默认已启用，无需此步骤"
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
-    $code = Invoke-BatFile "$scriptDir\generate-sign-hash.bat" "签名哈希提取" -NoPause
+    & "$scriptDir\..\tools\generate-sign-hash.ps1" -Version cloud
     Write-Host ""
-    return $code
+    return $LASTEXITCODE
 }
 
 function Build-AllStrict {
@@ -866,7 +866,7 @@ function Build-AllStrict {
     $env:NO_PAUSE = '1'
     try {
         Push-Location $scriptDir
-        & "$scriptDir\generate-sign-hash.bat" 2>&1 | ForEach-Object {
+        & "$scriptDir\..\tools\generate-sign-hash.ps1" -Version cloud 2>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.Exception.Message -ForegroundColor Yellow }
             else { Write-Host $_ }
         }
@@ -936,7 +936,7 @@ function Build-AppStrict {
     $env:NO_PAUSE = '1'
     try {
         Push-Location $scriptDir
-        & "$scriptDir\generate-sign-hash.bat" 2>&1 | ForEach-Object {
+        & "$scriptDir\..\tools\generate-sign-hash.ps1" -Version cloud 2>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.Exception.Message -ForegroundColor Yellow }
             else { Write-Host $_ }
         }

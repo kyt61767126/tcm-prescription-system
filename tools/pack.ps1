@@ -966,7 +966,7 @@ function Show-CurrentConfig {
 function Enable-StrictMode {
     param([string]$Ver)
     $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
-    $hashBat = "$versionDir\generate-sign-hash.bat"
+    $hashPs1 = "$script:ProjectRoot\tools\generate-sign-hash.ps1"
 
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Yellow
@@ -983,8 +983,8 @@ function Enable-StrictMode {
     Write-Host "    3. 重新打包 APK 启用签名严格模式"
     Write-Host ""
 
-    if (-not (Test-Path $hashBat)) {
-        Write-Host "[错误] 未找到 generate-sign-hash.bat: $hashBat" -ForegroundColor Red
+    if (-not (Test-Path $hashPs1)) {
+        Write-Host "[错误] 未找到 generate-sign-hash.ps1: $hashPs1" -ForegroundColor Red
         return 1
     }
 
@@ -996,10 +996,10 @@ function Enable-StrictMode {
 
     Write-Host ""
     Write-Log "[STEP] Enable strict mode for $Ver"
-    Invoke-External -FilePath $hashBat -WorkDir $versionDir
+    & $hashPs1 -Version $Ver
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[错误] 哈希提取失败" -ForegroundColor Red
-        Write-Log "[ERROR] generate-sign-hash.bat failed" "ERROR"
+        Write-Log "[ERROR] generate-sign-hash.ps1 failed" "ERROR"
         return 1
     }
 
@@ -1015,7 +1015,7 @@ function Enable-StrictMode {
 function Build-AllStrict {
     param([string]$Ver)
     $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
-    $hashBat = "$versionDir\generate-sign-hash.bat"
+    $hashPs1 = "$script:ProjectRoot\tools\generate-sign-hash.ps1"
 
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Yellow
@@ -1056,12 +1056,12 @@ function Build-AllStrict {
     # Step C: Extract & inject hash
     Write-Host ""
     Write-Host "  [步骤 C] 提取并注入哈希..." -ForegroundColor Cyan
-    if (-not (Test-Path $hashBat)) {
-        Write-Host "[错误] 未找到 generate-sign-hash.bat，跳过严格模式" -ForegroundColor Red
+    if (-not (Test-Path $hashPs1)) {
+        Write-Host "[错误] 未找到 generate-sign-hash.ps1，跳过严格模式" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
         return 1
     }
-    Invoke-External -FilePath $hashBat -WorkDir $versionDir -NoPause
+    & $hashPs1 -Version $Ver
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[错误] 哈希提取失败，跳过严格模式" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
@@ -1093,7 +1093,7 @@ function Build-AllStrict {
 function Build-AppStrict {
     param([string]$Ver)
     $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
-    $hashBat = "$versionDir\generate-sign-hash.bat"
+    $hashPs1 = "$script:ProjectRoot\tools\generate-sign-hash.ps1"
 
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Yellow
@@ -1123,12 +1123,12 @@ function Build-AppStrict {
     # Step B: Extract & inject hash
     Write-Host ""
     Write-Host "  [步骤 B] 提取并注入哈希..." -ForegroundColor Cyan
-    if (-not (Test-Path $hashBat)) {
-        Write-Host "[错误] 未找到 generate-sign-hash.bat，跳过严格模式" -ForegroundColor Red
+    if (-not (Test-Path $hashPs1)) {
+        Write-Host "[错误] 未找到 generate-sign-hash.ps1，跳过严格模式" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 A 的 APK (首次锁定模式)"
         return 1
     }
-    Invoke-External -FilePath $hashBat -WorkDir $versionDir -NoPause
+    & $hashPs1 -Version $Ver
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[错误] 哈希提取失败，跳过严格模式" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 A 的 APK (首次锁定模式)"
