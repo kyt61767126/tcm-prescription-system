@@ -274,6 +274,12 @@ public class MainActivity extends AppCompatActivity {
             } catch (Throwable ignored) {}
         }
 
+        // ★ 清除 WebView 缓存和表单数据（防止旧版本页面内容闪动）
+        // 问题：改名后，WebView 缓存中可能残留旧版本 index.html（含"本能中医处方系统"字样）
+        // 当键盘弹出导致页面重绘时，旧缓存内容会短暂闪现
+        // 注意：不清除 localStorage（WebStorage），避免丢失 rememberedUsername 等用户数据
+        webView.clearCache(true);
+        webView.clearFormData();
         webView.clearHistory();
         webView.addJavascriptInterface(new NativeBridge(), "AndroidNative");
 
