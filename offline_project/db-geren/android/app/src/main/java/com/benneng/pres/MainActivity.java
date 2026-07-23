@@ -634,6 +634,24 @@ public class MainActivity extends AppCompatActivity {
             "        catch(e){ resolve({success:false, error:String(e)}); }" +
             "      });" +
             "    }," +
+            "    startReadSession: function(filePath){" +
+            "      return new Promise(function(resolve){" +
+            "        try { var r = callNative('startReadSession', JSON.stringify({filePath:filePath})); resolve(r); }" +
+            "        catch(e){ resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
+            "    readNextChunk: function(sessionId){" +
+            "      return new Promise(function(resolve){" +
+            "        try { var r = callNative('readNextChunk', JSON.stringify({sessionId:sessionId})); resolve(r); }" +
+            "        catch(e){ resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
+            "    closeReadSession: function(sessionId){" +
+            "      return new Promise(function(resolve){" +
+            "        try { var r = callNative('closeReadSession', JSON.stringify({sessionId:sessionId})); resolve(r); }" +
+            "        catch(e){ resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
             "    renameMediaFiles: function(patientName, oldNo, newNo){" +
             "      return new Promise(function(resolve){" +
             "        try { var r = callNative('renameMediaFiles', JSON.stringify({patientName:patientName,oldNo:oldNo,newNo:newNo})); resolve(r); }" +
