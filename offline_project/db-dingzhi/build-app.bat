@@ -152,7 +152,7 @@ echo.
 
 echo [6/8] Building signed APK...
 echo.
-call gradlew.bat assembleRelease --rerun-tasks
+call gradlew.bat assembleRelease
 if errorlevel 1 (
     echo.
     echo [WARN] Restoring JavaScript due to build failure...

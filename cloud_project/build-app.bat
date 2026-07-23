@@ -145,7 +145,7 @@ echo.
 
 echo [5/6] Building signed APK...
 echo.
-call gradlew.bat assembleRelease --rerun-tasks
+call gradlew.bat assembleRelease
 if errorlevel 1 (
     echo.
     echo [ERROR] Build failed! Rolling back versionCode...

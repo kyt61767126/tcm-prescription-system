@@ -127,7 +127,7 @@ if defined TCM_GRADLE_SKIP_CLEAN (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
         echo       [OK] cleaned javac cache
     )
-    call gradlew.bat clean --no-daemon --no-build-cache --no-configuration-cache
+    call gradlew.bat clean
     if errorlevel 1 (
         echo [WARN] Clean failed, continuing with incremental build
     ) else (
@@ -152,7 +152,7 @@ echo.
 
 echo [6/8] Building signed APK...
 echo.
-call gradlew.bat assembleRelease --rerun-tasks
+call gradlew.bat assembleRelease
 if errorlevel 1 (
     echo.
     echo [WARN] Restoring JavaScript due to build failure...
