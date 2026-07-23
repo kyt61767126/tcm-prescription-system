@@ -116,6 +116,19 @@ public class LicenseManager {
     private static final String LASTRUN_FILE = "last-run.dat";
     private static final String COUNT_FILE = "prescription-count.dat";
 
+    // ★ P1-1 在线授权验证状态文件
+    private static final String VERIFY_STATE_FILE = "verify-state.dat";
+    private static final String VERIFY_STATE_KEY = "bnzc_verify_state_v1";
+    // ★ P1-2 激活码水印记录文件
+    private static final String ACTIVATION_RECORD_FILE = "activation-record.dat";
+    private static final String ACTIVATION_RECORD_KEY = "bnzc_activation_v1";
+    // ★ P1-1 在线验证 API
+    private static final String VERIFY_API_URL = "https://tcm-prescription-system.pages.dev/api/license/verify";
+    // ★ P1-1 在线验证阈值
+    private static final long ONLINE_VERIFY_PROMPT_DAYS = 7;
+    private static final int ONLINE_VERIFY_PROMPT_PRESCRIPTIONS = 30;
+    private static final long ONLINE_VERIFY_DOWNGRADE_DAYS = 90;
+
     // 云端激活 API
     private static final String ACTIVATE_API_URL = "https://tcm-prescription-system.pages.dev/api/license/validate";
     private static final int ACTIVATE_TIMEOUT_MS = 15000;
@@ -1417,6 +1430,138 @@ public class LicenseManager {
         }
     }
 
+    // ★ P1-1 在线验证状态读写
+    private JSONObject readVerifyState() {
+        try {
+            File f = getFile(VERIFY_STATE_FILE);
+            if (!f.exists()) return new JSONObject();
+            byte[] bytes = readFileBytes(f);
+            String content = new String(bytes, StandardCharsets.UTF_8).trim();
+            String json = xorDecrypt(content, VERIFY_STATE_KEY);
+            if (json == null) return new JSONObject();
+            return new JSONObject(json);
+        } catch (Exception e) {
+            return new JSONObject();
+        }
+    }
+
+    private void writeVerifyState(JSONObject state) {
+        try {
+            File f = getFile(VERIFY_STATE_FILE);
+            String encrypted = xorEncrypt(state.toString(), VERIFY_STATE_KEY);
+            try (FileOutputStream fos = new FileOutputStream(f)) {
+                fos.write(encrypted.getBytes(StandardCharsets.UTF_8));
+                fos.flush();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "写入验证状态失败", e);
+        }
+    }
+
+    // ★ P1-1 在线验证
+    public JSONObject verifyOnline(String machineId) {
+        HttpURLConnection conn = null;
+        try {
+            JSONObject rawLicense = readLicense(machineId);
+            if (rawLicense == null) {
+                return failResult("无有效授权，无法在线验证");
+            }
+            JSONObject license = normalizeLicense(rawLicense);
+            if (license == null) {
+                return failResult("授权文件格式错误");
+            }
+            JSONObject activationRecord = readActivationRecord();
+            String codeHash = activationRecord.optString("codeHash", "");
+
+            URL url = new URL(VERIFY_API_URL);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setConnectTimeout(ACTIVATE_TIMEOUT_MS);
+            conn.setReadTimeout(ACTIVATE_TIMEOUT_MS);
+            conn.setDoOutput(true);
+
+            JSONObject reqBody = new JSONObject();
+            reqBody.put("machineId", machineId != null ? machineId : "");
+            reqBody.put("codeHash", codeHash);
+            reqBody.put("user", license.optString("user", ""));
+            reqBody.put("expiresAt", license.optString("expiresAt", ""));
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(reqBody.toString().getBytes(StandardCharsets.UTF_8));
+                os.flush();
+            }
+
+            int codeResp = conn.getResponseCode();
+            InputStream is = (codeResp >= 200 && codeResp < 400) ? conn.getInputStream() : conn.getErrorStream();
+            if (is == null) {
+                return failResult("服务器无响应 (HTTP " + codeResp + ")");
+            }
+            String response = readStream(is);
+            Log.i(TAG, "在线验证响应: " + response);
+            JSONObject respJson = new JSONObject(response);
+
+            if (!respJson.optBoolean("success", false)) {
+                return failResult(respJson.optString("message", "在线验证失败"));
+            }
+
+            JSONObject verifyState = new JSONObject();
+            verifyState.put("lastOnlineVerify", System.currentTimeMillis());
+            verifyState.put("prescriptionsSinceVerify", 0);
+            writeVerifyState(verifyState);
+
+            JSONObject r = new JSONObject();
+            r.put("success", true);
+            r.put("message", "在线验证成功，授权有效");
+            r.put("verifyTime", System.currentTimeMillis());
+            return r;
+        } catch (java.net.SocketTimeoutException e) {
+            Log.w(TAG, "在线验证超时（不阻断使用）", e);
+            return failResult("验证超时，请检查网络后重试");
+        } catch (java.net.UnknownHostException e) {
+            Log.w(TAG, "在线验证无法连接服务器（不阻断使用）", e);
+            return failResult("无法连接服务器，请检查网络");
+        } catch (Exception e) {
+            Log.e(TAG, "在线验证失败", e);
+            return failResult("验证失败: " + e.getMessage());
+        } finally {
+            if (conn != null) conn.disconnect();
+        }
+    }
+
+    // ★ P1-2 激活码水印记录读写
+    private JSONObject readActivationRecord() {
+        try {
+            File f = getFile(ACTIVATION_RECORD_FILE);
+            if (!f.exists()) return new JSONObject();
+            byte[] bytes = readFileBytes(f);
+            String content = new String(bytes, StandardCharsets.UTF_8).trim();
+            String json = xorDecrypt(content, ACTIVATION_RECORD_KEY);
+            if (json == null) return new JSONObject();
+            return new JSONObject(json);
+        } catch (Exception e) {
+            return new JSONObject();
+        }
+    }
+
+    private void writeActivationRecord(JSONObject record) {
+        try {
+            File f = getFile(ACTIVATION_RECORD_FILE);
+            String encrypted = xorEncrypt(record.toString(), ACTIVATION_RECORD_KEY);
+            try (FileOutputStream fos = new FileOutputStream(f)) {
+                fos.write(encrypted.getBytes(StandardCharsets.UTF_8));
+                fos.flush();
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "写入激活记录失败", e);
+        }
+    }
+
+    public JSONObject getActivationRecord() {
+        return readActivationRecord();
+    }
+
     private byte[] readFileBytes(File f) throws Exception {
         try (java.io.FileInputStream fis = new java.io.FileInputStream(f)) {
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
@@ -1724,6 +1869,55 @@ public class LicenseManager {
                 // license 有效
                 writeLastRun(now);
                 long remainingDays = (long) Math.ceil((expiresAtMs - now) / (24.0 * 60 * 60 * 1000));
+
+                // ★ P1-1 在线授权验证
+                JSONObject verifyState = readVerifyState();
+                long lastVerify = verifyState.optLong("lastOnlineVerify", 0);
+                int prescriptionsSinceVerify = verifyState.optInt("prescriptionsSinceVerify", 0);
+                long daysSinceVerify = (now - lastVerify) / (24 * 60 * 60 * 1000);
+
+                if (lastVerify == 0) {
+                    verifyState.put("lastOnlineVerify", now);
+                    verifyState.put("prescriptionsSinceVerify", 0);
+                    writeVerifyState(verifyState);
+                    lastVerify = now;
+                    daysSinceVerify = 0;
+                }
+
+                if (daysSinceVerify > ONLINE_VERIFY_DOWNGRADE_DAYS) {
+                    JSONObject r = new JSONObject();
+                    r.put("valid", true);
+                    r.put("message", "授权有效（需在线验证）\n用户：" + license.optString("user", "") +
+                            "\n已超过" + ONLINE_VERIFY_DOWNGRADE_DAYS + "天未在线验证，已降级为试用模式。\n请连接网络完成验证以恢复全部功能。");
+                    r.put("type", "trial");
+                    r.put("licenseType", "trial");
+                    r.put("maxPrescriptions", TRIAL_MAX_PRESCRIPTIONS);
+                    r.put("features", new JSONArray());
+                    r.put("remainingDays", remainingDays);
+                    r.put("needOnlineVerify", true);
+                    r.put("verifyDowngraded", true);
+                    r.put("license", license);
+                    return r;
+                }
+
+                if (daysSinceVerify > ONLINE_VERIFY_PROMPT_DAYS && prescriptionsSinceVerify >= ONLINE_VERIFY_PROMPT_PRESCRIPTIONS) {
+                    JSONObject r = new JSONObject();
+                    r.put("valid", true);
+                    r.put("message", "授权有效\n用户：" + license.optString("user", "") +
+                            "\n类型：" + license.optString("type", "") +
+                            "\n到期：" + expiresAtStr +
+                            "\n剩余：" + remainingDays + " 天" +
+                            "\n\n⚠ 建议在线验证授权（已" + daysSinceVerify + "天未验证，" + prescriptionsSinceVerify + "张处方）");
+                    r.put("type", "licensed");
+                    r.put("licenseType", license.optString("type", "personal"));
+                    r.put("maxPrescriptions", license.optInt("maxPrescriptions", 0));
+                    r.put("features", license.optJSONArray("features"));
+                    r.put("remainingDays", remainingDays);
+                    r.put("needOnlineVerify", true);
+                    r.put("license", license);
+                    return r;
+                }
+
                 JSONObject r = new JSONObject();
                 r.put("valid", true);
                 r.put("message", "授权有效\n用户：" + license.optString("user", "") +
@@ -1903,6 +2097,30 @@ public class LicenseManager {
             // ★ 激活成功，重置失败计数
             resetActivateFailCount();
 
+            // ★ P1-1 初始化在线验证状态
+            try {
+                JSONObject vs = new JSONObject();
+                vs.put("lastOnlineVerify", System.currentTimeMillis());
+                vs.put("prescriptionsSinceVerify", 0);
+                writeVerifyState(vs);
+            } catch (Exception ve) {
+                Log.w(TAG, "初始化验证状态失败(不影响激活)", ve);
+            }
+            // ★ P1-2 保存激活码水印
+            try {
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                byte[] hash = md.digest(code.trim().getBytes(StandardCharsets.UTF_8));
+                StringBuilder sb = new StringBuilder();
+                for (byte b : hash) sb.append(String.format("%02x", b));
+                JSONObject ar = new JSONObject();
+                ar.put("codeHash", sb.toString());
+                ar.put("activateTime", System.currentTimeMillis());
+                ar.put("machineId", machineId != null ? machineId : "");
+                writeActivationRecord(ar);
+            } catch (Exception ae) {
+                Log.w(TAG, "保存激活记录失败(不影响激活)", ae);
+            }
+
             JSONObject r = new JSONObject();
             r.put("success", true);
             r.put("message", "激活成功，请重启应用");
@@ -2011,6 +2229,14 @@ public class LicenseManager {
             int newCount = counts.optInt(key, 0) + 1;
             counts.put(key, newCount);
             writeCounts(counts);
+            // ★ P1-1 在线验证：增加自上次验证以来的处方计数
+            try {
+                JSONObject verifyState = readVerifyState();
+                verifyState.put("prescriptionsSinceVerify", verifyState.optInt("prescriptionsSinceVerify", 0) + 1);
+                writeVerifyState(verifyState);
+            } catch (Exception ve) {
+                Log.w(TAG, "更新验证计数失败(不影响处方保存)", ve);
+            }
             return newCount;
         } catch (Exception e) {
             Log.e(TAG, "处方计数+1失败", e);

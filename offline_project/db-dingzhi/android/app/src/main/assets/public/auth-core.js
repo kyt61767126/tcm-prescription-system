@@ -957,6 +957,20 @@
                 // ★ 兼容逻辑：授权有效时清除失效标志
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ P1-1 在线验证：如果需要在线验证，自动触发（不阻断使用）
+                if (result.needOnlineVerify && global.electronAPI.license.verifyOnline) {
+                    try {
+                        console.log('[LicenseCheck] 检测到需要在线验证，正在验证...');
+                        const verifyResult = await global.electronAPI.license.verifyOnline();
+                        if (verifyResult && verifyResult.success) {
+                            console.log('[LicenseCheck] 在线验证成功');
+                        } else {
+                            console.warn('[LicenseCheck] 在线验证失败:', verifyResult && verifyResult.error);
+                        }
+                    } catch (e) {
+                        console.warn('[LicenseCheck] 在线验证异常:', e);
+                    }
+                }
                 return;
             }
             // license 失效
@@ -1054,7 +1068,7 @@
                 const promptMsg = lastFailMessage +
                     '\n\n请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）：\n机器ID：' + (machineId || '未知') +
                     '\n\n如有疑问请联系客服';
-                const code = await prompt(promptMsg);
+                const code = prompt(promptMsg);
 
                 if (!code || !code.trim()) {
                     // ★ 用户取消激活，不清除 __licenseActivating（兜底定时器会重新弹窗）

@@ -702,7 +702,11 @@ public class MainActivity extends AppCompatActivity {
             "        importLicense: function(){ return P({success:false, error:'APP端不支持离线license文件导入，请使用在线激活'}); }" +
             "      }," +
             "      setTrialDays: function(days){ return new Promise(function(resolve){ try { resolve(callNative('license_setTrialDays', JSON.stringify({days:days}))); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
-            "      getTrialDays: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getTrialDays', '{}')); } catch(e){ resolve({success:false, trialDays:7, error:String(e)}); } }); }" +
+            "      getTrialDays: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getTrialDays', '{}')); } catch(e){ resolve({success:false, trialDays:7, error:String(e)}); } }); }," +
+            // ★ P1-1 在线验证：定期校验授权有效性，防止离线破解后永久使用
+            "      verifyOnline: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_verifyOnline', '{}')); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
+            // ★ P1-2 获取激活记录（用于追溯盗版泄露源）
+            "      getActivationRecord: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getActivationRecord', '{}')); } catch(e){ resolve({success:false, error:String(e)}); } }); }" +
             "    }," +
             // ★ activate 命名空间（与桌面版 preload.js activate 命名空间接口一致）
             "    activate: {" +
@@ -1011,6 +1015,19 @@ public class MainActivity extends AppCompatActivity {
                     case "license_validate":
                         // ★ v3 新增：传入 localMachineId 用于三因子绑定校验
                         return licenseManager.validateLicense(licenseManager.getMachineId()).toString();
+                    // ★ P1-1 在线验证：定期校验授权有效性
+                    case "license_verifyOnline":
+                        return licenseManager.verifyOnline(licenseManager.getMachineId()).toString();
+                    // ★ P1-2 获取激活记录（追溯盗版泄露源）
+                    case "license_getActivationRecord":
+                        try {
+                            JSONObject r = new JSONObject();
+                            r.put("success", true);
+                            r.put("record", licenseManager.getActivationRecord());
+                            return r.toString();
+                        } catch (Exception e) {
+                            return fail(e.getMessage()).toString();
+                        }
                     case "license_getStatus":
                         try {
                             // ★ v3 新增：传入 localMachineId 用于绑定校验
