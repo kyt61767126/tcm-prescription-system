@@ -113,7 +113,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // 创建 WebView 并立即配置
-        webView = new WebView(this);
+        webView = new NoAutofillWebView(this);
         // ★ 适配状态栏（无 padding 方案）：WebView 填满整个屏幕，网页顶部紫色（header-section/login-overlay）
         // 与状态栏紫色(#667eea)融合，无额外 padding 区域。onPageFinished 时注入 CSS 让 header-section
         // 内容下移避开状态栏。此方案消除顶部灰白行/紫色加宽条，操作界面紧贴状态栏下方。
@@ -265,6 +265,13 @@ public class MainActivity extends AppCompatActivity {
             webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
             // 递归设置所有子 View（双保险，配合 AndroidManifest importantForAutofill=no）
             disableAutofillRecursive(webView);
+            // 拦截 Autofill 服务的所有未完成请求（系统级，最强防线）
+            try {
+                android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
+                if (afm != null) {
+                    afm.cancel();
+                }
+            } catch (Throwable ignored) {}
         }
 
         webView.clearHistory();
@@ -908,6 +915,40 @@ public class MainActivity extends AppCompatActivity {
     // 彻底解决"加载失败"反复出现：避免 isCallerAllowed 误拦截导致视频播放
     private boolean isSensitiveOperation(String name) {
         return "deleteFile".equals(name);
+    }
+
+    // ========================================================================
+    // 自定义 WebView：从系统层面彻底拦截 Autofill（最强防线）
+    // 重写 dispatchProvideAutofillStructure 和 autofill 回调，拒绝所有 Autofill 请求
+    // 配合 AndroidManifest importantForAutofill="no" + View 级别禁用，三重保险
+    // ========================================================================
+    public static class NoAutofillWebView extends WebView {
+        public NoAutofillWebView(Context context) {
+            super(context);
+        }
+
+        public NoAutofillWebView(Context context, android.util.AttributeSet attrs) {
+            super(context, attrs);
+        }
+
+        public NoAutofillWebView(Context context, android.util.AttributeSet attrs, int defStyleAttr) {
+            super(context, attrs, defStyleAttr);
+        }
+
+        @Override
+        public void autofill(android.view.autofill.AutofillValue value) {
+            // 拒绝所有 autofill 请求
+        }
+
+        @Override
+        public int getAutofillType() {
+            return View.AUTOFILL_TYPE_NONE;
+        }
+
+        @Override
+        public void dispatchProvideAutofillStructure(android.view.ViewStructure structure, int flags) {
+            // 不提供任何 autofill 结构信息，系统无法识别此 View 的内容
+        }
     }
 
     // ========================================================================

@@ -252,6 +252,13 @@ public class MainActivity extends BridgeActivity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
             disableAutofillRecursive(webView);
+            // 拦截 Autofill 服务的所有未完成请求（系统级，最强防线）
+            try {
+                android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
+                if (afm != null) {
+                    afm.cancel();
+                }
+            } catch (Throwable ignored) {}
         }
 
         // LOAD_NO_CACHE 模式下不需要启动时清缓存，每次加载都从网络获取
