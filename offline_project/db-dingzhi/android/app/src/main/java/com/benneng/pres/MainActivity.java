@@ -263,6 +263,8 @@ public class MainActivity extends AppCompatActivity {
         s.setSaveFormData(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+            // 递归设置所有子 View（双保险，配合 AndroidManifest importantForAutofill=no）
+            disableAutofillRecursive(webView);
         }
 
         webView.clearHistory();
@@ -401,6 +403,13 @@ public class MainActivity extends AppCompatActivity {
         });
 
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                // 提前注入 anti-autofill（虽然 DOM 可能未加载完，但 evaluateJavascript 会排队执行）
+                injectAutocompleteOff(view);
+            }
+
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
@@ -726,28 +735,63 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * ★ 彻底禁用密码输入框的自动填充（防止 Android Autofill 弹出旧版应用名称提示）
-     * 问题：点击密码输入框时，Android 系统弹出"惠康中医诊所管理系统"凭据提示
-     * 根因：Android Autofill 通过 input type="password" 识别密码字段并弹出凭据
-     *       autocomplete="off" 被现代 Chromium 忽略；setImportantForAutofill(NO) 对 WebView 内部 input 无效
-     * 彻底修复：将 type="password" 改为 type="text" + webkitTextSecurity=disc（视觉仍为圆点）
-     *           系统不再识别为密码字段，从根源消除 Autofill 提示
-     *           配合 autocomplete="new-password" + readonly 延迟移除双保险
+     * 问题：点击密码输入框时，Android 系统弹出"惠康中医诊所管理系统"凭据提示（旧名"本能中医处方系统"）
+     * 根因：Android Autofill 通过 Accessibility 虚拟节点树直接访问 WebView 内部 input，
+     *       View 级别 setImportantForAutofill(NO) 无法阻止；Autofill 提示显示系统数据库中的旧应用名
+     * 彻底修复（三层防线）：
+     *   1. AndroidManifest android:importantForAutofill="no"（系统级禁用，最强防线）
+     *   2. disableAutofillRecursive 递归设置所有子 View IMPORTANT_FOR_AUTOFILL_NO（双保险）
+     *   3. 本方法 JS 注入：MutationObserver 持续监控动态密码框 + 改 type=text + webkitTextSecurity
+     *      + data-lpignore/data-form-type/role 等多属性，防止第三方密码管理器识别
      */
     private void injectAutocompleteOff(WebView webView) {
         String js = "(function(){" +
-            "  var pwds = document.querySelectorAll('input[type=\"password\"]');" +
-            "  for (var i = 0; i < pwds.length; i++) {" +
-            "    var p = pwds[i];" +
+            "  function np(p){" +
+            "    if (!p || p.__bnAf) return;" +
+            "    p.__bnAf = 1;" +
             "    p.setAttribute('autocomplete', 'new-password');" +
+            "    p.setAttribute('data-lpignore', 'true');" +
+            "    p.setAttribute('data-form-type', 'other');" +
+            "    p.setAttribute('role', 'textbox');" +
             "    p.setAttribute('readonly', '');" +
             "    p.addEventListener('focus', function() { this.removeAttribute('readonly'); });" +
-            "    p.setAttribute('type', 'text');" +
-            "    p.style.webkitTextSecurity = 'disc';" +
-            "    p.style.MozTextSecurity = 'disc';" +
-            "    p.style.textSecurity = 'disc';" +
+            "    if (p.type === 'password') {" +
+            "      p.setAttribute('type', 'text');" +
+            "      p.style.webkitTextSecurity = 'disc';" +
+            "      p.style.MozTextSecurity = 'disc';" +
+            "      p.style.textSecurity = 'disc';" +
+            "    }" +
+            "  }" +
+            "  function scan(){" +
+            "    var s = 'input[type=\"password\"],input[autocomplete*=\"password\"],input[name*=\"password\"],input[name*=\"pwd\"]';" +
+            "    var l = document.querySelectorAll(s);" +
+            "    for (var i = 0; i < l.length; i++) { np(l[i]); }" +
+            "  }" +
+            "  scan();" +
+            "  if (!window.__bnAfObs) {" +
+            "    window.__bnAfObs = new MutationObserver(function() { scan(); });" +
+            "    var t = document.body || document.documentElement;" +
+            "    if (t) window.__bnAfObs.observe(t, {childList: true, subtree: true, attributes: true, attributeFilter: ['type']});" +
             "  }" +
             "})();";
         webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * 递归设置 View 及所有子 View 的 importantForAutofill=NO（双保险）
+     * 配合 AndroidManifest 的 android:importantForAutofill="no" 彻底禁用 Autofill
+     */
+    private void disableAutofillRecursive(View view) {
+        if (view == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            view.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                disableAutofillRecursive(group.getChildAt(i));
+            }
+        }
     }
 
     /**

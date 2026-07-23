@@ -247,6 +247,13 @@ public class MainActivity extends BridgeActivity {
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setTextZoom(100);
 
+        // ★ 禁用表单自动填充（防止 Android Autofill 弹出凭据提示）
+        settings.setSaveFormData(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+            disableAutofillRecursive(webView);
+        }
+
         // LOAD_NO_CACHE 模式下不需要启动时清缓存，每次加载都从网络获取
         webView.clearHistory();
 
@@ -372,6 +379,8 @@ public class MainActivity extends BridgeActivity {
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
+                // 提前注入 anti-autofill（虽然 DOM 可能未加载完，但 evaluateJavascript 会排队执行）
+                injectAutocompleteOff(view);
                 // 优化：有缓存时不显示loading（避免缓存加载时闪烁）
                 // 只有首次启动/版本更新（无缓存）时才显示loading
                 if (loadingLayout != null && loadingLayout.getVisibility() != View.GONE) {
@@ -408,6 +417,7 @@ public class MainActivity extends BridgeActivity {
                 float density = getResources().getDisplayMetrics().density;
                 int cssPx = (int) (statusBarHeightPx / density);
                 view.evaluateJavascript("window.__STATUS_BAR_HEIGHT__ = " + cssPx + ";", null);
+                injectAutocompleteOff(view);
 
                 // 记录页面版本到本地（供下次启动时 onCreate 版本检查使用）
                 // 注意：不在onPageFinished中reload，避免双重加载导致启动变慢
@@ -534,6 +544,67 @@ public class MainActivity extends BridgeActivity {
             result = getResources().getDimensionPixelSize(resourceId);
         }
         return result;
+    }
+
+    /**
+     * ★ 彻底禁用密码输入框的自动填充（防止 Android Autofill 弹出旧版应用名称提示）
+     * 问题：点击密码输入框时，Android 系统弹出"惠康中医诊所管理系统"凭据提示（旧名"本能中医处方系统"）
+     * 根因：Android Autofill 通过 Accessibility 虚拟节点树直接访问 WebView 内部 input，
+     *       View 级别 setImportantForAutofill(NO) 无法阻止；Autofill 提示显示系统数据库中的旧应用名
+     * 彻底修复（三层防线）：
+     *   1. AndroidManifest android:importantForAutofill="no"（系统级禁用，最强防线）
+     *   2. disableAutofillRecursive 递归设置所有子 View IMPORTANT_FOR_AUTOFILL_NO（双保险）
+     *   3. 本方法 JS 注入：MutationObserver 持续监控动态密码框 + 改 type=text + webkitTextSecurity
+     *      + data-lpignore/data-form-type/role 等多属性，防止第三方密码管理器识别
+     */
+    private void injectAutocompleteOff(WebView webView) {
+        String js = "(function(){" +
+            "  function np(p){" +
+            "    if (!p || p.__bnAf) return;" +
+            "    p.__bnAf = 1;" +
+            "    p.setAttribute('autocomplete', 'new-password');" +
+            "    p.setAttribute('data-lpignore', 'true');" +
+            "    p.setAttribute('data-form-type', 'other');" +
+            "    p.setAttribute('role', 'textbox');" +
+            "    p.setAttribute('readonly', '');" +
+            "    p.addEventListener('focus', function() { this.removeAttribute('readonly'); });" +
+            "    if (p.type === 'password') {" +
+            "      p.setAttribute('type', 'text');" +
+            "      p.style.webkitTextSecurity = 'disc';" +
+            "      p.style.MozTextSecurity = 'disc';" +
+            "      p.style.textSecurity = 'disc';" +
+            "    }" +
+            "  }" +
+            "  function scan(){" +
+            "    var s = 'input[type=\"password\"],input[autocomplete*=\"password\"],input[name*=\"password\"],input[name*=\"pwd\"]';" +
+            "    var l = document.querySelectorAll(s);" +
+            "    for (var i = 0; i < l.length; i++) { np(l[i]); }" +
+            "  }" +
+            "  scan();" +
+            "  if (!window.__bnAfObs) {" +
+            "    window.__bnAfObs = new MutationObserver(function() { scan(); });" +
+            "    var t = document.body || document.documentElement;" +
+            "    if (t) window.__bnAfObs.observe(t, {childList: true, subtree: true, attributes: true, attributeFilter: ['type']});" +
+            "  }" +
+            "})();";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * 递归设置 View 及所有子 View 的 importantForAutofill=NO（双保险）
+     * 配合 AndroidManifest 的 android:importantForAutofill="no" 彻底禁用 Autofill
+     */
+    private void disableAutofillRecursive(View view) {
+        if (view == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            view.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                disableAutofillRecursive(group.getChildAt(i));
+            }
+        }
     }
 
     /**
