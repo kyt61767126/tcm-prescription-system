@@ -1,14 +1,15 @@
 ﻿# generate-sign-hash.ps1 - Unified APK signature hash extraction and injection tool
 # Extracts SHA-256 from APK and injects into LicenseManager.java (offline) or SecurityGuard.java (cloud)
 # Enables strict signature mode: APP rejects any repackaged APK with mismatched signature
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-$ErrorActionPreference = "Stop"
 
 param(
     [Parameter(Mandatory=$true)]
     [ValidateSet('cloud','bendi','dingzhi','geren')]
     [string]$Version
 )
+
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ErrorActionPreference = "Stop"
 
 $rootDir = $PSScriptRoot | Split-Path -Parent  # project root: d:\trae_projects\kyt-zy
 

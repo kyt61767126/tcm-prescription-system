@@ -996,7 +996,7 @@ function Enable-StrictMode {
 
     Write-Host ""
     Write-Log "[STEP] Enable strict mode for $Ver"
-    & $hashPs1 -Version $Ver
+    $env:NO_PAUSE = '1'; & $hashPs1 -Version $Ver
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[错误] 哈希提取失败" -ForegroundColor Red
         Write-Log "[ERROR] generate-sign-hash.ps1 failed" "ERROR"
@@ -1061,7 +1061,7 @@ function Build-AllStrict {
         Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
         return 1
     }
-    & $hashPs1 -Version $Ver
+    $env:NO_PAUSE = '1'; & $hashPs1 -Version $Ver
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[错误] 哈希提取失败，跳过严格模式" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
@@ -1128,7 +1128,7 @@ function Build-AppStrict {
         Write-Host "  您仍可使用步骤 A 的 APK (首次锁定模式)"
         return 1
     }
-    & $hashPs1 -Version $Ver
+    $env:NO_PAUSE = '1'; & $hashPs1 -Version $Ver
     if ($LASTEXITCODE -ne 0) {
         Write-Host "[错误] 哈希提取失败，跳过严格模式" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 A 的 APK (首次锁定模式)"
