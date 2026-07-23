@@ -694,13 +694,19 @@ public class MainActivity extends AppCompatActivity {
     private void injectStatusBarFix(WebView webView) {
         int sbHeight = getStatusBarHeight();
         String js = "(function(){" +
-            "  if (document.getElementById('status-bar-fix')) return;" +
-            "  var s = document.createElement('style');" +
-            "  s.id = 'status-bar-fix';" +
-            "  s.textContent = '@media screen and (max-width: 768px) {" +
-            "    .header-section { padding-top: " + sbHeight + "px !important; }" +
-            "  }';" +
-            "  document.head.appendChild(s);" +
+            "  var headers = document.querySelectorAll('.header-section');" +
+            "  for (var i = 0; i < headers.length; i++) {" +
+            "    var el = headers[i];" +
+            "    var inLogin = false;" +
+            "    var p = el.parentElement;" +
+            "    while (p) {" +
+            "      if (p.classList && p.classList.contains('login-container')) { inLogin = true; break; }" +
+            "      p = p.parentElement;" +
+            "    }" +
+            "    if (!inLogin) {" +
+            "      el.style.paddingTop = '" + sbHeight + "px';" +
+            "    }" +
+            "  }" +
             "})();";
         webView.evaluateJavascript(js, null);
     }
