@@ -723,17 +723,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * ★ 禁用登录界面输入框的浏览器自动填充（防止 Android Autofill 弹出旧版应用名称提示）
+     * ★ 彻底禁用密码输入框的自动填充（防止 Android Autofill 弹出旧版应用名称提示）
      * 问题：点击密码输入框时，Android 系统弹出"本能中医处方系统"凭据提示
-     * 原因：用户之前使用过名为"本能中医处方系统"的应用并保存了密码，系统 Autofill 显示旧名称
-     * 修复：通过 JS 给所有 input 元素设置 autocomplete="off"，关闭浏览器自动填充
-     *      配合 configureWebView() 中的 setImportantForAutofill(NO) 完全屏蔽系统 Autofill
+     * 根因：Android Autofill 通过 input type="password" 识别密码字段并弹出凭据
+     *       autocomplete="off" 被现代 Chromium 忽略；setImportantForAutofill(NO) 对 WebView 内部 input 无效
+     * 彻底修复：将 type="password" 改为 type="text" + webkitTextSecurity=disc（视觉仍为圆点）
+     *           系统不再识别为密码字段，从根源消除 Autofill 提示
+     *           配合 autocomplete="new-password" + readonly 延迟移除双保险
      */
     private void injectAutocompleteOff(WebView webView) {
         String js = "(function(){" +
-            "  var inputs = document.querySelectorAll('input[type=\"password\"], input[type=\"text\"]');" +
-            "  for (var i = 0; i < inputs.length; i++) {" +
-            "    inputs[i].setAttribute('autocomplete', 'off');" +
+            "  var pwds = document.querySelectorAll('input[type=\"password\"]');" +
+            "  for (var i = 0; i < pwds.length; i++) {" +
+            "    var p = pwds[i];" +
+            "    p.setAttribute('autocomplete', 'new-password');" +
+            "    p.setAttribute('readonly', '');" +
+            "    p.addEventListener('focus', function() { this.removeAttribute('readonly'); });" +
+            "    p.setAttribute('type', 'text');" +
+            "    p.style.webkitTextSecurity = 'disc';" +
+            "    p.style.MozTextSecurity = 'disc';" +
+            "    p.style.textSecurity = 'disc';" +
             "  }" +
             "})();";
         webView.evaluateJavascript(js, null);

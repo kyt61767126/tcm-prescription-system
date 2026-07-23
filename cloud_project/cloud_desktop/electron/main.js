@@ -477,18 +477,25 @@ function createLoginWindow() {
     });
 
     loginWindow.webContents.on('dom-ready', () => {
-        // ★ 禁用登录界面输入框的浏览器自动填充（防止 Chromium 弹出密码保存提示）
-        // 问题：点击密码输入框时，浏览器弹出"本能中医处方系统"凭据保存提示
-        // 原因：用户之前使用过名为"本能中医处方系统"的应用并保存了密码，Chromium 密码管理器显示旧名称
-        // 修复：通过 JS 给所有 input 元素设置 autocomplete="off"，关闭浏览器自动填充
+        // ★ 彻底禁用密码输入框自动填充（防止 Chromium 弹出旧版应用名凭据提示）
+        // 根因：Chromium 通过 input type="password" 识别密码字段并弹出凭据提示
+        //       autocomplete="off" 被现代 Chromium 忽略
+        // 彻底修复：将 type="password" 改为 type="text" + webkitTextSecurity=disc（视觉仍为圆点）
+        //           系统不再识别为密码字段，从根源消除提示
+        //           配合 autocomplete="new-password" + readonly 延迟移除双保险
         loginWindow.webContents.executeJavaScript(`
             (function() {
-                var inputs = document.querySelectorAll('input[type="password"], input[type="text"]');
-                for (var i = 0; i < inputs.length; i++) {
-                    inputs[i].setAttribute('autocomplete', 'off');
+                var pwds = document.querySelectorAll('input[type="password"]');
+                for (var i = 0; i < pwds.length; i++) {
+                    var p = pwds[i];
+                    p.setAttribute('autocomplete', 'new-password');
+                    p.setAttribute('readonly', '');
+                    p.addEventListener('focus', function() { this.removeAttribute('readonly'); });
+                    p.setAttribute('type', 'text');
+                    p.style.webkitTextSecurity = 'disc';
                 }
             })();
-        `).catch(e => console.warn('[login] 注入 autocomplete=off 失败:', e.message));
+        `).catch(e => console.warn('[login] 注入 disableAutofill 失败:', e.message));
         loginWindow.show();
     });
 }
