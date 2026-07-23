@@ -301,12 +301,49 @@
 
     // ==================== 移动端键盘遮挡修复 ====================
     // 当药物表格内输入框获得焦点时，自动滚动到可见区域中央，避免被软键盘遮挡
-    // 配合 AndroidManifest.xml 的 adjustResize 使用效果最佳
+    // 兼容 adjustPan 和 adjustResize 两种 windowSoftInputMode：
+    //   - adjustResize: 视口缩小，布局重新计算，scrollIntoView 即可
+    //   - adjustPan: 视口不缩小，系统平移页面，需手动调整容器内部滚动
     function setupMobileKeyboardScroll() {
         // 仅在移动端（窄屏）启用，桌面端不需要
         if (window.innerWidth >= 769) return;
 
         var scrollTimer = null;
+        var lastFocusedInput = null;
+
+        // 精确滚动：手动调整 medicine-table-container 内部滚动，让焦点元素在容器可见区域中央
+        // 这是 adjustPan 模式下的关键：scrollIntoView({block:'center'}) 滚动到 WebView 视口中央，
+        // 但 adjustPan 模式下视口底部被键盘遮挡，需手动调整容器内部滚动
+        function doScroll(target) {
+            if (!target) return;
+            try {
+                var container = target.closest ? target.closest('.medicine-table-container') : null;
+                if (container) {
+                    // 手动调整容器内部滚动，让焦点元素在容器可见区域中央
+                    var targetRect = target.getBoundingClientRect();
+                    var containerRect = container.getBoundingClientRect();
+                    // 焦点元素中心相对于容器顶部的位置
+                    var targetCenterInContainer = targetRect.top + targetRect.height / 2 - containerRect.top;
+                    // 容器可见区域的中央
+                    var containerCenter = containerRect.height / 2;
+                    // 计算需要滚动的距离
+                    var scrollDelta = targetCenterInContainer - containerCenter;
+                    if (Math.abs(scrollDelta) > 10) {
+                        var newTop = container.scrollTop + scrollDelta;
+                        try {
+                            container.scrollTo({ top: newTop, behavior: 'smooth' });
+                        } catch(e1) {
+                            container.scrollTop = newTop;
+                        }
+                    }
+                } else {
+                    // 回退：调用 scrollIntoView
+                    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+            } catch(err) {
+                try { target.scrollIntoView(false); } catch(e2) {}
+            }
+        }
 
         // 监听 focusin 事件（捕获阶段，确保最早收到）
         document.addEventListener('focusin', function(e) {
@@ -318,21 +355,27 @@
             var table = target.closest ? target.closest('.medicine-table') : null;
             if (!table) return;
 
+            lastFocusedInput = target;
+
             // 多次尝试滚动，适配不同设备的键盘弹出速度
-            var doScroll = function() {
-                try {
-                    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                } catch(err) {
-                    try { target.scrollIntoView(false); } catch(e2) {}
-                }
-            };
             if (scrollTimer) clearTimeout(scrollTimer);
-            // 300ms: 快速设备，500ms: 慢速设备
-            scrollTimer = setTimeout(doScroll, 300);
-            setTimeout(doScroll, 500);
+            // 300ms: 快速设备，500ms: 慢速设备，800ms: 更慢的设备（adjustPan 模式下键盘弹出较慢）
+            scrollTimer = setTimeout(function() { doScroll(target); }, 300);
+            setTimeout(function() { doScroll(target); }, 500);
+            setTimeout(function() { doScroll(target); }, 800);
         }, true);
 
-        // 动态调整表格容器高度：键盘弹出时缩小 max-height
+        // 监听 focusout 清除 lastFocusedInput（延迟清除避免快速切换丢失）
+        document.addEventListener('focusout', function() {
+            setTimeout(function() {
+                if (!document.activeElement || document.activeElement === document.body) {
+                    lastFocusedInput = null;
+                }
+            }, 100);
+        }, true);
+
+        // 动态调整表格容器高度 + 重新滚动焦点元素
+        // adjustPan 模式下 visualViewport.resize 仍会触发（visualViewport 反映可见视口）
         function adjustContainerHeight() {
             var containers = document.querySelectorAll('.medicine-table-container');
             if (!containers.length) return;
@@ -343,13 +386,19 @@
             for (var i = 0; i < containers.length; i++) {
                 containers[i].style.maxHeight = maxH + 'px';
             }
+
+            // 键盘弹出/视口变化后，重新滚动焦点元素到可见区域中央
+            // 这是 adjustPan 模式下的关键改进：键盘弹出后容器 max-height 缩小，需重新滚动
+            if (lastFocusedInput) {
+                setTimeout(function() { doScroll(lastFocusedInput); }, 100);
+            }
         }
 
-        // Visual Viewport API（现代浏览器）
+        // Visual Viewport API（现代浏览器）- 键盘弹出时会触发
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', adjustContainerHeight);
         }
-        // 传统 resize 事件（回退方案）
+        // 传统 resize 事件（回退方案，adjustResize 模式下触发）
         window.addEventListener('resize', adjustContainerHeight);
         // 延迟初始调整
         setTimeout(adjustContainerHeight, 500);

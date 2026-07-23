@@ -1,1 +1,414 @@
-(function(a){'use strict';function b(p,q){let r=null;const s=function(){const t=this,u=arguments;if(r)clearTimeout(r);r=setTimeout(()=>{p['apply'](t,u),r=null;},q||0xc8);};return s['cancel']=function(){r&&(clearTimeout(r),r=null);},s['flush']=function(){r&&(clearTimeout(r),p['apply'](this,arguments),r=null);},s;}function c(p,q){let r=0x0,s=null;return function(){const t=this,u=arguments,v=Date['now'](),w=q-(v-r);if(w<=0x0)s&&(clearTimeout(s),s=null),r=v,p['apply'](t,u);else!s&&(s=setTimeout(()=>{r=Date['now'](),s=null,p['apply'](t,u);},w));};}function d(p,q){if(typeof a['requestIdleCallback']==='function')return a['requestIdleCallback'](p,q||{'timeout':0x3e8});return setTimeout(p,0x32);}function e(p){typeof a['cancelIdleCallback']==='function'?a['cancelIdleCallback'](p):clearTimeout(p);}function f(p){const q=Object['assign']({'container':null,'itemHeight':0x32,'bufferSize':0x5,'render':()=>document['createElement']('div'),'onScroll':null},p);if(!q['container'])return console['warn']('[PerfUtils]\x20createVirtualScroller:\x20container\x20is\x20required'),null;const r={'data':[],'scrollTop':0x0,'visibleCount':0x0,'renderTimer':null},s=q['container'];s['style']['overflowY']='auto',s['style']['position']='relative';const t=document['createElement']('div');t['style']['position']='relative',s['appendChild'](t);const u=document['createElement']('div');u['style']['position']='absolute',u['style']['top']='0',u['style']['left']='0',u['style']['right']='0',t['appendChild'](u);function v(){const x=s['clientHeight'];r['visibleCount']=Math['ceil'](x/q['itemHeight'])+q['bufferSize']*0x2;const y=Math['max'](0x0,Math['floor'](r['scrollTop']/q['itemHeight'])-q['bufferSize']),z=Math['min'](r['data']['length'],y+r['visibleCount']);t['style']['height']=r['data']['length']*q['itemHeight']+'px',u['style']['transform']='translateY('+y*q['itemHeight']+'px)',u['innerHTML']='';for(let A=y;A<z;A++){const B=q['render'](r['data'][A],A);B&&(B['style']['height']=q['itemHeight']+'px',B['style']['boxSizing']='border-box',u['appendChild'](B));}if(q['onScroll'])q['onScroll'](y,z);}function w(){r['scrollTop']=s['scrollTop'];if(r['renderTimer'])cancelAnimationFrame(r['renderTimer']);r['renderTimer']=requestAnimationFrame(v);}return s['addEventListener']('scroll',c(w,0x10),{'passive':!![]}),{'setData'(x){r['data']=x||[],r['scrollTop']=s['scrollTop']=0x0,v();},'refresh'(){v();},'scrollToIndex'(x){s['scrollTop']=x*q['itemHeight'];},'destroy'(){s['removeEventListener']('scroll',w),s['innerHTML']='';}};}let g=null;function h(p){if(!p)return;if(g)g['observe'](p);else{const q=p['getAttribute']('data-src');if(q)p['src']=q;}}function i(p){if(!p||!p['length'])return;if(!('IntersectionObserver'in a)){p['forEach'](q=>{const r=q['getAttribute']('data-src');if(r)q['src']=r;});return;}!g&&(g=new IntersectionObserver(q=>{q['forEach'](r=>{if(r['isIntersecting']){const s=r['target'],t=s['getAttribute']('data-src');t&&(s['src']=t,s['removeAttribute']('data-src')),g['unobserve'](s);}});},{'rootMargin':'50px\x200px','threshold':0.01})),p['forEach'](q=>{q['getAttribute']('data-src')&&g['observe'](q);});}function j(p,q,r){if(!p||!q||!q['length'])return;const s=document['createDocumentFragment']();q['forEach'](t=>{const u=r(t);if(u)s['appendChild'](u);}),p['appendChild'](s);}function k(p,q){d(()=>{try{const r=document['createElement']('link');r['rel']='prefetch',r['href']=p,r['as']=q||'fetch',document['head']['appendChild'](r);}catch(s){}});}function l(p,q){const r=performance['now'](),s=q(),t=performance['now']()-r;return t>0x10&&console['log']('[Perf]\x20'+p+':\x20'+t['toFixed'](0x2)+'ms'),s;}async function m(p,q){const r=performance['now']();try{return await q();}finally{const s=performance['now']()-r;s>0x10&&console['log']('[Perf]\x20'+p+':\x20'+s['toFixed'](0x2)+'ms');}}const n={'debounce':b,'throttle':c,'runIdle':d,'cancelIdle':e,'createVirtualScroller':f,'lazyImage':h,'observeLazyImages':i,'batchAppend':j,'prefetch':k,'measure':l,'measureAsync':m};a['PerfUtils']=n;function o(){if(window['innerWidth']>=0x301)return;var p=null;document['addEventListener']('focusin',function(r){var s=r['target'];if(!s)return;if(s['tagName']!=='INPUT'&&s['tagName']!=='TEXTAREA'&&s['tagName']!=='SELECT')return;var t=s['closest']?s['closest']('.medicine-table'):null;if(!t)return;var u=function(){try{s['scrollIntoView']({'block':'center','behavior':'smooth'});}catch(v){try{s['scrollIntoView'](![]);}catch(w){}}};if(p)clearTimeout(p);p=setTimeout(u,0x12c),setTimeout(u,0x1f4);},!![]);function q(){var r=document['querySelectorAll']('.medicine-table-container');if(!r['length'])return;var s=window['visualViewport']&&window['visualViewport']['height']||window['innerHeight'],t=Math['max'](0x78,Math['min'](0x190,s-0x118));for(var u=0x0;u<r['length'];u++){r[u]['style']['maxHeight']=t+'px';}}window['visualViewport']&&window['visualViewport']['addEventListener']('resize',q),window['addEventListener']('resize',q),setTimeout(q,0x1f4);}document['readyState']==='loading'?document['addEventListener']('DOMContentLoaded',o):o();}(typeof window!=='undefined'?window:typeof globalThis!=='undefined'?globalThis:this));
+// ============================================================================
+// performance-utils.js — 性能优化工具模块
+// 提供防抖/节流、空闲回调、虚拟滚动辅助、图片懒加载等工具
+// 各端可渐进式采用，不破坏现有逻辑
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    // ==================== 防抖 (Debounce) ====================
+    // 延迟执行，适合搜索输入、窗口 resize 等高频事件
+    function debounce(fn, wait) {
+        let timer = null;
+        const debounced = function () {
+            const ctx = this, args = arguments;
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                fn.apply(ctx, args);
+                timer = null;
+            }, wait || 200);
+        };
+        debounced.cancel = function () {
+            if (timer) { clearTimeout(timer); timer = null; }
+        };
+        debounced.flush = function () {
+            if (timer) {
+                clearTimeout(timer);
+                fn.apply(this, arguments);
+                timer = null;
+            }
+        };
+        return debounced;
+    }
+
+    // ==================== 节流 (Throttle) ====================
+    // 固定频率执行，适合滚动、拖拽等持续事件
+    function throttle(fn, wait) {
+        let lastTime = 0;
+        let timer = null;
+        return function () {
+            const ctx = this, args = arguments;
+            const now = Date.now();
+            const remaining = wait - (now - lastTime);
+            if (remaining <= 0) {
+                if (timer) { clearTimeout(timer); timer = null; }
+                lastTime = now;
+                fn.apply(ctx, args);
+            } else if (!timer) {
+                timer = setTimeout(() => {
+                    lastTime = Date.now();
+                    timer = null;
+                    fn.apply(ctx, args);
+                }, remaining);
+            }
+        };
+    }
+
+    // ==================== 空闲回调 (requestIdleCallback) ====================
+    // 低优先级任务延后到浏览器空闲时执行，不阻塞用户交互
+    function runIdle(fn, options) {
+        if (typeof global.requestIdleCallback === 'function') {
+            return global.requestIdleCallback(fn, options || { timeout: 1000 });
+        }
+        // 降级：setTimeout 50ms 后执行
+        return setTimeout(fn, 50);
+    }
+
+    function cancelIdle(id) {
+        if (typeof global.cancelIdleCallback === 'function') {
+            global.cancelIdleCallback(id);
+        } else {
+            clearTimeout(id);
+        }
+    }
+
+    // ==================== 简单虚拟滚动辅助 ====================
+    // 适用于长列表（历史处方、药品库等），只渲染可视区域+缓冲区
+    // 用法：
+    //   const vs = PerfUtils.createVirtualScroller({
+    //     container: document.getElementById('list'),
+    //     itemHeight: 60,          // 单项高度
+    //     bufferSize: 5,           // 上下缓冲项数
+    //     render: (item, index) => {  // 返回 HTMLElement
+    //       const el = document.createElement('div');
+    //       el.textContent = item.name;
+    //       return el;
+    //     }
+    //   });
+    //   vs.setData(allItems);
+    function createVirtualScroller(options) {
+        const config = Object.assign({
+            container: null,
+            itemHeight: 50,
+            bufferSize: 5,
+            render: () => document.createElement('div'),
+            onScroll: null
+        }, options);
+
+        if (!config.container) {
+            console.warn('[PerfUtils] createVirtualScroller: container is required');
+            return null;
+        }
+
+        const state = {
+            data: [],
+            scrollTop: 0,
+            visibleCount: 0,
+            renderTimer: null
+        };
+
+        // 创建内部 DOM 结构
+        const viewport = config.container;
+        viewport.style.overflowY = 'auto';
+        viewport.style.position = 'relative';
+
+        const spacer = document.createElement('div');
+        spacer.style.position = 'relative';
+        viewport.appendChild(spacer);
+
+        const content = document.createElement('div');
+        content.style.position = 'absolute';
+        content.style.top = '0';
+        content.style.left = '0';
+        content.style.right = '0';
+        spacer.appendChild(content);
+
+        function render() {
+            const containerHeight = viewport.clientHeight;
+            state.visibleCount = Math.ceil(containerHeight / config.itemHeight) + config.bufferSize * 2;
+            const startIndex = Math.max(0, Math.floor(state.scrollTop / config.itemHeight) - config.bufferSize);
+            const endIndex = Math.min(state.data.length, startIndex + state.visibleCount);
+
+            // 设置总高度撑开滚动条
+            spacer.style.height = (state.data.length * config.itemHeight) + 'px';
+
+            // 设置内容偏移
+            content.style.transform = 'translateY(' + (startIndex * config.itemHeight) + 'px)';
+
+            // 渲染可视项
+            content.innerHTML = '';
+            for (let i = startIndex; i < endIndex; i++) {
+                const el = config.render(state.data[i], i);
+                if (el) {
+                    el.style.height = config.itemHeight + 'px';
+                    el.style.boxSizing = 'border-box';
+                    content.appendChild(el);
+                }
+            }
+
+            if (config.onScroll) config.onScroll(startIndex, endIndex);
+        }
+
+        function onScroll() {
+            state.scrollTop = viewport.scrollTop;
+            if (state.renderTimer) cancelAnimationFrame(state.renderTimer);
+            state.renderTimer = requestAnimationFrame(render);
+        }
+
+        viewport.addEventListener('scroll', throttle(onScroll, 16), { passive: true });
+
+        return {
+            setData(items) {
+                state.data = items || [];
+                state.scrollTop = viewport.scrollTop = 0;
+                render();
+            },
+            refresh() { render(); },
+            scrollToIndex(index) {
+                viewport.scrollTop = index * config.itemHeight;
+            },
+            destroy() {
+                viewport.removeEventListener('scroll', onScroll);
+                viewport.innerHTML = '';
+            }
+        };
+    }
+
+    // ==================== 图片懒加载 (Lazy Image) ====================
+    // 使用 IntersectionObserver 按需加载图片，减少首屏网络请求
+    // 用法：
+    //   PerfUtils.lazyImage(imgElement);  // img 的 data-src 设置真实 URL
+    //   或 <img data-src="real.jpg" class="lazy">
+    //   PerfUtils.observeLazyImages(document.querySelectorAll('img.lazy'));
+    let _lazyObserver = null;
+
+    function lazyImage(img) {
+        if (!img) return;
+        if (_lazyObserver) {
+            _lazyObserver.observe(img);
+        } else {
+            // 降级：直接加载
+            const src = img.getAttribute('data-src');
+            if (src) img.src = src;
+        }
+    }
+
+    function observeLazyImages(images) {
+        if (!images || !images.length) return;
+
+        if (!('IntersectionObserver' in global)) {
+            // 降级：全部直接加载
+            images.forEach(img => {
+                const src = img.getAttribute('data-src');
+                if (src) img.src = src;
+            });
+            return;
+        }
+
+        if (!_lazyObserver) {
+            _lazyObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        const src = img.getAttribute('data-src');
+                        if (src) {
+                            img.src = src;
+                            img.removeAttribute('data-src');
+                        }
+                        _lazyObserver.unobserve(img);
+                    }
+                });
+            }, {
+                rootMargin: '50px 0px',  // 提前 50px 加载
+                threshold: 0.01
+            });
+        }
+
+        images.forEach(img => {
+            if (img.getAttribute('data-src')) {
+                _lazyObserver.observe(img);
+            }
+        });
+    }
+
+    // ==================== DOM 批量更新 ====================
+    // 使用 DocumentFragment 批量插入 DOM，减少重排
+    // 用法：PerfUtils.batchAppend(container, items, (item) => createElement)
+    function batchAppend(container, items, createElement) {
+        if (!container || !items || !items.length) return;
+        const fragment = document.createDocumentFragment();
+        items.forEach(item => {
+            const el = createElement(item);
+            if (el) fragment.appendChild(el);
+        });
+        container.appendChild(fragment);
+    }
+
+    // ==================== 资源预加载 ====================
+    // 空闲时预加载关键资源（如药品库 JSON）
+    function prefetch(url, as) {
+        runIdle(() => {
+            try {
+                const link = document.createElement('link');
+                link.rel = 'prefetch';
+                link.href = url;
+                link.as = as || 'fetch';
+                document.head.appendChild(link);
+            } catch (e) { /* 忽略 */ }
+        });
+    }
+
+    // ==================== 执行耗时测量 ====================
+    // 简单的性能测量工具
+    function measure(name, fn) {
+        const start = performance.now();
+        const result = fn();
+        const duration = performance.now() - start;
+        if (duration > 16) {  // 超过一帧才记录
+            console.log('[Perf] ' + name + ': ' + duration.toFixed(2) + 'ms');
+        }
+        return result;
+    }
+
+    async function measureAsync(name, fn) {
+        const start = performance.now();
+        try {
+            return await fn();
+        } finally {
+            const duration = performance.now() - start;
+            if (duration > 16) {
+                console.log('[Perf] ' + name + ': ' + duration.toFixed(2) + 'ms');
+            }
+        }
+    }
+
+    // ==================== 导出 ====================
+    const PerfUtils = {
+        debounce,
+        throttle,
+        runIdle,
+        cancelIdle,
+        createVirtualScroller,
+        lazyImage,
+        observeLazyImages,
+        batchAppend,
+        prefetch,
+        measure,
+        measureAsync
+    };
+
+    global.PerfUtils = PerfUtils;
+
+    // ==================== 移动端键盘遮挡修复 ====================
+    // 当药物表格内输入框获得焦点时，自动滚动到可见区域中央，避免被软键盘遮挡
+    // 兼容 adjustPan 和 adjustResize 两种 windowSoftInputMode：
+    //   - adjustResize: 视口缩小，布局重新计算，scrollIntoView 即可
+    //   - adjustPan: 视口不缩小，系统平移页面，需手动调整容器内部滚动
+    function setupMobileKeyboardScroll() {
+        // 仅在移动端（窄屏）启用，桌面端不需要
+        if (window.innerWidth >= 769) return;
+
+        var scrollTimer = null;
+        var lastFocusedInput = null;
+
+        // 精确滚动：手动调整 medicine-table-container 内部滚动，让焦点元素在容器可见区域中央
+        // 这是 adjustPan 模式下的关键：scrollIntoView({block:'center'}) 滚动到 WebView 视口中央，
+        // 但 adjustPan 模式下视口底部被键盘遮挡，需手动调整容器内部滚动
+        function doScroll(target) {
+            if (!target) return;
+            try {
+                var container = target.closest ? target.closest('.medicine-table-container') : null;
+                if (container) {
+                    // 手动调整容器内部滚动，让焦点元素在容器可见区域中央
+                    var targetRect = target.getBoundingClientRect();
+                    var containerRect = container.getBoundingClientRect();
+                    // 焦点元素中心相对于容器顶部的位置
+                    var targetCenterInContainer = targetRect.top + targetRect.height / 2 - containerRect.top;
+                    // 容器可见区域的中央
+                    var containerCenter = containerRect.height / 2;
+                    // 计算需要滚动的距离
+                    var scrollDelta = targetCenterInContainer - containerCenter;
+                    if (Math.abs(scrollDelta) > 10) {
+                        var newTop = container.scrollTop + scrollDelta;
+                        try {
+                            container.scrollTo({ top: newTop, behavior: 'smooth' });
+                        } catch(e1) {
+                            container.scrollTop = newTop;
+                        }
+                    }
+                } else {
+                    // 回退：调用 scrollIntoView
+                    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                }
+            } catch(err) {
+                try { target.scrollIntoView(false); } catch(e2) {}
+            }
+        }
+
+        // 监听 focusin 事件（捕获阶段，确保最早收到）
+        document.addEventListener('focusin', function(e) {
+            var target = e.target;
+            if (!target) return;
+            if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && target.tagName !== 'SELECT') return;
+
+            // 检查是否在 medicine-table 内（药物输入表格）
+            var table = target.closest ? target.closest('.medicine-table') : null;
+            if (!table) return;
+
+            lastFocusedInput = target;
+
+            // 多次尝试滚动，适配不同设备的键盘弹出速度
+            if (scrollTimer) clearTimeout(scrollTimer);
+            // 300ms: 快速设备，500ms: 慢速设备，800ms: 更慢的设备（adjustPan 模式下键盘弹出较慢）
+            scrollTimer = setTimeout(function() { doScroll(target); }, 300);
+            setTimeout(function() { doScroll(target); }, 500);
+            setTimeout(function() { doScroll(target); }, 800);
+        }, true);
+
+        // 监听 focusout 清除 lastFocusedInput（延迟清除避免快速切换丢失）
+        document.addEventListener('focusout', function() {
+            setTimeout(function() {
+                if (!document.activeElement || document.activeElement === document.body) {
+                    lastFocusedInput = null;
+                }
+            }, 100);
+        }, true);
+
+        // 动态调整表格容器高度 + 重新滚动焦点元素
+        // adjustPan 模式下 visualViewport.resize 仍会触发（visualViewport 反映可见视口）
+        function adjustContainerHeight() {
+            var containers = document.querySelectorAll('.medicine-table-container');
+            if (!containers.length) return;
+            // 优先用 visualViewport.height，回退到 window.innerHeight
+            var vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+            // 可见高度减去其他界面元素估算高度（患者信息+症状+操作栏 约 280px）
+            var maxH = Math.max(120, Math.min(400, vh - 280));
+            for (var i = 0; i < containers.length; i++) {
+                containers[i].style.maxHeight = maxH + 'px';
+            }
+
+            // 键盘弹出/视口变化后，重新滚动焦点元素到可见区域中央
+            // 这是 adjustPan 模式下的关键改进：键盘弹出后容器 max-height 缩小，需重新滚动
+            if (lastFocusedInput) {
+                setTimeout(function() { doScroll(lastFocusedInput); }, 100);
+            }
+        }
+
+        // Visual Viewport API（现代浏览器）- 键盘弹出时会触发
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', adjustContainerHeight);
+        }
+        // 传统 resize 事件（回退方案，adjustResize 模式下触发）
+        window.addEventListener('resize', adjustContainerHeight);
+        // 延迟初始调整
+        setTimeout(adjustContainerHeight, 500);
+    }
+
+    // 自动初始化
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupMobileKeyboardScroll);
+    } else {
+        setupMobileKeyboardScroll();
+    }
+
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
