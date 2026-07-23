@@ -334,7 +334,8 @@ function createMainWindow() {
             console.log('[FIX] 原生同步 dialog 注入完成');
         } catch(e) { console.warn('[FIX] 原生同步 dialog 注入失败:', e.message); }
 
-        // ★ 过滤"数据处理异常"toast，避免启动时偶发的未处理 Promise rejection 干扰用户
+        // ★ 过滤启动时偶发的"系统异常"/"数据处理异常"toast，避免干扰用户
+        // 来源：index.html 的 window.addEventListener('error') 和 unhandledrejection 监听器
         try {
             await mainWindow.webContents.executeJavaScript(`
                 (function() {
@@ -343,7 +344,8 @@ function createMainWindow() {
                     if (typeof window.showToast !== 'function') return;
                     var _origToast = window.showToast;
                     window.showToast = function(msg) {
-                        if (typeof msg === 'string' && msg.indexOf('数据处理异常') >= 0) {
+                        if (typeof msg === 'string' &&
+                            (msg.indexOf('数据处理异常') >= 0 || msg.indexOf('系统异常') === 0)) {
                             console.error('[已过滤toast]', msg);
                             return;
                         }
