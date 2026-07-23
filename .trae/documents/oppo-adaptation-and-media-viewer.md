@@ -140,8 +140,8 @@ settings.setTextZoom(100);
 - 视频：`患者姓名_处方编号_video.webm`
 
 文件存储路径（已实现）：
-- 图片：`getExternalFilesDir(DIRECTORY_PICTURES)/本能中医处方/YYYY-MM/`
-- 视频：`getExternalFilesDir(DIRECTORY_MOVIES)/本能中医处方/YYYY-MM/`
+- 图片：`getExternalFilesDir(DIRECTORY_PICTURES)/惠康中医处方/YYYY-MM/`
+- 视频：`getExternalFilesDir(DIRECTORY_MOVIES)/惠康中医处方/YYYY-MM/`
 
 ### 修改方案
 

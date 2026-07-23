@@ -1,6 +1,6 @@
 # 录像拍照功能优化文档
 
-> 本文档记录本能中医处方系统所有项目（离线桌面版、离线手机APP、云端桌面版、云端手机APP）的录像拍照功能架构特点、保存路径规范、优化过程和后续优化方向，方便以后优化修改。
+> 本文档记录惠康中医诊所管理系统所有项目（离线桌面版、离线手机APP、云端桌面版、云端手机APP）的录像拍照功能架构特点、保存路径规范、优化过程和后续优化方向，方便以后优化修改。
 
 ## 一、项目总览
 
@@ -35,8 +35,8 @@
 | 端 | 图片保存目录 | 视频保存目录 |
 |----|------------|------------|
 | 桌面版（Electron） | `安装目录/downloads/YYYY-MM/` | `安装目录/downloads/YYYY-MM/` |
-| 手机APP（Android 10+） | `Pictures/本能中医处方/YYYY-MM/` | `Movies/本能中医处方/YYYY-MM/` |
-| 手机APP（Android 9及以下） | `Pictures/本能中医处方/YYYY-MM/` | `Movies/本能中医处方/YYYY-MM/` |
+| 手机APP（Android 10+） | `Pictures/惠康中医处方/YYYY-MM/` | `Movies/惠康中医处方/YYYY-MM/` |
+| 手机APP（Android 9及以下） | `Pictures/惠康中医处方/YYYY-MM/` | `Movies/惠康中医处方/YYYY-MM/` |
 
 ### 2.3 月份分类子目录
 
@@ -72,7 +72,7 @@
 **特点**：
 - 通过 `@JavascriptInterface` 注入 `AndroidNative` 桥接
 - `NativeBridge.invoke(name, json)` 统一入口，分发到 `savePrescriptionImage`/`saveVideoFile` 等
-- 图片保存到 `Pictures/本能中医处方/YYYY-MM/`，视频保存到 `Movies/本能中医处方/YYYY-MM/`
+- 图片保存到 `Pictures/惠康中医处方/YYYY-MM/`，视频保存到 `Movies/惠康中医处方/YYYY-MM/`
 - Android 10+ 使用 `getExternalFilesDir()`，Android 9 及以下使用 `getExternalStoragePublicDirectory()`
 - 有摄像头前后切换（`switchCamera`/`switchCameraForPhoto`）
 - 有音频降级机制（`echoCancellation: false` 等 + 音频失败降级到仅视频）
@@ -106,7 +106,7 @@
 - 通过 `@JavascriptInterface` 注入 `AndroidNative` 桥接
 - `onPageFinished` 中读取 `assets/video-recorder-inject.js` 并通过 `evaluateJavascript` 注入
 - 注入脚本包含：electronAPI shim、浮动按钮（fixed 定位）、录像/拍照 overlay、MutationObserver
-- 图片保存到 `Pictures/本能中医处方/YYYY-MM/`，视频保存到 `Movies/本能中医处方/YYYY-MM/`
+- 图片保存到 `Pictures/惠康中医处方/YYYY-MM/`，视频保存到 `Movies/惠康中医处方/YYYY-MM/`
 - 有摄像头前后切换（`switchCamera`/`switchCameraForPhoto`）
 - 有音频降级机制（`echoCancellation: false` 等 + 音频失败降级到仅视频）
 - `WebChromeClient.onPermissionRequest` 自动授权摄像头和麦克风

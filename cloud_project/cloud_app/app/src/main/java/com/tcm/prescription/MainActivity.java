@@ -67,7 +67,7 @@ public class MainActivity extends BridgeActivity {
     private static final String TAG = "TCM_Prescription";
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
-    private static final String EXPECTED_APP_VERSION = "2026-07-18-v1";
+    private static final String EXPECTED_APP_VERSION = "2026-07-15-v1";
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
@@ -696,8 +696,8 @@ public class MainActivity extends BridgeActivity {
     // NativeBridge：JavaScript 桥接，提供本地文件保存能力
     // 录像拍照功能通过此桥接将文件保存到本地文件系统
     // 保存路径：
-    //   图片：Pictures/本能中医处方/YYYY-MM/患者姓名_处方编号_photo.png
-    //   视频：Movies/本能中医处方/YYYY-MM/患者姓名_处方编号_video.webm
+    //   图片：Pictures/惠康中医处方/YYYY-MM/患者姓名_处方编号_photo.png
+    //   视频：Movies/惠康中医处方/YYYY-MM/患者姓名_处方编号_video.webm
     // ========================================================================
     public class NativeBridge {
 
@@ -780,7 +780,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         // ------------------------------------------------------------------
-        // 处方图片：写入 Pictures/本能中医处方/YYYY-MM/ 目录
+        // 处方图片：写入 Pictures/惠康中医处方/YYYY-MM/ 目录
         // ------------------------------------------------------------------
         private JSONObject savePrescriptionImage(String imageData, String fileName) {
             try {
@@ -875,7 +875,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         // ------------------------------------------------------------------
-        // 视频文件：写入 Pictures/本能中医处方/YYYY-MM/ 目录（与图片同目录，方便导出）
+        // 视频文件：写入 Pictures/惠康中医处方/YYYY-MM/ 目录（与图片同目录，方便导出）
         // ------------------------------------------------------------------
         private JSONObject saveVideoFile(String base64Data, String fileName) {
             try {
@@ -985,7 +985,7 @@ public class MainActivity extends BridgeActivity {
                 }
                 Log.d("TCM-Pres", "commitMediaSession: sessionId=" + sessionId + ", type=" + type + ", tempSize=" + tempFile.length());
 
-                // 统一保存到 Pictures/本能中医处方/YYYY-MM/ 目录（图片视频同目录，方便导出）
+                // 统一保存到 Pictures/惠康中医处方/YYYY-MM/ 目录（图片视频同目录，方便导出）
                 File targetDir = getImageDir();
                 if (targetDir == null) {
                     tempFile.delete();
@@ -1118,10 +1118,15 @@ public class MainActivity extends BridgeActivity {
         private File getImageDir() {
             File dir;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                dir = new File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), "本能中医处方");
+                File external = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+                File newDir = new File(external, "惠康中医处方");
+                File oldDir = new File(external, "本能中医处方");
+                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
             } else {
                 File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-                dir = new File(pictures, "本能中医处方");
+                File newDir = new File(pictures, "惠康中医处方");
+                File oldDir = new File(pictures, "本能中医处方");
+                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
             }
             if (!dir.exists() && !dir.mkdirs()) {
                 dir = new File(getFilesDir(), "prescription_images");
@@ -1133,10 +1138,15 @@ public class MainActivity extends BridgeActivity {
         private File getVideoDir() {
             File dir;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                dir = new File(getExternalFilesDir(Environment.DIRECTORY_MOVIES), "本能中医处方");
+                File external = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                File newDir = new File(external, "惠康中医处方");
+                File oldDir = new File(external, "本能中医处方");
+                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
             } else {
                 File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-                dir = new File(movies, "本能中医处方");
+                File newDir = new File(movies, "惠康中医处方");
+                File oldDir = new File(movies, "本能中医处方");
+                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
             }
             if (!dir.exists() && !dir.mkdirs()) {
                 dir = new File(getFilesDir(), "prescription_videos");

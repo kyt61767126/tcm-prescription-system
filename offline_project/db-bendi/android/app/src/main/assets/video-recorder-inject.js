@@ -12,8 +12,8 @@
  * ActionBar 通过 window.openPhotoOverlay() / window.openRecordingOverlay() 调用本脚本。
  *
  * 保存路径（图片视频统一目录，方便导出）：
- *   Pictures/本能中医处方/YYYY-MM/患者姓名_处方编号_photo.png
- *   Pictures/本能中医处方/YYYY-MM/患者姓名_处方编号_video.webm
+ *   Pictures/惠康中医处方/YYYY-MM/患者姓名_处方编号_photo.png
+ *   Pictures/惠康中医处方/YYYY-MM/患者姓名_处方编号_video.webm
  */
 (function () {
     'use strict';

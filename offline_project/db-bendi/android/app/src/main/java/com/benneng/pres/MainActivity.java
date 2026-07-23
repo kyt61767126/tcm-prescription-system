@@ -54,7 +54,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * 本能中医处方 - 个人本地离线版（手机 APP）
+ * 惠康中医处方 - 个人本地离线版（手机 APP）
  *
  * 纯 WebView 架构，离线加载 assets/public/index.html。
  * 通过 @JavascriptInterface 注入 electronAPI 桥接：
@@ -166,25 +166,27 @@ public class MainActivity extends AppCompatActivity {
             // 外部存储目录（Android 10+）
             File extImg = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
             if (extImg != null) {
-                File d = new File(extImg, "本能中医处方");
-                mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+                // 新目录名（优先使用）
+                mediaWhitelistedRoots.add(new File(extImg, "惠康中医处方").getCanonicalPath() + File.separator);
+                // 向后兼容：旧目录名也加入白名单（保证老用户历史数据可访问）
+                mediaWhitelistedRoots.add(new File(extImg, "本能中医处方").getCanonicalPath() + File.separator);
             }
             File extVid = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
             if (extVid != null) {
-                File d = new File(extVid, "本能中医处方");
-                mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+                mediaWhitelistedRoots.add(new File(extVid, "惠康中医处方").getCanonicalPath() + File.separator);
+                mediaWhitelistedRoots.add(new File(extVid, "本能中医处方").getCanonicalPath() + File.separator);
             }
             // Android 9 及以下：外部公共目录
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
                 File pubImg = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
                 if (pubImg != null) {
-                    File d = new File(pubImg, "本能中医处方");
-                    mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+                    mediaWhitelistedRoots.add(new File(pubImg, "惠康中医处方").getCanonicalPath() + File.separator);
+                    mediaWhitelistedRoots.add(new File(pubImg, "本能中医处方").getCanonicalPath() + File.separator);
                 }
                 File pubVid = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
                 if (pubVid != null) {
-                    File d = new File(pubVid, "本能中医处方");
-                    mediaWhitelistedRoots.add(d.getCanonicalPath() + File.separator);
+                    mediaWhitelistedRoots.add(new File(pubVid, "惠康中医处方").getCanonicalPath() + File.separator);
+                    mediaWhitelistedRoots.add(new File(pubVid, "本能中医处方").getCanonicalPath() + File.separator);
                 }
             }
             // 内部 fallback 目录（getExternalFilesDir 返回 null 时使用）
@@ -255,8 +257,8 @@ public class MainActivity extends AppCompatActivity {
         s.setJavaScriptCanOpenWindowsAutomatically(true);
 
         // ★ 禁用表单自动填充（防止 Android Autofill 弹出旧版应用名称提示）
-        // 问题：点击密码输入框时，Android 系统弹出"本能中医处方系统"凭据提示
-        // 原因：用户之前使用过名为"本能中医处方系统"的应用并保存了密码，系统 Autofill 显示旧名称
+        // 问题：点击密码输入框时，Android 系统弹出"惠康中医诊所管理系统"凭据提示
+        // 原因：用户之前使用过名为"惠康中医诊所管理系统"的应用并保存了密码，系统 Autofill 显示旧名称
         // 修复：禁用 WebView 表单数据保存 + 设置 IMPORTANT_FOR_AUTOFILL_NO 屏蔽系统 Autofill
         s.setSaveFormData(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -724,7 +726,7 @@ public class MainActivity extends AppCompatActivity {
 
     /**
      * ★ 彻底禁用密码输入框的自动填充（防止 Android Autofill 弹出旧版应用名称提示）
-     * 问题：点击密码输入框时，Android 系统弹出"本能中医处方系统"凭据提示
+     * 问题：点击密码输入框时，Android 系统弹出"惠康中医诊所管理系统"凭据提示
      * 根因：Android Autofill 通过 input type="password" 识别密码字段并弹出凭据
      *       autocomplete="off" 被现代 Chromium 忽略；setImportantForAutofill(NO) 对 WebView 内部 input 无效
      * 彻底修复：将 type="password" 改为 type="text" + webkitTextSecurity=disc（视觉仍为圆点）
@@ -1051,7 +1053,7 @@ public class MainActivity extends AppCompatActivity {
                             super.onPageFinished(v, url);
                             android.print.PrintManager pm = (android.print.PrintManager)
                                     getSystemService(Context.PRINT_SERVICE);
-                            String jobName = "本能中医处方_" + System.currentTimeMillis();
+                            String jobName = "惠康中医处方_" + System.currentTimeMillis();
                             android.print.PrintDocumentAdapter adapter;
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                                 adapter = v.createPrintDocumentAdapter(jobName);
@@ -1135,7 +1137,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // ------------------------------------------------------------------
-        // 处方图片：写入 Pictures/本能中医处方/ 目录
+        // 处方图片：写入 Pictures/惠康中医处方/ 目录
         // ------------------------------------------------------------------
         private JSONObject savePrescriptionImage(String imageData, String fileName) {
             try {
@@ -1180,7 +1182,7 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // ------------------------------------------------------------------
-        // 视频文件：写入 Pictures/本能中医处方/ 目录（与图片同目录，方便导出）
+        // 视频文件：写入 Pictures/惠康中医处方/ 目录（与图片同目录，方便导出）
         // ------------------------------------------------------------------
         private JSONObject saveVideoFile(String base64Data, String fileName) {
             try {
@@ -1374,12 +1376,17 @@ public class MainActivity extends AppCompatActivity {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 File external = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
                 if (external != null) {
-                    dir = new File(external, "本能中医处方");
+                    // 优先使用新目录名，旧目录存在则继续用（保护老用户历史数据）
+                    File newDir = new File(external, "惠康中医处方");
+                    File oldDir = new File(external, "本能中医处方");
+                    dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
                 }
             } else {
                 File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
                 if (pictures != null) {
-                    dir = new File(pictures, "本能中医处方");
+                    File newDir = new File(pictures, "惠康中医处方");
+                    File oldDir = new File(pictures, "本能中医处方");
+                    dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
                 }
             }
             if (dir == null || (!dir.exists() && !dir.mkdirs())) {
@@ -1394,12 +1401,16 @@ public class MainActivity extends AppCompatActivity {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 File external = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
                 if (external != null) {
-                    dir = new File(external, "本能中医处方");
+                    File newDir = new File(external, "惠康中医处方");
+                    File oldDir = new File(external, "本能中医处方");
+                    dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
                 }
             } else {
                 File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
                 if (movies != null) {
-                    dir = new File(movies, "本能中医处方");
+                    File newDir = new File(movies, "惠康中医处方");
+                    File oldDir = new File(movies, "本能中医处方");
+                    dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
                 }
             }
             if (dir == null || (!dir.exists() && !dir.mkdirs())) {
