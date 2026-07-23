@@ -454,6 +454,25 @@
             .center-panel { min-width: 250px; }
         }
         
+        /* 小屏手机登录框放大 */
+        @media screen and (max-width: 480px) {
+            .login-container { width: 90%; max-width: 360px; }
+            .header-section { padding: 24px 20px; }
+            .system-title { font-size: 20px; letter-spacing: 2px; }
+            .version-tag { font-size: 13px; }
+            .main-content { padding: 28px 20px; }
+            .login-box { padding: 24px; }
+            .login-field { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 22px; }
+            .login-field label { width: 40px; font-size: 14px; text-align: right; flex-shrink: 0; }
+            .login-field input, .login-field select { width: 100%; padding: 12px 14px; font-size: 14px; border-radius: 8px; }
+            .username-input-wrapper { flex: 1; }
+            .username-input-wrapper input { width: 100%; padding-right: 34px; box-sizing: border-box; }
+            .login-buttons { gap: 15px; }
+            .login-btn { padding: 12px; font-size: 14px; border-radius: 8px; }
+            .login-footer { font-size: 12px; margin-top: 15px; }
+            .login-error { font-size: 12px; padding: 10px; border-radius: 6px; }
+        }
+        
         /* 小屏手机优化 */
         @media screen and (max-width: 480px) {
             .prescription-paper {
