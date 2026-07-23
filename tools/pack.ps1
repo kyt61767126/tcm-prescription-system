@@ -1071,10 +1071,13 @@ function Build-AllStrict {
     # Step D: Rebuild mobile (strict)
     Write-Host ""
     Write-Host "  [步骤 D] 重新打包手机 APP (严格模式)..." -ForegroundColor Cyan
-    # Step C only modified SecurityGuard.java/LicenseManager.java, skip clean for faster incremental build
-    $env:TCM_GRADLE_SKIP_CLEAN = '1'
+    # ★ 严格模式必须全量清理（不再跳过 clean）：
+    # 历史教训（2026-07-22）：之前为加速打包设置 TCM_GRADLE_SKIP_CLEAN=1 跳过 clean，
+    # 导致 MainActivity.java 中 NoAutofillWebView/AutofillManager.cancel() 等修复代码
+    # 因 Gradle 增量构建使用旧 javac 缓存未生效，APK 实际加载旧版页面，
+    # 华为 P40 仍弹出"本能中医处方系统"凭据提示。
+    # 修复方案：严格模式 Step C/D 不再跳过 clean，确保所有 Java 修改全部生效。
     $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
-    Remove-Item Env:\TCM_GRADLE_SKIP_CLEAN -ErrorAction SilentlyContinue
     if ($rc -ne 0) {
         Write-Host "[错误] 严格模式重新打包失败" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 B 的 APK (首次锁定模式)"
@@ -1138,10 +1141,8 @@ function Build-AppStrict {
     # Step C: Rebuild mobile (strict)
     Write-Host ""
     Write-Host "  [步骤 C] 重新打包手机 APP (严格模式)..." -ForegroundColor Cyan
-    # Step B only modified SecurityGuard.java/LicenseManager.java, skip clean for faster incremental build
-    $env:TCM_GRADLE_SKIP_CLEAN = '1'
+    # ★ 严格模式必须全量清理（不再跳过 clean），原因详见上方 Step D 注释
     $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
-    Remove-Item Env:\TCM_GRADLE_SKIP_CLEAN -ErrorAction SilentlyContinue
     if ($rc -ne 0) {
         Write-Host "[错误] 严格模式重新打包失败" -ForegroundColor Red
         Write-Host "  您仍可使用步骤 A 的 APK (首次锁定模式)"

@@ -116,7 +116,14 @@ echo.
 
 echo [4/6] Cleaning build cache (force full clean)...
 if defined TCM_GRADLE_SKIP_CLEAN (
-    echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, skipping clean
+    echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, skipping gradlew clean
+    REM ★ 双保险：即使跳过 gradlew clean，也必须清理 javac 缓存
+    REM 历史教训（2026-07-22）：跳过 clean 时若不清理 javac 缓存，MainActivity.java
+    REM 修改会因 Gradle 增量构建使用旧缓存而未生效，导致 Autofill 修复失效。
+    if exist "app\build\intermediates\javac" (
+        rmdir /S /Q "app\build\intermediates\javac" 2>nul
+        echo       [OK] cleaned javac cache (forced even in skip-clean mode)
+    )
 ) else (
     if exist "app\build\intermediates\javac" (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
