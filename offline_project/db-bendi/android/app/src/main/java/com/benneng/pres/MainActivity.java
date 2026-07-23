@@ -120,6 +120,9 @@ public class MainActivity extends AppCompatActivity {
         // WebView MATCH_PARENT 填充 FrameLayout 的内容区域（不含 padding）。
         // 这是 View 层面的 padding，与 edge-to-edge / fitsSystemWindows 无关，100% 可靠。
         container = new FrameLayout(this);
+        // ★修复顶部灰白色行：container 设置背景色与 statusBarColor(#667eea) 一致
+        // padding 区域（状态栏下方）显示此背景色，避免 DecorView 默认灰白色透出
+        container.setBackgroundColor(0xFF667eea);
         int statusBarHeight = getStatusBarHeight();
         container.setPadding(0, statusBarHeight, 0, 0);
         container.setLayoutParams(new FrameLayout.LayoutParams(
