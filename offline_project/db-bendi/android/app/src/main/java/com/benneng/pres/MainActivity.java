@@ -262,7 +262,7 @@ public class MainActivity extends AppCompatActivity {
         // 修复：禁用 WebView 表单数据保存 + 设置 IMPORTANT_FOR_AUTOFILL_NO 屏蔽系统 Autofill
         s.setSaveFormData(false);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+            webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
             // 递归设置所有子 View（双保险，配合 AndroidManifest importantForAutofill=no）
             disableAutofillRecursive(webView);
             // 拦截 Autofill 服务的所有未完成请求（系统级，最强防线）
