@@ -111,7 +111,7 @@
 
     function loadClinicName(config) {
         const name = localStorage.getItem(KEY_CLINIC_NAME) || config.clinicName;
-        $('clinicName').textContent = name || '本能堂中医诊所';
+        $('clinicName').textContent = name || '卢二灼中医诊所';
     }
 
     // 缓存登录用户信息
