@@ -113,18 +113,11 @@ public class MainActivity extends AppCompatActivity {
 
         // 创建 WebView 并立即配置
         webView = new WebView(this);
-        // ★ 适配状态栏（彻底解决顶部按钮与信号/电量重合 - FrameLayout 方案）：
-        // Android 15+ (API 35+) 强制 edge-to-edge 模式，WebView.setPadding 作为
-        // ContentView 时可能被 DecorView 布局过程覆盖。
-        // 方案：用 FrameLayout 包裹 WebView，在 FrameLayout 上设置 padding，
-        // WebView MATCH_PARENT 填充 FrameLayout 的内容区域（不含 padding）。
-        // 这是 View 层面的 padding，与 edge-to-edge / fitsSystemWindows 无关，100% 可靠。
+        // ★ 适配状态栏（无 padding 方案）：WebView 填满整个屏幕，网页顶部紫色（header-section/login-overlay）
+        // 与状态栏紫色(#667eea)融合，无额外 padding 区域。onPageFinished 时注入 CSS 让 header-section
+        // 内容下移避开状态栏。此方案消除顶部灰白行/紫色加宽条，操作界面紧贴状态栏下方。
         container = new FrameLayout(this);
-        // ★修复顶部灰白色行：container 设置背景色与 statusBarColor(#667eea) 一致
-        // padding 区域（状态栏下方）显示此背景色，避免 DecorView 默认灰白色透出
-        container.setBackgroundColor(0xFF667eea);
         int statusBarHeight = getStatusBarHeight();
-        container.setPadding(0, statusBarHeight, 0, 0);
         container.setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -132,20 +125,7 @@ public class MainActivity extends AppCompatActivity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         container.addView(webView);
-        // ★ WindowInsetsListener 动态更新 padding（处理挖孔/刘海屏）
-        ViewCompat.setOnApplyWindowInsetsListener(container, (v, insets) -> {
-            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
-            int insetTop = Math.max(systemBars.top, cutout.top);
-            int finalTop = Math.max(insetTop, statusBarHeight);
-            if (v.getPaddingTop() != finalTop) {
-                v.setPadding(0, finalTop, 0, 0);
-            }
-            return insets;
-        });
         setContentView(container);
-        // ★ 主动触发 insets 分发
-        ViewCompat.requestApplyInsets(container);
         configureWebView();
 
         // ★ 初始化 License 管理器（APP 端授权校验）
@@ -175,9 +155,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
-        if (webView != null) {
-            ViewCompat.requestApplyInsets(container);
-        }
     }
 
     // 初始化媒体文件读取白名单：缓存所有可能的目录（外部 + 内部 fallback）
@@ -416,7 +393,7 @@ public class MainActivity extends AppCompatActivity {
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 injectElectronApiShim(view);
-
+                injectStatusBarFix(view);
                 // 延迟注入录像拍照脚本（等待页面渲染稳定）
                 mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
             }
@@ -706,6 +683,26 @@ public class MainActivity extends AppCompatActivity {
             cachedVideoRecorderScript = "";
         }
         return cachedVideoRecorderScript;
+    }
+
+    /**
+     * ★ 注入状态栏避让 CSS（无 padding 方案配套）
+     * WebView 填满屏幕，网页顶部紫色与状态栏紫色融合。
+     * header-section 内容需要下移避开状态栏，注入 padding-top。
+     * login-overlay 紫色渐变与状态栏融合，login-container 居中不受影响。
+     */
+    private void injectStatusBarFix(WebView webView) {
+        int sbHeight = getStatusBarHeight();
+        String js = "(function(){" +
+            "  if (document.getElementById('status-bar-fix')) return;" +
+            "  var s = document.createElement('style');" +
+            "  s.id = 'status-bar-fix';" +
+            "  s.textContent = '@media screen and (max-width: 768px) {" +
+            "    .header-section { padding-top: " + sbHeight + "px !important; }" +
+            "  }';" +
+            "  document.head.appendChild(s);" +
+            "})();";
+        webView.evaluateJavascript(js, null);
     }
 
     /**
