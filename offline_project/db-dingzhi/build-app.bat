@@ -64,6 +64,15 @@ if exist "video-recorder-inject.js" (
 ) else ( echo [SKIP] video-recorder-inject.js not found )
 echo.
 
+echo [2.5/8] Minifying JavaScript files (security hardening)...
+node "%~dp0..\_shared\minify-js.js" "%ANDROID_PUBLIC%"
+if errorlevel 1 (
+    echo [WARN] JS minification had issues, continuing anyway
+) else (
+    echo [OK] JavaScript files minified
+)
+echo.
+
 cd /d "%~dp0\android"
 
 echo [3/8] Checking environment...
