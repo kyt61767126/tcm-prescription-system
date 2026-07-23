@@ -392,69 +392,27 @@
                 max-height: 90vh;
             }
             
-            /* 登录界面 - 移动端完整适配 */
-            .login-container {
-                width: 92%;
-                max-width: 340px;
-                height: auto;
-                min-height: 400px;
-                border-radius: 12px;
-                border-width: 2px;
-            }
-            .bg-decoration { border-radius: 10px; }
-            .header-section { padding: 20px 20px; gap: 6px; }
+            /* 登录界面 - 移动端完整适配（对齐云端尺寸） */
+            .login-container { width: 90%; max-width: 360px; }
+            .header-section { padding: 24px 20px; }
             .system-title { font-size: 20px; letter-spacing: 2px; }
             .version-tag { font-size: 13px; }
-            .main-content { padding: 16px; height: auto; }
-            .login-box {
-                width: 100%;
-                max-width: none;
-                padding: 20px;
-                border-radius: 10px;
-                border-width: 2px;
-            }
-            .clinic-info { padding: 12px; margin-bottom: 18px; }
-            .clinic-info-name { font-size: 16px; }
-            .login-field {
-                flex-direction: row;
-                align-items: center;
-                gap: 10px;
-                margin-bottom: 18px;
-            }
-            .login-field label {
-                width: 60px;
-                text-align: right;
-                font-size: 16px;
-                margin-bottom: 0;
-                flex-shrink: 0;
-            }
-            .login-field input, .login-field select {
-                width: 100%;
-                height: 32px;
-                font-size: 16px;
-                padding: 6px 14px;
-                min-width: 0;
-                max-width: none;
-                border-width: 2px;
-            }
-            .login-field.remember-me {
-                flex-direction: row;
-                align-items: center;
-                gap: 6px;
-                margin-bottom: 12px;
-            }
+            .main-content { padding: 28px 20px; }
+            .login-box { padding: 24px; }
+            .clinic-info { padding: 12px; margin-bottom: 22px; }
+            .clinic-info-name { font-size: 14px; }
+            .login-field { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 22px; }
+            .login-field label { width: 40px; font-size: 14px; text-align: right; flex-shrink: 0; }
+            .login-field input, .login-field select { width: 100%; padding: 12px 14px; font-size: 14px; border-radius: 8px; height: auto; }
+            .username-input-wrapper { flex: 1; }
+            .username-input-wrapper input { width: 100%; padding-right: 34px; box-sizing: border-box; }
+            .login-field.remember-me { flex-direction: row; align-items: center; justify-content: center; gap: 6px; margin-bottom: 22px; }
             .login-field.remember-me label { font-size: 14px; font-weight: normal; }
-            .login-field.remember-me input[type="checkbox"] { width: 18px; height: 18px; }
-            .login-buttons { gap: 15px; margin-top: 20px; }
-            .login-btn {
-                height: 48px;
-                font-size: 18px;
-                flex: 1;
-                min-width: 0;
-                border-radius: 6px;
-            }
+            .login-field.remember-me input[type="checkbox"] { width: 16px; height: 16px; }
+            .login-buttons { gap: 15px; }
+            .login-btn { padding: 12px; font-size: 14px; border-radius: 8px; height: auto; }
             .login-footer { font-size: 12px; margin-top: 15px; }
-            .login-error { font-size: 13px; padding: 8px; }
+            .login-error { font-size: 12px; padding: 10px; border-radius: 6px; }
 
             /* 统计分析图表 - 手机端缩小显示，确保屏幕内完整显示 */
             #visitTrendChart, #diseaseChart, #medicineChart { height: 130px; }
