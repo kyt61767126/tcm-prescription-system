@@ -40,6 +40,44 @@ app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('allow-file-access-from-files');
 
 // ============================================================================
+//  ★ 安全防护：拦截远程调试启动参数（防止绕过 DevTools 拦截）
+//  攻击场景：通过 --inspect / --remote-debugging-port=9229 启动 exe 后，
+//            可用 Chrome DevTools 远程连接，绕过 before-input-event 的 F12 拦截
+//  修复：检测到调试参数立即退出程序
+// ============================================================================
+(function blockRemoteDebugging() {
+    const argv = process.argv.join(' ').toLowerCase();
+    const debugPatterns = [
+        '--inspect',           // Node.js Inspector
+        '--inspect-brk',       // 断点调试
+        '--remote-debugging-port',  // Chrome 远程调试端口
+        '--debug',             // 旧版调试
+        '--debug-brk'          // 旧版断点调试
+    ];
+    for (const pattern of debugPatterns) {
+        if (argv.includes(pattern)) {
+            console.error('[SECURITY] 检测到远程调试参数，程序退出: ' + pattern);
+            try {
+                const { app: appRef } = require('electron');
+                appRef.whenReady().then(() => {
+                    const { dialog } = require('electron');
+                    dialog.showMessageBoxSync({
+                        type: 'error',
+                        title: '安全提示',
+                        message: '检测到调试参数，软件无法运行。',
+                        detail: '请勿通过命令行添加调试参数启动本程序。'
+                    });
+                    appRef.quit();
+                });
+            } catch (e) {
+                process.exit(1);
+            }
+            process.exit(1);
+        }
+    }
+})();
+
+// ============================================================================
 //  目录与键名工具
 // ============================================================================
 function getExeDirectory() {

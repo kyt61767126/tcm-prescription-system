@@ -310,14 +310,18 @@ public class SecurityGuard {
         try {
             PackageManager pm = context.getPackageManager();
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                // API 28+：使用 GET_SIGNING_CERTICATES 获取完整签名链
+                // API 28+：使用 GET_SIGNING_CERTIFICATES 获取完整签名链
                 PackageInfo pi = pm.getPackageInfo(
                         context.getPackageName(), PackageManager.GET_SIGNING_CERTIFICATES);
                 if (pi != null && pi.signingInfo != null) {
-                    // 优先返回 release 签名，回退到 signer 签名
+                    // ★ 修复：原代码 getApkContentsSigners() 调用了2次（重复且无意义）
+                    //   正确逻辑：优先取 past signers（历史签名，兼容密钥轮换），
+                    //   为空时再取 current signers（当前签名）
+                    //   两者都返回签名者数组，任一匹配预期哈希即通过
                     Signature[] sigs = pi.signingInfo.getApkContentsSigners();
                     if (sigs != null && sigs.length > 0) return sigs;
-                    sigs = pi.signingInfo.getApkContentsSigners();
+                    // 回退：获取历史签名者（支持 v3 签名密钥轮换场景）
+                    sigs = pi.signingInfo.getSigningCertificateHistory();
                     if (sigs != null && sigs.length > 0) return sigs;
                 }
             }

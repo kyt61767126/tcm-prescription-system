@@ -40,6 +40,47 @@ app.commandLine.appendSwitch('use-fake-ui-for-media-stream');
 app.commandLine.appendSwitch('allow-file-access-from-files');
 
 // ============================================================================
+//  ★ 安全防护：拦截远程调试启动参数（防止绕过 DevTools 拦截）
+//  攻击场景：通过 --inspect / --remote-debugging-port=9229 启动 exe 后，
+//            可用 Chrome DevTools 远程连接，绕过 before-input-event 的 F12 拦截
+//  修复：检测到调试参数立即退出程序
+// ============================================================================
+(function blockRemoteDebugging() {
+    const argv = process.argv.join(' ').toLowerCase();
+    const debugPatterns = [
+        '--inspect',           // Node.js Inspector
+        '--inspect-brk',       // 断点调试
+        '--remote-debugging-port',  // Chrome 远程调试端口
+        '--debug',             // 旧版调试
+        '--debug-brk'          // 旧版断点调试
+    ];
+    for (const pattern of debugPatterns) {
+        if (argv.includes(pattern)) {
+            // 不能用 dialog（app 未 ready），用 console + 弹窗
+            console.error('[SECURITY] 检测到远程调试参数，程序退出: ' + pattern);
+            try {
+                // 同步弹窗提示（Electron 在 app ready 前可用 dialog.showMessageBoxSync）
+                const { app: appRef } = require('electron');
+                appRef.whenReady().then(() => {
+                    const { dialog } = require('electron');
+                    dialog.showMessageBoxSync({
+                        type: 'error',
+                        title: '安全提示',
+                        message: '检测到调试参数，软件无法运行。',
+                        detail: '请勿通过命令行添加调试参数启动本程序。'
+                    });
+                    appRef.quit();
+                });
+            } catch (e) {
+                process.exit(1);
+            }
+            // 阻止后续代码执行
+            process.exit(1);
+        }
+    }
+})();
+
+// ============================================================================
 //  目录与键名工具
 // ============================================================================
 function getExeDirectory() {
@@ -479,6 +520,25 @@ app.whenReady().then(async () => {
 
     sharedSession = session.fromPartition(SESSION_PARTITION);
     installCSP(sharedSession);
+
+    // ============================================================================
+    //  ★ 安全防护：HTTPS 证书严格校验（防中间人攻击）
+    //  云端版必须加载 HTTPS 资源（tcm-prescription-system.pages.dev 等），
+    //  若不校验证书，攻击者可通过中间人代理替换响应内容
+    //  修复：仅信任有效证书，拒绝过期/自签名/被吊销的证书
+    // ============================================================================
+    sharedSession.setCertificateVerifyProc((request, callback) => {
+        // request 包含 hostname / certificate / validationResult / errorCode
+        const { validationResult, errorCode } = request;
+        // validationResult === 0 表示 Chromium 内置校验通过
+        // 非零值表示证书有问题（过期/域名不匹配/CA不可信/被吊销等）
+        if (validationResult !== 0) {
+            console.error(`[SECURITY] 证书校验失败: hostname=${request.hostname} validationResult=${validationResult} errorCode=${errorCode}`);
+            callback(-1);  // -1 = 拒绝连接
+            return;
+        }
+        callback(0);  // 0 = 信任证书
+    });
 
     // ★ 授予 camera/microphone 权限（视频录制所需）
     sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
