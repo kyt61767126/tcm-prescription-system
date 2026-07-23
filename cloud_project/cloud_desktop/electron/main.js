@@ -771,7 +771,7 @@ ipcMain.handle('dialog:prompt', async (event, message, defaultValue) => {
     }
 
     const promptWin = new BrowserWindow({
-        width: 460,
+        width: 480,
         height: 280,
         parent: parentWin,
         modal: true,

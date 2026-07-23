@@ -93,6 +93,46 @@ export async function onRequest(context) {
             return json({ success: true, data: medicines, count: medicines.length });
         }
 
+        // POST sync_platform - 同步平台兜底库到本诊所（保留 priority_use 标记）
+        if (method === 'POST' && url.searchParams.get('medicine') === 'sync_platform') {
+            if (!currentUser) {
+                return json({ success: false, error: '未授权访问，请先登录' }, 401);
+            }
+            if (!isClinicAdmin(currentUser)) {
+                return json({ success: false, error: '仅诊所管理员可同步平台兜底库' }, 403);
+            }
+            if (!currentUser.clinicId) {
+                return json({ success: false, error: '无诊所ID' }, 400);
+            }
+
+            const clinicKey = `clinic:${currentUser.clinicId}:medicines`;
+            const platformMedicines = await kv.get(KV_SYSTEM_PLATFORM_MEDICINES, 'json');
+            const clinicMedicines = await kv.get(clinicKey, 'json') || [];
+
+            if (!platformMedicines || !Array.isArray(platformMedicines) || platformMedicines.length === 0) {
+                return json({ success: false, error: '平台兜底库为空，无法同步' }, 400);
+            }
+
+            // 合并：以平台兜底库为基础，保留本诊所已设置的 priority_use 标记
+            const clinicMap = {};
+            if (Array.isArray(clinicMedicines)) {
+                for (const m of clinicMedicines) {
+                    if (m.name) clinicMap[m.name] = m;
+                }
+            }
+
+            const mergedMedicines = platformMedicines.map(pm => {
+                const cm = clinicMap[pm.name];
+                if (cm && cm.priority_use !== undefined) {
+                    return { ...pm, priority_use: cm.priority_use };
+                }
+                return pm;
+            });
+
+            await kv.put(clinicKey, JSON.stringify(mergedMedicines));
+            return json({ success: true, data: mergedMedicines, count: mergedMedicines.length });
+        }
+
         // POST/PUT - 保存药品库（需要管理员认证）
         if (method === 'POST' || method === 'PUT') {
             if (!currentUser) {
