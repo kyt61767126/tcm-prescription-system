@@ -436,6 +436,14 @@ public class MainActivity extends AppCompatActivity {
                 injectAutocompleteOff(view);
                 // 延迟注入录像拍照脚本（等待页面渲染稳定）
                 mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
+                // 再次清除缓存和 Autofill（adjustResize 模式下键盘弹出可能触发重绘）
+                webView.clearCache(true);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    try {
+                        android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
+                        if (afm != null) afm.cancel();
+                    } catch (Throwable ignored) {}
+                }
             }
 
             @Override
