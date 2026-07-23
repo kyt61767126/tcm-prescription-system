@@ -697,20 +697,10 @@ if (window.Permission) {
         }
 
         window.addEventListener('error', function(e) {
-            try {
-                if (typeof showToast === 'function') {
-                    showToast('系统异常: ' + (e.message || '未知错误'));
-                }
-                console.error('[全局错误]', e.message, e.error);
-            } catch (_) {}
+            console.error('[全局错误]', e.message, e.error);
         });
         window.addEventListener('unhandledrejection', function(e) {
-            try {
-                if (typeof showToast === 'function') {
-                    showToast('数据处理异常，请重试');
-                }
-                console.error('[未处理Promise]', e.reason);
-            } catch (_) {}
+            console.error('[未处理Promise]', e.reason);
         });
 
         function createPromptModal() {
