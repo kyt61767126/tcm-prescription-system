@@ -394,6 +394,7 @@ public class MainActivity extends AppCompatActivity {
                 super.onPageFinished(view, url);
                 injectElectronApiShim(view);
                 injectStatusBarFix(view);
+                injectLoginUsernameFix(view);
                 // 延迟注入录像拍照脚本（等待页面渲染稳定）
                 mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
             }
@@ -701,6 +702,27 @@ public class MainActivity extends AppCompatActivity {
             "    .header-section { padding-top: " + sbHeight + "px !important; }" +
             "  }';" +
             "  document.head.appendChild(s);" +
+            "})();";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * ★ 个人版：确保登入界面用户名输入框显示医师姓名（CONFIG.doctorName），
+     * 不被 initRememberedCredentials 中的 rememberedUsername（如 admin）覆盖。
+     * 延迟 600ms 执行，确保在 init()/initRememberedCredentials() 之后执行。
+     */
+    private void injectLoginUsernameFix(WebView webView) {
+        String js = "(function(){" +
+            "  setTimeout(function() {" +
+            "    try {" +
+            "      var input = document.getElementById('loginUsername');" +
+            "      if (!input) return;" +
+            "      var overlay = document.getElementById('loginOverlay');" +
+            "      if (overlay && overlay.style.display === 'none') return;" +  // 已登录则不修改
+            "      var name = (typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : '卢二灼';" +
+            "      input.value = name;" +
+            "    } catch(e) { console.warn('loginUsername fix error:', e); }" +
+            "  }, 600);" +
             "})();";
         webView.evaluateJavascript(js, null);
     }

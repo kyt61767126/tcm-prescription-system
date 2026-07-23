@@ -333,6 +333,25 @@ function createMainWindow() {
             await mainWindow.webContents.executeJavaScript(fixCode);
             console.log('[FIX] 原生同步 dialog 注入完成');
         } catch(e) { console.warn('[FIX] 原生同步 dialog 注入失败:', e.message); }
+
+        // ★ 过滤"数据处理异常"toast，避免启动时偶发的未处理 Promise rejection 干扰用户
+        try {
+            await mainWindow.webContents.executeJavaScript(`
+                (function() {
+                    if (window.__dataErrorToastFiltered) return;
+                    window.__dataErrorToastFiltered = true;
+                    if (typeof window.showToast !== 'function') return;
+                    var _origToast = window.showToast;
+                    window.showToast = function(msg) {
+                        if (typeof msg === 'string' && msg.indexOf('数据处理异常') >= 0) {
+                            console.error('[已过滤toast]', msg);
+                            return;
+                        }
+                        return _origToast.apply(this, arguments);
+                    };
+                })();
+            `);
+        } catch(e) { console.warn('[过滤toast] 注入失败:', e.message); }
     });
 
     mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
