@@ -18,6 +18,7 @@ import android.os.Looper;
 import android.provider.MediaStore;
 import android.util.Base64;
 import android.util.Log;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
 import android.webkit.JavascriptInterface;
@@ -253,6 +254,15 @@ public class MainActivity extends AppCompatActivity {
         s.setSupportMultipleWindows(true);
         s.setJavaScriptCanOpenWindowsAutomatically(true);
 
+        // ★ 禁用表单自动填充（防止 Android Autofill 弹出旧版应用名称提示）
+        // 问题：点击密码输入框时，Android 系统弹出"本能中医处方系统"凭据提示
+        // 原因：用户之前使用过名为"本能中医处方系统"的应用并保存了密码，系统 Autofill 显示旧名称
+        // 修复：禁用 WebView 表单数据保存 + 设置 IMPORTANT_FOR_AUTOFILL_NO 屏蔽系统 Autofill
+        s.setSaveFormData(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        }
+
         webView.clearHistory();
         webView.addJavascriptInterface(new NativeBridge(), "AndroidNative");
 
@@ -395,6 +405,7 @@ public class MainActivity extends AppCompatActivity {
                 injectElectronApiShim(view);
                 injectStatusBarFix(view);
                 injectLoginUsernameFix(view);
+                injectAutocompleteOff(view);
                 // 延迟注入录像拍照脚本（等待页面渲染稳定）
                 mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
             }
@@ -729,6 +740,23 @@ public class MainActivity extends AppCompatActivity {
             "      input.value = name;" +
             "    } catch(e) { console.warn('loginUsername fix error:', e); }" +
             "  }, 600);" +
+            "})();";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * ★ 禁用登录界面输入框的浏览器自动填充（防止 Android Autofill 弹出旧版应用名称提示）
+     * 问题：点击密码输入框时，Android 系统弹出"本能中医处方系统"凭据提示
+     * 原因：用户之前使用过名为"本能中医处方系统"的应用并保存了密码，系统 Autofill 显示旧名称
+     * 修复：通过 JS 给所有 input 元素设置 autocomplete="off"，关闭浏览器自动填充
+     *      配合 configureWebView() 中的 setImportantForAutofill(NO) 完全屏蔽系统 Autofill
+     */
+    private void injectAutocompleteOff(WebView webView) {
+        String js = "(function(){" +
+            "  var inputs = document.querySelectorAll('input[type=\"password\"], input[type=\"text\"]');" +
+            "  for (var i = 0; i < inputs.length; i++) {" +
+            "    inputs[i].setAttribute('autocomplete', 'off');" +
+            "  }" +
             "})();";
         webView.evaluateJavascript(js, null);
     }

@@ -436,6 +436,18 @@ function createLoginWindow() {
     });
 
     loginWindow.webContents.on('dom-ready', () => {
+        // ★ 禁用登录界面输入框的浏览器自动填充（防止 Chromium 弹出密码保存提示）
+        // 问题：点击密码输入框时，浏览器弹出"本能中医处方系统"凭据保存提示
+        // 原因：用户之前使用过名为"本能中医处方系统"的应用并保存了密码，Chromium 密码管理器显示旧名称
+        // 修复：通过 JS 给所有 input 元素设置 autocomplete="off"，关闭浏览器自动填充
+        loginWindow.webContents.executeJavaScript(`
+            (function() {
+                var inputs = document.querySelectorAll('input[type="password"], input[type="text"]');
+                for (var i = 0; i < inputs.length; i++) {
+                    inputs[i].setAttribute('autocomplete', 'off');
+                }
+            })();
+        `).catch(e => console.warn('[login] 注入 autocomplete=off 失败:', e.message));
         loginWindow.show();
     });
 }

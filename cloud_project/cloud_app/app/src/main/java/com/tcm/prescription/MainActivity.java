@@ -211,16 +211,18 @@ public class MainActivity extends BridgeActivity {
 
         WebSettings settings = webView.getSettings();
 
-        // 版本检查：如果 APP 版本更新了，清除 WebView 缓存强制加载最新页面
-        // 这解决了用户看到旧缓存版本（如"媒体"文字未更新为"处方"）的问题
+        // 版本检查：如果 APP 版本更新了，清除 WebView HTTP 缓存强制加载最新页面
+        // ★ 重要：只清 HTTP 缓存，不清 DOM Storage（localStorage）
+        //   原因：localStorage 中保存有 rememberedUsername（记住用户）等关键状态
+        //   清除 DOM Storage 会导致"记住用户"功能失效
+        //   版本不一致问题今后只通过清 HTTP 缓存解决，不再依赖重新打包 APK 同步版本号
         android.content.SharedPreferences prefs = getSharedPreferences("app_config", MODE_PRIVATE);
         String lastVersion = prefs.getString("page_version", "");
         if (!lastVersion.equals(EXPECTED_APP_VERSION)) {
-            Log.d("TCM-Pres", "页面版本变更: " + lastVersion + " -> " + EXPECTED_APP_VERSION + "，清除WebView缓存");
+            Log.d("TCM-Pres", "页面版本变更: " + lastVersion + " -> " + EXPECTED_APP_VERSION + "，仅清除HTTP缓存（保留localStorage）");
             webView.clearCache(true);
-            // 清除 WebView 存储的数据（DOM Storage、数据库等）
-            webView.clearFormData();
-            android.webkit.WebStorage.getInstance().deleteAllData();
+            // ★ 不再调用 WebStorage.getInstance().deleteAllData() 和 clearFormData()
+            // 避免清除 localStorage 中的 rememberedUsername 等用户状态
         }
 
         // LOAD_DEFAULT: 优先使用缓存，但会向服务器验证缓存是否过期（304则用缓存，200则加载新页面）
