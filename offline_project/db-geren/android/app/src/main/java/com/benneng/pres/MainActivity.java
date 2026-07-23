@@ -16,6 +16,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
@@ -52,6 +53,10 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.nio.charset.StandardCharsets;
+import javax.crypto.Cipher;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * 惠康中医处方 - 个人本地离线版（手机 APP）
@@ -658,6 +663,19 @@ public class MainActivity extends AppCompatActivity {
             "        catch(e){ resolve({success:false, error:String(e), renamed:0}); }" +
             "      });" +
             "    }," +
+            // ★ P0-2 数据加密：AES-256-CBC 加密/解密（密钥从设备特征派生，不暴露给JS）
+            "    encryptData: function(plaintext){" +
+            "      return new Promise(function(resolve){" +
+            "        try { var r = callNative('encryptData', JSON.stringify({plaintext:plaintext})); resolve(r); }" +
+            "        catch(e){ resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
+            "    decryptData: function(ciphertext){" +
+            "      return new Promise(function(resolve){" +
+            "        try { var r = callNative('decryptData', JSON.stringify({ciphertext:ciphertext})); resolve(r); }" +
+            "        catch(e){ resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
             "    loginSuccess: function(u){ return P({success:true}); }," +
             "    getCurrentUser: function(){ return P(null); }," +
             "    onLoginUser: function(cb){ /* no-op */ }," +
@@ -998,6 +1016,11 @@ public class MainActivity extends AppCompatActivity {
                         return renameMediaFiles(args.optString("patientName", ""),
                                 args.optString("oldNo", ""),
                                 args.optString("newNo", "")).toString();
+                    // ★ P0-2 数据加密：AES-256-CBC 加密/解密
+                    case "encryptData":
+                        return encryptData(args.optString("plaintext", "")).toString();
+                    case "decryptData":
+                        return decryptData(args.optString("ciphertext", "")).toString();
                     // ★ License 相关调用（与桌面版 IPC 接口保持一致）
                     case "license_validate":
                         // ★ v3 新增：传入 localMachineId 用于三因子绑定校验
@@ -1229,6 +1252,90 @@ public class MainActivity extends AppCompatActivity {
                 }
             } catch (Exception e) {
                 Log.e(TAG, "saveBackupFile 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // ★ P0-2 数据加密：AES-256-CBC 加密/解密（密钥从设备特征派生）
+        // 密钥 = SHA256(androidId + packageName + 固定盐)，32字节=256位
+        // 输出格式：ENC1:Base64(iv[16] + ciphertext)
+        // 向后兼容：decryptData 接收非 ENC1: 前缀的字符串时原样返回（当明文处理）
+        // ------------------------------------------------------------------
+        private byte[] getDeviceEncryptionKey() {
+            try {
+                String androidId = Settings.Secure.getString(
+                        getContentResolver(), Settings.Secure.ANDROID_ID);
+                if (androidId == null) androidId = "";
+                String src = androidId + "|" + getPackageName() + "|bnzc_data_enc_salt_v1";
+                MessageDigest md = MessageDigest.getInstance("SHA-256");
+                return md.digest(src.getBytes(StandardCharsets.UTF_8));
+            } catch (Exception e) {
+                Log.e(TAG, "getDeviceEncryptionKey 失败", e);
+                return null;
+            }
+        }
+
+        private JSONObject encryptData(String plaintext) {
+            try {
+                if (plaintext == null || plaintext.isEmpty()) {
+                    return fail("明文不能为空");
+                }
+                byte[] keyBytes = getDeviceEncryptionKey();
+                if (keyBytes == null) return fail("密钥派生失败");
+                SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
+                byte[] iv = new byte[16];
+                new java.security.SecureRandom().nextBytes(iv);
+                IvParameterSpec ivSpec = new IvParameterSpec(iv);
+                Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
+                byte[] encrypted = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
+                byte[] combined = new byte[iv.length + encrypted.length];
+                System.arraycopy(iv, 0, combined, 0, iv.length);
+                System.arraycopy(encrypted, 0, combined, iv.length, encrypted.length);
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("data", "ENC1:" + Base64.encodeToString(combined, Base64.NO_WRAP));
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "encryptData 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        private JSONObject decryptData(String ciphertext) {
+            try {
+                if (ciphertext == null || ciphertext.isEmpty()) {
+                    return fail("密文不能为空");
+                }
+                // 向后兼容：非加密格式直接返回明文
+                if (!ciphertext.startsWith("ENC1:")) {
+                    JSONObject r = new JSONObject();
+                    r.put("success", true);
+                    r.put("data", ciphertext);
+                    r.put("encrypted", false);
+                    return r;
+                }
+                byte[] keyBytes = getDeviceEncryptionKey();
+                if (keyBytes == null) return fail("密钥派生失败");
+                byte[] combined = Base64.decode(ciphertext.substring(5), Base64.DEFAULT);
+                if (combined.length < 17) return fail("密文长度不足");
+                byte[] iv = new byte[16];
+                byte[] encrypted = new byte[combined.length - 16];
+                System.arraycopy(combined, 0, iv, 0, 16);
+                System.arraycopy(combined, 16, encrypted, 0, encrypted.length);
+                SecretKeySpec key = new SecretKeySpec(keyBytes, "AES");
+                IvParameterSpec ivSpec = new IvParameterSpec(iv);
+                Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+                cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
+                byte[] decrypted = cipher.doFinal(encrypted);
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("data", new String(decrypted, StandardCharsets.UTF_8));
+                r.put("encrypted", true);
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "decryptData 失败", e);
                 return fail(e.getMessage());
             }
         }

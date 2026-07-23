@@ -4879,7 +4879,7 @@ if (window.Permission) {
                   'F9 - 保存录入\nAlt+1 - 辨证选方\nAlt+9 - 复诊直调');
         }
 
-        function saveLocalBackup() {
+        async function saveLocalBackup() {
             // ★ 优化：每日首次保存才触发完整备份，避免每次保存都序列化整个数据（大幅减少耗时）
             // 之前每次保存处方都会 JSON.stringify 整个 prescriptionHistory 写入 localStorage，数据量大时阻塞 UI
             const today = new Date().toISOString().slice(0, 10);
@@ -4898,12 +4898,27 @@ if (window.Permission) {
                         formulas: formulas || [],
                         prescriptionHistory: prescriptionHistory || []
                     },
-                    prescriptionCount: (prescriptionHistory || []).length
+                    prescriptionCount: (prescriptionHistory || []).length,
+                    encrypted: false
                 };
+                // ★ P0-2 数据加密：使用 AES-256-CBC 加密 backup.data（密钥从设备特征派生）
+                // 加密失败时降级为明文存储（不影响功能，仅降低安全性）
+                if (window.electronAPI && window.electronAPI.encryptData) {
+                    try {
+                        const plaintext = JSON.stringify(backup.data);
+                        const result = await window.electronAPI.encryptData(plaintext);
+                        if (result && result.success && result.data) {
+                            backup.data = result.data;
+                            backup.encrypted = true;
+                        }
+                    } catch (e) {
+                        console.warn('[Backup] 加密失败，使用明文存储:', e);
+                    }
+                }
                 backups.unshift(backup);
                 backups = backups.slice(0, 10);
                 localStorage.setItem('localBackups', JSON.stringify(backups));
-                console.log('[Backup] 每日自动备份已保存, 共', backups.length, '个备份');
+                console.log('[Backup] 每日自动备份已保存, 共', backups.length, '个备份, 加密:', backup.encrypted);
             } catch (error) {
                 console.warn('[Backup] 自动备份失败:', error);
             }
@@ -5084,10 +5099,26 @@ if (window.Permission) {
                 const backup = backups[backupIndex];
                 const dateStr = new Date(backup.timestamp).toLocaleString('zh-CN');
                 if (!confirm(`确定要恢复 ${dateStr} 的备份吗？\n\n处方数量: ${backup.prescriptionCount || 0} 条\n\n注意：恢复将覆盖当前数据！`)) return;
-                if (backup.data) {
-                    if (backup.data.medicines) { medicines = backup.data.medicines; localStorage.setItem('local_medicines', JSON.stringify(medicines)); }
-                    if (backup.data.formulas) { formulas = backup.data.formulas; localStorage.setItem('local_formulas', JSON.stringify(formulas)); }
-                    if (backup.data.prescriptionHistory) { prescriptionHistory = backup.data.prescriptionHistory; }
+                // ★ P0-2 数据加密：如果备份已加密，先解密（密钥绑定设备，换设备无法解密）
+                let backupData = backup.data;
+                if (backup.encrypted && typeof backupData === 'string') {
+                    if (window.electronAPI && window.electronAPI.decryptData) {
+                        const result = await window.electronAPI.decryptData(backupData);
+                        if (result && result.success) {
+                            backupData = JSON.parse(result.data);
+                        } else {
+                            showToast('❌ 解密失败，此备份可能来自其他设备');
+                            return;
+                        }
+                    } else {
+                        showToast('❌ 加密备份无法解密（APP版本过低）');
+                        return;
+                    }
+                }
+                if (backupData) {
+                    if (backupData.medicines) { medicines = backupData.medicines; localStorage.setItem('local_medicines', JSON.stringify(medicines)); }
+                    if (backupData.formulas) { formulas = backupData.formulas; localStorage.setItem('local_formulas', JSON.stringify(formulas)); }
+                    if (backupData.prescriptionHistory) { prescriptionHistory = backupData.prescriptionHistory; }
                 }
                 renderMedicineList(); renderPrescriptionHistory(); updateStats();
                 showToast('✅ 已从备份恢复 ' + (backup.prescriptionCount || 0) + ' 条处方');
