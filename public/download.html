@@ -209,6 +209,38 @@
             下载后请核对 SHA-256 校验值，确保文件完整无损。
         </div>
 
+        <!-- 云端APP -->
+        <div class="section-title">云端版 APP（手机端）</div>
+
+        <div class="card" id="card-cloud-app">
+            <div class="card-title">
+                惠康中医 · 云端版
+                <span class="badge cloud">云端</span>
+                <span class="status-tag latest" id="tag-cloud-app">最新</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">版本</span>
+                <span class="info-value version" id="ver-cloud-app">加载中...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">发布日期</span>
+                <span class="info-value date" id="date-cloud-app">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">更新说明</span>
+                <span class="info-value" id="notes-cloud-app">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">适用场景</span>
+                <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
+            </div>
+            <div class="hash-box">
+                <div class="hash-label">SHA-256 校验值（APK）：</div>
+                <div class="hash-value pending" id="hash-cloud-app">（打包后自动更新）</div>
+            </div>
+            <a href="#" class="download-btn" id="dl-cloud-app">下载 APK（Android）</a>
+        </div>
+
         <!-- 离线APP -->
         <div class="section-title">离线版 APP（手机端）</div>
 
@@ -434,6 +466,7 @@
         const BASE = 'https://tcm-prescription-system.pages.dev';
         const versions = {
             'cloud': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'desktop' },
+            'cloud-app': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'app' },
             'bendi-desktop': { jsonUrl: BASE + '/updates/bendi/latest.json', type: 'desktop' },
             'bendi': { jsonUrl: BASE + '/updates/bendi/latest.json', type: 'app' },
             'dingzhi': { jsonUrl: BASE + '/updates/dingzhi/latest.json', type: 'app' },
@@ -550,9 +583,10 @@
         fetch(BASE + '/hash-manifest.json', { cache: 'no-cache' })
             .then(r => r.json())
             .then(manifest => {
-                ['bendi', 'dingzhi', 'geren'].forEach(key => {
+                ['cloud-app', 'bendi', 'dingzhi', 'geren'].forEach(key => {
+                    const manifestKey = key === 'cloud-app' ? 'cloud' : key;
                     const hashEl = document.getElementById('hash-' + key);
-                    const data = manifest[key] && manifest[key].apk;
+                    const data = manifest[manifestKey] && manifest[manifestKey].apk;
                     if (hashEl && data && data.sha256) {
                         hashEl.textContent = data.sha256;
                         hashEl.classList.remove('pending');
