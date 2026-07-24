@@ -1,51 +1,49 @@
 @echo off
-chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
-title 惠康中医 - 一键发布工具
+title Huikang TCM - One-Click Publish
 
 echo ============================================
-echo   惠康中医 · 一键发布工具
-echo   （自动检查 exe/apk 变化 → 上传 GitHub Release）
+echo   Huikang TCM - One-Click Publish Tool
+echo   (Auto check exe/apk changes -^> Upload to GitHub Release)
 echo ============================================
 echo.
 
-REM 检查 node 是否可用
+REM Check node
 where node >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] 未找到 node，请先安装 Node.js
+    echo [ERROR] node not found. Please install Node.js first.
     pause
     exit /b 1
 )
 
-REM 检查 gh 是否可用
+REM Check gh
 where gh >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] 未找到 gh CLI，请安装: winget install GitHub.cli
+    echo [ERROR] gh CLI not found. Install: winget install GitHub.cli
     pause
     exit /b 1
 )
 
-echo [提示] 本脚本会自动检查本地 exe/apk 文件是否比线上版本更新
-echo        - 如果有新打包的文件，会自动上传到 GitHub Release
-echo        - 如果没有变化，会提示"无需发布"并退出
-echo        - 如需强制重新发布，用: node tools/auto-publish.js --force
+echo [Tip] This tool auto-checks local exe/apk vs online version.
+echo        - New build found -^> auto upload to GitHub Release
+echo        - No changes -^> exit with "No update needed"
+echo        - Force re-publish: node tools/auto-publish.js --force
 echo.
-echo 按任意键开始检查...
+echo Press any key to start checking...
 pause >nul
 echo.
 
-REM 调用 auto-publish.js
 node tools/auto-publish.js %*
 set "RC=%errorlevel%"
 
 echo.
 echo ============================================
 if "%RC%"=="0" (
-    echo  完成！所有文件都是最新，或已成功发布
+    echo Done. All files up-to-date, or published successfully.
 ) else (
-    echo  退出码: %RC%
-    echo  如发布失败，请检查上方错误信息
+    echo Exit code: %RC%
+    echo Publish failed. Please check error messages above.
 )
 echo ============================================
 echo.

@@ -109,7 +109,7 @@ if not exist "app\src\main\assets\video-recorder-inject.js" (
 echo [OK] Environment check passed
 echo.
 
-echo [3.6/8] Patching Capacitor Java version (21 -> 17)...
+echo [3.6/8] Patching Capacitor Java version (21 to 17)...
 call node "%~dp0..\..\tools\patch-java-version.js" "%~dp0..\.."
 if errorlevel 1 (
     echo [WARN] Java version patch had issues, continuing anyway
