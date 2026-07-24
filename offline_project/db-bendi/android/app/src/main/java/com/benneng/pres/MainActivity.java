@@ -118,6 +118,10 @@ public class MainActivity extends AppCompatActivity {
 
         // 创建 WebView 并立即配置
         webView = new WebView(this);
+        // ★ 防止闪现：初始隐藏，背景色与登录页一致（紫色#667eea），onPageFinished后显示
+        // 即使adjustResize导致重绘，闪现的也是紫色背景而非旧内容
+        webView.setVisibility(View.INVISIBLE);
+        webView.setBackgroundColor(0xFF667eea);
         // ★ 适配状态栏（无 padding 方案）：WebView 填满整个屏幕，网页顶部紫色（header-section/login-overlay）
         // 与状态栏紫色(#667eea)融合，无额外 padding 区域。onPageFinished 时注入 CSS 让 header-section
         // 内容下移避开状态栏。此方案消除顶部灰白行/紫色加宽条，操作界面紧贴状态栏下方。
@@ -431,6 +435,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
+                // ★ 防止闪现：页面加载完成后显示WebView，背景已设为紫色#667eea
+                // 即使有重绘闪现也是紫色背景，不会显示旧内容
+                view.setVisibility(View.VISIBLE);
                 injectElectronApiShim(view);
                 injectStatusBarFix(view);
                 injectAutocompleteOff(view);
