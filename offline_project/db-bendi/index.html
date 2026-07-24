@@ -632,14 +632,18 @@ let currentUser = null;
             edition: 'offline'
         };
 
-        (async function() {
+        // 同步加载 config.json（file://协议下同步XHR可靠，确保init前CONFIG已更新）
+        (function() {
             try {
-                const res = await fetch('config.json');
-                if (res.ok) {
-                    const cfg = await res.json();
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', 'config.json', false);
+                xhr.send();
+                if (xhr.status === 200 || xhr.status === 0) {
+                    var cfg = JSON.parse(xhr.responseText);
                     if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
                     if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
                     if (cfg.edition) CONFIG.edition = cfg.edition;
+                    if (cfg.users) CONFIG.users = cfg.users;
                 }
             } catch(e) {
                 console.warn('[CONFIG] 加载 config.json 失败:', e.message);
@@ -972,6 +976,15 @@ let currentUser = null;
         }
 
         function getDefaultUsers() {
+            // 优先使用 config.json 中的用户配置
+            if (CONFIG.users && CONFIG.users.length > 0) {
+                return CONFIG.users.map(u => ({
+                    username: u.username,
+                    password: u.password,
+                    name: u.name,
+                    role: u.role || 'user'
+                }));
+            }
             return [
                 {username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin'},
                 {username: 'doctor1', password: '6861055dc561644683c0e517c4e2eb68cfb5ba234ccc4c6da7fc78071771b1b1', name: '张医生', role: 'user'},
@@ -3027,10 +3040,10 @@ let currentUser = null;
             document.getElementById('paperClinicNo').textContent = presNo;
             const year = String(new Date().getFullYear()).slice(-2);
             document.getElementById('clinicNo').value = year + String(prescriptionHistory.length).padStart(6, '0');
-            const clinicNameVal = localStorage.getItem('local_clinicName') || '本能堂中医诊所';
+            const clinicNameVal = localStorage.getItem('local_clinicName') || CONFIG.clinicName;
             const regFeeVal = localStorage.getItem('local_defaultRegFee') || '0';
             const doseVal = localStorage.getItem('local_defaultDose') || '7';
-            const clinicDoctorVal = localStorage.getItem('local_clinicDoctor') || '张大夫';
+            const clinicDoctorVal = localStorage.getItem('local_clinicDoctor') || CONFIG.doctorName;
             document.getElementById('clinicName').value = clinicNameVal;
             document.getElementById('clinicNameDisplay').textContent = clinicNameVal;
             document.getElementById('defaultRegFee').value = regFeeVal;
