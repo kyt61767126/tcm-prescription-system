@@ -539,6 +539,9 @@
             if (dateEl) dateEl.textContent = data.releaseDate || '-';
             if (notesEl) notesEl.textContent = data.releaseNotes || '-';
 
+            // ★ cloud-app 的下载链接由 hash-manifest.json 提供，不使用 latest.json 中的桌面版 url
+            if (key === 'cloud-app') return;
+
             if (data.url && dlEl) {
                 dlEl.setAttribute('href', data.url);
                 dlEl.classList.remove('disabled');
