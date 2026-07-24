@@ -161,6 +161,48 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(container);
 
+        // ★ Activity 级别彻底禁用 Autofill（防止系统通过 Activity 节点树获取 WebView 内部 input）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getWindow().getDecorView().setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
+        }
+
+        // ★ 键盘动画拦截：在键盘动画开始前显示覆盖层，动画结束后隐藏
+        // 比onPreDraw更早拦截，彻底遮挡adjustResize模式下的闪现内容
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().getDecorView().setWindowInsetsAnimationCallback(
+                new android.view.WindowInsetsAnimation.Callback(
+                    android.view.WindowInsetsAnimation.Callback.DISPATCH_MODE_STOP) {
+                    @Override
+                    public android.view.WindowInsetsAnimation.Bounds onStart(
+                            android.view.WindowInsetsAnimation animation,
+                            android.view.WindowInsetsAnimation.Bounds bounds) {
+                        // 键盘动画开始前，立即显示覆盖层
+                        flashOverlay.setVisibility(View.VISIBLE);
+                        return bounds;
+                    }
+
+                    @Override
+                    public android.view.WindowInsets onProgress(
+                            android.view.WindowInsets insets,
+                            java.util.List<android.view.WindowInsetsAnimation> runningAnimations) {
+                        // 动画进行中，保持覆盖层可见
+                        return insets;
+                    }
+
+                    @Override
+                    public void onEnd(android.view.WindowInsetsAnimation animation) {
+                        // 动画结束后，延迟隐藏覆盖层（等待WebView重绘完成）
+                        mainHandler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                flashOverlay.setVisibility(View.GONE);
+                            }
+                        }, 150);
+                    }
+                }
+            );
+        }
+
         // ★ 监听键盘弹出/收起：通过ViewTreeObserver检测WebView高度变化，在重绘期间显示覆盖层
         setupKeyboardFlashProtection();
         configureWebView();
@@ -192,6 +234,18 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
+    }
+
+    // ★ Activity 级别重写：阻止系统 Autofill 获取任何虚拟节点信息
+    // 配合 WebView 的 onProvideAutofillVirtualStructure 重写，双保险
+    @Override
+    public void onProvideAutofillVirtualStructure(android.view.ViewStructure structure, int flags) {
+        // 空实现：不调用 super，Autofill 服务无法获取 Activity 内部任何虚拟节点
+    }
+
+    @Override
+    public void onProvideContentCaptureStructure(android.view.ViewStructure structure, int flags) {
+        // 空实现：阻止 ContentCapture 服务获取内容（HarmonyOS 可能通过此接口获取 input 信息）
     }
 
     // ★ 键盘弹出时的闪现保护：通过ViewTreeObserver检测WebView高度变化，在重绘期间显示覆盖层
@@ -961,6 +1015,23 @@ public class MainActivity extends AppCompatActivity {
             });
         } else {
             super.onBackPressed();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        // ★ 每次恢复时取消所有 Autofill 请求（防止系统在后台积累 Autofill 请求）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager)
+                    getSystemService(android.view.autofill.AutofillManager.class);
+                if (afm != null) afm.cancel();
+            } catch (Throwable ignored) {}
+        }
+        // 再次确保 decorView 禁用 Autofill
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            getWindow().getDecorView().setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         }
     }
 
