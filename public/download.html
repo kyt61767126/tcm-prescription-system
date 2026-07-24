@@ -487,6 +487,13 @@
                 showToast('安装包尚未上传，请联系开发者获取');
                 return;
             }
+            // ★ GitHub Release URL 直接跳转下载（避免 CORS 预检失败）
+            //   exe 文件存放在 GitHub Release（>25MB 超过 Cloudflare Pages 限制）
+            //   浏览器对 github.com/releases/download/ 的 HEAD 请求会触发 CORS 阻止
+            if (url.indexOf('https://github.com/') === 0 && url.indexOf('/releases/download/') > 0) {
+                window.location.href = url;
+                return;
+            }
             // 标记为加载中
             var originalText = btn.textContent;
             btn.textContent = '正在验证...';
@@ -601,11 +608,36 @@
                     }
                 });
                 ['cloud', 'bendi-desktop'].forEach(key => {
+                    // ★ hash-manifest.json 中桌面版存为 'bendi'（与 APK 同 key），download.html 用 'bendi-desktop'
+                    const manifestKey = key === 'bendi-desktop' ? 'bendi' : key;
                     const hashEl = document.getElementById('hash-' + key);
-                    const data = manifest[key] && manifest[key].exe;
+                    const data = manifest[manifestKey] && manifest[manifestKey].exe;
                     if (hashEl && data && data.sha256) {
                         hashEl.textContent = data.sha256;
                         hashEl.classList.remove('pending');
+                    }
+                    // ★ 若 latest.json 没有提供下载链接（如桌面版 exe 走 GitHub Release），
+                    //   从 hash-manifest.json 补充 url 和 portableUrl
+                    if (data && data.url) {
+                        const dlEl = document.getElementById('dl-' + key);
+                        if (dlEl) {
+                            dlEl.setAttribute('href', data.url);
+                            dlEl.classList.remove('disabled');
+                            if (dlEl.textContent.indexOf('暂不可用') >= 0) {
+                                dlEl.textContent = '下载安装版（推荐）';
+                            }
+                        }
+                    }
+                    const portableData = manifest[manifestKey] && manifest[manifestKey].portable;
+                    if (portableData && portableData.url) {
+                        const dlPortableEl = document.getElementById('dl-' + key + '-portable');
+                        if (dlPortableEl) {
+                            dlPortableEl.setAttribute('href', portableData.url);
+                            dlPortableEl.classList.remove('disabled');
+                            if (dlPortableEl.textContent.indexOf('暂不可用') >= 0) {
+                                dlPortableEl.textContent = '便携版';
+                            }
+                        }
                     }
                 });
             })
