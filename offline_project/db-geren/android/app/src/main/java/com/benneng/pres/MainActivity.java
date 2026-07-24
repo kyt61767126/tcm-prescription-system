@@ -82,17 +82,10 @@ public class MainActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> filePathCallback;
     private static final int REQ_FILE_CHOOSER = 1002;
     private volatile String cachedVideoRecorderScript = null;
-    // ★ 防闪现 overlay：键盘弹出/收起时遮挡 WebView 重绘闪现
+    // ★ 防闪现：紫色背景层（WebView 下方）+ onPreDraw 跳过闪现帧
     private View flashOverlay;
     private int lastWebViewHeight = 0;
-    private final Runnable hideOverlayRunnable = new Runnable() {
-        @Override
-        public void run() {
-            if (flashOverlay != null) {
-                flashOverlay.setVisibility(View.GONE);
-            }
-        }
-    };
+    private int skipDrawFrames = 0;
     // 媒体文件读取白名单（启动时初始化一次，避免每次调用都做 I/O 解析）
     // 彻底解决"加载失败"反复出现：统一路径解析，消除 getAbsolutePath vs getCanonicalPath 不一致
     private java.util.Set<String> mediaWhitelistedRoots = new java.util.HashSet<>();
@@ -146,33 +139,33 @@ public class MainActivity extends AppCompatActivity {
         webView.setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        container.addView(webView);
-        // ★ 防闪现 overlay：紫色背景 View，覆盖在 WebView 上方
-        // 键盘弹出/收起导致 WebView 重绘时显示此 overlay，遮挡旧缓存内容闪现
+        // ★ 防闪现：紫色背景层放在 WebView 下方
+        // WebView 重绘时若透明则显示紫色背景，而非灰白色
         flashOverlay = new View(this);
         flashOverlay.setBackgroundColor(0xFF667eea);
-        flashOverlay.setVisibility(View.GONE);
         container.addView(flashOverlay, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+        container.addView(webView);
         setContentView(container);
         configureWebView();
 
-        // ★ 运行时防闪现：监听 WebView 高度变化（键盘弹出/收起），显示 overlay 遮挡重绘
-        // 解决 adjustResize 模式下键盘事件触发 WebView 重绘闪现旧内容的问题
-        webView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+        // ★ 运行时防闪现：onPreDraw 在 WebView 绘制前检测高度变化
+        // 高度变化时跳过数帧绘制，保留上一帧内容，避免重绘闪现灰白色背景
+        webView.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
             @Override
-            public void onGlobalLayout() {
+            public boolean onPreDraw() {
                 int currentHeight = webView.getHeight();
-                if (lastWebViewHeight > 0 && Math.abs(currentHeight - lastWebViewHeight) > 100) {
-                    // 高度变化超过 100px，说明键盘弹出/收起，显示 overlay 防闪现
-                    if (flashOverlay != null && webView.getVisibility() == View.VISIBLE) {
-                        flashOverlay.setVisibility(View.VISIBLE);
-                        mainHandler.removeCallbacks(hideOverlayRunnable);
-                        mainHandler.postDelayed(hideOverlayRunnable, 400);
-                    }
+                if (lastWebViewHeight > 0 && Math.abs(currentHeight - lastWebViewHeight) > 50) {
+                    // 高度变化超过 50px（键盘弹出/收起），跳过接下来 5 帧绘制
+                    skipDrawFrames = 5;
                 }
                 lastWebViewHeight = currentHeight;
+                if (skipDrawFrames > 0) {
+                    skipDrawFrames--;
+                    return false; // 跳过本帧绘制，保留上一帧
+                }
+                return true;
             }
         });
 
