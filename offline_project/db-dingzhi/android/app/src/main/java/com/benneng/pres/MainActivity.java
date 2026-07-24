@@ -440,8 +440,8 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
-                // 提前注入 anti-autofill（虽然 DOM 可能未加载完，但 evaluateJavascript 会排队执行）
-                injectAutocompleteOff(view);
+                // ★ 不注入 injectAutocompleteOff：cancelAutofill() 调用会导致 Autofill 提示闪现
+                // 防线：onProvideAutofillVirtualStructure 重写阻止 Autofill 获取虚拟节点树
             }
 
             @Override
@@ -452,7 +452,8 @@ public class MainActivity extends AppCompatActivity {
                 view.setVisibility(View.VISIBLE);
                 injectElectronApiShim(view);
                 injectStatusBarFix(view);
-                injectAutocompleteOff(view);
+                // ★ 不注入 injectAutocompleteOff：cancelAutofill() 调用会导致 Autofill 提示闪现
+                // 防线：onProvideAutofillVirtualStructure 重写阻止 Autofill 获取虚拟节点树
                 // 延迟注入录像拍照脚本（等待页面渲染稳定）
                 mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
             }
