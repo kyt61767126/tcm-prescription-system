@@ -3078,7 +3078,12 @@ let currentUser = null;
                     loadData().catch(e => console.warn('[init] 提前触发 loadData 失败:', e));
                 }
             }
-            for (let i = 0; i< 15; i++) addEmptyRow();
+            // 修复闪动：若防火墙已 push 15 行（行数已正确），不再清空重建，仅渲染
+            // 避免出现"先3行→18行→15行"的视觉跳动（与云端 cloud_desktop 一致）
+            if (prescriptionItems.length !== 15) {
+                prescriptionItems = [];
+                for (let i = 0; i < 15; i++) addEmptyRow();
+            }
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
@@ -3136,7 +3141,9 @@ let currentUser = null;
                 if (typeof prescriptionItems === 'undefined' || !prescriptionItems || prescriptionItems.length === 0) {
                     if (typeof createEmptyMedicine === 'function') {
                         prescriptionItems = [];
-                        for (var i = 0; i < 3; i++) prescriptionItems.push(createEmptyMedicine());
+                        // 修复闪动：原 push 3 行会被 init() 清空再 push 15 行导致"先3行→18行"闪动
+                        // 改为 push 15 行，与 init() 目标行数一致，init() 检测到已15行就跳过清空（与云端一致）
+                        for (var i = 0; i < 15; i++) prescriptionItems.push(createEmptyMedicine());
                     }
                 }
                 if (prescriptionItems && prescriptionItems.length > 0 && (!tbody.innerHTML || tbody.children.length === 0)) {
