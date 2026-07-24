@@ -295,5 +295,14 @@ if errorlevel 1 (
 )
 echo.
 
+echo [10/8] Auto-updating download page...
+node "%~dp0..\..\tools\auto-update-downloads.js" dingzhi
+if errorlevel 1 (
+    echo [WARN] Download page auto-update had issues, continuing anyway
+) else (
+    echo [OK] Download page updated successfully
+)
+echo.
+
 if not defined NO_PAUSE pause
 exit /b 0

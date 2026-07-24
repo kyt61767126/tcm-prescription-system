@@ -231,5 +231,15 @@ echo   APK Path: %FINAL_APK%
 echo   This APK is signed and ready for installation
 echo ============================================
 echo.
+
+echo [7/6] Auto-updating download page...
+node "%~dp0..\tools\auto-update-downloads.js" cloud
+if errorlevel 1 (
+    echo [WARN] Download page auto-update had issues, continuing anyway
+) else (
+    echo [OK] Download page updated successfully
+)
+echo.
+
 if not defined NO_PAUSE pause
 exit /b 0
