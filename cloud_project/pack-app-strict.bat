@@ -3,8 +3,8 @@ chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
 
-REM pack-app-strict.bat - 严格模式APP打包入口（APK+签名哈希+重打包）
-REM 直接打包，无菜单交互
+REM pack-app-strict.bat - Strict mode APP Build entry (APK + signature hash + repack)
+REM Direct build, no menu interaction
 
 set "PACK_PS1=%~dp0packaging.ps1"
 if not exist "%PACK_PS1%" (
@@ -23,8 +23,8 @@ if errorlevel 1 (
 )
 
 echo ============================================
-echo   惠康中医打包 - 严格模式APP
-echo   (APK + 签名哈希校验 + 重打包)
+echo   Huikang-TCM Build - Strict mode APP
+echo   (APK + signature hash verification + repack)
 echo ============================================
 echo.
 
@@ -33,9 +33,9 @@ set "EXIT_CODE=%errorlevel%"
 
 echo.
 if %EXIT_CODE% neq 0 (
-    echo [ERROR] 打包失败，退出码: %EXIT_CODE%
+    echo [ERROR] Build failed, exit code: %EXIT_CODE%
 ) else (
-    echo [OK] 严格模式APP打包完成！
+    echo [OK] Strict mode APP build complete!
 )
 echo.
 if not defined NO_PAUSE pause

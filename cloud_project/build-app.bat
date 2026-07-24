@@ -117,14 +117,14 @@ echo.
 echo [4/6] Cleaning build cache (force full clean)...
 if defined TCM_GRADLE_SKIP_CLEAN (
     echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, skipping gradlew clean
-    REM ★ 双保险：即使跳过 gradlew clean，也必须清理 javac 缓存
-    REM 历史教训（2026-07-22）：跳过 clean 时若不清理 javac 缓存，MainActivity.java
-    REM 修改会因 Gradle 增量构建使用旧缓存而未生效，导致 Autofill 修复失效。
+    REM * Double safeguard: even if skipping gradlew clean, must clean javac cache
+    REM Historical lesson (2026-07-22): if javac cache not cleaned when skipping clean, MainActivity.java
+    REM changes will not take effect due to Gradle incremental build using old cache, causing Autofill fix to fail.
     if exist "app\build\intermediates\javac" (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
         echo       [OK] cleaned javac cache (forced even in skip-clean mode)
     )
-    REM ★ 清理 assets 缓存（对齐离线版，防止 index.html/JS 修改不生效）
+    REM * Clean assets cache (align with offline version, prevent index.html/JS changes not taking effect)
     if exist "app\build\intermediates\assets" (
         rmdir /S /Q "app\build\intermediates\assets" 2>nul
         echo       [OK] cleaned assets cache
@@ -138,7 +138,7 @@ if defined TCM_GRADLE_SKIP_CLEAN (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
         echo       [OK] cleaned javac cache
     )
-    REM ★ 清理 assets 缓存（对齐离线版，防止 index.html/JS 修改不生效）
+    REM * Clean assets cache (align with offline version, prevent index.html/JS changes not taking effect)
     if exist "app\build\intermediates\assets" (
         rmdir /S /Q "app\build\intermediates\assets" 2>nul
         echo       [OK] cleaned assets cache

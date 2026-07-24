@@ -140,7 +140,7 @@ if exist "dist\win-unpacked-path.txt" (
     set /p WIN_UNPACKED_PATH=<dist\win-unpacked-path.txt
 )
 echo       Using prepackaged: %WIN_UNPACKED_PATH%
-REM P1-安全加固: 证书密码从本地gitignore文件读取，避免硬编码泄露
+REM P1-Security hardening: Read cert password from local gitignored file to avoid hardcoded leak
 if exist "%~dp0..\..\tools\certs\cert-password.txt" (
     for /f "delims=" %%p in (%~dp0..\..\tools\certs\cert-password.txt) do set "CSC_KEY_PASSWORD=%%p"
 ) else (

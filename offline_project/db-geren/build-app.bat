@@ -129,11 +129,11 @@ echo.
 echo [5/10] Cleaning build cache (force full clean)...
 if defined TCM_GRADLE_SKIP_CLEAN (
     echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, skipping gradlew clean (debug only)
-    REM ★ 双保险：即使跳过 gradlew clean，也必须清理 javac 和 assets 缓存
-    REM 历史教训（2026-07-22）：跳过 clean 时若不清理 javac 缓存，MainActivity.java
-    REM 修改会因 Gradle 增量构建使用旧缓存而未生效，导致 Autofill 修复失效。
-    REM 历史教训（2026-07-23）：不清理 assets/merged_assets 缓存，index.html
-    REM 修改会因 Gradle 增量构建使用旧缓存而未生效，导致旧版本页面内容闪动。
+    REM * Double safeguard: even when skipping gradlew clean, must clean javac and assets cache
+    REM Historical lesson (2026-07-22): if javac cache not cleaned when skipping clean, MainActivity.java
+    REM changes won't take effect due to Gradle incremental build using stale cache, breaking Autofill fix.
+    REM Historical lesson (2026-07-23): without cleaning assets/merged_assets cache, index.html
+    REM changes won't take effect due to Gradle incremental build using stale cache, causing old page content to flicker.
     if exist "app\build\intermediates\javac" (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
         echo       [OK] cleaned javac cache (forced even in skip-clean mode)

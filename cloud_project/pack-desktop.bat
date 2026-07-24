@@ -3,8 +3,8 @@ chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
 
-REM pack-desktop.bat - 桌面版打包入口（Electron exe）
-REM 直接打包，无菜单交互
+REM pack-desktop.bat - Desktop Build entry (Electron exe)
+REM Direct build, no menu interaction
 
 set "PACK_PS1=%~dp0packaging.ps1"
 if not exist "%PACK_PS1%" (
@@ -23,7 +23,7 @@ if errorlevel 1 (
 )
 
 echo ============================================
-echo   惠康中医打包 - 桌面版 (Electron exe)
+echo   Huikang-TCM Build - Desktop (Electron exe)
 echo ============================================
 echo.
 
@@ -32,9 +32,9 @@ set "EXIT_CODE=%errorlevel%"
 
 echo.
 if %EXIT_CODE% neq 0 (
-    echo [ERROR] 打包失败，退出码: %EXIT_CODE%
+    echo [ERROR] Build failed, exit code: %EXIT_CODE%
 ) else (
-    echo [OK] 桌面版打包完成！
+    echo [OK] Desktop build complete!
 )
 echo.
 if not defined NO_PAUSE pause

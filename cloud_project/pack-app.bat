@@ -3,8 +3,8 @@ chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
 
-REM pack-app.bat - 手机APP打包入口（Android APK）
-REM 直接打包，无菜单交互
+REM pack-app.bat - Mobile APP Build entry (Android APK)
+REM Direct build, no menu interaction
 
 set "PACK_PS1=%~dp0packaging.ps1"
 if not exist "%PACK_PS1%" (
@@ -23,7 +23,7 @@ if errorlevel 1 (
 )
 
 echo ============================================
-echo   惠康中医打包 - 手机APP (Android APK)
+echo   Huikang-TCM Build - Mobile APP (Android APK)
 echo ============================================
 echo.
 
@@ -32,9 +32,9 @@ set "EXIT_CODE=%errorlevel%"
 
 echo.
 if %EXIT_CODE% neq 0 (
-    echo [ERROR] 打包失败，退出码: %EXIT_CODE%
+    echo [ERROR] Build failed, exit code: %EXIT_CODE%
 ) else (
-    echo [OK] 手机APP打包完成！
+    echo [OK] Mobile APP build complete!
 )
 echo.
 if not defined NO_PAUSE pause

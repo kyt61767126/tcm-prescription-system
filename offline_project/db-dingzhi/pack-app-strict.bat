@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
 
-REM pack-app-strict.bat - 严格模式APP打包入口（APK+签名哈希+重打包）
+REM pack-app-strict.bat - Strict APP build entry (APK+signature hash+repack)
 set "PACK_PS1=%~dp0..\..\tools\pack.ps1"
 if not exist "%PACK_PS1%" (
     echo [ERROR] pack.ps1 not found
@@ -17,16 +17,16 @@ if errorlevel 1 (
     exit /b 1
 )
 echo ============================================
-echo   惠康中医打包 - 严格模式APP (APK+签名哈希+重打包)
+echo   Huikang-TCM Build - Strict APP (APK+signature hash+repack)
 echo ============================================
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -Version dingzhi -Target appstrict
 set "EXIT_CODE=%errorlevel%"
 echo.
 if %EXIT_CODE% neq 0 (
-    echo [ERROR] 打包失败，退出码: %EXIT_CODE%
+    echo [ERROR] Build failed, exit code: %EXIT_CODE%
 ) else (
-    echo [OK] 严格模式APP打包完成！
+    echo [OK] Strict APP build complete!
 )
 echo.
 if not defined NO_PAUSE pause

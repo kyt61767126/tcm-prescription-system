@@ -1,4 +1,4 @@
-﻿{
+{
     "generated_at":  "2026-07-23 07:27:53 +08:00",
     "description":  "Interface structure fingerprint. SHA256 of HTML body (before first \u003cscript\u003e). Changes to \u003cscript\u003e blocks do NOT affect fingerprint.",
     "files":  {
