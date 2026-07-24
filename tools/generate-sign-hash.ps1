@@ -1,4 +1,4 @@
-# generate-sign-hash.ps1 - Unified APK signature hash extraction and injection tool
+﻿# generate-sign-hash.ps1 - Unified APK signature hash extraction and injection tool
 # Extracts SHA-256 from APK and injects into LicenseManager.java (offline) or SecurityGuard.java (cloud)
 # Enables strict signature mode: APP rejects any repackaged APK with mismatched signature
 
