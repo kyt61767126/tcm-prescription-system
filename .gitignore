@@ -51,6 +51,9 @@ _apk_check/
 _apk_verify/
 .interface-baseline/
 
+# publish-release.js 临时上传目录（重命名后的 exe/apk 副本）
+tools/.release-tmp/
+
 # 敏感凭据图片
 网页版密码.png
 *密码*.png

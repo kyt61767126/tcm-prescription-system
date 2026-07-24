@@ -1,9 +1,9 @@
 {
     "version": "1.2.0",
-    "releaseDate": "2026-07-20",
+    "releaseDate": "2026-07-24",
     "releaseNotes": "初始版本",
-    "url": "https://tcm-prescription-system.pages.dev/updates/cloud/惠康中医-云端-Setup-1.2.0.exe",
-    "portableUrl": "https://tcm-prescription-system.pages.dev/updates/cloud/惠康中医-云端-1.2.0.exe",
+    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v1.0.0-exe/huikang-cloud-setup-1.2.0.exe",
+    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v1.0.0-exe/huikang-cloud-1.2.0.exe",
     "forceUpdate": false,
     "minVersion": "1.0.0"
 }
