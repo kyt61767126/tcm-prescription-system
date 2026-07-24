@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 title Sync Shared Code to All Versions
-setlocal
+setlocal enabledelayedexpansion
 
 set SHARED=%~dp0_shared
 set VERSIONS=db-bendi db-dingzhi db-geren
@@ -35,19 +35,19 @@ for %%v in (%VERSIONS%) do (
     
     REM Sync to android/assets/public/
     set ANDROID=%~dp0%%v\android\app\src\main\assets\public
-    if exist "%ANDROID%" (
-        copy /Y "%SHARED%\auth-core.js"        "%ANDROID%\auth-core.js"        >nul
-        copy /Y "%SHARED%\db-adapter.js"       "%ANDROID%\db-adapter.js"       >nul
-        copy /Y "%SHARED%\prescription-core.js" "%ANDROID%\prescription-core.js" >nul
-        copy /Y "%SHARED%\patient-archive.js"  "%ANDROID%\patient-archive.js"  >nul
-        copy /Y "%SHARED%\medicine-dict.js"    "%ANDROID%\medicine-dict.js"    >nul
-        copy /Y "%SHARED%\print-utils.js"      "%ANDROID%\print-utils.js"      >nul
-        copy /Y "%SHARED%\performance-utils.js" "%ANDROID%\performance-utils.js" >nul
-        copy /Y "%SHARED%\debug-logger.js"     "%ANDROID%\debug-logger.js"     >nul
-        copy /Y "%SHARED%\permission.js"       "%ANDROID%\permission.js"       >nul
-        copy /Y "%SHARED%\security-guard.js"   "%ANDROID%\security-guard.js"   >nul
-        if not exist "%ANDROID%\vendor" mkdir "%ANDROID%\vendor" >nul
-        copy /Y "%SHARED%\vendor\xlsx.full.min.js" "%ANDROID%\vendor\xlsx.full.min.js" >nul
+    if exist "!ANDROID!" (
+        copy /Y "%SHARED%\auth-core.js"        "!ANDROID!\auth-core.js"        >nul
+        copy /Y "%SHARED%\db-adapter.js"       "!ANDROID!\db-adapter.js"       >nul
+        copy /Y "%SHARED%\prescription-core.js" "!ANDROID!\prescription-core.js" >nul
+        copy /Y "%SHARED%\patient-archive.js"  "!ANDROID!\patient-archive.js"  >nul
+        copy /Y "%SHARED%\medicine-dict.js"    "!ANDROID!\medicine-dict.js"    >nul
+        copy /Y "%SHARED%\print-utils.js"      "!ANDROID!\print-utils.js"      >nul
+        copy /Y "%SHARED%\performance-utils.js" "!ANDROID!\performance-utils.js" >nul
+        copy /Y "%SHARED%\debug-logger.js"     "!ANDROID!\debug-logger.js"     >nul
+        copy /Y "%SHARED%\permission.js"       "!ANDROID!\permission.js"       >nul
+        copy /Y "%SHARED%\security-guard.js"   "!ANDROID!\security-guard.js"   >nul
+        if not exist "!ANDROID!\vendor" mkdir "!ANDROID!\vendor" >nul
+        copy /Y "%SHARED%\vendor\xlsx.full.min.js" "!ANDROID!\vendor\xlsx.full.min.js" >nul
         echo   ^> Synced to root + electron/ + android/assets/public/
     ) else (
         echo   ^> Synced to root + electron/ (no android/)

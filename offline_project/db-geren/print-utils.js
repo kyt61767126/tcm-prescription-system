@@ -1,1 +1,116 @@
-(function(a){'use strict';const b={'PAGE_SIZES':{'A4':{'width':'210mm','height':'297mm','margin':'10mm'},'A5_PORTRAIT':{'width':'148mm','height':'210mm','margin':'0'},'A5_LANDSCAPE':{'width':'210mm','height':'148mm','margin':'0'}},'generatePrescriptionPrintHTML'(c,d){const e=d==='landscape',f=e?'A5\x20landscape':'A5\x20portrait',g=e?'210mm':'148mm',h=e?'148mm':'210mm';return'<!DOCTYPE\x20html><html><head><title>打印处方</title><style>\x0a@page\x20{\x20size:\x20'+f+';\x20margin:\x200;\x20}\x0abody\x20{\x20font-family:\x20SimSun,\x20serif;\x20padding:\x200;\x20margin:\x200;\x20}\x0a.prescription-paper\x20{\x20width:\x20'+g+';\x20height:\x20'+h+';\x20padding:\x2015mm;\x20margin:\x200\x20auto;\x20box-sizing:\x20border-box;\x20}\x0a.clinic-name\x20{\x20text-align:\x20center;\x20font-size:\x2018px;\x20font-weight:\x20bold;\x20color:\x20#2c5530;\x20margin-bottom:\x2010px;\x20}\x0a.prescription-title\x20{\x20text-align:\x20center;\x20font-size:\x2018px;\x20font-weight:\x20bold;\x20color:\x20#8b0000;\x20margin-bottom:\x2012px;\x20}\x0a.prescription-info\x20{\x20display:\x20grid;\x20grid-template-columns:\x201fr\x201fr\x201fr;\x20gap:\x206px;\x20margin-bottom:\x2010px;\x20border-bottom:\x201px\x20solid\x20#000;\x20padding-bottom:\x206px;\x20font-size:\x2012px;\x20}\x0a.prescription-grid\x20{\x20border-top:\x201px\x20solid\x20#000;\x20border-bottom:\x201px\x20solid\x20#000;\x20min-height:\x20180px;\x20margin-top:\x208px;\x20}\x0a.prescription-grid-inner\x20{\x20display:\x20grid;\x20grid-template-columns:\x201fr\x201fr\x201fr\x201fr;\x20gap:\x202px;\x20}\x0a.prescription-line\x20{\x20padding:\x203px\x200;\x20font-size:\x2013px;\x20text-align:\x20center;\x20}\x0a.rp-mark\x20{\x20font-size:\x2022px;\x20font-weight:\x20bold;\x20font-style:\x20italic;\x20color:\x20#8b0000;\x20}\x0a.dose-count\x20{\x20text-align:\x20right;\x20font-size:\x2013px;\x20color:\x20#000080;\x20}\x0a.prescription-footer\x20{\x20margin-top:\x2012px;\x20padding-top:\x206px;\x20border-top:\x201px\x20solid\x20#000;\x20font-size:\x2012px;\x20}\x0a.usage-text\x20{\x20margin-bottom:\x2010px;\x20}\x0a.signature-row\x20{\x20display:\x20flex;\x20justify-content:\x20space-between;\x20}\x0a</style></head><body><div\x20class=\x22prescription-paper\x22>'+c+'</div></body></html>';},'printPrescription'(c){c=c||'portrait';const d=document['getElementById']('prescriptionPaper')['innerHTML'],e=this['generatePrescriptionPrintHTML'](d,c);if(a['AndroidNative']&&a['AndroidNative']['printHtml']){a['AndroidNative']['printHtml'](e);return;}let f=document['getElementById']('printFrame');!f&&(f=document['createElement']('iframe'),f['id']='printFrame',f['style']['cssText']='position:fixed;right:0;bottom:0;width:0;height:0;border:0;',document['body']['appendChild'](f));const g=f['contentWindow']['document'];g['open'](),g['write'](e),g['close'](),f['contentWindow']['focus'](),f['contentWindow']['print']();},'generateMedicineListHTML'(c,d){const e=c['map']((f,g)=>'<tr><td>'+(g+0x1)+'</td><td>'+(f['name']||'')+'</td><td>'+(f['code']||'')+'</td><td>'+(f['unit']||'')+'</td><td>'+(f['price']||'')+'</td></tr>')['join']('');return'<!DOCTYPE\x20html><html><head><title>药材清单</title><style>\x0a@page\x20{\x20size:\x20A4;\x20margin:\x2010mm;\x20}\x0abody\x20{\x20font-family:\x20SimSun,\x20serif;\x20}\x0ah2\x20{\x20text-align:\x20center;\x20}\x0atable\x20{\x20width:\x20100%;\x20border-collapse:\x20collapse;\x20}\x0atd,\x20th\x20{\x20border:\x201px\x20solid\x20#000;\x20padding:\x204px\x208px;\x20font-size:\x2012px;\x20text-align:\x20center;\x20}\x0ath\x20{\x20background:\x20#f0f0f0;\x20}\x0a</style></head><body>\x0a<h2>'+(d||'')+'\x20—\x20药材清单</h2>\x0a<table><thead><tr><th>#</th><th>药名</th><th>简码</th><th>单位</th><th>单价</th></tr></thead>\x0a<tbody>'+e+'</tbody></table>\x0a</body></html>';},'exportCSV'(c,d){const e=d['map'](h=>h['map'](i=>{const j=String(i||'');return j['includes'](',')||j['includes']('\x22')?'\x22'+j['replace'](/"/g,'\x22\x22')+'\x22':j;})['join'](','))['join']('\x0a'),f='\uFEFF',g=new Blob([f+e],{'type':'text/csv;charset=utf-8;'});this['downloadBlob'](g,c);},'downloadBlob'(c,d){const e=URL['createObjectURL'](c),f=document['createElement']('a');f['href']=e,f['download']=d,document['body']['appendChild'](f),f['click'](),document['body']['removeChild'](f),URL['revokeObjectURL'](e);}};a['PrintUtils']=b;}(typeof window!=='undefined'?window:this));
+// ============================================================================
+// print-utils.js — 打印工具模块
+// 提供处方打印模板生成、A4适配、Excel导出等公共方法
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    const PrintUtils = {
+        // 打印页面尺寸常量
+        PAGE_SIZES: {
+            A4: { width: '210mm', height: '297mm', margin: '10mm' },
+            A5_PORTRAIT: { width: '148mm', height: '210mm', margin: '0' },
+            A5_LANDSCAPE: { width: '210mm', height: '148mm', margin: '0' }
+        },
+
+        // 生成处方打印HTML
+        generatePrescriptionPrintHTML(content, orientation) {
+            const isLandscape = orientation === 'landscape';
+            const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
+            const paperWidth = isLandscape ? '210mm' : '148mm';
+            const paperHeight = isLandscape ? '148mm' : '210mm';
+
+            return `<!DOCTYPE html><html><head><title>打印处方</title><style>
+@page { size: ${pageSize}; margin: 0; }
+body { font-family: SimSun, serif; padding: 0; margin: 0; }
+.prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 15mm; margin: 0 auto; box-sizing: border-box; }
+.clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
+.prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
+.prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 12px; }
+.prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 180px; margin-top: 8px; }
+.prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+.prescription-line { padding: 3px 0; font-size: 13px; text-align: center; }
+.rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #8b0000; }
+.dose-count { text-align: right; font-size: 13px; color: #000080; }
+.prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 12px; }
+.usage-text { margin-bottom: 10px; }
+.signature-row { display: flex; justify-content: space-between; }
+</style></head><body><div class="prescription-paper">${content}</div></body></html>`;
+        },
+
+        // 打印处方
+        printPrescription(orientation) {
+            orientation = orientation || 'portrait';
+            const printContent = document.getElementById('prescriptionPaper').innerHTML;
+            const html = this.generatePrescriptionPrintHTML(printContent, orientation);
+
+            // 安卓原生打印
+            if (global.AndroidNative && global.AndroidNative.printHtml) {
+                global.AndroidNative.printHtml(html);
+                return;
+            }
+
+            // 桌面端 iframe 打印
+            let printFrame = document.getElementById('printFrame');
+            if (!printFrame) {
+                printFrame = document.createElement('iframe');
+                printFrame.id = 'printFrame';
+                printFrame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+                document.body.appendChild(printFrame);
+            }
+            const doc = printFrame.contentWindow.document;
+            doc.open();
+            doc.write(html);
+            doc.close();
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
+        },
+
+        // 生成药材清单打印HTML
+        generateMedicineListHTML(medicines, clinicName) {
+            const rows = medicines.map((m, i) =>
+                `<tr><td>${i + 1}</td><td>${m.name || ''}</td><td>${m.code || ''}</td><td>${m.unit || ''}</td><td>${m.price || ''}</td></tr>`
+            ).join('');
+            return `<!DOCTYPE html><html><head><title>药材清单</title><style>
+@page { size: A4; margin: 10mm; }
+body { font-family: SimSun, serif; }
+h2 { text-align: center; }
+table { width: 100%; border-collapse: collapse; }
+td, th { border: 1px solid #000; padding: 4px 8px; font-size: 12px; text-align: center; }
+th { background: #f0f0f0; }
+</style></head><body>
+<h2>${clinicName || ''} — 药材清单</h2>
+<table><thead><tr><th>#</th><th>药名</th><th>简码</th><th>单位</th><th>单价</th></tr></thead>
+<tbody>${rows}</tbody></table>
+</body></html>`;
+        },
+
+        // 导出CSV
+        exportCSV(filename, rows) {
+            const csv = rows.map(row =>
+                row.map(cell => {
+                    const val = String(cell || '');
+                    return val.includes(',') || val.includes('"') ? '"' + val.replace(/"/g, '""') + '"' : val;
+                }).join(',')
+            ).join('\n');
+            const bom = '\uFEFF';
+            const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+            this.downloadBlob(blob, filename);
+        },
+
+        // 下载Blob
+        downloadBlob(blob, filename) {
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+    };
+
+    global.PrintUtils = PrintUtils;
+
+})(typeof window !== 'undefined' ? window : this);

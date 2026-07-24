@@ -320,14 +320,14 @@
             var winHeight = window.innerHeight;
             var vvHeight = window.visualViewport ? window.visualViewport.height : winHeight;
 
-            // ★ adjustPan 模式下 visualViewport.height 不更新（仍=innerHeight），需保守估算键盘高度
-            // 键盘通常占屏幕高度 35%-45%，取 40% 作为保守估计
+            // adjustResize 模式：visualViewport.height = innerHeight = 实际可视高度
+            // adjustPan 模式：visualViewport.height 仍=屏幕高度，需估算
             var visibleHeight;
             if (winHeight - vvHeight < 50) {
-                // visualViewport 未检测到键盘（adjustPan 模式），保守估算
+                // adjustPan 模式：visualViewport 未检测到键盘，保守估算（键盘占40%）
                 visibleHeight = winHeight * 0.6;
             } else {
-                // visualViewport 检测到键盘（adjustResize 模式），使用实际值
+                // adjustResize 模式：使用实际可视高度
                 visibleHeight = vvHeight;
             }
 
@@ -353,20 +353,85 @@
             mutations.forEach(function(m) {
                 if (m.attributeName === 'style' && dropdown.style.display === 'block') {
                     setTimeout(repositionDropdown, 10);
-                    setTimeout(repositionDropdown, 200);
+                    setTimeout(repositionDropdown, 100);
+                    setTimeout(repositionDropdown, 300);
                 }
             });
         });
         observer.observe(dropdown, { attributes: true, attributeFilter: ['style'] });
 
-        // 键盘弹出/收起时重新定位
+        // 键盘弹出/收起时重新定位（adjustResize 模式下 innerHeight 变化）
+        window.addEventListener('resize', function() {
+            if (dropdown.style.display === 'block') {
+                setTimeout(repositionDropdown, 50);
+                setTimeout(repositionDropdown, 200);
+            }
+        });
+
+        // visualViewport 变化时重新定位
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', function() {
                 if (dropdown.style.display === 'block') {
-                    setTimeout(repositionDropdown, 50);
+                    setTimeout(repositionDropdown, 30);
+                    setTimeout(repositionDropdown, 150);
                 }
             });
         }
+    }
+
+    // ==================== 全局禁用输入法候选词 ====================
+    // 问题：搜狗输入法个人词典记住了旧应用名"本能中医处方系统"，在所有输入框弹出候选词
+    // autocomplete="off" 无法阻止输入法候选词，必须设置 inputmode 切换输入法模式
+    // 修复：为不同输入框设置合适的 inputmode，切换到数字/电话/search 模式，阻止文本候选词
+    function setupInputAutocompleteOff() {
+        if (window.innerWidth >= 769) return;
+
+        function setOff(el) {
+            if (!el || el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') return;
+            if (el.__bnAutocompleteOff) return;
+            el.__bnAutocompleteOff = true;
+            el.setAttribute('autocomplete', 'off');
+            el.setAttribute('autocorrect', 'off');
+            el.setAttribute('autocapitalize', 'off');
+            el.setAttribute('spellcheck', 'false');
+
+            var type = el.getAttribute('type') || '';
+            var id = el.getAttribute('id') || '';
+            var className = el.className || '';
+
+            if (type === 'number' || id.indexOf('Age') >= 0 || id.indexOf('age') >= 0 ||
+                id.indexOf('Fee') >= 0 || id.indexOf('fee') >= 0 || id.indexOf('clinicNo') >= 0 ||
+                id.indexOf('dose') >= 0 || id.indexOf('Dose') >= 0 || id.indexOf('Count') >= 0) {
+                el.setAttribute('inputmode', 'numeric');
+            } else if (type === 'tel' || id.indexOf('Phone') >= 0 || id.indexOf('phone') >= 0) {
+                el.setAttribute('inputmode', 'tel');
+            } else if (type === 'text') {
+                el.setAttribute('inputmode', 'search');
+            }
+        }
+
+        var inputs = document.querySelectorAll('input,textarea');
+        for (var i = 0; i < inputs.length; i++) {
+            setOff(inputs[i]);
+        }
+
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) {
+                if (m.addedNodes) {
+                    for (var i = 0; i < m.addedNodes.length; i++) {
+                        var node = m.addedNodes[i];
+                        if (node.nodeType === 1) {
+                            setOff(node);
+                            var children = node.querySelectorAll('input,textarea');
+                            for (var j = 0; j < children.length; j++) {
+                                setOff(children[j]);
+                            }
+                        }
+                    }
+                }
+            });
+        });
+        observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
     }
 
     // ==================== 移动端键盘遮挡修复 ====================
@@ -460,9 +525,11 @@
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', setupMobileKeyboardScroll);
         document.addEventListener('DOMContentLoaded', setupDropdownKeyboardFix);
+        document.addEventListener('DOMContentLoaded', setupInputAutocompleteOff);
     } else {
         setupMobileKeyboardScroll();
         setupDropdownKeyboardFix();
+        setupInputAutocompleteOff();
     }
 
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

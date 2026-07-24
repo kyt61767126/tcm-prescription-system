@@ -184,11 +184,11 @@
                 rememberPwdContainer.style.display = this.hasRememberPassword() ? 'flex' : 'none';
             }
 
-            // 个人定制版：自动填充单一账号（显示医师姓名，不显示 username）
+            // 个人定制版：自动填充单一账号
             if (edition === 'personal') {
                 const usernameInput = document.getElementById('loginUsername');
-                if (usernameInput && this._config && this._config.doctorName) {
-                    usernameInput.value = this._config.doctorName;
+                if (usernameInput && this._config && this._config.users && this._config.users.length > 0) {
+                    usernameInput.value = this._config.users[0].username;
                     usernameInput.readOnly = true;
                     usernameInput.style.backgroundColor = '#f0f0f0';
                 }
