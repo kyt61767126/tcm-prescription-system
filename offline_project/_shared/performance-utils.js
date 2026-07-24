@@ -320,14 +320,14 @@
             var winHeight = window.innerHeight;
             var vvHeight = window.visualViewport ? window.visualViewport.height : winHeight;
 
-            // ★ adjustPan 模式下 visualViewport.height 不更新（仍=innerHeight），需保守估算键盘高度
-            // 键盘通常占屏幕高度 35%-45%，取 40% 作为保守估计
+            // adjustResize 模式：visualViewport.height = innerHeight = 实际可视高度
+            // adjustPan 模式：visualViewport.height 仍=屏幕高度，需估算
             var visibleHeight;
             if (winHeight - vvHeight < 50) {
-                // visualViewport 未检测到键盘（adjustPan 模式），保守估算
+                // adjustPan 模式：visualViewport 未检测到键盘，保守估算（键盘占40%）
                 visibleHeight = winHeight * 0.6;
             } else {
-                // visualViewport 检测到键盘（adjustResize 模式），使用实际值
+                // adjustResize 模式：使用实际可视高度
                 visibleHeight = vvHeight;
             }
 
@@ -353,17 +353,27 @@
             mutations.forEach(function(m) {
                 if (m.attributeName === 'style' && dropdown.style.display === 'block') {
                     setTimeout(repositionDropdown, 10);
-                    setTimeout(repositionDropdown, 200);
+                    setTimeout(repositionDropdown, 100);
+                    setTimeout(repositionDropdown, 300);
                 }
             });
         });
         observer.observe(dropdown, { attributes: true, attributeFilter: ['style'] });
 
-        // 键盘弹出/收起时重新定位
+        // 键盘弹出/收起时重新定位（adjustResize 模式下 innerHeight 变化）
+        window.addEventListener('resize', function() {
+            if (dropdown.style.display === 'block') {
+                setTimeout(repositionDropdown, 50);
+                setTimeout(repositionDropdown, 200);
+            }
+        });
+
+        // visualViewport 变化时重新定位
         if (window.visualViewport) {
             window.visualViewport.addEventListener('resize', function() {
                 if (dropdown.style.display === 'block') {
-                    setTimeout(repositionDropdown, 50);
+                    setTimeout(repositionDropdown, 30);
+                    setTimeout(repositionDropdown, 150);
                 }
             });
         }
