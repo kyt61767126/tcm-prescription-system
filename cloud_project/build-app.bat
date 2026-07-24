@@ -124,10 +124,28 @@ if defined TCM_GRADLE_SKIP_CLEAN (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
         echo       [OK] cleaned javac cache (forced even in skip-clean mode)
     )
+    REM ★ 清理 assets 缓存（对齐离线版，防止 index.html/JS 修改不生效）
+    if exist "app\build\intermediates\assets" (
+        rmdir /S /Q "app\build\intermediates\assets" 2>nul
+        echo       [OK] cleaned assets cache
+    )
+    if exist "app\build\intermediates\merged_assets" (
+        rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
+        echo       [OK] cleaned merged_assets cache
+    )
 ) else (
     if exist "app\build\intermediates\javac" (
         rmdir /S /Q "app\build\intermediates\javac" 2>nul
         echo       [OK] cleaned javac cache
+    )
+    REM ★ 清理 assets 缓存（对齐离线版，防止 index.html/JS 修改不生效）
+    if exist "app\build\intermediates\assets" (
+        rmdir /S /Q "app\build\intermediates\assets" 2>nul
+        echo       [OK] cleaned assets cache
+    )
+    if exist "app\build\intermediates\merged_assets" (
+        rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
+        echo       [OK] cleaned merged_assets cache
     )
     call gradlew.bat clean
     if errorlevel 1 (

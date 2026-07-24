@@ -1,4 +1,4 @@
-﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-bendi/db-dingzhi）
 param(
     [switch]$AutoDesktop,
@@ -17,6 +17,28 @@ $scriptDir = $PSScriptRoot
 $script:UTF8WithBom = New-Object System.Text.UTF8Encoding($true)
 $script:UTF8NoBom = New-Object System.Text.UTF8Encoding($false)
 
+# ★ 日志文件（对齐离线版 pack.ps1，失败时包含完整命令输出便于排查）
+$script:LogFile = $null
+$logDir = Join-Path $scriptDir 'logs'
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir -Force | Out-Null }
+$script:LogFile = "$logDir\packaging-$(Get-Date -Format 'yyyyMMdd-HHmmss').log"
+
+function Write-Log {
+    param([string]$Message, [string]$Level = "INFO")
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $line = "[$timestamp] [$Level] $Message"
+    if ($script:LogFile) {
+        [System.IO.File]::AppendAllText($script:LogFile, "$line`n", $script:UTF8NoBom)
+    }
+    $color = switch ($Level) {
+        "ERROR" { "Red" }
+        "WARN"  { "Yellow" }
+        "OK"    { "Green" }
+        default { "White" }
+    }
+    Write-Host $Message -ForegroundColor $color
+}
+
 # ============================================================================
 # Section 1: Utility Functions
 # ============================================================================
@@ -27,9 +49,11 @@ function Write-Step {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  $Title" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
+    Write-Log $Title
 }
 
 # Run external .bat file and return exit code (stderr displayed as yellow warnings)
+# ★ 缓存命令输出：失败时写入日志，便于排查编译错误（对齐离线版 pack.ps1 Invoke-External）
 function Invoke-BatFile {
     param(
         [string]$BatPath,
@@ -37,7 +61,7 @@ function Invoke-BatFile {
         [switch]$NoPause
     )
     if (-not (Test-Path $BatPath)) {
-        Write-Host "[ERROR] 文件未找到: $BatPath" -ForegroundColor Red
+        Write-Log "[FAIL] $Context (file not found: $BatPath)" "ERROR"
         return 1
     }
     # NoPause 模式：设置 NO_PAUSE 环境变量，让 build.bat / build-app.bat 跳过末尾 pause
@@ -46,15 +70,15 @@ function Invoke-BatFile {
     if ($NoPause) {
         $env:NO_PAUSE = '1'
     }
+    # ★ 缓存命令输出：失败时写入日志
+    $outputBuffer = New-Object System.Collections.ArrayList
     try {
         & $BatPath 2>&1 | ForEach-Object {
-            if ($_ -is [System.Management.Automation.ErrorRecord]) {
-                Write-Host $_.Exception.Message -ForegroundColor Yellow
-            } else {
-                Write-Host $_
-            }
+            $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+            Write-Host $line -ForegroundColor $(if ($_ -is [System.Management.Automation.ErrorRecord]) { 'Yellow' } else { 'White' })
+            $outputBuffer.Add($line) | Out-Null
         }
-        return $LASTEXITCODE
+        $code = $LASTEXITCODE
     } finally {
         if ($NoPause) {
             if ($prevNoPause) {
@@ -64,6 +88,18 @@ function Invoke-BatFile {
             }
         }
     }
+    if ($code -ne 0 -and $code -ne $null) {
+        Write-Log "[FAIL] $Context (exit code: $code)" "ERROR"
+        # ★ 失败时将完整命令输出写入日志（解决编译错误不记录到日志的问题）
+        if ($outputBuffer.Count -gt 0) {
+            Write-Log "--- 命令输出开始 ---" "ERROR"
+            foreach ($l in $outputBuffer) { Write-Log "  $l" "ERROR" }
+            Write-Log "--- 命令输出结束 ---" "ERROR"
+        }
+        return $code
+    }
+    Write-Log "[OK] $Context (exit code: $code)"
+    return $code
 }
 
 # ============================================================================
@@ -527,7 +563,10 @@ function Build-Desktop {
         & node "$toolsDir\prepare-win-unpacked.js" $desktopDir.TrimEnd("\") 2>&1 | ForEach-Object { Write-Host "  $_" }
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [ERROR] prepare-win-unpacked failed" -ForegroundColor Red
+            Write-Log "[ERROR] prepare-win-unpacked failed" "ERROR"
+            # ★ 完整恢复环境变量（之前遗漏 ELECTRON_BUILDER_BINARIES_MIRROR）
             Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
+            Remove-Item Env:\ELECTRON_BUILDER_BINARIES_MIRROR -ErrorAction SilentlyContinue
             & node "$toolsDir\obfuscate.js" restore --target=cloud 2>&1 | Out-Null
             return 1
         }
@@ -638,16 +677,43 @@ function Build-App {
     Write-Host "  安全说明：APK 内含 Root 检测 + 调试器检测 + 签名校验（SecurityGuard.java）"
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
+
+    # ★ Java 预编译检查（在调用 build-app.bat 前，提前发现编译错误）
+    # 对齐离线版 pack.ps1 的预编译检查逻辑
+    Write-Host "  Java 预编译检查中（提前发现编译错误）..." -ForegroundColor Cyan
+    $cloudAppDir = Join-Path $scriptDir 'cloud_app'
+    Push-Location $cloudAppDir
+    try {
+        $prevEAP = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+        $preCompileOutput = New-Object System.Collections.ArrayList
+        & ".\gradlew.bat" compileReleaseJavaWithJavac --quiet 2>&1 | ForEach-Object {
+            $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+            Write-Host $line -ForegroundColor $(if ($_ -is [System.Management.Automation.ErrorRecord]) { 'Yellow' } else { 'White' })
+            $preCompileOutput.Add($line) | Out-Null
+        }
+        $preCompileRC = $LASTEXITCODE
+        $ErrorActionPreference = $prevEAP
+        if ($preCompileRC -ne 0 -and $preCompileRC -ne $null) {
+            Write-Log "[ERROR] Java 预编译检查失败，终止打包" "ERROR"
+            if ($preCompileOutput.Count -gt 0) {
+                Write-Log "--- 预编译错误输出 ---" "ERROR"
+                foreach ($l in $preCompileOutput) { Write-Log "  $l" "ERROR" }
+                Write-Log "--- 预编译错误结束 ---" "ERROR"
+            }
+            return 1
+        }
+        Write-Host "  [OK] Java 预编译检查通过" -ForegroundColor Green
+    } finally {
+        Pop-Location
+    }
+
     # P1-易用：分步耗时统计
     $stepStart = Get-Date
     $env:NO_PAUSE = '1'
         try {
             Push-Location $scriptDir
-            & "$scriptDir\build-app.bat" 2>&1 | ForEach-Object {
-                if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.Exception.Message -ForegroundColor Yellow }
-                else { Write-Host $_ }
-            }
-            $code = $LASTEXITCODE
+            $code = Invoke-BatFile -BatPath "$scriptDir\build-app.bat" -Context "build-app.bat" -NoPause
         } finally {
             Pop-Location
             Remove-Item Env:\NO_PAUSE -ErrorAction SilentlyContinue
