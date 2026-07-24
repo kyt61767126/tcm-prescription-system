@@ -87,6 +87,26 @@
             cursor: not-allowed;
             pointer-events: none;
         }
+        .download-btn.pending {
+            background: #a0a0a0;
+            cursor: wait;
+        }
+        .toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 16px 24px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 9999;
+            display: none;
+            max-width: 80%;
+            text-align: center;
+            line-height: 1.6;
+        }
         .hash-box {
             background: #f8f9fa;
             border: 1px solid #e0e0e0;
@@ -177,6 +197,7 @@
     </style>
 </head>
 <body>
+    <div class="toast" id="toast"></div>
     <div class="container">
         <div class="header">
             <h1>惠康中医诊所管理系统</h1>
@@ -410,7 +431,6 @@
     </div>
 
     <script>
-        // 动态加载版本信息
         const BASE = 'https://tcm-prescription-system.pages.dev';
         const versions = {
             'cloud': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'desktop' },
@@ -419,6 +439,61 @@
             'dingzhi': { jsonUrl: BASE + '/updates/dingzhi/latest.json', type: 'app' },
             'geren': { jsonUrl: BASE + '/updates/geren/latest.json', type: 'app' }
         };
+
+        // ★ Toast 提示
+        function showToast(msg, duration) {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.style.display = 'block';
+            setTimeout(function() { toast.style.display = 'none'; }, duration || 3000);
+        }
+
+        // ★ 安全下载：先验证文件存在再跳转（防止404 fallback到登录页）
+        function safeDownload(url, btn) {
+            if (!url || url === '#') {
+                showToast('安装包尚未上传，请联系开发者获取');
+                return;
+            }
+            // 标记为加载中
+            var originalText = btn.textContent;
+            btn.textContent = '正在验证...';
+            btn.classList.add('pending');
+
+            fetch(url, { method: 'HEAD', cache: 'no-cache' })
+                .then(function(resp) {
+                    btn.classList.remove('pending');
+                    btn.textContent = originalText;
+                    if (resp.ok) {
+                        // 文件存在，直接下载
+                        window.location.href = url;
+                    } else {
+                        // 文件不存在
+                        showToast('安装包尚未上传（HTTP ' + resp.status + '）\n请联系开发者获取');
+                    }
+                })
+                .catch(function(err) {
+                    btn.classList.remove('pending');
+                    btn.textContent = originalText;
+                    showToast('网络错误，请稍后重试');
+                });
+        }
+
+        // ★ 为所有下载按钮绑定安全点击事件
+        function bindSafeDownload() {
+            var btns = document.querySelectorAll('.download-btn');
+            btns.forEach(function(btn) {
+                if (btn.dataset.bound) return;
+                btn.dataset.bound = '1';
+                btn.addEventListener('click', function(e) {
+                    if (btn.classList.contains('disabled') || btn.classList.contains('pending')) {
+                        e.preventDefault();
+                        return;
+                    }
+                    e.preventDefault();
+                    safeDownload(btn.getAttribute('href'), btn);
+                });
+            });
+        }
 
         function updateCard(key, data) {
             const verEl = document.getElementById('ver-' + key);
@@ -432,19 +507,21 @@
             if (notesEl) notesEl.textContent = data.releaseNotes || '-';
 
             if (data.url && dlEl) {
-                dlEl.href = data.url;
+                dlEl.setAttribute('href', data.url);
                 dlEl.classList.remove('disabled');
+                dlEl.textContent = dlEl.textContent.replace('暂不可用', '下载安装版（推荐）');
             } else if (dlEl) {
-                dlEl.href = '#';
+                dlEl.setAttribute('href', '#');
                 dlEl.classList.add('disabled');
                 dlEl.textContent = '暂不可用';
             }
 
             if (data.portableUrl && dlPortableEl) {
-                dlPortableEl.href = data.portableUrl;
+                dlPortableEl.setAttribute('href', data.portableUrl);
                 dlPortableEl.classList.remove('disabled');
+                dlPortableEl.textContent = '便携版';
             } else if (dlPortableEl) {
-                dlPortableEl.href = '#';
+                dlPortableEl.setAttribute('href', '#');
                 dlPortableEl.classList.add('disabled');
                 dlPortableEl.textContent = '暂不可用';
             }
@@ -455,7 +532,10 @@
             if (!config) return;
             fetch(config.jsonUrl, { cache: 'no-cache' })
                 .then(r => r.json())
-                .then(data => updateCard(key, data))
+                .then(data => {
+                    updateCard(key, data);
+                    bindSafeDownload();
+                })
                 .catch(err => {
                     console.warn('加载版本信息失败:', key, err);
                     const verEl = document.getElementById('ver-' + key);
@@ -470,22 +550,19 @@
         fetch(BASE + '/hash-manifest.json', { cache: 'no-cache' })
             .then(r => r.json())
             .then(manifest => {
-                // 离线APP APK 校验值
                 ['bendi', 'dingzhi', 'geren'].forEach(key => {
                     const hashEl = document.getElementById('hash-' + key);
                     const data = manifest[key] && manifest[key].apk;
                     if (hashEl && data && data.sha256) {
                         hashEl.textContent = data.sha256;
                         hashEl.classList.remove('pending');
-                        // 如果有下载URL，更新按钮
                         const dlEl = document.getElementById('dl-' + key);
                         if (dlEl && data.url) {
-                            dlEl.href = data.url;
+                            dlEl.setAttribute('href', data.url);
                             dlEl.classList.remove('disabled');
                         }
                     }
                 });
-                // 桌面版 exe 校验值
                 ['cloud', 'bendi-desktop'].forEach(key => {
                     const hashEl = document.getElementById('hash-' + key);
                     const data = manifest[key] && manifest[key].exe;
@@ -496,6 +573,9 @@
                 });
             })
             .catch(err => console.warn('加载校验值失败:', err));
+
+        // ★ 立即绑定安全下载（防止 latest.json 加载前的误点击）
+        bindSafeDownload();
     </script>
 </body>
 </html>
