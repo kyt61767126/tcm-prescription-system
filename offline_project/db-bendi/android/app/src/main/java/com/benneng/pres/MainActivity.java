@@ -151,7 +151,7 @@ public class MainActivity extends AppCompatActivity {
 
         // ★ 键盘弹出时的覆盖层保护：当adjustResize导致WebView重绘时，显示紫色覆盖层遮挡闪现内容
         flashOverlay = new View(this);
-        flashOverlay.setBackgroundColor(0xFF667eea);
+        flashOverlay.setBackgroundColor(0x00000000); // 透明，禁用紫色覆盖层闪现
         flashOverlay.setLayoutParams(new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
