@@ -317,8 +317,21 @@
             if (!activeEl || activeEl.tagName !== 'INPUT') return;
 
             var rect = activeEl.getBoundingClientRect();
-            var viewportHeight = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-            var availableBelow = viewportHeight - rect.bottom;
+            var winHeight = window.innerHeight;
+            var vvHeight = window.visualViewport ? window.visualViewport.height : winHeight;
+
+            // ★ adjustPan 模式下 visualViewport.height 不更新（仍=innerHeight），需保守估算键盘高度
+            // 键盘通常占屏幕高度 35%-45%，取 40% 作为保守估计
+            var visibleHeight;
+            if (winHeight - vvHeight < 50) {
+                // visualViewport 未检测到键盘（adjustPan 模式），保守估算
+                visibleHeight = winHeight * 0.6;
+            } else {
+                // visualViewport 检测到键盘（adjustResize 模式），使用实际值
+                visibleHeight = vvHeight;
+            }
+
+            var availableBelow = visibleHeight - rect.bottom;
             var availableAbove = rect.top;
             var dropdownMaxHeight = 250;
 
@@ -329,8 +342,7 @@
                 dropdown.style.maxHeight = aboveHeight + 'px';
             } else {
                 // 下方显示，限制最大高度不超过可用空间
-                var belowHeight = Math.min(availableBelow - 4, dropdownMaxHeight);
-                if (belowHeight < 60) belowHeight = 60;
+                var belowHeight = Math.min(Math.max(availableBelow - 4, 60), dropdownMaxHeight);
                 dropdown.style.top = (rect.bottom + 2) + 'px';
                 dropdown.style.maxHeight = belowHeight + 'px';
             }
