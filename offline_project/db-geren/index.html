@@ -2889,6 +2889,17 @@ if (window.Permission) {
         setTimeout(__medicineTableFirewall, 2000);
         setTimeout(__medicineTableFirewall, 5000);
 
+        // ★修复：所有药物表格输入框 focus 时滚动到可视区域（不只是搜索框）
+        document.addEventListener('focus', function(e) {
+            if (e.target && e.target.tagName === 'INPUT' && e.target.closest('.medicine-table')) {
+                if (window.innerWidth <= 768) {
+                    setTimeout(function() {
+                        try { e.target.scrollIntoView({ behavior: 'auto', block: 'center' }); } catch(err) {}
+                    }, 350);
+                }
+            }
+        }, true);
+
         // 药物数据防火墙 - 确保药物数据总是被加载（即使 loadData 失败）
         // 递归自查：100ms 后首次检查，之后每 100ms 检查一次直到 medicines 填充或 3秒超时
         let __medicinesFirewallTriggered = false;
@@ -2949,7 +2960,7 @@ if (window.Permission) {
             if (window.innerWidth <= 768) {
                 setTimeout(function() {
                     try {
-                        event.target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        event.target.scrollIntoView({ behavior: 'auto', block: 'center' });
                     } catch(e) {}
                 }, 300); // 延迟300ms等待键盘弹出
             }
