@@ -117,8 +117,19 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // 创建 WebView 并立即配置
-        webView = new WebView(this);
+        // 创建 WebView（匿名子类：重写 onProvideAutofillVirtualStructure 阻止 Autofill 获取 input 信息）
+        // ★ 根因修复：Android Autofill 通过虚拟节点树访问 WebView 内部 input，setImportantForAutofill 无效
+        // 重写此方法返回空结构，Autofill 服务无法获取任何 input 信息，从根本上阻止弹窗
+        webView = new WebView(this) {
+            @Override
+            public void onProvideAutofillVirtualStructure(android.view.ViewStructure structure, int flags) {
+                // 空实现：不调用 super，Autofill 服务无法获取 WebView 内部虚拟节点树
+            }
+            @Override
+            public void autofill(android.view.autofill.AutofillValue value) {
+                // 拦截 Autofill 填充请求，不执行任何操作
+            }
+        };
         // ★ 适配状态栏（无 padding 方案）：WebView 填满整个屏幕，网页顶部紫色（header-section/login-overlay）
         // 与状态栏紫色(#667eea)融合，无额外 padding 区域。onPageFinished 时注入 CSS 让 header-section
         // 内容下移避开状态栏。此方案消除顶部灰白行/紫色加宽条，操作界面紧贴状态栏下方。
@@ -854,15 +865,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * ★ 彻底禁用密码输入框的自动填充（防止 Android Autofill 弹出旧版应用名称提示）
-     * 问题：点击密码输入框时，Android 系统弹出"惠康中医诊所管理系统"凭据提示（旧名"本能中医处方系统"）
-     * 根因：Android Autofill 通过 Accessibility 虚拟节点树直接访问 WebView 内部 input，
-     *       View 级别 setImportantForAutofill(NO) 无法阻止；Autofill 提示显示系统数据库中的旧应用名
-     * 彻底修复（三层防线）：
-     *   1. AndroidManifest android:importantForAutofill="no"（系统级禁用，最强防线）
-     *   2. disableAutofillRecursive 递归设置所有子 View IMPORTANT_FOR_AUTOFILL_NO（双保险）
-     *   3. 本方法 JS 注入：MutationObserver 持续监控动态密码框 + 改 type=text + webkitTextSecurity
-     *      + data-lpignore/data-form-type/role 等多属性，防止第三方密码管理器识别
+     * ★ 彻底禁用所有输入框的自动填充（防止 Android Autofill 弹出旧版应用名称提示）
+     * 问题：点击任何输入框时，Android 系统弹出"本能中医处方系统"凭据提示
+     * 根因：Android Autofill 通过虚拟节点树直接访问 WebView 内部 input
+     * 修复：
+     *   1. 所有 input 添加 anti-autofill 属性 + focus 时通过 NativeBridge 调用 afm.cancel()
+     *   2. 密码框额外处理：改 type=text + webkitTextSecurity
+     *   3. MutationObserver 持续监控动态生成的 input
      */
     private void injectAutocompleteOff(WebView webView) {
         String js = "(function(){" +
@@ -874,7 +883,12 @@ public class MainActivity extends AppCompatActivity {
             "    p.setAttribute('data-form-type', 'other');" +
             "    p.setAttribute('role', 'textbox');" +
             "    p.setAttribute('readonly', '');" +
-            "    p.addEventListener('focus', function() { this.removeAttribute('readonly'); });" +
+            "    // focus 时立即调用原生 afm.cancel()，在 Autofill 弹窗前取消" +
+            "    p.addEventListener('focus', function() {" +
+            "      this.removeAttribute('readonly');" +
+            "      try { if (window.AndroidNative) AndroidNative.invoke('cancelAutofill', '{}'); } catch(e) {}" +
+            "    });" +
+            "    // 密码框额外处理：改 type=text 防止被识别为密码框" +
             "    if (p.type === 'password') {" +
             "      p.setAttribute('type', 'text');" +
             "      p.style.webkitTextSecurity = 'disc';" +
@@ -883,7 +897,8 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "  }" +
             "  function scan(){" +
-            "    var s = 'input[type=\"password\"],input[autocomplete*=\"password\"],input[name*=\"password\"],input[name*=\"pwd\"]';" +
+            "    // 扫描所有 input 和 textarea（不只是密码框）" +
+            "    var s = 'input,textarea';" +
             "    var l = document.querySelectorAll(s);" +
             "    for (var i = 0; i < l.length; i++) { np(l[i]); }" +
             "  }" +
@@ -1203,6 +1218,15 @@ public class MainActivity extends AppCompatActivity {
                         } catch (Exception e) {
                             return fail(e.getMessage()).toString();
                         }
+                    case "cancelAutofill":
+                        // JS input focus 时调用，立即取消 Autofill 请求
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            try {
+                                android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
+                                if (afm != null) afm.cancel();
+                            } catch (Throwable ignored) {}
+                        }
+                        return "{\"success\":true}";
                     default:
                         return fail("unknown method: " + name).toString();
                 }
