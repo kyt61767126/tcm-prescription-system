@@ -6279,11 +6279,13 @@ if (window.Permission) {
         }
 
         function showSearchDropdown(element, query, column) {
-            const dropdown = DOM_CACHE.medicineSearchDropdown;
-            if (hideSearchTimer) { clearTimeout(hideSearchTimer); hideSearchTimer = null; }
-            const rect = element.getBoundingClientRect();
-            dropdown.style.left = rect.left + 'px';
-            dropdown.style.top = (rect.bottom + 2) + 'px';
+            if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+            searchDebounceTimer = setTimeout(() => {
+                if (hideSearchTimer) { clearTimeout(hideSearchTimer); hideSearchTimer = null; }
+                const dropdown = DOM_CACHE.medicineSearchDropdown;
+                const rect = element.getBoundingClientRect();
+                dropdown.style.left = rect.left + 'px';
+                dropdown.style.top = (rect.bottom + 2) + 'px';
                 dropdown.style.width = (rect.width) + 'px';
 
                 if (!query.trim()) {
@@ -6359,6 +6361,7 @@ if (window.Permission) {
                 } else {
                     dropdown.style.display = 'none';
                 }
+            }, 150);
         }
 
         function tryHideSearch() {
