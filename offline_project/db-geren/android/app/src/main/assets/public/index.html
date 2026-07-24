@@ -3140,7 +3140,7 @@ if (window.Permission) {
             prescriptionItems[index].price = parseFloat(price).toFixed(2);
             prescriptionItems[index].dosage = actualDosage;
             prescriptionItems[index].total = (price * actualDosage).toFixed(2);
-            if (index >= prescriptionItems.length - 3 && prescriptionItems.length < 15) addEmptyRow();
+            if (index >= prescriptionItems.length - 3) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
