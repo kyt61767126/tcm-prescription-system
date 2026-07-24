@@ -22,7 +22,6 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
-import android.view.ViewTreeObserver;
 import android.webkit.JavascriptInterface;
 import android.webkit.JsPromptResult;
 import android.webkit.JsResult;
@@ -82,9 +81,6 @@ public class MainActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> filePathCallback;
     private static final int REQ_FILE_CHOOSER = 1002;
     private volatile String cachedVideoRecorderScript = null;
-    // ★ 防闪现：onPreDraw 跳过闪现帧（无需颜色遮盖）
-    private int lastWebViewHeight = 0;
-    private int skipDrawFrames = 0;
     // 媒体文件读取白名单（启动时初始化一次，避免每次调用都做 I/O 解析）
     // 彻底解决"加载失败"反复出现：统一路径解析，消除 getAbsolutePath vs getCanonicalPath 不一致
     private java.util.Set<String> mediaWhitelistedRoots = new java.util.HashSet<>();
@@ -141,26 +137,6 @@ public class MainActivity extends AppCompatActivity {
         container.addView(webView);
         setContentView(container);
         configureWebView();
-
-        // ★ 运行时防闪现：onPreDraw 在 WebView 绘制前检测高度变化
-        // 高度变化时跳过数帧绘制，保留上一帧内容，避免重绘闪现
-        // 无需颜色遮盖，直接阻止闪现帧的绘制
-        webView.getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
-            @Override
-            public boolean onPreDraw() {
-                int currentHeight = webView.getHeight();
-                if (lastWebViewHeight > 0 && Math.abs(currentHeight - lastWebViewHeight) > 50) {
-                    // 高度变化超过 50px（键盘弹出/收起），跳过接下来 8 帧绘制
-                    skipDrawFrames = 8;
-                }
-                lastWebViewHeight = currentHeight;
-                if (skipDrawFrames > 0) {
-                    skipDrawFrames--;
-                    return false; // 跳过本帧绘制，保留上一帧
-                }
-                return true;
-            }
-        });
 
         // ★ 初始化 License 管理器（APP 端授权校验）
         licenseManager = new LicenseManager(this);
@@ -860,12 +836,6 @@ public class MainActivity extends AppCompatActivity {
             "      this.removeAttribute('readonly');" +
             "      try { if (window.AndroidNative) AndroidNative.invoke('cancelAutofill', '{}'); } catch(e) {}" +
             "    });" +
-            "    if (p.type === 'password') {" +
-            "      p.setAttribute('type', 'text');" +
-            "      p.style.webkitTextSecurity = 'disc';" +
-            "      p.style.MozTextSecurity = 'disc';" +
-            "      p.style.textSecurity = 'disc';" +
-            "    }" +
             "  }" +
             "  function scan(){" +
             "    // 扫描所有 input 和 textarea（OEM 密码管理器会扫描所有输入框）" +
