@@ -3026,8 +3026,22 @@ if (window.Permission) {
                 const dropdown = DOM_CACHE.medicineSearchDropdown;
                 const rect = element.getBoundingClientRect();
                 dropdown.style.left = rect.left + 'px';
-                dropdown.style.top = (rect.bottom + 2) + 'px';
                 dropdown.style.width = (rect.width) + 'px';
+                
+                // 动态判断下拉框位置：下方空间不足时显示在输入框上方（避免被键盘遮挡）
+                // 使用 visualViewport.height 获取键盘弹出后的实际可见高度
+                const visibleHeight = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+                const dropdownHeight = 250; // 预估下拉框高度（最多显示20条，约250px）
+                const bottomSpace = visibleHeight - rect.bottom;
+                const safeMargin = 20;
+                
+                if (bottomSpace < dropdownHeight + safeMargin) {
+                    // 下方空间不足，显示在输入框上方
+                    dropdown.style.top = (rect.top - dropdownHeight - 2) + 'px';
+                } else {
+                    // 下方空间充足，显示在输入框下方
+                    dropdown.style.top = (rect.bottom + 2) + 'px';
+                }
 
                 if (!query.trim()) {
                     dropdown.style.display = 'none';
