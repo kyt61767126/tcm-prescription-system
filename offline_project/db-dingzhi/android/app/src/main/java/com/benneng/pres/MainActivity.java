@@ -163,6 +163,23 @@ public class MainActivity extends AppCompatActivity {
         super.onAttachedToWindow();
     }
 
+    // ★ adjustResize 模式下键盘弹出/收起时触发（configChanges 包含 keyboardHidden）
+    // 在此清除缓存和取消 Autofill，防止键盘弹出时旧内容闪现和 Autofill 弹窗
+    @Override
+    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        if (webView != null) {
+            webView.clearCache(true);
+            webView.clearFormData();
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
+                if (afm != null) afm.cancel();
+            } catch (Throwable ignored) {}
+        }
+    }
+
     // 初始化媒体文件读取白名单：缓存所有可能的目录（外部 + 内部 fallback）
     // 彻底解决 getExternalFilesDir 返回 null 时白名单失效的问题
     private void initMediaWhitelist() {
@@ -286,6 +303,32 @@ public class MainActivity extends AppCompatActivity {
         webView.clearCache(true);
         webView.clearFormData();
         webView.clearHistory();
+
+        // ★ adjustResize 模式下键盘弹出/收起时，WebView 布局变化触发 Autofill 重新扫描
+        // 通过布局变化监听 + AutofillCallback 双重拦截，彻底阻止 Autofill 弹窗
+        webView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or_, ob) -> {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                try {
+                    android.view.autofill.AutofillManager afm2 = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
+                    if (afm2 != null) afm2.cancel();
+                } catch (Throwable ignored) {}
+            }
+        });
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                android.view.autofill.AutofillManager afmCb = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
+                if (afmCb != null) {
+                    afmCb.registerCallback(new android.view.autofill.AutofillManager.AutofillCallback() {
+                        @Override
+                        public void onAutofillEvent(View view, int eventType) {
+                            // 任何 Autofill 事件触发时立即取消
+                            try { afmCb.cancel(); } catch (Throwable ignored) {}
+                        }
+                    });
+                }
+            } catch (Throwable ignored) {}
+        }
+
         webView.addJavascriptInterface(new NativeBridge(), "AndroidNative");
 
         webView.setWebChromeClient(new WebChromeClient() {
@@ -444,6 +487,22 @@ public class MainActivity extends AppCompatActivity {
                         if (afm != null) afm.cancel();
                     } catch (Throwable ignored) {}
                 }
+                // ★ 清除 localStorage 中残留的旧版本数据（含"本能中医处方系统"字样）
+                // 旧版 APP 可能在 localStorage 中存储了系统名称，adjustResize 重绘时可能闪现
+                view.evaluateJavascript(
+                    "(function(){" +
+                    "  try {" +
+                    "    var keys = [];" +
+                    "    for (var i = 0; i < localStorage.length; i++) {" +
+                    "      var k = localStorage.key(i);" +
+                    "      var v = localStorage.getItem(k);" +
+                    "      if (v && typeof v === 'string' && v.indexOf('本能中医处方系统') >= 0) {" +
+                    "        localStorage.removeItem(k);" +
+                    "      }" +
+                    "    }" +
+                    "  } catch(e) {}" +
+                    "})();",
+                    null);
             }
 
             @Override
