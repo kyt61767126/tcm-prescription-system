@@ -805,9 +805,10 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * ★ 禁用所有输入框的自动填充（防止 OEM 密码管理器弹出旧凭据提示）
-     * OEM 密码管理器通过签名证书/应用图标匹配旧凭据，包名变更无效
-     * 修复：所有 input focus 时调用 NativeBridge.cancelAutofill() 即时拦截
+     * ★ 禁用密码框自动填充（防止 OEM 密码管理器弹出旧凭据提示）
+     * 仅扫描密码框，不设置 readonly（避免 readonly→可编辑状态变化触发输入法候选词闪现）
+     * 主防线：onProvideAutofillVirtualStructure 重写（阻止 Autofill 获取虚拟节点树）
+     * 辅助防线：autocomplete/data-lpignore 等属性 + cancelAutofill() 调用
      */
     private void injectAutocompleteOff(WebView webView) {
         String js = "(function(){" +
@@ -817,17 +818,12 @@ public class MainActivity extends AppCompatActivity {
             "    p.setAttribute('autocomplete', 'new-password');" +
             "    p.setAttribute('data-lpignore', 'true');" +
             "    p.setAttribute('data-form-type', 'other');" +
-            "    p.setAttribute('role', 'textbox');" +
-            "    p.setAttribute('readonly', '');" +
-            "    // 所有 input focus 时立即调用原生 afm.cancel()，即时拦截 OEM 密码管理器弹窗" +
             "    p.addEventListener('focus', function() {" +
-            "      this.removeAttribute('readonly');" +
             "      try { if (window.AndroidNative) AndroidNative.invoke('cancelAutofill', '{}'); } catch(e) {}" +
             "    });" +
             "  }" +
             "  function scan(){" +
-            "    // 扫描所有 input 和 textarea（OEM 密码管理器会扫描所有输入框）" +
-            "    var s = 'input,textarea';" +
+            "    var s = 'input[type=\"password\"],input[autocomplete*=\"password\"]';" +
             "    var l = document.querySelectorAll(s);" +
             "    for (var i = 0; i < l.length; i++) { np(l[i]); }" +
             "  }" +
