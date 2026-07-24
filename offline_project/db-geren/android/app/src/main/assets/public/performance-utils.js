@@ -435,23 +435,21 @@
     }
 
     // ==================== 移动端键盘遮挡修复 ====================
-    // adjustPan 模式下：键盘弹出时系统平移视图（不压缩WebView高度），避免重绘闪现
-    // 需要手动滚动确保焦点元素在键盘上方可见
+    // adjustNothing 模式下：键盘弹出时WebView高度不变（无重绘闪现），系统不平移（操作快）
+    // JS通过visualViewport.height检测键盘高度，手动滚动焦点元素到可视区域
     function setupMobileKeyboardScroll() {
         // 仅在移动端（窄屏）启用，桌面端不需要
         if (window.innerWidth >= 769) return;
 
         var lastFocusedInput = null;
 
-        // 滚动焦点元素到可见区域中央（adjustPan 模式需估算键盘高度调整安全边距）
+        // 滚动焦点元素到可见区域中央（使用visualViewport.height适配adjustNothing模式）
         function doScroll(target) {
             if (!target) return;
             try {
-                // ★ adjustPan 模式检测：visualViewport 未缩小则视为 adjustPan
+                // 使用visualViewport.height作为可视区域高度（adjustNothing下键盘弹出时变小）
                 var vvH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
-                var isAdjustPan = (window.innerHeight - vvH) < 50;
-                // adjustPan：估算键盘占屏幕42%+60px安全边距；adjustResize：视口已缩小，80px 足够
-                var safeMargin = isAdjustPan ? Math.round(window.innerHeight * 0.42) + 60 : 80;
+                var safeMargin = 60;
 
                 target.scrollIntoView({ block: 'center', behavior: 'smooth' });
                 // 同时调整容器内部滚动（确保焦点行完全可见）
@@ -459,7 +457,7 @@
                 if (container) {
                     var targetRect = target.getBoundingClientRect();
                     var containerRect = container.getBoundingClientRect();
-                    var vh = window.innerHeight;
+                    var vh = vvH; // adjustNothing模式：使用visualViewport高度
                     if (targetRect.bottom > vh - safeMargin) {
                         var targetCenterInContainer = targetRect.top + targetRect.height / 2 - containerRect.top;
                         var containerCenter = containerRect.height / 2;
