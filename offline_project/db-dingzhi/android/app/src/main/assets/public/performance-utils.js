@@ -300,24 +300,20 @@
     global.PerfUtils = PerfUtils;
 
     // ==================== 移动端键盘遮挡修复 ====================
-    // 当药物表格内输入框获得焦点时，自动滚动到可见区域中央，避免被软键盘遮挡
-    // 兼容 adjustPan 和 adjustResize 两种 windowSoftInputMode：
-    //   - adjustResize: 视口缩小，布局重新计算，scrollIntoView 即可
-    //   - adjustPan: 视口不缩小，系统平移页面，需手动调整容器内部滚动
+    // adjustPan 模式下：window.innerHeight 不变，只有 visualViewport.height 会随键盘弹出而减小
+    // 必须用 visualViewport.height 检测焦点元素是否被键盘遮挡，然后滚动容器使其可见
     function setupMobileKeyboardScroll() {
         // 仅在移动端（窄屏）启用，桌面端不需要
         if (window.innerWidth >= 769) return;
 
-        var scrollTimer = null;
         var lastFocusedInput = null;
 
-        // 获取当前可见视口高度（键盘弹出后会减小）
-        function getViewportHeight() {
+        // 获取键盘弹出后的实际可见高度（adjustPan 模式下 visualViewport.height 会减小）
+        function getVisibleHeight() {
             return (window.visualViewport && window.visualViewport.height) || window.innerHeight;
         }
 
-        // 精确滚动：手动调整 medicine-table-container 内部滚动，让焦点元素在键盘上方可见区域中央
-        // adjustPan 模式下系统会平移页面，但底部行仍可能被键盘遮挡
+        // 滚动焦点元素到键盘上方可见区域（纯容器内滚动，不调用 scrollIntoView 避免与 adjustPan 冲突）
         function doScroll(target) {
             if (!target) return;
             try {
@@ -325,39 +321,41 @@
                 if (container) {
                     var targetRect = target.getBoundingClientRect();
                     var containerRect = container.getBoundingClientRect();
-                    var vh = getViewportHeight();
-                    // 可见区域底部 = 视口高度（键盘上方）
-                    var visibleBottom = vh;
-                    // 焦点元素底部如果超出可见区域，需要向上滚动
-                    var targetBottom = targetRect.bottom;
-                    var targetTop = targetRect.top;
-                    // 计算焦点元素中心相对于容器顶部的位置
-                    var targetCenterInContainer = targetTop + targetRect.height / 2 - containerRect.top;
-                    // 容器可见区域的中央（考虑键盘遮挡后的实际可见高度）
-                    var visibleContainerHeight = Math.min(containerRect.height, vh - containerRect.top);
-                    if (visibleContainerHeight < 0) visibleContainerHeight = containerRect.height;
-                    var containerCenter = visibleContainerHeight / 2;
-                    // 计算需要滚动的距离
-                    var scrollDelta = targetCenterInContainer - containerCenter;
-                    // 如果焦点元素底部超出可见区域，强制滚动
-                    if (targetBottom > visibleBottom) {
-                        scrollDelta = targetCenterInContainer - containerCenter;
+                    var visibleBottom = getVisibleHeight(); // 键盘上方的实际可见高度
+                    var safeMargin = 80; // 安全边距
+
+                    // 情况1：焦点元素底部超出可见区域（被键盘遮挡）
+                    if (targetRect.bottom > visibleBottom - safeMargin) {
+                        // 计算焦点元素中心相对于容器顶部的位置
+                        var targetCenterInContainer = targetRect.top + targetRect.height / 2 - containerRect.top;
+                        // 容器可见区域的中央
+                        var containerCenter = containerRect.height / 2;
+                        // 需要滚动的距离
+                        var scrollDelta = targetCenterInContainer - containerCenter;
+                        
+                        if (Math.abs(scrollDelta) > 5) {
+                            var newTop = container.scrollTop + scrollDelta;
+                            var maxScroll = container.scrollHeight - container.clientHeight;
+                            if (newTop < 0) newTop = 0;
+                            if (newTop > maxScroll) newTop = maxScroll;
+                            try {
+                                container.scrollTo({ top: newTop, behavior: 'smooth' });
+                            } catch(e) {
+                                container.scrollTop = newTop;
+                            }
+                        }
                     }
-                    if (Math.abs(scrollDelta) > 5) {
-                        var newTop = container.scrollTop + scrollDelta;
-                        // 限制滚动范围
-                        var maxScroll = container.scrollHeight - container.clientHeight;
+                    // 情况2：焦点元素顶部超出容器可见区域（需要向下滚动）
+                    else if (targetRect.top < containerRect.top + safeMargin) {
+                        var scrollNeeded = containerRect.top + safeMargin - targetRect.top;
+                        var newTop = container.scrollTop - scrollNeeded;
                         if (newTop < 0) newTop = 0;
-                        if (newTop > maxScroll) newTop = maxScroll;
                         try {
                             container.scrollTo({ top: newTop, behavior: 'smooth' });
-                        } catch(e1) {
+                        } catch(e) {
                             container.scrollTop = newTop;
                         }
                     }
-                } else {
-                    // 回退：调用 scrollIntoView
-                    target.scrollIntoView({ block: 'center', behavior: 'smooth' });
                 }
             } catch(err) {
                 try { target.scrollIntoView(false); } catch(e2) {}
@@ -376,13 +374,12 @@
 
             lastFocusedInput = target;
 
-            // 多次尝试滚动，适配不同设备的键盘弹出速度
-            if (scrollTimer) clearTimeout(scrollTimer);
-            // 200ms: 快速设备，400ms: 中速，600ms: 慢速，1000ms: 更慢的设备（adjustPan 模式下键盘弹出较慢）
-            scrollTimer = setTimeout(function() { doScroll(target); }, 200);
-            setTimeout(function() { doScroll(target); }, 400);
-            setTimeout(function() { doScroll(target); }, 600);
-            setTimeout(function() { doScroll(target); }, 1000);
+            // 多次尝试滚动，适配不同设备的键盘弹出速度（adjustPan 模式下键盘弹出较慢）
+            setTimeout(function() { doScroll(target); }, 100);
+            setTimeout(function() { doScroll(target); }, 300);
+            setTimeout(function() { doScroll(target); }, 500);
+            setTimeout(function() { doScroll(target); }, 800);
+            setTimeout(function() { doScroll(target); }, 1200);
         }, true);
 
         // 监听 focusout 清除 lastFocusedInput（延迟清除避免快速切换丢失）
@@ -394,36 +391,21 @@
             }, 100);
         }, true);
 
-        // 动态调整表格容器高度 + 重新滚动焦点元素
-        // adjustPan 模式下 visualViewport.resize 仍会触发（visualViewport 反映可见视口）
-        function adjustContainerHeight() {
-            var containers = document.querySelectorAll('.medicine-table-container');
-            if (!containers.length) return;
-            var vh = getViewportHeight();
-            // 可见高度减去其他界面元素估算高度（患者信息+症状+操作栏 约 280px）
-            var maxH = Math.max(120, Math.min(400, vh - 280));
-            for (var i = 0; i < containers.length; i++) {
-                containers[i].style.maxHeight = maxH + 'px';
-            }
-
-            // 键盘弹出/视口变化后，重新滚动焦点元素到可见区域中央
-            // 这是 adjustPan 模式下的关键改进：键盘弹出后容器 max-height 缩小，需重新滚动
+        // visualViewport.resize 事件触发时重新滚动（键盘弹出/收起时会触发）
+        function onViewportChange() {
             if (lastFocusedInput) {
                 setTimeout(function() { doScroll(lastFocusedInput); }, 50);
                 setTimeout(function() { doScroll(lastFocusedInput); }, 200);
+                setTimeout(function() { doScroll(lastFocusedInput); }, 400);
+                setTimeout(function() { doScroll(lastFocusedInput); }, 600);
             }
         }
 
         // Visual Viewport API（现代浏览器）- 键盘弹出时会触发
         if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', adjustContainerHeight);
-            // scroll 事件也可能在键盘弹出时触发
-            window.visualViewport.addEventListener('scroll', adjustContainerHeight);
+            window.visualViewport.addEventListener('resize', onViewportChange);
+            window.visualViewport.addEventListener('scroll', onViewportChange);
         }
-        // 传统 resize 事件（回退方案，adjustResize 模式下触发）
-        window.addEventListener('resize', adjustContainerHeight);
-        // 延迟初始调整
-        setTimeout(adjustContainerHeight, 500);
     }
 
     // 自动初始化

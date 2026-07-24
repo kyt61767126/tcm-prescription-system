@@ -117,19 +117,8 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // 创建 WebView（匿名子类：重写 onProvideAutofillVirtualStructure 阻止 Autofill 获取 input 信息）
-        // ★ 根因修复：Android Autofill 通过虚拟节点树访问 WebView 内部 input，setImportantForAutofill 无效
-        // 重写此方法返回空结构，Autofill 服务无法获取任何 input 信息，从根本上阻止弹窗
-        webView = new WebView(this) {
-            @Override
-            public void onProvideAutofillVirtualStructure(android.view.ViewStructure structure, int flags) {
-                // 空实现：不调用 super，Autofill 服务无法获取 WebView 内部虚拟节点树
-            }
-            @Override
-            public void autofill(android.view.autofill.AutofillValue value) {
-                // 拦截 Autofill 填充请求，不执行任何操作
-            }
-        };
+        // 创建 WebView 并立即配置
+        webView = new WebView(this);
         // ★ 适配状态栏（无 padding 方案）：WebView 填满整个屏幕，网页顶部紫色（header-section/login-overlay）
         // 与状态栏紫色(#667eea)融合，无额外 padding 区域。onPageFinished 时注入 CSS 让 header-section
         // 内容下移避开状态栏。此方案消除顶部灰白行/紫色加宽条，操作界面紧贴状态栏下方。
@@ -172,23 +161,6 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
-    }
-
-    // ★ adjustResize 模式下键盘弹出/收起时触发（configChanges 包含 keyboardHidden）
-    // 在此清除缓存和取消 Autofill，防止键盘弹出时旧内容闪现和 Autofill 弹窗
-    @Override
-    public void onConfigurationChanged(android.content.res.Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
-        if (webView != null) {
-            webView.clearCache(true);
-            webView.clearFormData();
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
-                if (afm != null) afm.cancel();
-            } catch (Throwable ignored) {}
-        }
     }
 
     // 初始化媒体文件读取白名单：缓存所有可能的目录（外部 + 内部 fallback）
@@ -314,31 +286,6 @@ public class MainActivity extends AppCompatActivity {
         webView.clearCache(true);
         webView.clearFormData();
         webView.clearHistory();
-
-        // ★ adjustResize 模式下键盘弹出/收起时，WebView 布局变化触发 Autofill 重新扫描
-        // 通过布局变化监听 + AutofillCallback 双重拦截，彻底阻止 Autofill 弹窗
-        webView.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or_, ob) -> {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                try {
-                    android.view.autofill.AutofillManager afm2 = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
-                    if (afm2 != null) afm2.cancel();
-                } catch (Throwable ignored) {}
-            }
-        });
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            try {
-                android.view.autofill.AutofillManager afmCb = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
-                if (afmCb != null) {
-                    afmCb.registerCallback(new android.view.autofill.AutofillManager.AutofillCallback() {
-                        @Override
-                        public void onAutofillEvent(View view, int eventType) {
-                            // 任何 Autofill 事件触发时立即取消
-                            try { afmCb.cancel(); } catch (Throwable ignored) {}
-                        }
-                    });
-                }
-            } catch (Throwable ignored) {}
-        }
 
         webView.addJavascriptInterface(new NativeBridge(), "AndroidNative");
 
@@ -490,30 +437,6 @@ public class MainActivity extends AppCompatActivity {
                 injectAutocompleteOff(view);
                 // 延迟注入录像拍照脚本（等待页面渲染稳定）
                 mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
-                // 再次清除缓存和 Autofill（adjustResize 模式下键盘弹出可能触发重绘）
-                webView.clearCache(true);
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    try {
-                        android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
-                        if (afm != null) afm.cancel();
-                    } catch (Throwable ignored) {}
-                }
-                // ★ 清除 localStorage 中残留的旧版本数据（含"本能中医处方系统"字样）
-                // 旧版 APP 可能在 localStorage 中存储了系统名称，adjustResize 重绘时可能闪现
-                view.evaluateJavascript(
-                    "(function(){" +
-                    "  try {" +
-                    "    var keys = [];" +
-                    "    for (var i = 0; i < localStorage.length; i++) {" +
-                    "      var k = localStorage.key(i);" +
-                    "      var v = localStorage.getItem(k);" +
-                    "      if (v && typeof v === 'string' && v.indexOf('本能中医处方系统') >= 0) {" +
-                    "        localStorage.removeItem(k);" +
-                    "      }" +
-                    "    }" +
-                    "  } catch(e) {}" +
-                    "})();",
-                    null);
             }
 
             @Override
@@ -865,13 +788,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * ★ 彻底禁用所有输入框的自动填充（防止 Android Autofill 弹出旧版应用名称提示）
-     * 问题：点击任何输入框时，Android 系统弹出"本能中医处方系统"凭据提示
-     * 根因：Android Autofill 通过虚拟节点树直接访问 WebView 内部 input
-     * 修复：
-     *   1. 所有 input 添加 anti-autofill 属性 + focus 时通过 NativeBridge 调用 afm.cancel()
-     *   2. 密码框额外处理：改 type=text + webkitTextSecurity
-     *   3. MutationObserver 持续监控动态生成的 input
+     * ★ 禁用密码输入框的自动填充（防止 Android Autofill 弹出凭据提示）
+     * adjustPan 模式下 Autofill 不会触发，本方法仅处理密码框安全属性
      */
     private void injectAutocompleteOff(WebView webView) {
         String js = "(function(){" +
@@ -883,12 +801,7 @@ public class MainActivity extends AppCompatActivity {
             "    p.setAttribute('data-form-type', 'other');" +
             "    p.setAttribute('role', 'textbox');" +
             "    p.setAttribute('readonly', '');" +
-            "    // focus 时立即调用原生 afm.cancel()，在 Autofill 弹窗前取消" +
-            "    p.addEventListener('focus', function() {" +
-            "      this.removeAttribute('readonly');" +
-            "      try { if (window.AndroidNative) AndroidNative.invoke('cancelAutofill', '{}'); } catch(e) {}" +
-            "    });" +
-            "    // 密码框额外处理：改 type=text 防止被识别为密码框" +
+            "    p.addEventListener('focus', function() { this.removeAttribute('readonly'); });" +
             "    if (p.type === 'password') {" +
             "      p.setAttribute('type', 'text');" +
             "      p.style.webkitTextSecurity = 'disc';" +
@@ -897,8 +810,7 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "  }" +
             "  function scan(){" +
-            "    // 扫描所有 input 和 textarea（不只是密码框）" +
-            "    var s = 'input,textarea';" +
+            "    var s = 'input[type=\"password\"],input[autocomplete*=\"password\"],input[name*=\"password\"],input[name*=\"pwd\"]';" +
             "    var l = document.querySelectorAll(s);" +
             "    for (var i = 0; i < l.length; i++) { np(l[i]); }" +
             "  }" +
@@ -1218,15 +1130,6 @@ public class MainActivity extends AppCompatActivity {
                         } catch (Exception e) {
                             return fail(e.getMessage()).toString();
                         }
-                    case "cancelAutofill":
-                        // JS input focus 时调用，立即取消 Autofill 请求
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            try {
-                                android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
-                                if (afm != null) afm.cancel();
-                            } catch (Throwable ignored) {}
-                        }
-                        return "{\"success\":true}";
                     default:
                         return fail("unknown method: " + name).toString();
                 }
