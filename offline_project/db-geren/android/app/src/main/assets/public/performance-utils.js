@@ -435,18 +435,24 @@
     }
 
     // ==================== 移动端键盘遮挡修复 ====================
-    // adjustResize 模式下：键盘弹出时系统缩小视口，fixed 元素自动保持在键盘上方
-    // scrollIntoView 即可让焦点元素滚动到可见区域
+    // adjustPan 模式下：键盘弹出时系统平移视图（不压缩WebView高度），避免重绘闪现
+    // 需要手动滚动确保焦点元素在键盘上方可见
     function setupMobileKeyboardScroll() {
         // 仅在移动端（窄屏）启用，桌面端不需要
         if (window.innerWidth >= 769) return;
 
         var lastFocusedInput = null;
 
-        // 滚动焦点元素到可见区域中央（adjustResize 模式下 scrollIntoView 即可）
+        // 滚动焦点元素到可见区域中央（adjustPan 模式需估算键盘高度调整安全边距）
         function doScroll(target) {
             if (!target) return;
             try {
+                // ★ adjustPan 模式检测：visualViewport 未缩小则视为 adjustPan
+                var vvH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+                var isAdjustPan = (window.innerHeight - vvH) < 50;
+                // adjustPan：估算键盘占屏幕42%+60px安全边距；adjustResize：视口已缩小，80px 足够
+                var safeMargin = isAdjustPan ? Math.round(window.innerHeight * 0.42) + 60 : 80;
+
                 target.scrollIntoView({ block: 'center', behavior: 'smooth' });
                 // 同时调整容器内部滚动（确保焦点行完全可见）
                 var container = target.closest ? target.closest('.medicine-table-container') : null;
@@ -454,7 +460,6 @@
                     var targetRect = target.getBoundingClientRect();
                     var containerRect = container.getBoundingClientRect();
                     var vh = window.innerHeight;
-                    var safeMargin = 80;
                     if (targetRect.bottom > vh - safeMargin) {
                         var targetCenterInContainer = targetRect.top + targetRect.height / 2 - containerRect.top;
                         var containerCenter = containerRect.height / 2;
