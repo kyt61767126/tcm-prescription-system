@@ -37,6 +37,8 @@ dist/assets/
 *.dmg
 *.zip
 *.tar.gz
+# 允许 public/downloads/ 目录下的下载文件（供 Cloudflare Pages 使用）
+!public/downloads/
 
 # 一次性修复脚本（防止误入库）
 fix*.js
