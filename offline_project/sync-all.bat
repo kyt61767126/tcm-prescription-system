@@ -24,7 +24,8 @@ for %%v in (%VERSIONS%) do (
     copy /Y "%SHARED%\performance-utils.js" "%~dp0%%v\performance-utils.js" >nul
     copy /Y "%SHARED%\debug-logger.js"     "%~dp0%%v\debug-logger.js"     >nul
     copy /Y "%SHARED%\permission.js"       "%~dp0%%v\permission.js"       >nul
-    
+    copy /Y "%SHARED%\security-guard.js"   "%~dp0%%v\security-guard.js"   >nul
+
     REM Sync vendor
     if not exist "%~dp0%%v\vendor" mkdir "%~dp0%%v\vendor"
     copy /Y "%SHARED%\vendor\xlsx.full.min.js" "%~dp0%%v\vendor\xlsx.full.min.js" >nul
@@ -44,7 +45,8 @@ for %%v in (%VERSIONS%) do (
         copy /Y "%SHARED%\performance-utils.js" "%ANDROID%\performance-utils.js" >nul
         copy /Y "%SHARED%\debug-logger.js"     "%ANDROID%\debug-logger.js"     >nul
         copy /Y "%SHARED%\permission.js"       "%ANDROID%\permission.js"       >nul
-        if not exist "%ANDROID%\vendor" mkdir "%ANDROID%\vendor"
+        copy /Y "%SHARED%\security-guard.js"   "%ANDROID%\security-guard.js"   >nul
+        if not exist "%ANDROID%\vendor" mkdir "%ANDROID%\vendor" >nul
         copy /Y "%SHARED%\vendor\xlsx.full.min.js" "%ANDROID%\vendor\xlsx.full.min.js" >nul
         echo   ^> Synced to root + electron/ + android/assets/public/
     ) else (

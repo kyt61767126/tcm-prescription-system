@@ -50,7 +50,7 @@ if exist "vendor\xlsx.full.min.js" (
     if errorlevel 1 ( echo [WARN] Failed to sync xlsx.full.min.js ) else ( echo       xlsx.full.min.js synced )
 ) else ( echo [SKIP] vendor/xlsx.full.min.js not found )
 echo   [4/5] Syncing core JS modules...
-set "MODULES=auth-core.js db-adapter.js debug-logger.js medicine-dict.js patient-archive.js performance-utils.js permission.js prescription-core.js print-utils.js"
+set "MODULES=auth-core.js db-adapter.js debug-logger.js medicine-dict.js patient-archive.js performance-utils.js permission.js prescription-core.js print-utils.js security-guard.js"
 for %%m in (%MODULES%) do (
     if exist "%%m" (
         copy /Y "%%m" "%ANDROID_PUBLIC%\%%m" >nul
