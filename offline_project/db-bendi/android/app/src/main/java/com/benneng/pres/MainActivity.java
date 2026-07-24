@@ -116,8 +116,19 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        // 创建 WebView 并立即配置
-        webView = new WebView(this);
+        // 创建 WebView（匿名子类：重写 onProvideAutofillVirtualStructure 阻止 Autofill 获取 input 信息）
+        // ★ 根因修复：Android Autofill 通过虚拟节点树访问 WebView 内部 input，setImportantForAutofill 无效
+        // 重写此方法返回空结构，Autofill 服务无法获取任何 input 信息，从根本上阻止弹窗
+        webView = new WebView(this) {
+            @Override
+            public void onProvideAutofillVirtualStructure(android.view.ViewStructure structure, int flags) {
+                // 空实现：不调用 super，Autofill 服务无法获取 WebView 内部虚拟节点树
+            }
+            @Override
+            public void autofill(android.view.autofill.AutofillValue value) {
+                // 拦截 Autofill 填充请求，不执行任何操作
+            }
+        };
         // ★ 防止闪现：初始隐藏，背景色与登录页一致（紫色#667eea），onPageFinished后显示
         // 即使adjustResize导致重绘，闪现的也是紫色背景而非旧内容
         webView.setVisibility(View.INVISIBLE);
