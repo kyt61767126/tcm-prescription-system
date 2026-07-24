@@ -285,6 +285,7 @@ public class MainActivity extends AppCompatActivity {
         webView.clearCache(true);
         webView.clearFormData();
         webView.clearHistory();
+
         webView.addJavascriptInterface(new NativeBridge(), "AndroidNative");
 
         webView.setWebChromeClient(new WebChromeClient() {

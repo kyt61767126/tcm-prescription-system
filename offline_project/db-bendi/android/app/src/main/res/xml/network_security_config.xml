@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+gh auth login<?xml version="1.0" encoding="utf-8"?>
 <!--
     network_security_config.xml - 网络安全配置（离线版通用）
     P1-A5 新增：HTTPS only + 拒绝用户 CA（防 Charles/Fiddler 抓包）

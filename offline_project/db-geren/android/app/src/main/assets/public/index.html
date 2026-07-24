@@ -2919,6 +2919,8 @@ if (window.Permission) {
                         autocapitalize="off"
                         autocorrect="off"
                         spellcheck="false"
+                        inputmode="search"
+                        enterkeyhint="search"
                         onfocus="startSearch(event,${index},'code')"
                         onblur="tryHideSearch()"
                         onkeyup="handleSearchKey(event,${index},'code')"
