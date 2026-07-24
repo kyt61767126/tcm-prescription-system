@@ -52,6 +52,18 @@ for %%v in (%VERSIONS%) do (
     ) else (
         echo   ^> Synced to root + electron/ (no android/)
     )
+
+    REM Sync to android/app/src/main/res/xml/ (security & backup rules)
+    REM P1-Security (2026-07-25): sync res/xml resources to prevent single-version pollution
+    REM Historical bug: db-bendi/network_security_config.xml was polluted by 'gh auth login' command
+    REM being accidentally written into the file. Without sync, the pollution persisted undetected.
+    set "ANDROID_RES_XML=%~dp0%%v\android\app\src\main\res\xml"
+    if exist "!ANDROID_RES_XML!" (
+        copy /Y "%SHARED%\res\xml\network_security_config.xml" "!ANDROID_RES_XML!\network_security_config.xml" >nul
+        copy /Y "%SHARED%\res\xml\data_extraction_rules.xml"   "!ANDROID_RES_XML!\data_extraction_rules.xml"   >nul
+        copy /Y "%SHARED%\res\xml\file_paths.xml"              "!ANDROID_RES_XML!\file_paths.xml"              >nul
+        echo   ^> Synced to android/res/xml/ (network_security + data_extraction + file_paths)
+    )
     echo.
 )
 

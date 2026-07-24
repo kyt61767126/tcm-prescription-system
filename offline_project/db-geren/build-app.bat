@@ -9,7 +9,7 @@ echo.
 
 cd /d "%~dp0"
 
-echo [1/8] Configuring clinic info...
+echo [1/10] Configuring clinic info...
 if /i "%1"=="--skip-config" (
     echo       [SKIP] --skip-config parameter detected
 ) else (
@@ -22,7 +22,7 @@ if /i "%1"=="--skip-config" (
 )
 echo.
 
-echo [2/8] Synchronizing files to Android...
+echo [2/10] Synchronizing files to Android...
 set "ANDROID_PUBLIC=%~dp0android\app\src\main\assets\public"
 set "ANDROID_ASSETS=%~dp0android\app\src\main\assets"
 if not exist "%ANDROID_PUBLIC%" (
@@ -64,7 +64,7 @@ if exist "video-recorder-inject.js" (
 ) else ( echo [SKIP] video-recorder-inject.js not found )
 echo.
 
-echo [2.5/8] Minifying JavaScript files (security hardening)...
+echo [2.5/10] Minifying JavaScript files (security hardening)...
 node "%~dp0..\_shared\minify-js.js" "%ANDROID_PUBLIC%"
 if errorlevel 1 (
     echo [WARN] JS minification had issues, continuing anyway
@@ -75,7 +75,7 @@ echo.
 
 cd /d "%~dp0\android"
 
-echo [3/8] Checking environment...
+echo [3/10] Checking environment...
 if not exist "gradlew.bat" (
     echo [ERROR] gradlew.bat not found
     echo   Path: %CD%\gradlew.bat
@@ -109,7 +109,7 @@ if not exist "app\src\main\assets\video-recorder-inject.js" (
 echo [OK] Environment check passed
 echo.
 
-echo [3.6/8] Patching Capacitor Java version (21 to 17)...
+echo [3.5/10] Patching Capacitor Java version (21 to 17)...
 call node "%~dp0..\..\tools\patch-java-version.js" "%~dp0..\.."
 if errorlevel 1 (
     echo [WARN] Java version patch had issues, continuing anyway
@@ -117,18 +117,16 @@ if errorlevel 1 (
     echo [OK] Java version patched
 )
 echo.
-echo.
-
-echo [3.5/8] Current configuration...
+echo [3.6/10] Current configuration...
 findstr "versionName" "app\build.gradle"
 echo.
 
-echo [4/8] Stopping residual Gradle processes...
+echo [4/10] Stopping residual Gradle processes...
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 echo [OK] Cleanup completed
 echo.
 
-echo [5/8] Cleaning build cache (force full clean)...
+echo [5/10] Cleaning build cache (force full clean)...
 if defined TCM_GRADLE_SKIP_CLEAN (
     echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, skipping gradlew clean (debug only)
     REM ★ 双保险：即使跳过 gradlew clean，也必须清理 javac 和 assets 缓存
@@ -170,11 +168,11 @@ if defined TCM_GRADLE_SKIP_CLEAN (
 )
 echo.
 
-echo [5.5/8] Auto-increment versionCode...
+echo [5.5/10] Auto-increment versionCode...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='app\build.gradle'; $c=[System.IO.File]::ReadAllText($f); if($c -match 'versionCode\s+(\d+)'){ $old=$matches[1]; $new=[int]$old+1; $c=$c -replace 'versionCode\s+\d+', ('versionCode '+$new); [System.IO.File]::WriteAllText($f,$c,(New-Object System.Text.UTF8Encoding($false))); Write-Host ('  versionCode: ' + $old + ' -> ' + $new) } else { Write-Host '  [WARN] versionCode not found, skip' }"
 echo.
 
-echo [5.6/8] Obfuscating JavaScript (target=geren)...
+echo [5.6/10] Obfuscating JavaScript (target=geren)...
 call node "%~dp0..\..\tools\obfuscate.js" --target=geren
 if errorlevel 1 (
     echo [ERROR] JS obfuscation failed
@@ -184,7 +182,7 @@ if errorlevel 1 (
 echo [OK] JS obfuscation complete
 echo.
 
-echo [6/8] Building signed APK...
+echo [6/10] Building signed APK...
 echo.
 call gradlew.bat assembleRelease
 if errorlevel 1 (
@@ -197,7 +195,7 @@ if errorlevel 1 (
 )
 echo.
 
-echo [6.5/8] Restoring JavaScript...
+echo [6.5/10] Restoring JavaScript...
 call node "%~dp0..\..\tools\obfuscate.js" restore --target=geren
 if errorlevel 1 (
     echo [WARN] JS restore failed - may need manual restore
@@ -206,7 +204,7 @@ if errorlevel 1 (
 )
 echo.
 
-echo [7/8] Build successful, locating APK...
+echo [7/10] Build successful, locating APK...
 echo.
 
 set "APK_DIR=app\build\outputs\apk\release"
@@ -233,7 +231,7 @@ for %%A in ("%APK_FILE%") do (
 )
 echo.
 
-echo [8/8] Copying APK to output directory...
+echo [8/10] Copying APK to output directory...
 set "VERSION_STR="
 for /f "tokens=2 delims=:" %%v in ('findstr "versionName" "app\build.gradle"') do (
     set "VERSION_STR=%%v"
@@ -286,7 +284,7 @@ echo   This APK is signed and ready for installation
 echo ============================================
 echo.
 
-echo [9/8] Calculating SHA-256 hash for download page...
+echo [9/10] Calculating SHA-256 hash for download page...
 node "%~dp0..\_shared\calculate-hash.js"
 if errorlevel 1 (
     echo [WARN] Hash calculation had issues, continuing anyway
@@ -295,7 +293,7 @@ if errorlevel 1 (
 )
 echo.
 
-echo [10/8] Auto-updating download page...
+echo [10/10] Auto-updating download page...
 node "%~dp0..\..\tools\auto-update-downloads.js" geren
 if errorlevel 1 (
     echo [WARN] Download page auto-update had issues, continuing anyway
