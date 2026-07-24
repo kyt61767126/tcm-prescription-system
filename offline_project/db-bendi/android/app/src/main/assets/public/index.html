@@ -3197,7 +3197,7 @@ let currentUser = null;
                 selectSearchResult();
             } else if (event.key === 'Tab') {
                 event.preventDefault();
-                if (currentEditIndex >= prescriptionItems.length - 3) { addEmptyRow(); DOM_CACHE.init();
+                if (currentEditIndex >= prescriptionItems.length - 3 && prescriptionItems.length < 15) { addEmptyRow(); DOM_CACHE.init();
             renderPrescriptionTable(); }
                 const nextInput = document.getElementById(`code-input-${index + 1}`);
                 if (nextInput) nextInput.focus();
@@ -3348,7 +3348,7 @@ let currentUser = null;
             prescriptionItems[index].price = parseFloat(price).toFixed(2);
             prescriptionItems[index].dosage = actualDosage;
             prescriptionItems[index].total = (price * actualDosage).toFixed(2);
-            if (index >= prescriptionItems.length - 3) addEmptyRow();
+            if (index >= prescriptionItems.length - 3 && prescriptionItems.length < 15) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();

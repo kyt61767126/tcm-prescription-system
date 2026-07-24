@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-定制</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -122,11 +122,11 @@
         .main-content { position: relative; z-index: 1; padding: 24px 18px; }
         .login-box { background: white; border-radius: 10px; padding: 20px 15px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.2); }
         .login-field { margin-bottom: 18px; display: flex; flex-direction: row; align-items: center; gap: 6px; }
-        .login-field label { font-size: 12px; font-weight: bold; color: #555; width: 36px; text-align: right; flex-shrink: 0; }
-        .login-field input, .login-field select { width: 33%; padding: 7px 9px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; background: #fafafa; transition: all 0.2s; }
+        .login-field label { width: 36px; font-size: 12px; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; }
+        .login-field input, .login-field select { width: 100%; padding: 10px 9px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; background: #fafafa; transition: all 0.2s; }
         .login-field input:focus, .login-field select:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); background: white; }
-        .username-input-wrapper { position: relative; }
-        .username-input-wrapper input { padding-right: 30px; }
+        .username-input-wrapper { position: relative; flex: 1; }
+        .username-input-wrapper input { width: 100%; padding-right: 30px; box-sizing: border-box; }
         .username-dropdown-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 27px; padding: 0; border: 2px solid #e0e0e0; border-left: none; border-radius: 0 8px 8px 0; background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; transition: all 0.2s; }
         .username-dropdown-btn:hover { background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%); }
         .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 2px solid #667eea; border-radius: 8px; top: calc(100% + 4px); left: 0; right: 0; box-shadow: 0 8px 20px rgba(102, 126, 234, 0.25); max-height: 150px; overflow-y: auto; }
@@ -283,23 +283,23 @@
             }
             
             .patient-row {
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
                 margin-bottom: 4px;
                 gap: 3px;
             }
-            
+
             .patient-label {
                 width: 45px;
                 font-size: 12px;
                 padding-right: 4px;
             }
-            
+
             .patient-input {
                 min-height: 32px;
                 font-size: 14px;
                 padding: 4px 6px;
             }
-            
+
             .patient-input.x-small { flex: 0 0 55px; }
             .patient-input.xx-small { flex: 0 0 85px; }
             .patient-input.xxx-small { flex: 0 0 110px; }
@@ -394,7 +394,47 @@
 
             /* 统计分析图表 - 手机端缩小显示，确保屏幕内完整显示 */
             #visitTrendChart, #diseaseChart, #medicineChart { height: 130px; }
-            
+
+            /* 患者信息输入栏 - 单行紧凑布局 */
+            .patient-row {
+                flex-wrap: nowrap;
+                gap: 3px;
+                margin-bottom: 5px;
+            }
+            .patient-label {
+                width: auto;
+                font-size: 12px;
+                padding-right: 2px;
+                flex-shrink: 0;
+            }
+            .patient-input {
+                min-height: 34px;
+                font-size: 14px;
+                padding: 4px 6px;
+                min-width: 0;
+            }
+            .patient-input.small { flex: 1 1 160px; }
+            .patient-input.x-small { flex: 0 0 55px; }
+            .patient-input.xx-small { flex: 0 0 85px; }
+            .patient-input.xxx-small { flex: 0 0 80px; }
+            .patient-input.name-input { flex: 0 0 85px; }
+            #patientAddress { flex: 1 1 225px !important; }
+
+            /* 诊断行内联样式覆盖（确保单行不换行） */
+            .diagnosis-section .patient-row input#diagnosis {
+                flex: 1 1 183px;
+                min-width: 30px !important;
+            }
+            .diagnosis-section .patient-row input#doseCountInput3 {
+                flex: 0 0 42px;
+                width: 42px !important;
+            }
+            .diagnosis-section .patient-row input#doctorName {
+                flex: 0 0 60px;
+                width: 60px !important;
+                min-width: 40px !important;
+            }
+
             /* 搜索下拉优化 */
             .medicine-search-dropdown {
                 max-height: 250px;
@@ -460,47 +500,17 @@
             .mobile-nav-icon {
                 font-size: 16px;
             }
-            
-            /* 患者信息输入栏 - 单行紧凑布局 */
-            .patient-row {
-                flex-wrap: nowrap;
-                gap: 3px;
-                margin-bottom: 5px;
-            }
-            .patient-label {
-                width: auto;
-                font-size: 12px;
-                padding-right: 2px;
-                flex-shrink: 0;
-            }
+
+            /* 患者信息栏继承768px的grid布局，仅微调 */
             .patient-input {
                 min-height: 34px;
                 font-size: 14px;
-                padding: 4px 6px;
-                min-width: 0;
             }
-            .patient-input.small { flex: 1 1 160px; }
-            .patient-input.x-small { flex: 0 0 55px; }
-            .patient-input.xx-small { flex: 0 0 85px; }
-            .patient-input.xxx-small { flex: 0 0 80px; }
-            .patient-input.name-input { flex: 0 0 85px; }
-            #patientAddress { flex: 1 1 225px !important; }
 
-            /* 诊断行内联样式覆盖（确保单行不换行） */
-            .diagnosis-section .patient-row input#diagnosis {
-                flex: 1 1 183px;
-                min-width: 30px !important;
+            .patient-label {
+                font-size: 12px;
             }
-            .diagnosis-section .patient-row input#doseCountInput3 {
-                flex: 0 0 42px;
-                width: 42px !important;
-            }
-            .diagnosis-section .patient-row input#doctorName {
-                flex: 0 0 60px;
-                width: 60px !important;
-                min-width: 40px !important;
-            }
-            
+
             /* 药品表格进一步紧凑 */
             .medicine-table-container {
                 max-height: 400px;
@@ -594,11 +604,11 @@
             }
         }
         </style><!-- xlsx 库按需加载：首次使用 Excel 导入时由 loadXlsxLibrary() 动态加载 vendor/xlsx.full.min.js；未放置时 Excel 导入功能不可用，其他功能不受影响 -->
-</head><body><div id="loginOverlay" class="login-overlay" style="display: flex; visibility: visible;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【定制】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')document.getElementById('loginPassword').focus()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser"><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div><div id="changePwdModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>修改密码</span><span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span></div><div class="modal-body"><div class="form-group"><label>原密码</label><input type="password" id="oldPwd" placeholder="请输入原密码"></div><div class="form-group"><label>新密码</label><input type="password" id="newPwd" placeholder="请输入新密码"></div><div class="form-group"><label>确认新密码</label><input type="password" id="confirmNewPwd" placeholder="请再次输入新密码"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('changePwdModal')">取消</button><button class="action-btn primary" onclick="handleChangePassword()">修改</button></div></div></div><div id="userManageModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>用户管理</span><span class="close-btn" onclick="closeModal('userManageModal')">&times;</span></div><div class="modal-body"><div id="userList" class="user-list"></div><div class="form-group" style="margin-top:15px;"><label>添加新用户</label><input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音"><input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;"><input type="text" id="newUserName" placeholder="医师姓名，如：张医生" style="margin-top:5px;"><select id="newUserRole" style="margin-top:5px;width:100%;padding:5px;"><option value="user">普通用户</option><option value="admin">管理员</option></select></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('userManageModal')">关闭</button><button class="action-btn primary" onclick="handleAddUser()">添加用户</button></div></div></div><div class="top-tabs"><div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div><div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div><div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div><div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div><div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div><div class="tab-item" id="userManageBtn" onclick="showUserManageModal()" style="display:none;">【用户管理】</div><div class="tab-item" onclick="showHelp()">【系统帮助】</div><div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div><div class="tab-item" id="changePwdBtn" style="display:none;" onclick="showChangePwdModal()">【修改密码】</div><div class="tab-hint">当前用户:<span style="color:#008000;font-weight:bold;" id="userDisplayName"></span>|<span style="color:#008000;font-weight:bold;">【定制】</span></div></div><div class="main-container"><div class="left-panel"><div class="top-tabs-left"><div class="tab-left-item active">填资料</div><div class="tab-left-item" onclick="loadLastHistory()">调原方</div><button class="action-btn" onclick="clearPrescription()" style="margin-left:5px;padding:2px 8px;font-size:12px;">重输</button><button class="action-btn" onclick="saveAsFormula()" style="padding:2px 8px;font-size:12px;">存验方</button><button class="action-btn" onclick="printPrescription('portrait')" style="padding:2px 8px;font-size:12px;">纵向打印</button><button class="action-btn" onclick="printPrescription('landscape')" style="padding:2px 8px;font-size:12px;">横向打印</button><button class="action-btn primary" onclick="savePrescription()" style="padding:2px 8px;font-size:12px;">保存</button></div><div class="patient-section"><div class="patient-row"><span class="patient-label">门诊</span><input type="text" id="prescriptionNo" class="patient-input name-input" readonly><span class="patient-label">性别</span><select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()"><option value="男">男</option><option value="女">女</option></select><span class="patient-label">日期</span><input type="text" id="visitDate" class="patient-input small" readonly></div><div class="patient-row"><span class="patient-label">姓名</span><input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off"><span class="patient-label">年龄</span><input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()"><span class="patient-label">电话</span><input type="text" id="patientPhone" class="patient-input small"></div><div class="patient-row"><span class="patient-label">统计</span><input type="text" id="clinicNo" class="patient-input xx-small" readonly><span class="patient-label">住址</span><input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;"></div></div><div class="symptom-section"><div class="history-tabs"><div class="history-tab active">病史症状</div><div class="history-tab">修改病史</div></div><textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea></div><div class="diagnosis-section"><div class="patient-row"><span class="patient-label">诊断</span><input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()"><span class="patient-label">剂数</span><input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')"><span style="font-size:13px;margin-right:8px;">剂</span><span class="patient-label">医师</span><input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;"></div></div><div class="action-buttons-section"><div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;"><span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span><span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span></div></div><div class="medicine-section"><div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">提示: 在简码栏输入简码，在药名栏输入药名</div><div class="medicine-table-container"><table class="medicine-table" id="prescriptionTable"><thead><tr><th style="width:25px;">#</th><th style="width:45px;">简码</th><th style="width:90px;">药物</th><th style="width:40px;">数量</th><th style="width:30px;">单位</th><th style="width:40px;">单价</th><th style="width:45px;">合计</th><th style="width:30px;">删</th></tr></thead><tbody id="prescriptionBody"></tbody></table></div><div class="medicine-search-dropdown" id="medicineSearchDropdown"></div></div></div><div class="center-panel"><div class="prescription-paper" id="prescriptionPaper"><div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div><div class="prescription-title">处 方 笺</div><div class="prescription-info"><div>姓名:<span id="paperName"></span></div><div>性别:<span id="paperGender"></span></div><div>年龄:<span id="paperAge"></span>岁</div><div>科别: 中医内科</div><div>门诊号:<span id="paperClinicNo"></span></div><div>日期:<span id="paperDate"></span></div></div><div style="margin-bottom:8px; line-height:1.5;"><span>病史症状:<span id="paperMedicalHistory"></span></span><div style="border-bottom:1px solid #000; margin-top:8px;"></div></div><div style="margin-bottom:3px;"><span>诊断:<span id="paperDiagnosis"></span></span><div style="border-bottom:1px solid #000; margin-top:2px;"></div></div><div class="prescription-grid" style="margin-top:3px;"><div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;"><div class="rp-mark">RP</div><div></div><div class="dose-count"><span id="paperDoseCount">7</span>剂</div></div><div id="prescriptionLines"></div></div><div class="prescription-footer" style="margin-top:3px;"><div class="usage-text">用法: 水煎服，日一剂，早晚分服</div><div class="signature-row"><span>医师:<span id="paperDoctor"></span>（签字）</span><span>配方: ________ 复核: ________</span></div></div></div></div><div class="right-panel"><div class="history-header"><span>处方历史</span><div style="display:flex;gap:16px;align-items:center;padding-right:4px;"><button class="history-refresh-btn" onclick="refreshHistory()" title="刷新历史处方" style="font-size:16px;padding:8px 10px;min-width:40px;min-height:36px;">🔄</button><button onclick="showRecycleBin()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="回收站">🗑️</button></div></div><div class="history-list" id="historyList"><div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div></div></div></div><div class="bottom-bar"></div><!-- 移动端底部导航 --><div class="mobile-nav" id="mobileNav"><div class="mobile-nav-items"><div class="mobile-nav-item active" onclick="switchMobileTab('prescription')"><span class="mobile-nav-icon">📝</span><span>门诊</span></div><div class="mobile-nav-item" onclick="switchMobileTab('history')"><span class="mobile-nav-icon">📋</span><span>历史</span></div><div class="mobile-nav-item" onclick="switchMobileTab('preview')"><span class="mobile-nav-icon">📄</span><span>预览</span></div><div class="mobile-nav-item" onclick="showModal('medicineModal')"><span class="mobile-nav-icon">💊</span><span>药品</span></div><div class="mobile-nav-item" onclick="showModal('settingsModal')"><span class="mobile-nav-icon">⚙️</span><span>设置</span></div><div class="mobile-nav-item" onclick="handleLogout()" style="color:var(--danger-color);"><span class="mobile-nav-icon">🚪</span><span>退出</span></div></div></div><!-- 移动端快捷操作栏 --><div class="mobile-action-bar" id="mobileActionBar"><div class="action-buttons"><button class="action-btn" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button><button class="action-btn" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button><button class="action-btn" onclick="clearPrescription()">🗑️ 清空</button><button class="action-btn primary" id="mobileActionBtn1" onclick="showModal('analyticsModal')">📊 统计</button><button class="action-btn" id="mobileActionBtn2" onclick="showChangePwdModal()">🔐 改密</button></div></div><div class="modal" id="settingsModal"><div class="modal-content"><div class="modal-header"><h3>F1 基础设置</h3><span class="close-btn" onclick="closeModal('settingsModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;"><label>诊所名称:</label><input type="text" id="clinicName" readonly style="width:100%;padding:6px;margin-top:4px;background:#f0f0f0;color:#555;cursor:not-allowed;"></div><div style="margin-bottom:12px;"><label>医师姓名:</label><input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>诊疗费:</label><input type="number" id="defaultRegFee" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>默认剂数:</label><input type="number" id="defaultDose" style="width:100%;padding:6px;margin-top:4px;"></div><div id="autoStartSection" style="margin-bottom:12px;display:none;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoStart" style="width:18px;height:18px;">开机自动启动（仅管理员）</label><div style="font-size:11px;color:#666;margin-top:4px;">勾选后，系统将在电脑开机时自动启动</div></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 统计分析</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js"></script><script src="permission.js"></script><script src="debug-logger.js"></script><script src="print-utils.js"></script><script src="medicine-dict.js"></script><script src="db-adapter.js"></script><script src="performance-utils.js"></script><script src="prescription-core.js"></script><script src="patient-archive.js"></script>
+</head><body><div id="loginOverlay" class="login-overlay" style="display: flex; visibility: visible;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【本地】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')document.getElementById('loginPassword').focus()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser"><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div><div id="changePwdModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>修改密码</span><span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span></div><div class="modal-body"><div class="form-group"><label>原密码</label><input type="password" id="oldPwd" placeholder="请输入原密码"></div><div class="form-group"><label>新密码</label><input type="password" id="newPwd" placeholder="请输入新密码"></div><div class="form-group"><label>确认新密码</label><input type="password" id="confirmNewPwd" placeholder="请再次输入新密码"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('changePwdModal')">取消</button><button class="action-btn primary" onclick="handleChangePassword()">修改</button></div></div></div><div id="userManageModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>用户管理</span><span class="close-btn" onclick="closeModal('userManageModal')">&times;</span></div><div class="modal-body"><div id="userList" class="user-list"></div><div class="form-group" style="margin-top:15px;"><label>添加新用户</label><input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音"><input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;"><input type="text" id="newUserName" placeholder="医师姓名，如：张医生" style="margin-top:5px;"><select id="newUserRole" style="margin-top:5px;width:100%;padding:5px;"><option value="user">普通用户</option><option value="admin">管理员</option></select></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('userManageModal')">关闭</button><button class="action-btn primary" onclick="handleAddUser()">添加用户</button></div></div></div><div class="top-tabs"><div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div><div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div><div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div><div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div><div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div><div class="tab-item" id="userManageBtn" onclick="showUserManageModal()" style="display:none;">【用户管理】</div><div class="tab-item" onclick="showHelp()">【系统帮助】</div><div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div><div class="tab-item" id="changePwdBtn" style="display:none;" onclick="showChangePwdModal()">【修改密码】</div><div class="tab-hint">当前用户:<span style="color:#008000;font-weight:bold;" id="userDisplayName"></span>|<span style="color:#008000;font-weight:bold;">【本地】</span></div></div><div class="main-container"><div class="left-panel"><div class="top-tabs-left"><div class="tab-left-item active">填资料</div><div class="tab-left-item" onclick="loadLastHistory()">调原方</div><button class="action-btn" onclick="clearPrescription()" style="margin-left:5px;padding:2px 8px;font-size:12px;">重输</button><button class="action-btn" onclick="saveAsFormula()" style="padding:2px 8px;font-size:12px;">存验方</button><button class="action-btn" onclick="printPrescription('portrait')" style="padding:2px 8px;font-size:12px;">纵向打印</button><button class="action-btn" onclick="printPrescription('landscape')" style="padding:2px 8px;font-size:12px;">横向打印</button><button class="action-btn primary" onclick="savePrescription()" style="padding:2px 8px;font-size:12px;">保存</button></div><div class="patient-section"><div class="patient-row"><span class="patient-label">门诊</span><input type="text" id="prescriptionNo" class="patient-input name-input" readonly><span class="patient-label">性别</span><select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()"><option value="男">男</option><option value="女">女</option></select><span class="patient-label">日期</span><input type="text" id="visitDate" class="patient-input small" readonly></div><div class="patient-row"><span class="patient-label">姓名</span><input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off"><span class="patient-label">年龄</span><input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()"><span class="patient-label">电话</span><input type="text" id="patientPhone" class="patient-input small"></div><div class="patient-row"><span class="patient-label">统计</span><input type="text" id="clinicNo" class="patient-input xx-small" readonly><span class="patient-label">住址</span><input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;"></div></div><div class="symptom-section"><div class="history-tabs"><div class="history-tab active">病史症状</div><div class="history-tab">修改病史</div></div><textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea></div><div class="diagnosis-section"><div class="patient-row"><span class="patient-label">诊断</span><input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()"><span class="patient-label">剂数</span><input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')"><span style="font-size:13px;margin-right:8px;">剂</span><span class="patient-label">医师</span><input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;"></div></div><div class="action-buttons-section"><div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;"><span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span><span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span></div></div><div class="medicine-section"><div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">提示: 在简码栏输入简码，在药名栏输入药名</div><div class="medicine-table-container"><table class="medicine-table" id="prescriptionTable"><thead><tr><th style="width:25px;">#</th><th style="width:45px;">简码</th><th style="width:90px;">药物</th><th style="width:40px;">数量</th><th style="width:30px;">单位</th><th style="width:40px;">单价</th><th style="width:45px;">合计</th><th style="width:30px;">删</th></tr></thead><tbody id="prescriptionBody"></tbody></table></div><div class="medicine-search-dropdown" id="medicineSearchDropdown"></div></div></div><div class="center-panel"><div class="prescription-paper" id="prescriptionPaper"><div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div><div class="prescription-title">处 方 笺</div><div class="prescription-info"><div>姓名:<span id="paperName"></span></div><div>性别:<span id="paperGender"></span></div><div>年龄:<span id="paperAge"></span>岁</div><div>科别: 中医内科</div><div>门诊号:<span id="paperClinicNo"></span></div><div>日期:<span id="paperDate"></span></div></div><div style="margin-bottom:8px; line-height:1.5;"><span>病史症状:<span id="paperMedicalHistory"></span></span><div style="border-bottom:1px solid #000; margin-top:8px;"></div></div><div style="margin-bottom:3px;"><span>诊断:<span id="paperDiagnosis"></span></span><div style="border-bottom:1px solid #000; margin-top:2px;"></div></div><div class="prescription-grid" style="margin-top:3px;"><div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;"><div class="rp-mark">RP</div><div></div><div class="dose-count"><span id="paperDoseCount">7</span>剂</div></div><div id="prescriptionLines"></div></div><div class="prescription-footer" style="margin-top:3px;"><div class="usage-text">用法: 水煎服，日一剂，早晚分服</div><div class="signature-row"><span>医师:<span id="paperDoctor"></span>（签字）</span><span>配方: ________ 复核: ________</span></div></div></div></div><div class="right-panel"><div class="history-header"><span>处方历史</span><div style="display:flex;gap:16px;align-items:center;padding-right:4px;"><button class="history-refresh-btn" onclick="refreshHistory()" title="刷新历史处方" style="font-size:16px;padding:8px 10px;min-width:40px;min-height:36px;">🔄</button><button onclick="showRecycleBin()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="回收站">🗑️</button></div></div><div class="history-list" id="historyList"><div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div></div></div></div><div class="bottom-bar"></div><!-- 移动端底部导航 --><div class="mobile-nav" id="mobileNav"><div class="mobile-nav-items"><div class="mobile-nav-item active" onclick="switchMobileTab('prescription')"><span class="mobile-nav-icon">📝</span><span>门诊</span></div><div class="mobile-nav-item" onclick="switchMobileTab('history')"><span class="mobile-nav-icon">📋</span><span>历史</span></div><div class="mobile-nav-item" onclick="switchMobileTab('preview')"><span class="mobile-nav-icon">📄</span><span>预览</span></div><div class="mobile-nav-item" onclick="showModal('medicineModal')"><span class="mobile-nav-icon">💊</span><span>药品</span></div><div class="mobile-nav-item" onclick="showModal('settingsModal')"><span class="mobile-nav-icon">⚙️</span><span>设置</span></div><div class="mobile-nav-item" onclick="handleLogout()" style="color:var(--danger-color);"><span class="mobile-nav-icon">🚪</span><span>退出</span></div></div></div><!-- 移动端快捷操作栏 --><div class="mobile-action-bar" id="mobileActionBar"><div class="action-buttons"><button class="action-btn" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button><button class="action-btn" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button><button class="action-btn" onclick="clearPrescription()">🗑️ 清空</button><button class="action-btn primary" id="mobileActionBtn1" onclick="showModal('analyticsModal')">📊 统计</button><button class="action-btn" id="mobileActionBtn2" onclick="showChangePwdModal()">🔐 改密</button></div></div><div class="modal" id="settingsModal"><div class="modal-content"><div class="modal-header"><h3>F1 基础设置</h3><span class="close-btn" onclick="closeModal('settingsModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;"><label>诊所名称:</label><input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>医师姓名:</label><input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>诊疗费:</label><input type="number" id="defaultRegFee" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>默认剂数:</label><input type="number" id="defaultDose" style="width:100%;padding:6px;margin-top:4px;"></div><div id="autoStartSection" style="margin-bottom:12px;display:none;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoStart" style="width:18px;height:18px;">开机自动启动（仅管理员）</label><div style="font-size:11px;color:#666;margin-top:4px;">勾选后，系统将在电脑开机时自动启动</div></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 统计分析</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js"></script><script src="permission.js"></script><script src="debug-logger.js"></script><script src="print-utils.js"></script><script src="medicine-dict.js"></script><script src="db-adapter.js"></script><script src="performance-utils.js"></script><script src="prescription-core.js"></script><script src="patient-archive.js"></script>
 <script src="security-guard.js"></script>
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
-window.EDITION = 'clinic_custom';
+window.EDITION = 'offline';
 if (window.Permission) {
     Permission.init().then(function() {
         if (document.readyState === 'loading') {
@@ -608,17 +618,18 @@ if (window.Permission) {
         }
     }).catch(function(e) { console.warn('Permission init failed:', e); });
 }
-</script><script>// ============================================================================
-        // 【诊所定制配置区 - 可编辑】
-        // 用记事本打开此文件，修改下面 clinicName 的值，
-        // 即可定制本系统显示的诊所名称（保存后重新打开程序生效）。
-        // 注意：诊所名称在操作界面中为只读，仅可通过此处修改。
-        // 医师姓名可在操作界面的「基础设置」中直接修改。
-        // ============================================================================
+</script><script>window.addEventListener('error', function(e) {
+    console.error('[全局错误]', e.message, e.error);
+});
+window.addEventListener('unhandledrejection', function(e) {
+    console.error('[未处理Promise]', e.reason);
+});
+let currentUser = null;
+
         const CONFIG = {
             clinicName: '本能堂中医诊所',
-            doctorName: '李大夫',
-            edition: 'clinic_custom'
+            doctorName: '张大夫',
+            edition: 'offline'
         };
 
         window.__APP_VERSION__ = '2026-07-11-v2';
@@ -647,52 +658,6 @@ if (window.Permission) {
         function loadAllPrescriptions() {
             return Storage.getJSON('all_prescription_list', []);
         }
-
-        window.addEventListener('error', function(e) {
-            console.error('[全局错误]', e.message, e.error);
-        });
-        window.addEventListener('unhandledrejection', function(e) {
-            console.error('[未处理Promise]', e.reason);
-        });
-
-        function createPromptModal() {
-            const modal = document.createElement('div');
-            modal.id = 'customPromptModal';
-            modal.className = 'modal';
-            modal.style.display = 'none';
-            modal.innerHTML = '<div class="modal-content" style="max-width:400px;"><div class="modal-header"><span id="promptTitle">提示</span><span class="close-btn" onclick="closePromptModal()">&times;</span></div><div class="modal-body" style="padding:20px;"><div id="promptMessage" style="margin-bottom:15px;font-size:14px;"></div><input type="text" id="promptInput" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px;" autocomplete="off"></div><div class="modal-footer"><button class="action-btn" onclick="closePromptModal(null)">取消</button><button class="action-btn primary" onclick="closePromptModal(true)">确定</button></div></div></div>';
-            document.body.appendChild(modal);
-        }
-        createPromptModal();
-
-        let _promptResolve = null;
-        function closePromptModal(confirmed) {
-            const modal = document.getElementById('customPromptModal');
-            const input = document.getElementById('promptInput');
-            const value = confirmed ? input.value : null;
-            modal.style.display = 'none';
-            if (_promptResolve) {
-                _promptResolve(value);
-                _promptResolve = null;
-            }
-        }
-
-        const _nativePrompt = window.prompt;
-        window.prompt = function(message, defaultValue) {
-            if (!IS_ELECTRON) return _nativePrompt.apply(window, arguments);
-            return new Promise((resolve) => {
-                _promptResolve = resolve;
-                const modal = document.getElementById('customPromptModal');
-                const msgEl = document.getElementById('promptMessage');
-                const input = document.getElementById('promptInput');
-                msgEl.innerHTML = message.replace(/\n/g, '<br>');
-                input.value = defaultValue || '';
-                modal.style.display = 'flex';
-                setTimeout(() => input.focus(), 50);
-            });
-        };
-
-        let currentUser = null;
 
         const DB_NAME = 'PrescriptionDB';
         const DB_VERSION = 3;
@@ -1143,7 +1108,7 @@ if (window.Permission) {
                         if (u.password === hashedPwd) { user = u; break; }
                     }
                 }
-
+                
                 if (user) {
                     // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
                     try {
@@ -1159,7 +1124,7 @@ if (window.Permission) {
                             }
                         }
                     } catch (e) { console.warn('密码升级失败:', e); }
-
+                    
                     currentUser = user;
                     // 使用统一的 user_login_data 存储登录信息
                     const loginData = {
@@ -1179,9 +1144,20 @@ if (window.Permission) {
                     document.querySelector('.main-container').style.display = 'flex';
                     updateUserDisplay();
                     errorDiv.style.display = 'none';
-                    
+
+                    // 登录后自动设置医师姓名为登录用户的姓名
+                    const doctorNameInput = document.getElementById('doctorName');
+                    if (doctorNameInput) {
+                        doctorNameInput.value = user.name || '';
+                    }
+                    const defaultDoctorInput = document.getElementById('defaultDoctor');
+                    if (defaultDoctorInput) {
+                        defaultDoctorInput.value = user.name || '';
+                    }
+
                     await loadData();
                     refreshUserInterface();
+                    if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
 
                     // 通知主进程放大窗口
                     if (window.electronAPI && window.electronAPI.loginSuccess) {
@@ -1212,8 +1188,10 @@ if (window.Permission) {
                 localStorage.removeItem('user_login_data');
                 currentUser = null;
                 const overlay = document.getElementById('loginOverlay');
-                if (overlay) overlay.style.display = 'flex';
-                loadRememberedUsers();
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    loadRememberedUsers();
+                }
             }
         };
 
@@ -1637,7 +1615,7 @@ if (window.Permission) {
             const btn2 = document.getElementById('mobileActionBtn2');
             if (!btn1 || !btn2 || !currentUser) return;
 
-            const isApp = !!window.AndroidNative; // Android APP独有桥接（window.electronAPI被注入shim不能用作判断）
+            const isApp = !!window.AndroidNative;
             const changePwdText = isApp ? '🔐 改密' : '🔐 修改密码';
 
             btn1.innerHTML = '📊 统计';
@@ -1721,14 +1699,17 @@ if (window.Permission) {
             const btn = document.getElementById('usernameDropdownBtn');
             const menu = document.getElementById('usernameDropdownMenu');
             if (!btn || !menu) return;
+
             if (usernames.length === 0) {
                 btn.style.display = 'none';
                 menu.style.display = 'none';
                 return;
             }
+
             btn.style.display = 'flex';
             btn.textContent = '▼(' + usernames.length + ')';
             menu.innerHTML = '';
+
             usernames.forEach(username => {
                 const item = document.createElement('div');
                 item.textContent = username;
@@ -1740,6 +1721,7 @@ if (window.Permission) {
                 });
                 menu.appendChild(item);
             });
+
             btn.onclick = function(e) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1767,6 +1749,7 @@ if (window.Permission) {
             try {
                 const cleanUsername = String(username).trim();
                 if (!cleanUsername) return;
+
                 let remembered = [];
                 const localList = localStorage.getItem('local_rememberedUsers');
                 if (localList) {
@@ -1781,9 +1764,11 @@ if (window.Permission) {
                         console.warn('解析本地记住的用户名失败:', e);
                     }
                 }
+
                 remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
                 remembered.unshift(cleanUsername);
                 if (remembered.length > 5) remembered = remembered.slice(0, 5);
+
                 localStorage.setItem('local_rememberedUsername', cleanUsername);
                 localStorage.setItem('local_rememberedUsers', JSON.stringify(remembered));
                 renderRememberedUsers(remembered);
@@ -1920,9 +1905,6 @@ if (window.Permission) {
             diseaseChart: null,
             medicineChart: null,
             historyList: null,
-            customPromptModal: null,
-            promptInput: null,
-            promptMessage: null,
             init: function() {
                 this.prescriptionBody = document.getElementById('prescriptionBody');
                 this.medicineSearchDropdown = document.getElementById('medicineSearchDropdown');
@@ -1980,9 +1962,6 @@ if (window.Permission) {
                 this.diseaseChart = document.getElementById('diseaseChart');
                 this.medicineChart = document.getElementById('medicineChart');
                 this.historyList = document.getElementById('historyList');
-                this.customPromptModal = document.getElementById('customPromptModal');
-                this.promptInput = document.getElementById('promptInput');
-                this.promptMessage = document.getElementById('promptMessage');
             }
         };
         let medicineFrequency = {};
@@ -2839,6 +2818,9 @@ if (window.Permission) {
                 if (!m.price) {
                     m.price = 0.0;
                 }
+                if (m.costPrice === undefined || m.costPrice === null || m.costPrice === '') {
+                    m.costPrice = Math.round((m.price || 0) * 0.8 * 100) / 100;
+                }
             });
         }
 
@@ -3031,10 +3013,10 @@ if (window.Permission) {
             document.getElementById('paperClinicNo').textContent = presNo;
             const year = String(new Date().getFullYear()).slice(-2);
             document.getElementById('clinicNo').value = year + String(prescriptionHistory.length).padStart(6, '0');
-            const clinicNameVal = (typeof CONFIG !== 'undefined' && CONFIG.clinicName) ? CONFIG.clinicName : (localStorage.getItem('local_clinicName') || '本能堂中医诊所');
+            const clinicNameVal = localStorage.getItem('local_clinicName') || '本能堂中医诊所';
             const regFeeVal = localStorage.getItem('local_defaultRegFee') || '0';
             const doseVal = localStorage.getItem('local_defaultDose') || '7';
-            const clinicDoctorVal = localStorage.getItem('local_clinicDoctor') || (typeof CONFIG !== 'undefined' && CONFIG.doctorName ? CONFIG.doctorName : '张大夫');
+            const clinicDoctorVal = localStorage.getItem('local_clinicDoctor') || '张大夫';
             document.getElementById('clinicName').value = clinicNameVal;
             document.getElementById('clinicNameDisplay').textContent = clinicNameVal;
             document.getElementById('defaultRegFee').value = regFeeVal;
@@ -3179,8 +3161,6 @@ if (window.Permission) {
                         autocapitalize="off"
                         autocorrect="off"
                         spellcheck="false"
-                        inputmode="search"
-                        enterkeyhint="search"
                         onfocus="startSearch(event,${index},'code')"
                         onblur="tryHideSearch()"
                         onkeyup="handleSearchKey(event,${index},'code')"
@@ -3217,7 +3197,7 @@ if (window.Permission) {
                 selectSearchResult();
             } else if (event.key === 'Tab') {
                 event.preventDefault();
-                if (currentEditIndex >= prescriptionItems.length - 3) { addEmptyRow(); DOM_CACHE.init();
+                if (currentEditIndex >= prescriptionItems.length - 3 && prescriptionItems.length < 15) { addEmptyRow(); DOM_CACHE.init();
             renderPrescriptionTable(); }
                 const nextInput = document.getElementById(`code-input-${index + 1}`);
                 if (nextInput) nextInput.focus();
@@ -3278,22 +3258,8 @@ if (window.Permission) {
                 const dropdown = DOM_CACHE.medicineSearchDropdown;
                 const rect = element.getBoundingClientRect();
                 dropdown.style.left = rect.left + 'px';
+                dropdown.style.top = (rect.bottom + 2) + 'px';
                 dropdown.style.width = (rect.width) + 'px';
-                
-                // 动态判断下拉框位置：下方空间不足时显示在输入框上方（避免被键盘遮挡）
-                // 使用 visualViewport.height 获取键盘弹出后的实际可见高度
-                const visibleHeight = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-                const dropdownHeight = 250; // 预估下拉框高度（最多显示20条，约250px）
-                const bottomSpace = visibleHeight - rect.bottom;
-                const safeMargin = 20;
-                
-                if (bottomSpace < dropdownHeight + safeMargin) {
-                    // 下方空间不足，显示在输入框上方
-                    dropdown.style.top = (rect.top - dropdownHeight - 2) + 'px';
-                } else {
-                    // 下方空间充足，显示在输入框下方
-                    dropdown.style.top = (rect.bottom + 2) + 'px';
-                }
 
                 if (!query.trim()) {
                     dropdown.style.display = 'none';
@@ -3382,7 +3348,7 @@ if (window.Permission) {
             prescriptionItems[index].price = parseFloat(price).toFixed(2);
             prescriptionItems[index].dosage = actualDosage;
             prescriptionItems[index].total = (price * actualDosage).toFixed(2);
-            if (index >= prescriptionItems.length - 3) addEmptyRow();
+            if (index >= prescriptionItems.length - 3 && prescriptionItems.length < 15) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
@@ -3425,7 +3391,7 @@ if (window.Permission) {
 
         function deleteRow(index) {
             prescriptionItems.splice(index, 1);
-            if (prescriptionItems.length < 15) addEmptyRow();
+            if (prescriptionItems.length< 15) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
@@ -3439,11 +3405,11 @@ if (window.Permission) {
             } else {
                 value = parseInt(DOM_CACHE.doseCountInput3?.value || '7') || 7;
             }
-
+            
             if (DOM_CACHE.doseCountInput3 && DOM_CACHE.doseCountInput3.value != value) DOM_CACHE.doseCountInput3.value = value;
             const display = document.getElementById('paperDoseCount');
             if (display) display.textContent = value;
-
+            
             calculateAmount();
         }
 
@@ -3454,9 +3420,9 @@ if (window.Permission) {
             } else {
                 value = parseFloat(DOM_CACHE.registrationFee2?.value || '0') || 0;
             }
-
+            
             if (DOM_CACHE.registrationFee2 && DOM_CACHE.registrationFee2.value != value) DOM_CACHE.registrationFee2.value = value;
-
+            
             calculateAmount();
         }
 
@@ -3468,10 +3434,10 @@ if (window.Permission) {
             const perDoseText = medicineTotal.toFixed(2);
             const totalText = (medicineTotal * doseCount).toFixed(2);
             const grandText = total.toFixed(2);
-
+            
             const tempAmountEl = document.getElementById('tempAmount');
             if (tempAmountEl) tempAmountEl.value = grandText;
-
+            
             if (DOM_CACHE.perDosePrice2) DOM_CACHE.perDosePrice2.textContent = perDoseText;
             if (DOM_CACHE.totalPrice2) DOM_CACHE.totalPrice2.textContent = totalText;
             if (DOM_CACHE.grandTotal2) DOM_CACHE.grandTotal2.textContent = grandText;
@@ -4141,7 +4107,7 @@ if (window.Permission) {
             // P0-5 安全修复：添加确认弹窗，防止误删导致数据永久丢失
             const patientName = record.patientName || '未知患者';
             const prescriptionNo = record.prescriptionNo || record.clinicNo || '无编号';
-            const confirmMsg = `确定要删除该处方吗？\n\n患者：${patientName}\n编号：${prescriptionNo}\n\n删除后将移入回收站，可通过 IndexedDB prescriptions_trash store 恢复。`;
+            const confirmMsg = `确定要删除该处方吗？\n\n患者：${patientName}\n编号：${prescriptionNo}\n\n删除后可点击标题栏🗑️按钮从回收站恢复。`;
             if (!confirm(confirmMsg)) {
                 return;
             }
@@ -4344,10 +4310,6 @@ if (window.Permission) {
             const doseInput2 = document.getElementById('doseCountInput2');
             if (doseInput2) doseInput2.value = doseCount;
             document.getElementById('paperDoseCount').textContent = doseCount;
-            const regFeeInput = document.getElementById('registrationFee');
-            const regFeeInput2 = document.getElementById('registrationFee2');
-            if (regFeeInput) regFeeInput.value = record.registrationFee || 0;
-            if (regFeeInput2) regFeeInput2.value = record.registrationFee || 0;
             // 加载药物数据，确保所有字段都有值
             prescriptionItems = (record.items || []).map(item =>({
                 code: item.code || '',
@@ -4418,56 +4380,17 @@ if (window.Permission) {
             prescriptionNoEl.focus();
         }
 
-        function showFormulaModal(isSaveAs) {
-            const existing = document.getElementById('formulaModal');
-            if (existing) existing.remove();
-            const modal = document.createElement('div');
-            modal.id = 'formulaModal';
-            modal.className = 'modal';
-            modal.style.display = 'flex';
-            modal.innerHTML = '<div class="modal-content user-modal-content">' +
-                '<div class="modal-header"><span>' + (isSaveAs ? '保存为验方' : '添加验方') + '</span>' +
-                '<span class="close-btn" onclick="document.getElementById(\'formulaModal\').remove()">&times;</span></div>' +
-                '<div class="modal-body">' +
-                '<div class="form-group"><label>验方名称</label>' +
-                '<input type="text" id="formulaName" placeholder="验方名称"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>验方简码</label>' +
-                '<input type="text" id="formulaCode" placeholder="验方简码"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>功效</label>' +
-                '<input type="text" id="formulaEffect" placeholder="功效"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>主治</label>' +
-                '<input type="text" id="formulaIndication" placeholder="主治"></div>' +
-                '</div>' +
-                '<div class="modal-footer">' +
-                '<button class="action-btn" onclick="document.getElementById(\'formulaModal\').remove()">取消</button>' +
-                '<button class="action-btn primary" onclick="confirmFormula(' + (isSaveAs ? 'true' : 'false') + ')">保存</button>' +
-                '</div></div>';
-            document.body.appendChild(modal);
-        }
-
-        function confirmFormula(isSaveAs) {
-            const name = document.getElementById('formulaName').value.trim();
-            const code = document.getElementById('formulaCode').value.trim();
-            const effect = document.getElementById('formulaEffect').value.trim();
-            const indication = document.getElementById('formulaIndication').value.trim();
-
-            if (!name) { alert('验方名称不能为空'); return; }
-            if (!code) { alert('验方简码不能为空'); return; }
-
-            let composition = [];
-            if (isSaveAs) {
-                const items = prescriptionItems.filter(item => item.name);
-                composition = items.map(i => ({name: i.name, dosage: i.dosage, price: i.price, unit: i.unit}));
-            }
-            formulas.push({name, code, effect: effect || '', indication: indication || '', composition: composition});
+        async function saveAsFormula() {
+            const name = await prompt('请输入验方名称：');
+            if (!name) return;
+            const code = await prompt('请输入验方简码：');
+            if (!code) return;
+            const effect = await prompt('请输入功效：');
+            const indication = await prompt('请输入主治：');
+            const items = prescriptionItems.filter(item =>item.name);
+            formulas.push({name, code, effect:effect||'', indication:indication||'', composition:items.map(i =>({name:i.name, dosage:i.dosage, price:i.price, unit:i.unit}))});
             localStorage.setItem('local_formulas', JSON.stringify(formulas));
-            if (!isSaveAs) renderFormulaList();
-            document.getElementById('formulaModal').remove();
-            if (isSaveAs) alert('验方保存成功！');
-        }
-
-        function saveAsFormula() {
-            showFormulaModal(true);
+            alert('验方保存成功！');
         }
 
         function printPrescription(orientation = 'portrait') {
@@ -4578,9 +4501,8 @@ if (window.Permission) {
             });
             
             // 重新计算总金额
-            const registrationFee = parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0;
             const updatedMedicineTotal = updatedItems.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
-            const updatedTotalAmount = updatedMedicineTotal * doseCount + registrationFee;
+            const updatedTotalAmount = updatedMedicineTotal * doseCount + (parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0);
             
             const record = {
                 id: Date.now(),
@@ -4597,7 +4519,7 @@ if (window.Permission) {
                 items: updatedItems,
                 doseCount: doseCount,
                 totalAmount: updatedTotalAmount,
-                registrationFee: registrationFee,
+                registrationFee: parseFloat(document.getElementById('registrationFee2')?.value || '0') || 0,
                 // 新增字段
                 createdAt: now.getTime(), // 生成时间戳
                 createdBy: currentUser?.username || '', // 登录用户名
@@ -4633,7 +4555,7 @@ if (window.Permission) {
             // 强制刷新显示
             prescriptionNoEl.blur();
             prescriptionNoEl.focus();
-            
+
             // ★ 优化：核心数据已保存到 IndexedDB，立即执行UI响应（清空表单+显示成功提示）
             // 让用户立即感知保存成功，不等待耗时辅助操作
             try { clearPrescription(); } catch (e) { console.warn('清空表单失败:', e); }
@@ -4796,14 +4718,13 @@ if (window.Permission) {
             const hasElectronAPI = typeof window.electronAPI !== 'undefined';
             const isElectronMarked = hasElectronAPI && window.electronAPI.isElectron;
             const isElectronEnv = hasElectronAPI && isElectronMarked;
-            
 
-            
             // Electron 环境：自动保存到安装目录下的月份文件夹，不弹出任何对话框
             if (isElectronEnv) {
                 try {
                     window.electronAPI.savePrescriptionImage(imageData, fileName).then(result => {
-                        if (!result.success) {
+                        if (result.success) {
+                        } else {
                             console.error('图片保存失败:', result.error);
                         }
                     }).catch(error => {
@@ -4840,10 +4761,7 @@ if (window.Permission) {
         }
 
         function saveSettings() {
-            // 定制版：诊所名称由 CONFIG 控制，不保存；医师姓名可修改，保存到 localStorage
-            if (typeof CONFIG === 'undefined' || !CONFIG.clinicName) {
-                localStorage.setItem('local_clinicName', document.getElementById('clinicName').value);
-            }
+            localStorage.setItem('local_clinicName', document.getElementById('clinicName').value);
             localStorage.setItem('local_clinicDoctor', document.getElementById('defaultDoctor').value);
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             localStorage.setItem('local_defaultDose', document.getElementById('defaultDose').value || '7');
@@ -4883,12 +4801,12 @@ if (window.Permission) {
         }
 
         function showHelp() {
-            alert('惠康中医-定制\n\n' +
-                  '【版本说明】定制版：含用户管理、修改密码\n\n' +
+            alert('惠康中医-本地\n\n' +
+                  '【版本说明】本地版：含用户管理，无修改密码\n\n' +
                   '【功能列表】\n' +
                   '✓ 处方录入与打印\n✓ 药品管理\n✓ 验方设置\n' +
                   '✓ 病例管理\n✓ 统计分析\n✓ 用户管理（管理员）\n' +
-                  '✓ 修改密码（管理员）\n✓ 离线自动备份\n✓ Excel导出\n\n' +
+                  '✗ 修改密码\n✓ 离线自动备份\n✓ Excel导出\n\n' +
                   '【快捷键】\n' +
                   'F1 - 基础设置\nF2 - 药品管理\nF3 - 验方设置\n' +
                   'F5 - 存为验方\nF7 - 重输方药\nF8 - 打印处方\n' +
@@ -5177,7 +5095,7 @@ if (window.Permission) {
             
             const data = {
                 exportInfo: {
-                    version: '惠康中医-定制 - 新版',
+                    version: '惠康中医-本地 - 新版',
                     versionCode: 'v2.0.0',
                     versionType: '本地',
                     exportTime: now.toLocaleString('zh-CN'),
@@ -5224,7 +5142,7 @@ if (window.Permission) {
             if (IS_ELECTRON && window.electronAPI && window.electronAPI.saveBackupFile) {
                 const result = await window.electronAPI.saveBackupFile(jsonStr, fileName);
                 if (result.success) {
-                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${result.fileName}\n\u4FDD\u5B58\u8DEF\u5F84\uFF1Adownloads/\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB`;
+                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${result.fileName}\n\u4FDD\u5B58\u8DEF\u5F84\uFF1Adownloads/中医处方系统/\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB`;
                     alert(backupInfo);
                 } else {
                     alert('备份失败：' + (result.error || '未知错误'));
@@ -5369,19 +5287,19 @@ if (window.Permission) {
             if (!list) return;
             const searchInput = DOM_CACHE.medicineSearch || document.getElementById('medicineSearch');
             const searchText = searchInput ? searchInput.value.trim().toLowerCase() : '';
-            
-            const filteredMedicines = searchText 
-                ? medicines.filter(m => 
-                    (m.name && m.name.toLowerCase().includes(searchText)) || 
+
+            const filteredMedicines = searchText
+                ? medicines.filter(m =>
+                    (m.name && m.name.toLowerCase().includes(searchText)) ||
                     (m.code && m.code.toLowerCase().includes(searchText))
                   )
                 : medicines;
-            
+
             list.innerHTML = filteredMedicines.map((m,i) => {
                 const idx = medicines.indexOf(m);
                 return `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;"><div style="flex:1;"><div style="font-weight:bold;">${escapeHtml(m.name)}</div><div style="font-size:11px;color:#666;">简码：${escapeHtml(m.code)} | 进价：${formatPrice(m.costPrice)}元 | 单价：${formatPrice(m.price)}元/${escapeHtml(m.unit)}</div><div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${escapeHtml(m.unit)} | 库存：${m.stock || '0'}</div></div><div style="display:flex;gap:4px;"><button class="small-btn" onclick="editMedicine(${idx})">编辑</button><button class="small-btn" onclick="deleteMedicine(${idx})">删除</button></div></div>`;
             }).join('');
-            
+
             if (filteredMedicines.length === 0) {
                 list.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">未找到匹配的药品</div>';
             }
@@ -5400,94 +5318,103 @@ if (window.Permission) {
             updatePrescriptionPaper();
         }
 
-        function showMedicineModal(index) {
-            const isEdit = index >= 0;
-            const m = isEdit ? medicines[index] : null;
-            const existing = document.getElementById('medicineModal');
-            if (existing) existing.remove();
-            const modal = document.createElement('div');
-            modal.id = 'medicineModal';
-            modal.className = 'modal';
-            modal.style.display = 'flex';
-            modal.innerHTML = '<div class="modal-content user-modal-content">' +
-                '<div class="modal-header"><span>' + (isEdit ? '编辑药品' : '添加药品') + '</span>' +
-                '<span class="close-btn" onclick="document.getElementById(\'medicineModal\').remove()">&times;</span></div>' +
-                '<div class="modal-body">' +
-                '<div class="form-group"><label>药品名称</label>' +
-                '<input type="text" id="medicineName" value="' + escapeHtml(m ? m.name : '') + '" placeholder="药品名称"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>简码</label>' +
-                '<input type="text" id="medicineCode" value="' + escapeHtml(m ? m.code : '') + '" placeholder="简码"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>进价</label>' +
-                '<input type="number" id="medicineCostPrice" value="' + (m ? (m.costPrice || 0) : 0) + '" step="0.01" placeholder="进价"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>单价</label>' +
-                '<input type="number" id="medicinePrice" value="' + (m ? (m.price || 0) : 0) + '" step="0.01" placeholder="单价"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>单位</label>' +
-                '<input type="text" id="medicineUnit" value="' + escapeHtml(m ? (m.unit || 'g') : 'g') + '" placeholder="单位"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>常用用量</label>' +
-                '<input type="number" id="medicineDosage" value="' + (m ? (m.dosage || 10) : 10) + '" step="0.1" placeholder="常用用量"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>库存数量</label>' +
-                '<input type="number" id="medicineStock" value="' + (m ? (m.stock || 0) : 0) + '" placeholder="库存数量"></div>' +
-                '</div>' +
-                '<div class="modal-footer">' +
-                '<button class="action-btn" onclick="document.getElementById(\'medicineModal\').remove()">取消</button>' +
-                '<button class="action-btn primary" onclick="confirmMedicine(' + index + ')">保存</button>' +
-                '</div></div>';
-            document.body.appendChild(modal);
+        let editingMedicineIndex = -1;
+
+        function editMedicine(index) {
+            editingMedicineIndex = index;
+            const m = medicines[index];
+            showMedicineEditModal(m, false);
         }
 
-        function confirmMedicine(index) {
-            const name = document.getElementById('medicineName').value.trim();
-            const code = document.getElementById('medicineCode').value.trim();
-            const costPrice = parseFloat(document.getElementById('medicineCostPrice').value) || 0;
-            const price = parseFloat(document.getElementById('medicinePrice').value) || 0;
-            const unit = document.getElementById('medicineUnit').value.trim() || 'g';
-            const dosage = parseFloat(document.getElementById('medicineDosage').value) || 10;
-            const stock = parseInt(document.getElementById('medicineStock').value) || 0;
+        function showAddMedicineForm() {
+            editingMedicineIndex = -1;
+            showMedicineEditModal(null, true);
+        }
 
-            if (!name) { alert('药品名称不能为空'); return; }
-            if (!code) { alert('简码不能为空'); return; }
+        function showMedicineEditModal(m, isAdd) {
+            let modal = document.getElementById('medicineEditModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'medicineEditModal';
+                modal.className = 'modal';
+                modal.innerHTML = '<div class="modal-content" style="max-width:400px;width:90%;">' +
+                    '<div class="modal-header"><h3 id="medicineEditTitle">编辑药品</h3><span class="close-btn" onclick="closeMedicineEditModal()">&times;</span></div>' +
+                    '<div class="modal-body">' +
+                    '<div style="display:flex;flex-direction:column;gap:10px;">' +
+                    '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">药品名称 *</label><input type="text" id="medEditName" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="请输入药品名称"></div>' +
+                    '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">简码 *</label><input type="text" id="medEditCode" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="请输入简码"></div>' +
+                    '<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">进价</label><input type="number" id="medEditCostPrice" step="0.01" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="0.00"></div>' +
+                    '<div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">单价</label><input type="number" id="medEditPrice" step="0.01" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="0.00"></div></div>' +
+                    '<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">单位</label><input type="text" id="medEditUnit" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="g" value="g"></div>' +
+                    '<div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">常用用量</label><input type="number" id="medEditDosage" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="10" value="10"></div></div>' +
+                    '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">库存数量</label><input type="number" id="medEditStock" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="0" value="0"></div>' +
+                    '</div></div>' +
+                    '<div class="modal-footer"><button class="action-btn" onclick="closeMedicineEditModal()">取消</button><button class="action-btn primary" onclick="saveMedicineEdit()">保存</button></div>' +
+                    '</div>';
+                document.body.appendChild(modal);
+            }
+            document.getElementById('medicineEditTitle').textContent = isAdd ? '新增药品' : '编辑药品';
+            document.getElementById('medEditName').value = m ? m.name : '';
+            document.getElementById('medEditCode').value = m ? m.code : '';
+            document.getElementById('medEditCostPrice').value = m ? (m.costPrice || 0) : 0;
+            document.getElementById('medEditPrice').value = m ? (m.price || 0) : 0;
+            document.getElementById('medEditUnit').value = m ? (m.unit || 'g') : 'g';
+            document.getElementById('medEditDosage').value = m ? (m.dosage || 10) : 10;
+            document.getElementById('medEditStock').value = m ? (m.stock || 0) : 0;
+            modal.style.display = 'flex';
+        }
 
-            const medicineData = {name, code, costPrice, price, unit, dosage, stock};
-            if (index >= 0) {
-                medicines[index] = medicineData;
+        function closeMedicineEditModal() {
+            const modal = document.getElementById('medicineEditModal');
+            if (modal) modal.style.display = 'none';
+            editingMedicineIndex = -1;
+        }
+
+        function saveMedicineEdit() {
+            const name = document.getElementById('medEditName').value.trim();
+            const code = document.getElementById('medEditCode').value.trim();
+            if (!name) { alert('请输入药品名称'); return; }
+            if (!code) { alert('请输入简码'); return; }
+            const costPrice = parseFloat(document.getElementById('medEditCostPrice').value) || 0;
+            const price = parseFloat(document.getElementById('medEditPrice').value) || 0;
+            const unit = document.getElementById('medEditUnit').value.trim() || 'g';
+            const dosage = parseFloat(document.getElementById('medEditDosage').value) || 10;
+            const stock = parseInt(document.getElementById('medEditStock').value) || 0;
+            const data = {name, code, costPrice, price, unit, dosage, stock};
+            if (editingMedicineIndex >= 0) {
+                medicines[editingMedicineIndex] = data;
             } else {
-                medicines.push(medicineData);
+                medicines.push(data);
             }
             localStorage.setItem('local_medicines', JSON.stringify(medicines));
             saveMedicinesToDisk();
             buildMedicineMap();
             renderMedicineList();
-            document.getElementById('medicineModal').remove();
-            showToast(index >= 0 ? '药品修改成功！' : '药品添加成功！');
+            closeMedicineEditModal();
         }
 
-        function editMedicine(index) {
-            showMedicineModal(index);
-        }
-
-        function showAddMedicineForm() {
-            showMedicineModal(-1);
-        }
-
-        async function exportMedicines() {
+        function exportMedicines() {
             const headers = ['药品名称', '简码', '进价', '单价', '单位', '常用用量', '库存'];
-            const rows = medicines.map(m => [
-                m.name || '',
-                m.code || '',
-                Number(m.costPrice) || 0,
-                Number(m.price) || 0,
-                m.unit || 'g',
-                Number(m.dosage) || 10,
-                Number(m.stock) || 0
-            ]);
-            try { await loadXlsxLibrary(); } catch (e) {
-                showToast('Excel导出失败：xlsx 库加载失败');
-                return;
-            }
-            const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, '药品库');
-            XLSX.writeFile(wb, `中药库_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.xlsx`);
+            let csvContent = '\uFEFF' + headers.join(',') + '\n';
+            medicines.forEach(m =>{
+                const row = [
+                    m.name || '',
+                    m.code || '',
+                    m.costPrice || '0',
+                    m.price || '0',
+                    m.unit || 'g',
+                    m.dosage || '10',
+                    m.stock || '0'
+                ].map(v =>`"${v}"`).join(',');
+                csvContent += row + '\n';
+            });
+            const blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `中药库_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
             showToast('药品库已导出为Excel格式！');
         }
 
@@ -5647,7 +5574,7 @@ if (window.Permission) {
                 
                 // Excel 文件导入
                 const reader = new FileReader();
-                reader.onload = async function(e) {
+                reader.onload = function(e) {
                     try {
                         const data = new Uint8Array(e.target.result);
                         const workbook = XLSX.read(data, { type: 'array' });
@@ -5680,7 +5607,7 @@ if (window.Permission) {
                             }
                         }
                         
-                        await processImportedMedicines(importedMedicines);
+                        processImportedMedicines(importedMedicines);
                     } catch (err) {
                         alert('Excel导入失败！请尝试将 Excel 另存为 CSV 格式再导入。错误信息：' + err.message);
                     }
@@ -5689,7 +5616,7 @@ if (window.Permission) {
             } else {
                 // CSV 或 JSON 文件导入
                 const reader = new FileReader();
-                reader.onload = async function(e) {
+                reader.onload = function(e) {
                     try {
                         let importedMedicines = [];
                         const arrayBuffer = e.target.result;
@@ -5736,7 +5663,7 @@ if (window.Permission) {
                             importedMedicines = importData.medicines;
                         }
                         
-                        await processImportedMedicines(importedMedicines);
+                        processImportedMedicines(importedMedicines);
                     } catch (err) {
                         alert('导入失败！文件格式错误。' + err.message);
                     }
@@ -5746,74 +5673,71 @@ if (window.Permission) {
             event.target.value = '';
         }
         
-        let _pendingImportedMedicines = null;
+        let pendingImportedMedicines = null;
 
         function processImportedMedicines(importedMedicines) {
             if (importedMedicines.length === 0) {
                 alert('没有导入任何药品！');
                 return;
             }
-            _pendingImportedMedicines = importedMedicines;
-            const existing = document.getElementById('importMedicineModal');
-            if (existing) existing.remove();
-            const modal = document.createElement('div');
-            modal.id = 'importMedicineModal';
-            modal.className = 'modal';
-            modal.style.display = 'flex';
-            modal.innerHTML = '<div class="modal-content user-modal-content">' +
-                '<div class="modal-header"><span>选择导入方式</span>' +
-                '<span class="close-btn" onclick="document.getElementById(\'importMedicineModal\').remove()">&times;</span></div>' +
-                '<div class="modal-body">' +
-                '<div style="padding:10px 0;">共 ' + importedMedicines.length + ' 种药品，请选择导入方式：</div>' +
-                '<div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">' +
-                '<button class="action-btn primary" onclick="confirmImportMedicines(\'1\')">追加（保留现有药品）</button>' +
-                '<button class="action-btn" style="background:#c0392b;color:#fff;" onclick="confirmImportMedicines(\'2\')">覆盖（替换现有药品）</button>' +
-                '<button class="action-btn primary" onclick="confirmImportMedicines(\'3\')">合并（同名覆盖）</button>' +
-                '</div>' +
-                '</div>' +
-                '<div class="modal-footer">' +
-                '<button class="action-btn" onclick="document.getElementById(\'importMedicineModal\').remove()">取消</button>' +
-                '</div></div>';
-            document.body.appendChild(modal);
+            pendingImportedMedicines = importedMedicines;
+            showImportMethodModal(importedMedicines.length);
         }
 
-        function confirmImportMedicines(action) {
-            const importedMedicines = _pendingImportedMedicines;
-            if (!importedMedicines) return;
+        function showImportMethodModal(count) {
+            let modal = document.getElementById('importMethodModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'importMethodModal';
+                modal.className = 'modal';
+                modal.innerHTML = '<div class="modal-content" style="max-width:360px;width:90%;">' +
+                    '<div class="modal-header"><h3>选择导入方式</h3><span class="close-btn" onclick="cancelImportMethod()">&times;</span></div>' +
+                    '<div class="modal-body">' +
+                    '<div style="text-align:center;margin-bottom:15px;font-size:14px;">共 <strong id="importMethodCount" style="color:#008000;font-size:18px;">0</strong> 种药品待导入</div>' +
+                    '<div style="display:flex;flex-direction:column;gap:10px;">' +
+                    '<button class="action-btn" onclick="executeImportMethod(\'append\')" style="padding:14px;font-size:15px;">追加（保留现有药品）</button>' +
+                    '<button class="action-btn" onclick="executeImportMethod(\'overwrite\')" style="padding:14px;font-size:15px;background:#ff6b6b;color:white;">覆盖（替换现有药品）</button>' +
+                    '<button class="action-btn" onclick="executeImportMethod(\'merge\')" style="padding:14px;font-size:15px;">合并（同名覆盖，以导入为准）</button>' +
+                    '</div></div></div>';
+                document.body.appendChild(modal);
+            }
+            document.getElementById('importMethodCount').textContent = count;
+            modal.style.display = 'flex';
+        }
 
-            if (action === '1') {
+        function cancelImportMethod() {
+            const modal = document.getElementById('importMethodModal');
+            if (modal) modal.style.display = 'none';
+            pendingImportedMedicines = null;
+        }
+
+        function executeImportMethod(method) {
+            const modal = document.getElementById('importMethodModal');
+            if (modal) modal.style.display = 'none';
+            const importedMedicines = pendingImportedMedicines;
+            pendingImportedMedicines = null;
+            if (!importedMedicines) return;
+            if (method === 'append') {
                 medicines = [...medicines, ...importedMedicines];
                 alert(`导入成功！共导入 ${importedMedicines.length} 种药品`);
-            } else if (action === '2') {
+            } else if (method === 'overwrite') {
                 if (confirm('确定要覆盖现有药品库吗？导入的药品价格将完全替换现有数据！')) {
                     medicines = [...importedMedicines];
                     localStorage.removeItem('local_clearDefaultMedicines');
                     alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据`);
-                } else {
-                    document.getElementById('importMedicineModal').remove();
-                    return;
-                }
-            } else if (action === '3') {
+                } else { return; }
+            } else if (method === 'merge') {
                 let addCount = 0, updateCount = 0;
                 importedMedicines.forEach(importMed =>{
                     const existIndex = medicines.findIndex(m =>m.name === importMed.name);
-                    if (existIndex >= 0) {
-                        medicines[existIndex] = importMed;
-                        updateCount++;
-                    } else {
-                        medicines.push(importMed);
-                        addCount++;
-                    }
+                    if (existIndex >= 0) { medicines[existIndex] = importMed; updateCount++; }
+                    else { medicines.push(importMed); addCount++; }
                 });
                 alert(`导入完成！新增：${addCount} 种，更新：${updateCount} 种，更新的药品以导入价格为准`);
-            } else {
-                return;
-            }
+            } else { return; }
             localStorage.setItem('local_medicines', JSON.stringify(medicines));
             buildMedicineMap();
             renderMedicineList();
-            _pendingImportedMedicines = null;
-            document.getElementById('importMedicineModal').remove();
         }
         
         function parseCSVLine(line) {
@@ -5861,8 +5785,16 @@ if (window.Permission) {
             renderFormulaList();
         }
 
-        function showAddFormulaForm() {
-            showFormulaModal(false);
+        async function showAddFormulaForm() {
+            const name = await prompt('请输入验方名称：');
+            if (!name) return;
+            const code = await prompt('请输入验方简码：');
+            if (!code) return;
+            const effect = await prompt('请输入功效：');
+            const indication = await prompt('请输入主治：');
+            formulas.push({name,code,effect:effect||'',indication:indication||'',composition:[]});
+            localStorage.setItem('local_formulas', JSON.stringify(formulas));
+            renderFormulaList();
         }
 
         function renderCaseList(list) {
@@ -6101,51 +6033,6 @@ if (window.Permission) {
                 .map(([name, totalDosage]) =>({ name, totalDosage }))
                 .sort((a, b) =>b.totalDosage - a.totalDosage)
                 .slice(0, 10);
-        }
-
-        async function analyzeMonthlyStats() {
-            const statsMap = new Map();
-            const allPrescriptions = await getAllUserPrescriptions();
-            
-            allPrescriptions.forEach(p => {
-                const date = new Date(p.createdAt || p.date || 0);
-                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                
-                if (!statsMap.has(monthKey)) {
-                    statsMap.set(monthKey, {
-                        visits: 0,
-                        totalIncome: 0,
-                        totalRegFee: 0,
-                        totalCost: 0,
-                        totalProfit: 0,
-                        totalDoses: 0
-                    });
-                }
-                
-                const stats = statsMap.get(monthKey);
-                stats.visits++;
-                stats.totalIncome += (parseFloat(p.totalAmount) || 0) + (parseFloat(p.registrationFee) || 0);
-                stats.totalRegFee += parseFloat(p.registrationFee) || 0;
-                stats.totalDoses += parseFloat(p.doseCount) || 0;
-                
-                if (p.items && Array.isArray(p.items)) {
-                    p.items.forEach(item => {
-                        const medicine = medicines.find(m => m.name === (item.name || item.medicineName));
-                        const costPrice = parseFloat(medicine?.costPrice) || parseFloat(item.costPrice) || parseFloat(item.price) || 0;
-                        const dosage = parseFloat(item.dosage) || 0;
-                        const doseCount = parseFloat(p.doseCount) || 1;
-                        stats.totalCost += costPrice * dosage * doseCount;
-                    });
-                }
-            });
-            
-            statsMap.forEach((stats, key) => {
-                stats.totalProfit = stats.totalIncome - stats.totalCost;
-                stats.month = key.split('-')[1];
-            });
-            
-            return Array.from(statsMap.values())
-                .sort((a, b) => b.month - a.month);
         }
 
         function formatDate(date) {
@@ -6401,6 +6288,51 @@ if (window.Permission) {
             }
         }
 
+        async function analyzeMonthlyStats() {
+            const statsMap = new Map();
+            const allPrescriptions = await getAllUserPrescriptions();
+
+            allPrescriptions.forEach(p => {
+                const date = new Date(p.createdAt || p.date || 0);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+                if (!statsMap.has(monthKey)) {
+                    statsMap.set(monthKey, {
+                        visits: 0,
+                        totalIncome: 0,
+                        totalRegFee: 0,
+                        totalCost: 0,
+                        totalProfit: 0,
+                        totalDoses: 0
+                    });
+                }
+
+                const stats = statsMap.get(monthKey);
+                stats.visits++;
+                stats.totalIncome += (parseFloat(p.totalAmount) || 0) + (parseFloat(p.registrationFee) || 0);
+                stats.totalRegFee += parseFloat(p.registrationFee) || 0;
+                stats.totalDoses += parseFloat(p.doseCount) || 0;
+
+                if (p.items && Array.isArray(p.items)) {
+                    p.items.forEach(item => {
+                        const medicine = medicines.find(m => m.name === (item.name || item.medicineName));
+                        const costPrice = parseFloat(medicine?.costPrice) || parseFloat(item.costPrice) || parseFloat(item.price) || 0;
+                        const dosage = parseFloat(item.dosage) || 0;
+                        const doseCount = parseFloat(p.doseCount) || 1;
+                        stats.totalCost += costPrice * dosage * doseCount;
+                    });
+                }
+            });
+
+            statsMap.forEach((stats, key) => {
+                stats.totalProfit = stats.totalIncome - stats.totalCost;
+                stats.month = key.split('-')[1];
+            });
+
+            return Array.from(statsMap.values())
+                .sort((a, b) => b.month - a.month);
+        }
+
         async function refreshAnalytics() {
           try {
             const patients = analyzePatients();
@@ -6580,6 +6512,14 @@ window.addEventListener('load', function () {
             }
         });
     }
+
+    window.handleEditUser = handleEditUser;
+    window.confirmEditUser = confirmEditUser;
+    window.handleAddUser = handleAddUser;
+    window.handleDeleteUser = handleDeleteUser;
+    window.handleViewUserPrescriptions = handleViewUserPrescriptions;
+    window.renderUserList = renderUserList;
+    window.showUserManageModal = showUserManageModal;
 });</script><div id="mediaViewerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99998;align-items:center;justify-content:center;" onclick="if(event.target===this)closeMediaViewer()"><div style="background:#fff;border-radius:10px;padding:12px;width:92%;max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#333;">拍照录像查看</span><button onclick="closeMediaViewer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;line-height:1;">&times;</button></div><div id="mediaViewerContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;"></div></div></div></body></html>
 
 
