@@ -89,6 +89,9 @@ public class MainActivity extends AppCompatActivity {
     // 与桌面版 license-manager.js / prescription-counter.js 逻辑一致
     private LicenseManager licenseManager;
 
+    // ★ 键盘弹出时的覆盖层：用于遮挡WebView重绘时的闪现内容
+    private View flashOverlay;
+
     // ========================================================================
     // 生命周期
     // ========================================================================
@@ -146,7 +149,20 @@ public class MainActivity extends AppCompatActivity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         container.addView(webView);
+
+        // ★ 键盘弹出时的覆盖层保护：当adjustResize导致WebView重绘时，显示紫色覆盖层遮挡闪现内容
+        flashOverlay = new View(this);
+        flashOverlay.setBackgroundColor(0xFF667eea);
+        flashOverlay.setLayoutParams(new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        flashOverlay.setVisibility(View.GONE);
+        container.addView(flashOverlay);
+
         setContentView(container);
+
+        // ★ 监听键盘弹出/收起：通过ViewTreeObserver检测WebView高度变化，在重绘期间显示覆盖层
+        setupKeyboardFlashProtection();
         configureWebView();
 
         // ★ 初始化 License 管理器（APP 端授权校验）
@@ -176,6 +192,46 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onAttachedToWindow() {
         super.onAttachedToWindow();
+    }
+
+    // ★ 键盘弹出时的闪现保护：通过ViewTreeObserver检测WebView高度变化，在重绘期间显示覆盖层
+    private void setupKeyboardFlashProtection() {
+        if (webView == null) return;
+        webView.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
+            private int lastHeight = 0;
+            private boolean flashActive = false;
+            private long lastFlashTime = 0;
+
+            @Override
+            public boolean onPreDraw() {
+                int currentHeight = webView.getHeight();
+                long now = System.currentTimeMillis();
+
+                // 检测高度变化（键盘弹出/收起会导致WebView高度变化）
+                if (Math.abs(currentHeight - lastHeight) > 50) {
+                    // 高度变化超过50px，认为是键盘事件
+                    // 立即显示覆盖层遮挡闪现
+                    if (!flashActive && (now - lastFlashTime > 50)) {
+                        flashOverlay.setVisibility(View.VISIBLE);
+                        flashActive = true;
+                        lastFlashTime = now;
+
+                        // 延迟隐藏覆盖层（等待WebView重绘完成）
+                        mainHandler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (flashActive) {
+                                    flashOverlay.setVisibility(View.GONE);
+                                    flashActive = false;
+                                }
+                            }
+                        }, 200);
+                    }
+                    lastHeight = currentHeight;
+                }
+                return true;
+            }
+        });
     }
 
     // 初始化媒体文件读取白名单：缓存所有可能的目录（外部 + 内部 fallback）
@@ -1240,7 +1296,7 @@ public class MainActivity extends AppCompatActivity {
                     safeName = "backup_" + System.currentTimeMillis() + ".json";
                 }
 
-                String subDir = "中医处方系统";
+                String subDir = "惠康中医";
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     // Android 10+：通过 MediaStore 写入公共 Downloads 目录
@@ -1598,10 +1654,10 @@ public class MainActivity extends AppCompatActivity {
         private File getBackupDir() {
             File dir;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                dir = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "中医处方系统");
+                dir = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "惠康中医");
             } else {
                 File downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                dir = new File(downloads, "中医处方系统");
+                dir = new File(downloads, "惠康中医");
             }
             if (!dir.exists() && !dir.mkdirs()) {
                 dir = new File(getFilesDir(), "backups");
