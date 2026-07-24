@@ -21,6 +21,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
+import android.view.ViewTreeObserver;
 import android.webkit.JavascriptInterface;
 import android.webkit.JsPromptResult;
 import android.webkit.JsResult;
@@ -80,6 +81,17 @@ public class MainActivity extends AppCompatActivity {
     private ValueCallback<Uri[]> filePathCallback;
     private static final int REQ_FILE_CHOOSER = 1002;
     private volatile String cachedVideoRecorderScript = null;
+    // ★ 防闪现 overlay：键盘弹出/收起时遮挡 WebView 重绘闪现
+    private View flashOverlay;
+    private int lastWebViewHeight = 0;
+    private final Runnable hideOverlayRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (flashOverlay != null) {
+                flashOverlay.setVisibility(View.GONE);
+            }
+        }
+    };
     // 媒体文件读取白名单（启动时初始化一次，避免每次调用都做 I/O 解析）
     // 彻底解决"加载失败"反复出现：统一路径解析，消除 getAbsolutePath vs getCanonicalPath 不一致
     private java.util.Set<String> mediaWhitelistedRoots = new java.util.HashSet<>();
@@ -134,8 +146,34 @@ public class MainActivity extends AppCompatActivity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         container.addView(webView);
+        // ★ 防闪现 overlay：紫色背景 View，覆盖在 WebView 上方
+        // 键盘弹出/收起导致 WebView 重绘时显示此 overlay，遮挡旧缓存内容闪现
+        flashOverlay = new View(this);
+        flashOverlay.setBackgroundColor(0xFF667eea);
+        flashOverlay.setVisibility(View.GONE);
+        container.addView(flashOverlay, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
         setContentView(container);
         configureWebView();
+
+        // ★ 运行时防闪现：监听 WebView 高度变化（键盘弹出/收起），显示 overlay 遮挡重绘
+        // 解决 adjustResize 模式下键盘事件触发 WebView 重绘闪现旧内容的问题
+        webView.getViewTreeObserver().addOnGlobalLayoutListener(new ViewTreeObserver.OnGlobalLayoutListener() {
+            @Override
+            public void onGlobalLayout() {
+                int currentHeight = webView.getHeight();
+                if (lastWebViewHeight > 0 && Math.abs(currentHeight - lastWebViewHeight) > 100) {
+                    // 高度变化超过 100px，说明键盘弹出/收起，显示 overlay 防闪现
+                    if (flashOverlay != null && webView.getVisibility() == View.VISIBLE) {
+                        flashOverlay.setVisibility(View.VISIBLE);
+                        mainHandler.removeCallbacks(hideOverlayRunnable);
+                        mainHandler.postDelayed(hideOverlayRunnable, 400);
+                    }
+                }
+                lastWebViewHeight = currentHeight;
+            }
+        });
 
         // ★ 初始化 License 管理器（APP 端授权校验）
         licenseManager = new LicenseManager(this);
