@@ -810,8 +810,9 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * ★ 禁用密码输入框的自动填充（防止 Android Autofill 弹出凭据提示）
-     * 包名变更后 Autofill 不再弹出，本方法仅处理密码框安全属性
+     * ★ 禁用所有输入框的自动填充（防止 OEM 密码管理器弹出旧凭据提示）
+     * OEM 密码管理器通过签名证书/应用图标匹配旧凭据，包名变更无效
+     * 修复：所有 input focus 时调用 NativeBridge.cancelAutofill() 即时拦截
      */
     private void injectAutocompleteOff(WebView webView) {
         String js = "(function(){" +
@@ -823,7 +824,11 @@ public class MainActivity extends AppCompatActivity {
             "    p.setAttribute('data-form-type', 'other');" +
             "    p.setAttribute('role', 'textbox');" +
             "    p.setAttribute('readonly', '');" +
-            "    p.addEventListener('focus', function() { this.removeAttribute('readonly'); });" +
+            "    // 所有 input focus 时立即调用原生 afm.cancel()，即时拦截 OEM 密码管理器弹窗" +
+            "    p.addEventListener('focus', function() {" +
+            "      this.removeAttribute('readonly');" +
+            "      try { if (window.AndroidNative) AndroidNative.invoke('cancelAutofill', '{}'); } catch(e) {}" +
+            "    });" +
             "    if (p.type === 'password') {" +
             "      p.setAttribute('type', 'text');" +
             "      p.style.webkitTextSecurity = 'disc';" +
@@ -832,7 +837,8 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "  }" +
             "  function scan(){" +
-            "    var s = 'input[type=\"password\"],input[autocomplete*=\"password\"],input[name*=\"password\"],input[name*=\"pwd\"]';" +
+            "    // 扫描所有 input 和 textarea（OEM 密码管理器会扫描所有输入框）" +
+            "    var s = 'input,textarea';" +
             "    var l = document.querySelectorAll(s);" +
             "    for (var i = 0; i < l.length; i++) { np(l[i]); }" +
             "  }" +
@@ -1152,6 +1158,15 @@ public class MainActivity extends AppCompatActivity {
                         } catch (Exception e) {
                             return fail(e.getMessage()).toString();
                         }
+                    case "cancelAutofill":
+                        // 所有 input focus 时调用，即时取消 Autofill（OEM 密码管理器绕过标准框架）
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            try {
+                                android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
+                                if (afm != null) afm.cancel();
+                            } catch (Throwable ignored) {}
+                        }
+                        return "{\"success\":true}";
                     default:
                         return fail("unknown method: " + name).toString();
                 }
