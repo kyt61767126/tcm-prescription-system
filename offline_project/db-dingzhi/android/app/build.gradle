@@ -54,7 +54,7 @@ android {
         }
     }
     defaultConfig {
-        applicationId "com.benneng.prescription.clinic"
+        applicationId "com.huikang.tcm.clinic"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 26

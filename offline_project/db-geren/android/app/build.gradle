@@ -54,10 +54,10 @@ android {
         }
     }
     defaultConfig {
-        applicationId "com.benneng.pres.personal"
+        applicationId "com.huikang.tcm.personal"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 86
+        versionCode 96
         versionName "1.0.${BUILD_TIME}"
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.map'

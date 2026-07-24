@@ -54,7 +54,7 @@ android {
         }
     }
     defaultConfig {
-        applicationId "com.benneng.prescription.offline"
+        applicationId "com.huikang.tcm.offline"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 26

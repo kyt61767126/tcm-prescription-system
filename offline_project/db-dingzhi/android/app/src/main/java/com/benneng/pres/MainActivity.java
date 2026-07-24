@@ -788,9 +788,8 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * ★ 禁用所有输入框的自动填充（防止 Android Autofill 弹出旧版应用凭据提示）
-     * adjustResize 模式下键盘弹出时触发重绘，Autofill 可能弹出旧应用名
-     * 修复：所有 input focus 时调用 NativeBridge.cancelAutofill() 立即取消 Autofill
+     * ★ 禁用密码输入框的自动填充（防止 Android Autofill 弹出凭据提示）
+     * 包名变更后 Autofill 不再弹出，本方法仅处理密码框安全属性
      */
     private void injectAutocompleteOff(WebView webView) {
         String js = "(function(){" +
@@ -802,10 +801,7 @@ public class MainActivity extends AppCompatActivity {
             "    p.setAttribute('data-form-type', 'other');" +
             "    p.setAttribute('role', 'textbox');" +
             "    p.setAttribute('readonly', '');" +
-            "    p.addEventListener('focus', function() {" +
-            "      this.removeAttribute('readonly');" +
-            "      try { if (window.AndroidNative) AndroidNative.invoke('cancelAutofill', '{}'); } catch(e) {}" +
-            "    });" +
+            "    p.addEventListener('focus', function() { this.removeAttribute('readonly'); });" +
             "    if (p.type === 'password') {" +
             "      p.setAttribute('type', 'text');" +
             "      p.style.webkitTextSecurity = 'disc';" +
@@ -814,7 +810,7 @@ public class MainActivity extends AppCompatActivity {
             "    }" +
             "  }" +
             "  function scan(){" +
-            "    var s = 'input,textarea';" +
+            "    var s = 'input[type=\"password\"],input[autocomplete*=\"password\"],input[name*=\"password\"],input[name*=\"pwd\"]';" +
             "    var l = document.querySelectorAll(s);" +
             "    for (var i = 0; i < l.length; i++) { np(l[i]); }" +
             "  }" +
@@ -1134,14 +1130,6 @@ public class MainActivity extends AppCompatActivity {
                         } catch (Exception e) {
                             return fail(e.getMessage()).toString();
                         }
-                    case "cancelAutofill":
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            try {
-                                android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
-                                if (afm != null) afm.cancel();
-                            } catch (Throwable ignored) {}
-                        }
-                        return "{\"success\":true}";
                     default:
                         return fail("unknown method: " + name).toString();
                 }
