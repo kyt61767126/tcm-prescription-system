@@ -578,8 +578,10 @@ public class MainActivity extends BridgeActivity {
      * 彻底修复（三层防线）：
      *   1. AndroidManifest android:importantForAutofill="no"（系统级禁用，最强防线）
      *   2. disableAutofillRecursive 递归设置所有子 View IMPORTANT_FOR_AUTOFILL_NO（双保险）
-     *   3. 本方法 JS 注入：MutationObserver 持续监控动态密码框 + 改 type=text + webkitTextSecurity
+     *   3. 本方法 JS 注入：MutationObserver 持续监控动态密码框
      *      + data-lpignore/data-form-type/role 等多属性，防止第三方密码管理器识别
+     *   注意：不可将 type='password' 改为 type='text' + webkitTextSecurity
+     *         HarmonyOS 4.2 上 webkitTextSecurity 不生效，且 type='text' 导致输入法弹出旧应用名候选词
      */
     private void injectAutocompleteOff(WebView webView) {
         String js = "(function(){" +
@@ -592,12 +594,6 @@ public class MainActivity extends BridgeActivity {
             "    p.setAttribute('role', 'textbox');" +
             "    p.setAttribute('readonly', '');" +
             "    p.addEventListener('focus', function() { this.removeAttribute('readonly'); });" +
-            "    if (p.type === 'password') {" +
-            "      p.setAttribute('type', 'text');" +
-            "      p.style.webkitTextSecurity = 'disc';" +
-            "      p.style.MozTextSecurity = 'disc';" +
-            "      p.style.textSecurity = 'disc';" +
-            "    }" +
             "  }" +
             "  function scan(){" +
             "    var s = 'input[type=\"password\"],input[autocomplete*=\"password\"],input[name*=\"password\"],input[name*=\"pwd\"]';" +
