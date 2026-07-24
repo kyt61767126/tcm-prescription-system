@@ -632,6 +632,20 @@ let currentUser = null;
             edition: 'offline'
         };
 
+        (async function() {
+            try {
+                const res = await fetch('config.json');
+                if (res.ok) {
+                    const cfg = await res.json();
+                    if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
+                    if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
+                    if (cfg.edition) CONFIG.edition = cfg.edition;
+                }
+            } catch(e) {
+                console.warn('[CONFIG] 加载 config.json 失败:', e.message);
+            }
+        })();
+
         window.__APP_VERSION__ = '2026-07-11-v2';
 
         const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
