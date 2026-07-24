@@ -1,4 +1,4 @@
-﻿# generate-sign-hash.ps1 - Unified APK signature hash extraction and injection tool
+# generate-sign-hash.ps1 - Unified APK signature hash extraction and injection tool
 # Extracts SHA-256 from APK and injects into LicenseManager.java (offline) or SecurityGuard.java (cloud)
 # Enables strict signature mode: APP rejects any repackaged APK with mismatched signature
 
@@ -135,11 +135,17 @@ Write-Host "  目标文件: $($guardFile.FullName)"
 $content = Get-Content $guardFile.FullName -Raw -Encoding UTF8
 $updated = $false
 
-$signPattern = 'private static final String ' + $placeholder + ' = "[^"]*";'
+# ★ 正则加行首锚定（?m）+ 可选空白，避免匹配到注释行（如 // private static final...）
+# 之前无锚定可能匹配到被注释掉的占位符，导致替换注释行破坏代码语法
+$signPattern = '(?m)^\s*private static final String ' + $placeholder + ' = "[^"]*";'
 $signReplacement = 'private static final String ' + $placeholder + ' = "' + $signSha256 + '";'
 if ($content -match $signPattern) {
     $newContent = $content -replace $signPattern, $signReplacement
     if ($newContent -ne $content) {
+        # ★ 写入前备份原文件（.bak），注入失败时可回滚
+        $bakPath = "$($guardFile.FullName).bak"
+        Copy-Item -Path $guardFile.FullName -Destination $bakPath -Force
+        Write-Host "  [OK] 已备份原文件: $(Split-Path $bakPath -Leaf)"
         $content = $newContent
         $updated = $true
         Write-Host "  [OK] $placeholder = $signSha256"
@@ -154,6 +160,11 @@ if ($updated) {
     $utf8NoBom = New-Object System.Text.UTF8Encoding $false
     [System.IO.File]::WriteAllText($guardFile.FullName, $content, $utf8NoBom)
     Write-Host "  [OK] 文件已保存"
+    # ★ 写入成功后删除备份（避免 .bak 残留干扰下次打包）
+    $bakPath = "$($guardFile.FullName).bak"
+    if (Test-Path $bakPath) {
+        Remove-Item $bakPath -Force -ErrorAction SilentlyContinue
+    }
 }
 Write-Host ""
 

@@ -407,8 +407,8 @@ function Edit-ClinicConfig {
         Write-Host ""
         Write-Host "  [错误] 配置更新失败: $_" -ForegroundColor Red
         Write-Host "  请检查错误信息后重试" -ForegroundColor Yellow
-        if (-not $env:NO_PAUSE) { pause }
-        return
+        # ★ 改为 throw（而非 return），避免错误被吞没后继续打包产生配置错误的产物
+        throw "配置更新失败: $_"
     }
 
     Write-Host ""
@@ -581,7 +581,8 @@ function Build-Desktop {
         }
         if (-not (Test-Path "$script:VersionDir\node_modules\electron\dist\electron.exe")) {
             Write-Host "  [ERROR] electron 二进制文件下载失败" -ForegroundColor Red
-            exit 1
+            # ★ 改为 throw（而非 exit 1），确保外层 try/finally 执行环境变量恢复
+            throw "electron 二进制文件下载失败"
         }
     }
 
@@ -779,6 +780,21 @@ function Build-App {
                 Write-Host "    [WARN] 清理 javac 缓存失败: $($_.Exception.Message)" -ForegroundColor Yellow
             }
         }
+        # ★ 清理 assets 缓存目录（防止 index.html/JS 修改不生效，与 build-app.bat 对齐）
+        $assetsCacheDirs = @(
+            "$script:AndroidDir\app\build\intermediates\assets",
+            "$script:AndroidDir\app\build\intermediates\merged_assets"
+        )
+        foreach ($cacheDir in $assetsCacheDirs) {
+            if (Test-Path $cacheDir) {
+                try {
+                    Remove-Item -Path $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
+                    Write-Host "    [OK] 已清理 $(Split-Path $cacheDir -Leaf)" -ForegroundColor Green
+                } catch {
+                    Write-Host "    [WARN] 清理 $(Split-Path $cacheDir -Leaf) 失败: $($_.Exception.Message)" -ForegroundColor Yellow
+                }
+            }
+        }
         # 再执行 gradlew clean 全量清理（含资源、依赖缓存）
         Push-Location $script:AndroidDir
         try {
@@ -798,6 +814,20 @@ function Build-App {
     }
 
     try {
+        # ★ Java 预编译检查（在 versionCode 递增前执行，避免编译错误导致版本号无效递增）
+        # 原因：@Override 方法在父类不存在等编译错误，若在 versionCode 递增后才发现，
+        #       需要回滚版本号，增加复杂度。预编译检查可提前发现，减少回滚成本。
+        Write-Host "  Java 预编译检查中（提前发现编译错误）..." -ForegroundColor Cyan
+        Push-Location $script:AndroidDir
+        try {
+            Invoke-External { & ".\gradlew.bat" compileReleaseJavaWithJavac --quiet } "Java pre-compile check"
+        } catch {
+            Write-Log "[ERROR] Java 预编译检查失败，终止打包（避免无效递增 versionCode）" "ERROR"
+            throw
+        } finally {
+            Pop-Location
+        }
+
         # Increment versionCode
         Increment-VersionCode
 
