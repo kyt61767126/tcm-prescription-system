@@ -114,21 +114,5 @@
             "releaseFileName": "huikang-cloud-1.2.0.exe",
             "releaseTag": "v1.0.0-exe"
         }
-    },
-    "bendi-desktop": {
-        "exe": {
-            "version": "",
-            "sha256": "",
-            "url": "",
-            "size": 0,
-            "updateTime": ""
-        },
-        "portable": {
-            "version": "",
-            "sha256": "",
-            "url": "",
-            "size": 0,
-            "updateTime": ""
-        }
     }
 }
