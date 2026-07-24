@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>惠康中医处方系统 - 官方下载</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #333;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+        .header h1 { font-size: 28px; margin-bottom: 8px; }
+        .header p { font-size: 14px; opacity: 0.9; }
+        .card {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        .card-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card-title .badge {
+            font-size: 11px;
+            background: #667eea;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-weight: normal;
+        }
+        .card-title .badge.offline { background: #f59e0b; }
+        .card-title .badge.cloud { background: #3b82f6; }
+        .card-title .badge.desktop { background: #10b981; }
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 14px;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: #666; }
+        .info-value { font-weight: 500; }
+        .info-value.version { color: #667eea; font-weight: bold; }
+        .info-value.date { color: #888; font-size: 13px; }
+        .download-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 32px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: bold;
+            margin-top: 12px;
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-align: center;
+        }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102,126,234,0.4);
+        }
+        .download-btn:active { transform: translateY(0); }
+        .download-btn.secondary {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        }
+        .download-btn.disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+        .hash-box {
+            background: #f8f9fa;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin-top: 12px;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            color: #555;
+            word-break: break-all;
+            line-height: 1.6;
+        }
+        .hash-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 4px;
+            font-family: -apple-system, sans-serif;
+        }
+        .hash-value { color: #667eea; }
+        .hash-value.pending { color: #aaa; font-style: italic; }
+        .section-title {
+            color: white;
+            font-size: 20px;
+            margin: 30px 0 15px 0;
+            padding-left: 12px;
+            border-left: 4px solid rgba(255,255,255,0.5);
+        }
+        .notice {
+            background: rgba(255,255,255,0.15);
+            border-radius: 8px;
+            padding: 16px;
+            color: white;
+            font-size: 13px;
+            line-height: 1.8;
+            margin-bottom: 20px;
+        }
+        .notice strong { color: #ffd700; }
+        .footer {
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            font-size: 12px;
+            margin-top: 40px;
+            line-height: 1.6;
+        }
+        .footer a { color: rgba(255,255,255,0.9); }
+        .install-steps {
+            counter-reset: step;
+            padding-left: 0;
+            list-style: none;
+        }
+        .install-steps li {
+            counter-increment: step;
+            padding: 8px 0 8px 36px;
+            position: relative;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .install-steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 8px;
+            width: 24px;
+            height: 24px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 24px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        @media (max-width: 600px) {
+            .header h1 { font-size: 22px; }
+            .card { padding: 16px; }
+            .info-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+        }
+        .loading { text-align: center; color: #888; padding: 20px; }
+        .status-tag {
+            display: inline-block;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: 6px;
+        }
+        .status-tag.latest { background: #d4edda; color: #155724; }
+        .status-tag.beta { background: #fff3cd; color: #856404; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>惠康中医处方系统</h1>
+            <p>官方下载中心 · 安全可靠 · 持续更新</p>
+        </div>
+
+        <div class="notice">
+            <strong>安全提示：</strong>请仅从本页面下载软件。第三方渠道的软件可能被篡改，存在安全风险。<br>
+            下载后请核对 SHA-256 校验值，确保文件完整无损。
+        </div>
+
+        <!-- 离线APP -->
+        <div class="section-title">离线版 APP（手机端）</div>
+
+        <div class="card" id="card-bendi">
+            <div class="card-title">
+                惠康中医 · 本地版
+                <span class="badge offline">离线</span>
+                <span class="status-tag latest" id="tag-bendi">最新</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">版本</span>
+                <span class="info-value version" id="ver-bendi">加载中...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">发布日期</span>
+                <span class="info-value date" id="date-bendi">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">更新说明</span>
+                <span class="info-value" id="notes-bendi">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">适用场景</span>
+                <span class="info-value">诊所本地使用，数据完全离线，支持多设备</span>
+            </div>
+            <div class="hash-box">
+                <div class="hash-label">SHA-256 校验值（APK）：</div>
+                <div class="hash-value pending" id="hash-bendi">（打包后自动更新）</div>
+            </div>
+            <a href="#" class="download-btn secondary" id="dl-bendi">下载 APK（Android）</a>
+        </div>
+
+        <div class="card" id="card-dingzhi">
+            <div class="card-title">
+                惠康中医 · 定制版
+                <span class="badge offline">离线</span>
+                <span class="status-tag latest" id="tag-dingzhi">最新</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">版本</span>
+                <span class="info-value version" id="ver-dingzhi">加载中...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">发布日期</span>
+                <span class="info-value date" id="date-dingzhi">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">更新说明</span>
+                <span class="info-value" id="notes-dingzhi">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">适用场景</span>
+                <span class="info-value">定制诊所使用，数据完全离线，无用户管理</span>
+            </div>
+            <div class="hash-box">
+                <div class="hash-label">SHA-256 校验值（APK）：</div>
+                <div class="hash-value pending" id="hash-dingzhi">（打包后自动更新）</div>
+            </div>
+            <a href="#" class="download-btn secondary" id="dl-dingzhi">下载 APK（Android）</a>
+        </div>
+
+        <div class="card" id="card-geren">
+            <div class="card-title">
+                惠康中医 · 个人版
+                <span class="badge offline">离线</span>
+                <span class="status-tag latest" id="tag-geren">最新</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">版本</span>
+                <span class="info-value version" id="ver-geren">加载中...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">发布日期</span>
+                <span class="info-value date" id="date-geren">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">更新说明</span>
+                <span class="info-value" id="notes-geren">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">适用场景</span>
+                <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
+            </div>
+            <div class="hash-box">
+                <div class="hash-label">SHA-256 校验值（APK）：</div>
+                <div class="hash-value pending" id="hash-geren">（打包后自动更新）</div>
+            </div>
+            <a href="#" class="download-btn secondary" id="dl-geren">下载 APK（Android）</a>
+        </div>
+
+        <!-- 桌面版 -->
+        <div class="section-title">桌面版（Windows）</div>
+
+        <div class="card" id="card-cloud-desktop">
+            <div class="card-title">
+                惠康中医 · 云端桌面版
+                <span class="badge desktop">桌面</span>
+                <span class="badge cloud">云端</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">版本</span>
+                <span class="info-value version" id="ver-cloud">加载中...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">发布日期</span>
+                <span class="info-value date" id="date-cloud">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">更新说明</span>
+                <span class="info-value" id="notes-cloud">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">适用场景</span>
+                <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
+            </div>
+            <div class="hash-box">
+                <div class="hash-label">SHA-256 校验值（安装版）：</div>
+                <div class="hash-value pending" id="hash-cloud">（打包后自动更新）</div>
+            </div>
+            <a href="#" class="download-btn" id="dl-cloud">下载安装版（推荐）</a>
+            <a href="#" class="download-btn secondary" id="dl-cloud-portable" style="margin-left:10px;">便携版</a>
+        </div>
+
+        <div class="card" id="card-bendi-desktop">
+            <div class="card-title">
+                惠康中医 · 本地桌面版
+                <span class="badge desktop">桌面</span>
+                <span class="badge offline">离线</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">版本</span>
+                <span class="info-value version" id="ver-bendi-desktop">加载中...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">发布日期</span>
+                <span class="info-value date" id="date-bendi-desktop">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">更新说明</span>
+                <span class="info-value" id="notes-bendi-desktop">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">适用场景</span>
+                <span class="info-value">完全离线使用，数据本地存储，无需联网</span>
+            </div>
+            <div class="hash-box">
+                <div class="hash-label">SHA-256 校验值（安装版）：</div>
+                <div class="hash-value pending" id="hash-bendi-desktop">（打包后自动更新）</div>
+            </div>
+            <a href="#" class="download-btn" id="dl-bendi-desktop">下载安装版（推荐）</a>
+            <a href="#" class="download-btn secondary" id="dl-bendi-desktop-portable" style="margin-left:10px;">便携版</a>
+        </div>
+
+        <!-- 云端网页版 -->
+        <div class="section-title">云端网页版（无需下载）</div>
+        <div class="card">
+            <div class="card-title">
+                惠康中医 · 云端网页版
+                <span class="badge cloud">云端</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">访问方式</span>
+                <span class="info-value">浏览器直接打开，无需安装</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">适用场景</span>
+                <span class="info-value">临时使用、跨平台、无需安装</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">数据存储</span>
+                <span class="info-value">云端存储，实时同步</span>
+            </div>
+            <a href="https://tcm-prescription-system.pages.dev/" class="download-btn">立即访问</a>
+        </div>
+
+        <!-- 安装说明 -->
+        <div class="section-title">安装说明</div>
+        <div class="card">
+            <div class="card-title">Android APP 安装步骤</div>
+            <ol class="install-steps">
+                <li>下载对应版本的 APK 文件到手机</li>
+                <li>在手机设置中允许"安装未知来源应用"（设置 → 安全 → 未知来源）</li>
+                <li>点击下载的 APK 文件进行安装</li>
+                <li>安装完成后打开 APP，首次使用需输入授权激活码</li>
+                <li>如遇"安装包损坏"提示，请重新下载并核对 SHA-256 校验值</li>
+            </ol>
+        </div>
+        <div class="card">
+            <div class="card-title">Windows 桌面版安装步骤</div>
+            <ol class="install-steps">
+                <li>下载安装版 exe 文件（推荐）或便携版</li>
+                <li>双击运行安装程序，按提示完成安装</li>
+                <li>安装完成后从桌面快捷方式启动</li>
+                <li>便携版无需安装，解压后直接运行 exe 即可</li>
+                <li>首次使用需输入授权激活码</li>
+            </ol>
+        </div>
+
+        <!-- SHA-256 校验方法 -->
+        <div class="card">
+            <div class="card-title">如何校验文件完整性（SHA-256）</div>
+            <div class="info-row">
+                <span class="info-label">Windows</span>
+                <span class="info-value" style="font-family:monospace;font-size:12px;">certutil -hashfile 文件名 SHA256</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Mac/Linux</span>
+                <span class="info-value" style="font-family:monospace;font-size:12px;">shasum -a 256 文件名</span>
+            </div>
+            <p style="font-size:13px;color:#666;margin-top:10px;line-height:1.6;">
+                将计算结果与上方页面的 SHA-256 值比对，完全一致则文件完整无损。
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>惠康中医处方系统 · 官方下载中心</p>
+            <p>© 2026 惠康中医 · 本能中医处方系统</p>
+            <p>技术支持请联系开发者 · 软件著作权登记中</p>
+        </div>
+    </div>
+
+    <script>
+        // 动态加载版本信息
+        const BASE = 'https://tcm-prescription-system.pages.dev';
+        const versions = {
+            'cloud': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'desktop' },
+            'bendi-desktop': { jsonUrl: BASE + '/updates/bendi/latest.json', type: 'desktop' },
+            'bendi': { jsonUrl: BASE + '/updates/bendi/latest.json', type: 'app' },
+            'dingzhi': { jsonUrl: BASE + '/updates/dingzhi/latest.json', type: 'app' },
+            'geren': { jsonUrl: BASE + '/updates/geren/latest.json', type: 'app' }
+        };
+
+        function updateCard(key, data) {
+            const verEl = document.getElementById('ver-' + key);
+            const dateEl = document.getElementById('date-' + key);
+            const notesEl = document.getElementById('notes-' + key);
+            const dlEl = document.getElementById('dl-' + key);
+            const dlPortableEl = document.getElementById('dl-' + key + '-portable');
+
+            if (verEl) verEl.textContent = 'v' + data.version;
+            if (dateEl) dateEl.textContent = data.releaseDate || '-';
+            if (notesEl) notesEl.textContent = data.releaseNotes || '-';
+
+            if (data.url && dlEl) {
+                dlEl.href = data.url;
+                dlEl.classList.remove('disabled');
+            } else if (dlEl) {
+                dlEl.href = '#';
+                dlEl.classList.add('disabled');
+                dlEl.textContent = '暂不可用';
+            }
+
+            if (data.portableUrl && dlPortableEl) {
+                dlPortableEl.href = data.portableUrl;
+                dlPortableEl.classList.remove('disabled');
+            } else if (dlPortableEl) {
+                dlPortableEl.href = '#';
+                dlPortableEl.classList.add('disabled');
+                dlPortableEl.textContent = '暂不可用';
+            }
+        }
+
+        function loadVersion(key) {
+            const config = versions[key];
+            if (!config) return;
+            fetch(config.jsonUrl, { cache: 'no-cache' })
+                .then(r => r.json())
+                .then(data => updateCard(key, data))
+                .catch(err => {
+                    console.warn('加载版本信息失败:', key, err);
+                    const verEl = document.getElementById('ver-' + key);
+                    if (verEl) verEl.textContent = '加载失败';
+                });
+        }
+
+        // 加载所有版本信息
+        Object.keys(versions).forEach(loadVersion);
+
+        // ★ 加载 SHA-256 校验值
+        fetch(BASE + '/hash-manifest.json', { cache: 'no-cache' })
+            .then(r => r.json())
+            .then(manifest => {
+                // 离线APP APK 校验值
+                ['bendi', 'dingzhi', 'geren'].forEach(key => {
+                    const hashEl = document.getElementById('hash-' + key);
+                    const data = manifest[key] && manifest[key].apk;
+                    if (hashEl && data && data.sha256) {
+                        hashEl.textContent = data.sha256;
+                        hashEl.classList.remove('pending');
+                        // 如果有下载URL，更新按钮
+                        const dlEl = document.getElementById('dl-' + key);
+                        if (dlEl && data.url) {
+                            dlEl.href = data.url;
+                            dlEl.classList.remove('disabled');
+                        }
+                    }
+                });
+                // 桌面版 exe 校验值
+                ['cloud', 'bendi-desktop'].forEach(key => {
+                    const hashEl = document.getElementById('hash-' + key);
+                    const data = manifest[key] && manifest[key].exe;
+                    if (hashEl && data && data.sha256) {
+                        hashEl.textContent = data.sha256;
+                        hashEl.classList.remove('pending');
+                    }
+                });
+            })
+            .catch(err => console.warn('加载校验值失败:', err));
+    </script>
+</body>
+</html>

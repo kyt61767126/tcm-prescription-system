@@ -285,5 +285,15 @@ echo   APK Path: %APK_FULL_PATH%
 echo   This APK is signed and ready for installation
 echo ============================================
 echo.
+
+echo [9/8] Calculating SHA-256 hash for download page...
+node "%~dp0..\_shared\calculate-hash.js"
+if errorlevel 1 (
+    echo [WARN] Hash calculation had issues, continuing anyway
+) else (
+    echo [OK] SHA-256 hash updated in public/hash-manifest.json
+)
+echo.
+
 if not defined NO_PAUSE pause
 exit /b 0

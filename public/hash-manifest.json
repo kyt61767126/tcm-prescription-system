@@ -1,0 +1,61 @@
+{
+    "bendi": {
+        "apk": {
+            "version": "",
+            "sha256": "",
+            "url": "",
+            "size": 0,
+            "updateTime": ""
+        }
+    },
+    "dingzhi": {
+        "apk": {
+            "version": "",
+            "sha256": "",
+            "url": "",
+            "size": 0,
+            "updateTime": ""
+        }
+    },
+    "geren": {
+        "apk": {
+            "version": "",
+            "sha256": "",
+            "url": "",
+            "size": 0,
+            "updateTime": ""
+        }
+    },
+    "cloud": {
+        "exe": {
+            "version": "",
+            "sha256": "",
+            "url": "",
+            "size": 0,
+            "updateTime": ""
+        },
+        "portable": {
+            "version": "",
+            "sha256": "",
+            "url": "",
+            "size": 0,
+            "updateTime": ""
+        }
+    },
+    "bendi-desktop": {
+        "exe": {
+            "version": "",
+            "sha256": "",
+            "url": "",
+            "size": 0,
+            "updateTime": ""
+        },
+        "portable": {
+            "version": "",
+            "sha256": "",
+            "url": "",
+            "size": 0,
+            "updateTime": ""
+        }
+    }
+}
