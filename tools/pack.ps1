@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -136,23 +136,20 @@ function Invoke-External {
         Set-Location $WorkDir
     }
 
+    # ★ 缓存命令输出：失败时写入日志，便于排查编译错误（如 Java @Override 失败）
+    $outputBuffer = New-Object System.Collections.ArrayList
     try {
         if ($PSCmdlet.ParameterSetName -eq 'FilePath') {
             & $FilePath 2>&1 | ForEach-Object {
-                if ($_ -is [System.Management.Automation.ErrorRecord]) {
-                    Write-Host $_.Exception.Message -ForegroundColor Yellow
-                } else {
-                    Write-Host $_
-                }
+                $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+                Write-Host $line -ForegroundColor $(if ($_ -is [System.Management.Automation.ErrorRecord]) { 'Yellow' } else { 'White' })
+                $outputBuffer.Add($line) | Out-Null
             }
         } else {
             & $Command 2>&1 | ForEach-Object {
-                if ($_ -is [System.Management.Automation.ErrorRecord]) {
-                    # stderr line - print as warning (yellow), don't throw
-                    Write-Host $_.Exception.Message -ForegroundColor Yellow
-                } else {
-                    Write-Host $_
-                }
+                $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
+                Write-Host $line -ForegroundColor $(if ($_ -is [System.Management.Automation.ErrorRecord]) { 'Yellow' } else { 'White' })
+                $outputBuffer.Add($line) | Out-Null
             }
         }
         $code = $LASTEXITCODE
@@ -169,6 +166,12 @@ function Invoke-External {
     }
     if ($code -ne 0 -and $code -ne $null) {
         Write-Log "[FAIL] $Context (exit code: $code)" "ERROR"
+        # ★ 失败时将完整命令输出写入日志（解决编译错误不记录到日志的问题）
+        if ($outputBuffer.Count -gt 0) {
+            Write-Log "--- 命令输出开始 ---" "ERROR"
+            foreach ($l in $outputBuffer) { Write-Log "  $l" "ERROR" }
+            Write-Log "--- 命令输出结束 ---" "ERROR"
+        }
         throw "$Context 失败，退出码: $code"
     }
     Write-Log "[OK] $Context (exit code: $code)"

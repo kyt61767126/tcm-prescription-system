@@ -236,17 +236,10 @@ public class MainActivity extends AppCompatActivity {
         super.onAttachedToWindow();
     }
 
-    // ★ Activity 级别重写：阻止系统 Autofill 获取任何虚拟节点信息
-    // 配合 WebView 的 onProvideAutofillVirtualStructure 重写，双保险
-    @Override
-    public void onProvideAutofillVirtualStructure(android.view.ViewStructure structure, int flags) {
-        // 空实现：不调用 super，Autofill 服务无法获取 Activity 内部任何虚拟节点
-    }
-
-    @Override
-    public void onProvideContentCaptureStructure(android.view.ViewStructure structure, int flags) {
-        // 空实现：阻止 ContentCapture 服务获取内容（HarmonyOS 可能通过此接口获取 input 信息）
-    }
+    // 注意：Activity 级别 onProvideAutofillVirtualStructure / onProvideContentCaptureStructure
+    // 在 AppCompatActivity 1.7.1 中无法 @Override（父类未暴露），已移除以避免编译错误。
+    // Autofill 防护由 WebView 子类的 onProvideAutofillVirtualStructure 重写负责（足够）。
+    // 闪现防护由 WindowInsetsAnimation.Callback + flashOverlay 负责。
 
     // ★ 键盘弹出时的闪现保护：通过ViewTreeObserver检测WebView高度变化，在重绘期间显示覆盖层
     private void setupKeyboardFlashProtection() {
