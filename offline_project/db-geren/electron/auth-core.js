@@ -1095,63 +1095,72 @@
         }, 5000); // 每 5 秒检查一次
     }
 
-    // APP 端监听 'app:show-activate' 事件，用 prompt 实现激活流程
+    // ★ APP 端激活对话框函数（提取为独立函数，activateNow 可直接调用，不依赖事件 dispatch）
+    // 桌面版由 main.js 的 activate.show() 打开 BrowserWindow，不走此函数
+    async function showActivateDialog() {
+        try {
+            if (!global.electronAPI || !global.electronAPI.activate) {
+                try { alert('授权系统未就绪，请重启应用后重试'); } catch (e) {}
+                global.__licenseActivating = false;
+                return;
+            }
+            // 获取机器 ID（显示给用户，方便客服查证）
+            let machineId = '';
+            try {
+                const r = await global.electronAPI.activate.getMachineId();
+                machineId = (r && r.machineId) ? r.machineId : (r || '');
+            } catch (e) {}
+
+            // ★ 显示激活码输入（合并到一个 prompt）
+            // 简化提示信息，避免太长导致 AlertDialog 显示不全
+            const promptMsg = '请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）\n机器ID：' + (machineId || '未知') +
+                '\n如有疑问请联系客服';
+            const code = prompt(promptMsg);
+
+            if (!code || !code.trim()) {
+                // 用户取消激活
+                global.__licenseActivating = false;
+                console.log('[LicenseCheck] 用户取消激活');
+                return;
+            }
+
+            // 获取用户名（从 CONFIG 或 localStorage）
+            let user = '';
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG.doctorName) {
+                    user = CONFIG.doctorName;
+                } else {
+                    user = localStorage.getItem('auth:rememberedUsername') || '';
+                }
+            } catch (e) {}
+
+            const result = await global.electronAPI.activate.submit(code.trim(), user);
+            if (result && result.success) {
+                // 激活成功，清除失效标记
+                global.__licenseExpired = false;
+                global.__licenseActivating = false;
+                try { alert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启'); } catch (e) {}
+                global.electronAPI.activate.restart();
+            } else {
+                // 激活失败，显示错误并重新弹 prompt
+                try {
+                    alert('激活失败：\n' + (result && result.error ? result.error : '未知错误') + '\n\n点击确定重新输入激活码');
+                } catch (e) {}
+                global.__licenseActivating = false;
+                // 重新调用激活对话框（递归）
+                showActivateDialog();
+            }
+        } catch (e) {
+            try { alert('激活过程出错：' + e.message); } catch (er) {}
+            global.__licenseActivating = false;
+        }
+    }
+
+    // APP 端监听 'app:show-activate' 事件（向后兼容，由 activate.show() 触发）
     // 桌面版的 activate.show() 由 main.js 处理（打开 BrowserWindow），不会触发此事件
     if (typeof global.addEventListener === 'function') {
-        global.addEventListener('app:show-activate', async function () {
-            try {
-                if (!global.electronAPI || !global.electronAPI.activate) return;
-                // 获取机器 ID（显示给用户，方便客服查证）
-                let machineId = '';
-                try {
-                    const r = await global.electronAPI.activate.getMachineId();
-                    machineId = (r && r.machineId) ? r.machineId : (r || '');
-                } catch (e) {}
-
-                // ★ 显示到期信息 + 激活码输入（合并到一个 prompt）
-                const promptMsg = lastFailMessage +
-                    '\n\n请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）：\n机器ID：' + (machineId || '未知') +
-                    '\n\n如有疑问请联系客服';
-                const code = prompt(promptMsg);
-
-                if (!code || !code.trim()) {
-                    // ★ 用户取消激活，不清除 __licenseActivating（兜底定时器会重新弹窗）
-                    // 但为了让兜底定时器能工作，需要清除 __licenseActivating
-                    global.__licenseActivating = false;
-                    console.log('[LicenseCheck] 用户取消激活，5 秒后将重新弹窗');
-                    return;
-                }
-
-                // 获取用户名（从 CONFIG 或 localStorage）
-                let user = '';
-                try {
-                    if (typeof CONFIG !== 'undefined' && CONFIG.doctorName) {
-                        user = CONFIG.doctorName;
-                    } else {
-                        user = localStorage.getItem('auth:rememberedUsername') || '';
-                    }
-                } catch (e) {}
-
-                const result = await global.electronAPI.activate.submit(code.trim(), user);
-                if (result && result.success) {
-                    // ★ 兼容逻辑：激活成功，清除失效标记
-                    global.__licenseExpired = false;
-                    global.__licenseActivating = false;
-                    try { alert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启'); } catch (e) {}
-                    global.electronAPI.activate.restart();
-                } else {
-                    // ★ 激活失败，显示错误并重新弹 prompt（递归触发事件）
-                    try {
-                        alert('激活失败：\n' + (result && result.error ? result.error : '未知错误') + '\n\n点击确定重新输入激活码');
-                    } catch (e) {}
-                    // 重新触发激活流程
-                    global.__licenseActivating = false;
-                    global.dispatchEvent(new CustomEvent('app:show-activate'));
-                }
-            } catch (e) {
-                try { alert('激活过程出错：' + e.message); } catch (er) {}
-                global.__licenseActivating = false;
-            }
+        global.addEventListener('app:show-activate', function () {
+            showActivateDialog();
         });
     }
 
@@ -1168,11 +1177,14 @@
         // 设置激活中标志，避免重复触发
         global.__licenseActivating = true;
 
-        // 主动触发激活流程（不依赖 __licenseExpired 标志）
-        // 桌面版：activate.show() 打开独立 BrowserWindow
-        // APP 端：activate.show() 触发 'app:show-activate' 事件
-        if (global.electronAPI && global.electronAPI.activate &&
-            typeof global.electronAPI.activate.show === 'function') {
+        // ★ 区分桌面版和 APP 端
+        // 桌面版：有 activate.showExpireAlert（一体化 IPC），调用 activate.show() 打开 BrowserWindow
+        // APP 端：无 showExpireAlert，直接调用 showActivateDialog() 用 prompt 输入
+        const isDesktop = global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.showExpireAlert === 'function';
+
+        if (isDesktop && typeof global.electronAPI.activate.show === 'function') {
+            // 桌面版：打开独立 BrowserWindow
             try {
                 await global.electronAPI.activate.show();
             } catch (e) {
@@ -1180,8 +1192,8 @@
                 global.__licenseActivating = false;
             }
         } else {
-            // 无 activate.show API（如旧版 APP），直接 dispatch 事件
-            global.dispatchEvent(new CustomEvent('app:show-activate'));
+            // APP 端：直接调用 showActivateDialog（不依赖事件 dispatch，更可靠）
+            showActivateDialog();
         }
     };
 
