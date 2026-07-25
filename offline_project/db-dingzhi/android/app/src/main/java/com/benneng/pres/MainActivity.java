@@ -1156,6 +1156,12 @@ public class MainActivity extends AppCompatActivity {
                             r.put("prescriptionStatus", licenseManager.getPrescriptionStatus());
                             r.put("machineId", licenseManager.getMachineId());
                             r.put("success", r.optBoolean("valid", false));
+                            // ★ P1-3: 透传 masterKey 到顶层（renderer 的 auth-core.js 读取 status.masterKey）
+                            // masterKey 在 license 嵌套对象中，需提升到顶层供 auth-core.js setMasterKey 注入
+                            JSONObject lic = r.optJSONObject("license");
+                            if (lic != null && lic.has("masterKey")) {
+                                r.put("masterKey", lic.optString("masterKey", ""));
+                            }
                             return r.toString();
                         } catch (Exception e) {
                             return fail(e.getMessage()).toString();

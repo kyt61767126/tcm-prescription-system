@@ -29,6 +29,26 @@
     }
     const RUNTIME_KEY = _deriveRuntimeKey();
 
+    // ==================== P1-3: masterKey 派生盐（外部可注入）====================
+    // 用途：让密码哈希盐基于 masterKey 派生（每个安装不同），避免硬编码盐被破解
+    // 注入方式：调用 setMasterKey(key) 或由 initMasterKeyFromLicense 自动从 license 注入
+    // 注入后 hashPassword / hashPasswordWithUser 优先使用 (PASSWORD_SALT + ':' + masterKey) 作为盐
+    // 未注入时 fallback 到纯 PASSWORD_SALT（向后兼容旧版本与旧哈希）
+    let _masterKey = null;
+    function setMasterKey(key) {
+        _masterKey = key ? String(key) : null;
+        if (_masterKey) {
+            try { console.log('[AuthCore] masterKey 已注入，密码哈希将使用派生盐'); } catch (e) { }
+        }
+    }
+    function getMasterKey() {
+        return _masterKey;
+    }
+    // 获取密码哈希盐：masterKey 注入时返回派生盐，否则返回基础盐（向后兼容）
+    function getEffectiveSalt() {
+        return _masterKey ? (PASSWORD_SALT + ':' + _masterKey) : PASSWORD_SALT;
+    }
+
     // ==================== safeStorage 系统级加密桥（P0-2）====================
     // 仅 Electron 桌面版可用：基于 Windows DPAPI，绑定用户/机器
     // 远比 XOR + 硬编码盐安全，攻击者即使拿到源码与密文也无法解密
@@ -1132,12 +1152,120 @@
         });
     }
 
+    // ============================================================================
+    // ★ 新增：立即激活入口（试用期内主动激活，无需等待试用期结束）
+    // 用途：用户在试用期有效时也可主动激活，激活成功后转为正式授权
+    // 调用方式：window.activateNow() 或通过 settingsModal 中注入的"立即激活"按钮
+    // ============================================================================
+    global.activateNow = async function () {
+        if (global.__licenseActivating) {
+            try { alert('激活流程进行中，请稍候'); } catch (e) { }
+            return;
+        }
+        // 设置激活中标志，避免重复触发
+        global.__licenseActivating = true;
+
+        // 主动触发激活流程（不依赖 __licenseExpired 标志）
+        // 桌面版：activate.show() 打开独立 BrowserWindow
+        // APP 端：activate.show() 触发 'app:show-activate' 事件
+        if (global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.show === 'function') {
+            try {
+                await global.electronAPI.activate.show();
+            } catch (e) {
+                console.error('[LicenseCheck] 立即激活失败:', e);
+                global.__licenseActivating = false;
+            }
+        } else {
+            // 无 activate.show API（如旧版 APP），直接 dispatch 事件
+            global.dispatchEvent(new CustomEvent('app:show-activate'));
+        }
+    };
+
+    // ★ 向 settingsModal 运行时注入 license 状态显示 + 立即激活按钮
+    // 不修改 HTML 源码，仅在运行时动态注入 DOM，符合界面保护约束
+    function injectLicenseStatusIntoSettings() {
+        const settingsModal = document.getElementById('settingsModal');
+        if (!settingsModal) {
+            console.warn('[LicenseCheck] settingsModal 未找到，跳过 license 状态注入');
+            return;
+        }
+        // 避免重复注入
+        if (document.getElementById('licenseStatusSection')) {
+            // 已注入，仅更新状态文本
+            updateLicenseStatusText();
+            return;
+        }
+
+        const modalBody = settingsModal.querySelector('.modal-body');
+        if (!modalBody) {
+            console.warn('[LicenseCheck] settingsModal 无 modal-body，跳过注入');
+            return;
+        }
+
+        const section = document.createElement('div');
+        section.id = 'licenseStatusSection';
+        section.style.cssText = 'margin-top:15px;padding:10px;border:1px solid #ddd;border-radius:6px;background:#f9f9f9;';
+        section.innerHTML =
+            '<div style="font-weight:bold;margin-bottom:8px;color:#333;">🔐 授权状态</div>' +
+            '<div id="licenseStatusText" style="font-size:13px;color:#666;margin-bottom:10px;">加载中...</div>' +
+            '<button class="action-btn" id="activateNowBtn" style="background:#ff9800;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;">立即激活</button>';
+
+        modalBody.appendChild(section);
+
+        // 绑定按钮事件：关闭 settingsModal 后触发激活
+        const btn = section.querySelector('#activateNowBtn');
+        btn.addEventListener('click', function () {
+            try { closeModal('settingsModal'); } catch (e) { }
+            if (typeof global.activateNow === 'function') {
+                global.activateNow();
+            }
+        });
+
+        // 异步加载 license 状态
+        updateLicenseStatusText();
+    }
+
+    // ★ 异步获取并显示 license 状态（试用期剩余天数 / 已激活 / 已过期）
+    async function updateLicenseStatusText() {
+        const el = document.getElementById('licenseStatusText');
+        if (!el) return;
+
+        try {
+            if (!global.electronAPI || !global.electronAPI.license ||
+                typeof global.electronAPI.license.getStatus !== 'function') {
+                el.textContent = '未检测到授权系统';
+                return;
+            }
+            const status = await global.electronAPI.license.getStatus();
+            if (status && status.valid) {
+                // ★ 优先从 prescriptionStatus 读取剩余天数
+                const ps = status.prescriptionStatus;
+                if (ps && typeof ps.remainingDays === 'number' && ps.remainingDays > 0) {
+                    el.innerHTML = '⏳ 试用期有效<br>剩余 <b style="color:#4caf50;">' + ps.remainingDays + '</b> 天';
+                } else if (ps && typeof ps.remainingDays === 'number' && ps.remainingDays <= 0) {
+                    el.innerHTML = '✅ 已激活' + (ps.plan ? '（' + ps.plan + '）' : '');
+                } else {
+                    el.innerHTML = '✅ 已激活';
+                }
+            } else {
+                el.innerHTML = '❌ 未激活<br><span style="color:red;">' +
+                    ((status && status.message) ? status.message : '请激活后使用') +
+                    '</span>';
+            }
+        } catch (e) {
+            el.textContent = '状态获取失败: ' + (e && e.message ? e.message : '未知错误');
+        }
+    }
+
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
     function startLicenseCheck() {
         setTimeout(async () => {
             await checkLicenseAndShowActivate();
             // ★ 启动兜底检查（无论首次校验结果如何，都启动定时器）
             startFallbackCheck();
+            // ★ 新增：向 settingsModal 注入 license 状态显示 + 立即激活按钮
+            injectLicenseStatusIntoSettings();
         }, 2000);
     }
 

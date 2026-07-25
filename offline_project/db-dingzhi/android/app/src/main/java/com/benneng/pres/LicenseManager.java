@@ -70,6 +70,63 @@ public class LicenseManager {
     // ★ v3 新增：config.json 完整性签名密钥（与桌面版 license-manager.js / edit-config.ps1 完全一致）
     private static final String CONFIG_SIGN_KEY = "bnzc_config_sign_key_v1_2026";
 
+    // ============================================================================
+    //  ★ P1-3 新增：masterKey 派生密钥机制（与桌面版 license-manager.js / 云端 license-core.js 对齐）
+    //  设计：
+    //    - license.dat 中可能包含 masterKey 字段（云端 LICENSE_MASTER_KEY 配置后下发）
+    //    - 若 license 含 masterKey，则从 masterKey 派生 HMAC/CONFIG_SIGN 密钥
+    //    - 若不含 masterKey（旧版 license），fallback 到硬编码密钥（向后兼容）
+    //  派生算法（与云端 license-core.js 保持一致）：
+    //    effectiveHmacKey      = SHA256(masterKey + ':license-hmac:v1')
+    //    effectiveConfigSignKey = SHA256(masterKey + ':config-sign:v1')
+    //  使用：
+    //    verifySignature 开头调用 setLicenseDataContext(data) 缓存当前 license
+    //    随后所有签名校验/加密派生均使用 getEffectiveHmacKey() / getEffectiveConfigSignKey()
+    // ============================================================================
+    private JSONObject _currentLicenseData = null;
+
+    private void setLicenseDataContext(JSONObject data) {
+        _currentLicenseData = (data != null) ? data : null;
+    }
+
+    private String getLicenseMasterKey() {
+        if (_currentLicenseData != null) {
+            return _currentLicenseData.optString("masterKey", "");
+        }
+        return "";
+    }
+
+    private String getEffectiveHmacKey() {
+        String mk = getLicenseMasterKey();
+        if (mk != null && !mk.isEmpty()) {
+            return sha256Hex(mk + ":license-hmac:v1");
+        }
+        return LICENSE_HMAC_KEY;
+    }
+
+    private String getEffectiveConfigSignKey() {
+        String mk = getLicenseMasterKey();
+        if (mk != null && !mk.isEmpty()) {
+            return sha256Hex(mk + ":config-sign:v1");
+        }
+        return CONFIG_SIGN_KEY;
+    }
+
+    private String sha256Hex(String input) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "SHA-256 计算失败", e);
+            return "";
+        }
+    }
+
     // ★ P1-A 新增：license 文件加密格式标识和算法
     private static final String LICENSE_ENC_PREFIX = "ENC1:";  // 旧加密格式前缀（向后兼容）
     // ★ P3-C 新增：license 文件新格式前缀（含 HMAC 校验）
@@ -1010,27 +1067,22 @@ public class LicenseManager {
     }
 
     private String hmacSha256(String content) {
-        try {
-            Mac mac = Mac.getInstance("HmacSHA256");
-            SecretKeySpec keySpec = new SecretKeySpec(
-                    LICENSE_HMAC_KEY.getBytes(StandardCharsets.UTF_8), "HmacSHA256");
-            mac.init(keySpec);
-            byte[] hash = mac.doFinal(content.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder();
-            for (byte b : hash) {
-                sb.append(String.format("%02x", b));
-            }
-            return sb.toString();
-        } catch (Exception e) {
-            Log.e(TAG, "HMAC-SHA256 计算失败", e);
-            return "";
-        }
+        // ★ P1-3: 使用 getEffectiveHmacKey() 派生密钥（masterKey 派生或硬编码 fallback）
+        return hmacSha256WithKey(content, getEffectiveHmacKey());
     }
 
     // 签名验证（先 v5 ECDSA，再 v3，再 v2，最后 v1 向后兼容）
     private boolean verifySignature(JSONObject data) {
         String sig = data.optString("signature", "");
         if (sig == null || sig.isEmpty()) return false;
+
+        // ★ P1-3: 缓存当前 license 数据上下文，供 getEffectiveHmacKey 派生密钥使用
+        // 注意：此时 license 数据尚未验签，但 masterKey 字段不参与签名内容（云端在签名后添加），
+        //      因此攻击者修改 masterKey 会导致派生密钥改变，但 cloud 签名仍按原 masterKey 计算，
+        //      所以篡改后的 license 会验签失败（除非攻击者知道原 masterKey 并重算签名）。
+        //      ECDSA v5（如果配置）提供更强的防篡改保证。
+        setLicenseDataContext(data);
+
         // ★ v5 ECDSA 非对称验签优先校验（云端私钥签，客户端公钥验）
         // 优势：即使 APP 被反编译拿到公钥，也无法伪造签名（公钥只能验不能签）
         if (data.has("signatureV5") && ECDSA_VERIFY_PUBLIC_KEY_PEM != null
@@ -1040,19 +1092,38 @@ public class LicenseManager {
             }
             Log.w(TAG, "v5 ECDSA 验签失败，降级为 HMAC");
         }
-        // ★ v3 签名优先校验（含 clinicName/machineId/licenseBinding 时使用）
+
+        // ★ P1-3 新增：若 license 含 masterKey 字段，则 generateSignatureV3/V2 会自动使用 masterKey 派生密钥
+        // 若验签失败，清除上下文，后续 fallback 到硬编码密钥（向后兼容旧 license）
+        boolean hasMasterKey = data.has("masterKey") && !data.optString("masterKey", "").isEmpty();
+
+        if (hasMasterKey) {
+            // 尝试 1：masterKey 派生密钥验签
+            if (data.has("clinicName") && data.has("machineId") && data.has("licenseBinding")) {
+                String expectedV3mk = generateSignatureV3(data);
+                if (sig.equalsIgnoreCase(expectedV3mk)) return true;
+            }
+            String expectedV2mk = generateSignature(data);
+            if (sig.equalsIgnoreCase(expectedV2mk)) return true;
+            // masterKey 派生密钥验签失败，清除上下文，后续用硬编码密钥 fallback
+            setLicenseDataContext(null);
+        }
+
+        // 尝试 2：硬编码密钥 fallback（用于旧 license 无 masterKey，或 masterKey 验签失败的兜底）
         if (data.has("clinicName") && data.has("machineId") && data.has("licenseBinding")) {
             String expectedV3 = generateSignatureV3(data);
             if (sig.equalsIgnoreCase(expectedV3)) return true;
         }
-        // v2 签名校验
         String expectedV2 = generateSignature(data);
         if (sig.equalsIgnoreCase(expectedV2)) return true;
         // v1 向后兼容：仅当旧版 license（无 maxPrescriptions 和 features 字段）才尝试 v1
         if (!data.has("maxPrescriptions") && !data.has("features")) {
             String expectedV1 = generateSignatureV1(data);
-            return sig.equalsIgnoreCase(expectedV1);
+            if (sig.equalsIgnoreCase(expectedV1)) return true;
         }
+
+        // 所有验签均失败，清除上下文（避免影响后续校验）
+        setLicenseDataContext(null);
         return false;
     }
 
@@ -1626,6 +1697,11 @@ public class LicenseManager {
             if (license.has("licenseBinding")) {
                 normalized.put("licenseBinding", license.optString("licenseBinding", ""));
             }
+            // ★ P1-3 新增：透传 masterKey 字段（云端 LICENSE_MASTER_KEY 配置后下发，旧 license 无此字段）
+            // 用途：license_getStatus 桥接返回时携带 masterKey，renderer 的 auth-core.js 调用 setMasterKey 注入密码哈希盐
+            if (license.has("masterKey")) {
+                normalized.put("masterKey", license.optString("masterKey", ""));
+            }
             return normalized;
         } catch (Exception e) {
             Log.e(TAG, "normalizeLicense 失败", e);
@@ -1719,7 +1795,9 @@ public class LicenseManager {
             String signContent = cfg.optString("clinicName", "") + "|" +
                                  cfg.optString("doctorName", "") + "|" +
                                  cfg.optString("edition", "") + "|" + issuedAt;
-            String expected = hmacSha256WithKey(signContent, CONFIG_SIGN_KEY);
+            // ★ P1-3: 使用 getEffectiveConfigSignKey() 派生密钥（从 license.masterKey 派生，向后兼容）
+            // 注意：verifyConfigIntegrity 在 validateLicense 内部调用，此时 _currentLicenseData 已被 setLicenseDataContext 缓存
+            String expected = hmacSha256WithKey(signContent, getEffectiveConfigSignKey());
             return sig.equalsIgnoreCase(expected);
         } catch (Exception e) {
             Log.w(TAG, "config.json 完整性校验异常: " + e.getMessage());
