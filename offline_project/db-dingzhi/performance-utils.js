@@ -383,6 +383,9 @@
     // 问题：搜狗输入法个人词典记住了旧应用名"本能中医处方系统"，在所有输入框弹出候选词
     // autocomplete="off" 无法阻止输入法候选词，必须设置 inputmode 切换输入法模式
     // 修复：为不同输入框设置合适的 inputmode，切换到数字/电话/search 模式，阻止文本候选词
+    // ★ resize 防护：豆包建议指出 resize 是隐藏触发源，键盘弹出导致 WebView 高度变化
+    //   会触发 resize 事件，IME 候选词框会再次闪现。setupResizeAutofillGuard() 会在 resize
+    //   时调用 reapplyInputMode() 重新应用 inputmode，防止 IME 重新显示候选词
     function setupInputAutocompleteOff() {
         if (window.innerWidth >= 769) return;
 
@@ -432,6 +435,109 @@
             });
         });
         observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    }
+
+    // ==================== resize 事件 IME/Autofill 隐藏触发源防护 ====================
+    // 豆包建议核心：resize 是"本能中医处方系统"提示闪现的隐藏触发源
+    // 之前 setupInputAutocompleteOff 只在 focus 时屏蔽，漏掉了 resize 这个隐藏触发源
+    // 当键盘弹出导致 WebView 高度变化时，触发 resize 事件：
+    //   1. IME 候选词框会再次闪现（旧应用名"本能中医处方系统"）
+    //   2. 系统 Autofill 服务会重新评估当前 input，弹出凭据提示
+    //   3. 药物搜索 dropdown 会跟随 resize 闪现
+    // 修复策略：在 resize 事件中主动屏蔽所有可能的弹窗触发源
+    function setupResizeAutofillGuard() {
+        if (window.innerWidth >= 769) return;
+
+        var resizeTriggeredAt = 0;
+        var lastFocusedInput = null;
+
+        // 跟踪当前焦点 input（供 resize 时重新应用 inputmode）
+        document.addEventListener('focusin', function(e) {
+            var target = e.target;
+            if (!target) return;
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+                lastFocusedInput = target;
+            }
+        }, true);
+        document.addEventListener('focusout', function() {
+            // 延迟清除，避免快速切换丢失
+            setTimeout(function() {
+                if (!document.activeElement || document.activeElement === document.body) {
+                    lastFocusedInput = null;
+                }
+            }, 100);
+        }, true);
+
+        // 主动取消系统 Autofill 服务请求（通过 AndroidNative 桥接）
+        function cancelSystemAutofill() {
+            try {
+                if (window.AndroidNative && typeof window.AndroidNative.invoke === 'function') {
+                    window.AndroidNative.invoke('cancelAutofill', '{}');
+                }
+            } catch(e) { /* 忽略 */ }
+        }
+
+        // 重新应用 inputmode（防止 IME 重新显示候选词）
+        function reapplyInputMode(el) {
+            if (!el || el.tagName !== 'INPUT') return;
+            // 读取当前 inputmode，先移除再设置，强制 IME 重新评估
+            var currentMode = el.getAttribute('inputmode');
+            if (currentMode) {
+                el.removeAttribute('inputmode');
+                // 强制 reflow 后重新设置
+                void el.offsetWidth;
+                el.setAttribute('inputmode', currentMode);
+            }
+        }
+
+        // resize 事件处理：屏蔽所有隐藏触发源
+        function onResizeGuard() {
+            resizeTriggeredAt = Date.now();
+
+            // 1. 主动取消系统 Autofill 服务请求（最强防线）
+            cancelSystemAutofill();
+
+            // 2. 重新应用当前焦点 input 的 inputmode（防止 IME 重新显示候选词）
+            if (lastFocusedInput && document.activeElement === lastFocusedInput) {
+                reapplyInputMode(lastFocusedInput);
+            }
+
+            // 3. 隐藏药物搜索 dropdown（防止跟随 resize 闪现）
+            //    dropdown 挂载在 .medicine-section 内部，键盘挤压页面时会跟着重渲染闪现
+            //    resize 期间隐藏，resize 结束后由原有逻辑重新定位显示
+            var dropdown = document.getElementById('medicineSearchDropdown');
+            if (dropdown && dropdown.style.display === 'block') {
+                // 标记为 resize 暂时隐藏，避免被其他逻辑误判为用户主动关闭
+                dropdown.setAttribute('data-resize-hidden', '1');
+                dropdown.style.display = 'none';
+                // resize 结束后延迟恢复（由 focus 事件或输入事件重新触发显示）
+                setTimeout(function() {
+                    dropdown.removeAttribute('data-resize-hidden');
+                }, 300);
+            }
+        }
+
+        // 监听 window resize（adjustResize 模式下键盘弹出会触发）
+        // 使用 capture 阶段，确保最先收到事件
+        window.addEventListener('resize', onResizeGuard, true);
+
+        // 监听 visualViewport.resize（现代浏览器键盘事件更精确）
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', onResizeGuard);
+        }
+
+        // resize 结束后再次 cancelAutofill（防止 resize 期间 Autofill 重新请求）
+        var postResizeTimer = null;
+        function schedulePostResizeCleanup() {
+            if (postResizeTimer) clearTimeout(postResizeTimer);
+            postResizeTimer = setTimeout(function() {
+                cancelSystemAutofill();
+            }, 250);
+        }
+        window.addEventListener('resize', schedulePostResizeCleanup);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', schedulePostResizeCleanup);
+        }
     }
 
     // ==================== 移动端键盘遮挡修复 ====================
@@ -529,10 +635,12 @@
         document.addEventListener('DOMContentLoaded', setupMobileKeyboardScroll);
         document.addEventListener('DOMContentLoaded', setupDropdownKeyboardFix);
         document.addEventListener('DOMContentLoaded', setupInputAutocompleteOff);
+        document.addEventListener('DOMContentLoaded', setupResizeAutofillGuard);
     } else {
         setupMobileKeyboardScroll();
         setupDropdownKeyboardFix();
         setupInputAutocompleteOff();
+        setupResizeAutofillGuard();
     }
 
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
