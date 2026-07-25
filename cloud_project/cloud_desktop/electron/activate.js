@@ -52,6 +52,7 @@ function getMachineId() {
 // 调用云端 validate API，返回 { success, license, licenseInfo } 或 { success: false, error }
 // ★ v3 新增：clinicName 参数，传给云端做诊所名绑定校验
 // ★ 修复：license.dat 写入失败时友好提示 + 自动 fallback 到 userData 目录
+// ★ 优化：Promise.race 双保险超时，解决 Electron 28 中 AbortController 可能不生效导致 fetch 卡死几十分钟的问题
 async function activateOnline(code, machineId, user, clinicName) {
     try {
         const body = { code, machineId };
@@ -59,18 +60,30 @@ async function activateOnline(code, machineId, user, clinicName) {
         // ★ v3 新增：提交 clinicName（如填写）
         if (clinicName) body.clinicName = clinicName;
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 15000);  // 15 秒超时
+        // ★ 优化：Promise.race 实现可靠超时
+        // 原问题：Electron 28 中 AbortController.abort() 可能不中断 fetch，导致卡死几十分钟
+        // 修复：Promise.race 确保 15 秒后必定返回超时错误，不依赖 AbortController
+        const fetchPromise = async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);  // 12 秒 AbortController 超时
+            try {
+                const response = await fetch(ACTIVATE_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal: controller.signal
+                });
+                return await response.json();
+            } finally {
+                clearTimeout(timeout);
+            }
+        };
 
-        const response = await fetch(ACTIVATE_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: controller.signal
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('FETCH_TIMEOUT')), 15000);  // 15 秒总超时兜底
         });
-        clearTimeout(timeout);
 
-        const data = await response.json();
+        const data = await Promise.race([fetchPromise(), timeoutPromise]);
 
         if (!data.success) {
             return { success: false, error: data.error || '激活失败' };
@@ -127,8 +140,8 @@ async function activateOnline(code, machineId, user, clinicName) {
     } catch (e) {
         console.error('[Activate] 在线激活失败:', e);
         let errorMsg = e.message;
-        if (e.name === 'AbortError') {
-            errorMsg = '连接服务器超时，请检查网络后重试';
+        if (e.message === 'FETCH_TIMEOUT' || e.name === 'AbortError') {
+            errorMsg = '连接服务器超时（15秒），请检查网络后重试';
         } else if (e.message && e.message.includes('fetch failed')) {
             errorMsg = '无法连接服务器，请检查网络连接';
         }
