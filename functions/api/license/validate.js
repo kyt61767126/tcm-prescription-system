@@ -87,13 +87,13 @@ export async function onRequest(context) {
             return json({ success: false, error: 'KV binding not found' }, 500);
         }
 
-        // 速率限制
+        // 速率限制（防暴力尝试，20次/小时足够测试且安全）
         const ip = getClientIP(context);
-        const rateLimit = await checkRateLimit(kv, ip, 5);
+        const rateLimit = await checkRateLimit(kv, ip, 20);
         if (!rateLimit.allowed) {
             return json({
                 success: false,
-                error: '校验请求过于频繁，请稍后再试（每小时限 5 次）',
+                error: '校验请求过于频繁，请稍后再试（每小时限 20 次）',
                 rateLimited: true
             }, 429);
         }
