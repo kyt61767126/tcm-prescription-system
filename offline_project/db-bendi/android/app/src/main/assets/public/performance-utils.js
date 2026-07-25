@@ -524,15 +524,84 @@
         }
     }
 
+    // ==================== adjustResize 模式下表格底部紧贴键盘（无空白）====================
+    // 问题: 三重嵌套滚动容器(body+main-container+table-container)互相冲突，滑动时暴露空白
+    // 方案: 通过 JS 动态注入 CSS，锁死 body/html，用 flex 布局让表格容器吃掉剩余空间
+    //       键盘弹出时切换 body.keyboard-open 类，隐藏底栏释放空间，表格底部紧贴键盘上缘
+    // 注意: 不修改 index.html 的 <style>，通过 performance-utils.js 动态注入样式
+    function setupTableKeyboardLayoutFix() {
+        if (window.innerWidth >= 769) return;
+
+        // ★ 动态注入 CSS（覆盖移动端布局，解决三重滚动容器冲突）
+        var style = document.createElement('style');
+        style.id = 'table-keyboard-layout-fix';
+        style.textContent = [
+            '/* ===== 表格键盘布局修复 ===== */',
+            '/* 1. 锁死 html/body，禁止整页滑动（空白的元凶）*/',
+            'html, body { overflow: hidden !important; height: 100vh !important; height: 100dvh !important; min-height: 0 !important; }',
+            '',
+            '/* 2. .main-container 改为固定视口高度的 flex 列，禁止滚动 */',
+            '.main-container { display: flex !important; flex-direction: column !important; height: 100vh !important; height: 100dvh !important; min-height: 0 !important; padding-bottom: 0 !important; overflow: hidden !important; }',
+            '',
+            '/* 3. .left-panel 填满主容器，自身不滚 */',
+            '.left-panel { flex: 1 1 0 !important; min-height: 0 !important; height: auto !important; overflow: hidden !important; display: flex !important; flex-direction: column !important; }',
+            '',
+            '/* 4. 顶部信息区固定高度，不收缩 */',
+            '.top-tabs-left, .patient-section, .symptom-section, .diagnosis-section, .action-buttons-section { flex-shrink: 0 !important; }',
+            '',
+            '/* 5. 药物区 flex:1 吃掉剩余空间 */',
+            '.medicine-section { flex: 1 1 0 !important; min-height: 0 !important; display: flex !important; flex-direction: column !important; overflow: hidden !important; padding-bottom: 104px; }',
+            '',
+            '/* 6. 表格容器 flex:1 + 移除固定像素上限 */',
+            '.medicine-table-container { flex: 1 1 0 !important; max-height: none !important; min-height: 0 !important; overflow-y: auto !important; overflow-x: auto !important; -webkit-overflow-scrolling: touch; }',
+            '',
+            '/* 7. 键盘弹出时：隐藏底栏 + 隐藏顶部信息区，表格贴到键盘上缘 */',
+            'body.keyboard-open .mobile-nav, body.keyboard-open .mobile-action-bar { display: none !important; }',
+            'body.keyboard-open .medicine-section { padding-bottom: 0 !important; }',
+            'body.keyboard-open .patient-section, body.keyboard-open .symptom-section, body.keyboard-open .diagnosis-section, body.keyboard-open .action-buttons-section { display: none !important; }'
+        ].join('\n');
+        document.head.appendChild(style);
+
+        // ★ focus/blur 切换 body.keyboard-open 类（比 visibility:hidden 更稳定，释放底栏空间）
+        document.addEventListener('focus', function(e) {
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && window.innerWidth <= 768) {
+                document.body.classList.add('keyboard-open');
+            }
+        }, true);
+        document.addEventListener('blur', function(e) {
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') && window.innerWidth <= 768) {
+                setTimeout(function() {
+                    if (!document.querySelector('input:focus, textarea:focus')) {
+                        document.body.classList.remove('keyboard-open');
+                    }
+                }, 100);
+            }
+        }, true);
+
+        // ★ visualViewport 兜底：防止 blur 未触发时键盘状态不同步
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', function() {
+                var hasKeyboard = window.innerHeight - window.visualViewport.height > 100;
+                if (hasKeyboard && document.querySelector('input:focus, textarea:focus')) {
+                    document.body.classList.add('keyboard-open');
+                } else if (!hasKeyboard) {
+                    document.body.classList.remove('keyboard-open');
+                }
+            });
+        }
+    }
+
     // 自动初始化
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', setupMobileKeyboardScroll);
         document.addEventListener('DOMContentLoaded', setupDropdownKeyboardFix);
         document.addEventListener('DOMContentLoaded', setupInputAutocompleteOff);
+        document.addEventListener('DOMContentLoaded', setupTableKeyboardLayoutFix);
     } else {
         setupMobileKeyboardScroll();
         setupDropdownKeyboardFix();
         setupInputAutocompleteOff();
+        setupTableKeyboardLayoutFix();
     }
 
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
