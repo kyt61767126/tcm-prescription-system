@@ -96,6 +96,19 @@ const LICENSE_TYPE_CONFIG = {
 // ============================================================================
 //  路径工具
 // ============================================================================
+// ★ 修复 NSIS 安装到 Program Files 无写权限导致 license.dat 写入失败的问题
+// 策略：
+//   - Portable exe（PORTABLE_EXECUTABLE_DIR 已设）: 用 exe 同目录（保留便携性，license 跟随 exe 走）
+//   - NSIS 安装版: 用 app.getPath('userData')（C:\Users\xxx\AppData\Roaming\产品名\，可写）
+//   - 兜底异常: 用 userData
+function isPortableInstall() {
+    try {
+        return !!process.env.PORTABLE_EXECUTABLE_DIR;
+    } catch (e) {
+        return false;
+    }
+}
+
 function getExeDirectory() {
     try {
         if (process.env.PORTABLE_EXECUTABLE_DIR) {
@@ -107,9 +120,23 @@ function getExeDirectory() {
     }
 }
 
+// ★ 新增：获取可写目录（license.dat / trial-config.json 使用）
+// Portable: exe 同目录；NSIS: userData 目录
+function getWritableDir() {
+    try {
+        if (isPortableInstall()) {
+            return getExeDirectory();
+        }
+        // NSIS 安装版：exe 在 Program Files 下只读，license.dat 必须写到 userData
+        return app.getPath('userData');
+    } catch (e) {
+        try { return app.getPath('userData'); } catch (e2) { return getExeDirectory(); }
+    }
+}
+
 function getLicensePath() {
     try {
-        return path.join(getExeDirectory(), 'license.dat');
+        return path.join(getWritableDir(), 'license.dat');
     } catch (e) {
         return path.join(app.getPath('userData'), 'license.dat');
     }
@@ -122,7 +149,7 @@ function getTrialPath() {
 // ★ 试用期配置文件路径（与 license.dat 同目录，portable 友好）
 function getTrialConfigPath() {
     try {
-        return path.join(getExeDirectory(), 'trial-config.json');
+        return path.join(getWritableDir(), 'trial-config.json');
     } catch (e) {
         return path.join(app.getPath('userData'), 'trial-config.json');
     }
@@ -1226,6 +1253,7 @@ function generateLicense(user, type, expiresAt, options) {
 
 // 写入 license 文件（供激活码导入使用）
 // ★ P1-A 新增：写入前先加密（AES-256-CBC，密钥从 machineId 派生）
+// ★ 修复：NSIS 安装到 Program Files 时 license.dat 写入失败的处理
 function writeLicenseContent(base64Content, machineId) {
     try {
         const licensePath = getLicensePath();
@@ -1242,8 +1270,17 @@ function writeLicenseContent(base64Content, machineId) {
 
         // 加密并写入
         const encrypted = encryptLicenseContent(jsonStr, actualMachineId);
-        fs.writeFileSync(licensePath, encrypted, 'utf8');
-        return { success: true, path: licensePath };
+        try {
+            fs.writeFileSync(licensePath, encrypted, 'utf8');
+            return { success: true, path: licensePath };
+        } catch (writeErr) {
+            // ★ 写入失败时尝试 fallback 到 userData 目录（防御性兜底）
+            console.warn('[License] 主路径写入失败，尝试 userData 兜底:', writeErr.message);
+            const fallbackPath = path.join(app.getPath('userData'), 'license.dat');
+            fs.writeFileSync(fallbackPath, encrypted, 'utf8');
+            console.log('[License] license.dat 已写入兜底路径:', fallbackPath);
+            return { success: true, path: fallbackPath };
+        }
     } catch (e) {
         return { success: false, error: e.message };
     }
@@ -1370,6 +1407,9 @@ module.exports = {
     getLocalClinicName,   // 从 config.json 读取本地诊所名
     getLocalDoctorName,   // 从 config.json 读取本地医师名
     verifyConfigIntegrity, // config.json 完整性校验
+    // ★ 路径相关（修复 NSIS 安装到 Program Files 无写权限问题）
+    isPortableInstall,    // 检测是否为 portable 安装（供 activate.js 决定写入路径）
+    getWritableDir,       // 获取可写目录（license.dat / trial-config.json 用）
     // ★ P1-A 新增：加密相关
     getMachineId,         // 获取机器 ID（供 main.js 调用）
     encryptLicenseContent, // 加密 license（供测试用）

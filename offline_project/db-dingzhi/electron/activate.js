@@ -51,6 +51,7 @@ function getMachineId() {
 // ============================================================================
 // 调用云端 validate API，返回 { success, license, licenseInfo } 或 { success: false, error }
 // ★ v3 新增：clinicName 参数，传给云端做诊所名绑定校验
+// ★ 修复：license.dat 写入失败时友好提示 + 自动 fallback 到 userData 目录
 async function activateOnline(code, machineId, user, clinicName) {
     try {
         const body = { code, machineId };
@@ -75,10 +76,36 @@ async function activateOnline(code, machineId, user, clinicName) {
             return { success: false, error: data.error || '激活失败' };
         }
 
-        // 写入 license.dat
+        // 写入 license.dat（带权限错误处理 + userData 兜底）
         const licensePath = licenseManager.getLicensePath();
-        fs.writeFileSync(licensePath, data.license, 'utf8');
-        console.log('[Activate] license.dat 已写入:', licensePath);
+        let actualWritePath = licensePath;
+        try {
+            fs.writeFileSync(licensePath, data.license, 'utf8');
+            console.log('[Activate] license.dat 已写入:', licensePath);
+        } catch (writeErr) {
+            // ★ 修复 NSIS 安装到 Program Files 无写权限问题
+            // 主路径写入失败时自动 fallback 到 userData 目录
+            console.warn('[Activate] 主路径写入失败，尝试 userData 兜底:', writeErr.message);
+            const { app } = require('electron');
+            const path = require('path');
+            const fallbackPath = path.join(app.getPath('userData'), 'license.dat');
+            try {
+                fs.writeFileSync(fallbackPath, data.license, 'utf8');
+                actualWritePath = fallbackPath;
+                console.log('[Activate] license.dat 已写入兜底路径:', fallbackPath);
+            } catch (fallbackErr) {
+                // 兜底也失败，给出明确的权限错误提示
+                console.error('[Activate] 兜底路径也写入失败:', fallbackErr.message);
+                const isPermErr = fallbackErr.code === 'EACCES' || fallbackErr.code === 'EPERM' ||
+                                  writeErr.code === 'EACCES' || writeErr.code === 'EPERM';
+                return {
+                    success: false,
+                    error: isPermErr
+                        ? '授权文件写入失败：系统权限不足。\n请以管理员身份运行程序，或联系客服协助。'
+                        : '授权文件写入失败：' + fallbackErr.message
+                };
+            }
+        }
 
         // ★ 清除 trial 文件（已正式激活，避免残留过期试用标记导致重复弹窗）
         try {
@@ -94,7 +121,8 @@ async function activateOnline(code, machineId, user, clinicName) {
         return {
             success: true,
             licenseInfo: data.licenseInfo,
-            message: '激活成功'
+            message: '激活成功',
+            licensePath: actualWritePath
         };
     } catch (e) {
         console.error('[Activate] 在线激活失败:', e);
@@ -178,11 +206,11 @@ function showActivateWindow(parentWindow) {
     const machineId = getMachineId();
 
     activateWindow = new BrowserWindow({
-        width: 480,
-        height: 600,
+        width: 500,
+        height: 760,
         parent: parentWindow,
         modal: true,
-        resizable: false,
+        resizable: true,
         minimizable: false,
         maximizable: false,
         autoHideMenuBar: true,
