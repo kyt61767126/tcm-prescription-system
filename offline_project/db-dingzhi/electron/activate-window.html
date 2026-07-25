@@ -303,6 +303,20 @@ h1 {
     <button class="btn" id="activateBtn" onclick="submitActivate()">激 活</button>
     <button class="btn btn-secondary" onclick="closeWindow()">取 消</button>
 
+    <!-- ★ 新增：离线激活文件导入入口（无网络时使用） -->
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed #ddd;">
+        <div style="font-size: 12px; color: #888; margin-bottom: 8px; text-align: center;">— 无法联网？使用离线激活文件 —</div>
+        <button class="btn btn-secondary" id="importOfflineBtn" onclick="importOfflineLicense()" style="background: #fff8e1; color: #e65100; border: 1px solid #ffe082;">
+            📁 导入离线激活文件
+        </button>
+        <div style="font-size: 11px; color: #999; margin-top: 6px; line-height: 1.6;">
+            使用方法：<br>
+            1. 复制上方机器 ID 发给客服<br>
+            2. 客服生成离线激活文件发给您<br>
+            3. 点击上方按钮选择该文件完成激活
+        </div>
+    </div>
+
     <div class="machine-id-box">
         <div class="label">
             <span class="label-text">🔑 本机机器 ID（联系客服时提供）</span>
@@ -325,7 +339,7 @@ h1 {
             <li>每个激活码绑定一台设备 + 一个诊所</li>
             <li>换机或换诊所需联系客服解绑</li>
             <li>激活成功后软件将自动重启</li>
-            <li>如无法联网，请联系客服获取离线激活文件</li>
+            <li>如无法联网，请点击上方"导入离线激活文件"按钮，使用客服提供的离线激活文件完成激活</li>
         </ol>
     </div>
 </div>
@@ -489,6 +503,99 @@ async function submitActivate() {
 
 function closeWindow() {
     window.electronAPI.activate.close();
+}
+
+// ★ 离线激活文件导入（无网络时使用）
+// 流程：选择文件 → 读取内容 → 调用 license:activate IPC 写入 license.dat → 重启
+async function importOfflineLicense() {
+    const importBtn = document.getElementById('importOfflineBtn');
+    try {
+        if (!window.electronAPI || !window.electronAPI.license || !window.electronAPI.license.selectOfflineFile) {
+            showStatus('当前版本不支持离线激活文件导入，请升级软件', 'error');
+            return;
+        }
+
+        // 1. 选择文件
+        importBtn.disabled = true;
+        importBtn.textContent = '正在选择文件...';
+        const selectResult = await window.electronAPI.license.selectOfflineFile();
+        if (!selectResult.success) {
+            importBtn.disabled = false;
+            importBtn.textContent = '📁 导入离线激活文件';
+            if (selectResult.cancelled) {
+                // 用户取消选择，不显示错误
+                return;
+            }
+            showStatus('选择文件失败：' + (selectResult.error || '未知错误'), 'error');
+            return;
+        }
+
+        // 2. 校验文件内容（base64 格式，能解码为 JSON）
+        importBtn.textContent = '正在验证文件...';
+        const base64Content = selectResult.base64Content;
+        if (!base64Content) {
+            importBtn.disabled = false;
+            importBtn.textContent = '📁 导入离线激活文件';
+            showStatus('激活文件为空，请检查文件内容', 'error');
+            return;
+        }
+        let licenseData;
+        try {
+            const jsonStr = atob(base64Content);
+            licenseData = JSON.parse(jsonStr);
+        } catch (e) {
+            importBtn.disabled = false;
+            importBtn.textContent = '📁 导入离线激活文件';
+            showStatus('激活文件格式错误（非有效的 license 文件）', 'error');
+            return;
+        }
+
+        // 3. 显示 license 信息，二次确认
+        const info = licenseData.user ? `用户：${licenseData.user}\n` : '';
+        const type = licenseData.type ? `版本：${licenseData.type}\n` : '';
+        const clinic = licenseData.clinicName ? `诊所：${licenseData.clinicName}\n` : '';
+        const expires = licenseData.expiresAt ? `到期：${licenseData.expiresAt.slice(0, 10)}\n` : '';
+        const confirmMsg = `已加载离线激活文件：\n\n${info}${type}${clinic}${expires}\n点击"确定"完成激活并重启软件，点击"取消"放弃激活。`;
+        // 用 Electron 原生确认框
+        const confirmSync = window.electronAPI.confirmSync;
+        if (typeof confirmSync === 'function') {
+            const ok = confirmSync(confirmMsg);
+            if (!ok) {
+                importBtn.disabled = false;
+                importBtn.textContent = '📁 导入离线激活文件';
+                return;
+            }
+        }
+
+        // 4. 调用 license:activate IPC 写入 license.dat（加密写入 + 清除 trial.dat）
+        importBtn.textContent = '正在激活...';
+        showStatus('正在写入授权文件...', 'loading');
+        const activateResult = await window.electronAPI.license.activate(base64Content);
+        if (activateResult.success) {
+            showStatus('✅ 激活成功！软件将自动重启...', 'success');
+            importBtn.textContent = '激活成功';
+            // 给用户一点时间看到成功提示
+            setTimeout(() => {
+                window.electronAPI.activate.restart();
+            }, 1500);
+        } else {
+            const err = activateResult.error || '激活失败';
+            // 区分错误类型：绑定不匹配 / 文件损坏 / 权限问题
+            let friendlyErr = err;
+            if (/machineId|机器|绑定/.test(err)) {
+                friendlyErr = '激活文件与本机不匹配：' + err + '\n\n请确认该文件是为本机机器 ID 生成的。';
+            } else if (/permission|EACCES|EPERM|权限/.test(err)) {
+                friendlyErr = '授权文件写入权限不足：' + err + '\n\n请以管理员身份运行程序后重试。';
+            }
+            showStatus(friendlyErr, 'error', true);
+            importBtn.disabled = false;
+            importBtn.textContent = '📁 导入离线激活文件';
+        }
+    } catch (e) {
+        showStatus('导入激活文件出错：' + e.message, 'error', true);
+        importBtn.disabled = false;
+        importBtn.textContent = '📁 导入离线激活文件';
+    }
 }
 </script>
 </body>

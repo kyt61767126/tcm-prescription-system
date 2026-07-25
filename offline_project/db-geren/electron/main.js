@@ -620,12 +620,54 @@ ipcMain.handle('license:activate', (event, base64Content) => {
         try { localMachineId = activateManager.getMachineId(); } catch (e) {}
         const result = licenseManager.writeLicenseContent(base64Content, localMachineId);
         if (result.success) {
+            // ★ 离线激活/导入 license 后清除 trial.dat（与 activateOnline 成功后一致）
+            // 防止试用模式数据残留导致重复弹窗
+            try {
+                const fsSync = require('fs');
+                const trialPath = licenseManager.getTrialPath();
+                if (fsSync.existsSync(trialPath)) {
+                    fsSync.unlinkSync(trialPath);
+                    console.log('[License] 离线导入：trial.dat 已清除');
+                }
+            } catch (e) {
+                console.warn('[License] 离线导入：清除 trial.dat 失败:', e);
+            }
             // ★ v3 新增：激活后立即校验绑定
             const validate = licenseManager.validateLicense({ localMachineId });
             return { success: true, status: validate };
         }
         return { success: false, error: result.error };
     } catch (e) {
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ 新增：离线激活文件选择对话框（导入 license.dat）
+// 用户在激活窗口点击"导入离线激活文件"按钮时调用
+// 返回 { success, filePath, base64Content } 或 { success: false, error }
+ipcMain.handle('license:select-offline-file', async (event) => {
+    try {
+        const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
+        const result = await dialog.showOpenDialog(win, {
+            title: '选择离线激活文件',
+            defaultPath: app.getPath('downloads'),
+            filters: [
+                { name: 'License 文件', extensions: ['dat', 'lic', 'txt'] },
+                { name: '所有文件', extensions: ['*'] }
+            ],
+            properties: ['openFile']
+        });
+        if (result.canceled || result.filePaths.length === 0) {
+            return { success: false, cancelled: true };
+        }
+        const filePath = result.filePaths[0];
+        const fsSync = require('fs');
+        const content = fsSync.readFileSync(filePath, 'utf8');
+        // 去除可能的空白字符和换行（确保 base64 解析正常）
+        const trimmed = content.trim();
+        return { success: true, filePath: filePath, base64Content: trimmed };
+    } catch (e) {
+        console.error('[IPC] select-offline-file 异常:', e);
         return { success: false, error: e.message };
     }
 });

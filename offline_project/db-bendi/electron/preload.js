@@ -98,6 +98,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     license: {
         getStatus: () => ipcRenderer.invoke('license:get-status'),
         activate: (base64Content) => ipcRenderer.invoke('license:activate', base64Content),
+        // ★ 新增：离线激活文件选择对话框（返回 { success, filePath, base64Content }）
+        selectOfflineFile: () => ipcRenderer.invoke('license:select-offline-file'),
         // v2 新增：处方数量限制
         canPrescribe: () => ipcRenderer.invoke('license:can-prescribe'),
         incrementPrescription: () => ipcRenderer.invoke('license:increment-prescription'),
