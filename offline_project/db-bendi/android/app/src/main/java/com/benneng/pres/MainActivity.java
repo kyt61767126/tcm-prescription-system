@@ -209,6 +209,15 @@ public class MainActivity extends AppCompatActivity {
                             android.view.WindowInsets insets,
                             java.util.List<android.view.WindowInsetsAnimation> runningAnimations) {
                         // 动画进行中，保持覆盖层可见
+                        // ★ 注入键盘高度到 JS（实时更新，用于上移底部固定元素和滚动焦点元素）
+                        int imeHeight = insets.getInsets(android.view.WindowInsets.Type.ime()).bottom;
+                        if (webView != null) {
+                            final int height = imeHeight;
+                            webView.evaluateJavascript(
+                                "window.__imeHeight = " + height + ";" +
+                                "if(window.dispatchEvent){window.dispatchEvent(new Event('imeheightchange'));}",
+                                null);
+                        }
                         return insets;
                     }
 
