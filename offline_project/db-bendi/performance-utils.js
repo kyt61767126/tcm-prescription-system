@@ -561,6 +561,12 @@
 
         // 监听 Java 注入的 imeheightchange 事件
         window.addEventListener('imeheightchange', function() {
+            var imeHeight = window.__imeHeight || 0;
+            // ★ 设置 body padding-bottom 填充键盘区域，让表格可以向上滑动
+            // 解决"第11行开始键盘区域完全遮盖，表格无法继续向上滑动"问题
+            // 原理: padding-bottom 增大页面可滚动区域，用户可以滑动查看被键盘遮挡的表格内容
+            document.body.style.paddingBottom = imeHeight > 0 ? imeHeight + 'px' : '';
+
             // 防抖：连续变化时只滚动最后一次
             if (scrollTimer) clearTimeout(scrollTimer);
             scrollTimer = setTimeout(scrollToFocused, 100);
