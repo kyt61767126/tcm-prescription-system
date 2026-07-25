@@ -1290,6 +1290,10 @@
             // 桌面版：打开独立 BrowserWindow
             try {
                 await global.electronAPI.activate.show();
+                // ★ 修复：show() 立即返回（只打开窗口，不等待关闭）
+                // 重置标志让用户可以再次打开激活窗口
+                // 激活流程由激活窗口内的 submitActivate 处理，不依赖 __licenseActivating
+                global.__licenseActivating = false;
             } catch (e) {
                 console.error('[LicenseCheck] 立即激活失败:', e);
                 global.__licenseActivating = false;
