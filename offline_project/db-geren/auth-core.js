@@ -1614,3 +1614,47 @@
         document.addEventListener('DOMContentLoaded', startLicenseCheck);
     }
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
+
+// ============================================================================
+// 键盘适配：输入框聚焦时自动滚动到可见区域，防止药物栏表格被键盘遮盖
+// 解决"药物栏输入到第11行与手机键盘部分重合"的问题
+// 适用于所有端（云端网页/云端APP/云端桌面/离线桌面/离线APP）
+// 通过 focusin 事件 + visualViewport.resize 事件实现，不修改 index.html
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    function setupKeyboardAdapter() {
+        if (global.__bnKbAdapter) return;
+        global.__bnKbAdapter = true;
+
+        function scrollToActive() {
+            var el = document.activeElement;
+            if (!el) return;
+            if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable) {
+                try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(false); }
+            }
+        }
+
+        document.addEventListener('focusin', function (e) {
+            var el = e.target;
+            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+                setTimeout(scrollToActive, 300);
+            }
+        });
+
+        if (global.visualViewport) {
+            var timer = null;
+            global.visualViewport.addEventListener('resize', function () {
+                if (timer) clearTimeout(timer);
+                timer = setTimeout(scrollToActive, 100);
+            });
+        }
+    }
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        setupKeyboardAdapter();
+    } else {
+        document.addEventListener('DOMContentLoaded', setupKeyboardAdapter);
+    }
+})(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
