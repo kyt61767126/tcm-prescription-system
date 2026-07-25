@@ -562,10 +562,6 @@
         // 监听 Java 注入的 imeheightchange 事件
         window.addEventListener('imeheightchange', function() {
             var imeHeight = window.__imeHeight || 0;
-            // ★ 设置 body padding-bottom 填充键盘区域，让表格可以向上滑动
-            // 解决"第11行开始键盘区域完全遮盖，表格无法继续向上滑动"问题
-            // 原理: padding-bottom 增大页面可滚动区域，用户可以滑动查看被键盘遮挡的表格内容
-            document.body.style.paddingBottom = imeHeight > 0 ? imeHeight + 'px' : '';
 
             // ★ 参考云端布局：键盘 → 工具栏/菜单栏按钮 → 药物表格
             // 键盘弹出时上移底部固定元素到键盘上方，让用户能看到工具栏和菜单栏
@@ -583,6 +579,19 @@
             var mobileActionBar = document.querySelector('.mobile-action-bar');
             if (mobileActionBar) {
                 mobileActionBar.style.bottom = imeHeight > 0 ? (imeHeight + 52) + 'px' : '';
+            }
+
+            // ★ 表格底部行与键盘上缘闭合（无空白）
+            // 移除 body padding-bottom（会导致 body 可滚动，滑动时暴露 padding 区域空白）
+            // 改用表格容器 margin-bottom，减小容器高度，底部紧贴键盘上缘
+            var tableContainer = document.querySelector('.medicine-table-container');
+            if (tableContainer) {
+                // 处方页面：表格容器 margin-bottom = imeHeight，底部紧贴键盘上缘
+                tableContainer.style.marginBottom = imeHeight > 0 ? imeHeight + 'px' : '';
+                document.body.style.paddingBottom = '';
+            } else {
+                // 其他页面：body padding-bottom = imeHeight（备选）
+                document.body.style.paddingBottom = imeHeight > 0 ? imeHeight + 'px' : '';
             }
 
             // 防抖：连续变化时只滚动最后一次
