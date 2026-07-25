@@ -1118,18 +1118,46 @@ let currentUser = null;
             localStorage.setItem('local_systemUsers', simpleEncrypt(JSON.stringify(users)));
         }
 
+        // ★ 优化：登录防重复提交标志
+        let _loginInFlight = false;
+
+        function setLoginLoading(loading) {
+            const btn = document.getElementById('btnOk') || document.querySelector('.login-btn:not(.cancel)');
+            const pwd = document.getElementById('loginPassword');
+            const select = document.getElementById('loginUsername');
+            if (!btn) return;
+            if (loading) {
+                btn.disabled = true;
+                btn.dataset.originalText = btn.textContent;
+                btn.textContent = '登录中...';
+                if (pwd) pwd.disabled = true;
+                if (select) select.disabled = true;
+            } else {
+                btn.disabled = false;
+                if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
+                if (pwd) pwd.disabled = false;
+                if (select) select.disabled = false;
+            }
+        }
+
         async function handleLogin() {
+            const errorDiv = document.getElementById('loginError');
+            if (errorDiv) errorDiv.style.display = 'none';
+            // ★ 优化：防重复提交
+            if (_loginInFlight) return;
             try {
                 const username = document.getElementById('loginUsername').value.trim();
                 const password = document.getElementById('loginPassword').value;
-                const errorDiv = document.getElementById('loginError');
-                
+
                 if (!username || !password) {
                     errorDiv.textContent = '请输入用户名和密码';
                     errorDiv.style.display = 'block';
                     return;
                 }
-                
+
+                _loginInFlight = true;
+                setLoginLoading(true);
+
                 const users = getUsers();
                 // 使用 AuthCore.verifyPassword 支持 PBKDF2 + 旧 SHA-256 + 明文兼容
                 let user = null;
@@ -1142,7 +1170,7 @@ let currentUser = null;
                         if (u.password === hashedPwd) { user = u; break; }
                     }
                 }
-                
+
                 if (user) {
                     // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
                     try {
@@ -1158,7 +1186,7 @@ let currentUser = null;
                             }
                         }
                     } catch (e) { console.warn('密码升级失败:', e); }
-                    
+
                     currentUser = user;
                     // 使用统一的 user_login_data 存储登录信息
                     const loginData = {
@@ -1166,14 +1194,14 @@ let currentUser = null;
                         loginTime: Date.now()
                     };
                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
-                    
+
                     const rememberUser = document.getElementById('rememberUser')?.checked;
                     if (rememberUser) {
                         saveRememberedUser(username);
                     } else {
                         localStorage.removeItem('local_rememberedUsername');
                     }
-                    
+
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.main-container').style.display = 'flex';
                     updateUserDisplay();
@@ -1207,9 +1235,11 @@ let currentUser = null;
                 }
             } catch (e) {
                 console.error('登录失败:', e);
-                const errorDiv = document.getElementById('loginError');
                 errorDiv.textContent = '登录失败: ' + (e.message || '未知错误');
                 errorDiv.style.display = 'block';
+            } finally {
+                _loginInFlight = false;
+                setLoginLoading(false);
             }
         }
 

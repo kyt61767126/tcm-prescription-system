@@ -1162,16 +1162,41 @@ if (window.Permission) {
             localStorage.setItem('local_systemUsers', simpleEncrypt(JSON.stringify(users)));
         }
 
+        // ★ 优化：登录防重复提交标志
+        let _loginInFlight = false;
+
+        function setLoginLoading(loading) {
+            const btn = document.getElementById('btnOk') || document.querySelector('.login-btn:not(.cancel)');
+            const pwd = document.getElementById('loginPassword');
+            if (!btn) return;
+            if (loading) {
+                btn.disabled = true;
+                btn.dataset.originalText = btn.textContent;
+                btn.textContent = '登录中...';
+                if (pwd) pwd.disabled = true;
+            } else {
+                btn.disabled = false;
+                if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
+                if (pwd) pwd.disabled = false;
+            }
+        }
+
         async function handleLogin() {
+            const errorDiv = document.getElementById('loginError');
+            if (errorDiv) errorDiv.style.display = 'none';
+            // ★ 优化：防重复提交
+            if (_loginInFlight) return;
             try {
                 const password = document.getElementById('loginPassword').value;
-                const errorDiv = document.getElementById('loginError');
 
                 if (!password) {
                     errorDiv.textContent = '请输入密码';
                     errorDiv.style.display = 'block';
                     return;
                 }
+
+                _loginInFlight = true;
+                setLoginLoading(true);
 
                 // 个人版：使用第一个用户进行认证
                 const users = getUsers();
@@ -1216,10 +1241,8 @@ if (window.Permission) {
                     } else {
                         localStorage.removeItem('local_rememberedUsername');
                     }
-                    
+
                     // 个人版：记住密码功能（P0-1 安全优化：禁止明文存储）
-                    // 使用 AuthCore.saveRememberedPassword 加密存储（safeStorage/DPAPI 优先，XOR PWDv2 降级）
-                    // 兼容旧明文 local_rememberedPassword：检测到时自动迁移到加密存储并删除
                     const rememberPassword = document.getElementById('rememberPassword')?.checked;
                     if (rememberPassword) {
                         if (window.AuthCore && AuthCore.saveRememberedPassword) {
@@ -1227,10 +1250,8 @@ if (window.Permission) {
                                 console.warn('加密保存密码失败:', e);
                             });
                         } else {
-                            // 兜底：AuthCore 未加载时降级为 sessionStorage（仅会话内有效，关闭即失效）
                             sessionStorage.setItem('auth:savedPassword', password);
                         }
-                        // 清除可能存在的旧明文数据
                         localStorage.removeItem('local_rememberedPassword');
                     } else {
                         localStorage.removeItem('local_rememberedPassword');
@@ -1240,18 +1261,16 @@ if (window.Permission) {
                             sessionStorage.removeItem('auth:savedPassword');
                         }
                     }
-                    
+
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.main-container').style.display = 'flex';
                     updateUserDisplay();
                     errorDiv.style.display = 'none';
-                    
+
                     await loadData();
                     refreshUserInterface();
-                    // 登录后切换到处方页，确保移动端底部操作栏显示
                     try { switchMobileTab('prescription'); } catch(e) { console.warn('switchMobileTab failed:', e); }
 
-                    // 通知主进程放大窗口
                     if (window.electronAPI && window.electronAPI.loginSuccess) {
                         try {
                             await window.electronAPI.loginSuccess(user);
@@ -1265,9 +1284,11 @@ if (window.Permission) {
                 }
             } catch (e) {
                 console.error('登录失败:', e);
-                const errorDiv = document.getElementById('loginError');
                 errorDiv.textContent = '登录失败: ' + (e.message || '未知错误');
                 errorDiv.style.display = 'block';
+            } finally {
+                _loginInFlight = false;
+                setLoginLoading(false);
             }
         }
 

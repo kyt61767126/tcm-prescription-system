@@ -177,84 +177,117 @@
         } catch(e) { console.warn('Login permission init failed:', e); }
     }
 
-    async function handleLogin() {
-    clearError();
-    const username = $('loginUsername').value;
-    const password = $('loginPassword').value;
-    if (!username) { showError('请选择用户'); return; }
-    if (!password) { showError('请输入密码'); return; }
+    // ★ 优化：登录防重复提交标志
+    let _loginInFlight = false;
 
-    const config = await getAppConfig();
-    const cfg = getUsersFromConfig(config);
-    const stored = getUsersFromStorage();
-    const users = (cfg.length > 0 || stored.length > 0)
-        ? mergeUsers(cfg, stored)
-        : DEFAULT_USERS.map(normalizeUser).map(u => ({ ...u, displayName: u.name || u.username }));
-    const user = users.find(u => u.username === username);
-
-    if (!user) {
-        showError('用户不存在');
-        return;
-    }
-
-    const storedPwd = user.password || '';
-    const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
-    const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
-    if (!pwdOk) {
-        showError('密码错误');
-        return;
-    }
-
-    localStorage.setItem('currentUser', JSON.stringify({
-        username: user.username,
-        name: user.name,
-        role: user.role || 'user'
-    }));
-    if (window.AuthCore) {
-        try {
-            await AuthCore.StorageAdapter.setItem('auth:currentUser', JSON.stringify({username:user.username, name:user.name, role:user.role||'user'}));
-            await AuthCore.StorageAdapter.setItem('auth:isLoggedIn', 'true');
-            await AuthCore.StorageAdapter.setItem('auth:loginData', JSON.stringify({loginTime: Date.now(), username:user.username}));
-        } catch(e) {}
-    }
-    localStorage.setItem('isLoggedIn', 'true');
-
-    const remember = $('rememberUser').checked;
-    if (remember) {
-        localStorage.setItem(KEY_REMEMBER_USER, user.username);
-    } else {
-        localStorage.removeItem(KEY_REMEMBER_USER);
-    }
-
-    // 记住密码（P0-2: 优先 safeStorage 系统级加密；移除明文回退分支）
-    const rememberPassword = document.getElementById('rememberPassword');
-    if (rememberPassword && rememberPassword.checked) {
-        if (window.AuthCore && AuthCore.encryptPassword) {
-            const encryptedPwd = await AuthCore.encryptPassword(password);
-            if (encryptedPwd) {
-                localStorage.setItem('auth:savedPassword', encryptedPwd);
-            } else {
-                console.warn('[auth] 密码加密失败，已拒绝保存密码');
-                localStorage.removeItem('auth:savedPassword');
-                rememberPassword.checked = false;
-            }
+    function setLoginLoading(loading) {
+        const btn = $('btnOk');
+        const pwd = $('loginPassword');
+        const select = $('loginUsername');
+        if (!btn) return;
+        if (loading) {
+            btn.disabled = true;
+            btn.dataset.originalText = btn.textContent;
+            btn.textContent = '登录中...';
+            if (pwd) pwd.disabled = true;
+            if (select) select.disabled = true;
         } else {
-            console.warn('[auth] AuthCore.encryptPassword 不可用，已拒绝保存密码');
-            localStorage.removeItem('auth:savedPassword');
-            rememberPassword.checked = false;
+            btn.disabled = false;
+            if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
+            if (pwd) pwd.disabled = false;
+            if (select) select.disabled = false;
         }
-    } else {
-        localStorage.removeItem('auth:savedPassword');
     }
 
-    if (window.electronAPI && window.electronAPI.loginSuccess) {
-        await window.electronAPI.loginSuccess({
-            username: user.username,
-            name: user.name,
-            role: user.role || 'user'
-        });
+    async function handleLogin() {
+        clearError();
+        // ★ 优化：防重复提交
+        if (_loginInFlight) return;
+        const username = $('loginUsername').value;
+        const password = $('loginPassword').value;
+        if (!username) { showError('请选择用户'); return; }
+        if (!password) { showError('请输入密码'); return; }
+
+        _loginInFlight = true;
+        setLoginLoading(true);
+        try {
+            const config = await getAppConfig();
+            const cfg = getUsersFromConfig(config);
+            const stored = getUsersFromStorage();
+            const users = (cfg.length > 0 || stored.length > 0)
+                ? mergeUsers(cfg, stored)
+                : DEFAULT_USERS.map(normalizeUser).map(u => ({ ...u, displayName: u.name || u.username }));
+            const user = users.find(u => u.username === username);
+
+            if (!user) {
+                showError('用户不存在');
+                return;
+            }
+
+            const storedPwd = user.password || '';
+            const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
+            const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
+            if (!pwdOk) {
+                showError('密码错误');
+                return;
+            }
+
+            // ★ 优化：批量并行写入 AuthCore 存储
+            const userData = { username: user.username, name: user.name, role: user.role || 'user' };
+            const userDataStr = JSON.stringify(userData);
+            const loginDataStr = JSON.stringify({ loginTime: Date.now(), username: user.username });
+
+            if (window.AuthCore) {
+                try {
+                    await Promise.all([
+                        AuthCore.StorageAdapter.setItem('auth:currentUser', userDataStr),
+                        AuthCore.StorageAdapter.setItem('auth:isLoggedIn', 'true'),
+                        AuthCore.StorageAdapter.setItem('auth:loginData', loginDataStr)
+                    ]);
+                } catch(e) {}
+            }
+            localStorage.setItem('currentUser', userDataStr);
+            localStorage.setItem('isLoggedIn', 'true');
+
+            const remember = $('rememberUser').checked;
+            if (remember) {
+                localStorage.setItem(KEY_REMEMBER_USER, user.username);
+            } else {
+                localStorage.removeItem(KEY_REMEMBER_USER);
+            }
+
+            // 记住密码（P0-2: 优先 safeStorage 系统级加密）
+            const rememberPassword = document.getElementById('rememberPassword');
+            if (rememberPassword && rememberPassword.checked) {
+                if (window.AuthCore && AuthCore.encryptPassword) {
+                    const encryptedPwd = await AuthCore.encryptPassword(password);
+                    if (encryptedPwd) {
+                        localStorage.setItem('auth:savedPassword', encryptedPwd);
+                    } else {
+                        console.warn('[auth] 密码加密失败，已拒绝保存密码');
+                        localStorage.removeItem('auth:savedPassword');
+                        rememberPassword.checked = false;
+                    }
+                } else {
+                    console.warn('[auth] AuthCore.encryptPassword 不可用，已拒绝保存密码');
+                    localStorage.removeItem('auth:savedPassword');
+                    rememberPassword.checked = false;
+                }
+            } else {
+                localStorage.removeItem('auth:savedPassword');
+            }
+
+            if (window.electronAPI && window.electronAPI.loginSuccess) {
+                await window.electronAPI.loginSuccess(userData);
+            }
+        } catch (e) {
+            console.error('[login] handleLogin 异常:', e);
+            showError('登录异常：' + (e && e.message ? e.message : '未知错误'));
+        } finally {
+            _loginInFlight = false;
+            setLoginLoading(false);
+        }
     }
-}
 
     function handleCancel() {
         if (window.electronAPI && window.electronAPI.quitApp) {

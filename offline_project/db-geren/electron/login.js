@@ -138,64 +138,95 @@
         } catch(e) { console.warn('Login permission init failed:', e); }
     }
 
+    // ★ 优化：登录防重复提交标志，避免按钮重复点击触发多次异步登录
+    let _loginInFlight = false;
+
+    function setLoginLoading(loading) {
+        const btn = $('btnOk');
+        const pwd = $('loginPassword');
+        if (!btn) return;
+        if (loading) {
+            btn.disabled = true;
+            btn.dataset.originalText = btn.textContent;
+            btn.textContent = '登录中...';
+            if (pwd) pwd.disabled = true;
+        } else {
+            btn.disabled = false;
+            if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
+            if (pwd) pwd.disabled = false;
+        }
+    }
+
     async function handleLogin() {
         clearError();
+        // ★ 优化：防重复提交
+        if (_loginInFlight) return;
         if (!loginUserInfo) { showError('用户信息加载失败'); return; }
         const password = $('loginPassword').value;
         if (!password) { showError('请输入密码'); return; }
 
-        const storedPwd = loginUserInfo.password || '';
-        const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
-        const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
-        if (!pwdOk) {
-            showError('密码错误');
-            return;
-        }
+        _loginInFlight = true;
+        setLoginLoading(true);
+        try {
+            const storedPwd = loginUserInfo.password || '';
+            const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
+            const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
+            if (!pwdOk) {
+                showError('密码错误');
+                return;
+            }
 
-        // 仅写入必要字段，不写入密码
-        localStorage.setItem('currentUser', JSON.stringify({
-            username: loginUserInfo.username,
-            name: loginUserInfo.name,
-            role: loginUserInfo.role || 'user'
-        }));
-        if (window.AuthCore) {
-            try {
-                await AuthCore.StorageAdapter.setItem('auth:currentUser', JSON.stringify({username:loginUserInfo.username, name:loginUserInfo.name, role:loginUserInfo.role||'user'}));
-                await AuthCore.StorageAdapter.setItem('auth:isLoggedIn', 'true');
-                await AuthCore.StorageAdapter.setItem('auth:loginData', JSON.stringify({loginTime: Date.now(), username:loginUserInfo.username}));
-            } catch(e) {}
-        }
-        localStorage.setItem('isLoggedIn', 'true');
+            // 仅写入必要字段，不写入密码
+            const userData = { username: loginUserInfo.username, name: loginUserInfo.name, role: loginUserInfo.role || 'user' };
+            const userDataStr = JSON.stringify(userData);
+            const loginDataStr = JSON.stringify({ loginTime: Date.now(), username: loginUserInfo.username });
 
-        localStorage.removeItem(KEY_REMEMBER_USER);
+            // ★ 优化：批量并行写入 AuthCore 存储，避免串行 await 累积延迟
+            if (window.AuthCore) {
+                try {
+                    await Promise.all([
+                        AuthCore.StorageAdapter.setItem('auth:currentUser', userDataStr),
+                        AuthCore.StorageAdapter.setItem('auth:isLoggedIn', 'true'),
+                        AuthCore.StorageAdapter.setItem('auth:loginData', loginDataStr)
+                    ]);
+                } catch(e) {}
+            }
+            // localStorage 同步写入
+            localStorage.setItem('currentUser', userDataStr);
+            localStorage.setItem('isLoggedIn', 'true');
 
-        // 记住密码（P0-2: 优先 safeStorage 系统级加密；移除明文回退分支）
-        const rememberPassword = document.getElementById('rememberPassword');
-        if (rememberPassword && rememberPassword.checked) {
-            if (window.AuthCore && AuthCore.encryptPassword) {
-                const encryptedPwd = await AuthCore.encryptPassword(password);
-                if (encryptedPwd) {
-                    localStorage.setItem('auth:savedPassword', encryptedPwd);
+            localStorage.removeItem(KEY_REMEMBER_USER);
+
+            // 记住密码（P0-2: 优先 safeStorage 系统级加密；移除明文回退分支）
+            const rememberPassword = document.getElementById('rememberPassword');
+            if (rememberPassword && rememberPassword.checked) {
+                if (window.AuthCore && AuthCore.encryptPassword) {
+                    const encryptedPwd = await AuthCore.encryptPassword(password);
+                    if (encryptedPwd) {
+                        localStorage.setItem('auth:savedPassword', encryptedPwd);
+                    } else {
+                        console.warn('[auth] 密码加密失败，已拒绝保存密码');
+                        localStorage.removeItem('auth:savedPassword');
+                        rememberPassword.checked = false;
+                    }
                 } else {
-                    console.warn('[auth] 密码加密失败，已拒绝保存密码');
+                    console.warn('[auth] AuthCore.encryptPassword 不可用，已拒绝保存密码');
                     localStorage.removeItem('auth:savedPassword');
                     rememberPassword.checked = false;
                 }
             } else {
-                console.warn('[auth] AuthCore.encryptPassword 不可用，已拒绝保存密码');
                 localStorage.removeItem('auth:savedPassword');
-                rememberPassword.checked = false;
             }
-        } else {
-            localStorage.removeItem('auth:savedPassword');
-        }
 
-        if (window.electronAPI && window.electronAPI.loginSuccess) {
-            await window.electronAPI.loginSuccess({
-                username: loginUserInfo.username,
-                name: loginUserInfo.name,
-                role: loginUserInfo.role || 'user'
-            });
+            if (window.electronAPI && window.electronAPI.loginSuccess) {
+                await window.electronAPI.loginSuccess(userData);
+            }
+        } catch (e) {
+            console.error('[login] handleLogin 异常:', e);
+            showError('登录异常：' + (e && e.message ? e.message : '未知错误'));
+        } finally {
+            _loginInFlight = false;
+            setLoginLoading(false);
         }
     }
 
