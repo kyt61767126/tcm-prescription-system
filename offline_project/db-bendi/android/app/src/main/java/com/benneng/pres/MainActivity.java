@@ -358,12 +358,6 @@ public class MainActivity extends AppCompatActivity {
     // WebView 配置
     // ========================================================================
     private void configureWebView() {
-        // ★ 禁用 WebView 硬件加速，使用软件渲染（LAYER_TYPE_SOFTWARE）
-        // 目的: 清除 GPU 纹理缓存，根治 adjustResize 模式下键盘弹出时 WebView 渲染中间帧
-        //       显示旧内容"本能中医处方系统"的闪现问题
-        // 原理: 软件渲染不使用 GPU 纹理缓存，重绘时不会显示残留的旧内容
-        // 副作用: 可能略微影响滚动流畅度，但能彻底根治 GPU 纹理缓存导致的闪现
-        webView.setLayerType(View.LAYER_TYPE_SOFTWARE, null);
         WebSettings s = webView.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
