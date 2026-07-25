@@ -1242,7 +1242,10 @@
 
     // ★ 异步获取并显示 license 状态
     // 云端环境：显示"🌐 云端版，登录即可使用"
-    // 离线环境：显示试用期剩余天数 / 已激活 / 已过期
+    // 离线环境：根据 licenseType 区分 trial(试用期) / licensed(已激活)
+    //   - trial + remainingDays>0 → 试用期剩余 X 天
+    //   - trial + remainingDays<=0 → 试用期已过期
+    //   - licensed → 已激活（type）+ 剩余 X 天
     async function updateLicenseStatusText() {
         const el = document.getElementById('licenseStatusText');
         if (!el) return;
@@ -1256,14 +1259,32 @@
             }
             const status = await global.electronAPI.license.getStatus();
             if (status && status.valid) {
-                // ★ 优先从 prescriptionStatus 读取剩余天数
-                const ps = status.prescriptionStatus;
-                if (ps && typeof ps.remainingDays === 'number' && ps.remainingDays > 0) {
-                    el.innerHTML = '⏳ 试用期有效<br>剩余 <b style="color:#4caf50;">' + ps.remainingDays + '</b> 天';
-                } else if (ps && typeof ps.remainingDays === 'number' && ps.remainingDays <= 0) {
-                    el.innerHTML = '✅ 已激活' + (ps.plan ? '（' + ps.plan + '）' : '');
+                // ★ LicenseManager.java 返回字段：licenseType / type / remainingDays 都在顶层
+                //    不存在 prescriptionStatus 字段（之前代码读错位置导致走 else 显示"已激活"）
+                const licenseType = status.licenseType || status.type || '';
+                const remainingDays = status.remainingDays;
+                const hasDays = (typeof remainingDays === 'number' && !isNaN(remainingDays));
+
+                if (licenseType === 'trial') {
+                    // 试用期模式
+                    if (hasDays && remainingDays > 0) {
+                        el.innerHTML = '⏳ 试用期有效<br>剩余 <b style="color:#4caf50;">' + remainingDays + '</b> 天';
+                    } else {
+                        el.innerHTML = '⚠️ <span style="color:#ff9800;">试用期已过期</span><br><span style="color:red;">请激活后使用</span>';
+                    }
+                } else if (licenseType === 'licensed' || licenseType === 'personal' || licenseType === 'pro') {
+                    // 已激活（正式 license）
+                    const planLabel = licenseType === 'personal' ? '个人版' :
+                                      licenseType === 'pro' ? '专业版' : licenseType;
+                    let html = '✅ 已激活' + (planLabel ? '（' + planLabel + '）' : '');
+                    if (hasDays && remainingDays > 0) {
+                        html += '<br>剩余 <b style="color:#4caf50;">' + remainingDays + '</b> 天';
+                    }
+                    el.innerHTML = html;
                 } else {
-                    el.innerHTML = '✅ 已激活';
+                    // 未知类型，显示通用已激活
+                    el.innerHTML = '✅ 已激活' +
+                        (hasDays && remainingDays > 0 ? '<br>剩余 ' + remainingDays + ' 天' : '');
                 }
             } else {
                 el.innerHTML = '❌ 未激活<br><span style="color:red;">' +
