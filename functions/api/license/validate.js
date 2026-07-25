@@ -165,12 +165,20 @@ export async function onRequest(context) {
         if (record.status === 'used' && !existingDevice) {
             // 新设备激活：检查是否还有配额
             if (devices.length >= maxDevices) {
-                return json({
-                    success: false,
-                    error: `已达最大设备数（${maxDevices} 台），无法绑定新设备。请联系管理员解绑旧设备后重试`,
-                    maxDevices: maxDevices,
-                    devicesCount: devices.length
-                }, 403);
+                // ★ 换机模式：自动解绑最旧的设备，允许新设备激活
+                // 适用场景：用户更换手机/重装系统后机器ID变化，无法激活
+                // 安全性：激活码格式 BNZC-XXXX-XXXX-XXXX-XXXX 不易被猜到
+                // devices 数组按激活时间排序（push 到末尾），第一个是最旧的
+                const oldestDevice = devices[0];
+                await appendLicenseLog(kv, code, {
+                    action: 'auto-unbind',
+                    time: new Date().toISOString(),
+                    ip: ip,
+                    operator: 'system',
+                    detail: `auto-unbind oldest device ${oldestDevice.machineId.substring(0, 8)}... for new device ${machineId.substring(0, 8)}..., remaining=${devices.length - 1}/${maxDevices}`
+                });
+                devices.shift();  // 移除最旧的设备
+                // 继续后续激活流程（新设备会被添加到 devices 数组）
             }
             // 配额充足，允许新设备激活（在后续 updateLicense 中添加到 devices 数组）
         }
