@@ -146,12 +146,10 @@ public class MainActivity extends AppCompatActivity {
                 // 拦截 Autofill 填充请求，不执行任何操作
             }
         };
-        // ★ 与云端APP对齐：不禁用硬件加速，WebView 一直可见（不初始隐藏）
-        // 之前 webView.setVisibility(View.INVISIBLE) + onPageFinished 设 VISIBLE
-        // 导致首次键盘弹出时 WebView 重绘不完整，底部工具栏分2次才出现
-        // splash.png 已替换为纯紫色 + 主题已切换，无需初始隐藏防闪现
+        // ★ 防止闪现：初始隐藏，背景色与登录页一致（紫色#667eea），onPageFinished后显示
+        // 即使adjustResize导致重绘，闪现的也是紫色背景而非旧内容
+        webView.setVisibility(View.INVISIBLE);
         webView.setBackgroundColor(0xFF667eea);
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         // ★ 适配状态栏（无 padding 方案）：WebView 填满整个屏幕，网页顶部紫色（header-section/login-overlay）
         // 与状态栏紫色(#667eea)融合，无额外 padding 区域。onPageFinished 时注入 CSS 让 header-section
         // 内容下移避开状态栏。此方案消除顶部灰白行/紫色加宽条，操作界面紧贴状态栏下方。
@@ -181,8 +179,8 @@ public class MainActivity extends AppCompatActivity {
             getWindow().getDecorView().setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         }
 
-        // ★ 键盘动画回调：splash.png 已替换为纯紫色 + 主题已切换，flashOverlay 不再需要显示
-        // 保留回调框架但不显示覆盖层，避免阻断WebView首次重绘导致底部工具栏分2次出现
+        // ★ 键盘动画拦截：在键盘动画开始前显示覆盖层，动画结束后隐藏
+        // 比onPreDraw更早拦截，彻底遮挡adjustResize模式下的闪现内容
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().getDecorView().setWindowInsetsAnimationCallback(
                 new android.view.WindowInsetsAnimation.Callback(
@@ -191,7 +189,8 @@ public class MainActivity extends AppCompatActivity {
                     public android.view.WindowInsetsAnimation.Bounds onStart(
                             android.view.WindowInsetsAnimation animation,
                             android.view.WindowInsetsAnimation.Bounds bounds) {
-                        // 不显示覆盖层，让WebView正常重绘（与云端APP行为一致）
+                        // 键盘动画开始前，立即显示覆盖层
+                        flashOverlay.setVisibility(View.VISIBLE);
                         return bounds;
                     }
 
@@ -199,26 +198,19 @@ public class MainActivity extends AppCompatActivity {
                     public android.view.WindowInsets onProgress(
                             android.view.WindowInsets insets,
                             java.util.List<android.view.WindowInsetsAnimation> runningAnimations) {
+                        // 动画进行中，保持覆盖层可见
                         return insets;
                     }
 
                     @Override
                     public void onEnd(android.view.WindowInsetsAnimation animation) {
-                        // ★ 键盘动画结束后，触发网页 resize 事件，让 position:fixed 菜单栏工具栏立即重新定位
-                        // 解决"键盘弹出后中间空白区，第二次点击才出现菜单栏工具栏"的问题
-                        // 云端APP的 Capacitor 框架自动处理此逻辑，离线APP需手动注入
-                        if (webView != null) {
-                            webView.post(() -> {
-                                webView.evaluateJavascript(
-                                    "(function(){" +
-                                    "  window.dispatchEvent(new Event('resize'));" +
-                                    "  var el = document.activeElement;" +
-                                    "  if(el && (el.tagName==='INPUT'||el.tagName==='TEXTAREA')){" +
-                                    "    try{ el.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){}" +
-                                    "  }" +
-                                    "})();", null);
-                            });
-                        }
+                        // 动画结束后，延迟隐藏覆盖层（等待WebView重绘完成）
+                        mainHandler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                flashOverlay.setVisibility(View.GONE);
+                            }
+                        }, 150);
                     }
                 }
             );
@@ -262,19 +254,39 @@ public class MainActivity extends AppCompatActivity {
     // Autofill 防护由 WebView 子类的 onProvideAutofillVirtualStructure 重写负责（足够）。
     // 闪现防护由 WindowInsetsAnimation.Callback + flashOverlay 负责。
 
-    // ★ 键盘弹出时的闪现保护（已禁用覆盖层显示）
-    // splash.png 已替换为纯紫色 + 主题已切换，flashOverlay 不再需要显示
-    // 保留方法框架但不禁用高度检测，覆盖层保持 GONE 不影响 WebView 渲染
+    // ★ 键盘弹出时的闪现保护：通过ViewTreeObserver检测WebView高度变化，在重绘期间显示覆盖层
     private void setupKeyboardFlashProtection() {
         if (webView == null) return;
         webView.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
             private int lastHeight = 0;
+            private boolean flashActive = false;
+            private long lastFlashTime = 0;
 
             @Override
             public boolean onPreDraw() {
                 int currentHeight = webView.getHeight();
-                // 仅记录高度变化，不显示覆盖层（与云端APP行为一致）
+                long now = System.currentTimeMillis();
+
+                // 检测高度变化（键盘弹出/收起会导致WebView高度变化）
                 if (Math.abs(currentHeight - lastHeight) > 50) {
+                    // 高度变化超过50px，认为是键盘事件
+                    // 立即显示覆盖层遮挡闪现
+                    if (!flashActive && (now - lastFlashTime > 50)) {
+                        flashOverlay.setVisibility(View.VISIBLE);
+                        flashActive = true;
+                        lastFlashTime = now;
+
+                        // 延迟隐藏覆盖层（等待WebView重绘完成）
+                        mainHandler.postDelayed(new Runnable() {
+                            @Override
+                            public void run() {
+                                if (flashActive) {
+                                    flashOverlay.setVisibility(View.GONE);
+                                    flashActive = false;
+                                }
+                            }
+                        }, 200);
+                    }
                     lastHeight = currentHeight;
                 }
                 return true;
