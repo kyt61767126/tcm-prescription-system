@@ -287,22 +287,73 @@ functions/api/           # Cloudflare Pages Functions（API 后端）
    - 从 Cloudflare 环境变量 `LICENSE_MASTER_KEY` 读取
    - 未配置则不下发（客户端 fallback 到硬编码）
    - `masterKey` 不参与签名内容（在签名计算后添加）
+   - **P1-3 升级**：`getLicenseHmacKey()` 改为 async，若配置了 `LICENSE_MASTER_KEY` 则签名密钥也派生自 masterKey（`SHA256(masterKey + ':license-hmac:v1')`），与客户端保持一致
 
-2. **客户端** `license-manager.js`：新增 `getEffectiveHmacKey()` / `getEffectiveConfigSignKey()`
+2. **客户端** `license-manager.js`：新增 `setLicenseDataContext()` / `getEffectiveHmacKey()` / `getEffectiveConfigSignKey()`
    - 优先从 license.dat 中的 `masterKey` 派生 HMAC 密钥（`SHA256(masterKey + ':license-hmac:v1')`）
    - 旧 license 无 `masterKey` 字段 → fallback 到硬编码 `LICENSE_HMAC_KEY`（向后兼容）
    - `verifySignature` 开头调用 `setLicenseDataContext(data)` 缓存 license 数据
+   - `verifyConfigIntegrity` 使用 `getEffectiveConfigSignKey()` 派生密钥
+   - `validateLicense` 返回结果携带 `license.masterKey`（透传给 renderer）
 
-3. **影响范围**
+3. **客户端渲染层** `auth-core.js`：自动注入 masterKey
+   - 模块加载时自动调用 `electronAPI.license.getStatus()` 获取 license
+   - 若 status 包含 `masterKey`，调用 `AuthCore.setMasterKey(status.masterKey)` 注入
+   - 注入后 `hashPassword` / `hashPasswordWithUser` 优先使用 `(PASSWORD_SALT + ':' + masterKey)` 作为盐
+   - 未注入时 fallback 到纯 `PASSWORD_SALT`（向后兼容旧版本与旧哈希）
+   - 旧 PWDv1/PWDv2/XORv1/XORv2 解密逻辑不受影响（RUNTIME_KEY 在模块加载时计算定值）
+
+4. **影响范围**
    - 旧 license：继续用硬编码密钥验签（向后兼容）
    - 新激活的 license（配置 LICENSE_MASTER_KEY 后）：用 masterKey 派生密钥验签（更安全）
    - license.dat 加密/解密逻辑不变（仍用 machineId+硬件指纹派生）
+   - 密码哈希盐动态化：每个安装使用不同盐值，破解单一安装不会泄露其他安装密码
 
-#### 配置方法
-1. 在 Cloudflare Pages 后台设置环境变量 `LICENSE_MASTER_KEY`（32+ 字符随机字符串）
-2. 新激活的 license 会自动包含 `masterKey` 字段
-3. 旧 license 不受影响（继续用硬编码密钥）
-4. 客户端重新打包后生效（4端 license-manager.js 已更新）
+#### 配置方法（Cloudflare Pages 后台）
+
+**步骤 1：登录 Cloudflare 控制台**
+1. 访问 https://dash.cloudflare.com/
+2. 选择对应账号 → Pages → 选择 `tcm-prescription-system` 项目
+
+**步骤 2：进入环境变量配置**
+1. 项目详情页 → Settings → Environment variables
+2. 选择 Production 环境（重要：仅 Production 环境的变量对线上生效）
+
+**步骤 3：添加 LICENSE_MASTER_KEY（必选）**
+- 变量名：`LICENSE_MASTER_KEY`
+- 值：32+ 字符随机字符串
+  - 推荐用命令生成：`openssl rand -hex 32` 或 `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+  - 示例：`a1b2c3d4e5f6...`（请勿使用示例值，必须自己生成）
+- 类型：Plain text（**不要用 Encrypt**，因为 Cloudflare Functions 需明文读取；如需加密请用 Secrets 但需 Functions 兼容）
+- 注意：一旦设置并激活新 license 后**不可更改**，否则已激活的 license 会全部失效
+
+**步骤 4：（可选）添加 LICENSE_HMAC_KEY**
+- 仅当需要覆盖默认硬编码 HMAC 密钥时配置
+- 变量名：`LICENSE_HMAC_KEY`
+- 值：32+ 字符随机字符串
+- 注意：若同时配置了 `LICENSE_MASTER_KEY`，则 `LICENSE_HMAC_KEY` 不生效（masterKey 派生优先）
+
+**步骤 5：（可选，强烈推荐）添加 LICENSE_SIGN_PRIVATE_KEY 启用 ECDSA v5 非对称验签**
+- 步骤：
+  1. 本地运行 `node tools/gen-ecdsa-keys.cjs` 生成密钥对
+  2. 私钥（PEM 格式整段）填入 Cloudflare Secrets：变量名 `LICENSE_SIGN_PRIVATE_KEY`
+  3. 公钥（PEM 格式整段）填入 `license-manager.js` 的 `ECDSA_VERIFY_PUBLIC_KEY_PEM` 常量
+  4. 重新打包 4 端 exe
+- 优势：私钥仅云端持有，即使客户端源码完全泄露也无法伪造 license（HMAC 密钥派生虽然安全，但 ECDSA 提供更强的非对称保证）
+
+**步骤 6：触发部署使变量生效**
+- 推送任意 commit 到 GitHub main 分支会自动触发 Cloudflare Pages 重新部署
+- 或在 Cloudflare Pages 后台手动触发部署：Deployments → Retry deployment
+
+#### 验证配置是否生效
+1. **生成新激活码**：在管理后台 `/admin/index.html` 生成激活码，激活后查看 license.dat 解密内容是否包含 `masterKey` 字段
+2. **客户端日志检查**：启动桌面版查看 DevTools Console 是否出现 `[AuthCore] masterKey 已从 license 注入`
+3. **API 日志检查**：在 Cloudflare Pages Functions 日志中应出现 `[License] 已附加 masterKey（客户端将派生动态密钥）`
+
+#### 失效与回滚
+- **配置后**：新激活的 license 自动含 masterKey，旧 license 不受影响
+- **撤销 masterKey**：删除 Cloudflare 环境变量 → 重新部署 → 新激活的 license 不再含 masterKey 字段（已激活的 license 仍可正常使用，因客户端会自动 fallback 到硬编码密钥验签）
+- **更新 masterKey 值**：仅影响新激活的 license，旧 license（含旧 masterKey）仍按其 masterKey 派生密钥验签
 
 ### 4.3 后续优化方向
 
@@ -377,14 +428,16 @@ functions/api/           # Cloudflare Pages Functions（API 后端）
 - [x] 密钥管理优化：masterKey 下发 + 运行时派生
 - [x] 用户管理 API 增强：批量导入导出
 - [x] 创建模块化文档（本文档）
+- [x] **P1-3：masterKey 完整闭环**（云端派生签名 + 客户端派生验签 + 渲染层注入密码哈希盐）
 
-### P1（待完成）
-- [ ] Cloudflare Pages 后台配置 `LICENSE_MASTER_KEY` 环境变量
-- [ ] 4端桌面版重新打包 exe（使 license-manager.js 修改生效）
+### P1（待完成 - 用户操作）
+- [ ] Cloudflare Pages 后台配置 `LICENSE_MASTER_KEY` 环境变量（参考 4.2 节配置方法）
+- [ ] 4端桌面版重新打包 exe（使 license-manager.js + auth-core.js 修改生效）
+- [ ] 3端离线 APP 重新打包 APK（使 auth-core.js 修改生效）
 
 ### P2（后续优化）
 - [ ] ECDSA v5 验签启用（生成密钥对 + 配置 Cloudflare Secret）
-- [ ] PASSWORD_SALT 迁移到 masterKey 派生
+- [x] ~~PASSWORD_SALT 迁移到 masterKey 派生~~（P1-3 已完成，auth-core.js 自动注入）
 - [ ] masterKey 加密存储（machineId+硬件指纹 二次加密）
 - [ ] 安全防护措施运行时自检（定期校验 asarmor/proguard 完整性）
 - [ ] 审计日志可视化（管理员后台查看）

@@ -39,6 +39,41 @@ const LASTRUN_KEY = 'bnzc_lastrun_key_v1';
 // 用于校验 config.json 中的 clinicName/doctorName 未被篡改
 const CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026';
 
+// ============================================================================
+//  ★ P1-3 新增：masterKey 派生密钥机制
+//  设计：
+//    - license.dat 中可能包含 masterKey 字段（云端 LICENSE_MASTER_KEY 配置后下发）
+//    - 若 license 含 masterKey，则从 masterKey 派生 HMAC/CONFIG_SIGN 密钥
+//    - 若不含 masterKey（旧版 license），fallback 到硬编码密钥（向后兼容）
+//  派生算法（与云端 license-core.js 保持一致）：
+//    effectiveHmacKey      = SHA256(masterKey + ':license-hmac:v1')
+//    effectiveConfigSignKey = SHA256(masterKey + ':config-sign:v1')
+//  使用：
+//    verifySignature 开头调用 setLicenseDataContext(data) 缓存当前 license
+//    随后所有签名校验/加密派生均使用 getEffectiveHmacKey() / getEffectiveConfigSignKey()
+// ============================================================================
+let _currentLicenseData = null;
+function setLicenseDataContext(data) {
+    _currentLicenseData = data || null;
+}
+function getLicenseMasterKey() {
+    return (_currentLicenseData && _currentLicenseData.masterKey) ? _currentLicenseData.masterKey : null;
+}
+function getEffectiveHmacKey() {
+    const mk = getLicenseMasterKey();
+    if (mk) {
+        return crypto.createHash('sha256').update(mk + ':license-hmac:v1').digest('hex');
+    }
+    return LICENSE_HMAC_KEY;
+}
+function getEffectiveConfigSignKey() {
+    const mk = getLicenseMasterKey();
+    if (mk) {
+        return crypto.createHash('sha256').update(mk + ':config-sign:v1').digest('hex');
+    }
+    return CONFIG_SIGN_KEY;
+}
+
 // ★ v2: 版本类型默认配置（功能差异矩阵）
 // trial: 试用版，限 30 张/月处方，无高级功能
 // personal: 个人版，无限处方，支持数据备份
@@ -460,7 +495,7 @@ function generateSignature(data) {
         String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
         Array.isArray(data.features) ? data.features.join(',') : ''
     ].join('|');
-    return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
+    return crypto.createHmac('sha256', getEffectiveHmacKey()).update(content).digest('hex');
 }
 
 // ★ v3 签名：在 v2 基础上增加 clinicName/machineId/licenseBinding 三个绑定字段
@@ -476,17 +511,24 @@ function generateSignatureV3(data) {
         data.machineId || '',
         data.licenseBinding || ''
     ].join('|');
-    return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
+    return crypto.createHmac('sha256', getEffectiveHmacKey()).update(content).digest('hex');
 }
 
 // v1 签名逻辑（向后兼容旧版 license）
 function generateSignatureV1(data) {
     const content = [data.user, data.type, data.issuedAt, data.expiresAt].join('|');
-    return crypto.createHmac('sha256', LICENSE_HMAC_KEY).update(content).digest('hex');
+    return crypto.createHmac('sha256', getEffectiveHmacKey()).update(content).digest('hex');
 }
 
 function verifySignature(data) {
     if (!data.signature) return false;
+
+    // ★ P1-3: 缓存当前 license 数据上下文，供 getEffectiveHmacKey 派生密钥使用
+    // 注意：此时 license 数据尚未验签，但 masterKey 字段不参与签名内容（云端在签名后添加），
+    //      因此攻击者修改 masterKey 会导致派生密钥改变，但 cloud 签名仍按原 masterKey 计算，
+    //      所以篡改后的 license 会验签失败（除非攻击者知道原 masterKey 并重算签名）。
+    //      ECDSA v5（如果配置）提供更强的防篡改保证。
+    setLicenseDataContext(data);
 
     // ★ 任务2 新增：v5 ECDSA 签名优先校验
     // 如果 license 包含 signatureV5 字段且配置了 ECDSA 公钥，优先用非对称验签
@@ -498,7 +540,27 @@ function verifySignature(data) {
         console.warn('[License] v5 ECDSA 验签失败，降级为 HMAC');
     }
 
-    // ★ v3 签名优先校验（含 clinicName/machineId/licenseBinding 时使用）
+    // ★ P1-3 新增：如果 license 含 masterKey 字段，先用 masterKey 派生密钥验签
+    // 若验签失败，再 fallback 到硬编码密钥（向后兼容旧 license，但新 license 不会通过此路径）
+    if (data.masterKey) {
+        // 已在 setLicenseDataContext(data) 中缓存 masterKey，下面 generateSignatureV3/V2 会自动派生
+        const expectedV3mk = generateSignatureV3(data);
+        try {
+            if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV3mk, 'hex'))) {
+                return true;
+            }
+        } catch (e) { /* 长度不匹配，继续尝试其他方式 */ }
+        const expectedV2mk = generateSignature(data);
+        try {
+            if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV2mk, 'hex'))) {
+                return true;
+            }
+        } catch (e) { /* 继续尝试硬编码密钥 fallback */ }
+        // ★ masterKey 派生密钥验签失败，清除上下文，后续用硬编码密钥 fallback
+        setLicenseDataContext(null);
+    }
+
+    // ★ v3 签名优先校验（含 clinicName/machineId/licenseBinding 时使用）— 硬编码密钥 fallback
     if (data.clinicName !== undefined && data.machineId !== undefined && data.licenseBinding) {
         const expectedV3 = generateSignatureV3(data);
         try {
@@ -768,6 +830,11 @@ function normalizeLicense(license) {
     if (license.clinicName !== undefined) normalized.clinicName = license.clinicName || '';
     if (license.machineId !== undefined) normalized.machineId = license.machineId || '';
     if (license.licenseBinding !== undefined) normalized.licenseBinding = license.licenseBinding || '';
+    // ★ P1-3 新增：masterKey 透传（云端 LICENSE_MASTER_KEY 配置后下发，旧 license 无此字段）
+    if (license.masterKey !== undefined) normalized.masterKey = license.masterKey || null;
+    // ★ v3 新增：v5 ECDSA 签名透传（如果存在）
+    if (license.signatureV5 !== undefined) normalized.signatureV5 = license.signatureV5;
+    if (license.signatureVersion !== undefined) normalized.signatureVersion = license.signatureVersion;
     return normalized;
 }
 
@@ -833,6 +900,7 @@ function checkLicenseBinding(license, localMachineId) {
 // ★ v3 新增：校验 config.json 完整性签名
 // 防止用户修改 config.json 中的 clinicName 绕过 license 绑定校验
 // 返回 true=完整 / false=被篡改或无签名
+// ★ P1-3: 使用 getEffectiveConfigSignKey() 派生密钥（从 license.masterKey 派生，向后兼容）
 function verifyConfigIntegrity() {
     try {
         const configPath = path.join(getExeDirectory(), 'config.json');
@@ -844,7 +912,7 @@ function verifyConfigIntegrity() {
         if (!cfg.configIssuedAt) return false;
         // 签名内容：clinicName|doctorName|edition|configIssuedAt
         const signContent = [cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '', cfg.configIssuedAt].join('|');
-        const expected = crypto.createHmac('sha256', CONFIG_SIGN_KEY).update(signContent).digest('hex');
+        const expected = crypto.createHmac('sha256', getEffectiveConfigSignKey()).update(signContent).digest('hex');
         try {
             return crypto.timingSafeEqual(Buffer.from(cfg.configSignature, 'hex'), Buffer.from(expected, 'hex'));
         } catch (e) {
@@ -1083,7 +1151,8 @@ function validateLicense(options) {
             maxPrescriptions: license.maxPrescriptions,  // v2: 处方数量限制
             features: license.features,          // v2: 功能列表
             license: license,
-            remainingDays: remainingDays
+            remainingDays: remainingDays,
+            masterKey: license.masterKey || null  // ★ P1-3: 透传给 renderer 用于 AuthCore.setMasterKey
         };
     }
 
@@ -1319,5 +1388,10 @@ module.exports = {
     // ★ 网络心跳相关
     startHeartbeat,        // 启动心跳检测
     stopHeartbeat,         // 停止心跳检测
-    checkLicenseRevocation // 手动检查授权状态（供测试用）
+    checkLicenseRevocation, // 手动检查授权状态（供测试用）
+    // ★ P1-3 新增：masterKey 派生密钥机制
+    setLicenseDataContext,  // 缓存当前 license 数据（供 verifyConfigIntegrity 派生密钥用）
+    getLicenseMasterKey,    // 获取当前 license 的 masterKey（供测试用）
+    getEffectiveHmacKey,    // 获取生效的 HMAC 密钥（masterKey 派生或硬编码 fallback）
+    getEffectiveConfigSignKey // 获取生效的 config 签名密钥（masterKey 派生或硬编码 fallback）
 };

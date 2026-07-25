@@ -821,22 +821,27 @@
     }
 
     async function loadRememberedUsers() {
+        // 并行读取所有 key，避免串行 await 导致的累积延迟
         try {
-            const stored = await StorageAdapter.getItem('auth:rememberedUsers');
-            if (stored) {
-                const arr = JSON.parse(stored);
-                if (Array.isArray(arr)) return arr;
-            }
-        } catch (e) { /* 忽略 */ }
+            const [stored, single, cloudOld, localOld, legacyOld] = await Promise.all([
+                StorageAdapter.getItem('auth:rememberedUsers'),
+                StorageAdapter.getItem('auth:rememberedUsername'),
+                StorageAdapter.getItem('cloud_rememberedUsername'),
+                StorageAdapter.getItem('local_rememberedUsername'),
+                StorageAdapter.getItem('rememberedUsername')
+            ]);
 
-        // 回退到单个用户名
-        const single = await StorageAdapter.getItem('auth:rememberedUsername');
-        // 兼容旧key
-        const oldSingle = single ||
-            await StorageAdapter.getItem('cloud_rememberedUsername') ||
-            await StorageAdapter.getItem('local_rememberedUsername') ||
-            await StorageAdapter.getItem('rememberedUsername');
-        return oldSingle ? [oldSingle] : [];
+            if (stored) {
+                try {
+                    const arr = JSON.parse(stored);
+                    if (Array.isArray(arr) && arr.length > 0) return arr;
+                } catch (e) { /* 忽略解析错误 */ }
+            }
+
+            const oldSingle = single || cloudOld || localOld || legacyOld;
+            return oldSingle ? [oldSingle] : [];
+        } catch (e) { /* 忽略 */ }
+        return [];
     }
 
     async function clearRememberedUsers() {
@@ -854,6 +859,24 @@
 
     // 自动执行旧key迁移
     migrateOldKeys().catch(e => console.warn('Key迁移失败:', e));
+
+    // ★ P1-3: 自动从主进程获取 license.masterKey 并注入
+    // 用途：让密码哈希盐基于 masterKey 派生（每个安装不同），避免硬编码盐被破解
+    // 仅 Electron 桌面版可用（electronAPI.license.getStatus 存在时）
+    // 失败时 fallback 到硬编码 PASSWORD_SALT（向后兼容）
+    (async function initMasterKeyFromLicense() {
+        try {
+            if (global.electronAPI && global.electronAPI.license && typeof global.electronAPI.license.getStatus === 'function') {
+                const status = await global.electronAPI.license.getStatus();
+                if (status && status.masterKey) {
+                    setMasterKey(status.masterKey);
+                    console.log('[AuthCore] masterKey 已从 license 注入');
+                }
+            }
+        } catch (e) {
+            console.warn('[AuthCore] 获取 masterKey 失败，使用硬编码盐 fallback:', e.message);
+        }
+    })();
 
     // ==================== 导出 ====================
 
@@ -907,7 +930,10 @@
         clearRememberedUsers,
 
         // Key 迁移
-        migrateOldKeys
+        migrateOldKeys,
+
+        // P1-3: masterKey 派生盐（外部可手动注入，正常情况下由 initMasterKeyFromLicense 自动注入）
+        setMasterKey
     };
 
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
@@ -952,6 +978,20 @@
                 // ★ 兼容逻辑：授权有效时清除失效标志
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ P1-1 在线验证：如果需要在线验证，自动触发（不阻断使用）
+                if (result.needOnlineVerify && global.electronAPI.license.verifyOnline) {
+                    try {
+                        console.log('[LicenseCheck] 检测到需要在线验证，正在验证...');
+                        const verifyResult = await global.electronAPI.license.verifyOnline();
+                        if (verifyResult && verifyResult.success) {
+                            console.log('[LicenseCheck] 在线验证成功');
+                        } else {
+                            console.warn('[LicenseCheck] 在线验证失败:', verifyResult && verifyResult.error);
+                        }
+                    } catch (e) {
+                        console.warn('[LicenseCheck] 在线验证异常:', e);
+                    }
+                }
                 return;
             }
             // license 失效
@@ -1032,236 +1072,7 @@
         }, 5000); // 每 5 秒检查一次
     }
 
-    // ★ APP 端 HTML 模态框激活流程（替代旧的 alert+prompt）
-    // 不修改 index.html 的 DOM 结构和 CSS 样式，纯 JS 动态创建
-    // 模态框样式用动态 <style> + lcam- 前缀避免冲突
-    let activateModalInstalled = false;
-    let activateModalState = { submitting: false };
-
-    function installActivateModalStyle() {
-        if (activateModalInstalled) return;
-        if (typeof document === 'undefined') return;
-        const style = document.createElement('style');
-        style.id = 'lcam-style';
-        style.textContent = [
-            '.lcam-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);',
-            'z-index:2147483647;display:flex;align-items:center;justify-content:center;',
-            'font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;}',
-            '.lcam-card{background:#fff;border-radius:12px;width:90%;max-width:420px;max-height:90vh;',
-            'overflow-y:auto;padding:20px 22px;box-shadow:0 8px 32px rgba(0,0,0,0.3);}',
-            '.lcam-title{font-size:18px;font-weight:600;color:#1a1a1a;margin:0 0 12px;text-align:center;}',
-            '.lcam-alert{background:#fff3e0;border:1px solid #ffb74d;border-radius:6px;padding:10px 12px;',
-            'font-size:13px;color:#e65100;margin:0 0 14px;line-height:1.5;white-space:pre-wrap;word-break:break-all;}',
-            '.lcam-label{font-size:12px;color:#666;margin:0 0 6px;}',
-            '.lcam-machine-row{display:flex;align-items:center;gap:8px;margin:0 0 14px;}',
-            '.lcam-machine-id{flex:1;font-size:11px;color:#999;background:#f5f5f5;border:1px solid #e0e0e0;',
-            'border-radius:4px;padding:6px 8px;font-family:monospace;word-break:break-all;max-height:60px;overflow-y:auto;}',
-            '.lcam-btn-copy{background:#eee;border:none;border-radius:4px;padding:6px 10px;font-size:12px;',
-            'color:#333;cursor:pointer;white-space:nowrap;}',
-            '.lcam-btn-copy:active{background:#ddd;}',
-            '.lcam-input{width:100%;box-sizing:border-box;border:1px solid #d0d0d0;border-radius:6px;',
-            'padding:10px 12px;font-size:14px;font-family:monospace;letter-spacing:1px;text-transform:uppercase;',
-            'outline:none;margin:0 0 10px;}',
-            '.lcam-input:focus{border-color:#1976d2;}',
-            '.lcam-input::placeholder{color:#bbb;text-transform:none;letter-spacing:0;}',
-            '.lcam-error{background:#ffebee;border:1px solid #ef9a9a;border-radius:6px;padding:8px 12px;',
-            'font-size:12px;color:#c62828;margin:0 0 10px;display:none;line-height:1.5;}',
-            '.lcam-error.lcam-show{display:block;}',
-            '.lcam-actions{display:flex;gap:10px;margin-top:4px;}',
-            '.lcam-btn{flex:1;border:none;border-radius:6px;padding:10px 0;font-size:14px;font-weight:500;',
-            'cursor:pointer;}',
-            '.lcam-btn-primary{background:#1976d2;color:#fff;}',
-            '.lcam-btn-primary:active{background:#1565c0;}',
-            '.lcam-btn-primary:disabled{background:#90caf9;cursor:not-allowed;}',
-            '.lcam-btn-secondary{background:#f5f5f5;color:#666;}',
-            '.lcam-btn-secondary:active{background:#e0e0e0;}',
-            '.lcam-btn-text{background:transparent;color:#1976d2;font-size:12px;padding:8px 0;flex:0 0 auto;}',
-            '.lcam-tip{font-size:11px;color:#999;margin:10px 0 0;text-align:center;line-height:1.5;}',
-            '.lcam-success{display:none;text-align:center;padding:20px 0;}',
-            '.lcam-success.lcam-show{display:block;}',
-            '.lcam-success-icon{font-size:48px;color:#4caf50;margin:0 0 12px;}',
-            '.lcam-success-text{font-size:14px;color:#333;margin:0 0 8px;line-height:1.5;}'
-        ].join('');
-        document.head.appendChild(style);
-        activateModalInstalled = true;
-    }
-
-    function showActivateModal(machineId) {
-        if (typeof document === 'undefined') return;
-        installActivateModalStyle();
-        // 移除已存在的模态框
-        const existing = document.getElementById('lcam-overlay');
-        if (existing) existing.remove();
-
-        const overlay = document.createElement('div');
-        overlay.id = 'lcam-overlay';
-        overlay.className = 'lcam-overlay';
-
-        const alertText = (lastFailMessage || '授权已失效，请激活') +
-            '\n请输入激活码完成激活';
-
-        overlay.innerHTML = [
-            '<div class="lcam-card">',
-            '<h3 class="lcam-title">软件激活</h3>',
-            '<div class="lcam-alert" id="lcam-alert">' + escapeHtml(alertText) + '</div>',
-            '<div class="lcam-label">机器 ID（请提供给客服）</div>',
-            '<div class="lcam-machine-row">',
-            '<div class="lcam-machine-id" id="lcam-machine-id">' + escapeHtml(machineId || '未知') + '</div>',
-            '<button class="lcam-btn-copy" id="lcam-btn-copy">复制</button>',
-            '</div>',
-            '<div class="lcam-label">激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）</div>',
-            '<input class="lcam-input" id="lcam-input" type="text" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" maxlength="24" autocomplete="off" />',
-            '<div class="lcam-error" id="lcam-error"></div>',
-            '<div class="lcam-actions">',
-            '<button class="lcam-btn lcam-btn-secondary" id="lcam-btn-cancel">取消</button>',
-            '<button class="lcam-btn lcam-btn-primary" id="lcam-btn-submit">激活</button>',
-            '</div>',
-            '<div class="lcam-tip">如有疑问请联系客服</div>',
-            '<div class="lcam-success" id="lcam-success">',
-            '<div class="lcam-success-icon">✓</div>',
-            '<div class="lcam-success-text" id="lcam-success-text">激活成功！应用即将重启...</div>',
-            '</div>',
-            '</div>'
-        ].join('');
-
-        document.body.appendChild(overlay);
-        activateModalState.submitting = false;
-
-        const inputEl = overlay.querySelector('#lcam-input');
-        const errorEl = overlay.querySelector('#lcam-error');
-        const submitBtn = overlay.querySelector('#lcam-btn-submit');
-        const cancelBtn = overlay.querySelector('#lcam-btn-cancel');
-        const copyBtn = overlay.querySelector('#lcam-btn-copy');
-        const machineIdEl = overlay.querySelector('#lcam-machine-id');
-
-        // 自动格式化输入（大写 + 自动添加连字符）
-        inputEl.addEventListener('input', function () {
-            let v = this.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9]/g, '');
-            // 自动添加连字符：BNZC-XXXX-XXXX-XXXX-XXXX
-            const parts = [];
-            if (v.length > 0) {
-                parts.push(v.substring(0, Math.min(4, v.length)));
-                for (let i = 4; i < v.length && parts.length < 5; i += 4) {
-                    parts.push(v.substring(i, Math.min(i + 4, v.length)));
-                }
-            }
-            this.value = parts.join('-');
-            errorEl.classList.remove('lcam-show');
-        });
-
-        // 回车提交
-        inputEl.addEventListener('keypress', function (e) {
-            if (e.key === 'Enter') { e.preventDefault(); submitBtn.click(); }
-        });
-
-        // 复制机器 ID
-        copyBtn.addEventListener('click', function () {
-            const text = machineIdEl.textContent.trim();
-            if (!text) return;
-            try {
-                if (navigator.clipboard) {
-                    navigator.clipboard.writeText(text).then(() => {
-                        copyBtn.textContent = '已复制';
-                        setTimeout(() => { copyBtn.textContent = '复制'; }, 1500);
-                    });
-                } else {
-                    // 回退方案
-                    const ta = document.createElement('textarea');
-                    ta.value = text;
-                    document.body.appendChild(ta);
-                    ta.select();
-                    try { document.execCommand('copy'); copyBtn.textContent = '已复制'; setTimeout(() => { copyBtn.textContent = '复制'; }, 1500); } catch (e) {}
-                    ta.remove();
-                }
-            } catch (e) {}
-        });
-
-        // 取消按钮
-        cancelBtn.addEventListener('click', function () {
-            overlay.remove();
-            global.__licenseActivating = false;
-            console.log('[LicenseCheck] 用户取消激活，兜底定时器将重新弹窗');
-        });
-
-        // 激活按钮
-        submitBtn.addEventListener('click', async function () {
-            if (activateModalState.submitting) return;
-            const code = inputEl.value.trim();
-            if (!code) {
-                errorEl.textContent = '请输入激活码';
-                errorEl.classList.add('lcam-show');
-                return;
-            }
-            // 格式校验
-            if (!/^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/.test(code)) {
-                errorEl.textContent = '激活码格式错误，应为 BNZC-XXXX-XXXX-XXXX-XXXX';
-                errorEl.classList.add('lcam-show');
-                return;
-            }
-
-            activateModalState.submitting = true;
-            submitBtn.disabled = true;
-            submitBtn.textContent = '激活中...';
-            errorEl.classList.remove('lcam-show');
-
-            try {
-                // 获取用户名
-                let user = '';
-                try {
-                    if (typeof CONFIG !== 'undefined' && CONFIG.doctorName) {
-                        user = CONFIG.doctorName;
-                    } else {
-                        user = localStorage.getItem('auth:rememberedUsername') || '';
-                    }
-                } catch (e) {}
-
-                const result = await global.electronAPI.activate.submit(code, user);
-                if (result && result.success) {
-                    // 激活成功
-                    global.__licenseExpired = false;
-                    global.__licenseActivating = false;
-                    // 隐藏表单，显示成功
-                    overlay.querySelectorAll('.lcam-alert, .lcam-label, .lcam-machine-row, .lcam-input, .lcam-error, .lcam-actions, .lcam-tip').forEach(el => el.style.display = 'none');
-                    const successEl = overlay.querySelector('#lcam-success');
-                    successEl.classList.add('lcam-show');
-                    overlay.querySelector('#lcam-success-text').textContent = (result.message || '激活成功') + '\n应用即将重启...';
-                    // 2 秒后重启
-                    setTimeout(() => {
-                        try { global.electronAPI.activate.restart(); } catch (e) {}
-                    }, 2000);
-                } else {
-                    // 激活失败，显示错误，保留输入框
-                    const errMsg = (result && result.error) ? result.error : '未知错误';
-                    errorEl.textContent = errMsg;
-                    errorEl.classList.add('lcam-show');
-                    submitBtn.disabled = false;
-                    submitBtn.textContent = '激活';
-                    activateModalState.submitting = false;
-                }
-            } catch (e) {
-                errorEl.textContent = '激活过程出错：' + (e.message || e);
-                errorEl.classList.add('lcam-show');
-                submitBtn.disabled = false;
-                submitBtn.textContent = '激活';
-                activateModalState.submitting = false;
-            }
-        });
-
-        // 自动聚焦输入框
-        setTimeout(() => { try { inputEl.focus(); } catch (e) {} }, 100);
-    }
-
-    function escapeHtml(str) {
-        if (!str) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
-    }
-
-    // APP 端监听 'app:show-activate' 事件，用 HTML 模态框实现激活流程
+    // APP 端监听 'app:show-activate' 事件，用 prompt 实现激活流程
     // 桌面版的 activate.show() 由 main.js 处理（打开 BrowserWindow），不会触发此事件
     if (typeof global.addEventListener === 'function') {
         global.addEventListener('app:show-activate', async function () {
@@ -1274,8 +1085,46 @@
                     machineId = (r && r.machineId) ? r.machineId : (r || '');
                 } catch (e) {}
 
-                // ★ 显示 HTML 模态框（替代旧的 prompt）
-                showActivateModal(machineId);
+                // ★ 显示到期信息 + 激活码输入（合并到一个 prompt）
+                const promptMsg = lastFailMessage +
+                    '\n\n请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）：\n机器ID：' + (machineId || '未知') +
+                    '\n\n如有疑问请联系客服';
+                const code = prompt(promptMsg);
+
+                if (!code || !code.trim()) {
+                    // ★ 用户取消激活，不清除 __licenseActivating（兜底定时器会重新弹窗）
+                    // 但为了让兜底定时器能工作，需要清除 __licenseActivating
+                    global.__licenseActivating = false;
+                    console.log('[LicenseCheck] 用户取消激活，5 秒后将重新弹窗');
+                    return;
+                }
+
+                // 获取用户名（从 CONFIG 或 localStorage）
+                let user = '';
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG.doctorName) {
+                        user = CONFIG.doctorName;
+                    } else {
+                        user = localStorage.getItem('auth:rememberedUsername') || '';
+                    }
+                } catch (e) {}
+
+                const result = await global.electronAPI.activate.submit(code.trim(), user);
+                if (result && result.success) {
+                    // ★ 兼容逻辑：激活成功，清除失效标记
+                    global.__licenseExpired = false;
+                    global.__licenseActivating = false;
+                    try { alert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启'); } catch (e) {}
+                    global.electronAPI.activate.restart();
+                } else {
+                    // ★ 激活失败，显示错误并重新弹 prompt（递归触发事件）
+                    try {
+                        alert('激活失败：\n' + (result && result.error ? result.error : '未知错误') + '\n\n点击确定重新输入激活码');
+                    } catch (e) {}
+                    // 重新触发激活流程
+                    global.__licenseActivating = false;
+                    global.dispatchEvent(new CustomEvent('app:show-activate'));
+                }
             } catch (e) {
                 try { alert('激活过程出错：' + e.message); } catch (er) {}
                 global.__licenseActivating = false;

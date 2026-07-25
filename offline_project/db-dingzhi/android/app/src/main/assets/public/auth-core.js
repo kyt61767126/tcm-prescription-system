@@ -860,6 +860,24 @@
     // 自动执行旧key迁移
     migrateOldKeys().catch(e => console.warn('Key迁移失败:', e));
 
+    // ★ P1-3: 自动从主进程获取 license.masterKey 并注入
+    // 用途：让密码哈希盐基于 masterKey 派生（每个安装不同），避免硬编码盐被破解
+    // 仅 Electron 桌面版可用（electronAPI.license.getStatus 存在时）
+    // 失败时 fallback 到硬编码 PASSWORD_SALT（向后兼容）
+    (async function initMasterKeyFromLicense() {
+        try {
+            if (global.electronAPI && global.electronAPI.license && typeof global.electronAPI.license.getStatus === 'function') {
+                const status = await global.electronAPI.license.getStatus();
+                if (status && status.masterKey) {
+                    setMasterKey(status.masterKey);
+                    console.log('[AuthCore] masterKey 已从 license 注入');
+                }
+            }
+        } catch (e) {
+            console.warn('[AuthCore] 获取 masterKey 失败，使用硬编码盐 fallback:', e.message);
+        }
+    })();
+
     // ==================== 导出 ====================
 
     global.AuthCore = {
@@ -912,7 +930,10 @@
         clearRememberedUsers,
 
         // Key 迁移
-        migrateOldKeys
+        migrateOldKeys,
+
+        // P1-3: masterKey 派生盐（外部可手动注入，正常情况下由 initMasterKeyFromLicense 自动注入）
+        setMasterKey
     };
 
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);

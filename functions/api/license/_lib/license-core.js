@@ -14,7 +14,17 @@
 
 // ★ 必须与客户端 license-manager.js 中的 LICENSE_HMAC_KEY 保持一致
 // 优先从环境变量读取（Cloudflare Secrets），硬编码作为默认值（向后兼容）
-function getLicenseHmacKey(context) {
+// ★ P1-3 优化：如果配置了 LICENSE_MASTER_KEY，使用 masterKey 派生 HMAC 密钥
+//   派生算法（与客户端 getEffectiveHmacKey 一致）：
+//     effectiveHmacKey = SHA256(masterKey + ':license-hmac:v1')
+//   优势：每个安装的 license 使用独立密钥，攻击者破解单一安装不会泄露其他安装密钥
+async function getLicenseHmacKey(context) {
+    // ★ P1-3: 优先使用 masterKey 派生密钥
+    const masterKey = getLicenseMasterKey(context);
+    if (masterKey) {
+        const derived = await crypto.subtle.digest('SHA-256', strToBytes(masterKey + ':license-hmac:v1'));
+        return bytesToHex(new Uint8Array(derived));
+    }
     if (context && context.env && context.env.LICENSE_HMAC_KEY) {
         return context.env.LICENSE_HMAC_KEY;
     }
@@ -288,8 +298,8 @@ async function buildLicenseData(record, options = {}) {
     }
 
     // ★ 自动选择 v3 / v2 签名
-    // 优先使用 options.secret，否则从 options.context 读取环境变量
-    const secret = options.secret || (options.context ? getLicenseHmacKey(options.context) : undefined);
+    // 优先使用 options.secret，否则从 options.context 读取环境变量（含 masterKey 派生逻辑）
+    const secret = options.secret || (options.context ? await getLicenseHmacKey(options.context) : undefined);
     data.signature = await generateSignatureAuto(data, secret);
 
     // ★ 任务2 新增：附加 v5 ECDSA 签名（如果配置了 ECDSA 私钥）

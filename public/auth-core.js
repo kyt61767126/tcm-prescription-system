@@ -32,7 +32,7 @@
     // ==================== safeStorage 系统级加密桥（P0-2）====================
     // 仅 Electron 桌面版可用：基于 Windows DPAPI，绑定用户/机器
     // 远比 XOR + 硬编码盐安全，攻击者即使拿到源码与密文也无法解密
-    // 在浏览器/WebView 中 available() 返回 false，自动降级到 XOR PWDv2
+    // 在浏览器/WebView 中 available() 返回 false，自动降级到 XOR PWDv2/XORv2
     const SafeStorageBridge = {
         _availableCache: null,
         async available() {
@@ -486,18 +486,6 @@
         }));
     }
 
-    // P0 修复：构造完整 Authorization header 值
-    // 云端登录后 user.token 存在 → 返回 Bearer token
-    // 离线模式无 token → 回退到 Basic base64 payload
-    function buildAuthHeader(user) {
-        const u = user || null;
-        if (u && u.token) {
-            return `Bearer ${u.token}`;
-        }
-        const payload = buildAuthPayload(u);
-        return payload ? `Basic ${payload}` : null;
-    }
-
     // ==================== 会话管理层 ====================
 
     async function checkSession() {
@@ -566,10 +554,6 @@
                 if (!data || !data.success || !data.user) {
                     return { success: false, error: (data && data.error) || '用户名或密码错误' };
                 }
-                // P0 修复：保存后端返回的 Bearer token，供后续 API 调用使用
-                if (data.token) {
-                    data.user.token = data.token;
-                }
                 return { success: true, user: data.user };
             } catch (e) {
                 console.error('云端登录失败:', e);
@@ -578,11 +562,116 @@
         }
     };
 
+    // ★ 优化3：密码错误锁定辅助工具（5次错误锁定30分钟）
+    const LoginLockout = {
+        _getStorage() {
+            // 兼容 Capacitor Preferences 和 localStorage
+            if (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences) {
+                return null; // APP 端暂不支持锁定，仅桌面/网页版支持
+            }
+            try { return global.localStorage; } catch (e) { return null; }
+        },
+        checkLocked(username) {
+            const storage = this._getStorage();
+            if (!storage) return null;
+            const lockUntil = parseInt(storage.getItem('auth:lockUntil:' + username) || '0', 10);
+            if (lockUntil > Date.now()) {
+                const remainMin = Math.ceil((lockUntil - Date.now()) / 60000);
+                return '账号已被锁定，请 ' + remainMin + ' 分钟后重试';
+            }
+            return null;
+        },
+        recordFailure(username) {
+            const storage = this._getStorage();
+            if (!storage) return '密码错误';
+            const failKey = 'auth:failCount:' + username;
+            let failCount = parseInt(storage.getItem(failKey) || '0', 10) + 1;
+            if (failCount >= 5) {
+                storage.setItem('auth:lockUntil:' + username, String(Date.now() + 30 * 60 * 1000));
+                storage.removeItem(failKey);
+                return '密码错误次数过多，账号已被锁定 30 分钟';
+            }
+            storage.setItem(failKey, String(failCount));
+            return '密码错误（剩余 ' + (5 - failCount) + ' 次尝试机会）';
+        },
+        recordSuccess(username) {
+            const storage = this._getStorage();
+            if (!storage) return;
+            storage.removeItem('auth:failCount:' + username);
+            storage.removeItem('auth:lockUntil:' + username);
+        }
+    };
+
+    // ★ 优化3：操作审计日志（登录/退出/处方保存/删除等关键操作）
+    const AuditLog = {
+        _getStorage() {
+            if (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences) {
+                return null; // APP 端暂不支持，仅桌面/网页版
+            }
+            try { return global.localStorage; } catch (e) { return null; }
+        },
+        _resolveUser() {
+            // 优先读取运行时 currentUser，回退到 storage
+            try {
+                if (typeof currentUser !== 'undefined' && currentUser && currentUser.username) {
+                    return currentUser.username;
+                }
+            } catch (e) { /* currentUser 未定义 */ }
+            const storage = this._getStorage();
+            if (storage) {
+                try {
+                    const stored = storage.getItem('auth:currentUser');
+                    if (stored) return (JSON.parse(stored).username) || 'unknown';
+                } catch (e) {}
+            }
+            return 'unknown';
+        },
+        record(action, details) {
+            const storage = this._getStorage();
+            if (!storage) return;
+            try {
+                const entry = {
+                    t: Date.now(),
+                    ts: new Date().toISOString(),
+                    user: this._resolveUser(),
+                    action: String(action || '').slice(0, 64),
+                    details: String(details || '').slice(0, 500)
+                };
+                let logs = [];
+                try { logs = JSON.parse(storage.getItem('audit:log') || '[]'); } catch (e) {}
+                if (!Array.isArray(logs)) logs = [];
+                logs.push(entry);
+                // 最多保留 500 条，超出时丢弃最早的
+                if (logs.length > 500) logs = logs.slice(-500);
+                storage.setItem('audit:log', JSON.stringify(logs));
+            } catch (e) { console.warn('审计日志写入失败:', e); }
+        },
+        list(limit) {
+            const storage = this._getStorage();
+            if (!storage) return [];
+            try {
+                const logs = JSON.parse(storage.getItem('audit:log') || '[]');
+                if (!Array.isArray(logs)) return [];
+                return limit ? logs.slice(-limit) : logs;
+            } catch (e) { return []; }
+        },
+        clear() {
+            const storage = this._getStorage();
+            if (!storage) return;
+            storage.removeItem('audit:log');
+        }
+    };
+    global.AuditLog = AuditLog;
+
     // 离线适配器工厂
     function createLocalAdapter(getUsersFn) {
         return {
             async authenticate(username, password) {
                 try {
+                    // ★ 优化3：检查账号是否被锁定
+                    const lockMsg = LoginLockout.checkLocked(username);
+                    if (lockMsg) return { success: false, error: lockMsg };
+
                     const users = typeof getUsersFn === 'function' ? await getUsersFn() : getUsersFn;
                     if (!Array.isArray(users)) {
                         return { success: false, error: '用户数据加载失败' };
@@ -593,8 +682,11 @@
                     }
                     const pwdOk = await verifyPassword(password, user.password || '');
                     if (!pwdOk) {
-                        return { success: false, error: '密码错误' };
+                        // ★ 优化3：密码错误计数+1，5次后锁定30分钟
+                        return { success: false, error: LoginLockout.recordFailure(username) };
                     }
+                    // 登录成功，清零错误计数
+                    LoginLockout.recordSuccess(username);
                     // 不返回密码
                     const { password: _, ...safeUser } = user;
                     return { success: true, user: safeUser };
@@ -611,14 +703,21 @@
         return {
             async authenticate(username, password) {
                 try {
+                    // ★ 优化3：检查账号是否被锁定
+                    const lockMsg = LoginLockout.checkLocked(username);
+                    if (lockMsg) return { success: false, error: lockMsg };
+
                     const user = typeof getUserFn === 'function' ? await getUserFn() : getUserFn;
                     if (!user) {
                         return { success: false, error: '用户信息加载失败' };
                     }
                     const pwdOk = await verifyPassword(password, user.password || '');
                     if (!pwdOk) {
-                        return { success: false, error: '密码错误' };
+                        // ★ 优化3：密码错误计数+1，5次后锁定30分钟
+                        return { success: false, error: LoginLockout.recordFailure(username) };
                     }
+                    // 登录成功，清零错误计数
+                    LoginLockout.recordSuccess(username);
                     const { password: _, ...safeUser } = user;
                     return { success: true, user: safeUser };
                 } catch (e) {
@@ -641,6 +740,8 @@
             const result = await adapter.authenticate(username, password);
 
             if (!result.success || !result.user) {
+                // ★ 优化3：审计日志 - 登录失败
+                try { AuditLog.record('login_failure', username + ': ' + (result.error || '认证失败')); } catch(e) {}
                 return { success: false, error: result.error || '认证失败' };
             }
 
@@ -682,6 +783,8 @@
     // ==================== 退出登录 ====================
 
     async function logout() {
+        // ★ 优化3：审计日志 - 退出登录
+        try { AuditLog.record('logout', ''); } catch(e) {}
         const allKeys = [
             'auth:currentUser', 'auth:isLoggedIn', 'auth:loginData',
             // 兼容旧key也清除
@@ -718,22 +821,27 @@
     }
 
     async function loadRememberedUsers() {
+        // 并行读取所有 key，避免串行 await 导致的累积延迟
         try {
-            const stored = await StorageAdapter.getItem('auth:rememberedUsers');
-            if (stored) {
-                const arr = JSON.parse(stored);
-                if (Array.isArray(arr)) return arr;
-            }
-        } catch (e) { /* 忽略 */ }
+            const [stored, single, cloudOld, localOld, legacyOld] = await Promise.all([
+                StorageAdapter.getItem('auth:rememberedUsers'),
+                StorageAdapter.getItem('auth:rememberedUsername'),
+                StorageAdapter.getItem('cloud_rememberedUsername'),
+                StorageAdapter.getItem('local_rememberedUsername'),
+                StorageAdapter.getItem('rememberedUsername')
+            ]);
 
-        // 回退到单个用户名
-        const single = await StorageAdapter.getItem('auth:rememberedUsername');
-        // 兼容旧key
-        const oldSingle = single ||
-            await StorageAdapter.getItem('cloud_rememberedUsername') ||
-            await StorageAdapter.getItem('local_rememberedUsername') ||
-            await StorageAdapter.getItem('rememberedUsername');
-        return oldSingle ? [oldSingle] : [];
+            if (stored) {
+                try {
+                    const arr = JSON.parse(stored);
+                    if (Array.isArray(arr) && arr.length > 0) return arr;
+                } catch (e) { /* 忽略解析错误 */ }
+            }
+
+            const oldSingle = single || cloudOld || localOld || legacyOld;
+            return oldSingle ? [oldSingle] : [];
+        } catch (e) { /* 忽略 */ }
+        return [];
     }
 
     async function clearRememberedUsers() {
@@ -751,6 +859,24 @@
 
     // 自动执行旧key迁移
     migrateOldKeys().catch(e => console.warn('Key迁移失败:', e));
+
+    // ★ P1-3: 自动从主进程获取 license.masterKey 并注入
+    // 用途：让密码哈希盐基于 masterKey 派生（每个安装不同），避免硬编码盐被破解
+    // 仅 Electron 桌面版可用（electronAPI.license.getStatus 存在时）
+    // 失败时 fallback 到硬编码 PASSWORD_SALT（向后兼容）
+    (async function initMasterKeyFromLicense() {
+        try {
+            if (global.electronAPI && global.electronAPI.license && typeof global.electronAPI.license.getStatus === 'function') {
+                const status = await global.electronAPI.license.getStatus();
+                if (status && status.masterKey) {
+                    setMasterKey(status.masterKey);
+                    console.log('[AuthCore] masterKey 已从 license 注入');
+                }
+            }
+        } catch (e) {
+            console.warn('[AuthCore] 获取 masterKey 失败，使用硬编码盐 fallback:', e.message);
+        }
+    })();
 
     // ==================== 导出 ====================
 
@@ -785,7 +911,6 @@
         isClinicAdmin,
         isPlatformAdmin,
         buildAuthPayload,
-        buildAuthHeader,
 
         // 会话管理
         checkSession,
@@ -805,7 +930,220 @@
         clearRememberedUsers,
 
         // Key 迁移
-        migrateOldKeys
+        migrateOldKeys,
+
+        // P1-3: masterKey 派生盐（外部可手动注入，正常情况下由 initMasterKeyFromLicense 自动注入）
+        setMasterKey
     };
 
+})(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
+
+// ============================================================================
+// LicenseCheck — License 启动校验与自动激活（4端桌面版 + APP 端通用）
+// 启动后延迟 2 秒校验 license，失效时自动弹出激活窗口
+// 桌面版：调用 activate.show() 打开独立 BrowserWindow（activate-window.html）
+// APP 端：activate.show() 触发 'app:show-activate' 事件，本模块用 prompt 实现激活
+//
+// ★ 完善体验（2026-07-20）：
+//   1. 弹窗交互：alert 显示到期信息 → 点击确定 → 自动拉起激活码输入窗口
+//   2. 兜底逻辑：设置 __licenseExpired 标志，定期检查（5秒），失效则重新弹激活窗口
+//                  用户取消激活后，5 秒后会重新弹窗，强制停留在激活页面
+//   3. 兼容逻辑：激活成功后清除 __licenseExpired 标志（重启后自动清除，但即时反馈更好）
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    // 避免重复初始化
+    if (global.__licenseCheckInitialized) return;
+    global.__licenseCheckInitialized = true;
+
+    // ★ 全局 License 状态标志
+    global.__licenseExpired = false;       // License 是否已失效
+    global.__licenseActivating = false;    // 是否正在激活流程中（防止重复弹窗）
+
+    // 上次失败的消息（用于兜底弹窗显示）
+    let lastFailMessage = '授权已失效，请激活';
+
+    async function checkLicenseAndShowActivate() {
+        try {
+            // 检查 license API 是否存在（APP 端无 window.electronAPI 时自动跳过）
+            if (!global.electronAPI || !global.electronAPI.license ||
+                typeof global.electronAPI.license.validate !== 'function') {
+                console.log('[LicenseCheck] 未检测到 license API，跳过校验');
+                return;
+            }
+            const result = await global.electronAPI.license.validate();
+            if (result && result.valid) {
+                console.log('[LicenseCheck] 授权有效:', result.message || '');
+                // ★ 兼容逻辑：授权有效时清除失效标志
+                global.__licenseExpired = false;
+                global.__licenseActivating = false;
+                // ★ P1-1 在线验证：如果需要在线验证，自动触发（不阻断使用）
+                if (result.needOnlineVerify && global.electronAPI.license.verifyOnline) {
+                    try {
+                        console.log('[LicenseCheck] 检测到需要在线验证，正在验证...');
+                        const verifyResult = await global.electronAPI.license.verifyOnline();
+                        if (verifyResult && verifyResult.success) {
+                            console.log('[LicenseCheck] 在线验证成功');
+                        } else {
+                            console.warn('[LicenseCheck] 在线验证失败:', verifyResult && verifyResult.error);
+                        }
+                    } catch (e) {
+                        console.warn('[LicenseCheck] 在线验证异常:', e);
+                    }
+                }
+                return;
+            }
+            // license 失效
+            const msg = (result && result.message) ? result.message : '授权已失效，请激活';
+            lastFailMessage = msg;
+            console.warn('[LicenseCheck] 授权失效:', msg);
+
+            // ★ 设置失效标志
+            global.__licenseExpired = true;
+
+            // ★ 如果正在激活中，不重复弹窗
+            if (global.__licenseActivating) {
+                console.log('[LicenseCheck] 激活流程进行中，跳过弹窗');
+                return;
+            }
+
+            // ★ 弹窗交互：先 alert 显示到期信息，关闭后自动拉起激活窗口
+            await showExpireAlertAndActivate(msg);
+        } catch (e) {
+            console.error('[LicenseCheck] 校验异常:', e);
+            global.__licenseActivating = false;
+        }
+    }
+
+    // ★ 弹窗交互：先显示到期提示，用户点击确定后自动拉起激活窗口
+    // 桌面版：优先用 showExpireAlert 一体化 IPC（main process 中 dialog + showActivateWindow）
+    // APP 端：showExpireAlert 不存在，回退到 alert + activate.show()
+    async function showExpireAlertAndActivate(msg) {
+        global.__licenseActivating = true;
+
+        // ★ 桌面版优先：一体化 IPC（解决渲染进程 alert 阻塞导致 activate.show 不执行的问题）
+        if (global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.showExpireAlert === 'function') {
+            try {
+                await global.electronAPI.activate.showExpireAlert(msg);
+                // main process 中 dialog 关闭后已自动 showActivateWindow
+                return;
+            } catch (e) {
+                console.error('[LicenseCheck] showExpireAlert 失败，回退到 alert+show:', e);
+                // 回退到下面的 alert + show 流程
+            }
+        }
+
+        // ★ APP 端或回退：先 alert 显示到期信息，关闭后 activate.show()
+        try {
+            alert(msg);
+        } catch (e) { /* alert 不可用时忽略 */ }
+
+        // 自动拉起激活码输入窗口
+        if (global.electronAPI && global.electronAPI.activate &&
+            typeof global.electronAPI.activate.show === 'function') {
+            try {
+                await global.electronAPI.activate.show();
+                // 桌面版：activate.show() 打开 BrowserWindow，窗口关闭后通过定时器重新检查
+                // APP 端：activate.show() 触发 'app:show-activate' 事件
+            } catch (e) {
+                console.error('[LicenseCheck] 拉起激活窗口失败:', e);
+                global.__licenseActivating = false;
+            }
+        } else {
+            // 无 activate API，仅显示提示
+            try { alert(msg + '\n\n请联系管理员获取激活码'); } catch (e) {}
+            global.__licenseActivating = false;
+        }
+    }
+
+    // ★ 兜底逻辑：定期检查 license 状态，失效则重新弹激活窗口
+    // 防止用户关闭激活窗口后继续使用主界面
+    let fallbackTimer = null;
+    function startFallbackCheck() {
+        if (fallbackTimer) clearInterval(fallbackTimer);
+        fallbackTimer = setInterval(async () => {
+            // 只在 license 已失效且不在激活流程中时检查
+            if (!global.__licenseExpired || global.__licenseActivating) return;
+
+            console.log('[LicenseCheck] 兜底检查：license 失效，重新弹激活窗口');
+            await showExpireAlertAndActivate(lastFailMessage);
+        }, 5000); // 每 5 秒检查一次
+    }
+
+    // APP 端监听 'app:show-activate' 事件，用 prompt 实现激活流程
+    // 桌面版的 activate.show() 由 main.js 处理（打开 BrowserWindow），不会触发此事件
+    if (typeof global.addEventListener === 'function') {
+        global.addEventListener('app:show-activate', async function () {
+            try {
+                if (!global.electronAPI || !global.electronAPI.activate) return;
+                // 获取机器 ID（显示给用户，方便客服查证）
+                let machineId = '';
+                try {
+                    const r = await global.electronAPI.activate.getMachineId();
+                    machineId = (r && r.machineId) ? r.machineId : (r || '');
+                } catch (e) {}
+
+                // ★ 显示到期信息 + 激活码输入（合并到一个 prompt）
+                const promptMsg = lastFailMessage +
+                    '\n\n请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）：\n机器ID：' + (machineId || '未知') +
+                    '\n\n如有疑问请联系客服';
+                const code = prompt(promptMsg);
+
+                if (!code || !code.trim()) {
+                    // ★ 用户取消激活，不清除 __licenseActivating（兜底定时器会重新弹窗）
+                    // 但为了让兜底定时器能工作，需要清除 __licenseActivating
+                    global.__licenseActivating = false;
+                    console.log('[LicenseCheck] 用户取消激活，5 秒后将重新弹窗');
+                    return;
+                }
+
+                // 获取用户名（从 CONFIG 或 localStorage）
+                let user = '';
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG.doctorName) {
+                        user = CONFIG.doctorName;
+                    } else {
+                        user = localStorage.getItem('auth:rememberedUsername') || '';
+                    }
+                } catch (e) {}
+
+                const result = await global.electronAPI.activate.submit(code.trim(), user);
+                if (result && result.success) {
+                    // ★ 兼容逻辑：激活成功，清除失效标记
+                    global.__licenseExpired = false;
+                    global.__licenseActivating = false;
+                    try { alert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启'); } catch (e) {}
+                    global.electronAPI.activate.restart();
+                } else {
+                    // ★ 激活失败，显示错误并重新弹 prompt（递归触发事件）
+                    try {
+                        alert('激活失败：\n' + (result && result.error ? result.error : '未知错误') + '\n\n点击确定重新输入激活码');
+                    } catch (e) {}
+                    // 重新触发激活流程
+                    global.__licenseActivating = false;
+                    global.dispatchEvent(new CustomEvent('app:show-activate'));
+                }
+            } catch (e) {
+                try { alert('激活过程出错：' + e.message); } catch (er) {}
+                global.__licenseActivating = false;
+            }
+        });
+    }
+
+    // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
+    function startLicenseCheck() {
+        setTimeout(async () => {
+            await checkLicenseAndShowActivate();
+            // ★ 启动兜底检查（无论首次校验结果如何，都启动定时器）
+            startFallbackCheck();
+        }, 2000);
+    }
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        startLicenseCheck();
+    } else {
+        document.addEventListener('DOMContentLoaded', startLicenseCheck);
+    }
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
