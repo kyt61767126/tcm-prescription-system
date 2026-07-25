@@ -574,7 +574,10 @@
                 if (!data || !data.success || !data.user) {
                     return { success: false, error: (data && data.error) || '用户名或密码错误' };
                 }
-                return { success: true, user: data.user };
+                // ★ P0 修复：保留 API 返回的 token，附加到 user 对象
+                // buildAuthHeader(user) 依赖 user.token 构造 Bearer header
+                // 丢弃 token 会导致后续 API 请求回退到 Basic auth，云端返回 401 触发自动登出
+                return { success: true, user: { ...data.user, token: data.token } };
             } catch (e) {
                 console.error('云端登录失败:', e);
                 return { success: false, error: '登录失败：' + (e.message || '网络错误') };
