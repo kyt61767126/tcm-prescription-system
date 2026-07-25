@@ -524,123 +524,15 @@
         }
     }
 
-    // ==================== adjustNothing 模式键盘遮盖修复 ====================
-    // adjustNothing 模式下 WebView 高度不变（根治闪现），但键盘会遮挡底部内容
-    // 通过 Java 注入的 window.__imeHeight 获取键盘高度，手动滚动焦点元素到可视区域
-    // 解决药物栏简码输入框被键盘遮挡的问题
-    function setupAdjustNothingKeyboardScroll() {
-        if (window.innerWidth >= 769) return;
-
-        var scrollTimer = null;
-
-        function scrollToFocused() {
-            var imeHeight = window.__imeHeight || 0;
-            var focused = document.activeElement;
-            if (!focused || focused === document.body) return;
-            if (focused.tagName !== 'INPUT' && focused.tagName !== 'TEXTAREA') return;
-
-            // 可视区域高度 = 窗口高度 - 键盘高度
-            var visibleHeight = window.innerHeight - imeHeight;
-            if (visibleHeight <= 0) return;
-
-            // 获取焦点元素相对于视口的位置
-            var rect = focused.getBoundingClientRect();
-            // 留 80px 边距，确保输入框和部分下拉框可见
-            var margin = 80;
-
-            // 如果焦点元素底部超出可视区域，向上滚动
-            if (rect.bottom > visibleHeight) {
-                var scrollAmount = rect.bottom - visibleHeight + margin;
-                window.scrollBy({ top: scrollAmount, left: 0, behavior: 'smooth' });
-            }
-            // 如果焦点元素顶部超出可视区域上方（键盘收起后回滚），向下滚动
-            else if (rect.top < 0) {
-                window.scrollBy({ top: rect.top - margin, left: 0, behavior: 'smooth' });
-            }
-        }
-
-        // 监听 Java 注入的 imeheightchange 事件
-        window.addEventListener('imeheightchange', function() {
-            var imeHeight = window.__imeHeight || 0;
-
-            // ★ 参考云端布局：键盘 → 工具栏/菜单栏按钮 → 药物表格
-            // 键盘弹出时上移底部固定元素到键盘上方，让用户能看到工具栏和菜单栏
-            // .bottom-bar (bottom:0) → bottom: imeHeight
-            // .mobile-nav (bottom:0) → bottom: imeHeight
-            // .mobile-action-bar (bottom:52px) → bottom: imeHeight + 52
-            var bottomBar = document.querySelector('.bottom-bar');
-            if (bottomBar) {
-                bottomBar.style.bottom = imeHeight > 0 ? imeHeight + 'px' : '';
-            }
-            var mobileNav = document.querySelector('.mobile-nav');
-            if (mobileNav) {
-                mobileNav.style.bottom = imeHeight > 0 ? imeHeight + 'px' : '';
-            }
-            var mobileActionBar = document.querySelector('.mobile-action-bar');
-            if (mobileActionBar) {
-                mobileActionBar.style.bottom = imeHeight > 0 ? (imeHeight + 52) + 'px' : '';
-            }
-
-            // ★ 表格底部行与键盘上缘闭合（无空白）
-            // 移除 body padding-bottom（会导致 body 可滚动，滑动时暴露 padding 区域空白）
-            // 改用表格容器 margin-bottom，减小容器高度，底部紧贴键盘上缘
-            var tableContainer = document.querySelector('.medicine-table-container');
-            if (tableContainer) {
-                // 处方页面：表格容器 margin-bottom = imeHeight，底部紧贴键盘上缘
-                tableContainer.style.marginBottom = imeHeight > 0 ? imeHeight + 'px' : '';
-                document.body.style.paddingBottom = '';
-            } else {
-                // 其他页面：body padding-bottom = imeHeight（备选）
-                document.body.style.paddingBottom = imeHeight > 0 ? imeHeight + 'px' : '';
-            }
-
-            // 防抖：连续变化时只滚动最后一次
-            if (scrollTimer) clearTimeout(scrollTimer);
-            scrollTimer = setTimeout(scrollToFocused, 100);
-        });
-
-        // focus 事件也触发滚动（输入框切换时）
-        document.addEventListener('focusin', function(e) {
-            var target = e.target;
-            if (!target) return;
-            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
-                // 延迟滚动，等待键盘动画完成
-                if (scrollTimer) clearTimeout(scrollTimer);
-                scrollTimer = setTimeout(scrollToFocused, 200);
-            }
-        }, true);
-
-        // 键盘收起时（imeHeight 变为 0），滚动回顶部可见区域
-        var lastImeHeight = 0;
-        window.addEventListener('imeheightchange', function() {
-            var currentImeHeight = window.__imeHeight || 0;
-            if (lastImeHeight > 0 && currentImeHeight === 0) {
-                // 键盘收起，延迟滚动回原位置
-                setTimeout(function() {
-                    var focused = document.activeElement;
-                    if (focused && focused !== document.body) {
-                        var rect = focused.getBoundingClientRect();
-                        if (rect.top < 0 || rect.bottom > window.innerHeight) {
-                            focused.scrollIntoView({ block: 'center', behavior: 'smooth' });
-                        }
-                    }
-                }, 150);
-            }
-            lastImeHeight = currentImeHeight;
-        });
-    }
-
     // 自动初始化
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', setupMobileKeyboardScroll);
         document.addEventListener('DOMContentLoaded', setupDropdownKeyboardFix);
         document.addEventListener('DOMContentLoaded', setupInputAutocompleteOff);
-        document.addEventListener('DOMContentLoaded', setupAdjustNothingKeyboardScroll);
     } else {
         setupMobileKeyboardScroll();
         setupDropdownKeyboardFix();
         setupInputAutocompleteOff();
-        setupAdjustNothingKeyboardScroll();
     }
 
 })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
