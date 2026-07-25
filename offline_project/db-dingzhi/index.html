@@ -3158,17 +3158,15 @@ let currentUser = null;
         setTimeout(__medicineTableFirewall, 2000);
         setTimeout(__medicineTableFirewall, 5000);
 
-        // ★修复：移动端药物表格容器高度限制（确保可滚动，不被键盘遮盖）
-        function __adjustMedicineTableHeight() {
-            if (window.innerWidth > 768) return;
-            const container = document.querySelector('.medicine-table-container');
-            if (!container) return;
-            const visibleHeight = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-            container.style.maxHeight = Math.floor(visibleHeight * 0.45) + 'px';
+        // ★修复：移动端药物栏 CSS（对齐云端APP方案）
+        if (window.innerWidth <= 768) {
+            const __ms = document.querySelector('.medicine-section');
+            const __mtc = document.querySelector('.medicine-table-container');
+            if (__ms) { __ms.style.minHeight = '300px'; __ms.style.flex = 'none'; }
+            if (__mtc) { __mtc.style.maxHeight = '400px'; }
         }
-        __adjustMedicineTableHeight();
 
-        // ★修复：所有药物表格输入框 focus 时滚动到容器中心（直接调整 scrollTop，不用 scrollIntoView 避免闪现）
+        // ★修复：药物表格输入框 focus 时滚动到容器中心（直接调整 scrollTop，不用 scrollIntoView 避免闪现）
         document.addEventListener('focus', function(e) {
             if (e.target && e.target.tagName === 'INPUT' && e.target.closest('.medicine-table')) {
                 if (window.innerWidth <= 768) {
@@ -3185,27 +3183,10 @@ let currentUser = null;
                                 }
                             }
                         } catch(err) {}
-                    }, 350);
+                    }, 300);
                 }
             }
         }, true);
-
-        // ★修复：键盘弹出时调整底部菜单栏位置 + 表格容器高度
-        if (window.visualViewport) {
-            const __vvActionBar = document.getElementById('mobileActionBar');
-            const __vvMobileNav = document.querySelector('.mobile-nav');
-            window.visualViewport.addEventListener('resize', function() {
-                const __kbHeight = window.innerHeight - window.visualViewport.height;
-                if (__kbHeight > 50) {
-                    if (__vvActionBar) __vvActionBar.style.bottom = (__kbHeight + 52) + 'px';
-                    if (__vvMobileNav) __vvMobileNav.style.bottom = __kbHeight + 'px';
-                } else {
-                    if (__vvActionBar) __vvActionBar.style.bottom = '52px';
-                    if (__vvMobileNav) __vvMobileNav.style.bottom = '0px';
-                }
-                __adjustMedicineTableHeight();
-            });
-        }
 
         // 药物数据防火墙 - 确保药物数据总是被加载（即使 loadData 失败）
         // 递归自查：100ms 后首次检查，之后每 100ms 检查一次直到 medicines 填充或 3秒超时
