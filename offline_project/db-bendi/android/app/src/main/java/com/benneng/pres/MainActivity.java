@@ -179,8 +179,8 @@ public class MainActivity extends AppCompatActivity {
             getWindow().getDecorView().setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         }
 
-        // ★ 键盘动画拦截：在键盘动画开始前显示覆盖层，动画结束后隐藏
-        // 比onPreDraw更早拦截，彻底遮挡adjustResize模式下的闪现内容
+        // ★ 键盘动画回调：splash.png 已替换为纯紫色 + 主题已切换，flashOverlay 不再需要显示
+        // 保留回调框架但不显示覆盖层，避免阻断WebView首次重绘导致底部工具栏分2次出现
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             getWindow().getDecorView().setWindowInsetsAnimationCallback(
                 new android.view.WindowInsetsAnimation.Callback(
@@ -189,8 +189,7 @@ public class MainActivity extends AppCompatActivity {
                     public android.view.WindowInsetsAnimation.Bounds onStart(
                             android.view.WindowInsetsAnimation animation,
                             android.view.WindowInsetsAnimation.Bounds bounds) {
-                        // 键盘动画开始前，立即显示覆盖层
-                        flashOverlay.setVisibility(View.VISIBLE);
+                        // 不显示覆盖层，让WebView正常重绘（与云端APP行为一致）
                         return bounds;
                     }
 
@@ -198,19 +197,12 @@ public class MainActivity extends AppCompatActivity {
                     public android.view.WindowInsets onProgress(
                             android.view.WindowInsets insets,
                             java.util.List<android.view.WindowInsetsAnimation> runningAnimations) {
-                        // 动画进行中，保持覆盖层可见
                         return insets;
                     }
 
                     @Override
                     public void onEnd(android.view.WindowInsetsAnimation animation) {
-                        // 动画结束后，延迟隐藏覆盖层（等待WebView重绘完成）
-                        mainHandler.postDelayed(new Runnable() {
-                            @Override
-                            public void run() {
-                                flashOverlay.setVisibility(View.GONE);
-                            }
-                        }, 150);
+                        // 无需隐藏覆盖层（从未显示）
                     }
                 }
             );
@@ -254,39 +246,19 @@ public class MainActivity extends AppCompatActivity {
     // Autofill 防护由 WebView 子类的 onProvideAutofillVirtualStructure 重写负责（足够）。
     // 闪现防护由 WindowInsetsAnimation.Callback + flashOverlay 负责。
 
-    // ★ 键盘弹出时的闪现保护：通过ViewTreeObserver检测WebView高度变化，在重绘期间显示覆盖层
+    // ★ 键盘弹出时的闪现保护（已禁用覆盖层显示）
+    // splash.png 已替换为纯紫色 + 主题已切换，flashOverlay 不再需要显示
+    // 保留方法框架但不禁用高度检测，覆盖层保持 GONE 不影响 WebView 渲染
     private void setupKeyboardFlashProtection() {
         if (webView == null) return;
         webView.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
             private int lastHeight = 0;
-            private boolean flashActive = false;
-            private long lastFlashTime = 0;
 
             @Override
             public boolean onPreDraw() {
                 int currentHeight = webView.getHeight();
-                long now = System.currentTimeMillis();
-
-                // 检测高度变化（键盘弹出/收起会导致WebView高度变化）
+                // 仅记录高度变化，不显示覆盖层（与云端APP行为一致）
                 if (Math.abs(currentHeight - lastHeight) > 50) {
-                    // 高度变化超过50px，认为是键盘事件
-                    // 立即显示覆盖层遮挡闪现
-                    if (!flashActive && (now - lastFlashTime > 50)) {
-                        flashOverlay.setVisibility(View.VISIBLE);
-                        flashActive = true;
-                        lastFlashTime = now;
-
-                        // 延迟隐藏覆盖层（等待WebView重绘完成）
-                        mainHandler.postDelayed(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (flashActive) {
-                                    flashOverlay.setVisibility(View.GONE);
-                                    flashActive = false;
-                                }
-                            }
-                        }, 200);
-                    }
                     lastHeight = currentHeight;
                 }
                 return true;
