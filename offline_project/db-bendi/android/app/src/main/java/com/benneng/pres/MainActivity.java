@@ -211,6 +211,13 @@ public class MainActivity extends AppCompatActivity {
                         // 动画进行中，保持覆盖层可见
                         // ★ 注入键盘高度到 JS（实时更新，用于上移底部固定元素和滚动焦点元素）
                         int imeHeight = insets.getInsets(android.view.WindowInsets.Type.ime()).bottom;
+                        // 兜底：adjustNothing 下 insets 参数可能不包含 IME，通过 webView.getRootWindowInsets() 获取
+                        if (imeHeight == 0 && webView != null) {
+                            android.view.WindowInsets rootInsets = webView.getRootWindowInsets();
+                            if (rootInsets != null) {
+                                imeHeight = rootInsets.getInsets(android.view.WindowInsets.Type.ime()).bottom;
+                            }
+                        }
                         if (webView != null) {
                             final int height = imeHeight;
                             webView.evaluateJavascript(
@@ -223,7 +230,20 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onEnd(android.view.WindowInsetsAnimation animation) {
-                        // 动画结束后，延迟隐藏覆盖层（等待WebView重绘完成）
+                        // ★ 动画结束后，注入最终键盘高度（确保最终值正确，防止 onProgress 最后一次值不准）
+                        if (webView != null) {
+                            android.view.WindowInsets rootInsets = webView.getRootWindowInsets();
+                            int imeHeight = 0;
+                            if (rootInsets != null) {
+                                imeHeight = rootInsets.getInsets(android.view.WindowInsets.Type.ime()).bottom;
+                            }
+                            final int height = imeHeight;
+                            webView.evaluateJavascript(
+                                "window.__imeHeight = " + height + ";" +
+                                "if(window.dispatchEvent){window.dispatchEvent(new Event('imeheightchange'));}",
+                                null);
+                        }
+                        // 延迟隐藏覆盖层（等待WebView重绘完成）
                         mainHandler.postDelayed(new Runnable() {
                             @Override
                             public void run() {
