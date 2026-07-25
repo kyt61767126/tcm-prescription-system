@@ -35,7 +35,8 @@
       "db-adapter.js",
       "performance-utils.js",
       "prescription-core.js",
-      "patient-archive.js"
+      "patient-archive.js",
+      "security-guard.js"
     ],
     "win": {
       "target": [
