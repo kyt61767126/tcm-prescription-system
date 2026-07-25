@@ -608,6 +608,13 @@
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
 window.EDITION = 'personal';
+// ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
+try {
+    if (localStorage.getItem('isLoggedIn') === 'true') {
+        var __lo = document.getElementById('loginOverlay');
+        if (__lo) __lo.style.display = 'none';
+    }
+} catch(e) {}
 if (window.Permission) {
     Permission.init().then(function() {
         if (document.readyState === 'loading') {
