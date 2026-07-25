@@ -444,12 +444,19 @@
     //   1. IME 候选词框会再次闪现（旧应用名"本能中医处方系统"）
     //   2. 系统 Autofill 服务会重新评估当前 input，弹出凭据提示
     //   3. 药物搜索 dropdown 会跟随 resize 闪现
-    // 修复策略：在 resize 事件中主动屏蔽所有可能的弹窗触发源
+    //   4. WebView 渲染中间帧会显示 GPU 纹理缓存的旧内容（"本能中医处方系统"）
+    //
+    // ★ 核心防护：resize 期间隐藏 body（显示 WebView 紫色背景 #667eea）
+    //   - body 隐藏时 WebView 重绘只显示紫色背景，不显示旧内容
+    //   - resize 结束后立即恢复 body，用户看到新内容
+    //   - 隐藏时间控制在 80-120ms，用户感觉不到卡顿
     function setupResizeAutofillGuard() {
         if (window.innerWidth >= 769) return;
 
         var resizeTriggeredAt = 0;
         var lastFocusedInput = null;
+        var bodyHiddenForResize = false;
+        var bodyRestoreTimer = null;
 
         // 跟踪当前焦点 input（供 resize 时重新应用 inputmode）
         document.addEventListener('focusin', function(e) {
@@ -490,9 +497,31 @@
             }
         }
 
+        // ★ 核心防护：隐藏 body（显示 WebView 紫色背景，遮挡渲染中间帧）
+        function hideBodyForResize() {
+            if (bodyHiddenForResize) return;
+            bodyHiddenForResize = true;
+            try {
+                document.body.style.visibility = 'hidden';
+            } catch(e) { /* 忽略 */ }
+        }
+
+        // ★ 恢复 body 显示（resize 结束后调用）
+        function restoreBody() {
+            if (!bodyHiddenForResize) return;
+            bodyHiddenForResize = false;
+            try {
+                document.body.style.visibility = '';
+            } catch(e) { /* 忽略 */ }
+        }
+
         // resize 事件处理：屏蔽所有隐藏触发源
         function onResizeGuard() {
             resizeTriggeredAt = Date.now();
+
+            // ★ 第一优先级：立即隐藏 body（最关键防护）
+            //   body 隐藏后 WebView 重绘只显示紫色背景，不显示旧内容中间帧
+            hideBodyForResize();
 
             // 1. 主动取消系统 Autofill 服务请求（最强防线）
             cancelSystemAutofill();
@@ -515,6 +544,14 @@
                     dropdown.removeAttribute('data-resize-hidden');
                 }, 300);
             }
+
+            // ★ 调度 body 恢复（防抖：连续 resize 时只恢复最后一次）
+            if (bodyRestoreTimer) clearTimeout(bodyRestoreTimer);
+            bodyRestoreTimer = setTimeout(function() {
+                restoreBody();
+                // 恢复后再次 cancelAutofill（防止恢复时 Autofill 重新请求）
+                cancelSystemAutofill();
+            }, 100);
         }
 
         // 监听 window resize（adjustResize 模式下键盘弹出会触发）
@@ -526,18 +563,12 @@
             window.visualViewport.addEventListener('resize', onResizeGuard);
         }
 
-        // resize 结束后再次 cancelAutofill（防止 resize 期间 Autofill 重新请求）
-        var postResizeTimer = null;
-        function schedulePostResizeCleanup() {
-            if (postResizeTimer) clearTimeout(postResizeTimer);
-            postResizeTimer = setTimeout(function() {
-                cancelSystemAutofill();
-            }, 250);
-        }
-        window.addEventListener('resize', schedulePostResizeCleanup);
-        if (window.visualViewport) {
-            window.visualViewport.addEventListener('resize', schedulePostResizeCleanup);
-        }
+        // ★ 安全兜底：如果 body 被隐藏后因异常未恢复，5秒后强制恢复
+        setInterval(function() {
+            if (bodyHiddenForResize && Date.now() - resizeTriggeredAt > 5000) {
+                restoreBody();
+            }
+        }, 1000);
     }
 
     // ==================== 移动端键盘遮挡修复 ====================
