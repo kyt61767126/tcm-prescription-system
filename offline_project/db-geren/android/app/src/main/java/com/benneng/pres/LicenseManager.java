@@ -2154,7 +2154,8 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
 
             if (!respJson.optBoolean("success", false)) {
                 recordActivateFailure();  // ★ 云端返回激活失败，增加计数
-                return failResult(respJson.optString("message", "激活失败"));
+                // ★ 修复：云端 API 返回 error 字段（非 message），优先读取 error 显示具体失败原因
+                return failResult(respJson.optString("error", respJson.optString("message", "激活失败")));
             }
 
             // 获取 license base64 并写入文件
