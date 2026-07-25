@@ -99,6 +99,20 @@ public class MainActivity extends AppCompatActivity {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         super.onCreate(savedInstanceState);
 
+        // ★ 根因修复：切换到普通主题，移除 windowBackground(splash.png)
+        // 启动主题 AppTheme.NoActionBarLaunch 的 android:background=@drawable/splash
+        // 如果不切换，WebView 重绘时(键盘弹出/input focus)会闪现 splash.png 中的旧文字
+        // 切换到 AppTheme.NoActionBar 后 android:background=@null，彻底消除闪现
+        setTheme(R.style.AppTheme_NoActionBar);
+
+        // ★ 关键补充：手动清除 DecorView 和 Window 已应用的 splash 背景
+        // setTheme() 不会清除 super.onCreate() 时已应用到 DecorView 的 android:background
+        // 键盘弹出时 WebView 高度缩小，会露出 DecorView 残留的 splash 图片，遮盖输入框
+        // 必须手动清除，否则点击输入框时仍会弹出 splash 图片遮盖输入框
+        getWindow().setBackgroundDrawable(null);
+        getWindow().getDecorView().setBackground(null);
+        getWindow().getDecorView().setBackgroundColor(0xFF667eea);
+
         // Android 6.0+ 动态申请存储权限（仅 28 及以下需要 WRITE_EXTERNAL_STORAGE）
         if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
