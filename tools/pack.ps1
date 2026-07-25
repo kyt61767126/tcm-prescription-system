@@ -226,18 +226,34 @@ function Invoke-EncodingCheck {
 
     $fixed = 0
 
-    # Check .ps1 files: MUST have BOM
-    $ps1Files = @(
-        "$script:VersionDir\edit-config.ps1"
-    ) | Where-Object { Test-Path $_ }
-
-    foreach ($f in $ps1Files) {
-        if (Test-FileBom -Path $f) {
-            Write-Host "  [OK]   $($f | Split-Path -Leaf) : BOM 已存在" -ForegroundColor Green
+    # ★ 举一反三：扫描并修复所有 .ps1 文件的 BOM（不仅限于 edit-config.ps1）
+    # 修复前问题：只检查 $script:VersionDir\edit-config.ps1，遗漏 tools/pack.ps1 等
+    # 修复后：调用 fix-ps1-bom.ps1 扫描 offline_project/ 和 tools/ 下所有 .ps1 文件
+    # 原因：Edit 工具会剥离 .ps1 文件 BOM，导致 PowerShell 5.x 解析中文失败
+    $fixBomScript = "$script:ProjectRoot\tools\fix-ps1-bom.ps1"
+    if (Test-Path $fixBomScript) {
+        Write-Host "  扫描所有 .ps1 文件 BOM..." -ForegroundColor Cyan
+        & $fixBomScript
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  [OK] 所有 .ps1 文件 BOM 检查通过" -ForegroundColor Green
         } else {
-            Write-Host "  [FIX]  $($f | Split-Path -Leaf) : BOM 缺失，修复中..." -ForegroundColor Yellow
-            Repair-FileBom -Path $f -ShouldHaveBom $true | Out-Null
+            Write-Host "  [WARN] 部分文件已自动修复 BOM" -ForegroundColor Yellow
             $fixed++
+        }
+    } else {
+        # 降级：仅检查当前版本的 edit-config.ps1
+        $ps1Files = @(
+            "$script:VersionDir\edit-config.ps1"
+        ) | Where-Object { Test-Path $_ }
+
+        foreach ($f in $ps1Files) {
+            if (Test-FileBom -Path $f) {
+                Write-Host "  [OK]   $($f | Split-Path -Leaf) : BOM 已存在" -ForegroundColor Green
+            } else {
+                Write-Host "  [FIX]  $($f | Split-Path -Leaf) : BOM 缺失，修复中..." -ForegroundColor Yellow
+                Repair-FileBom -Path $f -ShouldHaveBom $true | Out-Null
+                $fixed++
+            }
         }
     }
 
@@ -857,6 +873,12 @@ function Build-App {
         }
     }
 
+    # ★ 举一反三：集中 versionCode restore 到单一 catch 块
+    # 修复前问题：Restore-VersionCode 分散在 3 处（assembleRelease catch / APK not found / copy failed）
+    #           新增步骤若忘记调用 Restore-VersionCode，versionCode 会错误递增
+    # 修复后：用 $versionCodeIncremented 标志 + 单一 catch 块统一处理回滚
+    $versionCodeIncremented = $false
+    try {
     try {
         # ★ Java 预编译检查（在 versionCode 递增前执行，避免编译错误导致版本号无效递增）
         # 原因：@Override 方法在父类不存在等编译错误，若在 versionCode 递增后才发现，
@@ -874,6 +896,7 @@ function Build-App {
 
         # Increment versionCode
         Increment-VersionCode
+        $versionCodeIncremented = $true
 
         # Build APK - use daemon for faster subsequent builds
         Write-Host "  构建签名 APK 中..." -ForegroundColor Yellow
@@ -891,9 +914,6 @@ function Build-App {
             } else {
                 Invoke-External { & ".\gradlew.bat" assembleRelease --parallel --rerun-tasks } "gradlew assembleRelease"
             }
-        } catch {
-            Restore-VersionCode
-            throw
         } finally {
             Pop-Location
         }
@@ -962,13 +982,18 @@ function Build-App {
             Write-Host "  ====================================" -ForegroundColor Green
             Write-Log "[OK] APK: $finalApkName ($sizeMB MB)"
         } else {
-            Restore-VersionCode
             Write-Log "[ERROR] APK copy failed or file is empty/corrupted" "ERROR"
             throw "APK 复制失败或文件为空/损坏"
         }
     } else {
-        Restore-VersionCode
         throw "输出目录未找到 APK"
+    }
+    } catch {
+        # ★ 集中 versionCode restore：任何步骤失败时统一回滚（防版本号错误递增）
+        if ($versionCodeIncremented) {
+            Restore-VersionCode
+        }
+        throw
     }
 }
 

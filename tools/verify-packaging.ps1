@@ -63,14 +63,16 @@ Write-Host "========================================"
 Write-Host ""
 
 # --- Check 1: .ps1 files MUST have BOM ---
+# ★ 举一反三：扫描所有 .ps1 文件而非硬编码列表（遗漏 pack.ps1 导致 BOM 问题未被发现）
 Write-Host "[Check 1] .ps1 files (MUST have UTF-8 BOM for Chinese support)"
-$ps1Files = @(
-    'offline_project\db-bendi\edit-config.ps1',
-    'offline_project\db-dingzhi\edit-config.ps1',
-    'offline_project\db-geren\edit-config.ps1',
-    'tools\generate-sign-hash.ps1'
-)
-foreach ($f in $ps1Files) { Check-Bom -Path $f -ShouldHaveBom $true -Label $f }
+$ps1Files = @()
+$ps1Files += Get-ChildItem -Path 'offline_project' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
+$ps1Files += Get-ChildItem -Path 'tools' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
+$ps1Files = $ps1Files | Where-Object { $_.FullName -notmatch '\\node_modules\\' }
+foreach ($f in $ps1Files) {
+    $rel = $f.FullName.Substring($root.Length + 1)
+    Check-Bom -Path $f.FullName -ShouldHaveBom $true -Label $rel
+}
 Write-Host ""
 
 # --- Check 2: index.html files MUST NOT have BOM ---

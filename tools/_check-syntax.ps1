@@ -1,4 +1,4 @@
-$tokens = $null
+﻿$tokens = $null
 $errors = $null
 [System.Management.Automation.Language.Parser]::ParseFile('d:\trae_projects\kyt-zy\tools\pack.ps1', [ref]$tokens, [ref]$errors) | Out-Null
 if ($errors -and $errors.Count -gt 0) {
