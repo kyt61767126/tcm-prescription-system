@@ -509,43 +509,46 @@
     // ==================== 会话管理层 ====================
 
     async function checkSession() {
-        // 会话超时检查
-        try {
-            const loginData = await StorageAdapter.getItem('auth:loginData');
-            if (loginData) {
-                const { loginTime } = JSON.parse(loginData);
+        // ★ 优化：并行读取所有需要的 key，避免串行 await 累积延迟
+        // Capacitor Preferences 每次跨 IPC 调用约 5-15ms，串行 8 次=40-120ms，并行后仅一次往返
+        const [
+            loginData, oldLoginData,
+            isLoggedIn, userStr,
+            cloudIsLoggedIn, isLoggedInLegacy,
+            cloudCurrentUser, currentUserLegacy
+        ] = await Promise.all([
+            StorageAdapter.getItem('auth:loginData'),
+            StorageAdapter.getItem('user_login_data'),
+            StorageAdapter.getItem('auth:isLoggedIn'),
+            StorageAdapter.getItem('auth:currentUser'),
+            StorageAdapter.getItem('cloud_isLoggedIn'),
+            StorageAdapter.getItem('isLoggedIn'),
+            StorageAdapter.getItem('cloud_currentUser'),
+            StorageAdapter.getItem('currentUser')
+        ]);
+
+        // 会话超时检查（优先新 key，回退旧 key）
+        const effectiveLoginData = loginData || oldLoginData;
+        if (effectiveLoginData) {
+            try {
+                const { loginTime } = JSON.parse(effectiveLoginData);
                 if (loginTime && Date.now() - loginTime > SESSION_TIMEOUT_MS) {
                     await logout();
                     return { valid: false, reason: 'session_timeout' };
                 }
-            }
-        } catch (e) { /* 忽略 */ }
+            } catch (e) { /* 忽略 */ }
+        }
 
-        // 兼容旧key
-        try {
-            const oldLoginData = await StorageAdapter.getItem('user_login_data');
-            if (oldLoginData) {
-                const { loginTime } = JSON.parse(oldLoginData);
-                if (loginTime && Date.now() - loginTime > SESSION_TIMEOUT_MS) {
-                    await logout();
-                    return { valid: false, reason: 'session_timeout' };
-                }
-            }
-        } catch (e) { /* 忽略 */ }
-
-        const isLoggedIn = await StorageAdapter.getItem('auth:isLoggedIn');
-        const userStr = await StorageAdapter.getItem('auth:currentUser');
+        // 优先使用新 key
         if (isLoggedIn === 'true' && userStr) {
             try {
                 return { valid: true, user: JSON.parse(userStr) };
             } catch (e) { /* 解析失败继续 */ }
         }
 
-        // 兼容旧key
-        const oldLoggedIn = await StorageAdapter.getItem('cloud_isLoggedIn') ||
-                            await StorageAdapter.getItem('isLoggedIn');
-        const oldUserStr = await StorageAdapter.getItem('cloud_currentUser') ||
-                           await StorageAdapter.getItem('currentUser');
+        // 兼容旧 key
+        const oldLoggedIn = cloudIsLoggedIn || isLoggedInLegacy;
+        const oldUserStr = cloudCurrentUser || currentUserLegacy;
         if (oldLoggedIn === 'true' && oldUserStr) {
             try {
                 return { valid: true, user: JSON.parse(oldUserStr) };
@@ -758,6 +761,15 @@
                 return { success: false, error: '请输入用户名和密码' };
             }
 
+            // 1.1 ★ 优化：基础密码强度校验（避免弱密码登录云端）
+            if (options.checkStrength !== false) {
+                const strengthErr = validatePasswordStrength(password);
+                if (strengthErr && options.adapter === cloudAdapter) {
+                    // 仅云端版强制校验，离线版兼容旧账号弱密码
+                    return { success: false, error: strengthErr };
+                }
+            }
+
             // 2. 选择适配器
             const adapter = options.adapter || cloudAdapter;
             const result = await adapter.authenticate(username, password);
@@ -778,29 +790,49 @@
                 user.allowedMode = 'both';
             }
 
-            // 5. 写入登录态（统一 key）
+            // 5. ★ 优化：批量并行写入登录态，减少串行 await 累积延迟
+            // sessionStorage 是同步操作，不参与并行
             const userData = JSON.stringify(user);
-            await StorageAdapter.setItem('auth:currentUser', userData);
-            await StorageAdapter.setItem('auth:isLoggedIn', 'true');
-            StorageAdapter.setSessionItem('auth:currentUser', userData);
-            StorageAdapter.setSessionItem('auth:isLoggedIn', 'true');
-
-            // 6. 记录登录时间（会话超时用）
-            await StorageAdapter.setItem('auth:loginData', JSON.stringify({
+            const loginDataStr = JSON.stringify({
                 loginTime: Date.now(),
                 username: user.username
-            }));
+            });
 
-            // 7. 同步诊所名
+            const setItemPromises = [
+                StorageAdapter.setItem('auth:currentUser', userData),
+                StorageAdapter.setItem('auth:isLoggedIn', 'true'),
+                StorageAdapter.setItem('auth:loginData', loginDataStr)
+            ];
+            // 同步诊所名（仅当存在）
             if (user.clinicName) {
-                await StorageAdapter.setItem('auth:clinicName', user.clinicName);
+                setItemPromises.push(StorageAdapter.setItem('auth:clinicName', user.clinicName));
             }
+            await Promise.all(setItemPromises);
+
+            // sessionStorage 同步写入（无延迟）
+            StorageAdapter.setSessionItem('auth:currentUser', userData);
+            StorageAdapter.setSessionItem('auth:isLoggedIn', 'true');
 
             return { success: true, user };
         } catch (e) {
             console.error('登录异常:', e);
             return { success: false, error: '登录失败：' + (e.message || '未知错误') };
         }
+    }
+
+    // ★ 优化：密码强度校验函数（用于注册/修改密码/首次登录）
+    // 返回 null 表示通过，返回字符串表示错误信息
+    function validatePasswordStrength(password) {
+        if (!password) return '密码不能为空';
+        if (typeof password !== 'string') return '密码格式错误';
+        if (password.length < 6) return '密码长度至少 6 位';
+        if (password.length > 64) return '密码长度不能超过 64 位';
+        // 必须包含字母和数字（或为强密码：含大小写+数字+符号）
+        const hasLetter = /[a-zA-Z]/.test(password);
+        const hasDigit = /\d/.test(password);
+        if (!hasLetter) return '密码必须包含字母';
+        if (!hasDigit) return '密码必须包含数字';
+        return null;
     }
 
     // ==================== 退出登录 ====================
@@ -941,6 +973,9 @@
         // 登录调度
         login,
         logout,
+
+        // 密码强度校验（用于修改密码/注册场景）
+        validatePasswordStrength,
 
         // 适配器工厂
         cloudAdapter,
