@@ -1636,10 +1636,41 @@
             }
         }
 
+        // ★ 调整 position:fixed 菜单栏工具栏的 bottom 定位，确保在键盘上方
+        // 解决 Android WebView 中 position:fixed;bottom:0 相对于屏幕底部（键盘下方）的问题
+        function adjustFixedElements() {
+            if (!global.visualViewport) return;
+            var keyboardHeight = global.innerHeight - global.visualViewport.height;
+            var nav = document.querySelector('.mobile-nav');
+            var bar = document.querySelector('.mobile-action-bar');
+            if (nav && bar) {
+                if (keyboardHeight > 50) {
+                    // 键盘弹出，将菜单栏工具栏移到键盘上方
+                    nav.style.bottom = keyboardHeight + 'px';
+                    bar.style.bottom = (keyboardHeight + 52) + 'px';
+                } else {
+                    // 键盘收起，恢复默认定位
+                    nav.style.bottom = '0px';
+                    bar.style.bottom = '52px';
+                }
+            }
+        }
+
         document.addEventListener('focusin', function (e) {
             var el = e.target;
             if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
-                setTimeout(scrollToActive, 300);
+                setTimeout(function() {
+                    scrollToActive();
+                    adjustFixedElements();
+                }, 300);
+            }
+        });
+
+        // 键盘收起时恢复菜单栏工具栏定位
+        document.addEventListener('focusout', function (e) {
+            var el = e.target;
+            if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+                setTimeout(adjustFixedElements, 300);
             }
         });
 
@@ -1647,7 +1678,10 @@
             var timer = null;
             global.visualViewport.addEventListener('resize', function () {
                 if (timer) clearTimeout(timer);
-                timer = setTimeout(scrollToActive, 100);
+                timer = setTimeout(function() {
+                    scrollToActive();
+                    adjustFixedElements();
+                }, 100);
             });
         }
     }
