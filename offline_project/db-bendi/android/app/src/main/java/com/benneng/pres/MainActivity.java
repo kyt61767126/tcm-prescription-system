@@ -146,10 +146,12 @@ public class MainActivity extends AppCompatActivity {
                 // 拦截 Autofill 填充请求，不执行任何操作
             }
         };
-        // ★ 防止闪现：初始隐藏，背景色与登录页一致（紫色#667eea），onPageFinished后显示
-        // 即使adjustResize导致重绘，闪现的也是紫色背景而非旧内容
-        webView.setVisibility(View.INVISIBLE);
+        // ★ 与云端APP对齐：不禁用硬件加速，WebView 一直可见（不初始隐藏）
+        // 之前 webView.setVisibility(View.INVISIBLE) + onPageFinished 设 VISIBLE
+        // 导致首次键盘弹出时 WebView 重绘不完整，底部工具栏分2次才出现
+        // splash.png 已替换为纯紫色 + 主题已切换，无需初始隐藏防闪现
         webView.setBackgroundColor(0xFF667eea);
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         // ★ 适配状态栏（无 padding 方案）：WebView 填满整个屏幕，网页顶部紫色（header-section/login-overlay）
         // 与状态栏紫色(#667eea)融合，无额外 padding 区域。onPageFinished 时注入 CSS 让 header-section
         // 内容下移避开状态栏。此方案消除顶部灰白行/紫色加宽条，操作界面紧贴状态栏下方。
