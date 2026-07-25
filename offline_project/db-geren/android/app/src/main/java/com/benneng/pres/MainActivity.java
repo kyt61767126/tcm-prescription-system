@@ -461,13 +461,22 @@ public class MainActivity extends AppCompatActivity {
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
                 container.addView(input, inputLp);
 
-                new android.app.AlertDialog.Builder(ctx)
+                // ★ 修复激活码输入框被键盘遮挡：设置 ADJUST_RESIZE + STATE_VISIBLE
+                // ADJUST_RESIZE：键盘弹出时调整对话框位置，避免输入框被遮挡
+                // STATE_VISIBLE：显示对话框时自动弹出键盘并聚焦输入框
+                final android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(ctx)
                         .setTitle("请输入")
                         .setView(container)
                         .setPositiveButton("确定", (d, w) -> result.confirm(input.getText().toString()))
                         .setNegativeButton("取消", (d, w) -> result.cancel())
                         .setOnCancelListener(d -> result.cancel())
-                        .show();
+                        .create();
+                dialog.getWindow().setSoftInputMode(
+                        android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE |
+                        android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_VISIBLE);
+                dialog.show();
+                // 自动聚焦输入框并选中默认值
+                input.requestFocus();
                 return true;
             }
 
