@@ -515,8 +515,6 @@
                 setTimeout(function() { doScroll(lastFocusedInput); }, 200);
                 setTimeout(function() { doScroll(lastFocusedInput); }, 400);
             }
-            // ★ 同步云端：动态调整表格容器高度，让表格底部紧贴键盘上缘
-            adjustContainerHeight();
         }
 
         // Visual Viewport API（现代浏览器）- 键盘弹出时会触发
@@ -524,25 +522,6 @@
             window.visualViewport.addEventListener('resize', onViewportChange);
             window.visualViewport.addEventListener('scroll', onViewportChange);
         }
-
-        // ★ 同步云端：动态调整表格容器高度（键盘弹出时缩小 maxHeight）
-        // 原理: visualViewport.height 是键盘上方的可视高度，减去其他界面元素高度得到表格容器 maxHeight
-        function adjustContainerHeight() {
-            var containers = document.querySelectorAll('.medicine-table-container');
-            if (!containers.length) return;
-            // 优先用 visualViewport.height，回退到 window.innerHeight
-            var vh = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-            // 可见高度减去其他界面元素估算高度（患者信息+症状+操作栏 约 280px）
-            var maxH = Math.max(120, Math.min(400, vh - 280));
-            for (var i = 0; i < containers.length; i++) {
-                containers[i].style.maxHeight = maxH + 'px';
-            }
-        }
-
-        // 传统 resize 事件（回退方案）
-        window.addEventListener('resize', adjustContainerHeight);
-        // 延迟初始调整
-        setTimeout(adjustContainerHeight, 500);
     }
 
     // 自动初始化
