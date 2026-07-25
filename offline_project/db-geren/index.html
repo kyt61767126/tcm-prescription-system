@@ -2889,35 +2889,13 @@ if (window.Permission) {
         setTimeout(__medicineTableFirewall, 2000);
         setTimeout(__medicineTableFirewall, 5000);
 
-        // ★修复：移动端药物栏 CSS（对齐云端APP方案）
+        // ★修复：移动端药物栏 CSS（对齐云端APP方案，adjustResize 自动处理键盘）
         if (window.innerWidth <= 768) {
             const __ms = document.querySelector('.medicine-section');
             const __mtc = document.querySelector('.medicine-table-container');
             if (__ms) { __ms.style.minHeight = '300px'; __ms.style.flex = 'none'; }
             if (__mtc) { __mtc.style.maxHeight = '400px'; }
         }
-
-        // ★修复：药物表格输入框 focus 时滚动到容器中心（直接调整 scrollTop，不用 scrollIntoView 避免闪现）
-        document.addEventListener('focus', function(e) {
-            if (e.target && e.target.tagName === 'INPUT' && e.target.closest('.medicine-table')) {
-                if (window.innerWidth <= 768) {
-                    setTimeout(function() {
-                        try {
-                            const container = e.target.closest('.medicine-table-container');
-                            if (container) {
-                                const row = e.target.closest('tr');
-                                if (row) {
-                                    const rowTop = row.offsetTop;
-                                    const rowHeight = row.offsetHeight;
-                                    const containerHeight = container.clientHeight;
-                                    container.scrollTop = Math.max(0, rowTop - (containerHeight - rowHeight) / 2);
-                                }
-                            }
-                        } catch(err) {}
-                    }, 300);
-                }
-            }
-        }, true);
 
         // 药物数据防火墙 - 确保药物数据总是被加载（即使 loadData 失败）
         // 递归自查：100ms 后首次检查，之后每 100ms 检查一次直到 medicines 填充或 3秒超时
