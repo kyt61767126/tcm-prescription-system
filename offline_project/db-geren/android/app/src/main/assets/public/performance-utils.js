@@ -567,6 +567,24 @@
             // 原理: padding-bottom 增大页面可滚动区域，用户可以滑动查看被键盘遮挡的表格内容
             document.body.style.paddingBottom = imeHeight > 0 ? imeHeight + 'px' : '';
 
+            // ★ 参考云端布局：键盘 → 工具栏/菜单栏按钮 → 药物表格
+            // 键盘弹出时上移底部固定元素到键盘上方，让用户能看到工具栏和菜单栏
+            // .bottom-bar (bottom:0) → bottom: imeHeight
+            // .mobile-nav (bottom:0) → bottom: imeHeight
+            // .mobile-action-bar (bottom:52px) → bottom: imeHeight + 52
+            var bottomBar = document.querySelector('.bottom-bar');
+            if (bottomBar) {
+                bottomBar.style.bottom = imeHeight > 0 ? imeHeight + 'px' : '';
+            }
+            var mobileNav = document.querySelector('.mobile-nav');
+            if (mobileNav) {
+                mobileNav.style.bottom = imeHeight > 0 ? imeHeight + 'px' : '';
+            }
+            var mobileActionBar = document.querySelector('.mobile-action-bar');
+            if (mobileActionBar) {
+                mobileActionBar.style.bottom = imeHeight > 0 ? (imeHeight + 52) + 'px' : '';
+            }
+
             // 防抖：连续变化时只滚动最后一次
             if (scrollTimer) clearTimeout(scrollTimer);
             scrollTimer = setTimeout(scrollToFocused, 100);
