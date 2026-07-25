@@ -254,7 +254,7 @@
             <div class="card-title">📋 选哪个版本？看这里！</div>
             <div style="font-size:13px;line-height:1.8;color:#555;">
                 <strong style="color:#92400e;">🆓 想免费体验？</strong><br>
-                选择下面的 <strong>离线版</strong>（本地版/定制版/个人版），下载安装后即自动进入 <strong>7 天免费试用</strong>（限 30 张处方），无需任何账户注册。<br><br>
+                选择下面的 <strong>离线版</strong>（定制版/个人版），下载安装后即自动进入 <strong>7 天免费试用</strong>（限 30 张处方），无需任何账户注册。<br><br>
                 <strong style="color:#1e3a8a;">☁️ 想用云端版（多设备同步）？</strong><br>
                 云端版 <strong>不提供公开试用</strong>。云端功能与离线版相同，只是多了云端数据同步能力。<br>
                 试用流程：<br>
@@ -291,6 +291,14 @@
                 <span class="info-label">适用场景</span>
                 <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
             </div>
+            <div class="info-row">
+                <span class="info-label">用户模式</span>
+                <span class="info-value">多用户（医师姓名可编辑）· 诊所固定（只读）</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">权限说明</span>
+                <span class="info-value">管理员：云端功能 · 普通用户：仅本地权限（离线）</span>
+            </div>
             <div class="notice-cloud">
                 <strong>⚠️ 无公开试用：</strong>云端版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
                 <strong>试用建议：</strong>请先下载下方"离线版"体验功能，满意后联系开发者开通云端账户。
@@ -304,42 +312,6 @@
 
         <!-- 离线APP -->
         <div class="section-title">离线版 APP（手机端）</div>
-
-        <div class="card" id="card-bendi">
-            <div class="card-title">
-                惠康中医 · 本地版
-                <span class="badge offline">离线</span>
-                <span class="status-tag latest" id="tag-bendi">最新</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">版本</span>
-                <span class="info-value version" id="ver-bendi">加载中...</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">发布日期</span>
-                <span class="info-value date" id="date-bendi">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">更新说明</span>
-                <span class="info-value" id="notes-bendi">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">适用场景</span>
-                <span class="info-value">诊所本地使用，数据完全离线，支持多设备</span>
-            </div>
-            <div class="credential-box">
-                <strong>🔑 默认账号：</strong>
-                管理员 <span class="cred-pair">admin / admin</span>
-                医师 <span class="cred-pair">doctor1 / 123456</span>
-                <span class="cred-pair">doctor2 / 123456</span><br>
-                <strong>⚠️ 首次登录后请立即修改密码！</strong>
-            </div>
-            <div class="hash-box">
-                <div class="hash-label">SHA-256 校验值（APK）：</div>
-                <div class="hash-value pending" id="hash-bendi">（打包后自动更新）</div>
-            </div>
-            <a href="#" class="download-btn secondary" id="dl-bendi">下载 APK（Android）</a>
-        </div>
 
         <div class="card" id="card-dingzhi">
             <div class="card-title">
@@ -361,7 +333,11 @@
             </div>
             <div class="info-row">
                 <span class="info-label">适用场景</span>
-                <span class="info-value">定制诊所使用，数据完全离线，无用户管理</span>
+                <span class="info-value">固定诊所使用，数据完全离线</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">用户模式</span>
+                <span class="info-value">多用户（医师姓名可编辑）· 诊所名称固定（只读）</span>
             </div>
             <div class="credential-box">
                 <strong>🔑 默认账号：</strong>
@@ -399,10 +375,14 @@
                 <span class="info-label">适用场景</span>
                 <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
             </div>
+            <div class="info-row">
+                <span class="info-label">用户模式</span>
+                <span class="info-value">固定医师一个用户（只读）· 诊所名称固定（只读）</span>
+            </div>
             <div class="credential-box">
                 <strong>🔑 默认账号：</strong>
-                管理员 <span class="cred-pair">admin / admin</span>（个人版仅此一个账号）<br>
-                <strong>⚠️ 首次登录后请立即修改密码！</strong>
+                管理员 <span class="cred-pair">admin / admin</span>（个人版仅此一个账号，不可改）<br>
+                <strong>⚠️ 默认账号不可修改，请妥善保管密码！</strong>
             </div>
             <div class="hash-box">
                 <div class="hash-label">SHA-256 校验值（APK）：</div>
@@ -436,9 +416,17 @@
                 <span class="info-label">适用场景</span>
                 <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
             </div>
+            <div class="info-row">
+                <span class="info-label">用户模式</span>
+                <span class="info-value">多用户（医师姓名可编辑）· 诊所固定（只读）</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">权限说明</span>
+                <span class="info-value">管理员：云端功能 · 普通用户：仅本地权限（离线）</span>
+            </div>
             <div class="notice-cloud">
                 <strong>⚠️ 无公开试用：</strong>云端桌面版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
-                <strong>试用建议：</strong>请先下载下方"本地桌面版"体验功能，满意后联系开发者开通云端账户。
+                <strong>试用建议：</strong>请先下载上方"离线版 APP"体验功能，满意后联系开发者开通云端账户。
             </div>
             <div class="hash-box">
                 <div class="hash-label">SHA-256 校验值（安装版）：</div>
@@ -448,27 +436,31 @@
             <a href="#" class="download-btn secondary" id="dl-cloud-portable" style="margin-left:10px;">便携版</a>
         </div>
 
-        <div class="card" id="card-bendi-desktop">
+        <div class="card" id="card-dingzhi-desktop">
             <div class="card-title">
-                惠康中医 · 本地桌面版
+                惠康中医 · 定制桌面版
                 <span class="badge desktop">桌面</span>
                 <span class="badge offline">离线</span>
             </div>
             <div class="info-row">
                 <span class="info-label">版本</span>
-                <span class="info-value version" id="ver-bendi-desktop">加载中...</span>
+                <span class="info-value version" id="ver-dingzhi-desktop">加载中...</span>
             </div>
             <div class="info-row">
                 <span class="info-label">发布日期</span>
-                <span class="info-value date" id="date-bendi-desktop">-</span>
+                <span class="info-value date" id="date-dingzhi-desktop">-</span>
             </div>
             <div class="info-row">
                 <span class="info-label">更新说明</span>
-                <span class="info-value" id="notes-bendi-desktop">-</span>
+                <span class="info-value" id="notes-dingzhi-desktop">-</span>
             </div>
             <div class="info-row">
                 <span class="info-label">适用场景</span>
-                <span class="info-value">完全离线使用，数据本地存储，无需联网</span>
+                <span class="info-value">固定诊所使用，数据完全离线</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">用户模式</span>
+                <span class="info-value">多用户（医师姓名可编辑）· 诊所名称固定（只读）</span>
             </div>
             <div class="credential-box">
                 <strong>🔑 默认账号：</strong>
@@ -479,10 +471,49 @@
             </div>
             <div class="hash-box">
                 <div class="hash-label">SHA-256 校验值（安装版）：</div>
-                <div class="hash-value pending" id="hash-bendi-desktop">（打包后自动更新）</div>
+                <div class="hash-value pending" id="hash-dingzhi-desktop">（打包后自动更新）</div>
             </div>
-            <a href="#" class="download-btn" id="dl-bendi-desktop">下载安装版（推荐）</a>
-            <a href="#" class="download-btn secondary" id="dl-bendi-desktop-portable" style="margin-left:10px;">便携版</a>
+            <a href="#" class="download-btn" id="dl-dingzhi-desktop">下载安装版（推荐）</a>
+            <a href="#" class="download-btn secondary" id="dl-dingzhi-desktop-portable" style="margin-left:10px;">便携版</a>
+        </div>
+
+        <div class="card" id="card-geren-desktop">
+            <div class="card-title">
+                惠康中医 · 个人桌面版
+                <span class="badge desktop">桌面</span>
+                <span class="badge offline">离线</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">版本</span>
+                <span class="info-value version" id="ver-geren-desktop">加载中...</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">发布日期</span>
+                <span class="info-value date" id="date-geren-desktop">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">更新说明</span>
+                <span class="info-value" id="notes-geren-desktop">-</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">适用场景</span>
+                <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">用户模式</span>
+                <span class="info-value">固定医师一个用户（只读）· 诊所名称固定（只读）</span>
+            </div>
+            <div class="credential-box">
+                <strong>🔑 默认账号：</strong>
+                管理员 <span class="cred-pair">admin / admin</span>（个人版仅此一个账号，不可改）<br>
+                <strong>⚠️ 默认账号不可修改，请妥善保管密码！</strong>
+            </div>
+            <div class="hash-box">
+                <div class="hash-label">SHA-256 校验值（安装版）：</div>
+                <div class="hash-value pending" id="hash-geren-desktop">（打包后自动更新）</div>
+            </div>
+            <a href="#" class="download-btn" id="dl-geren-desktop">下载安装版（推荐）</a>
+            <a href="#" class="download-btn secondary" id="dl-geren-desktop-portable" style="margin-left:10px;">便携版</a>
         </div>
 
         <!-- 云端网页版 -->
@@ -504,9 +535,17 @@
                 <span class="info-label">数据存储</span>
                 <span class="info-value">云端存储，实时同步</span>
             </div>
+            <div class="info-row">
+                <span class="info-label">用户模式</span>
+                <span class="info-value">多用户（医师姓名可编辑）· 诊所固定（只读）</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">权限说明</span>
+                <span class="info-value">管理员：云端功能 · 普通用户：仅本地权限（离线）</span>
+            </div>
             <div class="notice-cloud">
                 <strong>⚠️ 无公开试用：</strong>云端网页版需账户登录才能使用，账户由开发者（平台管理员）统一开通。<br>
-                <strong>试用建议：</strong>请先下载离线桌面版/APP 体验功能，满意后联系开发者开通云端账户。
+                <strong>试用建议：</strong>请先下载离线版 APP/桌面版体验功能，满意后联系开发者开通云端账户。
             </div>
             <a href="https://tcm-prescription-system.pages.dev/" class="download-btn">立即访问</a>
         </div>
@@ -585,27 +624,30 @@
                     <thead>
                         <tr style="background:#667eea;color:white;">
                             <th style="padding:8px;border:1px solid #ddd;text-align:left;">功能</th>
-                            <th style="padding:8px;border:1px solid #ddd;">本地版</th>
                             <th style="padding:8px;border:1px solid #ddd;">定制版</th>
                             <th style="padding:8px;border:1px solid #ddd;">个人版</th>
                             <th style="padding:8px;border:1px solid #ddd;">云端版</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">默认账号</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">admin/admin<br>doctor1,2/123456</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">admin/admin<br>doctor1,2/123456</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">admin/admin</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">需开通</td></tr>
-                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">试用模式</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">7天/30张</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">7天/30张</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">7天/30张</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">无试用</td></tr>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">数据存储</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">云端</td></tr>
-                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">用户管理</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅ 多用户</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 单用户</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 单用户</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅ 多用户</td></tr>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">修改密码</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
-                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">数据备份</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">统计分析</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
-                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">多设备同步</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">联网要求</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">完全离线</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">完全离线</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">完全离线</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">需联网</td></tr>
+                        <tr><td style="padding:6px;border:1px solid #ddd;">默认账号</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">admin/admin<br>doctor1,2/123456</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">admin/admin<br>（仅此一个，不可改）</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">需开通</td></tr>
+                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">用户模式</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">多用户</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">固定一个用户（只读）</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">多用户</td></tr>
+                        <tr><td style="padding:6px;border:1px solid #ddd;">医师姓名</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅ 可编辑</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 只读</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅ 可编辑</td></tr>
+                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">诊所名称</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 只读</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 只读</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 只读</td></tr>
+                        <tr><td style="padding:6px;border:1px solid #ddd;">修改密码</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
+                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">试用模式</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">7天/30张</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">7天/30张</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">无试用</td></tr>
+                        <tr><td style="padding:6px;border:1px solid #ddd;">数据存储</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">云端+本地</td></tr>
+                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">管理员权限</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地管理</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地管理</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">云端功能</td></tr>
+                        <tr><td style="padding:6px;border:1px solid #ddd;">普通用户权限</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地（离线）</td></tr>
+                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">数据备份</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
+                        <tr><td style="padding:6px;border:1px solid #ddd;">统计分析</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
+                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">多设备同步</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
+                        <tr><td style="padding:6px;border:1px solid #ddd;">联网要求</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">完全离线</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">完全离线</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">需联网</td></tr>
                     </tbody>
                 </table>
             </div>
             <p style="font-size:12px;color:#888;margin-top:10px;line-height:1.6;">
-                💡 <strong>选择建议：</strong>个人医生选<strong>个人版</strong>；定制诊所（单医生）选<strong>定制版</strong>；多医生诊所本地使用选<strong>本地版</strong>；多设备协作或需要云端同步选<strong>云端版</strong>。
+                💡 <strong>选择建议：</strong>个人医生选<strong>个人版</strong>；固定诊所（多医师）选<strong>定制版</strong>；需要多设备同步或云端协作选<strong>云端版</strong>。
             </p>
         </div>
 
@@ -621,9 +663,9 @@
         const versions = {
             'cloud': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'desktop' },
             'cloud-app': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'app' },
-            'bendi-desktop': { jsonUrl: BASE + '/updates/bendi/latest.json', type: 'desktop' },
-            'bendi': { jsonUrl: BASE + '/updates/bendi/latest.json', type: 'app' },
+            'dingzhi-desktop': { jsonUrl: BASE + '/updates/dingzhi/latest.json', type: 'desktop' },
             'dingzhi': { jsonUrl: BASE + '/updates/dingzhi/latest.json', type: 'app' },
+            'geren-desktop': { jsonUrl: BASE + '/updates/geren/latest.json', type: 'desktop' },
             'geren': { jsonUrl: BASE + '/updates/geren/latest.json', type: 'app' }
         };
 
@@ -747,7 +789,8 @@
         fetch(BASE + '/hash-manifest.json', { cache: 'no-cache' })
             .then(r => r.json())
             .then(manifest => {
-                ['cloud-app', 'bendi', 'dingzhi', 'geren'].forEach(key => {
+                // APK 校验值：云端APP、定制版、个人版
+                ['cloud-app', 'dingzhi', 'geren'].forEach(key => {
                     const manifestKey = key === 'cloud-app' ? 'cloud' : key;
                     const hashEl = document.getElementById('hash-' + key);
                     const data = manifest[manifestKey] && manifest[manifestKey].apk;
@@ -761,9 +804,12 @@
                         }
                     }
                 });
-                ['cloud', 'bendi-desktop'].forEach(key => {
-                    // ★ hash-manifest.json 中桌面版存为 'bendi'（与 APK 同 key），download.html 用 'bendi-desktop'
-                    const manifestKey = key === 'bendi-desktop' ? 'bendi' : key;
+                // 桌面版 exe 校验值：云端桌面版、定制桌面版、个人桌面版
+                ['cloud', 'dingzhi-desktop', 'geren-desktop'].forEach(key => {
+                    // hash-manifest.json 中桌面版 exe 与 APK 同 key（dingzhi/geren/cloud）
+                    const manifestKey = key === 'dingzhi-desktop' ? 'dingzhi'
+                                      : key === 'geren-desktop' ? 'geren'
+                                      : key;
                     const hashEl = document.getElementById('hash-' + key);
                     const data = manifest[manifestKey] && manifest[manifestKey].exe;
                     if (hashEl && data && data.sha256) {
