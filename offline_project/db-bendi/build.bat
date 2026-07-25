@@ -98,6 +98,18 @@ if exist "%~dp0..\..\tools\certs\cert-password.txt" (
 ) else (
     echo [WARN] cert-password.txt not found, code signing may be skipped
 )
+echo.
+echo [CHECK] ============================================
+echo [CHECK] 打包前安全完整性验证
+echo [CHECK] ============================================
+node "%~dp0..\..\tools\pre-build-check.js" "%CD%"
+if errorlevel 1 (
+    echo [FAIL] 安全检查未通过，终止打包！请修复 package.json 的 files 列表
+    exit /b 1
+)
+echo [OK] 安全检查通过
+echo.
+
 set NODE_TLS_REJECT_UNAUTHORIZED=0
 call npm run build
 set "BUILD_RC=%errorlevel%"

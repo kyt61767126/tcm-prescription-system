@@ -105,6 +105,17 @@ if exist "%OUTPUT_DIR%" (
 echo [OK] Old artifacts cleaned
 echo.
 
+echo [CHECK] ============================================
+echo [CHECK] 打包前安全完整性验证
+echo [CHECK] ============================================
+node "%~dp0..\..\tools\pre-build-check.js" "%CD%"
+if errorlevel 1 (
+    echo [FAIL] 安全检查未通过，终止打包！请修复 package.json 的 files 列表
+    exit /b 1
+)
+echo [OK] 安全检查通过
+echo.
+
 echo [5/8] Obfuscating JavaScript code (target=cloud)...
 node "%~dp0..\..\tools\obfuscate.js" --target=cloud
 if errorlevel 1 (
