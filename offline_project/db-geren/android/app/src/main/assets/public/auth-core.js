@@ -1186,22 +1186,13 @@
             const cancelBtn = card.querySelector('#activateCancelBtn');
             const submitBtn = card.querySelector('#activateSubmitBtn');
 
-            // ★ 最强 Autofill 阻止：聚焦时立即取消 Android Autofill 请求
-            // 防止系统弹出旧应用凭据提示（"本能中医处方系统"大图标窗口）
-            input.addEventListener('focus', function() {
-                try {
-                    if (window.AndroidNative) {
-                        window.AndroidNative.invoke('cancelAutofill', '{}');
-                    }
-                } catch (e) {}
-                // 双保险：再次调用 electronAPI 取消（如果存在）
-                try {
-                    if (global.electronAPI && global.electronAPI.activate &&
-                        typeof global.electronAPI.activate.cancelAutofill === 'function') {
-                        global.electronAPI.activate.cancelAutofill();
-                    }
-                } catch (e) {}
-            }, { once: true });
+            // ★ 移除 cancelAutofill 调用：cancelAutofill 反而触发 Autofill 凭据提示弹窗
+            // ("本能中医处方系统"大图标窗口)
+            // 防护由 Java 层负责：
+            //   1. onProvideAutofillVirtualStructure 重写返回空结构(阻止获取虚拟节点树)
+            //   2. disableAutofillRecursive 设置 importantForAutofill=NO
+            //   3. AndroidManifest importantForAutofill=noExcludeDescendants
+            //   4. AutofillManager.cancel() 在 configureWebView 中调用
 
             // 自动聚焦输入框
             setTimeout(function() { input.focus(); }, 100);
