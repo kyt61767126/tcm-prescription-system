@@ -3173,6 +3173,26 @@ let currentUser = null;
             if (__mtc) { __mtc.style.maxHeight = '400px'; }
         }
 
+        // ★修复：键盘弹出时隐藏底部菜单栏（避免 adjustResize 重排时 position:fixed 元素闪现）
+        if (window.visualViewport) {
+            const __vvActionBar = document.getElementById('mobileActionBar');
+            const __vvMobileNav = document.getElementById('mobileNav');
+            let __vvTimer = null;
+            window.visualViewport.addEventListener('resize', function() {
+                const __kbHeight = window.innerHeight - window.visualViewport.height;
+                if (__kbHeight > 50) {
+                    if (__vvActionBar) __vvActionBar.style.visibility = 'hidden';
+                    if (__vvMobileNav) __vvMobileNav.style.visibility = 'hidden';
+                } else {
+                    if (__vvTimer) clearTimeout(__vvTimer);
+                    __vvTimer = setTimeout(function() {
+                        if (__vvActionBar) __vvActionBar.style.visibility = '';
+                        if (__vvMobileNav) __vvMobileNav.style.visibility = '';
+                    }, 100);
+                }
+            });
+        }
+
         // 药物数据防火墙 - 确保药物数据总是被加载（即使 loadData 失败）
         // 递归自查：100ms 后首次检查，之后每 100ms 检查一次直到 medicines 填充或 3秒超时
         let __medicinesFirewallTriggered = false;
