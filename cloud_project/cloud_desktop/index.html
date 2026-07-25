@@ -4648,21 +4648,14 @@ if (window.Permission) {
         }
 
         async function checkLoginStatus() {
-            const session = await AuthCore.checkSession();
-            if (session.valid && session.user) {
-                try {
-                    currentUser = session.user;
-                    localStorage.setItem('cloud_currentUser', JSON.stringify(session.user));
-                    localStorage.setItem('cloud_isLoggedIn', 'true');
-                    document.getElementById('loginOverlay').style.display = 'none';
-                    updateUserDisplay();
-                    return;
-                } catch (e) {
-                    console.error('解析用户数据失败:', e);
-                }
-            }
+            // ★ 取消自动登入：即使会话有效也强制显示登入界面，用户必须手动输入密码
+            // 仅调用 checkSession 清理过期会话（不使用返回值自动登入）
+            try { await AuthCore.checkSession(); } catch(e) {}
+            // 清除可能残留的登入状态，确保每次都从登入界面开始
             currentUser = null;
+            // 立即显示登入界面（不等待记住用户名加载，优化显示速度）
             document.getElementById('loginOverlay').style.display = 'flex';
+            // 异步加载记住的用户名（不阻塞登入界面显示）
             initLoginDropdown();
         }
 
@@ -5926,10 +5919,21 @@ if (window.Permission) {
                 const userManageBtn = document.getElementById('userManageBtn');
                 if (userManageBtn && !isClinicAdmin(currentUser)) userManageBtn.style.display = 'none';
             }
-            
+
+            // ★ APP端（Capacitor）优化：强制每次手动登入，跳过Electron和localStorage检查
+            // 直接显示登入界面，避免异步检查导致的登入界面显示延迟
+            const isCapacitor = window.Capacitor && window.Capacitor.isNative;
+            if (isCapacitor) {
+                document.getElementById('loginOverlay').style.display = 'flex';
+                const mainContainer = document.querySelector('.main-container');
+                if (mainContainer) mainContainer.style.display = 'none';
+                finishInitUI(false);
+                return;
+            }
+
             // 检查是否是Electron环境
             const isElectron = window.electronAPI && window.electronAPI.isElectron;
-            
+
             // Electron模式：优先通过IPC从主进程获取登录用户（跨源localStorage隔离）
             if (isElectron && window.electronAPI.getLoggedInUser) {
                 try {
