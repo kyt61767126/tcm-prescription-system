@@ -1136,12 +1136,14 @@
                 showHtmlAlert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启');
                 global.electronAPI.activate.restart();
             } else {
-                showHtmlAlert('激活失败：\n' + (result && result.error ? result.error : '未知错误') + '\n\n点击确定重新输入激活码');
+                // ★ 必须 await：等用户点击"确定"后再重新显示输入框
+                // 否则错误提示和新输入框同时出现，用户看到的是新输入框(显示"请输入激活码")，键盘再次弹出
+                await showHtmlAlert('激活失败：\n' + (result && result.error ? result.error : '未知错误') + '\n\n点击确定重新输入激活码');
                 global.__licenseActivating = false;
                 showActivateDialog();
             }
         } catch (e) {
-            showHtmlAlert('激活过程出错：' + e.message);
+            await showHtmlAlert('激活过程出错：' + e.message);
             global.__licenseActivating = false;
         }
     }
@@ -1195,7 +1197,8 @@
             //   4. AutofillManager.cancel() 在 configureWebView 中调用
 
             // 自动聚焦输入框
-            setTimeout(function() { input.focus(); }, 100);
+            // ★ 延迟 350ms 聚焦：等键盘完全收起后再聚焦，避免"键盘消失再次出现"的视觉跳动
+            setTimeout(function() { input.focus(); }, 350);
 
             function cleanup() {
                 if (overlay.parentNode) overlay.parentNode.removeChild(overlay);

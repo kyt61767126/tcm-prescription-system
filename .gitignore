@@ -103,3 +103,9 @@ check_syntax.cjs
 # Temporary directories
 tmp/
 
+
+Cloudflare u{914D}u{7F6E}LICENSE_MASTER_KEY.txt
+LICENSE_MASTER_KEY*
+*LICENSE_MASTER_KEY*
+# Cloudflare 密钥配置文件（含敏感信息，绝不入库）
+Cloudflare*LICENSE_MASTER_KEY*
