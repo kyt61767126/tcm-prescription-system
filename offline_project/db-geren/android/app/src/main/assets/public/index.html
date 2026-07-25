@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-个人</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-个人</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -2906,24 +2906,36 @@ if (window.Permission) {
 
         // ★修复：input focus 时立即隐藏底部菜单栏（避免 adjustResize 重排时闪现）
         // 在 focus 事件时（键盘弹出之前）就隐藏，比 visualViewport.resize 更早
+        // ★优化：改用 display:none 释放布局空间（visibility:hidden 仍占据空间导致空白）
+        var __savedMobileActionBarDisplay = null;
+        var __savedMobileNavDisplay = null;
         document.addEventListener('focus', function(e) {
             if (e.target && e.target.tagName === 'INPUT' && window.innerWidth <= 768) {
                 const __ab = document.getElementById('mobileActionBar');
                 const __mn = document.getElementById('mobileNav');
-                if (__ab) __ab.style.visibility = 'hidden';
-                if (__mn) __mn.style.visibility = 'hidden';
+                if (__ab) { __savedMobileActionBarDisplay = __ab.style.display || ''; __ab.style.display = 'none'; }
+                if (__mn) { __savedMobileNavDisplay = __mn.style.display || ''; __mn.style.display = 'none'; }
             }
         }, true);
+        function __restoreMobileBars() {
+            const __ab = document.getElementById('mobileActionBar');
+            const __mn = document.getElementById('mobileNav');
+            if (__ab && __savedMobileActionBarDisplay !== null) { __ab.style.display = __savedMobileActionBarDisplay; __savedMobileActionBarDisplay = null; }
+            if (__mn && __savedMobileNavDisplay !== null) { __mn.style.display = __savedMobileNavDisplay; __savedMobileNavDisplay = null; }
+        }
         document.addEventListener('blur', function(e) {
             if (e.target && e.target.tagName === 'INPUT' && window.innerWidth <= 768) {
-                setTimeout(function() {
-                    const __ab = document.getElementById('mobileActionBar');
-                    const __mn = document.getElementById('mobileNav');
-                    if (__ab) __ab.style.visibility = '';
-                    if (__mn) __mn.style.visibility = '';
-                }, 100);
+                setTimeout(__restoreMobileBars, 100);
             }
         }, true);
+        // ★兜底：visualViewport resize 时如果键盘收起（高度恢复），强制恢复底部按钮工具栏
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', function() {
+                if (window.visualViewport.height > window.innerHeight * 0.8) {
+                    __restoreMobileBars();
+                }
+            });
+        }
 
         // 药物数据防火墙 - 确保药物数据总是被加载（即使 loadData 失败）
         // 递归自查：100ms 后首次检查，之后每 100ms 检查一次直到 medicines 填充或 3秒超时
