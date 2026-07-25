@@ -1095,36 +1095,31 @@
         }, 5000); // 每 5 秒检查一次
     }
 
-    // ★ APP 端激活对话框函数（提取为独立函数，activateNow 可直接调用，不依赖事件 dispatch）
-    // 桌面版由 main.js 的 activate.show() 打开 BrowserWindow，不走此函数
+    // ★ APP 端激活对话框函数（提取为独立函数，activateNow 可直接调用）
+    // 放弃 prompt() 方案，改为在页面内用 HTML/CSS 动态注入全屏遮罩模态弹窗
+    // 原因：Android WebView 的 onJsPrompt 会把页面内容当作 message 显示，导致输入框被挤压不可见
     async function showActivateDialog() {
         try {
             if (!global.electronAPI || !global.electronAPI.activate) {
-                try { alert('授权系统未就绪，请重启应用后重试'); } catch (e) {}
+                showHtmlAlert('授权系统未就绪，请重启应用后重试');
                 global.__licenseActivating = false;
                 return;
             }
-            // 获取机器 ID（显示给用户，方便客服查证）
             let machineId = '';
             try {
                 const r = await global.electronAPI.activate.getMachineId();
                 machineId = (r && r.machineId) ? r.machineId : (r || '');
             } catch (e) {}
 
-            // ★ 显示激活码输入（合并到一个 prompt）
-            // 简化提示信息，避免太长导致 AlertDialog 显示不全
-            const promptMsg = '请输入激活码（格式：BNZC-XXXX-XXXX-XXXX-XXXX）\n机器ID：' + (machineId || '未知') +
-                '\n如有疑问请联系客服';
-            const code = prompt(promptMsg);
+            // ★ 使用 HTML 模态弹窗替代 prompt()，完全由 JS/CSS 控制，不依赖 Android AlertDialog
+            const code = await showActivateModal(machineId);
 
             if (!code || !code.trim()) {
-                // 用户取消激活
                 global.__licenseActivating = false;
                 console.log('[LicenseCheck] 用户取消激活');
                 return;
             }
 
-            // 获取用户名（从 CONFIG 或 localStorage）
             let user = '';
             try {
                 if (typeof CONFIG !== 'undefined' && CONFIG.doctorName) {
@@ -1136,24 +1131,114 @@
 
             const result = await global.electronAPI.activate.submit(code.trim(), user);
             if (result && result.success) {
-                // 激活成功，清除失效标记
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
-                try { alert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启'); } catch (e) {}
+                showHtmlAlert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启');
                 global.electronAPI.activate.restart();
             } else {
-                // 激活失败，显示错误并重新弹 prompt
-                try {
-                    alert('激活失败：\n' + (result && result.error ? result.error : '未知错误') + '\n\n点击确定重新输入激活码');
-                } catch (e) {}
+                showHtmlAlert('激活失败：\n' + (result && result.error ? result.error : '未知错误') + '\n\n点击确定重新输入激活码');
                 global.__licenseActivating = false;
-                // 重新调用激活对话框（递归）
                 showActivateDialog();
             }
         } catch (e) {
-            try { alert('激活过程出错：' + e.message); } catch (er) {}
+            showHtmlAlert('激活过程出错：' + e.message);
             global.__licenseActivating = false;
         }
+    }
+
+    // ★ HTML 模态弹窗（替代 prompt()）
+    // 创建全屏遮罩 + 居中卡片，包含激活码输入框，完全由 JS/CSS 控制
+    function showActivateModal(machineId) {
+        return new Promise(function(resolve) {
+            const overlay = document.createElement('div');
+            overlay.id = 'activateModalOverlay';
+            overlay.style.cssText =
+                'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+
+            const card = document.createElement('div');
+            card.style.cssText =
+                'background:white;border-radius:12px;width:100%;max-width:380px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.3);';
+
+            card.innerHTML =
+                '<div style="font-size:18px;font-weight:bold;color:#333;text-align:center;margin-bottom:8px;">🔐 软件激活</div>' +
+                '<div style="font-size:12px;color:#999;text-align:center;margin-bottom:20px;">请输入激活码完成授权</div>' +
+                '<div style="font-size:13px;color:#666;margin-bottom:8px;">激活码格式：BNZC-XXXX-XXXX-XXXX-XXXX</div>' +
+                '<input type="text" id="activateCodeInput" ' +
+                'style="width:100%;padding:14px 16px;font-size:16px;font-family:monospace;border:2px solid #ddd;border-radius:8px;letter-spacing:2px;outline:none;transition:border-color 0.2s;margin-bottom:12px;" ' +
+                'placeholder="请输入激活码" />' +
+                '<div style="font-size:12px;color:#666;margin-bottom:16px;">机器ID：' + (machineId || '未知') + '</div>' +
+                '<div style="display:flex;gap:10px;">' +
+                '<button id="activateCancelBtn" style="flex:1;padding:12px;font-size:15px;border:1px solid #ddd;border-radius:8px;color:#666;background:white;cursor:pointer;">取消</button>' +
+                '<button id="activateSubmitBtn" style="flex:1;padding:12px;font-size:15px;border:none;border-radius:8px;color:white;background:#667eea;cursor:pointer;font-weight:bold;">确定</button>' +
+                '</div>';
+
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+
+            const input = card.querySelector('#activateCodeInput');
+            const cancelBtn = card.querySelector('#activateCancelBtn');
+            const submitBtn = card.querySelector('#activateSubmitBtn');
+
+            // 自动聚焦输入框
+            setTimeout(function() { input.focus(); }, 100);
+
+            function cleanup() {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+            }
+
+            cancelBtn.addEventListener('click', function() {
+                cleanup();
+                resolve('');
+            });
+
+            submitBtn.addEventListener('click', function() {
+                const val = input.value;
+                cleanup();
+                resolve(val);
+            });
+
+            // 点击遮罩关闭
+            overlay.addEventListener('click', function(e) {
+                if (e.target === overlay) {
+                    cleanup();
+                    resolve('');
+                }
+            });
+
+            // 回车提交
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    submitBtn.click();
+                }
+            });
+        });
+    }
+
+    // ★ HTML 弹窗（替代 alert()）
+    function showHtmlAlert(message) {
+        return new Promise(function(resolve) {
+            const overlay = document.createElement('div');
+            overlay.id = 'alertModalOverlay';
+            overlay.style.cssText =
+                'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+
+            const card = document.createElement('div');
+            card.style.cssText =
+                'background:white;border-radius:12px;width:100%;max-width:320px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.3);';
+
+            card.innerHTML =
+                '<div style="font-size:14px;color:#333;line-height:1.6;margin-bottom:20px;white-space:pre-wrap;">' + message + '</div>' +
+                '<button id="alertOkBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:white;background:#667eea;cursor:pointer;font-weight:bold;">确定</button>';
+
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+
+            const btn = card.querySelector('#alertOkBtn');
+            btn.addEventListener('click', function() {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                resolve();
+            });
+        });
     }
 
     // APP 端监听 'app:show-activate' 事件（向后兼容，由 activate.show() 触发）
