@@ -1148,6 +1148,8 @@
 
     // ★ HTML 模态弹窗（替代 prompt()）
     // 创建全屏遮罩 + 居中卡片，包含激活码输入框，完全由 JS/CSS 控制
+    // 关键防护：输入框添加 autocomplete="off" + data-lpignore="true" + onfocus 取消 Autofill
+    // 阻止 Android Autofill 弹出旧应用凭据提示（"本能中医处方系统"大图标窗口）
     function showActivateModal(machineId) {
         return new Promise(function(resolve) {
             const overlay = document.createElement('div');
@@ -1159,13 +1161,18 @@
             card.style.cssText =
                 'background:white;border-radius:12px;width:100%;max-width:380px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.3);';
 
+            // ★ 输入框添加最强 Autofill 阻止属性：
+            // - autocomplete="off"：标准属性阻止浏览器自动填充
+            // - autocomplete="new-password"：阻止密码管理器填充（即使 off 无效时）
+            // - data-lpignore="true"：阻止 LastPass 等密码管理器
+            // - onfocus 事件：聚焦时立即取消 Android Autofill 请求
             card.innerHTML =
                 '<div style="font-size:18px;font-weight:bold;color:#333;text-align:center;margin-bottom:8px;">🔐 软件激活</div>' +
                 '<div style="font-size:12px;color:#999;text-align:center;margin-bottom:20px;">请输入激活码完成授权</div>' +
                 '<div style="font-size:13px;color:#666;margin-bottom:8px;">激活码格式：BNZC-XXXX-XXXX-XXXX-XXXX</div>' +
                 '<input type="text" id="activateCodeInput" ' +
                 'style="width:100%;padding:14px 16px;font-size:16px;font-family:monospace;border:2px solid #ddd;border-radius:8px;letter-spacing:2px;outline:none;transition:border-color 0.2s;margin-bottom:12px;" ' +
-                'placeholder="请输入激活码" />' +
+                'placeholder="请输入激活码" autocomplete="new-password" data-lpignore="true" />' +
                 '<div style="font-size:12px;color:#666;margin-bottom:16px;">机器ID：' + (machineId || '未知') + '</div>' +
                 '<div style="display:flex;gap:10px;">' +
                 '<button id="activateCancelBtn" style="flex:1;padding:12px;font-size:15px;border:1px solid #ddd;border-radius:8px;color:#666;background:white;cursor:pointer;">取消</button>' +
@@ -1178,6 +1185,23 @@
             const input = card.querySelector('#activateCodeInput');
             const cancelBtn = card.querySelector('#activateCancelBtn');
             const submitBtn = card.querySelector('#activateSubmitBtn');
+
+            // ★ 最强 Autofill 阻止：聚焦时立即取消 Android Autofill 请求
+            // 防止系统弹出旧应用凭据提示（"本能中医处方系统"大图标窗口）
+            input.addEventListener('focus', function() {
+                try {
+                    if (window.AndroidNative) {
+                        window.AndroidNative.invoke('cancelAutofill', '{}');
+                    }
+                } catch (e) {}
+                // 双保险：再次调用 electronAPI 取消（如果存在）
+                try {
+                    if (global.electronAPI && global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.cancelAutofill === 'function') {
+                        global.electronAPI.activate.cancelAutofill();
+                    }
+                } catch (e) {}
+            }, { once: true });
 
             // 自动聚焦输入框
             setTimeout(function() { input.focus(); }, 100);

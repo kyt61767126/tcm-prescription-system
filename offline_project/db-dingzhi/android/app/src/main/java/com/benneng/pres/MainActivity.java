@@ -838,7 +838,9 @@ public class MainActivity extends AppCompatActivity {
             "      submit: function(code, user){ return new Promise(function(resolve){ try { resolve(callNative('license_activateOnline', JSON.stringify({code:code,user:user||''}))); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
             "      close: function(){ return P({success:true}); }," +
             "      restart: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_restart', '{}')); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
-            "      getMachineId: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getMachineId', '{}')); } catch(e){ resolve(null); } }); }" +
+            "      getMachineId: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getMachineId', '{}')); } catch(e){ resolve(null); } }); }," +
+            // ★ P1-4 取消 Autofill（阻止 Android Autofill 弹出旧应用凭据提示）
+            "      cancelAutofill: function(){ return new Promise(function(resolve){ try { resolve(callNative('cancelAutofill', '{}')); } catch(e){ resolve({success:true}); } }); }" +
             "    }" +
             "  };" +
             "  window.IS_ELECTRON = true;" +
