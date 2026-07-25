@@ -205,7 +205,21 @@ public class MainActivity extends AppCompatActivity {
 
                     @Override
                     public void onEnd(android.view.WindowInsetsAnimation animation) {
-                        // 无需隐藏覆盖层（从未显示）
+                        // ★ 键盘动画结束后，触发网页 resize 事件，让 position:fixed 菜单栏工具栏立即重新定位
+                        // 解决"键盘弹出后中间空白区，第二次点击才出现菜单栏工具栏"的问题
+                        // 云端APP的 Capacitor 框架自动处理此逻辑，离线APP需手动注入
+                        if (webView != null) {
+                            webView.post(() -> {
+                                webView.evaluateJavascript(
+                                    "(function(){" +
+                                    "  window.dispatchEvent(new Event('resize'));" +
+                                    "  var el = document.activeElement;" +
+                                    "  if(el && (el.tagName==='INPUT'||el.tagName==='TEXTAREA')){" +
+                                    "    try{ el.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){}" +
+                                    "  }" +
+                                    "})();", null);
+                            });
+                        }
                     }
                 }
             );
