@@ -30,6 +30,7 @@ import android.webkit.WebSettings;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.WebViewDatabase;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.Toast;
@@ -159,6 +160,29 @@ public class MainActivity extends AppCompatActivity {
         container.addView(flashOverlay);
 
         setContentView(container);
+
+        // ★ 方案B: adjustNothing 模式下，通过 WindowInsets 检测键盘高度，注入到 JS
+        // 目的: 让 JS 知道键盘高度，手动滚动焦点元素（药物栏简码输入框）到可视区域
+        // 原理: adjustNothing 下 WebView 高度不变，需要 JS 根据键盘高度手动滚动
+        ViewCompat.setOnApplyWindowInsetsListener(container, new androidx.core.view.OnApplyWindowInsetsListener() {
+            @Override
+            public WindowInsetsCompat onApplyWindowInsets(View v, WindowInsetsCompat insets) {
+                int imeHeight = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
+                final int height = imeHeight;
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (webView != null) {
+                            webView.evaluateJavascript(
+                                "window.__imeHeight = " + height + ";" +
+                                "if(window.dispatchEvent){window.dispatchEvent(new Event('imeheightchange'));}",
+                                null);
+                        }
+                    }
+                });
+                return insets;
+            }
+        });
 
         // ★ Activity 级别彻底禁用 Autofill（防止系统通过 Activity 节点树获取 WebView 内部 input）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -403,6 +427,12 @@ public class MainActivity extends AppCompatActivity {
         webView.clearCache(true);
         webView.clearFormData();
         webView.clearHistory();
+        // ★ 方案A: 清除应用级 WebView 表单数据库（比 webView.clearFormData() 更彻底）
+        // 目的: 根治"本能中医处方系统"旧应用名残留闪现
+        // 原理: WebViewDatabase 是应用级数据库，存储表单自动完成建议，webView.clearFormData() 无法清除
+        try {
+            WebViewDatabase.getInstance(this).clearFormData();
+        } catch(Exception e) { /* 兼容旧版本 */ }
 
         webView.addJavascriptInterface(new NativeBridge(), "AndroidNative");
 
