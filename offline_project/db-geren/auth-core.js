@@ -1639,8 +1639,15 @@
         // ★ 调整 position:fixed 菜单栏工具栏的 bottom 定位，确保在键盘上方
         // 解决 Android WebView 中 position:fixed;bottom:0 相对于屏幕底部（键盘下方）的问题
         function adjustFixedElements() {
-            if (!global.visualViewport) return;
-            var keyboardHeight = global.innerHeight - global.visualViewport.height;
+            var keyboardHeight = 0;
+            // 方式1：visualViewport 计算
+            if (global.visualViewport && global.visualViewport.height < global.innerHeight) {
+                keyboardHeight = global.innerHeight - global.visualViewport.height;
+            }
+            // 方式2：resize 事件记录的初始高度计算（fallback）
+            if (keyboardHeight <= 0 && global.__bnInitialHeight && global.__bnInitialHeight > global.innerHeight) {
+                keyboardHeight = global.__bnInitialHeight - global.innerHeight;
+            }
             var nav = document.querySelector('.mobile-nav');
             var bar = document.querySelector('.mobile-action-bar');
             if (nav && bar) {
@@ -1656,22 +1663,32 @@
             }
         }
 
-        document.addEventListener('focusin', function (e) {
+        // ★ 使用 focus 捕获阶段（focusin 可能被 onfocus 属性干扰）
+        document.addEventListener('focus', function (e) {
             var el = e.target;
             if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
+                // 记录初始高度（键盘弹出前的 innerHeight）
+                if (!global.__bnInitialHeight || global.__bnInitialHeight < global.innerHeight) {
+                    global.__bnInitialHeight = global.innerHeight;
+                }
                 setTimeout(function() {
                     scrollToActive();
                     adjustFixedElements();
                 }, 300);
             }
-        });
+        }, true); // ★ 捕获阶段
 
-        // 键盘收起时恢复菜单栏工具栏定位
-        document.addEventListener('focusout', function (e) {
+        // ★ 键盘收起时恢复菜单栏工具栏定位
+        document.addEventListener('blur', function (e) {
             var el = e.target;
             if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) {
                 setTimeout(adjustFixedElements, 300);
             }
+        }, true); // ★ 捕获阶段
+
+        // ★ resize 事件作为 visualViewport 的 fallback
+        global.addEventListener('resize', function () {
+            setTimeout(adjustFixedElements, 100);
         });
 
         if (global.visualViewport) {
