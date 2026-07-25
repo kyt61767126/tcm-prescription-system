@@ -51,6 +51,22 @@ $script:OldVersionCode = $null
 $script:UTF8WithBom = New-Object System.Text.UTF8Encoding($true)
 $script:UTF8NoBom = New-Object System.Text.UTF8Encoding($false)
 
+# 速度优化：npm cache 跨版本共享（bendi/dingzhi/geren 共用同一缓存目录）
+# 默认 npm cache 位于 %LOCALAPPDATA%\npm-cache，可能受 AV 扫描影响较慢
+# 改为项目级共享目录，所有版本复用，避免重复下载 electron/better-sqlite3 等大包
+$script:SharedNpmCache = "$script:ProjectRoot\tools\.npm-cache"
+if (-not (Test-Path $script:SharedNpmCache)) {
+    New-Item -ItemType Directory -Path $script:SharedNpmCache -Force | Out-Null
+}
+# 仅在用户未自定义时设置（避免覆盖开发者本地配置）
+if (-not $env:npm_config_cache) {
+    $env:npm_config_cache = $script:SharedNpmCache
+}
+# ELECTRON_BUILDER_CACHE 也统一到项目级，便于跨版本复用 NSIS/wine 等二进制
+if (-not $env:ELECTRON_BUILDER_CACHE) {
+    $env:ELECTRON_BUILDER_CACHE = "$script:ProjectRoot\tools\.eb-cache"
+}
+
 # ★ v3 安全：config.json 完整性签名密钥（与 license-manager.js / edit-config.ps1 保持一致）
 # 修改 config.json 时必须同步计算 HMAC-SHA256 签名并写入 configSignature 字段
 $script:CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026'
@@ -587,14 +603,32 @@ function Build-Desktop {
     }
 
     # Obfuscate JS
+    # ★ 稳定性修复：混淆步骤本身也可能失败（部分文件已生成 .bak），失败时必须 restore 清理
+    # 修复前问题：若 obfuscate.js 中途失败，已生成的 .bak 残留开发环境，下次打包会触发误还原
     Write-Host "  混淆 JavaScript 中..." -ForegroundColor Yellow
+    $obfuscateOk = $false
     Push-Location $script:ProjectRoot
     try {
         Invoke-External { node "tools\obfuscate.js" --target=$Version } "JS obfuscation"
+        $obfuscateOk = $true
     } finally {
         Pop-Location
+        if (-not $obfuscateOk) {
+            Write-Host "  [WARN] 混淆失败，正在 restore 清理 .bak 残留..." -ForegroundColor Yellow
+            Push-Location $script:ProjectRoot
+            try {
+                Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore after obfuscate failure"
+            } catch {
+                Write-Log "[WARN] JS restore failed after obfuscate failure" "WARN"
+            } finally {
+                Pop-Location
+            }
+        }
     }
 
+    # ★ 稳定性修复：将后续所有步骤包裹在 try-finally 中，确保任何步骤失败时都能还原 JS 源码
+    # 修复前问题：若证书检查/prepare-win-unpacked 等步骤抛异常，混淆源码会卡住不还原，污染开发环境
+    try {
     # ★ 证书存在性检查（防止证书丢失时 electron-builder 签名失败）
     $certPath = "$script:ProjectRoot\tools\certs\惠康中医-codesign.pfx"
     $pkgPath = "$script:VersionDir\package.json"
@@ -651,7 +685,7 @@ function Build-Desktop {
     Push-Location $script:VersionDir
     try {
         $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://registry.npmmirror.com/-/binary/electron-builder-binaries/"
-        $env:ELECTRON_BUILDER_CACHE = "$env:LOCALAPPDATA\electron-builder\Cache"
+        # ELECTRON_BUILDER_CACHE 已在脚本开头设置为项目级共享目录
         $env:NODE_TLS_REJECT_UNAUTHORIZED = "0"
         # ★ 修复 NSIS "Error writing temporary file" 错误
         # 原因：TRAE 沙箱可能阻止 NSIS 编译器(makensis.exe)写入系统 %TEMP% 目录
@@ -681,20 +715,11 @@ function Build-Desktop {
             Write-Host ""
             Write-Host "  [ERROR] electron-builder 失败: $_" -ForegroundColor Red
             Write-Log "[ERROR] electron-builder --prepackaged failed" "ERROR"
-            # ★ P1-B5 修复：构建失败时恢复 package.json 原始配置
+            # ★ P1-B5 修复：构建失败时恢复 package.json 原始配置（JS 源码由外层 finally 统一恢复）
             if (Test-Path $certBackupPath) {
                 Copy-Item -Path $certBackupPath -Destination $pkgPath -Force
                 Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue
                 Write-Host "  [OK] 已恢复 package.json 原始配置" -ForegroundColor Green
-            }
-            # ★ P1-B5 修复：构建失败时恢复 JS 源码（避免 .bak 残留）
-            Push-Location $script:ProjectRoot
-            try {
-                Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore (failure recovery)"
-            } catch {
-                Write-Log "[WARN] JS restore failed after desktop build failure" "WARN"
-            } finally {
-                Pop-Location
             }
             throw
         } finally {
@@ -732,13 +757,18 @@ function Build-Desktop {
         }
     }
 
-    # Restore JS (de-obfuscate)
-    Write-Host "  恢复 JavaScript 中..." -ForegroundColor Yellow
-    Push-Location $script:ProjectRoot
-    try {
-        Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore"
+    # Restore JS (de-obfuscate) - 由外层 try-finally 统一处理
     } finally {
-        Pop-Location
+        # ★ 稳定性修复：无论构建成功或失败，都恢复 JS 源码（防源码污染开发环境）
+        Write-Host "  恢复 JavaScript 中..." -ForegroundColor Yellow
+        Push-Location $script:ProjectRoot
+        try {
+            Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore"
+        } catch {
+            Write-Log "[WARN] JS restore failed after desktop build" "WARN"
+        } finally {
+            Pop-Location
+        }
     }
 
     Write-Log "[OK] Desktop build completed"
@@ -805,12 +835,26 @@ function Build-App {
     }
 
     # P1: 混淆 JS 代码（含 Android assets/public，防 APK 内 JS 被直接读取）
+    # ★ 稳定性修复：混淆失败时必须 restore 清理 .bak 残留（与 Build-Desktop 对齐）
     Write-Host "  混淆 JavaScript 中（含 Android assets）..." -ForegroundColor Yellow
+    $obfuscateOk = $false
     Push-Location $script:ProjectRoot
     try {
         Invoke-External { node "tools\obfuscate.js" --target=$Version } "JS obfuscation for APK"
+        $obfuscateOk = $true
     } finally {
         Pop-Location
+        if (-not $obfuscateOk) {
+            Write-Host "  [WARN] 混淆失败，正在 restore 清理 .bak 残留..." -ForegroundColor Yellow
+            Push-Location $script:ProjectRoot
+            try {
+                Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore after obfuscate failure"
+            } catch {
+                Write-Log "[WARN] JS restore failed after obfuscate failure" "WARN"
+            } finally {
+                Pop-Location
+            }
+        }
     }
 
     try {
@@ -837,8 +881,16 @@ function Build-App {
         try {
             # Using daemon (no --no-daemon) enables 2-3x faster incremental builds
             # --parallel enables parallel task execution
-            # --rerun-tasks 强制重新执行所有任务（忽略增量缓存，确保修改全部生效）
-            Invoke-External { & ".\gradlew.bat" assembleRelease --parallel --rerun-tasks } "gradlew assembleRelease"
+            # ★ 速度优化：TCM_GRADLE_SKIP_CLEAN=1 时跳过 --rerun-tasks，启用真正增量构建
+            #   - 默认（全量）：--rerun-tasks 强制重新执行所有任务，确保修改全部生效（最稳）
+            #   - 增量模式：跳过 --rerun-tasks，Gradle 通过输入哈希判断是否重新编译（快 2-3 倍）
+            #   适用场景：仅修改少量 Java/资源文件的开发调试；正式发布必须用全量模式
+            if ($env:TCM_GRADLE_SKIP_CLEAN -eq '1') {
+                Write-Host "  [增量构建] 跳过 --rerun-tasks TCM_GRADLE_SKIP_CLEAN=1" -ForegroundColor Cyan
+                Invoke-External { & ".\gradlew.bat" assembleRelease --parallel } "gradlew assembleRelease incremental"
+            } else {
+                Invoke-External { & ".\gradlew.bat" assembleRelease --parallel --rerun-tasks } "gradlew assembleRelease"
+            }
         } catch {
             Restore-VersionCode
             throw

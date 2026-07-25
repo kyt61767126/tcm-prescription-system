@@ -276,6 +276,7 @@ console.log(`========================================\n`);
 if (mode === 'restore') {
     // 还原模式：从 .bak 恢复所有文件
     console.log('正在还原原始文件...\n');
+    const allFiles = [];
     for (const dir of DISTRIBUTION_DIRS) {
         const absDir = path.join(projectRoot, dir);
         if (!fs.existsSync(absDir)) continue;
@@ -284,9 +285,12 @@ if (mode === 'restore') {
         for (const modFile of MODULE_FILES) {
             const filePath = path.join(absDir, modFile);
             if (fs.existsSync(filePath + '.bak')) {
+                allFiles.push({ dir, file: modFile, filePath });
                 if (restoreFile(filePath)) {
                     console.log(`  [OK] ${dir}/${modFile}`);
                     successCount++;
+                } else {
+                    failCount++;
                 }
             }
         }
@@ -296,14 +300,37 @@ if (mode === 'restore') {
         for (const extraFile of extras) {
             const filePath = path.join(absDir, extraFile);
             if (fs.existsSync(filePath + '.bak')) {
+                allFiles.push({ dir, file: extraFile, filePath });
                 if (restoreFile(filePath)) {
                     console.log(`  [OK] ${dir}/${extraFile}`);
                     successCount++;
+                } else {
+                    failCount++;
                 }
             }
         }
     }
     console.log(`\n还原完成: ${successCount} 个文件已恢复`);
+
+    // ★ 稳定性修复：restore 后必须校验 .bak 已全部清理
+    // 修复前问题：restoreFile 在文件被占用/权限不足时 unlink 失败，.bak 残留但脚本静默退出
+    //           下次打包 obfuscateFile 会因 .bak 存在触发"上次未还原"误判，使用错误的源码
+    // 修复后：restore 末尾扫描所有处理过的文件，若 .bak 仍存在则明确告警并返回退出码 2
+    const residualBaks = [];
+    for (const item of allFiles) {
+        if (fs.existsSync(item.filePath + '.bak')) {
+            residualBaks.push(`${item.dir}/${item.file}`);
+        }
+    }
+    if (residualBaks.length > 0) {
+        console.log(`\n[WARN] 发现 ${residualBaks.length} 个 .bak 残留文件：`);
+        residualBaks.forEach(f => console.log(`  - ${f}`));
+        console.log('\n可能原因：文件被占用 / 权限不足 / restoreFile 失败');
+        console.log('建议：手动删除上述 .bak 文件后重新执行 restore');
+        process.exit(2);
+    } else {
+        console.log('[OK] .bak 残留检查通过，无残留文件');
+    }
 } else {
     // 混淆模式
     // 先统计待处理文件总数，用于显示进度

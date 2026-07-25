@@ -578,6 +578,7 @@ public class MainActivity extends AppCompatActivity {
                 view.setVisibility(View.VISIBLE);
                 injectElectronApiShim(view);
                 injectStatusBarFix(view);
+                injectKeyboardAdapter(view);
                 injectLoginUsernameFix(view);
                 // ★ 不注入 injectAutocompleteOff：cancelAutofill() 调用会导致 Autofill 提示闪现
                 // 防线：onProvideAutofillVirtualStructure 重写阻止 Autofill 获取虚拟节点树
@@ -930,6 +931,39 @@ public class MainActivity extends AppCompatActivity {
             "    if (!inLogin) {" +
             "      el.style.paddingTop = '" + sbHeight + "px';" +
             "    }" +
+            "  }" +
+            "})();";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * ★ 键盘适配：输入框聚焦时自动滚动到可见区域，防止药物栏表格被键盘遮盖
+     * 解决"药物栏输入到第11行与手机键盘部分重合"的问题
+     * 通过 focusin 事件 + visualViewport.resize 事件实现，不修改 index.html
+     */
+    private void injectKeyboardAdapter(WebView webView) {
+        String js = "(function(){" +
+            "  if(window.__bnKbAdapter) return;" +
+            "  window.__bnKbAdapter = true;" +
+            "  function scrollToActive(){" +
+            "    var el = document.activeElement;" +
+            "    if(!el) return;" +
+            "    if(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable){" +
+            "      try{ el.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){ el.scrollIntoView(false); }" +
+            "    }" +
+            "  }" +
+            "  document.addEventListener('focusin', function(e){" +
+            "    var el = e.target;" +
+            "    if(el&&(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable)){" +
+            "      setTimeout(scrollToActive, 300);" +
+            "    }" +
+            "  });" +
+            "  if(window.visualViewport){" +
+            "    var timer = null;" +
+            "    window.visualViewport.addEventListener('resize', function(){" +
+            "      if(timer) clearTimeout(timer);" +
+            "      timer = setTimeout(scrollToActive, 100);" +
+            "    });" +
             "  }" +
             "})();";
         webView.evaluateJavascript(js, null);

@@ -54,6 +54,10 @@ _apk_verify/
 # publish-release.js 临时上传目录（重命名后的 exe/apk 副本）
 tools/.release-tmp/
 
+# pack.ps1 跨版本共享缓存目录（npm/electron-builder）
+tools/.npm-cache/
+tools/.eb-cache/
+
 # 敏感凭据图片
 网页版密码.png
 *密码*.png
