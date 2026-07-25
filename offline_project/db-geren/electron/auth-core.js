@@ -1187,6 +1187,7 @@
 
     // ★ 向 settingsModal 运行时注入 license 状态显示 + 立即激活按钮
     // 不修改 HTML 源码，仅在运行时动态注入 DOM，符合界面保护约束
+    // 云端环境（网页版/云端APP）无 electronAPI.license，显示"云端版无需激活"并隐藏按钮
     function injectLicenseStatusIntoSettings() {
         const settingsModal = document.getElementById('settingsModal');
         if (!settingsModal) {
@@ -1206,38 +1207,51 @@
             return;
         }
 
+        // ★ 云端环境检测：无 electronAPI 或无 license 桥接 → 云端版，无需激活
+        const hasLicenseApi = global.electronAPI && global.electronAPI.license &&
+            typeof global.electronAPI.license.getStatus === 'function';
+
         const section = document.createElement('div');
         section.id = 'licenseStatusSection';
         section.style.cssText = 'margin-top:15px;padding:10px;border:1px solid #ddd;border-radius:6px;background:#f9f9f9;';
         section.innerHTML =
             '<div style="font-weight:bold;margin-bottom:8px;color:#333;">🔐 授权状态</div>' +
             '<div id="licenseStatusText" style="font-size:13px;color:#666;margin-bottom:10px;">加载中...</div>' +
-            '<button class="action-btn" id="activateNowBtn" style="background:#ff9800;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;">立即激活</button>';
+            (hasLicenseApi
+                ? '<button class="action-btn" id="activateNowBtn" style="background:#ff9800;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;">立即激活</button>'
+                : '');
 
         modalBody.appendChild(section);
 
-        // 绑定按钮事件：关闭 settingsModal 后触发激活
-        const btn = section.querySelector('#activateNowBtn');
-        btn.addEventListener('click', function () {
-            try { closeModal('settingsModal'); } catch (e) { }
-            if (typeof global.activateNow === 'function') {
-                global.activateNow();
+        // 仅在有 license API 时绑定按钮事件
+        if (hasLicenseApi) {
+            const btn = section.querySelector('#activateNowBtn');
+            if (btn) {
+                btn.addEventListener('click', function () {
+                    try { closeModal('settingsModal'); } catch (e) { }
+                    if (typeof global.activateNow === 'function') {
+                        global.activateNow();
+                    }
+                });
             }
-        });
+        }
 
         // 异步加载 license 状态
         updateLicenseStatusText();
     }
 
-    // ★ 异步获取并显示 license 状态（试用期剩余天数 / 已激活 / 已过期）
+    // ★ 异步获取并显示 license 状态
+    // 云端环境：显示"🌐 云端版，登录即可使用"
+    // 离线环境：显示试用期剩余天数 / 已激活 / 已过期
     async function updateLicenseStatusText() {
         const el = document.getElementById('licenseStatusText');
         if (!el) return;
 
         try {
+            // ★ 云端环境：无 electronAPI.license → 显示云端版提示
             if (!global.electronAPI || !global.electronAPI.license ||
                 typeof global.electronAPI.license.getStatus !== 'function') {
-                el.textContent = '未检测到授权系统';
+                el.innerHTML = '🌐 <b style="color:#2196f3;">云端版</b><br><span style="color:#666;">登录即可使用，无需激活</span>';
                 return;
             }
             const status = await global.electronAPI.license.getStatus();
