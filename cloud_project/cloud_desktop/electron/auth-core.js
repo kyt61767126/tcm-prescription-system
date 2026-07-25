@@ -1098,6 +1098,7 @@
     // ★ APP 端激活对话框函数（提取为独立函数，activateNow 可直接调用）
     // 放弃 prompt() 方案，改为在页面内用 HTML/CSS 动态注入全屏遮罩模态弹窗
     // 原因：Android WebView 的 onJsPrompt 会把页面内容当作 message 显示，导致输入框被挤压不可见
+    // ★ 优化客户使用流程：步骤指引 + 机器ID复制 + 联系客服入口 + loading + 错误分类
     async function showActivateDialog() {
         try {
             if (!global.electronAPI || !global.electronAPI.activate) {
@@ -1111,10 +1112,19 @@
                 machineId = (r && r.machineId) ? r.machineId : (r || '');
             } catch (e) {}
 
-            // ★ 使用 HTML 模态弹窗替代 prompt()，完全由 JS/CSS 控制，不依赖 Android AlertDialog
-            const code = await showActivateModal(machineId);
+            // 获取本地诊所名（从 CONFIG.clinicName 读取，便于用户报给客服）
+            let clinicName = '';
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG.clinicName) {
+                    clinicName = CONFIG.clinicName;
+                }
+            } catch (e) {}
 
-            if (!code || !code.trim()) {
+            // ★ 使用 HTML 模态弹窗替代 prompt()，完全由 JS/CSS 控制，不依赖 Android AlertDialog
+            // 返回值：{ code: string, cancelled: boolean }
+            const modalResult = await showActivateModal(machineId, clinicName);
+
+            if (modalResult.cancelled || !modalResult.code || !modalResult.code.trim()) {
                 global.__licenseActivating = false;
                 console.log('[LicenseCheck] 用户取消激活');
                 return;
@@ -1129,16 +1139,29 @@
                 }
             } catch (e) {}
 
-            const result = await global.electronAPI.activate.submit(code.trim(), user);
+            // ★ 激活码前端格式校验（减少无效网络请求）
+            const codeTrim = modalResult.code.trim();
+            const codePattern = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+            if (!codePattern.test(codeTrim)) {
+                await showHtmlAlert('激活码格式不正确\n\n正确格式：BNZC-XXXX-XXXX-XXXX-XXXX\n（X 为大写字母或数字，去除 I/O/0/1）\n\n点击确定重新输入');
+                global.__licenseActivating = false;
+                showActivateDialog();
+                return;
+            }
+
+            const result = await global.electronAPI.activate.submit(codeTrim, user);
             if (result && result.success) {
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
-                showHtmlAlert('激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启');
+                showHtmlAlert('✅ 激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启');
                 global.electronAPI.activate.restart();
             } else {
+                // ★ 错误分类提示（网络错误/激活码错误/绑定错误）
+                const errMsg = (result && result.error) ? result.error : '未知错误';
+                const friendlyMsg = formatActivateError(errMsg);
                 // ★ 必须 await：等用户点击"确定"后再重新显示输入框
                 // 否则错误提示和新输入框同时出现，用户看到的是新输入框(显示"请输入激活码")，键盘再次弹出
-                await showHtmlAlert('激活失败：\n' + (result && result.error ? result.error : '未知错误') + '\n\n点击确定重新输入激活码');
+                await showHtmlAlert(friendlyMsg);
                 global.__licenseActivating = false;
                 showActivateDialog();
             }
@@ -1148,20 +1171,79 @@
         }
     }
 
+    // ★ 激活错误友好提示（区分网络错误/激活码错误/绑定错误）
+    function formatActivateError(errMsg) {
+        const msg = String(errMsg || '').toLowerCase();
+        // 网络错误
+        if (msg.includes('网络') || msg.includes('超时') || msg.includes('timeout') ||
+            msg.includes('unknownhost') || msg.includes('socket') || msg.includes('连接')) {
+            return '❌ 激活失败：网络连接异常\n\n' + errMsg + '\n\n请检查网络后重试。\n如暂时无法联网，请联系客服协助激活。\n\n点击确定重新输入激活码';
+        }
+        // 激活码错误
+        if (msg.includes('激活码') || msg.includes('已禁用') || msg.includes('已过期') || msg.includes('disabled') || msg.includes('expired')) {
+            return '❌ 激活失败：激活码无效\n\n' + errMsg + '\n\n请确认激活码输入正确，或联系客服重新获取。\n\n点击确定重新输入激活码';
+        }
+        // 绑定错误（诊所名不匹配）
+        if (msg.includes('诊所') || msg.includes('绑定') || msg.includes('clinic') || msg.includes('绑定设备')) {
+            return '❌ 激活失败：授权绑定不匹配\n\n' + errMsg + '\n\n请确认诊所名称和机器ID与客服记录一致。\n\n点击确定重新输入激活码';
+        }
+        // 限速
+        if (msg.includes('限速') || msg.includes('频繁') || msg.includes('rate')) {
+            return '❌ 激活失败：尝试过于频繁\n\n' + errMsg + '\n\n请等待几分钟后重试。\n\n点击确定重新输入激活码';
+        }
+        // 兜底
+        return '❌ 激活失败：\n' + errMsg + '\n\n点击确定重新输入激活码';
+    }
+
+    // ★ 复制文本到剪贴板（带 fallback，APP 端 WebView 可能不支持 navigator.clipboard）
+    function copyTextToClipboard(text) {
+        return new Promise(function(resolve) {
+            const textStr = String(text || '');
+            if (!textStr) { resolve(false); return; }
+            // 优先使用现代 Clipboard API
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(textStr).then(function() {
+                    resolve(true);
+                }).catch(function() {
+                    // fallback 到 execCommand
+                    fallbackCopy(textStr, resolve);
+                });
+            } else {
+                fallbackCopy(textStr, resolve);
+            }
+        });
+    }
+    function fallbackCopy(text, resolve) {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0;';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            const ok = document.execCommand('copy');
+            document.body.removeChild(ta);
+            resolve(ok);
+        } catch (e) {
+            resolve(false);
+        }
+    }
+
     // ★ HTML 模态弹窗（替代 prompt()）
     // 创建全屏遮罩 + 居中卡片，包含激活码输入框，完全由 JS/CSS 控制
     // 关键防护：输入框添加 autocomplete="off" + data-lpignore="true" + onfocus 取消 Autofill
     // 阻止 Android Autofill 弹出旧应用凭据提示（"本能中医处方系统"大图标窗口）
-    function showActivateModal(machineId) {
+    // ★ 优化客户使用流程：紫色主题、步骤指引、机器ID复制、联系客服、诊所名展示、loading
+    function showActivateModal(machineId, clinicName) {
         return new Promise(function(resolve) {
             const overlay = document.createElement('div');
             overlay.id = 'activateModalOverlay';
             overlay.style.cssText =
-                'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;';
+                'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
 
             const card = document.createElement('div');
             card.style.cssText =
-                'background:white;border-radius:12px;width:100%;max-width:380px;padding:24px;box-shadow:0 10px 30px rgba(0,0,0,0.3);';
+                'background:white;border-radius:14px;width:100%;max-width:400px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;';
 
             // ★ 输入框添加最强 Autofill 阻止属性：
             // - autocomplete="off"：标准属性阻止浏览器自动填充
@@ -1169,17 +1251,78 @@
             // - data-lpignore="true"：阻止 LastPass 等密码管理器
             // - onfocus 事件：聚焦时立即取消 Android Autofill 请求
             card.innerHTML =
-                '<div style="font-size:18px;font-weight:bold;color:#333;text-align:center;margin-bottom:8px;">🔐 软件激活</div>' +
-                '<div style="font-size:12px;color:#999;text-align:center;margin-bottom:20px;">请输入激活码完成授权</div>' +
-                '<div style="font-size:13px;color:#666;margin-bottom:8px;">激活码格式：BNZC-XXXX-XXXX-XXXX-XXXX</div>' +
+                // 标题区（紫色主题）
+                '<div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);margin:-20px -20px 16px -20px;padding:20px;border-radius:14px 14px 0 0;text-align:center;">' +
+                    '<div style="font-size:20px;font-weight:bold;color:white;">🔐 软件激活</div>' +
+                    '<div style="font-size:12px;color:rgba(255,255,255,0.85);margin-top:4px;">惠康中医诊所管理系统</div>' +
+                '</div>' +
+
+                // 步骤指引
+                '<div style="background:#f5f7ff;border-radius:8px;padding:12px;margin-bottom:16px;">' +
+                    '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:6px;">📋 激活步骤</div>' +
+                    '<div style="font-size:12px;color:#666;line-height:1.8;">' +
+                        '<div>1️⃣ 复制下方"机器ID"</div>' +
+                        '<div>2️⃣ 联系客服，提供机器ID和诊所名</div>' +
+                        '<div>3️⃣ 输入客服提供的激活码</div>' +
+                    '</div>' +
+                '</div>' +
+
+                // 机器ID区（含复制按钮）
+                '<div style="margin-bottom:14px;">' +
+                    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
+                        '<span style="font-size:12px;color:#888;font-weight:bold;">🔑 本机机器 ID</span>' +
+                        '<button id="copyMachineIdBtn" style="font-size:11px;padding:4px 10px;border:1px solid #667eea;border-radius:4px;background:#667eea;color:white;cursor:pointer;">复制</button>' +
+                    '</div>' +
+                    '<div id="machineIdValue" style="font-size:11px;color:#333;background:#f9f9f9;border:1px solid #eee;border-radius:6px;padding:8px 10px;word-break:break-all;font-family:monospace;letter-spacing:1px;">' + (machineId || '未知') + '</div>' +
+                '</div>' +
+
+                // 诊所名展示（便于用户报给客服）
+                (clinicName ?
+                    '<div style="margin-bottom:14px;font-size:12px;color:#666;">' +
+                        '<span style="color:#888;font-weight:bold;">🏥 本机诊所名：</span>' +
+                        '<span style="color:#333;">' + clinicName + '</span>' +
+                    '</div>' : '') +
+
+                // 激活码输入区
+                '<div style="font-size:12px;color:#666;margin-bottom:6px;">激活码格式：BNZC-XXXX-XXXX-XXXX-XXXX</div>' +
                 '<input type="text" id="activateCodeInput" ' +
-                'style="width:100%;padding:14px 16px;font-size:16px;font-family:monospace;border:2px solid #ddd;border-radius:8px;letter-spacing:2px;outline:none;transition:border-color 0.2s;margin-bottom:12px;" ' +
+                'style="width:100%;padding:14px 16px;font-size:16px;font-family:monospace;border:2px solid #ddd;border-radius:8px;letter-spacing:2px;outline:none;transition:border-color 0.2s;margin-bottom:14px;box-sizing:border-box;" ' +
                 'placeholder="请输入激活码" autocomplete="new-password" data-lpignore="true" />' +
-                '<div style="font-size:12px;color:#666;margin-bottom:16px;">机器ID：' + (machineId || '未知') + '</div>' +
+
+                // loading 提示（默认隐藏）
+                '<div id="activateLoadingBox" style="display:none;text-align:center;padding:10px;margin-bottom:14px;">' +
+                    '<div style="display:inline-block;width:20px;height:20px;border:2px solid #ddd;border-top-color:#667eea;border-radius:50%;animation:activateSpin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></div>' +
+                    '<span style="font-size:13px;color:#667eea;vertical-align:middle;">正在激活，请稍候...</span>' +
+                '</div>' +
+
+                // 联系客服区
+                '<div style="background:#fff8e1;border-radius:8px;padding:10px;margin-bottom:16px;">' +
+                    '<div style="font-size:12px;font-weight:bold;color:#e65100;margin-bottom:6px;">📞 获取激活码（联系客服）</div>' +
+                    '<div style="font-size:12px;color:#555;line-height:1.8;">' +
+                        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+                            '<span>微信：<strong style="color:#333;">huikang-tcm</strong></span>' +
+                            '<button class="copyContactBtn" data-text="huikang-tcm" style="font-size:11px;padding:2px 8px;border:1px solid #e65100;border-radius:4px;background:white;color:#e65100;cursor:pointer;">复制</button>' +
+                        '</div>' +
+                        '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">' +
+                            '<span>电话：<strong style="color:#333;">400-xxx-xxxx</strong></span>' +
+                            '<button class="copyContactBtn" data-text="400-xxx-xxxx" style="font-size:11px;padding:2px 8px;border:1px solid #e65100;border-radius:4px;background:white;color:#e65100;cursor:pointer;">复制</button>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+
+                // 按钮区
                 '<div style="display:flex;gap:10px;">' +
-                '<button id="activateCancelBtn" style="flex:1;padding:12px;font-size:15px;border:1px solid #ddd;border-radius:8px;color:#666;background:white;cursor:pointer;">取消</button>' +
-                '<button id="activateSubmitBtn" style="flex:1;padding:12px;font-size:15px;border:none;border-radius:8px;color:white;background:#667eea;cursor:pointer;font-weight:bold;">确定</button>' +
+                    '<button id="activateCancelBtn" style="flex:1;padding:12px;font-size:15px;border:1px solid #ddd;border-radius:8px;color:#666;background:white;cursor:pointer;">取消</button>' +
+                    '<button id="activateSubmitBtn" style="flex:1;padding:12px;font-size:15px;border:none;border-radius:8px;color:white;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);cursor:pointer;font-weight:bold;">立即激活</button>' +
                 '</div>';
+
+            // 注入 spinner 动画 keyframes（仅注入一次）
+            if (!document.getElementById('activateSpinKeyframes')) {
+                const styleEl = document.createElement('style');
+                styleEl.id = 'activateSpinKeyframes';
+                styleEl.textContent = '@keyframes activateSpin{to{transform:rotate(360deg);}}';
+                document.head.appendChild(styleEl);
+            }
 
             overlay.appendChild(card);
             document.body.appendChild(overlay);
@@ -1187,6 +1330,9 @@
             const input = card.querySelector('#activateCodeInput');
             const cancelBtn = card.querySelector('#activateCancelBtn');
             const submitBtn = card.querySelector('#activateSubmitBtn');
+            const copyMachineIdBtn = card.querySelector('#copyMachineIdBtn');
+            const loadingBox = card.querySelector('#activateLoadingBox');
+            const copyContactBtns = card.querySelectorAll('.copyContactBtn');
 
             // ★ 移除 cancelAutofill 调用：cancelAutofill 反而触发 Autofill 凭据提示弹窗
             // ("本能中医处方系统"大图标窗口)
@@ -1200,32 +1346,68 @@
             // ★ 延迟 350ms 聚焦：等键盘完全收起后再聚焦，避免"键盘消失再次出现"的视觉跳动
             setTimeout(function() { input.focus(); }, 350);
 
+            // 机器ID复制按钮
+            copyMachineIdBtn.addEventListener('click', async function() {
+                const ok = await copyTextToClipboard(machineId);
+                copyMachineIdBtn.textContent = ok ? '✅ 已复制' : '❌ 失败';
+                setTimeout(function() { copyMachineIdBtn.textContent = '复制'; }, 1500);
+            });
+
+            // 联系方式复制按钮
+            copyContactBtns.forEach(function(btn) {
+                btn.addEventListener('click', async function() {
+                    const text = btn.getAttribute('data-text') || '';
+                    const ok = await copyTextToClipboard(text);
+                    btn.textContent = ok ? '✅ 已复制' : '❌ 失败';
+                    setTimeout(function() { btn.textContent = '复制'; }, 1500);
+                });
+            });
+
             function cleanup() {
                 if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
             }
 
+            function submitCode() {
+                const val = input.value;
+                // ★ 显示 loading 状态（不立即关闭弹窗，让用户看到正在处理）
+                // 仅当有输入时才显示 loading
+                if (val && val.trim()) {
+                    submitBtn.disabled = true;
+                    cancelBtn.disabled = true;
+                    input.disabled = true;
+                    loadingBox.style.display = 'block';
+                    submitBtn.textContent = '激活中...';
+                    // 延迟一帧让 loading 显示后再 resolve（主流程异步处理）
+                    setTimeout(function() {
+                        cleanup();
+                        resolve({ code: val, cancelled: false });
+                    }, 100);
+                } else {
+                    // 空输入直接关闭
+                    cleanup();
+                    resolve({ code: '', cancelled: false });
+                }
+            }
+
             cancelBtn.addEventListener('click', function() {
                 cleanup();
-                resolve('');
+                resolve({ code: '', cancelled: true });
             });
 
-            submitBtn.addEventListener('click', function() {
-                const val = input.value;
-                cleanup();
-                resolve(val);
-            });
+            submitBtn.addEventListener('click', submitCode);
 
             // 点击遮罩关闭
             overlay.addEventListener('click', function(e) {
                 if (e.target === overlay) {
                     cleanup();
-                    resolve('');
+                    resolve({ code: '', cancelled: true });
                 }
             });
 
             // 回车提交
             input.addEventListener('keydown', function(e) {
                 if (e.key === 'Enter') {
+                    e.preventDefault();
                     submitBtn.click();
                 }
             });
