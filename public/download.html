@@ -737,28 +737,17 @@
             border-radius: var(--radius-md);
             margin: 16px 0;
         }
-        .qrcode-placeholder {
+        .qrcode-img {
             width: 180px; height: 180px;
-            background: white;
             border: 2px solid var(--border-color);
             border-radius: var(--radius-sm);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            color: var(--text-tertiary);
-            font-size: 12px;
             margin-bottom: 12px;
-            position: relative;
-            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transition: var(--transition);
         }
-        .qrcode-placeholder .icon { font-size: 48px; margin-bottom: 6px; color: var(--success); }
-        .qrcode-placeholder::after {
-            content: '扫码加客服';
-            position: absolute;
-            bottom: 8px;
-            font-size: 11px;
-            color: var(--text-secondary);
+        .qrcode-img:hover {
+            transform: scale(1.02);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
         }
         .contact-wechat {
             font-size: 14px;
@@ -1439,11 +1428,7 @@
                         </div>
                     </div>
                     <div class="contact-box">
-                        <div class="qrcode-placeholder" id="qrcodePlaceholder">
-                            <span class="icon">💬</span>
-                            <span>客服微信二维码</span>
-                            <small style="margin-top:4px;font-size:10px;color:#9ca3af;">（待替换为实际图片）</small>
-                        </div>
+                        <img src="/qr-wechat.svg" alt="客服微信二维码" class="qrcode-img">
                         <div class="contact-wechat">
                             客服微信：
                             <span class="wx-id" onclick="copyText(this)" title="点击复制">yqjzy1688</span>
