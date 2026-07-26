@@ -2,115 +2,353 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>惠康中医诊所管理系统 - 官方下载</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>惠康中医诊所管理系统 - 官方下载中心</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-            color: #333;
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        :root {
+            --primary: #667eea;
+            --primary-dark: #764ba2;
+            --primary-light: #818cf8;
+            --bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --card-bg: #ffffff;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --text-tertiary: #9ca3af;
+            --border-color: #e5e7eb;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+            --shadow-lg: 0 10px 30px rgba(0,0,0,0.12);
+            --shadow-xl: 0 20px 50px rgba(102,126,234,0.25);
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 16px;
+            --transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         }
-        .container { max-width: 900px; margin: 0 auto; }
-        .header {
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', 'PingFang SC', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            color: var(--text-primary);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+        .container { max-width: 1100px; margin: 0 auto; padding: 20px 16px 80px; }
+
+        /* ============ Hero 头部 ============ */
+        .hero {
             text-align: center;
             color: white;
-            margin-bottom: 30px;
+            padding: 40px 20px 30px;
+            position: relative;
         }
-        .header h1 { font-size: 28px; margin-bottom: 8px; }
-        .header p { font-size: 14px; opacity: 0.9; }
-        .card {
-            background: white;
-            border-radius: 12px;
-            padding: 24px;
-            margin-bottom: 20px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        .hero::before {
+            content: '';
+            position: absolute;
+            top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 60%);
+            pointer-events: none;
         }
-        .card-title {
-            font-size: 18px;
-            font-weight: bold;
-            color: #667eea;
+        .hero-logo {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 72px; height: 72px;
+            background: rgba(255,255,255,0.15);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            font-size: 36px;
             margin-bottom: 16px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+        }
+        .hero h1 {
+            font-size: 30px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            letter-spacing: 1px;
+        }
+        .hero p {
+            font-size: 14px;
+            opacity: 0.92;
+            margin-bottom: 24px;
+        }
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(255,255,255,0.15);
+            border: 1px solid rgba(255,255,255,0.25);
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            backdrop-filter: blur(10px);
+        }
+        .hero-badge .dot {
+            width: 8px; height: 8px;
+            background: #4ade80;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #4ade80;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.6; transform: scale(1.2); }
+        }
+
+        /* ============ 安全提示 ============ */
+        .security-notice {
+            background: rgba(255,255,255,0.12);
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: var(--radius-md);
+            padding: 14px 18px;
+            color: white;
+            font-size: 13px;
+            line-height: 1.7;
+            margin-bottom: 24px;
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .security-notice .icon {
+            font-size: 18px;
+            flex-shrink: 0;
+        }
+        .security-notice strong { color: #fde68a; }
+
+        /* ============ Tab 导航 ============ */
+        .tab-nav {
+            display: flex;
+            gap: 6px;
+            background: rgba(255,255,255,0.12);
+            padding: 6px;
+            border-radius: var(--radius-md);
+            margin-bottom: 24px;
+            backdrop-filter: blur(10px);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+        }
+        .tab-nav::-webkit-scrollbar { display: none; }
+        .tab-btn {
+            flex: 1;
+            min-width: max-content;
+            padding: 10px 16px;
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.85);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            border-radius: var(--radius-sm);
+            transition: var(--transition);
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+        .tab-btn:hover {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        .tab-btn.active {
+            background: white;
+            color: var(--primary-dark);
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+        /* ============ Tab 内容 ============ */
+        .tab-content { display: none; animation: fadeIn 0.35s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* ============ 区块标题 ============ */
+        .section-title {
+            color: white;
+            font-size: 18px;
+            font-weight: 600;
+            margin: 0 0 16px 0;
+            padding-left: 12px;
+            border-left: 3px solid rgba(255,255,255,0.6);
             display: flex;
             align-items: center;
             gap: 8px;
         }
-        .card-title .badge {
-            font-size: 11px;
-            background: #667eea;
-            color: white;
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-weight: normal;
+        .section-title .sub {
+            font-size: 12px;
+            font-weight: 400;
+            opacity: 0.75;
         }
-        .card-title .badge.offline { background: #f59e0b; }
-        .card-title .badge.cloud { background: #3b82f6; }
-        .card-title .badge.desktop { background: #10b981; }
+
+        /* ============ 卡片 ============ */
+        .card {
+            background: var(--card-bg);
+            border-radius: var(--radius-lg);
+            padding: 22px;
+            margin-bottom: 18px;
+            box-shadow: var(--shadow-lg);
+            transition: var(--transition);
+            border: 1px solid rgba(255,255,255,0.5);
+            position: relative;
+            overflow: hidden;
+        }
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-xl);
+        }
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; height: 4px;
+            background: var(--bg-gradient);
+            opacity: 0;
+            transition: var(--transition);
+        }
+        .card:hover::before { opacity: 1; }
+        .card.featured {
+            border: 2px solid var(--primary-light);
+            background: linear-gradient(180deg, #f0f4ff 0%, #ffffff 30%);
+        }
+        .card.featured::before { opacity: 1; }
+
+        .card-title {
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 14px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .card-title .icon { font-size: 22px; }
+        .badge {
+            font-size: 11px;
+            font-weight: 500;
+            padding: 3px 10px;
+            border-radius: 12px;
+            color: white;
+        }
+        .badge.cloud { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .badge.offline { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .badge.desktop { background: linear-gradient(135deg, #10b981, #059669); }
+        .badge.web { background: linear-gradient(135deg, #8b5cf6, #7c3aed); }
+        .badge.hot {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            animation: hotPulse 1.8s infinite;
+        }
+        @keyframes hotPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.6); }
+            50% { box-shadow: 0 0 0 6px rgba(239,68,68,0); }
+        }
+
+        /* ============ 信息行 ============ */
         .info-row {
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            padding: 8px 0;
-            border-bottom: 1px solid #f0f0f0;
-            font-size: 14px;
+            align-items: flex-start;
+            padding: 9px 0;
+            border-bottom: 1px solid #f3f4f6;
+            font-size: 13px;
+            gap: 12px;
         }
         .info-row:last-child { border-bottom: none; }
-        .info-label { color: #666; }
-        .info-value { font-weight: 500; }
-        .info-value.version { color: #667eea; font-weight: bold; }
-        .info-value.date { color: #888; font-size: 13px; }
-        .download-btn {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 12px 32px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-size: 15px;
-            font-weight: bold;
+        .info-label {
+            color: var(--text-secondary);
+            flex-shrink: 0;
+            min-width: 80px;
+        }
+        .info-value {
+            font-weight: 500;
+            color: var(--text-primary);
+            text-align: right;
+            word-break: break-word;
+        }
+        .info-value.version { color: var(--primary); font-weight: 700; font-size: 14px; }
+        .info-value.date { color: var(--text-tertiary); font-size: 12px; }
+        .info-value.success { color: var(--success); }
+        .info-value.danger { color: var(--danger); }
+
+        /* ============ 提示框 ============ */
+        .notice {
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
             margin-top: 12px;
-            transition: transform 0.2s, box-shadow 0.2s;
-            text-align: center;
+            font-size: 12px;
+            line-height: 1.7;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
         }
-        .download-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(102,126,234,0.4);
+        .notice .icon { font-size: 14px; flex-shrink: 0; }
+        .notice-cloud {
+            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
+            border: 1px solid #818cf8;
+            color: #3730a3;
         }
-        .download-btn:active { transform: translateY(0); }
-        .download-btn.secondary {
-            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+        .notice-cloud strong { color: #1e3a8a; }
+        .notice-single {
+            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
+            border: 1px solid #fca5a5;
+            color: #991b1b;
         }
-        .download-btn.disabled {
-            background: #ccc;
-            cursor: not-allowed;
-            pointer-events: none;
+        .notice-single strong { color: #7f1d1d; }
+        .notice-warning {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            border: 1px solid #fbbf24;
+            color: #92400e;
         }
-        .download-btn.pending {
-            background: #a0a0a0;
-            cursor: wait;
+        .notice-warning strong { color: #78350f; }
+        .notice-success {
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            border: 1px solid #6ee7b7;
+            color: #065f46;
         }
-        .toast {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: rgba(0,0,0,0.85);
-            color: white;
-            padding: 16px 24px;
-            border-radius: 8px;
-            font-size: 14px;
-            z-index: 9999;
-            display: none;
-            max-width: 80%;
-            text-align: center;
-            line-height: 1.6;
+        .notice-success strong { color: #064e3b; }
+
+        .credential-box {
+            background: linear-gradient(135deg, #fff5e6 0%, #ffe9d6 100%);
+            border: 1px solid #ffb87a;
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            margin-top: 12px;
+            font-size: 12px;
+            color: #8a5a1a;
+            line-height: 1.8;
         }
+        .credential-box strong { color: #c2410c; }
+        .cred-pair {
+            display: inline-block;
+            background: white;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin: 2px 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            color: #333;
+            border: 1px solid #f0d090;
+            cursor: pointer;
+            transition: var(--transition);
+            user-select: all;
+        }
+        .cred-pair:hover { background: #fef3c7; transform: scale(1.05); }
+
+        /* ============ 哈希校验 ============ */
         .hash-box {
             background: #f8f9fa;
-            border: 1px solid #e0e0e0;
-            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
             padding: 10px 12px;
             margin-top: 12px;
             font-family: 'Courier New', monospace;
@@ -120,38 +358,126 @@
             line-height: 1.6;
         }
         .hash-label {
-            font-size: 12px;
-            color: #888;
+            font-size: 11px;
+            color: var(--text-tertiary);
             margin-bottom: 4px;
             font-family: -apple-system, sans-serif;
+            display: flex;
+            align-items: center;
+            gap: 4px;
         }
-        .hash-value { color: #667eea; }
+        .hash-value { color: var(--primary); }
         .hash-value.pending { color: #aaa; font-style: italic; }
-        .section-title {
-            color: white;
-            font-size: 20px;
-            margin: 30px 0 15px 0;
-            padding-left: 12px;
-            border-left: 4px solid rgba(255,255,255,0.5);
+        .hash-copy {
+            float: right;
+            background: transparent;
+            border: 1px solid var(--border-color);
+            border-radius: 3px;
+            padding: 1px 6px;
+            font-size: 10px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-family: -apple-system, sans-serif;
+            transition: var(--transition);
         }
-        .notice {
-            background: rgba(255,255,255,0.15);
-            border-radius: 8px;
-            padding: 16px;
-            color: white;
-            font-size: 13px;
-            line-height: 1.8;
-            margin-bottom: 20px;
+        .hash-copy:hover { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* ============ 下载按钮 ============ */
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            flex-wrap: wrap;
         }
-        .notice strong { color: #ffd700; }
-        .footer {
+        .download-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 11px 24px;
+            border-radius: var(--radius-md);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            transition: var(--transition);
             text-align: center;
-            color: rgba(255,255,255,0.7);
-            font-size: 12px;
-            margin-top: 40px;
-            line-height: 1.6;
+            border: none;
+            cursor: pointer;
+            flex: 1;
+            min-width: 140px;
+            box-shadow: 0 4px 12px rgba(102,126,234,0.3);
         }
-        .footer a { color: rgba(255,255,255,0.9); }
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102,126,234,0.45);
+        }
+        .download-btn:active { transform: translateY(0); }
+        .download-btn.secondary {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            box-shadow: 0 4px 12px rgba(245,158,11,0.3);
+        }
+        .download-btn.secondary:hover {
+            box-shadow: 0 8px 20px rgba(245,158,11,0.45);
+        }
+        .download-btn.success {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            box-shadow: 0 4px 12px rgba(16,185,129,0.3);
+        }
+        .download-btn.disabled {
+            background: #d1d5db;
+            cursor: not-allowed;
+            pointer-events: none;
+            box-shadow: none;
+            opacity: 0.7;
+        }
+        .download-btn.pending {
+            background: #9ca3af;
+            cursor: wait;
+            pointer-events: none;
+        }
+        .download-btn .icon { font-size: 16px; }
+
+        /* ============ Toast ============ */
+        .toast {
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%) scale(0.9);
+            background: rgba(0,0,0,0.88);
+            color: white;
+            padding: 14px 24px;
+            border-radius: var(--radius-md);
+            font-size: 14px;
+            z-index: 9999;
+            display: none;
+            max-width: 80%;
+            text-align: center;
+            line-height: 1.6;
+            opacity: 0;
+            transition: all 0.25s ease;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+        .toast.show {
+            display: block;
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+        .toast .icon { font-size: 24px; display: block; margin-bottom: 6px; }
+
+        /* ============ 网格布局 ============ */
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 16px;
+        }
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        /* ============ 安装步骤 ============ */
         .install-steps {
             counter-reset: step;
             padding-left: 0;
@@ -159,561 +485,1470 @@
         }
         .install-steps li {
             counter-increment: step;
-            padding: 8px 0 8px 36px;
+            padding: 10px 0 10px 40px;
             position: relative;
             font-size: 13px;
-            line-height: 1.6;
+            line-height: 1.7;
+            color: var(--text-primary);
         }
         .install-steps li::before {
             content: counter(step);
             position: absolute;
-            left: 0;
-            top: 8px;
-            width: 24px;
-            height: 24px;
-            background: #667eea;
+            left: 0; top: 8px;
+            width: 26px; height: 26px;
+            background: var(--bg-gradient);
             color: white;
             border-radius: 50%;
             text-align: center;
-            line-height: 24px;
+            line-height: 26px;
             font-size: 12px;
-            font-weight: bold;
+            font-weight: 700;
+            box-shadow: 0 2px 6px rgba(102,126,234,0.3);
         }
-        @media (max-width: 600px) {
-            .header h1 { font-size: 22px; }
+
+        /* ============ 表格 ============ */
+        .table-wrap {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--border-color);
+        }
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            min-width: 480px;
+        }
+        .compare-table th {
+            background: var(--bg-gradient);
+            color: white;
+            padding: 10px 8px;
+            border: 1px solid rgba(255,255,255,0.2);
+            text-align: center;
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+        .compare-table th:first-child { text-align: left; padding-left: 12px; }
+        .compare-table td {
+            padding: 8px;
+            border: 1px solid var(--border-color);
+            text-align: center;
+            color: var(--text-primary);
+        }
+        .compare-table td:first-child {
+            text-align: left;
+            padding-left: 12px;
+            background: #f9fafb;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+        .compare-table tr:nth-child(even) td { background: #fafbfc; }
+        .compare-table tr:nth-child(even) td:first-child { background: #f3f4f6; }
+        .compare-table .yes { color: var(--success); font-weight: 600; }
+        .compare-table .no { color: var(--danger); font-weight: 600; }
+
+        /* ============ FAQ 折叠 ============ */
+        .faq-item {
+            background: white;
+            border-radius: var(--radius-md);
+            margin-bottom: 10px;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border-color);
+        }
+        .faq-question {
+            padding: 14px 18px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: var(--transition);
+            color: var(--text-primary);
+        }
+        .faq-question:hover { background: #f9fafb; }
+        .faq-question .arrow {
+            transition: transform 0.25s ease;
+            color: var(--text-tertiary);
+        }
+        .faq-item.open .faq-question .arrow { transform: rotate(180deg); }
+        .faq-answer {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.7;
+        }
+        .faq-item.open .faq-answer { max-height: 500px; }
+        .faq-answer-inner { padding: 0 18px 14px; }
+
+        /* ============ 购买激活码 ============ */
+        .purchase-flow {
+            background: white;
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            box-shadow: var(--shadow-lg);
+        }
+        .purchase-step {
+            display: none;
+            animation: fadeIn 0.35s ease;
+        }
+        .purchase-step.active { display: block; }
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 18px;
+            padding-bottom: 14px;
+            border-bottom: 2px solid #f3f4f6;
+        }
+        .step-num {
+            width: 36px; height: 36px;
+            background: var(--bg-gradient);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
+            box-shadow: 0 4px 10px rgba(102,126,234,0.3);
+        }
+        .step-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .step-desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        /* 版本选择卡片 */
+        .version-pick {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-bottom: 18px;
+        }
+        .version-pick-item {
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-md);
+            padding: 16px;
+            cursor: pointer;
+            transition: var(--transition);
+            background: white;
+            position: relative;
+        }
+        .version-pick-item:hover {
+            border-color: var(--primary-light);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        .version-pick-item.selected {
+            border-color: var(--primary);
+            background: linear-gradient(180deg, #f0f4ff 0%, #ffffff 60%);
+            box-shadow: 0 6px 18px rgba(102,126,234,0.2);
+        }
+        .version-pick-item.selected::after {
+            content: '✓';
+            position: absolute;
+            top: 8px; right: 8px;
+            width: 22px; height: 22px;
+            background: var(--primary);
+            color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .version-pick-item .name {
+            font-size: 15px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 6px;
+        }
+        .version-pick-item .desc {
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+        .version-pick-item .price {
+            margin-top: 10px;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+        .version-pick-item .price small {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            font-weight: 400;
+        }
+
+        /* 订单号展示 */
+        .order-box {
+            background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
+            border: 2px dashed var(--primary);
+            border-radius: var(--radius-md);
+            padding: 18px;
+            text-align: center;
+            margin: 16px 0;
+        }
+        .order-box .label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+        .order-box .value {
+            font-family: 'Courier New', monospace;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary-dark);
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+            word-break: break-all;
+        }
+        .order-box .copy-btn {
+            background: var(--primary);
+            color: white;
+            border: none;
+            padding: 7px 18px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+            cursor: pointer;
+            transition: var(--transition);
+            font-weight: 500;
+        }
+        .order-box .copy-btn:hover { background: var(--primary-dark); transform: scale(1.05); }
+
+        /* 客服微信 */
+        .contact-box {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: var(--radius-md);
+            margin: 16px 0;
+        }
+        .qrcode-placeholder {
+            width: 180px; height: 180px;
+            background: white;
+            border: 2px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-tertiary);
+            font-size: 12px;
+            margin-bottom: 12px;
+            position: relative;
+            overflow: hidden;
+        }
+        .qrcode-placeholder .icon { font-size: 48px; margin-bottom: 6px; color: var(--success); }
+        .qrcode-placeholder::after {
+            content: '扫码加客服';
+            position: absolute;
+            bottom: 8px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+        .contact-wechat {
+            font-size: 14px;
+            color: var(--text-primary);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .contact-wechat .wx-id {
+            background: white;
+            padding: 3px 10px;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .contact-wechat .wx-id:hover { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* 流程指引 */
+        .flow-guide {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            border: 1px solid #f59e0b;
+            border-radius: var(--radius-md);
+            padding: 14px 18px;
+            margin-top: 16px;
+            font-size: 12px;
+            color: #78350f;
+            line-height: 1.8;
+        }
+        .flow-guide strong { color: #92400e; }
+        .flow-guide ol { padding-left: 20px; margin-top: 6px; }
+        .flow-guide ol li { margin-bottom: 3px; }
+
+        /* 导航按钮 */
+        .step-nav {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 20px;
+            gap: 10px;
+        }
+        .step-nav button {
+            padding: 10px 22px;
+            border: none;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+        .step-nav .prev {
+            background: #e5e7eb;
+            color: var(--text-secondary);
+        }
+        .step-nav .prev:hover { background: #d1d5db; }
+        .step-nav .next {
+            background: var(--bg-gradient);
+            color: white;
+            box-shadow: 0 4px 10px rgba(102,126,234,0.3);
+        }
+        .step-nav .next:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(102,126,234,0.45); }
+        .step-nav button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        /* ============ 浮动按钮 ============ */
+        .float-buttons {
+            position: fixed;
+            right: 20px; bottom: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+        .float-btn {
+            width: 48px; height: 48px;
+            border-radius: 50%;
+            background: var(--bg-gradient);
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-size: 20px;
+            box-shadow: 0 6px 18px rgba(102,126,234,0.4);
+            transition: var(--transition);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .float-btn:hover { transform: scale(1.1); box-shadow: 0 8px 22px rgba(102,126,234,0.55); }
+        .float-btn.scrollTop { display: none; }
+        .float-btn.scrollTop.visible { display: flex; animation: fadeIn 0.3s ease; }
+
+        /* ============ Footer ============ */
+        .footer {
+            text-align: center;
+            color: rgba(255,255,255,0.7);
+            font-size: 12px;
+            margin-top: 40px;
+            padding: 20px;
+            line-height: 1.8;
+            border-top: 1px solid rgba(255,255,255,0.15);
+        }
+        .footer a { color: rgba(255,255,255,0.9); text-decoration: none; }
+
+        /* ============ 响应式 ============ */
+        @media (max-width: 768px) {
+            .hero h1 { font-size: 22px; }
+            .hero p { font-size: 12px; }
+            .hero-logo { width: 56px; height: 56px; font-size: 28px; }
             .card { padding: 16px; }
-            .info-row { flex-direction: column; align-items: flex-start; gap: 2px; }
+            .card-title { font-size: 15px; }
+            .info-row { flex-direction: column; align-items: flex-start; gap: 3px; }
+            .info-value { text-align: left; }
+            .info-label { min-width: auto; }
+            .tab-btn { padding: 8px 12px; font-size: 13px; }
+            .download-btn { font-size: 13px; padding: 10px 18px; min-width: 120px; }
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+            .version-pick { grid-template-columns: 1fr; }
+            .section-title { font-size: 16px; }
         }
-        .loading { text-align: center; color: #888; padding: 20px; }
+        @media (max-width: 480px) {
+            .container { padding: 12px 10px 80px; }
+            .btn-group { flex-direction: column; }
+            .download-btn { width: 100%; }
+        }
+
+        .loading { text-align: center; color: var(--text-tertiary); padding: 20px; font-size: 13px; }
         .status-tag {
             display: inline-block;
             font-size: 10px;
-            padding: 2px 6px;
+            padding: 2px 8px;
             border-radius: 4px;
-            margin-left: 6px;
+            margin-left: 4px;
+            font-weight: 500;
         }
         .status-tag.latest { background: #d4edda; color: #155724; }
         .status-tag.beta { background: #fff3cd; color: #856404; }
-        .credential-box {
-            background: linear-gradient(135deg, #fff5e6 0%, #ffe9d6 100%);
-            border: 1px solid #ffb87a;
-            border-radius: 6px;
-            padding: 8px 12px;
-            margin-top: 10px;
-            font-size: 12px;
-            color: #8a5a1a;
-            line-height: 1.7;
-        }
-        .credential-box strong { color: #c2410c; }
-        .credential-box .cred-pair {
-            display: inline-block;
-            background: white;
-            padding: 1px 6px;
-            border-radius: 3px;
-            margin: 1px 2px;
-            font-family: 'Courier New', monospace;
-            font-size: 12px;
-            color: #333;
-            border: 1px solid #f0d090;
-        }
-        .notice-cloud {
-            background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
-            border: 1px solid #818cf8;
-            border-radius: 6px;
-            padding: 8px 12px;
-            margin-top: 10px;
-            font-size: 12px;
-            color: #3730a3;
-            line-height: 1.7;
-        }
-        .notice-cloud strong { color: #1e3a8a; }
-        .notice-single {
-            background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%);
-            border: 1px solid #fca5a5;
-            border-radius: 6px;
-            padding: 8px 12px;
-            margin-top: 10px;
-            font-size: 12px;
-            color: #991b1b;
-            line-height: 1.7;
-        }
-        .notice-single strong { color: #7f1d1d; }
-        .section-title.trial { border-left-color: #fbbf24; }
+
         .trial-card {
             background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-            border: 1px solid #f59e0b;
+            border: 2px solid #f59e0b;
         }
         .trial-card .card-title { color: #92400e; }
+        .decision-tree {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 12px;
+            margin-top: 12px;
+        }
+        .decision-item {
+            background: rgba(255,255,255,0.95);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            border-left: 4px solid var(--primary);
+            transition: var(--transition);
+        }
+        .decision-item:hover { transform: translateX(4px); box-shadow: var(--shadow-md); }
+        .decision-item .q { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+        .decision-item .a { font-size: 14px; font-weight: 600; color: var(--primary-dark); }
     </style>
 </head>
 <body>
     <div class="toast" id="toast"></div>
+
     <div class="container">
-        <div class="header">
+        <!-- ============ Hero ============ -->
+        <div class="hero">
+            <div class="hero-logo">⚕️</div>
             <h1>惠康中医诊所管理系统</h1>
             <p>官方下载中心 · 安全可靠 · 持续更新</p>
-        </div>
-
-        <div class="notice">
-            <strong>安全提示：</strong>请仅从本页面下载软件。第三方渠道的软件可能被篡改，存在安全风险。<br>
-            下载后请核对 SHA-256 校验值，确保文件完整无损。
-        </div>
-
-        <!-- 试用与版本选择说明 -->
-        <div class="section-title trial">试用与版本选择说明</div>
-        <div class="card trial-card">
-            <div class="card-title">📋 选哪个版本？看这里！</div>
-            <div style="font-size:13px;line-height:1.8;color:#555;">
-                <strong style="color:#92400e;">🆓 想免费体验？</strong><br>
-                选择下面的 <strong>离线版</strong>（定制版/个人版），下载安装后即自动进入 <strong>7 天免费试用</strong>（限 30 张处方），无需任何账户注册。<br><br>
-                <strong style="color:#1e3a8a;">☁️ 想用云端版（多设备同步）？</strong><br>
-                云端版 <strong>不提供公开试用</strong>。云端功能与离线版相同，只是多了云端数据同步能力。<br>
-                试用流程：<br>
-                &nbsp;&nbsp;1. 先下载离线版体验功能；<br>
-                &nbsp;&nbsp;2. 满意后联系开发者（平台管理员）开通云端账户；<br>
-                &nbsp;&nbsp;3. 获得账户后即可登录云端网页版/APK/桌面版。<br><br>
-                <strong style="color:#92400e;">🔑 试用到期怎么办？</strong><br>
-                试用期结束后需输入 <strong>授权激活码</strong>，请联系开发者获取（提供诊所信息+设备识别码）。
+            <div class="hero-badge">
+                <span class="dot"></span>
+                <span>所有版本均通过 SHA-256 校验</span>
             </div>
         </div>
 
-        <!-- 云端APP -->
-        <div class="section-title">云端版 APP（手机端）</div>
-
-        <div class="card" id="card-cloud-app">
-            <div class="card-title">
-                惠康中医 · 云端版
-                <span class="badge cloud">云端</span>
-                <span class="status-tag latest" id="tag-cloud-app">最新</span>
+        <!-- ============ 安全提示 ============ -->
+        <div class="security-notice">
+            <span class="icon">🛡️</span>
+            <div>
+                <strong>安全提示：</strong>请仅从本页面下载软件。第三方渠道的软件可能被篡改，存在安全风险。<br>
+                下载后请核对 SHA-256 校验值，确保文件完整无损。
             </div>
-            <div class="info-row">
-                <span class="info-label">版本</span>
-                <span class="info-value version" id="ver-cloud-app">加载中...</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">发布日期</span>
-                <span class="info-value date" id="date-cloud-app">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">更新说明</span>
-                <span class="info-value" id="notes-cloud-app">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">适用场景</span>
-                <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">用户模式</span>
-                <span class="info-value">多用户（医师姓名可编辑）· 诊所固定（只读）</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">多设备登入</span>
-                <span class="info-value">✅ 支持（云端实时同步）</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">权限说明</span>
-                <span class="info-value">管理员：云端功能 · 普通用户：仅本地权限（离线）</span>
-            </div>
-            <div class="notice-cloud">
-                <strong>⚠️ 无公开试用：</strong>云端版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
-                <strong>试用建议：</strong>请先下载下方"离线版"体验功能，满意后联系开发者开通云端账户。
-            </div>
-            <div class="hash-box">
-                <div class="hash-label">SHA-256 校验值（APK）：</div>
-                <div class="hash-value pending" id="hash-cloud-app">（打包后自动更新）</div>
-            </div>
-            <a href="#" class="download-btn" id="dl-cloud-app">下载 APK（Android）</a>
         </div>
 
-        <!-- 离线APP -->
-        <div class="section-title">离线版 APP（手机端）</div>
-
-        <div class="card" id="card-dingzhi">
-            <div class="card-title">
-                惠康中医 · 定制版
-                <span class="badge offline">离线</span>
-                <span class="status-tag latest" id="tag-dingzhi">最新</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">版本</span>
-                <span class="info-value version" id="ver-dingzhi">加载中...</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">发布日期</span>
-                <span class="info-value date" id="date-dingzhi">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">更新说明</span>
-                <span class="info-value" id="notes-dingzhi">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">适用场景</span>
-                <span class="info-value">固定诊所使用，数据完全离线</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">用户模式</span>
-                <span class="info-value">多用户（医师姓名可编辑）· 诊所名称固定（只读）</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">多设备登入</span>
-                <span class="info-value">❌ 不支持（仅单机使用）</span>
-            </div>
-            <div class="credential-box">
-                <strong>🔑 默认账号：</strong>
-                管理员 <span class="cred-pair">admin / admin</span>
-                医师 <span class="cred-pair">doctor1 / 123456</span>
-                <span class="cred-pair">doctor2 / 123456</span><br>
-                <strong>⚠️ 默认账号密码固定，不可修改！如需重置请联系开发者。</strong>
-            </div>
-            <div class="notice-single">
-                <strong>⚠️ 仅支持单机使用：</strong>定制版未启动本地服务器，不支持多设备同时登入同一数据源。<br>
-                <strong>如需多设备登入</strong>（诊所内多台电脑/手机同时使用），请选择上方<strong>云端版</strong>。
-            </div>
-            <div class="hash-box">
-                <div class="hash-label">SHA-256 校验值（APK）：</div>
-                <div class="hash-value pending" id="hash-dingzhi">（打包后自动更新）</div>
-            </div>
-            <a href="#" class="download-btn secondary" id="dl-dingzhi">下载 APK（Android）</a>
+        <!-- ============ Tab 导航 ============ -->
+        <div class="tab-nav" id="tabNav">
+            <button class="tab-btn active" data-tab="mobile">📱 手机端</button>
+            <button class="tab-btn" data-tab="desktop">💻 桌面端</button>
+            <button class="tab-btn" data-tab="web">🌐 网页端</button>
+            <button class="tab-btn" data-tab="purchase">🔑 购买激活码</button>
+            <button class="tab-btn" data-tab="install">📋 安装说明</button>
+            <button class="tab-btn" data-tab="compare">⚖️ 版本对比</button>
+            <button class="tab-btn" data-tab="faq">❓ 常见问题</button>
         </div>
 
-        <div class="card" id="card-geren">
-            <div class="card-title">
-                惠康中医 · 个人版
-                <span class="badge offline">离线</span>
-                <span class="status-tag latest" id="tag-geren">最新</span>
+        <!-- ============ Tab: 手机端 ============ -->
+        <div class="tab-content active" id="tab-mobile">
+            <div class="section-title">
+                <span>📱 云端版 APP</span>
+                <span class="sub">多设备同步 · 需账户</span>
             </div>
-            <div class="info-row">
-                <span class="info-label">版本</span>
-                <span class="info-value version" id="ver-geren">加载中...</span>
+            <div class="card featured" id="card-cloud-app">
+                <div class="card-title">
+                    <span class="icon">☁️</span>
+                    惠康中医 · 云端版
+                    <span class="badge cloud">云端</span>
+                    <span class="status-tag latest" id="tag-cloud-app">最新</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">版本</span>
+                    <span class="info-value version" id="ver-cloud-app">加载中...</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">发布日期</span>
+                    <span class="info-value date" id="date-cloud-app">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">更新说明</span>
+                    <span class="info-value" id="notes-cloud-app">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">适用场景</span>
+                    <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">多设备登入</span>
+                    <span class="info-value success">✅ 支持（云端实时同步）</span>
+                </div>
+                <div class="notice notice-cloud">
+                    <span class="icon">⚠️</span>
+                    <div>
+                        <strong>无公开试用：</strong>云端版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
+                        <strong>试用建议：</strong>请先下载下方"离线版"体验功能，满意后联系开发者开通云端账户。
+                    </div>
+                </div>
+                <div class="hash-box">
+                    <div class="hash-label">
+                        🔒 SHA-256 校验值（APK）
+                        <button class="hash-copy" onclick="copyHash('hash-cloud-app')">复制</button>
+                    </div>
+                    <div class="hash-value pending" id="hash-cloud-app">（打包后自动更新）</div>
+                </div>
+                <div class="btn-group">
+                    <a href="#" class="download-btn" id="dl-cloud-app">
+                        <span class="icon">⬇️</span>下载 APK（Android）
+                    </a>
+                </div>
             </div>
-            <div class="info-row">
-                <span class="info-label">发布日期</span>
-                <span class="info-value date" id="date-geren">-</span>
+
+            <div class="section-title">
+                <span>📱 离线版 APP</span>
+                <span class="sub">免费试用 7 天 · 无需注册</span>
             </div>
-            <div class="info-row">
-                <span class="info-label">更新说明</span>
-                <span class="info-value" id="notes-geren">-</span>
+            <div class="grid-2">
+                <div class="card" id="card-dingzhi">
+                    <div class="card-title">
+                        <span class="icon">🏥</span>
+                        惠康中医 · 定制版
+                        <span class="badge offline">离线</span>
+                        <span class="status-tag latest" id="tag-dingzhi">最新</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">版本</span>
+                        <span class="info-value version" id="ver-dingzhi">加载中...</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">发布日期</span>
+                        <span class="info-value date" id="date-dingzhi">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">更新说明</span>
+                        <span class="info-value" id="notes-dingzhi">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">适用场景</span>
+                        <span class="info-value">固定诊所使用，数据完全离线</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">多设备登入</span>
+                        <span class="info-value danger">❌ 不支持（仅单机使用）</span>
+                    </div>
+                    <div class="credential-box">
+                        <strong>🔑 默认账号：</strong>
+                        管理员 <span class="cred-pair" onclick="copyText(this)">admin / admin</span>
+                        医师 <span class="cred-pair" onclick="copyText(this)">doctor1 / 123456</span>
+                        <span class="cred-pair" onclick="copyText(this)">doctor2 / 123456</span><br>
+                        <strong>⚠️ 默认账号密码固定，不可修改！如需重置请联系开发者。</strong>
+                    </div>
+                    <div class="notice notice-single">
+                        <span class="icon">⚠️</span>
+                        <div>
+                            <strong>仅支持单机使用：</strong>不支持多设备同时登入同一数据源。<br>
+                            <strong>如需多设备登入</strong>，请选择上方<strong>云端版</strong>。
+                        </div>
+                    </div>
+                    <div class="hash-box">
+                        <div class="hash-label">
+                            🔒 SHA-256 校验值（APK）
+                            <button class="hash-copy" onclick="copyHash('hash-dingzhi')">复制</button>
+                        </div>
+                        <div class="hash-value pending" id="hash-dingzhi">（打包后自动更新）</div>
+                    </div>
+                    <div class="btn-group">
+                        <a href="#" class="download-btn secondary" id="dl-dingzhi">
+                            <span class="icon">⬇️</span>下载 APK（Android）
+                        </a>
+                    </div>
+                </div>
+
+                <div class="card" id="card-geren">
+                    <div class="card-title">
+                        <span class="icon">👤</span>
+                        惠康中医 · 个人版
+                        <span class="badge offline">离线</span>
+                        <span class="status-tag latest" id="tag-geren">最新</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">版本</span>
+                        <span class="info-value version" id="ver-geren">加载中...</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">发布日期</span>
+                        <span class="info-value date" id="date-geren">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">更新说明</span>
+                        <span class="info-value" id="notes-geren">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">适用场景</span>
+                        <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">多设备登入</span>
+                        <span class="info-value danger">❌ 不支持（仅单机使用）</span>
+                    </div>
+                    <div class="credential-box">
+                        <strong>🔑 默认账号：</strong>
+                        管理员 <span class="cred-pair" onclick="copyText(this)">admin / admin</span>（个人版仅此一个账号，不可改）<br>
+                        <strong>⚠️ 默认账号密码固定，不可修改！请妥善保管，如遗忘请联系开发者重置。</strong>
+                    </div>
+                    <div class="notice notice-single">
+                        <span class="icon">⚠️</span>
+                        <div>
+                            <strong>仅支持单机使用：</strong>不支持多设备同时登入同一数据源。<br>
+                            <strong>如需多设备登入</strong>，请选择上方<strong>云端版</strong>。
+                        </div>
+                    </div>
+                    <div class="hash-box">
+                        <div class="hash-label">
+                            🔒 SHA-256 校验值（APK）
+                            <button class="hash-copy" onclick="copyHash('hash-geren')">复制</button>
+                        </div>
+                        <div class="hash-value pending" id="hash-geren">（打包后自动更新）</div>
+                    </div>
+                    <div class="btn-group">
+                        <a href="#" class="download-btn secondary" id="dl-geren">
+                            <span class="icon">⬇️</span>下载 APK（Android）
+                        </a>
+                    </div>
+                </div>
             </div>
-            <div class="info-row">
-                <span class="info-label">适用场景</span>
-                <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">用户模式</span>
-                <span class="info-value">固定医师一个用户（只读）· 诊所名称固定（只读）</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">多设备登入</span>
-                <span class="info-value">❌ 不支持（仅单机使用）</span>
-            </div>
-            <div class="credential-box">
-                <strong>🔑 默认账号：</strong>
-                管理员 <span class="cred-pair">admin / admin</span>（个人版仅此一个账号，不可改）<br>
-                <strong>⚠️ 默认账号密码固定，不可修改！请妥善保管，如遗忘请联系开发者重置。</strong>
-            </div>
-            <div class="notice-single">
-                <strong>⚠️ 仅支持单机使用：</strong>个人版未启动本地服务器，不支持多设备同时登入同一数据源。<br>
-                <strong>如需多设备登入</strong>（诊所内多台电脑/手机同时使用），请选择上方<strong>云端版</strong>。
-            </div>
-            <div class="hash-box">
-                <div class="hash-label">SHA-256 校验值（APK）：</div>
-                <div class="hash-value pending" id="hash-geren">（打包后自动更新）</div>
-            </div>
-            <a href="#" class="download-btn secondary" id="dl-geren">下载 APK（Android）</a>
         </div>
 
-        <!-- 桌面版 -->
-        <div class="section-title">桌面版（Windows）</div>
+        <!-- ============ Tab: 桌面端 ============ -->
+        <div class="tab-content" id="tab-desktop">
+            <div class="section-title">
+                <span>💻 云端桌面版</span>
+                <span class="sub">多设备同步 · 需账户</span>
+            </div>
+            <div class="card featured" id="card-cloud-desktop">
+                <div class="card-title">
+                    <span class="icon">☁️</span>
+                    惠康中医 · 云端桌面版
+                    <span class="badge desktop">桌面</span>
+                    <span class="badge cloud">云端</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">版本</span>
+                    <span class="info-value version" id="ver-cloud">加载中...</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">发布日期</span>
+                    <span class="info-value date" id="date-cloud">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">更新说明</span>
+                    <span class="info-value" id="notes-cloud">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">适用场景</span>
+                    <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">多设备登入</span>
+                    <span class="info-value success">✅ 支持（云端实时同步）</span>
+                </div>
+                <div class="notice notice-cloud">
+                    <span class="icon">⚠️</span>
+                    <div>
+                        <strong>无公开试用：</strong>云端桌面版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
+                        <strong>试用建议：</strong>请先下载上方"离线版 APP"体验功能，满意后联系开发者开通云端账户。
+                    </div>
+                </div>
+                <div class="hash-box">
+                    <div class="hash-label">
+                        🔒 SHA-256 校验值（安装版）
+                        <button class="hash-copy" onclick="copyHash('hash-cloud')">复制</button>
+                    </div>
+                    <div class="hash-value pending" id="hash-cloud">（打包后自动更新）</div>
+                </div>
+                <div class="btn-group">
+                    <a href="#" class="download-btn" id="dl-cloud">
+                        <span class="icon">⬇️</span>下载安装版（推荐）
+                    </a>
+                    <a href="#" class="download-btn secondary" id="dl-cloud-portable">
+                        <span class="icon">📦</span>便携版
+                    </a>
+                </div>
+            </div>
 
-        <div class="card" id="card-cloud-desktop">
-            <div class="card-title">
-                惠康中医 · 云端桌面版
-                <span class="badge desktop">桌面</span>
-                <span class="badge cloud">云端</span>
+            <div class="section-title">
+                <span>💻 离线桌面版</span>
+                <span class="sub">免费试用 7 天 · 无需注册</span>
             </div>
-            <div class="info-row">
-                <span class="info-label">版本</span>
-                <span class="info-value version" id="ver-cloud">加载中...</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">发布日期</span>
-                <span class="info-value date" id="date-cloud">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">更新说明</span>
-                <span class="info-value" id="notes-cloud">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">适用场景</span>
-                <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">用户模式</span>
-                <span class="info-value">多用户（医师姓名可编辑）· 诊所固定（只读）</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">多设备登入</span>
-                <span class="info-value">✅ 支持（云端实时同步）</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">权限说明</span>
-                <span class="info-value">管理员：云端功能 · 普通用户：仅本地权限（离线）</span>
-            </div>
-            <div class="notice-cloud">
-                <strong>⚠️ 无公开试用：</strong>云端桌面版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
-                <strong>试用建议：</strong>请先下载上方"离线版 APP"体验功能，满意后联系开发者开通云端账户。
-            </div>
-            <div class="hash-box">
-                <div class="hash-label">SHA-256 校验值（安装版）：</div>
-                <div class="hash-value pending" id="hash-cloud">（打包后自动更新）</div>
-            </div>
-            <a href="#" class="download-btn" id="dl-cloud">下载安装版（推荐）</a>
-            <a href="#" class="download-btn secondary" id="dl-cloud-portable" style="margin-left:10px;">便携版</a>
-        </div>
+            <div class="grid-2">
+                <div class="card" id="card-dingzhi-desktop">
+                    <div class="card-title">
+                        <span class="icon">🏥</span>
+                        惠康中医 · 定制桌面版
+                        <span class="badge desktop">桌面</span>
+                        <span class="badge offline">离线</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">版本</span>
+                        <span class="info-value version" id="ver-dingzhi-desktop">加载中...</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">发布日期</span>
+                        <span class="info-value date" id="date-dingzhi-desktop">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">更新说明</span>
+                        <span class="info-value" id="notes-dingzhi-desktop">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">适用场景</span>
+                        <span class="info-value">固定诊所使用，数据完全离线</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">多设备登入</span>
+                        <span class="info-value danger">❌ 不支持（仅单机使用）</span>
+                    </div>
+                    <div class="credential-box">
+                        <strong>🔑 默认账号：</strong>
+                        管理员 <span class="cred-pair" onclick="copyText(this)">admin / admin</span>
+                        医师 <span class="cred-pair" onclick="copyText(this)">doctor1 / 123456</span>
+                        <span class="cred-pair" onclick="copyText(this)">doctor2 / 123456</span><br>
+                        <strong>⚠️ 默认账号密码固定，不可修改！如需重置请联系开发者。</strong>
+                    </div>
+                    <div class="notice notice-single">
+                        <span class="icon">⚠️</span>
+                        <div>
+                            <strong>仅支持单机使用：</strong>不支持多设备同时登入同一数据源。<br>
+                            <strong>如需多设备登入</strong>，请选择上方<strong>云端桌面版</strong>。
+                        </div>
+                    </div>
+                    <div class="hash-box">
+                        <div class="hash-label">
+                            🔒 SHA-256 校验值（安装版）
+                            <button class="hash-copy" onclick="copyHash('hash-dingzhi-desktop')">复制</button>
+                        </div>
+                        <div class="hash-value pending" id="hash-dingzhi-desktop">（打包后自动更新）</div>
+                    </div>
+                    <div class="btn-group">
+                        <a href="#" class="download-btn" id="dl-dingzhi-desktop">
+                            <span class="icon">⬇️</span>下载安装版（推荐）
+                        </a>
+                        <a href="#" class="download-btn secondary" id="dl-dingzhi-desktop-portable">
+                            <span class="icon">📦</span>便携版
+                        </a>
+                    </div>
+                </div>
 
-        <div class="card" id="card-dingzhi-desktop">
-            <div class="card-title">
-                惠康中医 · 定制桌面版
-                <span class="badge desktop">桌面</span>
-                <span class="badge offline">离线</span>
+                <div class="card" id="card-geren-desktop">
+                    <div class="card-title">
+                        <span class="icon">👤</span>
+                        惠康中医 · 个人桌面版
+                        <span class="badge desktop">桌面</span>
+                        <span class="badge offline">离线</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">版本</span>
+                        <span class="info-value version" id="ver-geren-desktop">加载中...</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">发布日期</span>
+                        <span class="info-value date" id="date-geren-desktop">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">更新说明</span>
+                        <span class="info-value" id="notes-geren-desktop">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">适用场景</span>
+                        <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">多设备登入</span>
+                        <span class="info-value danger">❌ 不支持（仅单机使用）</span>
+                    </div>
+                    <div class="credential-box">
+                        <strong>🔑 默认账号：</strong>
+                        管理员 <span class="cred-pair" onclick="copyText(this)">admin / admin</span>（个人版仅此一个账号，不可改）<br>
+                        <strong>⚠️ 默认账号密码固定，不可修改！请妥善保管，如遗忘请联系开发者重置。</strong>
+                    </div>
+                    <div class="notice notice-single">
+                        <span class="icon">⚠️</span>
+                        <div>
+                            <strong>仅支持单机使用：</strong>不支持多设备同时登入同一数据源。<br>
+                            <strong>如需多设备登入</strong>，请选择上方<strong>云端桌面版</strong>。
+                        </div>
+                    </div>
+                    <div class="hash-box">
+                        <div class="hash-label">
+                            🔒 SHA-256 校验值（安装版）
+                            <button class="hash-copy" onclick="copyHash('hash-geren-desktop')">复制</button>
+                        </div>
+                        <div class="hash-value pending" id="hash-geren-desktop">（打包后自动更新）</div>
+                    </div>
+                    <div class="btn-group">
+                        <a href="#" class="download-btn" id="dl-geren-desktop">
+                            <span class="icon">⬇️</span>下载安装版（推荐）
+                        </a>
+                        <a href="#" class="download-btn secondary" id="dl-geren-desktop-portable">
+                            <span class="icon">📦</span>便携版
+                        </a>
+                    </div>
+                </div>
             </div>
-            <div class="info-row">
-                <span class="info-label">版本</span>
-                <span class="info-value version" id="ver-dingzhi-desktop">加载中...</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">发布日期</span>
-                <span class="info-value date" id="date-dingzhi-desktop">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">更新说明</span>
-                <span class="info-value" id="notes-dingzhi-desktop">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">适用场景</span>
-                <span class="info-value">固定诊所使用，数据完全离线</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">用户模式</span>
-                <span class="info-value">多用户（医师姓名可编辑）· 诊所名称固定（只读）</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">多设备登入</span>
-                <span class="info-value">❌ 不支持（仅单机使用）</span>
-            </div>
-            <div class="credential-box">
-                <strong>🔑 默认账号：</strong>
-                管理员 <span class="cred-pair">admin / admin</span>
-                医师 <span class="cred-pair">doctor1 / 123456</span>
-                <span class="cred-pair">doctor2 / 123456</span><br>
-                <strong>⚠️ 默认账号密码固定，不可修改！如需重置请联系开发者。</strong>
-            </div>
-            <div class="notice-single">
-                <strong>⚠️ 仅支持单机使用：</strong>定制桌面版未启动本地服务器，不支持多设备同时登入同一数据源。<br>
-                <strong>如需多设备登入</strong>（诊所内多台电脑/手机同时使用），请选择上方<strong>云端桌面版</strong>。
-            </div>
-            <div class="hash-box">
-                <div class="hash-label">SHA-256 校验值（安装版）：</div>
-                <div class="hash-value pending" id="hash-dingzhi-desktop">（打包后自动更新）</div>
-            </div>
-            <a href="#" class="download-btn" id="dl-dingzhi-desktop">下载安装版（推荐）</a>
-            <a href="#" class="download-btn secondary" id="dl-dingzhi-desktop-portable" style="margin-left:10px;">便携版</a>
-        </div>
-
-        <div class="card" id="card-geren-desktop">
-            <div class="card-title">
-                惠康中医 · 个人桌面版
-                <span class="badge desktop">桌面</span>
-                <span class="badge offline">离线</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">版本</span>
-                <span class="info-value version" id="ver-geren-desktop">加载中...</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">发布日期</span>
-                <span class="info-value date" id="date-geren-desktop">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">更新说明</span>
-                <span class="info-value" id="notes-geren-desktop">-</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">适用场景</span>
-                <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">用户模式</span>
-                <span class="info-value">固定医师一个用户（只读）· 诊所名称固定（只读）</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">多设备登入</span>
-                <span class="info-value">❌ 不支持（仅单机使用）</span>
-            </div>
-            <div class="credential-box">
-                <strong>🔑 默认账号：</strong>
-                管理员 <span class="cred-pair">admin / admin</span>（个人版仅此一个账号，不可改）<br>
-                <strong>⚠️ 默认账号密码固定，不可修改！请妥善保管，如遗忘请联系开发者重置。</strong>
-            </div>
-            <div class="notice-single">
-                <strong>⚠️ 仅支持单机使用：</strong>个人桌面版未启动本地服务器，不支持多设备同时登入同一数据源。<br>
-                <strong>如需多设备登入</strong>（诊所内多台电脑/手机同时使用），请选择上方<strong>云端桌面版</strong>。
-            </div>
-            <div class="hash-box">
-                <div class="hash-label">SHA-256 校验值（安装版）：</div>
-                <div class="hash-value pending" id="hash-geren-desktop">（打包后自动更新）</div>
-            </div>
-            <a href="#" class="download-btn" id="dl-geren-desktop">下载安装版（推荐）</a>
-            <a href="#" class="download-btn secondary" id="dl-geren-desktop-portable" style="margin-left:10px;">便携版</a>
-        </div>
-
-        <!-- 云端网页版 -->
-        <div class="section-title">云端网页版（无需下载）</div>
-        <div class="card">
-            <div class="card-title">
-                惠康中医 · 云端网页版
-                <span class="badge cloud">云端</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">访问方式</span>
-                <span class="info-value">浏览器直接打开，无需安装</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">适用场景</span>
-                <span class="info-value">临时使用、跨平台、无需安装</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">数据存储</span>
-                <span class="info-value">云端存储，实时同步</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">用户模式</span>
-                <span class="info-value">多用户（医师姓名可编辑）· 诊所固定（只读）</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">多设备登入</span>
-                <span class="info-value">✅ 支持（云端实时同步）</span>
-            </div>
-            <div class="info-row">
-                <span class="info-label">权限说明</span>
-                <span class="info-value">管理员：云端功能 · 普通用户：仅本地权限（离线）</span>
-            </div>
-            <div class="notice-cloud">
-                <strong>⚠️ 无公开试用：</strong>云端网页版需账户登录才能使用，账户由开发者（平台管理员）统一开通。<br>
-                <strong>试用建议：</strong>请先下载离线版 APP/桌面版体验功能，满意后联系开发者开通云端账户。
-            </div>
-            <a href="https://tcm-prescription-system.pages.dev/" class="download-btn">立即访问</a>
         </div>
 
-        <!-- 安装说明 -->
-        <div class="section-title">安装说明</div>
-        <div class="card">
-            <div class="card-title">Android APP 安装步骤</div>
-            <ol class="install-steps">
-                <li>下载对应版本的 APK 文件到手机</li>
-                <li>在手机设置中允许"安装未知来源应用"（设置 → 安全 → 未知来源）</li>
-                <li>点击下载的 APK 文件进行安装</li>
-                <li>安装完成后打开 APP，使用上方"默认账号"登录（如 admin/admin）</li>
-                <li>首次使用有 7 天试用期（限 30 张处方），到期后需输入授权激活码</li>
-                <li>登录后请立即到"设置"中修改默认密码，确保账户安全</li>
-                <li>如遇"安装包损坏"提示，请重新下载并核对 SHA-256 校验值</li>
-            </ol>
-        </div>
-        <div class="card">
-            <div class="card-title">Windows 桌面版安装步骤</div>
-            <ol class="install-steps">
-                <li>下载安装版 exe 文件（推荐）或便携版</li>
-                <li>双击运行安装程序，按提示完成安装</li>
-                <li>安装完成后从桌面快捷方式启动</li>
-                <li>便携版无需安装，解压后直接运行 exe 即可</li>
-                <li>使用上方"默认账号"登录（如 admin/admin）</li>
-                <li>首次使用有 7 天试用期（限 30 张处方），到期后需输入授权激活码</li>
-                <li>登录后请立即到"设置"中修改默认密码，确保账户安全</li>
-            </ol>
-        </div>
-        <div class="card">
-            <div class="card-title">激活流程（试用到期后）</div>
-            <ol class="install-steps">
-                <li>试用期结束后，系统会弹出"激活授权"提示框</li>
-                <li>在提示框中复制您的"<strong>设备识别码</strong>"（每台设备唯一）</li>
-                <li>将设备识别码 + 诊所名称 + 联系方式发送给开发者</li>
-                <li>开发者通过云端管理后台生成对应的"<strong>授权激活码</strong>"</li>
-                <li>将激活码粘贴到激活提示框中，点击"激活"按钮</li>
-                <li>激活成功后即可无限制使用（个人版/专业版功能差异见下方版本对比）</li>
-            </ol>
-        </div>
-        <div class="card">
-            <div class="card-title">云端版账户开通流程</div>
-            <ol class="install-steps">
-                <li>先下载离线版体验功能，确认满足需求</li>
-                <li>将诊所名称 + 管理员账号 + 管理员姓名 + 联系方式发送给开发者</li>
-                <li>开发者通过平台管理后台创建诊所和账户</li>
-                <li>开发者将账户信息回传给您</li>
-                <li>下载云端版 APP/桌面版 或 直接访问云端网页版</li>
-                <li>使用收到的账户信息登录即可使用</li>
-            </ol>
+        <!-- ============ Tab: 网页端 ============ -->
+        <div class="tab-content" id="tab-web">
+            <div class="section-title">
+                <span>🌐 云端网页版</span>
+                <span class="sub">无需下载 · 浏览器即用</span>
+            </div>
+            <div class="card featured">
+                <div class="card-title">
+                    <span class="icon">🌐</span>
+                    惠康中医 · 云端网页版
+                    <span class="badge web">网页</span>
+                    <span class="badge cloud">云端</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">访问方式</span>
+                    <span class="info-value">浏览器直接打开，无需安装</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">适用场景</span>
+                    <span class="info-value">临时使用、跨平台、无需安装</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">数据存储</span>
+                    <span class="info-value">云端存储，实时同步</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">多设备登入</span>
+                    <span class="info-value success">✅ 支持（云端实时同步）</span>
+                </div>
+                <div class="notice notice-cloud">
+                    <span class="icon">⚠️</span>
+                    <div>
+                        <strong>无公开试用：</strong>云端网页版需账户登录才能使用，账户由开发者（平台管理员）统一开通。<br>
+                        <strong>试用建议：</strong>请先下载离线版 APP/桌面版体验功能，满意后联系开发者开通云端账户。
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <a href="https://tcm-prescription-system.pages.dev/" class="download-btn success">
+                        <span class="icon">🚀</span>立即访问
+                    </a>
+                </div>
+            </div>
         </div>
 
-        <!-- SHA-256 校验方法 -->
-        <div class="card">
-            <div class="card-title">如何校验文件完整性（SHA-256）</div>
-            <div class="info-row">
-                <span class="info-label">Windows</span>
-                <span class="info-value" style="font-family:monospace;font-size:12px;">certutil -hashfile 文件名 SHA256</span>
+        <!-- ============ Tab: 购买激活码 ============ -->
+        <div class="tab-content" id="tab-purchase">
+            <div class="section-title">
+                <span>🔑 购买激活码</span>
+                <span class="sub">试用到期后 · 扫码支付 · 客服发放</span>
             </div>
-            <div class="info-row">
-                <span class="info-label">Mac/Linux</span>
-                <span class="info-value" style="font-family:monospace;font-size:12px;">shasum -a 256 文件名</span>
+
+            <div class="card trial-card" style="margin-bottom:16px;">
+                <div class="card-title">
+                    <span class="icon">💡</span>
+                    激活码购买流程
+                </div>
+                <div style="font-size:13px;color:#78350f;line-height:1.7;">
+                    试用期结束后需输入<strong>授权激活码</strong>才能继续使用。请按以下步骤操作：
+                    选择版本 → 生成订单号 → 扫码加客服 → 发送订单号 → 客服生成激活码 → 输入激活。
+                </div>
             </div>
-            <p style="font-size:13px;color:#666;margin-top:10px;line-height:1.6;">
-                将计算结果与上方页面的 SHA-256 值比对，完全一致则文件完整无损。
-            </p>
+
+            <div class="purchase-flow">
+                <!-- Step 1: 选择版本 -->
+                <div class="purchase-step active" data-step="1">
+                    <div class="step-header">
+                        <div class="step-num">1</div>
+                        <div>
+                            <div class="step-title">选择需要激活的版本</div>
+                            <div class="step-desc">请选择您正在使用的软件版本</div>
+                        </div>
+                    </div>
+                    <div class="version-pick" id="versionPick">
+                        <div class="version-pick-item" data-version="geren" data-price="¥XXX">
+                            <div class="name">👤 个人版</div>
+                            <div class="desc">个人医生使用，单用户，数据离线</div>
+                            <div class="price">¥XXX <small>/ 一次性买断</small></div>
+                        </div>
+                        <div class="version-pick-item" data-version="dingzhi" data-price="¥XXX">
+                            <div class="name">🏥 定制版</div>
+                            <div class="desc">固定诊所多用户，数据离线</div>
+                            <div class="price">¥XXX <small>/ 一次性买断</small></div>
+                        </div>
+                        <div class="version-pick-item" data-version="cloud" data-price="¥XXX/年">
+                            <div class="name">☁️ 云端版</div>
+                            <div class="desc">多设备同步，云端协作，按年订阅</div>
+                            <div class="price">¥XXX <small>/ 年</small></div>
+                        </div>
+                    </div>
+                    <div class="step-nav">
+                        <button class="prev" disabled>← 上一步</button>
+                        <button class="next" id="step1Next" disabled>下一步：生成订单号 →</button>
+                    </div>
+                </div>
+
+                <!-- Step 2: 生成订单号 -->
+                <div class="purchase-step" data-step="2">
+                    <div class="step-header">
+                        <div class="step-num">2</div>
+                        <div>
+                            <div class="step-title">生成专属订单号</div>
+                            <div class="step-desc">请复制您的订单号，付款后发送给客服</div>
+                        </div>
+                    </div>
+                    <div class="order-box">
+                        <div class="label">您的专属订单号（请复制保存）</div>
+                        <div class="value" id="orderNumber">-</div>
+                        <button class="copy-btn" onclick="copyOrder()">📋 复制订单号</button>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">激活版本</span>
+                        <span class="info-value" id="orderVersion">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">订单金额</span>
+                        <span class="info-value version" id="orderPrice">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">创建时间</span>
+                        <span class="info-value date" id="orderTime">-</span>
+                    </div>
+                    <div class="step-nav">
+                        <button class="prev" onclick="goStep(1)">← 上一步</button>
+                        <button class="next" onclick="goStep(3)">下一步：扫码加客服 →</button>
+                    </div>
+                </div>
+
+                <!-- Step 3: 扫码加客服 -->
+                <div class="purchase-step" data-step="3">
+                    <div class="step-header">
+                        <div class="step-num">3</div>
+                        <div>
+                            <div class="step-title">扫码加客服微信</div>
+                            <div class="step-desc">扫描下方二维码添加客服，发送订单号</div>
+                        </div>
+                    </div>
+                    <div class="contact-box">
+                        <div class="qrcode-placeholder" id="qrcodePlaceholder">
+                            <span class="icon">💬</span>
+                            <span>客服微信二维码</span>
+                            <small style="margin-top:4px;font-size:10px;color:#9ca3af;">（待替换为实际图片）</small>
+                        </div>
+                        <div class="contact-wechat">
+                            客服微信：
+                            <span class="wx-id" onclick="copyText(this)" title="点击复制">yqjzy1688</span>
+                        </div>
+                    </div>
+                    <div class="notice notice-warning">
+                        <span class="icon">📋</span>
+                        <div>
+                            <strong>请向客服发送以下信息：</strong><br>
+                            ① 订单号（上一步生成）<br>
+                            ② 诊所名称 / 个人姓名<br>
+                            ③ 设备识别码（在软件激活弹窗中复制）<br>
+                            ④ 付款截图
+                        </div>
+                    </div>
+                    <div class="step-nav">
+                        <button class="prev" onclick="goStep(2)">← 上一步</button>
+                        <button class="next" onclick="goStep(4)">下一步：付款并领取激活码 →</button>
+                    </div>
+                </div>
+
+                <!-- Step 4: 付款并领取 -->
+                <div class="purchase-step" data-step="4">
+                    <div class="step-header">
+                        <div class="step-num">4</div>
+                        <div>
+                            <div class="step-title">付款并领取激活码</div>
+                            <div class="step-desc">向客服微信付款后，等待客服生成激活码</div>
+                        </div>
+                    </div>
+                    <div class="flow-guide">
+                        <strong>📌 操作指引：</strong>
+                        <ol>
+                            <li>在客服微信中完成付款（金额见订单号展示）</li>
+                            <li>将订单号 + 付款截图 + 设备识别码发送给客服</li>
+                            <li>客服核对后通过云端管理后台生成专属激活码</li>
+                            <li>客服将激活码回传给您（通常 5-30 分钟内）</li>
+                            <li>在软件"激活授权"弹窗中粘贴激活码，点击"激活"按钮</li>
+                        </ol>
+                    </div>
+                    <div class="notice notice-success">
+                        <span class="icon">✅</span>
+                        <div>
+                            <strong>激活成功后：</strong>软件将无限制使用，所有功能解锁。<br>
+                            <strong>注意事项：</strong>激活码绑定当前设备，更换设备需重新购买或联系客服迁移。
+                        </div>
+                    </div>
+                    <div class="order-box" style="margin-top:14px;">
+                        <div class="label">您的订单号（再次复制）</div>
+                        <div class="value" id="orderNumberRepeat">-</div>
+                        <button class="copy-btn" onclick="copyOrder()">📋 复制订单号</button>
+                    </div>
+                    <div class="step-nav">
+                        <button class="prev" onclick="goStep(3)">← 上一步</button>
+                        <button class="next" onclick="resetPurchase()">🔄 重新生成订单</button>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <!-- 版本对比表 -->
-        <div class="section-title">版本对比表</div>
-        <div class="card">
-            <div class="card-title">📊 各版本功能对比</div>
-            <div style="overflow-x:auto;">
-                <table style="width:100%;border-collapse:collapse;font-size:12px;">
-                    <thead>
-                        <tr style="background:#667eea;color:white;">
-                            <th style="padding:8px;border:1px solid #ddd;text-align:left;">功能</th>
-                            <th style="padding:8px;border:1px solid #ddd;">定制版</th>
-                            <th style="padding:8px;border:1px solid #ddd;">个人版</th>
-                            <th style="padding:8px;border:1px solid #ddd;">云端版</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">默认账号</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">admin/admin<br>doctor1,2/123456</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">admin/admin<br>（仅此一个，不可改）</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">需开通</td></tr>
-                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">用户模式</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">多用户</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">固定一个用户（只读）</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">多用户</td></tr>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">医师姓名</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅ 可编辑</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 只读</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅ 可编辑</td></tr>
-                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">诊所名称</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 只读</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 只读</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 只读</td></tr>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">修改密码</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
-                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">试用模式</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">7天/30张</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">7天/30张</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">无试用</td></tr>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">数据存储</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">云端+本地</td></tr>
-                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">管理员权限</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地管理</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地管理</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">云端功能</td></tr>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">普通用户权限</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">本地（离线）</td></tr>
-                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">数据备份</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">统计分析</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅</td></tr>
-                        <tr style="background:#f8f9fa;"><td style="padding:6px;border:1px solid #ddd;">多设备登入</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 仅单机</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">❌ 仅单机</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">✅ 云端同步</td></tr>
-                        <tr><td style="padding:6px;border:1px solid #ddd;">联网要求</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">完全离线</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">完全离线</td><td style="padding:6px;border:1px solid #ddd;text-align:center;">需联网</td></tr>
-                    </tbody>
-                </table>
+        <!-- ============ Tab: 安装说明 ============ -->
+        <div class="tab-content" id="tab-install">
+            <div class="section-title">
+                <span>📋 安装说明</span>
+                <span class="sub">Android · Windows · 激活流程</span>
             </div>
-            <p style="font-size:12px;color:#888;margin-top:10px;line-height:1.6;">
-                💡 <strong>选择建议：</strong>个人医生选<strong>个人版</strong>；固定诊所（多医师，单机使用）选<strong>定制版</strong>；需要多设备登入或云端协作选<strong>云端版</strong>。
-            </p>
+            <div class="grid-2">
+                <div class="card">
+                    <div class="card-title"><span class="icon">📱</span>Android APP 安装步骤</div>
+                    <ol class="install-steps">
+                        <li>下载对应版本的 APK 文件到手机</li>
+                        <li>在手机设置中允许"安装未知来源应用"（设置 → 安全 → 未知来源）</li>
+                        <li>点击下载的 APK 文件进行安装</li>
+                        <li>安装完成后打开 APP，使用上方"默认账号"登录（如 admin/admin）</li>
+                        <li>首次使用有 7 天试用期（限 30 张处方），到期后需输入授权激活码</li>
+                        <li>登录后请立即到"设置"中修改默认密码，确保账户安全</li>
+                        <li>如遇"安装包损坏"提示，请重新下载并核对 SHA-256 校验值</li>
+                    </ol>
+                </div>
+                <div class="card">
+                    <div class="card-title"><span class="icon">💻</span>Windows 桌面版安装步骤</div>
+                    <ol class="install-steps">
+                        <li>下载安装版 exe 文件（推荐）或便携版</li>
+                        <li>双击运行安装程序，按提示完成安装</li>
+                        <li>安装完成后从桌面快捷方式启动</li>
+                        <li>便携版无需安装，解压后直接运行 exe 即可</li>
+                        <li>使用上方"默认账号"登录（如 admin/admin）</li>
+                        <li>首次使用有 7 天试用期（限 30 张处方），到期后需输入授权激活码</li>
+                        <li>登录后请立即到"设置"中修改默认密码，确保账户安全</li>
+                    </ol>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-title"><span class="icon">🔑</span>激活流程（试用到期后）</div>
+                <ol class="install-steps">
+                    <li>试用期结束后，系统会弹出"激活授权"提示框</li>
+                    <li>在提示框中复制您的"<strong>设备识别码</strong>"（每台设备唯一）</li>
+                    <li>切换到本页面"<strong>购买激活码</strong>"Tab，按步骤生成订单号</li>
+                    <li>扫码加客服微信，发送订单号 + 设备识别码 + 诊所信息</li>
+                    <li>付款后客服通过云端管理后台生成对应的"<strong>授权激活码</strong>"</li>
+                    <li>将激活码粘贴到激活提示框中，点击"激活"按钮</li>
+                    <li>激活成功后即可无限制使用（各版本功能差异见"版本对比"）</li>
+                </ol>
+            </div>
+            <div class="card">
+                <div class="card-title"><span class="icon">☁️</span>云端版账户开通流程</div>
+                <ol class="install-steps">
+                    <li>先下载离线版体验功能，确认满足需求</li>
+                    <li>将诊所名称 + 管理员账号 + 管理员姓名 + 联系方式发送给开发者</li>
+                    <li>开发者通过平台管理后台创建诊所和账户</li>
+                    <li>开发者将账户信息回传给您</li>
+                    <li>下载云端版 APP/桌面版 或 直接访问云端网页版</li>
+                    <li>使用收到的账户信息登录即可使用</li>
+                </ol>
+            </div>
+            <div class="card">
+                <div class="card-title"><span class="icon">🔒</span>如何校验文件完整性（SHA-256）</div>
+                <div class="info-row">
+                    <span class="info-label">Windows</span>
+                    <span class="info-value" style="font-family:monospace;font-size:12px;">certutil -hashfile 文件名 SHA256</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">Mac/Linux</span>
+                    <span class="info-value" style="font-family:monospace;font-size:12px;">shasum -a 256 文件名</span>
+                </div>
+                <p style="font-size:13px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
+                    将计算结果与上方页面的 SHA-256 值比对，完全一致则文件完整无损。
+                </p>
+            </div>
         </div>
 
+        <!-- ============ Tab: 版本对比 ============ -->
+        <div class="tab-content" id="tab-compare">
+            <div class="section-title">
+                <span>⚖️ 版本对比</span>
+                <span class="sub">选择最适合您的版本</span>
+            </div>
+
+            <div class="card trial-card">
+                <div class="card-title"><span class="icon">🎯</span>快速选择指南</div>
+                <div class="decision-tree">
+                    <div class="decision-item">
+                        <div class="q">👤 个人医生使用？</div>
+                        <div class="a">→ 选择个人版</div>
+                    </div>
+                    <div class="decision-item">
+                        <div class="q">🏥 固定诊所多医师？</div>
+                        <div class="a">→ 选择定制版</div>
+                    </div>
+                    <div class="decision-item">
+                        <div class="q">☁️ 需要多设备协作？</div>
+                        <div class="a">→ 选择云端版</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-title"><span class="icon">📊</span>各版本功能对比</div>
+                <div class="table-wrap">
+                    <table class="compare-table">
+                        <thead>
+                            <tr>
+                                <th>功能</th>
+                                <th>定制版</th>
+                                <th>个人版</th>
+                                <th>云端版</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>默认账号</td><td>admin/admin<br>doctor1,2/123456</td><td>admin/admin<br>（仅此一个，不可改）</td><td>需开通</td></tr>
+                            <tr><td>用户模式</td><td>多用户</td><td>固定一个用户（只读）</td><td>多用户</td></tr>
+                            <tr><td>医师姓名</td><td class="yes">✅ 可编辑</td><td class="no">❌ 只读</td><td class="yes">✅ 可编辑</td></tr>
+                            <tr><td>诊所名称</td><td class="no">❌ 只读</td><td class="no">❌ 只读</td><td class="no">❌ 只读</td></tr>
+                            <tr><td>修改密码</td><td class="no">❌</td><td class="no">❌</td><td class="yes">✅</td></tr>
+                            <tr><td>试用模式</td><td>7天/30张</td><td>7天/30张</td><td class="no">无试用</td></tr>
+                            <tr><td>数据存储</td><td>本地</td><td>本地</td><td>云端+本地</td></tr>
+                            <tr><td>管理员权限</td><td>本地管理</td><td>本地管理</td><td>云端功能</td></tr>
+                            <tr><td>普通用户权限</td><td>本地</td><td>本地</td><td>本地（离线）</td></tr>
+                            <tr><td>数据备份</td><td class="yes">✅</td><td class="no">❌</td><td class="yes">✅</td></tr>
+                            <tr><td>统计分析</td><td class="no">❌</td><td class="no">❌</td><td class="yes">✅</td></tr>
+                            <tr><td>多设备登入</td><td class="no">❌ 仅单机</td><td class="no">❌ 仅单机</td><td class="yes">✅ 云端同步</td></tr>
+                            <tr><td>联网要求</td><td>完全离线</td><td>完全离线</td><td>需联网</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p style="font-size:12px;color:var(--text-secondary);margin-top:12px;line-height:1.6;">
+                    💡 <strong>选择建议：</strong>个人医生选<strong>个人版</strong>；固定诊所（多医师，单机使用）选<strong>定制版</strong>；需要多设备登入或云端协作选<strong>云端版</strong>。
+                </p>
+            </div>
+        </div>
+
+        <!-- ============ Tab: FAQ ============ -->
+        <div class="tab-content" id="tab-faq">
+            <div class="section-title">
+                <span>❓ 常见问题</span>
+                <span class="sub">点击展开查看答案</span>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>🆓 哪个版本可以免费试用？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>离线版（定制版/个人版）</strong>提供 7 天免费试用（限 30 张处方），下载安装后即可使用，无需任何账户注册。<br>
+                        <strong>云端版</strong>不提供公开试用。如需体验云端功能，请先下载离线版试用，满意后联系开发者开通云端账户。
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>🔑 试用期结束后怎么办？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        试用期结束后需输入<strong>授权激活码</strong>。请切换到本页面"<strong>购买激活码</strong>"Tab，按以下步骤操作：<br>
+                        1. 选择您正在使用的版本<br>
+                        2. 生成专属订单号<br>
+                        3. 扫码加客服微信<br>
+                        4. 付款后将订单号 + 设备识别码发送给客服<br>
+                        5. 客服生成激活码并回传给您<br>
+                        6. 在软件激活弹窗中粘贴激活码完成激活
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>💻 设备识别码在哪里找？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        试用期结束后，软件会自动弹出"<strong>激活授权</strong>"提示框，其中会显示当前设备的"<strong>设备识别码</strong>"（每台设备唯一）。<br>
+                        点击提示框中的"<strong>复制</strong>"按钮即可复制设备识别码，然后发送给客服。
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>🔄 更换设备后激活码还能用吗？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>不能直接使用</strong>。激活码绑定当前设备，更换设备后需要重新购买或联系客服迁移。<br>
+                        请联系客服微信（yqjzy1688），提供原激活码 + 新设备识别码，客服会评估是否可以免费迁移（通常硬件故障可免费迁移一次）。
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>☁️ 云端版如何开通账户？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        云端版账户由开发者（平台管理员）统一开通，请将以下信息发送给客服：<br>
+                        ① 诊所名称<br>
+                        ② 管理员账号（建议中文姓名）<br>
+                        ③ 管理员姓名<br>
+                        ④ 联系方式<br>
+                        客服创建账户后会将账户信息回传给您，即可登录云端网页版/APP/桌面版。
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>🔒 如何确认下载的文件是官方正版？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        每个版本卡片下方都显示该安装包的 <strong>SHA-256 校验值</strong>。下载完成后请计算文件哈希值并与页面显示的值比对：<br>
+                        <strong>Windows：</strong><code>certutil -hashfile 文件名 SHA256</code><br>
+                        <strong>Mac/Linux：</strong><code>shasum -a 256 文件名</code><br>
+                        两者完全一致则文件完整无损，否则请重新下载。
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>📱 APK 安装时提示"安装包损坏"怎么办？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        请按以下步骤排查：<br>
+                        1. 重新下载 APK 文件（可能下载不完整）<br>
+                        2. 核对 SHA-256 校验值是否与页面一致<br>
+                        3. 确认手机已开启"允许安装未知来源应用"<br>
+                        4. 关闭手机安全软件的"安装拦截"功能后重试<br>
+                        5. 如仍无法解决，请联系客服微信（yqjzy1688）获取帮助
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>💾 数据安全吗？会不会丢失？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>离线版：</strong>数据完全存储在本地设备，不会上传云端。请定期使用"设置 → 数据备份"导出数据到安全位置。<br>
+                        <strong>云端版：</strong>数据云端+本地双存储，实时同步，多设备共享。<br>
+                        <strong>建议：</strong>无论哪个版本，都建议定期备份重要数据。
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ Footer ============ -->
         <div class="footer">
             <p>惠康中医诊所管理系统 · 官方下载中心</p>
             <p>© 2026 惠康中医 · 本能中医处方系统</p>
-            <p>技术支持请联系开发者 · 软件著作权登记中</p>
+            <p>客服微信：<strong>yqjzy1688</strong> · 技术支持请联系开发者</p>
         </div>
     </div>
 
+    <!-- ============ 浮动按钮 ============ -->
+    <div class="float-buttons">
+        <button class="float-btn scrollTop" id="scrollTopBtn" title="回到顶部" onclick="scrollTop()">↑</button>
+        <button class="float-btn" title="客服微信" onclick="switchToPurchase()">💬</button>
+    </div>
+
     <script>
+        // =====================================================================
+        // 1. Tab 切换逻辑
+        // =====================================================================
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const target = btn.dataset.tab;
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('tab-' + target).classList.add('active');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+        });
+
+        // =====================================================================
+        // 2. FAQ 折叠
+        // =====================================================================
+        function toggleFaq(el) {
+            const item = el.parentElement;
+            item.classList.toggle('open');
+        }
+
+        // =====================================================================
+        // 3. 回到顶部
+        // =====================================================================
+        const scrollTopBtn = document.getElementById('scrollTopBtn');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 300) {
+                scrollTopBtn.classList.add('visible');
+            } else {
+                scrollTopBtn.classList.remove('visible');
+            }
+        });
+        function scrollTop() {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // =====================================================================
+        // 4. Toast 提示
+        // =====================================================================
+        function showToast(msg, duration) {
+            const toast = document.getElementById('toast');
+            toast.innerHTML = '<span class="icon">✅</span>' + msg;
+            toast.classList.add('show');
+            clearTimeout(toast._timer);
+            toast._timer = setTimeout(() => toast.classList.remove('show'), duration || 2500);
+        }
+
+        // =====================================================================
+        // 5. 复制功能
+        // =====================================================================
+        function copyText(el) {
+            const text = el.textContent.trim();
+            const fallback = () => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); } catch(e) {}
+                document.body.removeChild(ta);
+                showToast('已复制：' + text);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast('已复制：' + text);
+                }).catch(fallback);
+            } else {
+                fallback();
+            }
+        }
+        function copyHash(id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            const text = el.textContent.trim();
+            if (!text || text.indexOf('打包后') >= 0) {
+                showToast('校验值尚未生成');
+                return;
+            }
+            const fallback = () => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); } catch(e) {}
+                document.body.removeChild(ta);
+                showToast('SHA-256 已复制');
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast('SHA-256 已复制')).catch(fallback);
+            } else { fallback(); }
+        }
+
+        // =====================================================================
+        // 6. 购买激活码流程
+        // =====================================================================
+        let selectedVersion = null;
+        let orderInfo = { number: '', version: '', price: '', time: '' };
+
+        // 版本选择
+        document.querySelectorAll('.version-pick-item').forEach(item => {
+            item.addEventListener('click', () => {
+                document.querySelectorAll('.version-pick-item').forEach(i => i.classList.remove('selected'));
+                item.classList.add('selected');
+                selectedVersion = {
+                    key: item.dataset.version,
+                    name: item.querySelector('.name').textContent,
+                    price: item.dataset.price
+                };
+                document.getElementById('step1Next').disabled = false;
+            });
+        });
+
+        // Step 1 → Step 2: 生成订单号
+        document.getElementById('step1Next').addEventListener('click', () => {
+            if (!selectedVersion) return;
+            generateOrder();
+            goStep(2);
+        });
+
+        function generateOrder() {
+            const now = new Date();
+            const ts = now.getFullYear().toString() +
+                       String(now.getMonth() + 1).padStart(2, '0') +
+                       String(now.getDate()).padStart(2, '0') +
+                       String(now.getHours()).padStart(2, '0') +
+                       String(now.getMinutes()).padStart(2, '0');
+            const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
+            const versionMap = { geren: 'GR', dingzhi: 'DZ', cloud: 'CL' };
+            const prefix = versionMap[selectedVersion.key] || 'XX';
+            orderInfo.number = 'BNZC-' + prefix + '-' + ts + '-' + rand;
+            orderInfo.version = selectedVersion.name;
+            orderInfo.price = selectedVersion.price;
+            orderInfo.time = now.toLocaleString('zh-CN');
+
+            document.getElementById('orderNumber').textContent = orderInfo.number;
+            document.getElementById('orderVersion').textContent = orderInfo.version;
+            document.getElementById('orderPrice').textContent = orderInfo.price;
+            document.getElementById('orderTime').textContent = orderInfo.time;
+            document.getElementById('orderNumberRepeat').textContent = orderInfo.number;
+        }
+
+        function copyOrder() {
+            const text = orderInfo.number;
+            const fallback = () => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); } catch(e) {}
+                document.body.removeChild(ta);
+                showToast('订单号已复制：' + text);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast('订单号已复制')).catch(fallback);
+            } else { fallback(); }
+        }
+
+        function goStep(n) {
+            document.querySelectorAll('.purchase-step').forEach(s => s.classList.remove('active'));
+            document.querySelector('.purchase-step[data-step="' + n + '"]').classList.add('active');
+            window.scrollTo({ top: document.querySelector('.purchase-flow').offsetTop - 80, behavior: 'smooth' });
+        }
+
+        function resetPurchase() {
+            selectedVersion = null;
+            document.querySelectorAll('.version-pick-item').forEach(i => i.classList.remove('selected'));
+            document.getElementById('step1Next').disabled = true;
+            orderInfo = { number: '', version: '', price: '', time: '' };
+            goStep(1);
+            showToast('已重置，请重新选择版本');
+        }
+
+        function switchToPurchase() {
+            document.querySelector('.tab-btn[data-tab="purchase"]').click();
+        }
+
+        // =====================================================================
+        // 7. 下载逻辑（保留原有逻辑）
+        // =====================================================================
         const BASE = 'https://tcm-prescription-system.pages.dev';
         const versions = {
             'cloud': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'desktop' },
@@ -724,52 +1959,37 @@
             'geren': { jsonUrl: BASE + '/updates/geren/latest.json', type: 'app' }
         };
 
-        // ★ Toast 提示
-        function showToast(msg, duration) {
-            const toast = document.getElementById('toast');
-            toast.textContent = msg;
-            toast.style.display = 'block';
-            setTimeout(function() { toast.style.display = 'none'; }, duration || 3000);
-        }
-
-        // ★ 安全下载：先验证文件存在再跳转（防止404 fallback到登录页）
+        // 安全下载：先验证文件存在再跳转
         function safeDownload(url, btn) {
             if (!url || url === '#') {
-                showToast('安装包尚未上传，请联系开发者获取');
+                showToast('安装包尚未上传，请联系客服获取');
                 return;
             }
-            // ★ GitHub Release URL 直接跳转下载（避免 CORS 预检失败）
-            //   exe 文件存放在 GitHub Release（>25MB 超过 Cloudflare Pages 限制）
-            //   浏览器对 github.com/releases/download/ 的 HEAD 请求会触发 CORS 阻止
             if (url.indexOf('https://github.com/') === 0 && url.indexOf('/releases/download/') > 0) {
                 window.location.href = url;
                 return;
             }
-            // 标记为加载中
-            var originalText = btn.textContent;
-            btn.textContent = '正在验证...';
+            var originalText = btn.innerHTML;
+            btn.innerHTML = '<span class="icon">⏳</span>正在验证...';
             btn.classList.add('pending');
 
             fetch(url, { method: 'HEAD', cache: 'no-cache' })
                 .then(function(resp) {
                     btn.classList.remove('pending');
-                    btn.textContent = originalText;
+                    btn.innerHTML = originalText;
                     if (resp.ok) {
-                        // 文件存在，直接下载
                         window.location.href = url;
                     } else {
-                        // 文件不存在
-                        showToast('安装包尚未上传（HTTP ' + resp.status + '）\n请联系开发者获取');
+                        showToast('安装包尚未上传（HTTP ' + resp.status + '）\n请联系客服获取');
                     }
                 })
                 .catch(function(err) {
                     btn.classList.remove('pending');
-                    btn.textContent = originalText;
+                    btn.innerHTML = originalText;
                     showToast('网络错误，请稍后重试');
                 });
         }
 
-        // ★ 为所有下载按钮绑定安全点击事件
         function bindSafeDownload() {
             var btns = document.querySelectorAll('.download-btn');
             btns.forEach(function(btn) {
@@ -797,7 +2017,6 @@
             if (dateEl) dateEl.textContent = data.releaseDate || '-';
             if (notesEl) notesEl.textContent = data.releaseNotes || '-';
 
-            // ★ cloud-app 的下载链接由 hash-manifest.json 提供，不使用 latest.json 中的桌面版 url
             if (key === 'cloud-app') return;
 
             if (data.url && dlEl) {
@@ -837,14 +2056,12 @@
                 });
         }
 
-        // 加载所有版本信息
         Object.keys(versions).forEach(loadVersion);
 
-        // ★ 加载 SHA-256 校验值
+        // 加载 SHA-256 校验值
         fetch(BASE + '/hash-manifest.json', { cache: 'no-cache' })
             .then(r => r.json())
             .then(manifest => {
-                // APK 校验值：云端APP、定制版、个人版
                 ['cloud-app', 'dingzhi', 'geren'].forEach(key => {
                     const manifestKey = key === 'cloud-app' ? 'cloud' : key;
                     const hashEl = document.getElementById('hash-' + key);
@@ -859,9 +2076,7 @@
                         }
                     }
                 });
-                // 桌面版 exe 校验值：云端桌面版、定制桌面版、个人桌面版
                 ['cloud', 'dingzhi-desktop', 'geren-desktop'].forEach(key => {
-                    // hash-manifest.json 中桌面版 exe 与 APK 同 key（dingzhi/geren/cloud）
                     const manifestKey = key === 'dingzhi-desktop' ? 'dingzhi'
                                       : key === 'geren-desktop' ? 'geren'
                                       : key;
@@ -871,8 +2086,6 @@
                         hashEl.textContent = data.sha256;
                         hashEl.classList.remove('pending');
                     }
-                    // ★ 若 latest.json 没有提供下载链接（如桌面版 exe 走 GitHub Release），
-                    //   从 hash-manifest.json 补充 url 和 portableUrl
                     if (data && data.url) {
                         const dlEl = document.getElementById('dl-' + key);
                         if (dlEl) {
@@ -898,7 +2111,6 @@
             })
             .catch(err => console.warn('加载校验值失败:', err));
 
-        // ★ 立即绑定安全下载（防止 latest.json 加载前的误点击）
         bindSafeDownload();
     </script>
 </body>
