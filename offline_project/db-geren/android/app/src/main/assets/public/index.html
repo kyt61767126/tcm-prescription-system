@@ -1202,7 +1202,8 @@ if (window.Permission) {
                         }
                     } catch (e) { console.warn('密码升级失败:', e); }
 
-                    currentUser = user;
+                    // ★个人版：currentUser.name 固定使用 CONFIG.doctorName（医师姓名）
+                    currentUser = { ...user, name: (typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : user.name };
                     // 使用统一的 user_login_data 存储登录信息
                     const loginData = {
                         user: user,
@@ -1411,7 +1412,9 @@ if (window.Permission) {
 
         function updateUserDisplay() {
             if (currentUser) {
-                document.getElementById('userDisplayName').textContent = currentUser.name;
+                // ★个人版：固定显示医师姓名（CONFIG.doctorName），不显示 users[0].name（"管理员"）
+                const displayName = (typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : (currentUser.name || currentUser.username);
+                document.getElementById('userDisplayName').textContent = displayName;
                 const userManageBtn = document.getElementById('userManageBtn');
                 const changePwdBtn = document.getElementById('changePwdBtn');
                 const autoStartSection = document.getElementById('autoStartSection');

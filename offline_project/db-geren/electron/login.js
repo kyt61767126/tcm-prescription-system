@@ -177,7 +177,10 @@
             }
 
             // 仅写入必要字段，不写入密码
-            const userData = { username: loginUserInfo.username, name: loginUserInfo.name, role: loginUserInfo.role || 'user' };
+            // ★个人版：name 固定使用 config.doctorName（医师姓名），不使用 users[0].name（"管理员"）
+            const cfg = await getAppConfig();
+            const displayName = cfg.doctorName || loginUserInfo.name || loginUserInfo.username;
+            const userData = { username: loginUserInfo.username, name: displayName, role: loginUserInfo.role || 'user' };
             const userDataStr = JSON.stringify(userData);
             const loginDataStr = JSON.stringify({ loginTime: Date.now(), username: loginUserInfo.username });
 
