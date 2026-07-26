@@ -174,6 +174,15 @@ public class MainActivity extends AppCompatActivity {
 
         setContentView(container);
 
+        // ★ 方案1：与云端APP对齐——添加 WindowInsetsListener，让 WindowInsets 正确分发到 WebView
+        // 这是 adjustResize 正确生效的关键，解决 position:fixed 元素在键盘下方的问题
+        // 云端APP（Capacitor）有此代码，离线APP之前缺失，导致键盘弹出时菜单栏工具栏分2次出现
+        // 不设置 padding（状态栏适配由 injectStatusBarFix 的 CSS 注入处理）
+        ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(webView);
+
         // ★ Activity 级别彻底禁用 Autofill（防止系统通过 Activity 节点树获取 WebView 内部 input）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             getWindow().getDecorView().setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
