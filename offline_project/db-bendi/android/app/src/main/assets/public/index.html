@@ -1732,10 +1732,53 @@ let currentUser = null;
                     document.getElementById('loginUsername').value = localUsername;
                     document.getElementById('rememberUser').checked = true;
                     localStorage.setItem('local_rememberedUsers', JSON.stringify(singleList));
+                    return;
                 }
+                // 没有记住的用户时，渲染默认用户列表（与离线桌面版 <select> 下拉框一致）
+                // 数据源：getUsers() -> config.json users -> 硬编码默认用户
+                renderDefaultUsers();
             } catch (e) {
                 console.warn('loadRememberedUsers error:', e);
             }
+        }
+
+        // 没有记住的用户时，渲染默认用户列表（与离线桌面版 <select> 下拉框一致）
+        // 数据源：getUsers() -> config.json users -> 硬编码默认用户（管理员/张医生/李医生）
+        function renderDefaultUsers() {
+            const btn = document.getElementById('usernameDropdownBtn');
+            const menu = document.getElementById('usernameDropdownMenu');
+            if (!btn || !menu) return;
+
+            const users = getUsers();
+            if (!users || users.length === 0) {
+                btn.style.display = 'none';
+                menu.style.display = 'none';
+                return;
+            }
+
+            btn.style.display = 'flex';
+            btn.textContent = '▼(' + users.length + ')';
+            menu.innerHTML = '';
+
+            users.forEach(u => {
+                const item = document.createElement('div');
+                const displayName = u.name || u.username;
+                const loginValue = u.username;
+                item.textContent = displayName;
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    document.getElementById('loginUsername').value = loginValue;
+                    document.getElementById('loginPassword').focus();
+                    menu.classList.remove('show');
+                });
+                menu.appendChild(item);
+            });
+
+            btn.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                menu.classList.toggle('show');
+            };
         }
 
         function renderRememberedUsers(usernames) {

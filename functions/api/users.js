@@ -542,11 +542,16 @@ export async function onRequest(context) {
             if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
                 return json({ success: false, error: '管理员登录账号不能使用中文' }, 400);
             }
+            // 命名规则强制校验：必须为 admin_{诊所简拼} 格式（如 admin_bnt）
+            // 规则：以 admin_ 开头，后缀为 2-12 位小写字母/数字（诊所简拼）
+            if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(adminUsername)) {
+                return json({ success: false, error: '管理员账号必须为 admin_诊所简拼 格式（如 admin_bnt），仅小写字母和数字，2-12 位' }, 400);
+            }
 
-            // 检查用户名是否已存在
+            // 检查用户名是否已存在（全局唯一，跨诊所 + platform_admins）
             const existing = await findUserForLogin(kv, adminUsername);
             if (existing) {
-                return json({ success: false, error: '登录账号已存在，请更换' }, 409);
+                return json({ success: false, error: '登录账号已存在，请更换（admin_诊所简拼 全局唯一）' }, 409);
             }
 
             const clinicId = generateId('clinic');
@@ -621,11 +626,15 @@ export async function onRequest(context) {
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
 
             // 更新管理员信息（如果有提供）
+            // ★安全规则：管理员用户名（username）不可修改，仅可修改姓名（name）和密码
             if (adminUsername || adminName || adminPassword) {
                 const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
                 const adminIdx = users.findIndex(u => u.role === ROLE_CLINIC_ADMIN);
                 if (adminIdx !== -1) {
-                    if (adminUsername) users[adminIdx].username = adminUsername;
+                    // 拒绝修改管理员用户名（确保账号唯一性和云端数据安全）
+                    if (adminUsername && adminUsername !== users[adminIdx].username) {
+                        return json({ success: false, error: '管理员登录账号不可修改（确保全局唯一和数据安全），仅可修改姓名和密码' }, 403);
+                    }
                     if (adminName) users[adminIdx].name = adminName;
                     if (adminPassword) {
                         const { passwordHash, salt } = await hashPassword(adminPassword);
@@ -693,6 +702,16 @@ export async function onRequest(context) {
                     const clinicUsers = body.users.filter(u => u.clinicId === clinic.id || (!u.clinicId && u.role !== ROLE_PLATFORM_ADMIN));
                     if (clinicUsers.length > 0) {
                         const existingUsers = (await kv.get(`clinic:${clinic.id}:users`, 'json')) || [];
+                        // ★安全规则：禁止修改 clinic_admin 用户的 username（确保全局唯一和数据安全）
+                        const existingClinicAdmin = existingUsers.find(u => u.role === ROLE_CLINIC_ADMIN);
+                        if (existingClinicAdmin) {
+                            const newClinicAdminEntries = clinicUsers.filter(u => u.role === ROLE_CLINIC_ADMIN);
+                            for (const newAdmin of newClinicAdminEntries) {
+                                if (newAdmin.username !== existingClinicAdmin.username) {
+                                    return json({ success: false, error: `管理员登录账号不可修改（诊所：${clinic.name}，账号：${existingClinicAdmin.username}），仅可修改姓名和密码` }, 403);
+                                }
+                            }
+                        }
                         const savedUsers = await processUsersForSave(clinicUsers, existingUsers);
                         await kv.put(`clinic:${clinic.id}:users`, JSON.stringify(savedUsers));
                     }
@@ -719,6 +738,17 @@ export async function onRequest(context) {
                     }
                     if (u.clinicId && u.clinicId !== clinicId) {
                         return json({ success: false, error: 'Forbidden: 不能修改其他诊所用户' }, 403);
+                    }
+                }
+
+                // ★安全规则：禁止修改本诊所 clinic_admin 用户的 username（确保全局唯一和数据安全）
+                const existingAdmin = existingUsers.find(u => u.role === ROLE_CLINIC_ADMIN);
+                if (existingAdmin) {
+                    const newAdminEntries = body.users.filter(u => u.role === ROLE_CLINIC_ADMIN);
+                    for (const newAdmin of newAdminEntries) {
+                        if (newAdmin.username !== existingAdmin.username) {
+                            return json({ success: false, error: '管理员登录账号不可修改（确保全局唯一和数据安全），仅可修改姓名和密码' }, 403);
+                        }
                     }
                 }
 

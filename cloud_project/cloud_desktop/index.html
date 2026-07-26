@@ -4425,20 +4425,29 @@ if (window.Permission) {
             const user = users.find(u => u.username === username);
             if (!user) { await alert('未找到该用户'); return; }
 
-            const newUsername = await prompt('请输入新登录用户（英文或拼音）：', user.username);
-            if (newUsername === null) return;
+            // ★安全规则：clinic_admin 管理员账号不可修改（确保全局唯一和云端数据安全）
+            // 仅允许修改姓名和密码，username 保持原值
+            const isClinicAdminUser = (user.role === 'clinic_admin' || user.role === 'admin');
+            let trimmedUsername = user.username;
 
-            const trimmedUsername = newUsername.trim();
-            if (!trimmedUsername) {
-                await alert('用户名不能为空');
-                return;
-            }
+            if (isClinicAdminUser) {
+                await alert('【管理员账号保护】\n\n管理员登录账号（' + user.username + '）不可修改，仅可修改姓名和密码。\n\n如需修改管理员账号，请联系平台总管理员。');
+            } else {
+                const newUsername = await prompt('请输入新登录用户（英文或拼音）：', user.username);
+                if (newUsername === null) return;
 
-            if (trimmedUsername !== username) {
-                const exists = users.find(u => u.username === trimmedUsername);
-                if (exists) {
-                    await alert('用户名已存在');
+                trimmedUsername = newUsername.trim();
+                if (!trimmedUsername) {
+                    await alert('用户名不能为空');
                     return;
+                }
+
+                if (trimmedUsername !== username) {
+                    const exists = users.find(u => u.username === trimmedUsername);
+                    if (exists) {
+                        await alert('用户名已存在');
+                        return;
+                    }
                 }
             }
 
