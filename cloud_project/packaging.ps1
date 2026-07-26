@@ -13,6 +13,12 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $scriptDir = $PSScriptRoot
 
+# Auto-fix .ps1 BOM (prevent Chinese garbled text due to BOM loss)
+$bomFixScript = Join-Path $scriptDir '..\tools\fix-ps1-bom.ps1'
+if (Test-Path $bomFixScript) {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $bomFixScript 2>&1 | Out-Null
+}
+
 # UTF-8 encoders (reusable)
 $script:UTF8WithBom = New-Object System.Text.UTF8Encoding($true)
 $script:UTF8NoBom = New-Object System.Text.UTF8Encoding($false)

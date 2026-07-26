@@ -1,5 +1,7 @@
 @echo off
 chcp 65001 >nul
+REM Auto-fix .ps1 BOM (prevent Chinese garbled text due to BOM loss)
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\fix-ps1-bom.ps1" >nul 2>&1
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Huikang TCM Custom - Offline Desktop Build
