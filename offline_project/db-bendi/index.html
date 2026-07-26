@@ -1440,6 +1440,11 @@ let currentUser = null;
                     const exists = users.find(u => u.username === newUsername);
                     if (exists) { alert('用户名已存在'); return; }
                 }
+                const nameExists = users.find(u => u.name === newName && u.username !== originalUsername);
+                if (nameExists) {
+                    alert('医师姓名已存在，请使用不同的姓名！');
+                    return;
+                }
 
                 const userIndex = users.findIndex(u => u.username === originalUsername);
                 if (userIndex === -1) { alert('用户不存在'); return; }
@@ -1520,6 +1525,10 @@ let currentUser = null;
             const users = getUsers();
             if (users.find(u =>u.username === username)) {
                 alert('用户名已存在');
+                return;
+            }
+            if (users.find(u => u.name === name)) {
+                alert('医师姓名已存在，请使用不同的姓名！');
                 return;
             }
 
