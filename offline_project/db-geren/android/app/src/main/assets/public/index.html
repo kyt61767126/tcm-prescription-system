@@ -1162,41 +1162,16 @@ if (window.Permission) {
             localStorage.setItem('local_systemUsers', simpleEncrypt(JSON.stringify(users)));
         }
 
-        // ★ 优化：登录防重复提交标志
-        let _loginInFlight = false;
-
-        function setLoginLoading(loading) {
-            const btn = document.getElementById('btnOk') || document.querySelector('.login-btn:not(.cancel)');
-            const pwd = document.getElementById('loginPassword');
-            if (!btn) return;
-            if (loading) {
-                btn.disabled = true;
-                btn.dataset.originalText = btn.textContent;
-                btn.textContent = '登录中...';
-                if (pwd) pwd.disabled = true;
-            } else {
-                btn.disabled = false;
-                if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
-                if (pwd) pwd.disabled = false;
-            }
-        }
-
         async function handleLogin() {
-            const errorDiv = document.getElementById('loginError');
-            if (errorDiv) errorDiv.style.display = 'none';
-            // ★ 优化：防重复提交
-            if (_loginInFlight) return;
             try {
                 const password = document.getElementById('loginPassword').value;
+                const errorDiv = document.getElementById('loginError');
 
                 if (!password) {
                     errorDiv.textContent = '请输入密码';
                     errorDiv.style.display = 'block';
                     return;
                 }
-
-                _loginInFlight = true;
-                setLoginLoading(true);
 
                 // 个人版：使用第一个用户进行认证
                 const users = getUsers();
@@ -1241,8 +1216,10 @@ if (window.Permission) {
                     } else {
                         localStorage.removeItem('local_rememberedUsername');
                     }
-
+                    
                     // 个人版：记住密码功能（P0-1 安全优化：禁止明文存储）
+                    // 使用 AuthCore.saveRememberedPassword 加密存储（safeStorage/DPAPI 优先，XOR PWDv2 降级）
+                    // 兼容旧明文 local_rememberedPassword：检测到时自动迁移到加密存储并删除
                     const rememberPassword = document.getElementById('rememberPassword')?.checked;
                     if (rememberPassword) {
                         if (window.AuthCore && AuthCore.saveRememberedPassword) {
@@ -1250,8 +1227,10 @@ if (window.Permission) {
                                 console.warn('加密保存密码失败:', e);
                             });
                         } else {
+                            // 兜底：AuthCore 未加载时降级为 sessionStorage（仅会话内有效，关闭即失效）
                             sessionStorage.setItem('auth:savedPassword', password);
                         }
+                        // 清除可能存在的旧明文数据
                         localStorage.removeItem('local_rememberedPassword');
                     } else {
                         localStorage.removeItem('local_rememberedPassword');
@@ -1261,16 +1240,18 @@ if (window.Permission) {
                             sessionStorage.removeItem('auth:savedPassword');
                         }
                     }
-
+                    
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.main-container').style.display = 'flex';
                     updateUserDisplay();
                     errorDiv.style.display = 'none';
-
+                    
                     await loadData();
                     refreshUserInterface();
+                    // 登录后切换到处方页，确保移动端底部操作栏显示
                     try { switchMobileTab('prescription'); } catch(e) { console.warn('switchMobileTab failed:', e); }
 
+                    // 通知主进程放大窗口
                     if (window.electronAPI && window.electronAPI.loginSuccess) {
                         try {
                             await window.electronAPI.loginSuccess(user);
@@ -1284,11 +1265,9 @@ if (window.Permission) {
                 }
             } catch (e) {
                 console.error('登录失败:', e);
+                const errorDiv = document.getElementById('loginError');
                 errorDiv.textContent = '登录失败: ' + (e.message || '未知错误');
                 errorDiv.style.display = 'block';
-            } finally {
-                _loginInFlight = false;
-                setLoginLoading(false);
             }
         }
 
@@ -1468,15 +1447,12 @@ if (window.Permission) {
             btn2.style.display = '';
         }
 
-        // 个人版：恢复记住的用户名（P0-1：密码改为从加密存储读取）
+        // 个人版：恢复记住的密码（P0-1：密码改为从加密存储读取）
+        // 个人版输入框始终显示医师姓名，不用 rememberedUsername 覆盖
         async function initRememberedCredentials() {
             const rememberedUsername = localStorage.getItem('local_rememberedUsername')
                 || localStorage.getItem('auth:rememberedUsername');
             if (rememberedUsername) {
-                const userInput = document.getElementById('loginUsername');
-                if (userInput) {
-                    userInput.value = rememberedUsername;
-                }
                 const rememberUserCheckbox = document.getElementById('rememberUser');
                 if (rememberUserCheckbox) {
                     rememberUserCheckbox.checked = true;
@@ -3862,59 +3838,98 @@ if (window.Permission) {
                     window.__openSysPlayer();
                 }
 
-                // 主方案：分片读取 + Blob URL 内嵌播放
-                if (window.electronAPI && window.electronAPI.startReadSession) {
-                    window.electronAPI.startReadSession(filePath).then(function(session) {
-                        if (!session || !session.success || !session.sessionId) {
-                            console.error('[媒体查看] startReadSession 失败，降级到系统播放器');
-                            fallbackToSystemPlayer();
-                            return;
-                        }
-                        var sessionId = session.sessionId;
-                        var allBase64 = '';
-                        var mimeType2 = session.mimeType || mimeType || 'video/webm';
+                // 降级方案1：分片读取 + Blob URL（主方案失败时使用）
+                function fallbackToChunkedBlob() {
+                    if (window.electronAPI && window.electronAPI.startReadSession) {
+                        window.electronAPI.startReadSession(filePath).then(function(session) {
+                            if (!session || !session.success || !session.sessionId) {
+                                console.error('[媒体查看] startReadSession 失败，降级到系统播放器');
+                                fallbackToSystemPlayer();
+                                return;
+                            }
+                            var sessionId = session.sessionId;
+                            var allBase64 = '';
+                            var mimeType2 = session.mimeType || mimeType || 'video/webm';
 
-                        function readNext() {
-                            window.electronAPI.readNextChunk(sessionId).then(function(chunkResult) {
-                                if (!chunkResult || !chunkResult.success) {
-                                    console.error('[媒体查看] readNextChunk 失败，降级到系统播放器');
-                                    window.electronAPI.closeReadSession(sessionId);
-                                    fallbackToSystemPlayer();
-                                    return;
-                                }
-                                if (chunkResult.chunk) {
-                                    allBase64 += chunkResult.chunk;
-                                }
-                                if (chunkResult.eof) {
-                                    window.electronAPI.closeReadSession(sessionId);
-                                    try {
-                                        var arrayBuffer = base64ToArrayBuffer(allBase64);
-                                        if (!playWithBlobUrl(arrayBuffer, mimeType2)) {
-                                            console.error('[媒体查看] Blob URL 播放失败，降级到系统播放器');
+                            function readNext() {
+                                window.electronAPI.readNextChunk(sessionId).then(function(chunkResult) {
+                                    if (!chunkResult || !chunkResult.success) {
+                                        console.error('[媒体查看] readNextChunk 失败，降级到系统播放器');
+                                        window.electronAPI.closeReadSession(sessionId);
+                                        fallbackToSystemPlayer();
+                                        return;
+                                    }
+                                    if (chunkResult.chunk) {
+                                        allBase64 += chunkResult.chunk;
+                                    }
+                                    if (chunkResult.eof) {
+                                        window.electronAPI.closeReadSession(sessionId);
+                                        try {
+                                            var arrayBuffer = base64ToArrayBuffer(allBase64);
+                                            if (!playWithBlobUrl(arrayBuffer, mimeType2)) {
+                                                console.error('[媒体查看] Blob URL 播放失败，降级到系统播放器');
+                                                fallbackToSystemPlayer();
+                                            }
+                                        } catch(e) {
+                                            console.error('[媒体查看] 分片拼接或 Blob 创建失败:', e);
                                             fallbackToSystemPlayer();
                                         }
-                                    } catch(e) {
-                                        console.error('[媒体查看] 分片拼接或 Blob 创建失败:', e);
-                                        fallbackToSystemPlayer();
+                                    } else {
+                                        readNext();
                                     }
-                                } else {
-                                    readNext();
-                                }
-                            }).catch(function(err) {
-                                console.error('[媒体查看] readNextChunk 异常:', err);
-                                window.electronAPI.closeReadSession(sessionId);
-                                fallbackToSystemPlayer();
-                            });
-                        }
-                        readNext();
-                    }).catch(function(err) {
-                        console.error('[媒体查看] startReadSession 异常:', err);
+                                }).catch(function(err) {
+                                    console.error('[媒体查看] readNextChunk 异常:', err);
+                                    window.electronAPI.closeReadSession(sessionId);
+                                    fallbackToSystemPlayer();
+                                });
+                            }
+                            readNext();
+                        }).catch(function(err) {
+                            console.error('[媒体查看] startReadSession 异常:', err);
+                            fallbackToSystemPlayer();
+                        });
+                    } else {
+                        console.error('[媒体查看] startReadSession 不可用，降级到系统播放器');
                         fallbackToSystemPlayer();
-                    });
-                } else {
-                    console.error('[媒体查看] startReadSession 不可用，降级到系统播放器');
-                    fallbackToSystemPlayer();
+                    }
                 }
+
+                // 主方案：http://local-media/ 协议流式播放
+                // MainActivity.shouldInterceptRequest 拦截请求，直接返回文件流
+                // 支持 Range 请求（视频 seek），无内存压力，体验与云端一致
+                function playWithLocalMedia() {
+                    try {
+                        var mediaUrl = 'http://local-media/' + encodeURIComponent(filePath);
+                        view.innerHTML = '';
+                        var video = document.createElement('video');
+                        video.src = mediaUrl;
+                        video.controls = true;
+                        video.playsInline = true;
+                        video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+                        var loaded = false;
+                        video.onerror = function() {
+                            if (loaded) return;
+                            console.error('[媒体查看] local-media 视频播放失败，降级到分片读取');
+                            fallbackToChunkedBlob();
+                        };
+                        view.appendChild(video);
+                        // 超时检查：5秒内未加载则降级
+                        setTimeout(function() {
+                            if (video.readyState < 2) {
+                                console.error('[媒体查看] local-media 视频加载超时，降级到分片读取');
+                                video.onerror = null;
+                                fallbackToChunkedBlob();
+                            }
+                        }, 5000);
+                        video.addEventListener('loadeddata', function() { loaded = true; });
+                    } catch(e) {
+                        console.error('[媒体查看] local-media 播放失败:', e);
+                        fallbackToChunkedBlob();
+                    }
+                }
+
+                // 启动主方案
+                playWithLocalMedia();
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }

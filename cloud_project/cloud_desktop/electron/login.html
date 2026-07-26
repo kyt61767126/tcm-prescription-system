@@ -321,7 +321,8 @@
                 if (localList) {
                     const parsed = JSON.parse(localList);
                     if (Array.isArray(parsed)) {
-                        usernames = parsed.map(u => String(u).trim()).filter(u => u);
+                        // 兼容旧格式（纯字符串）和新格式（{username, name}对象）
+                        usernames = parsed.filter(u => u);
                     } else if (typeof parsed === 'string') {
                         usernames = [parsed.trim()];
                     }
@@ -338,7 +339,9 @@
 
             if (usernames.length > 0) {
                 renderRememberedUsers(usernames);
-                document.getElementById('loginUsername').value = usernames[0];
+                const firstEntry = usernames[0];
+                const firstUsername = typeof firstEntry === 'object' ? (firstEntry.username || '') : String(firstEntry).trim();
+                document.getElementById('loginUsername').value = firstUsername;
                 document.getElementById('rememberUser').checked = true;
             }
         }
@@ -358,12 +361,15 @@
             btn.textContent = '▼(' + usernames.length + ')';
             menu.innerHTML = '';
 
-            usernames.forEach(username => {
+            usernames.forEach(entry => {
                 const item = document.createElement('div');
-                item.textContent = username;
+                // 兼容旧格式（纯字符串）和新格式（{username, name}对象）
+                const displayName = typeof entry === 'object' ? (entry.name || entry.username) : entry;
+                const loginValue = typeof entry === 'object' ? entry.username : entry;
+                item.textContent = displayName;
                 item.addEventListener('click', function(e) {
                     e.stopPropagation();
-                    document.getElementById('loginUsername').value = username;
+                    document.getElementById('loginUsername').value = loginValue;
                     document.getElementById('loginPassword').focus();
                     menu.classList.remove('show');
                 });
@@ -385,9 +391,10 @@
             }
         });
 
-        function saveRememberedUser(username) {
+        function saveRememberedUser(username, displayName) {
             const cleanUsername = String(username).trim();
             if (!cleanUsername) return;
+            const cleanName = displayName ? String(displayName).trim() : cleanUsername;
 
             let remembered = [];
             try {
@@ -402,8 +409,12 @@
                 }
             } catch (e) {}
 
-            remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
-            remembered.unshift(cleanUsername);
+            // 兼容旧格式（纯字符串）和新格式（{username, name}对象）
+            remembered = remembered.filter(u => {
+                const uName = typeof u === 'object' ? u.username : u;
+                return String(uName).toLowerCase() !== cleanUsername.toLowerCase();
+            });
+            remembered.unshift({ username: cleanUsername, name: cleanName });
             if (remembered.length > 5) remembered = remembered.slice(0, 5);
 
             localStorage.setItem('cloud_rememberedUsername', cleanUsername);
@@ -463,7 +474,7 @@
 
                 const rememberUser = document.getElementById('rememberUser').checked;
                 if (rememberUser) {
-                    saveRememberedUser(username);
+                    saveRememberedUser(username, user.name);
                 } else {
                     localStorage.removeItem('cloud_rememberedUsername');
                     localStorage.removeItem('rememberedUsername');

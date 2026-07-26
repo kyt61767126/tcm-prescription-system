@@ -1753,12 +1753,19 @@ let currentUser = null;
             btn.textContent = '▼(' + usernames.length + ')';
             menu.innerHTML = '';
 
+            // 构建 username → name 映射，下拉菜单显示中文医师姓名
+            const users = getUsers();
+            const nameMap = {};
+            users.forEach(u => { nameMap[u.username] = u.name || u.username; });
+
             usernames.forEach(username => {
                 const item = document.createElement('div');
-                item.textContent = username;
+                const displayName = nameMap[username] || (typeof username === 'object' ? (username.name || username.username) : username);
+                const loginValue = typeof username === 'object' ? username.username : username;
+                item.textContent = displayName;
                 item.addEventListener('click', function(e) {
                     e.stopPropagation();
-                    document.getElementById('loginUsername').value = username;
+                    document.getElementById('loginUsername').value = loginValue;
                     document.getElementById('loginPassword').focus();
                     menu.classList.remove('show');
                 });

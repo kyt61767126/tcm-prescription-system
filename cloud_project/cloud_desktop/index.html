@@ -3250,12 +3250,23 @@ if (window.Permission) {
             btn.textContent = '▼(' + usernames.length + ')';
             menu.innerHTML = '';
 
-            usernames.forEach(username => {
+            // 读取用户名→姓名映射（用于显示中文医师姓名）
+            let nameMap = {};
+            try {
+                const raw = localStorage.getItem('cloud_rememberedUserNames');
+                if (raw) nameMap = JSON.parse(raw) || {};
+            } catch (e) {}
+
+            usernames.forEach(entry => {
                 const item = document.createElement('div');
-                item.textContent = username;
+                // 兼容旧格式（纯字符串）和新格式（{username, name}对象）
+                const loginValue = typeof entry === 'object' ? entry.username : String(entry).trim();
+                const objName = typeof entry === 'object' ? (entry.name || entry.username) : null;
+                const displayName = objName || nameMap[loginValue] || loginValue;
+                item.textContent = displayName;
                 item.addEventListener('click', function(e) {
                     e.stopPropagation();
-                    document.getElementById('loginUsername').value = username;
+                    document.getElementById('loginUsername').value = loginValue;
                     document.getElementById('loginPassword').focus();
                     menu.classList.remove('show');
                 });
@@ -3284,12 +3295,23 @@ if (window.Permission) {
             }
         });
 
-        async function saveRememberedUser(username) {
+        async function saveRememberedUser(username, displayName) {
             try {
                 await AuthCore.saveRememberedUser(username);
                 const remembered = await AuthCore.loadRememberedUsers();
                 await asyncStorage.set('cloud_rememberedUsername', String(username).trim());
                 await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(remembered));
+                // 维护用户名→姓名映射，用于下拉菜单显示中文医师姓名
+                if (displayName) {
+                    try {
+                        const cleanName = String(displayName).trim();
+                        let nameMap = {};
+                        const raw = localStorage.getItem('cloud_rememberedUserNames');
+                        if (raw) nameMap = JSON.parse(raw) || {};
+                        nameMap[String(username).trim()] = cleanName;
+                        localStorage.setItem('cloud_rememberedUserNames', JSON.stringify(nameMap));
+                    } catch (e) {}
+                }
                 renderRememberedUsers(remembered);
             } catch (e) {
                 console.warn('保存记住的用户名失败:', e);
@@ -3415,7 +3437,7 @@ if (window.Permission) {
                 const rememberUser = document.getElementById('rememberUser').checked;
                 if (rememberUser) {
                     console.log('[DEBUG] 开始保存记住的用户名:', username, '用户角色:', user.role);
-                    await saveRememberedUser(username);
+                    await saveRememberedUser(username, user.name);
                 } else {
                     await asyncStorage.set('cloud_rememberedUsername', '');
                 }

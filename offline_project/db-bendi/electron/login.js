@@ -124,7 +124,7 @@
         $('clinicName').textContent = name || '本能堂中医诊所';
     }
 
-    function initUserSelect(config) {
+    function initLoginDropdown(config) {
         const select = $('loginUsername');
         select.innerHTML = '';
         const users = getUsers(config);
@@ -269,7 +269,7 @@
     document.addEventListener('DOMContentLoaded', async () => {
         const config = await getAppConfig();
         loadClinicName(config);
-        initUserSelect(config);
+        initLoginDropdown(config);
         initLoginPermissions();
         let savedPassword = localStorage.getItem('auth:savedPassword');
         if (savedPassword) {
