@@ -761,16 +761,9 @@
                 return { success: false, error: '请输入用户名和密码' };
             }
 
-            // 1.1 ★ 优化：基础密码强度校验（避免弱密码登录云端）
-            if (options.checkStrength !== false) {
-                const strengthErr = validatePasswordStrength(password);
-                if (strengthErr && options.adapter === cloudAdapter) {
-                    // 仅云端版强制校验，离线版兼容旧账号弱密码
-                    return { success: false, error: strengthErr };
-                }
-            }
-
             // 2. 选择适配器
+            // 注：登录时不强制密码强度校验，避免阻止已有弱密码账号登录
+            // 密码强度校验仅在注册/修改密码时生效（validatePasswordStrength）
             const adapter = options.adapter || cloudAdapter;
             const result = await adapter.authenticate(username, password);
 
