@@ -127,38 +127,26 @@ echo [OK] Cleanup completed
 echo.
 
 echo [5/10] Cleaning build cache (force full clean)...
+REM * Critical caches must be cleaned in BOTH modes (skip-clean and normal)
+REM Historical lesson (2026-07-22): if javac cache not cleaned, MainActivity.java changes
+REM won't take effect due to Gradle incremental build using stale cache, breaking Autofill fix.
+REM Historical lesson (2026-07-23): without cleaning assets/merged_assets cache, index.html
+REM changes won't take effect due to Gradle incremental build using stale cache, causing old page flicker.
+if exist "app\build\intermediates\javac" (
+    rmdir /S /Q "app\build\intermediates\javac" 2>nul
+    echo       [OK] cleaned javac cache
+)
+if exist "app\build\intermediates\assets" (
+    rmdir /S /Q "app\build\intermediates\assets" 2>nul
+    echo       [OK] cleaned assets cache
+)
+if exist "app\build\intermediates\merged_assets" (
+    rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
+    echo       [OK] cleaned merged_assets cache
+)
 if defined TCM_GRADLE_SKIP_CLEAN (
     echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, skipping gradlew clean (debug only)
-    REM * Double safeguard: even when skipping gradlew clean, must clean javac and assets cache
-    REM Historical lesson (2026-07-22): if javac cache not cleaned when skipping clean, MainActivity.java
-    REM changes won't take effect due to Gradle incremental build using stale cache, breaking Autofill fix.
-    REM Historical lesson (2026-07-23): without cleaning assets/merged_assets cache, index.html
-    REM changes won't take effect due to Gradle incremental build using stale cache, causing old page content to flicker.
-    if exist "app\build\intermediates\javac" (
-        rmdir /S /Q "app\build\intermediates\javac" 2>nul
-        echo       [OK] cleaned javac cache (forced even in skip-clean mode)
-    )
-    if exist "app\build\intermediates\assets" (
-        rmdir /S /Q "app\build\intermediates\assets" 2>nul
-        echo       [OK] cleaned assets cache (forced even in skip-clean mode)
-    )
-    if exist "app\build\intermediates\merged_assets" (
-        rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
-        echo       [OK] cleaned merged_assets cache (forced even in skip-clean mode)
-    )
 ) else (
-    if exist "app\build\intermediates\javac" (
-        rmdir /S /Q "app\build\intermediates\javac" 2>nul
-        echo       [OK] cleaned javac cache
-    )
-    if exist "app\build\intermediates\assets" (
-        rmdir /S /Q "app\build\intermediates\assets" 2>nul
-        echo       [OK] cleaned assets cache
-    )
-    if exist "app\build\intermediates\merged_assets" (
-        rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
-        echo       [OK] cleaned merged_assets cache
-    )
     call gradlew.bat clean
     if errorlevel 1 (
         echo [WARN] Clean failed, continuing with incremental build
