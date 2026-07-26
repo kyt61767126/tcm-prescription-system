@@ -651,47 +651,65 @@ function Build-Desktop {
     # 修复前问题：若证书检查/prepare-win-unpacked 等步骤抛异常，混淆源码会卡住不还原，污染开发环境
     try {
     # ★ 证书存在性检查（防止证书丢失时 electron-builder 签名失败）
-    # 同时检查 pfx 证书文件和 cert-password.txt 密码文件
-    # 任一缺失都跳过签名，避免 electron-builder 误判或 CSC_KEY_PASSWORD 残留导致异常
+    # 策略：
+    #   1. 先读 package.json，若未配置 certificateFile → 直接跳过签名（不检查 pfx/密码文件）
+    #   2. 若配置了 certificateFile → 检查 pfx 和 cert-password.txt 是否存在
+    #      任一缺失 → 临时移除 certificateFile 配置（避免 electron-builder 签名失败）
+    #   3. 证书齐全 → 加载 CSC_KEY_PASSWORD
     $certPath = "$script:ProjectRoot\tools\certs\惠康中医-codesign.pfx"
     $certPwdFile = "$script:ProjectRoot\tools\certs\cert-password.txt"
     $pkgPath = "$script:VersionDir\package.json"
     $certBackupPath = "$script:VersionDir\package.json.certbak"
-    $certExists = Test-Path $certPath
-    $pwdExists = Test-Path $certPwdFile
-    if (-not $certExists -or -not $pwdExists) {
-        Write-Host "  [WARN] 代码签名证书或密码文件缺失，将跳过签名" -ForegroundColor Yellow
-        if (-not $certExists) { Write-Host "         证书路径: $certPath (未找到)" -ForegroundColor Yellow }
-        if (-not $pwdExists)  { Write-Host "         密码文件: $certPwdFile (未找到)" -ForegroundColor Yellow }
-        Write-Host "         如需启用签名，请运行: powershell -File tools\gen-code-sign-cert.ps1" -ForegroundColor Yellow
-        Write-Host "         临时从 package.json 移除 certificateFile 配置..." -ForegroundColor Yellow
-        # 清除可能残留的 CSC_KEY_PASSWORD，避免 electron-builder 误判
+
+    # 读取 package.json 检查是否配置了 certificateFile
+    $pkgContent = Get-Content $pkgPath -Raw -Encoding UTF8
+    $hasCertConfig = $pkgContent -match '"certificateFile"'
+
+    if (-not $hasCertConfig) {
+        # package.json 未配置 certificateFile → 默认不签名（当前默认状态）
+        Write-Host "  [INFO] 未配置代码签名（package.json 无 certificateFile）" -ForegroundColor Cyan
+        Write-Host "         如需启用签名：1) 在 package.json 的 build.win 添加 certificateFile" -ForegroundColor DarkGray
+        Write-Host "                          2) 运行 tools\gen-code-sign-cert.ps1 生成证书" -ForegroundColor DarkGray
+        # 清除可能残留的 CSC_KEY_PASSWORD
         Remove-Item Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
-        Copy-Item -Path $pkgPath -Destination $certBackupPath -Force
-        try {
-            $pkg = Get-Content $pkgPath -Raw -Encoding UTF8 | ConvertFrom-Json
-            if ($pkg.build.win.PSObject.Properties.Name -contains 'certificateFile') {
-                $pkg.build.win.PSObject.Properties.Remove('certificateFile')
-            }
-            if ($pkg.build.win.PSObject.Properties.Name -contains 'certificatePassword') {
-                $pkg.build.win.PSObject.Properties.Remove('certificatePassword')
-            }
-            $jsonStr = $pkg | ConvertTo-Json -Depth 10
-            [System.IO.File]::WriteAllText($pkgPath, $jsonStr, (New-Object System.Text.UTF8Encoding $false))
-            Write-Host "  [OK] 已临时移除证书配置，构建后将恢复" -ForegroundColor Green
-        } catch {
-            Write-Host "  [ERROR] 修改 package.json 失败: $($_.Exception.Message)" -ForegroundColor Red
-            if (Test-Path $certBackupPath) {
-                Copy-Item -Path $certBackupPath -Destination $pkgPath -Force
-                Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue
-            }
-            return 1
-        }
     } else {
-        # ★ P1-安全加固: 证书密码从本地 cert-password.txt 读取（仅当证书和密码都存在时才加载）
-        $env:CSC_KEY_PASSWORD = (Get-Content $certPwdFile -Raw).Trim()
-        Write-Host "  [OK] 代码签名证书已就绪" -ForegroundColor Green
-        Write-Host "  [OK] 证书密码已从 cert-password.txt 加载" -ForegroundColor Green
+        # 配置了 certificateFile → 检查 pfx 和密码文件
+        $certExists = Test-Path $certPath
+        $pwdExists = Test-Path $certPwdFile
+        if (-not $certExists -or -not $pwdExists) {
+            Write-Host "  [WARN] 代码签名证书或密码文件缺失，将跳过签名" -ForegroundColor Yellow
+            if (-not $certExists) { Write-Host "         证书路径: $certPath (未找到)" -ForegroundColor Yellow }
+            if (-not $pwdExists)  { Write-Host "         密码文件: $certPwdFile (未找到)" -ForegroundColor Yellow }
+            Write-Host "         如需启用签名，请运行: powershell -File tools\gen-code-sign-cert.ps1" -ForegroundColor Yellow
+            Write-Host "         临时从 package.json 移除 certificateFile 配置..." -ForegroundColor Yellow
+            # 清除可能残留的 CSC_KEY_PASSWORD
+            Remove-Item Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
+            Copy-Item -Path $pkgPath -Destination $certBackupPath -Force
+            try {
+                $pkg = Get-Content $pkgPath -Raw -Encoding UTF8 | ConvertFrom-Json
+                if ($pkg.build.win.PSObject.Properties.Name -contains 'certificateFile') {
+                    $pkg.build.win.PSObject.Properties.Remove('certificateFile')
+                }
+                if ($pkg.build.win.PSObject.Properties.Name -contains 'certificatePassword') {
+                    $pkg.build.win.PSObject.Properties.Remove('certificatePassword')
+                }
+                $jsonStr = $pkg | ConvertTo-Json -Depth 10
+                [System.IO.File]::WriteAllText($pkgPath, $jsonStr, (New-Object System.Text.UTF8Encoding $false))
+                Write-Host "  [OK] 已临时移除证书配置，构建后将恢复" -ForegroundColor Green
+            } catch {
+                Write-Host "  [ERROR] 修改 package.json 失败: $($_.Exception.Message)" -ForegroundColor Red
+                if (Test-Path $certBackupPath) {
+                    Copy-Item -Path $certBackupPath -Destination $pkgPath -Force
+                    Remove-Item $certBackupPath -Force -ErrorAction SilentlyContinue
+                }
+                return 1
+            }
+        } else {
+            # ★ P1-安全加固: 证书密码从本地 cert-password.txt 读取（仅当证书和密码都存在时才加载）
+            $env:CSC_KEY_PASSWORD = (Get-Content $certPwdFile -Raw).Trim()
+            Write-Host "  [OK] 代码签名证书已就绪" -ForegroundColor Green
+            Write-Host "  [OK] 证书密码已从 cert-password.txt 加载" -ForegroundColor Green
+        }
     }
 
     # ★ 修复：使用 --prepackaged 模式，跳过 app-builder.exe 解包步骤
