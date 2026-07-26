@@ -6039,6 +6039,10 @@ if (window.Permission) {
                     mainContainer.style.display = 'flex';
                 }
                 updateUserDisplay();
+                // ★修复：回退分支也需加载数据，否则药物表格和处方历史为空
+                try { await refreshCurrentUserFromCloud(); } catch(e) { console.error('refreshCurrentUserFromCloud 异常:', e); }
+                try { await loadData(); } catch(e) { console.error('loadData 异常:', e); }
+                try { renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount)); } catch(e) { console.error('renderHistoryList 异常:', e); }
             } else {
                 document.getElementById('loginOverlay').style.display = 'flex';
                 const mainContainer = document.querySelector('.main-container');

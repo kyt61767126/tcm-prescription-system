@@ -1192,6 +1192,13 @@ ipcMain.handle('get-current-user', async () => {
     return currentLoggedInUser;
 });
 
+// ★修复：preload.js 调用的是 get-logged-in-user，需与 get-current-user 保持一致
+// 否则 init() 的 Electron 分支获取用户失败，回退到 localStorage 分支，
+// 导致 loadData() 和 renderHistoryList() 不被调用，药物表格和处方历史为空
+ipcMain.handle('get-logged-in-user', async () => {
+    return currentLoggedInUser;
+});
+
 // 读取 index.html 同目录下的 config.json；如不存在，则使用内置默认值
 ipcMain.handle('get-app-config', async () => {
     const defaults = {
