@@ -106,31 +106,17 @@
         return [];
     }
 
-    // 合并 config（权威用户列表）与 localStorage（主窗口可能修改过密码或新增用户）
-    // 按 username 去重；对同名（name）用户追加 (username) 后缀以消除"重名用户"
-    function mergeUsers(configUsers, storedUsers) {
-        const cfgList = configUsers || [];
-        const stoList = storedUsers || [];
-        const cfgMap = new Map();
-        for (const u of cfgList) { cfgMap.set(u.username, u); }
-        const stoMap = new Map();
-        for (const u of stoList) { stoMap.set(u.username, u); }
-
-        const merged = [];
-        // config 用户优先（权威列表），若 localStorage 有同名用户则取其密码（可能已修改）
-        for (const u of cfgList) {
-            const sto = stoMap.get(u.username);
-            merged.push(sto ? { ...u, password: sto.password } : { ...u });
+    // 获取用户列表：优先使用 localStorage（用户管理中维护的），为空时回退到 config.json
+    function getUsers(config) {
+        const stored = getUsersFromStorage();
+        if (stored.length > 0) {
+            return stored.map(u => ({ ...u, displayName: u.name || u.username }));
         }
-        // localStorage 中 config 没有的自定义用户（主窗口新增）
-        for (const u of stoList) {
-            if (!cfgMap.has(u.username)) merged.push({ ...u });
+        const cfg = getUsersFromConfig(config);
+        if (cfg.length > 0) {
+            return cfg.map(u => ({ ...u, displayName: u.name || u.username }));
         }
-
-        return merged.map(u => {
-            const name = u.name || u.username;
-            return { ...u, displayName: name };
-        });
+        return DEFAULT_USERS.map(normalizeUser).map(u => ({ ...u, displayName: u.name || u.username }));
     }
 
     function loadClinicName(config) {
@@ -141,11 +127,7 @@
     function initUserSelect(config) {
         const select = $('loginUsername');
         select.innerHTML = '';
-        const cfg = getUsersFromConfig(config);
-        const stored = getUsersFromStorage();
-        const users = (cfg.length > 0 || stored.length > 0)
-            ? mergeUsers(cfg, stored)
-            : DEFAULT_USERS.map(normalizeUser).map(u => ({ ...u, displayName: u.name || u.username }));
+        const users = getUsers(config);
         const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
         users.forEach(u => {
             const opt = document.createElement('option');
@@ -205,11 +187,7 @@
         setLoginLoading(true);
         try {
             const config = await getAppConfig();
-            const cfg = getUsersFromConfig(config);
-            const stored = getUsersFromStorage();
-            const users = (cfg.length > 0 || stored.length > 0)
-                ? mergeUsers(cfg, stored)
-                : DEFAULT_USERS.map(normalizeUser).map(u => ({ ...u, displayName: u.name || u.username }));
+            const users = getUsers(config);
             const user = users.find(u => u.username === username);
 
             if (!user) {
