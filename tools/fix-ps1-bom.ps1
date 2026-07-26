@@ -14,6 +14,7 @@ $ok = 0
 $ps1Files = @()
 $ps1Files += Get-ChildItem -Path 'offline_project' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
 $ps1Files += Get-ChildItem -Path 'tools' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
+$ps1Files += Get-ChildItem -Path 'cloud_project' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
 $ps1Files = $ps1Files | Where-Object { $_.FullName -notmatch '\\node_modules\\' }
 
 foreach ($f in $ps1Files) {
