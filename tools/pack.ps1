@@ -1340,6 +1340,23 @@ function Invoke-Packaging {
             $stepStartTime = Get-Date
         }
 
+        # Step 1.5: Sync check - ensure _shared/ files are synced to all versions before packaging
+        $syncScript = Join-Path $PSScriptRoot 'sync-offline-files.ps1'
+        if (Test-Path $syncScript) {
+            Write-Host "  [步骤] 检查共享文件同步状态..." -ForegroundColor Cyan
+            $syncOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -VerifyOnly 2>&1
+            $syncExitCode = $LASTEXITCODE
+            if ($syncExitCode -ne 0) {
+                Write-Host "  [WARN] 检测到共享文件未同步，正在自动同步..." -ForegroundColor Yellow
+                & powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript 2>&1 | Out-Null
+                Write-Host "  [OK] 共享文件已同步" -ForegroundColor Green
+            } else {
+                Write-Host "  [OK] 共享文件已同步" -ForegroundColor Green
+            }
+            Write-Host "  [耗时] 同步检查: $(((Get-Date) - $stepStartTime).ToString('ss\.fff'))s" -ForegroundColor DarkGray
+            $stepStartTime = Get-Date
+        }
+
         # Step 2: Config modification (for desktop/app/all/config targets)
         if (-not $SkipCfg -and ($Tgt -eq 'desktop' -or $Tgt -eq 'app' -or $Tgt -eq 'all' -or $Tgt -eq 'config')) {
             Edit-ClinicConfig
