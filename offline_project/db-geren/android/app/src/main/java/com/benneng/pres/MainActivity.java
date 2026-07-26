@@ -51,9 +51,9 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.nio.charset.StandardCharsets;
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -89,8 +89,7 @@ public class MainActivity extends AppCompatActivity {
     // 与桌面版 license-manager.js / prescription-counter.js 逻辑一致
     private LicenseManager licenseManager;
 
-    // ★ 键盘弹出时的覆盖层：用于遮挡WebView重绘时的闪现内容
-    private View flashOverlay;
+
 
     // ========================================================================
     // 生命周期
@@ -147,10 +146,8 @@ public class MainActivity extends AppCompatActivity {
                 // 拦截 Autofill 填充请求，不执行任何操作
             }
         };
-        // ★ 防止闪现：初始隐藏，背景色与登录页一致（紫色#667eea），onPageFinished后显示
-        // 即使adjustResize导致重绘，闪现的也是紫色背景而非旧内容
-        webView.setVisibility(View.INVISIBLE);
         webView.setBackgroundColor(0xFF667eea);
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         // ★ 适配状态栏（无 padding 方案）：WebView 填满整个屏幕，网页顶部紫色（header-section/login-overlay）
         // 与状态栏紫色(#667eea)融合，无额外 padding 区域。onPageFinished 时注入 CSS 让 header-section
         // 内容下移避开状态栏。此方案消除顶部灰白行/紫色加宽条，操作界面紧贴状态栏下方。
@@ -163,15 +160,6 @@ public class MainActivity extends AppCompatActivity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
         container.addView(webView);
-
-        // ★ 键盘弹出时的覆盖层保护：当adjustResize导致WebView重绘时，显示紫色覆盖层遮挡闪现内容
-        flashOverlay = new View(this);
-        flashOverlay.setBackgroundColor(0x00000000); // 透明，禁用紫色覆盖层闪现
-        flashOverlay.setLayoutParams(new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
-        flashOverlay.setVisibility(View.GONE);
-        container.addView(flashOverlay);
 
         setContentView(container);
 
@@ -189,45 +177,6 @@ public class MainActivity extends AppCompatActivity {
             getWindow().getDecorView().setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
         }
 
-        // ★ 键盘动画拦截：在键盘动画开始前显示覆盖层，动画结束后隐藏
-        // 比onPreDraw更早拦截，彻底遮挡adjustResize模式下的闪现内容
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            getWindow().getDecorView().setWindowInsetsAnimationCallback(
-                new android.view.WindowInsetsAnimation.Callback(
-                    android.view.WindowInsetsAnimation.Callback.DISPATCH_MODE_STOP) {
-                    @Override
-                    public android.view.WindowInsetsAnimation.Bounds onStart(
-                            android.view.WindowInsetsAnimation animation,
-                            android.view.WindowInsetsAnimation.Bounds bounds) {
-                        // 键盘动画开始前，立即显示覆盖层
-                        flashOverlay.setVisibility(View.VISIBLE);
-                        return bounds;
-                    }
-
-                    @Override
-                    public android.view.WindowInsets onProgress(
-                            android.view.WindowInsets insets,
-                            java.util.List<android.view.WindowInsetsAnimation> runningAnimations) {
-                        // 动画进行中，保持覆盖层可见
-                        return insets;
-                    }
-
-                    @Override
-                    public void onEnd(android.view.WindowInsetsAnimation animation) {
-                        // 动画结束后，延迟隐藏覆盖层（等待WebView重绘完成）
-                        mainHandler.postDelayed(new Runnable() {
-                            @Override
-                            public void run() {
-                                flashOverlay.setVisibility(View.GONE);
-                            }
-                        }, 150);
-                    }
-                }
-            );
-        }
-
-        // ★ 监听键盘弹出/收起：通过ViewTreeObserver检测WebView高度变化，在重绘期间显示覆盖层
-        setupKeyboardFlashProtection();
         configureWebView();
 
         // ★ 初始化 License 管理器（APP 端授权校验）
@@ -262,47 +211,6 @@ public class MainActivity extends AppCompatActivity {
     // 注意：Activity 级别 onProvideAutofillVirtualStructure / onProvideContentCaptureStructure
     // 在 AppCompatActivity 1.7.1 中无法 @Override（父类未暴露），已移除以避免编译错误。
     // Autofill 防护由 WebView 子类的 onProvideAutofillVirtualStructure 重写负责（足够）。
-    // 闪现防护由 WindowInsetsAnimation.Callback + flashOverlay 负责。
-
-    // ★ 键盘弹出时的闪现保护：通过ViewTreeObserver检测WebView高度变化，在重绘期间显示覆盖层
-    private void setupKeyboardFlashProtection() {
-        if (webView == null) return;
-        webView.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() {
-            private int lastHeight = 0;
-            private boolean flashActive = false;
-            private long lastFlashTime = 0;
-
-            @Override
-            public boolean onPreDraw() {
-                int currentHeight = webView.getHeight();
-                long now = System.currentTimeMillis();
-
-                // 检测高度变化（键盘弹出/收起会导致WebView高度变化）
-                if (Math.abs(currentHeight - lastHeight) > 50) {
-                    // 高度变化超过50px，认为是键盘事件
-                    // 立即显示覆盖层遮挡闪现
-                    if (!flashActive && (now - lastFlashTime > 50)) {
-                        flashOverlay.setVisibility(View.VISIBLE);
-                        flashActive = true;
-                        lastFlashTime = now;
-
-                        // 延迟隐藏覆盖层（等待WebView重绘完成）
-                        mainHandler.postDelayed(new Runnable() {
-                            @Override
-                            public void run() {
-                                if (flashActive) {
-                                    flashOverlay.setVisibility(View.GONE);
-                                    flashActive = false;
-                                }
-                            }
-                        }, 200);
-                    }
-                    lastHeight = currentHeight;
-                }
-                return true;
-            }
-        });
-    }
 
     // 初始化媒体文件读取白名单：缓存所有可能的目录（外部 + 内部 fallback）
     // 彻底解决 getExternalFilesDir 返回 null 时白名单失效的问题
@@ -582,13 +490,9 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
-                // ★ 防止闪现：页面加载完成后显示WebView，背景已设为紫色#667eea
-                // 即使有重绘闪现也是紫色背景，不会显示旧内容
-                view.setVisibility(View.VISIBLE);
                 injectElectronApiShim(view);
                 injectStatusBarFix(view);
                 injectKeyboardAdapter(view);
-                injectLoginUsernameFix(view);
                 // ★ 不注入 injectAutocompleteOff：cancelAutofill() 调用会导致 Autofill 提示闪现
                 // 防线：onProvideAutofillVirtualStructure 重写阻止 Autofill 获取虚拟节点树
                 // 延迟注入录像拍照脚本（等待页面渲染稳定）
@@ -852,9 +756,9 @@ public class MainActivity extends AppCompatActivity {
             "      }," +
             "      setTrialDays: function(days){ return new Promise(function(resolve){ try { resolve(callNative('license_setTrialDays', JSON.stringify({days:days}))); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
             "      getTrialDays: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getTrialDays', '{}')); } catch(e){ resolve({success:false, trialDays:7, error:String(e)}); } }); }," +
-            // ★ P1-1 在线验证
+            // ★ P1-1 在线验证：定期校验授权有效性，防止离线破解后永久使用
             "      verifyOnline: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_verifyOnline', '{}')); } catch(e){ resolve({success:false, error:String(e)}); } }); }," +
-            // ★ P1-2 获取激活记录
+            // ★ P1-2 获取激活记录（用于追溯盗版泄露源）
             "      getActivationRecord: function(){ return new Promise(function(resolve){ try { resolve(callNative('license_getActivationRecord', '{}')); } catch(e){ resolve({success:false, error:String(e)}); } }); }" +
             "    }," +
             // ★ activate 命名空间（与桌面版 preload.js activate 命名空间接口一致）
@@ -979,28 +883,6 @@ public class MainActivity extends AppCompatActivity {
     }
 
     /**
-     * ★ 个人版：确保登入界面用户名输入框显示医师姓名（CONFIG.doctorName），
-     * 不被 initRememberedCredentials 中的 rememberedUsername（如 admin）覆盖。
-     * 延迟 600ms 执行，确保在 init()/initRememberedCredentials() 之后执行。
-     */
-    private void injectLoginUsernameFix(WebView webView) {
-        String js = "(function(){" +
-            "  setTimeout(function() {" +
-            "    try {" +
-            "      var input = document.getElementById('loginUsername');" +
-            "      if (!input) return;" +
-            "      var overlay = document.getElementById('loginOverlay');" +
-            "      if (overlay && overlay.style.display === 'none') return;" +  // 已登录则不修改
-            "      var name = (typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : '卢二灼';" +
-            "      input.value = name;" +
-            "    } catch(e) { console.warn('loginUsername fix error:', e); }" +
-            "  }, 600);" +
-            "})();";
-        webView.evaluateJavascript(js, null);
-    }
-
-    /**
-     * ★ 禁用密码框自动填充（防止 OEM 密码管理器弹出旧凭据提示）
      * 仅扫描密码框，不设置 readonly（避免 readonly→可编辑状态变化触发输入法候选词闪现）
      * 主防线：onProvideAutofillVirtualStructure 重写（阻止 Autofill 获取虚拟节点树）
      * 辅助防线：autocomplete/data-lpignore 等属性 + cancelAutofill() 调用
@@ -1226,10 +1108,10 @@ public class MainActivity extends AppCompatActivity {
                     case "license_validate":
                         // ★ v3 新增：传入 localMachineId 用于三因子绑定校验
                         return licenseManager.validateLicense(licenseManager.getMachineId()).toString();
-                    // ★ P1-1 在线验证
+                    // ★ P1-1 在线验证：定期校验授权有效性
                     case "license_verifyOnline":
                         return licenseManager.verifyOnline(licenseManager.getMachineId()).toString();
-                    // ★ P1-2 获取激活记录
+                    // ★ P1-2 获取激活记录（追溯盗版泄露源）
                     case "license_getActivationRecord":
                         try {
                             JSONObject r = new JSONObject();
@@ -1792,10 +1674,10 @@ public class MainActivity extends AppCompatActivity {
         private File getBackupDir() {
             File dir;
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                dir = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "惠康中医");
+                dir = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "中医处方系统");
             } else {
                 File downloads = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-                dir = new File(downloads, "惠康中医");
+                dir = new File(downloads, "中医处方系统");
             }
             if (!dir.exists() && !dir.mkdirs()) {
                 dir = new File(getFilesDir(), "backups");

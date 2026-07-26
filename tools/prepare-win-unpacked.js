@@ -29,7 +29,7 @@ if (!versionDir) {
 
 // Resolve relative to versionDir
 const pkgPath = path.join(versionDir, 'package.json');
-const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8').replace(/^\uFEFF/, ''));
 const productName = pkg.build.productName || pkg.name;
 // exe name MUST match productName: electron-builder NSIS shortcut Target is hardcoded
 // to ${productName}.exe. If exe name differs (e.g. pkg.name), shortcut will be broken
