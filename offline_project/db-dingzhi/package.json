@@ -1,62 +1,62 @@
 {
-  "name": "tcm-prescription-custom",
-  "version": "1.0.0",
-  "description": "惠康中医-定制",
-  "main": "electron/main.js",
-  "scripts": {
-    "start": "electron .",
-    "build": "electron-builder"
-  },
-  "author": "惠康中医",
-  "license": "MIT",
-  "devDependencies": {
-    "asarmor": "^3.0.2",
-    "electron": "^35.0.0",
-    "electron-builder": "^24.9.1"
-  },
-  "build": {
-    "appId": "com.benneng.prescription.clinic",
-    "productName": "惠康中医-定制",
-    "directories": {
-      "output": "dist"
-    },
-    "afterPack": "./afterPack.js",
-    "files": [
-      "electron/**/*",
-      "index.html",
-      "config.json",
-      "vendor/**/*",
-      "package.json",
-      "auth-core.js",
-      "permission.js",
-      "debug-logger.js",
-      "print-utils.js",
-      "medicine-dict.js",
-      "db-adapter.js",
-      "performance-utils.js",
-      "prescription-core.js",
-      "patient-archive.js",
-      "security-guard.js"
-    ],
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ],
-      "certificateFile": "../../tools/certs/惠康中医-codesign.pfx"
-    },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": true,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true,
-      "unicode": true,
-      "include": "installer.nsh",
-      "differentialPackage": false
-    }
-  },
-  "dependencies": {
-    "fs-extra": "^11.3.5"
-  }
+    "name":  "tcm-prescription-custom",
+    "version":  "1.0.0",
+    "description":  "惠康中医-定制",
+    "main":  "electron/main.js",
+    "scripts":  {
+                    "start":  "electron .",
+                    "build":  "electron-builder"
+                },
+    "author":  "惠康中医",
+    "license":  "MIT",
+    "devDependencies":  {
+                            "asarmor":  "^3.0.2",
+                            "electron":  "^35.0.0",
+                            "electron-builder":  "^24.9.1"
+                        },
+    "build":  {
+                  "appId":  "com.benneng.prescription.clinic",
+                  "productName":  "惠康中医-定制",
+                  "directories":  {
+                                      "output":  "dist"
+                                  },
+                  "afterPack":  "./afterPack.js",
+                  "files":  [
+                                "electron/**/*",
+                                "index.html",
+                                "config.json",
+                                "vendor/**/*",
+                                "package.json",
+                                "auth-core.js",
+                                "permission.js",
+                                "debug-logger.js",
+                                "print-utils.js",
+                                "medicine-dict.js",
+                                "db-adapter.js",
+                                "performance-utils.js",
+                                "prescription-core.js",
+                                "patient-archive.js",
+                                "security-guard.js"
+                            ],
+                  "win":  {
+                              "target":  [
+                                             "nsis",
+                                             "portable"
+                                         ],
+                              "certificateFile":  "../../tools/certs/惠康中医-codesign.pfx"
+                          },
+                  "nsis":  {
+                               "oneClick":  false,
+                               "perMachine":  true,
+                               "allowToChangeInstallationDirectory":  true,
+                               "createDesktopShortcut":  true,
+                               "createStartMenuShortcut":  true,
+                               "unicode":  true,
+                               "include":  "installer.nsh",
+                               "differentialPackage":  false
+                           }
+              },
+    "dependencies":  {
+                         "fs-extra":  "^11.3.5"
+                     }
 }

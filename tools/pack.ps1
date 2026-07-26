@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -651,14 +651,22 @@ function Build-Desktop {
     # 修复前问题：若证书检查/prepare-win-unpacked 等步骤抛异常，混淆源码会卡住不还原，污染开发环境
     try {
     # ★ 证书存在性检查（防止证书丢失时 electron-builder 签名失败）
+    # 同时检查 pfx 证书文件和 cert-password.txt 密码文件
+    # 任一缺失都跳过签名，避免 electron-builder 误判或 CSC_KEY_PASSWORD 残留导致异常
     $certPath = "$script:ProjectRoot\tools\certs\惠康中医-codesign.pfx"
+    $certPwdFile = "$script:ProjectRoot\tools\certs\cert-password.txt"
     $pkgPath = "$script:VersionDir\package.json"
     $certBackupPath = "$script:VersionDir\package.json.certbak"
-    if (-not (Test-Path $certPath)) {
-        Write-Host "  [WARN] 代码签名证书未找到，将跳过签名" -ForegroundColor Yellow
-        Write-Host "         证书路径: $certPath" -ForegroundColor Yellow
+    $certExists = Test-Path $certPath
+    $pwdExists = Test-Path $certPwdFile
+    if (-not $certExists -or -not $pwdExists) {
+        Write-Host "  [WARN] 代码签名证书或密码文件缺失，将跳过签名" -ForegroundColor Yellow
+        if (-not $certExists) { Write-Host "         证书路径: $certPath (未找到)" -ForegroundColor Yellow }
+        if (-not $pwdExists)  { Write-Host "         密码文件: $certPwdFile (未找到)" -ForegroundColor Yellow }
         Write-Host "         如需启用签名，请运行: powershell -File tools\gen-code-sign-cert.ps1" -ForegroundColor Yellow
         Write-Host "         临时从 package.json 移除 certificateFile 配置..." -ForegroundColor Yellow
+        # 清除可能残留的 CSC_KEY_PASSWORD，避免 electron-builder 误判
+        Remove-Item Env:CSC_KEY_PASSWORD -ErrorAction SilentlyContinue
         Copy-Item -Path $pkgPath -Destination $certBackupPath -Force
         try {
             $pkg = Get-Content $pkgPath -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -679,15 +687,11 @@ function Build-Desktop {
             }
             return 1
         }
-    }
-
-    # ★ P1-安全加固: 证书密码从本地 cert-password.txt 读取
-    $certPwdFile = "$script:ProjectRoot\tools\certs\cert-password.txt"
-    if (Test-Path $certPwdFile) {
-        $env:CSC_KEY_PASSWORD = (Get-Content $certPwdFile -Raw).Trim()
-        Write-Host "  [OK] 证书密码已从 cert-password.txt 加载" -ForegroundColor Green
     } else {
-        Write-Host "  [WARN] cert-password.txt 未找到，代码签名可能被跳过" -ForegroundColor Yellow
+        # ★ P1-安全加固: 证书密码从本地 cert-password.txt 读取（仅当证书和密码都存在时才加载）
+        $env:CSC_KEY_PASSWORD = (Get-Content $certPwdFile -Raw).Trim()
+        Write-Host "  [OK] 代码签名证书已就绪" -ForegroundColor Green
+        Write-Host "  [OK] 证书密码已从 cert-password.txt 加载" -ForegroundColor Green
     }
 
     # ★ 修复：使用 --prepackaged 模式，跳过 app-builder.exe 解包步骤
