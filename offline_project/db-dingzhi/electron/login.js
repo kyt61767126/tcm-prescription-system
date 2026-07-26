@@ -129,16 +129,9 @@
             if (!cfgMap.has(u.username)) merged.push({ ...u });
         }
 
-        // 统计 display name 出现次数，重名时追加 (username) 区分
-        const nameCount = new Map();
-        for (const u of merged) {
-            const name = u.name || u.username;
-            nameCount.set(name, (nameCount.get(name) || 0) + 1);
-        }
         return merged.map(u => {
             const name = u.name || u.username;
-            const displayName = nameCount.get(name) > 1 ? `${name}(${u.username})` : name;
-            return { ...u, displayName };
+            return { ...u, displayName: name };
         });
     }
 
