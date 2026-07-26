@@ -503,11 +503,16 @@ function Sync-FilesToApp {
     }
 
     # Sync video-recorder-inject.js to assets/ (not public/)
+    # 源文件可选：若版本根目录有则同步；没有则验证目标已存在（该文件由 _shared 或 git 直接维护在 assets/ 下）
     $injectSrc = "$script:VersionDir\video-recorder-inject.js"
+    $injectDst = "$assetsDir\video-recorder-inject.js"
     if (Test-Path $injectSrc) {
-        Copy-FileWithLog $injectSrc "$assetsDir\video-recorder-inject.js"
+        Copy-FileWithLog $injectSrc $injectDst
+    } elseif (Test-Path $injectDst) {
+        Write-Host "  [OK]   video-recorder-inject.js 已存在于 assets/" -ForegroundColor Green
     } else {
-        Write-Host "  [SKIP] 未找到 video-recorder-inject.js" -ForegroundColor Yellow
+        Write-Host "  [WARN] video-recorder-inject.js 缺失，录像功能将不可用" -ForegroundColor Red
+        Write-Log "[WARN] video-recorder-inject.js 缺失于 $injectDst"
     }
 
     Write-Log "[OK] File sync completed"
@@ -663,7 +668,8 @@ function Build-Desktop {
             if ($pkg.build.win.PSObject.Properties.Name -contains 'certificatePassword') {
                 $pkg.build.win.PSObject.Properties.Remove('certificatePassword')
             }
-            $pkg | ConvertTo-Json -Depth 10 | Set-Content $pkgPath -Encoding UTF8
+            $jsonStr = $pkg | ConvertTo-Json -Depth 10
+            [System.IO.File]::WriteAllText($pkgPath, $jsonStr, (New-Object System.Text.UTF8Encoding $false))
             Write-Host "  [OK] 已临时移除证书配置，构建后将恢复" -ForegroundColor Green
         } catch {
             Write-Host "  [ERROR] 修改 package.json 失败: $($_.Exception.Message)" -ForegroundColor Red

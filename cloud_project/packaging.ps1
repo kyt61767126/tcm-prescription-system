@@ -221,14 +221,17 @@ function Sync-FilesToCloudApp {
     }
 
     # 同步 video-recorder-inject.js 到 assets/（非 public/）
+    # 源文件可选：若 shared/ 有则同步；没有则验证目标已存在（该文件由 git 直接维护在 assets/ 下）
     $injectSrc = "$sharedDir\video-recorder-inject.js"
     $injectDst = "$assetsDir\video-recorder-inject.js"
     if (Test-Path $injectSrc) {
         Copy-Item -Path $injectSrc -Destination $injectDst -Force
         Write-Host "  [OK]   video-recorder-inject.js 已同步" -ForegroundColor Green
         $synced++
+    } elseif (Test-Path $injectDst) {
+        Write-Host "  [OK]   video-recorder-inject.js 已存在于 assets/" -ForegroundColor Green
     } else {
-        Write-Host "  [SKIP] video-recorder-inject.js 未找到" -ForegroundColor Yellow
+        Write-Host "  [WARN] video-recorder-inject.js 缺失，录像功能将不可用" -ForegroundColor Red
     }
 
     Write-Host ""
