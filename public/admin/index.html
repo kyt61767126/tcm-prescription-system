@@ -233,6 +233,14 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <input type="number" id="genCount" value="1" min="1" max="100">
                 </div>
                 <div class="form-group">
+                    <label>绑定诊所名</label>
+                    <input type="text" id="genClinicName" placeholder="如：本能堂中医诊所（可留空）">
+                </div>
+                <div class="form-group">
+                    <label>最大设备数</label>
+                    <input type="number" id="genMaxDevices" value="1" min="1" max="10" title="1=单机激活码；5=可激活5台设备（专业版推荐）">
+                </div>
+                <div class="form-group">
                     <label>备注</label>
                     <input type="text" id="genNote" placeholder="如：客户A">
                 </div>
@@ -262,6 +270,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <input type="text" id="filterQ" placeholder="搜索激活码/用户名/备注" onkeyup="if(event.key==='Enter') loadList()">
             <button class="btn btn-sm" onclick="loadList()">搜索</button>
             <button class="btn btn-sm" onclick="clearFilter()">重置</button>
+            <button class="btn btn-sm btn-warning" onclick="openBatchExtendModal()">批量延期</button>
             <button class="btn btn-sm" onclick="loadList()" style="margin-left:auto;">刷新</button>
         </div>
         <div class="table-box">
@@ -366,6 +375,117 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
     </div>
 </div>
 
+<!-- 设备列表弹窗 -->
+<div id="devicesModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeDevicesModal()">&times;</span>
+        <h3>已绑定设备列表</h3>
+        <div id="devicesModalAlert" class="alert"></div>
+        <div style="margin-bottom:12px;color:#606266;font-size:13px;">
+            <strong>激活码：</strong><span id="devicesModalCode" style="font-family:Courier New,monospace;"></span>
+            <span style="margin-left:16px;">配额：<strong id="devicesModalMax">1</strong> · 已用：<strong id="devicesModalUsed">0</strong></span>
+        </div>
+        <div id="devicesList" style="max-height:400px;overflow-y:auto;">加载中...</div>
+    </div>
+</div>
+
+<!-- 离线导出 license 弹窗 -->
+<div id="exportModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeExportModal()">&times;</span>
+        <h3>离线导出激活文件</h3>
+        <div id="exportModalAlert" class="alert"></div>
+        <div style="margin-bottom:16px;color:#606266;font-size:13px;line-height:1.6;">
+            为无法联网的客户生成 license.dat 文件。<br>
+            客户在激活窗口点击"📁 导入离线激活文件"选择该文件即可完成激活。
+        </div>
+        <div class="gen-row">
+            <div class="form-group">
+                <label>激活码 *</label>
+                <input type="text" id="exportCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX">
+            </div>
+            <div class="form-group">
+                <label>机器 ID *</label>
+                <input type="text" id="exportMachineId" placeholder="客户提供的32位机器ID">
+            </div>
+            <div class="form-group">
+                <label>诊所名</label>
+                <input type="text" id="exportClinicName" placeholder="绑定的诊所名（如已绑定）">
+            </div>
+        </div>
+        <div style="margin-top:12px;text-align:right;">
+            <button class="btn" onclick="closeExportModal()">取消</button>
+            <button class="btn btn-success" onclick="exportLicense()">生成 license 文件</button>
+        </div>
+    </div>
+</div>
+
+<!-- 批量延期弹窗 -->
+<div id="batchExtendModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeBatchExtendModal()">&times;</span>
+        <h3>批量延期激活码</h3>
+        <div id="batchExtendAlert" class="alert"></div>
+        <div style="margin-bottom:12px;color:#606266;font-size:13px;line-height:1.6;">
+            输入多个激活码（每行一个，最多 100 个），选择延期方式。<br>
+            <strong>延期逻辑</strong>：若已过期，从当前时间起加天数；否则在原到期时间基础上加。
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+            <label>激活码列表（每行一个）*</label>
+            <textarea id="batchExtendCodes" rows="6" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX&#10;BNZC-YYYY-YYYY-YYYY-YYYY" style="width:100%;font-family:Courier New,monospace;"></textarea>
+        </div>
+        <div class="gen-row">
+            <div class="form-group">
+                <label>延期天数</label>
+                <input type="number" id="batchExtendDays" placeholder="如 365" min="1" max="3650">
+            </div>
+            <div class="form-group">
+                <label>或新到期日期</label>
+                <input type="date" id="batchExtendExpiresAt">
+            </div>
+        </div>
+        <div style="margin-top:12px;text-align:right;">
+            <button class="btn" onclick="closeBatchExtendModal()">取消</button>
+            <button class="btn btn-success" onclick="batchExtend()">确认延期</button>
+        </div>
+    </div>
+</div>
+
+<!-- 修改激活码弹窗 -->
+<div id="editModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeEditModal()">&times;</span>
+        <h3>修改激活码信息</h3>
+        <div id="editModalAlert" class="alert"></div>
+        <div style="margin-bottom:12px;color:#606266;font-size:13px;">
+            <strong>激活码：</strong><span id="editCode" style="font-family:Courier New,monospace;"></span>
+        </div>
+        <div class="gen-row">
+            <div class="form-group">
+                <label>最大设备数</label>
+                <input type="number" id="editMaxDevices" min="1" max="10">
+                <small style="color:#909399;">若新配额小于已绑定设备数，将自动解绑最旧的设备</small>
+            </div>
+            <div class="form-group">
+                <label>诊所名</label>
+                <input type="text" id="editClinicName">
+            </div>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="editUser">
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <input type="text" id="editNote">
+            </div>
+        </div>
+        <div style="margin-top:12px;text-align:right;">
+            <button class="btn" onclick="closeEditModal()">取消</button>
+            <button class="btn btn-success" onclick="saveEdit()">保存修改</button>
+        </div>
+    </div>
+</div>
+
 <script>
 // API 基础路径（与 Pages Functions 路径一致）
 const API_BASE = '/api';
@@ -441,6 +561,8 @@ async function generateCodes() {
     const expiresAt = document.getElementById('genExpiresAt').value;
     const count = document.getElementById('genCount').value || 1;
     const note = document.getElementById('genNote').value.trim();
+    const clinicName = document.getElementById('genClinicName').value.trim();
+    const maxDevices = document.getElementById('genMaxDevices').value;
 
     if (!user) { showAlert('mainAlert', '请输入用户名', 'error'); return; }
     if (!days && !expiresAt) { showAlert('mainAlert', '请填写有效天数或到期日期', 'error'); return; }
@@ -448,6 +570,8 @@ async function generateCodes() {
     const body = { user, type, count: parseInt(count, 10), note };
     if (days) body.days = parseInt(days, 10);
     if (expiresAt) body.expiresAt = expiresAt;
+    if (clinicName) body.clinicName = clinicName;
+    if (maxDevices) body.maxDevices = parseInt(maxDevices, 10);
 
     try {
         const res = await fetch(API_BASE + '/license/generate', {
@@ -480,6 +604,8 @@ function clearGenForm() {
     document.getElementById('genDays').value = '';
     document.getElementById('genExpiresAt').value = '';
     document.getElementById('genCount').value = '1';
+    document.getElementById('genClinicName').value = '';
+    document.getElementById('genMaxDevices').value = '1';
     document.getElementById('genNote').value = '';
 }
 
@@ -550,9 +676,11 @@ function renderList(records) {
 
         let actions = '<button class="btn btn-sm" onclick="copyCode(\'' + r.code + '\')">复制</button>';
         actions += '<button class="btn btn-sm" onclick="showLogs(\'' + r.code + '\')">日志</button>';
+        actions += '<button class="btn btn-sm" onclick="openEditModal(\'' + r.code + '\')">编辑</button>';
         if (r.status === 'used') {
-            actions += '<button class="btn btn-sm btn-warning" onclick="manageCode(\'' + r.code + '\',\'unbind\')">解绑</button>';
+            actions += '<button class="btn btn-sm" onclick="showDevices(\'' + r.code + '\')">查看设备</button>';
         }
+        actions += '<button class="btn btn-sm" onclick="openExportModal(\'' + r.code + '\')">导出</button>';
         if (r.status !== 'disabled') {
             actions += '<button class="btn btn-sm btn-warning" onclick="manageCode(\'' + r.code + '\',\'disable\')">禁用</button>';
         } else {
@@ -614,7 +742,12 @@ function renderLogs(logs) {
         unbind: '解绑机器',
         disable: '禁用',
         enable: '启用',
-        delete: '删除'
+        delete: '删除',
+        'auto-unbind': '自动解绑',
+        extend: '延期',
+        'export-offline': '导出离线文件',
+        'export-offline-reactivate': '导出离线文件(重激活)',
+        update: '修改字段'
     };
     ul.innerHTML = logs.map(log => {
         const time = new Date(log.time).toLocaleString('zh-CN');
@@ -664,6 +797,265 @@ async function manageCode(code, action) {
         }
     } catch (e) {
         showAlert('mainAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 设备列表查看 + 单设备解绑 =====
+// 查看激活码绑定的设备列表
+async function showDevices(code) {
+    document.getElementById('devicesModalCode').textContent = code;
+    document.getElementById('devicesModal').classList.add('show');
+    document.getElementById('devicesModalAlert').className = 'alert';
+    document.getElementById('devicesList').innerHTML = '<div class="loading">加载中...</div>';
+    document.getElementById('devicesModalMax').textContent = '1';
+    document.getElementById('devicesModalUsed').textContent = '0';
+    try {
+        const res = await fetch(API_BASE + '/license/status?code=' + encodeURIComponent(code), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+            const r = data.data;
+            const maxDev = r.maxDevices || 1;
+            const devices = r.devices || [];
+            document.getElementById('devicesModalMax').textContent = maxDev;
+            document.getElementById('devicesModalUsed').textContent = devices.length;
+            renderDevicesList(code, devices);
+        } else {
+            if (res.status === 403) {
+                showAlert('devicesModalAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(() => { closeDevicesModal(); doLogout(); }, 1500);
+            } else {
+                document.getElementById('devicesList').innerHTML = '<div class="empty">' + escapeHtml(data.error || '加载失败') + '</div>';
+            }
+        }
+    } catch (e) {
+        document.getElementById('devicesList').innerHTML = '<div class="empty">网络错误：' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+function renderDevicesList(code, devices) {
+    const el = document.getElementById('devicesList');
+    if (!devices || devices.length === 0) {
+        el.innerHTML = '<div class="empty">暂无已绑定设备</div>';
+        return;
+    }
+    el.innerHTML = devices.map((d, i) => {
+        const activatedAt = d.activatedAt ? new Date(d.activatedAt).toLocaleString('zh-CN') : '-';
+        return '<div style="padding:10px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+            '<div style="flex:1;min-width:200px;">' +
+                '<div style="font-family:Courier New,monospace;color:#2c3e50;font-weight:600;">' + escapeHtml(d.machineId || '-') + '</div>' +
+                '<div style="font-size:12px;color:#909399;margin-top:4px;">激活时间：' + activatedAt + (d.clinicName ? ' · 诊所：' + escapeHtml(d.clinicName) : '') + '</div>' +
+            '</div>' +
+            '<button class="btn btn-sm btn-warning" onclick="unbindDevice(\'' + code + '\',\'' + escapeHtml(d.machineId) + '\',' + i + ')">解绑</button>' +
+        '</div>';
+    }).join('');
+}
+
+function closeDevicesModal() {
+    document.getElementById('devicesModal').classList.remove('show');
+}
+
+// 解绑单台设备（v4 API 已支持传 machineId）
+// 注意：UI 拿到的是 sanitizeRecord 截断后的 machineId（前8位+...），
+// status.js 已增强为：精确匹配失败时回退到前缀匹配，保证 UI 解绑可用。
+async function unbindDevice(code, machineId, index) {
+    if (!confirm('确认解绑该设备？\n机器ID：' + machineId + '\n解绑后该设备将无法继续使用此激活码。')) return;
+    try {
+        const res = await fetch(API_BASE + '/license/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ code, action: 'unbind', machineId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('devicesModalAlert', data.message || '设备已解绑', 'success');
+            // 刷新设备列表
+            showDevices(code);
+            // 同时刷新主列表（设备数会变）
+            loadList();
+        } else {
+            showAlert('devicesModalAlert', data.error || '解绑失败', 'error');
+        }
+    } catch (e) {
+        showAlert('devicesModalAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 离线导出 license =====
+function closeExportModal() {
+    document.getElementById('exportModal').classList.remove('show');
+    document.getElementById('exportCode').value = '';
+    document.getElementById('exportMachineId').value = '';
+    document.getElementById('exportClinicName').value = '';
+    document.getElementById('exportModalAlert').className = 'alert';
+}
+
+// 打开导出弹窗（从列表点击时自动填充激活码）
+function openExportModal(code) {
+    document.getElementById('exportModalAlert').className = 'alert';
+    document.getElementById('exportCode').value = code || '';
+    document.getElementById('exportMachineId').value = '';
+    document.getElementById('exportClinicName').value = '';
+    document.getElementById('exportModal').classList.add('show');
+}
+
+async function exportLicense() {
+    const code = document.getElementById('exportCode').value.trim();
+    const machineId = document.getElementById('exportMachineId').value.trim();
+    const clinicName = document.getElementById('exportClinicName').value.trim();
+    if (!code || !machineId) {
+        showAlert('exportModalAlert', '请填写激活码和机器 ID', 'error');
+        return;
+    }
+    const body = { code, machineId };
+    if (clinicName) body.clinicName = clinicName;
+    try {
+        const res = await fetch(API_BASE + '/license/export-license', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            // 触发文件下载（license 字段为 base64 字符串，即 license.dat 文件内容）
+            const blob = new Blob([data.license], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.fileName || ('license_' + machineId.substring(0,8) + '.dat');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            const info = data.licenseInfo || {};
+            showAlert('exportModalAlert', '✅ license 文件已下载！\n\n用户：' + (info.user || '-') + '\n版本：' + (info.type || '-') + '\n诊所：' + (info.clinicName || '-') + '\n到期：' + (info.expiresAt ? new Date(info.expiresAt).toLocaleDateString('zh-CN') : '-'), 'success');
+            setTimeout(() => closeExportModal(), 3000);
+            loadList();
+        } else {
+            showAlert('exportModalAlert', data.error || '导出失败', 'error');
+        }
+    } catch (e) {
+        showAlert('exportModalAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 批量延期 =====
+function openBatchExtendModal() {
+    document.getElementById('batchExtendAlert').className = 'alert';
+    document.getElementById('batchExtendModal').classList.add('show');
+}
+
+function closeBatchExtendModal() {
+    document.getElementById('batchExtendModal').classList.remove('show');
+    document.getElementById('batchExtendCodes').value = '';
+    document.getElementById('batchExtendDays').value = '';
+    document.getElementById('batchExtendExpiresAt').value = '';
+    document.getElementById('batchExtendAlert').className = 'alert';
+}
+
+async function batchExtend() {
+    const codesText = document.getElementById('batchExtendCodes').value.trim();
+    const addDays = document.getElementById('batchExtendDays').value;
+    const newExpiresAt = document.getElementById('batchExtendExpiresAt').value;
+    if (!codesText) { showAlert('batchExtendAlert', '请输入激活码', 'error'); return; }
+    if (!addDays && !newExpiresAt) { showAlert('batchExtendAlert', '请填写延期天数或新到期日期', 'error'); return; }
+    if (addDays && newExpiresAt) { showAlert('batchExtendAlert', '延期天数与新到期日期只能二选一', 'error'); return; }
+    const codes = codesText.split('\n').map(s => s.trim()).filter(s => s);
+    if (codes.length === 0) { showAlert('batchExtendAlert', '未识别到有效激活码', 'error'); return; }
+    if (codes.length > 100) { showAlert('batchExtendAlert', '最多 100 个激活码', 'error'); return; }
+    const body = { codes };
+    if (addDays) body.addDays = parseInt(addDays, 10);
+    if (newExpiresAt) body.newExpiresAt = newExpiresAt;
+    try {
+        const res = await fetch(API_BASE + '/license/extend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            // extend API 返回 updated/failed 两个数组
+            const successCount = (data.updated || []).length;
+            const failedCount = (data.failed || []).length;
+            let msg = '延期完成：成功 ' + successCount + ' 个，失败 ' + failedCount + ' 个';
+            if (failedCount > 0 && Array.isArray(data.failed)) {
+                const failedDetail = data.failed.slice(0, 5).map(f => f.code + ' (' + (f.error || '未知') + ')').join('；');
+                msg += '\n失败明细（前5条）：' + failedDetail;
+            }
+            showAlert('batchExtendAlert', msg, failedCount > 0 ? 'info' : 'success');
+            if (failedCount === 0) {
+                setTimeout(() => closeBatchExtendModal(), 2000);
+                loadList();
+            }
+        } else {
+            showAlert('batchExtendAlert', data.error || '延期失败', 'error');
+        }
+    } catch (e) {
+        showAlert('batchExtendAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 修改激活码字段（maxDevices / clinicName / user / note）=====
+async function openEditModal(code) {
+    document.getElementById('editCode').textContent = code;
+    document.getElementById('editModalAlert').className = 'alert';
+    document.getElementById('editModal').classList.add('show');
+    document.getElementById('editMaxDevices').value = '1';
+    document.getElementById('editClinicName').value = '';
+    document.getElementById('editUser').value = '';
+    document.getElementById('editNote').value = '';
+    // 加载当前值
+    try {
+        const res = await fetch(API_BASE + '/license/status?code=' + encodeURIComponent(code), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+            const r = data.data;
+            document.getElementById('editMaxDevices').value = r.maxDevices || 1;
+            document.getElementById('editClinicName').value = r.clinicName || '';
+            document.getElementById('editUser').value = r.user || '';
+            document.getElementById('editNote').value = r.note || '';
+        } else {
+            showAlert('editModalAlert', data.error || '加载失败', 'error');
+        }
+    } catch (e) {
+        showAlert('editModalAlert', '加载失败：' + e.message, 'error');
+    }
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.remove('show');
+    document.getElementById('editModalAlert').className = 'alert';
+}
+
+async function saveEdit() {
+    const code = document.getElementById('editCode').textContent;
+    const body = { code };
+    const maxDevices = document.getElementById('editMaxDevices').value;
+    const clinicName = document.getElementById('editClinicName').value.trim();
+    const user = document.getElementById('editUser').value.trim();
+    const note = document.getElementById('editNote').value.trim();
+    if (maxDevices) body.maxDevices = parseInt(maxDevices, 10);
+    body.clinicName = clinicName;
+    body.user = user;
+    body.note = note;
+    try {
+        const res = await fetch(API_BASE + '/license/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('editModalAlert', data.message || '已保存', 'success');
+            setTimeout(() => { closeEditModal(); loadList(); }, 1500);
+        } else {
+            showAlert('editModalAlert', data.error || '保存失败', 'error');
+        }
+    } catch (e) {
+        showAlert('editModalAlert', '网络错误：' + e.message, 'error');
     }
 }
 

@@ -170,7 +170,21 @@ export async function onRequest(context) {
                     if (targetMachineId) {
                         // 解绑单台设备：从 devices 数组中移除
                         const devices = getDevices(record);
-                        const newDevices = devices.filter(d => d.machineId !== targetMachineId);
+                        let newDevices = devices.filter(d => d.machineId !== targetMachineId);
+                        let matchedFullMachineId = targetMachineId;
+                        // ★ 兼容 UI 截断显示：精确匹配失败时，若 machineId 以 "..." 结尾
+                        //   （sanitizeRecord 返回的前8位+"..."格式），回退到前缀匹配。
+                        //   前 8 位 hex 已足够在单激活码范围内唯一标识设备。
+                        if (newDevices.length === devices.length && targetMachineId.endsWith('...')) {
+                            const prefix = targetMachineId.slice(0, -3);  // 去掉 "..."
+                            if (prefix.length >= 6) {
+                                const matched = devices.find(d => d.machineId && d.machineId.startsWith(prefix));
+                                if (matched) {
+                                    newDevices = devices.filter(d => d !== matched);
+                                    matchedFullMachineId = matched.machineId;
+                                }
+                            }
+                        }
                         if (newDevices.length === devices.length) {
                             return json({ success: false, error: '未找到指定的 machineId' }, 404);
                         }
@@ -191,7 +205,7 @@ export async function onRequest(context) {
                             updates.activatedAt = newDevices[0].activatedAt;
                             message = `已解绑 1 台设备，剩余 ${newDevices.length} 台`;
                         }
-                        logDetail = `machineId=${targetMachineId.substring(0, 8)}..., remaining=${newDevices.length}/${getMaxDevices(record)}`;
+                        logDetail = `machineId=${matchedFullMachineId.substring(0, 8)}..., remaining=${newDevices.length}/${getMaxDevices(record)}`;
                     } else {
                         // 解绑所有设备（旧行为）
                         updates = {
