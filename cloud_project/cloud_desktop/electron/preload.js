@@ -130,20 +130,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return ipcRenderer.invoke('auth:decryptString', encryptedBase64);
     },
 
-    // ---------- 本地离线数据库 ----------
-    localDB: {
-        ready: () => ipcRenderer.invoke('localdb:ready'),
-        getPrescriptions: (username) => ipcRenderer.invoke('localdb:getPrescriptions', username),
-        upsertPrescription: (p, opts) => ipcRenderer.invoke('localdb:upsertPrescription', p, opts),
-        getUnsyncedPrescriptions: () => ipcRenderer.invoke('localdb:getUnsyncedPrescriptions'),
-        markSynced: (id) => ipcRenderer.invoke('localdb:markSynced', id),
-        markDeleted: (id) => ipcRenderer.invoke('localdb:markDeleted', id),
-        countUnsynced: () => ipcRenderer.invoke('localdb:countUnsynced'),
-        getCache: (key) => ipcRenderer.invoke('localdb:getCache', key),
-        setCache: (key, data) => ipcRenderer.invoke('localdb:setCache', key, data),
-        getSyncStatus: () => ipcRenderer.invoke('localdb:getSyncStatus'),
-        setSyncStatus: (s) => ipcRenderer.invoke('localdb:setSyncStatus', s)
-    },
+    // ★清理：移除 localDB 系列（云端桌面版不需要本地数据库，这是离线版功能）
+    // index.html:1524 有防御性检查 `window.electronAPI.localDB ? ... : null`，移除后不会崩溃
 
     // ★ 同步对话框（替代原生 alert/confirm 和原 HTML 模态框方案）
     // 原因：

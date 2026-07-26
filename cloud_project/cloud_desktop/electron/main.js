@@ -248,15 +248,8 @@ async function renameMediaFiles(patientName, oldNo, newNo) {
 async function saveLoginState(hasLoggedIn, user = null) {
     if (user) currentLoggedInUser = user;
     if (!hasLoggedIn) currentLoggedInUser = null;
-    try {
-        const settingsPath = path.join(app.getPath('userData'), 'login-state.json');
-        const tmpPath = settingsPath + '.tmp';
-        const payload = { hasLoggedIn, user, updatedAt: new Date().toISOString() };
-        await fse.writeJson(tmpPath, payload, { spaces: 2 });
-        await fs.rename(tmpPath, settingsPath);
-    } catch (e) {
-        console.error('保存登录状态失败:', e);
-    }
+    // ★清理：删除 login-state.json 文件写入（该文件从未被读取，是死代码）
+    // 用户偏好：每次启动都必须重新输入密码登录，不持久化登录状态
 }
 
 // ============================================================================
@@ -1188,15 +1181,123 @@ ipcMain.handle('login-success', async (event, userData) => {
     }
 });
 
-ipcMain.handle('get-current-user', async () => {
+// ★修复：preload.js 调用的是 get-logged-in-user（曾只有 get-current-user 导致 IPC 不匹配）
+// 已删除冗余的 get-current-user handler，统一使用 get-logged-in-user
+ipcMain.handle('get-logged-in-user', async () => {
     return currentLoggedInUser;
 });
 
-// ★修复：preload.js 调用的是 get-logged-in-user，需与 get-current-user 保持一致
-// 否则 init() 的 Electron 分支获取用户失败，回退到 localStorage 分支，
-// 导致 loadData() 和 renderHistoryList() 不被调用，药物表格和处方历史为空
-ipcMain.handle('get-logged-in-user', async () => {
-    return currentLoggedInUser;
+// ============================================================================
+// ★修复：补全 preload.js 暴露但 main.js 未注册的 4 个 IPC handler
+// 历史问题：preload.js 调用这些 IPC 时会抛 "No handler registered" 错误，
+// 导致相关功能（图片目录、媒体文件列表、登录取消按钮）静默失效
+// ============================================================================
+
+// 1. 获取图片保存目录（与视频目录一致，使用当前月份子目录）
+ipcMain.handle('get-image-directory', async () => {
+    return getCurrentMonthDirectory();
+});
+
+// 2. 选择图片保存目录（弹出系统文件夹选择对话框）
+ipcMain.handle('select-image-save-directory', async () => {
+    const result = await dialog.showOpenDialog({
+        properties: ['openDirectory', 'createDirectory'],
+        title: '选择图片保存位置'
+    });
+    if (result.canceled || result.filePaths.length === 0) {
+        return { success: false };
+    }
+    return { success: true, path: result.filePaths[0] };
+});
+
+// 3. 列出所有媒体文件（遍历 downloads 目录所有月份子目录，用于调试）
+ipcMain.handle('list-all-media-files', async () => {
+    try {
+        const downloadsDir = getDownloadsDirectory();
+        const searchDirectories = [downloadsDir];
+        const files = [];
+        const validExtensions = ['.jpg', '.jpeg', '.png', '.webm', '.mp4', '.avi', '.mov'];
+
+        let monthDirs = [];
+        try {
+            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
+            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
+        } catch (e) { /* downloads目录可能不存在 */ }
+
+        for (const monthDir of monthDirs) {
+            let fileEntries = [];
+            try {
+                fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
+            } catch (e) { continue; }
+            for (const fe of fileEntries) {
+                if (!fe.isFile()) continue;
+                const ext = path.extname(fe.name).toLowerCase();
+                if (!validExtensions.includes(ext)) continue;
+                try {
+                    const filePath = path.join(monthDir, fe.name);
+                    const stat = await fs.stat(filePath);
+                    const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
+                    files.push({
+                        name: fe.name,
+                        path: filePath,
+                        type: isVideo ? 'video' : 'image',
+                        size: stat.size,
+                        lastModified: stat.mtimeMs
+                    });
+                } catch (e) { /* 跳过无法读取的文件 */ }
+            }
+        }
+        return { success: true, files, searchDirectories };
+    } catch (error) {
+        console.error('列出所有媒体文件失败:', error);
+        return { success: false, error: error.message, files: [], searchDirectories: [] };
+    }
+});
+
+// 4. 登录取消（关闭登录窗口并退出应用）
+ipcMain.handle('login-cancel', async () => {
+    try {
+        if (loginWindow && !loginWindow.isDestroyed()) {
+            loginWindow.destroy();
+        }
+    } catch (e) { /* 忽略 */ }
+    app.quit();
+});
+
+// 5. 读取 index.html 内容（登录界面用于获取诊所名称）
+ipcMain.handle('get-index-html-content', async () => {
+    try {
+        const indexPath = path.join(__dirname, '..', 'index.html');
+        const content = await fs.readFile(indexPath, 'utf8');
+        return { success: true, content };
+    } catch (e) {
+        console.error('读取 index.html 失败:', e);
+        return { success: false, content: '' };
+    }
+});
+
+// 6. 获取数据目录（userData 目录）
+ipcMain.handle('get-data-directory', async () => {
+    return app.getPath('userData');
+});
+
+// 7. 打开图片目录（在文件管理器中打开）
+ipcMain.handle('open-image-directory', async () => {
+    const dir = getCurrentMonthDirectory();
+    shell.openPath(dir);
+    return { success: true, directory: dir };
+});
+
+// 8. 获取备份目录
+ipcMain.handle('get-backup-directory', async () => {
+    return getDownloadsDirectory();
+});
+
+// 9. 打开备份目录
+ipcMain.handle('open-backup-directory', async () => {
+    const dir = getDownloadsDirectory();
+    shell.openPath(dir);
+    return { success: true, directory: dir };
 });
 
 // 读取 index.html 同目录下的 config.json；如不存在，则使用内置默认值

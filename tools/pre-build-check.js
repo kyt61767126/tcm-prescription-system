@@ -134,6 +134,26 @@ function main() {
     console.log('====================================');
     console.log('  [PASS] 所有 JS 文件均已覆盖，可以安全打包');
     console.log('====================================');
+
+    // ★新增：IPC 一致性检查（仅云端桌面版）
+    // 防止 preload.js 调用的 IPC 在 main.js 中未注册，导致功能静默失效
+    // 历史教训：2026-07-26 曾因 IPC 不匹配导致药物表格和处方历史不显示
+    try {
+        const { execSync } = require('child_process');
+        console.log('');
+        console.log('====================================');
+        console.log('  IPC 一致性检查（云端桌面版）');
+        console.log('====================================');
+        execSync('node tools/check-ipc-consistency.js', { stdio: 'inherit', cwd: process.cwd() });
+    } catch (e) {
+        // check-ipc-consistency.js 退出码 1 表示发现不匹配
+        console.log('');
+        console.log('====================================');
+        console.log('  [FAIL] IPC 一致性检查未通过！请补全 main.js 中的 handler 注册');
+        console.log('====================================');
+        process.exit(1);
+    }
+
     process.exit(0);
 }
 
