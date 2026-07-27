@@ -299,7 +299,9 @@ public class MainActivity extends AppCompatActivity {
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         s.setAllowFileAccess(true);
         s.setAllowContentAccess(true);
-        s.setAllowFileAccessFromFileURLs(true);
+        // ★ 安全：关闭 JS 通过 fetch/XHR 访问 file:// URL（不影响 HTML 标签加载 assets）
+        s.setAllowFileAccessFromFileURLs(false);
+        // 保留：file:// 页面需要访问 http://local-media/ 资源（内嵌视频播放）
         s.setAllowUniversalAccessFromFileURLs(true);
         // 允许 file:// 页面加载 http://local-media/ 资源（内嵌视频播放需要）
         // shouldInterceptRequest 会拦截并返回本地文件流，不存在真实网络请求
