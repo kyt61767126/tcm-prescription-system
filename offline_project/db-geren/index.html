@@ -599,7 +599,11 @@
 <script src="debug-logger.js"></script>
 <script src="print-utils.js"></script>
 <script src="medicine-dict.js"></script>
-<script src="db-adapter.js"></script>
+<!-- ★ 已移除 db-adapter.js 引用：它与 index.html 的 openDB(DB_VERSION=3) 产生版本冲突
+     db-adapter.js 使用 DB_VERSION=2 自动初始化并持有连接，阻塞 index.html 的版本3升级
+     导致所有 IndexedDB 操作失败，处方数据无法保存，这是"重新登入后历史处方消失"的真正根因
+     index.html 已有完整的 IndexedDB 逻辑（openDB/savePrescriptionToDB/getAllPrescriptionsFromDB），不需要 db-adapter.js -->
+<!-- <script src="db-adapter.js"></script> -->
 <script src="performance-utils.js"></script>
 <script src="prescription-core.js"></script>
 <script src="patient-archive.js"></script>
