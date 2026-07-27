@@ -2,10 +2,10 @@
     "bendi": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
-            "sha256": "bc8b87b4e0218b6e2d0dcf5ad8f65a99dea0bb91d8212797a64e5f998dfafdce",
+            "sha256": "4f3fdde3a20ec41542e2f8bd1bffa7ed6c1a0cd203ff82506f56a1a2a2e4acda",
             "url": "/downloads/惠康中医-本地.apk",
-            "size": 2023321,
-            "updateTime": "2026-07-26T22:02:01.782Z",
+            "size": 2050532,
+            "updateTime": "2026-07-27T09:37:58.724Z",
             "fileName": "惠康中医-本地.apk"
         },
         "portable": {
