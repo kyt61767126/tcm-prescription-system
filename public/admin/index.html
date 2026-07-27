@@ -1348,7 +1348,12 @@ async function batchExtend() {
             // extend API 返回 updated/failed 两个数组
             const successCount = (data.updated || []).length;
             const failedCount = (data.failed || []).length;
+            // ★ 统计自动恢复状态的激活码数量（expired → used）
+            const recoveredCount = (data.updated || []).filter(u => u.statusChanged).length;
             let msg = '延期完成：成功 ' + successCount + ' 个，失败 ' + failedCount + ' 个';
+            if (recoveredCount > 0) {
+                msg += '\n其中 ' + recoveredCount + ' 个已过期激活码已自动恢复为「已激活」状态，用户可重新激活。';
+            }
             if (failedCount > 0 && Array.isArray(data.failed)) {
                 const failedDetail = data.failed.slice(0, 5).map(f => f.code + ' (' + (f.error || '未知') + ')').join('；');
                 msg += '\n失败明细（前5条）：' + failedDetail;

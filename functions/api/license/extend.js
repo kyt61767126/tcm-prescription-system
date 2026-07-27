@@ -23,6 +23,8 @@
 //    }
 //
 //  注意：只更新 record.expiresAt，不重新签发 license（用户重新激活时才会用新 expiresAt）
+//  ★ 修复：若激活码当前状态为 expired 且延期后到期时间在未来，同时把 status 改回 used
+//         否则延期后 validate/export-license 仍会被 status==='expired' 拦截，用户无法重新激活
 // ============================================================================
 
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
@@ -130,6 +132,7 @@ export async function onRequest(context) {
                 }
 
                 const oldExpiresAt = record.expiresAt || null;
+                const oldStatus = record.status || null;
                 let newExp = null;
 
                 if (targetExpiresAt) {
@@ -147,21 +150,36 @@ export async function onRequest(context) {
                     }
                 }
 
-                // 只更新 record.expiresAt，不重新签发 license
-                await updateLicense(kv, code, { expiresAt: newExp });
+                // ★ 修复：组装更新对象
+                // 1. 总是更新 expiresAt
+                // 2. 若延期后到期时间在未来，且原状态为 expired，同时把 status 改回 used
+                //    （否则 validate/export-license 仍会被 status==='expired' 拦截，用户无法重新激活）
+                // 3. 不改动 status==='disabled' 的激活码（禁用是管理员主动行为，延期不应自动解禁）
+                const updates = { expiresAt: newExp };
+                const newExpMs = new Date(newExp).getTime();
+                const isNowValid = newExpMs > Date.now();
+                let statusChanged = false;
+                if (isNowValid && oldStatus === 'expired') {
+                    updates.status = 'used';
+                    statusChanged = true;
+                }
+
+                await updateLicense(kv, code, updates);
                 // 写入操作日志
                 await appendLicenseLog(kv, code, {
                     action: 'extend',
                     time: new Date().toISOString(),
                     ip: ip,
                     operator: currentUser.username,
-                    detail: `batch extend: oldExpiresAt=${oldExpiresAt || 'null'}, newExpiresAt=${newExp}, addDays=${parsedAddDays || 0}`
+                    detail: `batch extend: oldExpiresAt=${oldExpiresAt || 'null'}, newExpiresAt=${newExp}, addDays=${parsedAddDays || 0}` +
+                            (statusChanged ? `, status: expired→used (auto-recovered)` : '')
                 });
 
                 updated.push({
                     code: code,
                     oldExpiresAt: oldExpiresAt,
-                    newExpiresAt: newExp
+                    newExpiresAt: newExp,
+                    statusChanged: statusChanged  // ★ 透传状态变更标记，便于前端提示
                 });
             } catch (e) {
                 failed.push({ code: code, error: e.message || '延期失败' });
