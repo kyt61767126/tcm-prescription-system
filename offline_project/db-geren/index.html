@@ -1282,6 +1282,13 @@ if (window.Permission) {
                 localStorage.removeItem('isLoggedIn');
                 localStorage.removeItem('user_login_data');
                 currentUser = null;
+                // ★修复"重新登入后历史处方不显示"：退出时必须清空 prescriptionHistory 和 UI，
+                // 防止 loadData 失败时 catch 块保留上一用户数据被 filterPrescriptionsByPermission 过滤为空
+                prescriptionHistory = [];
+                if (typeof __historyFullList !== 'undefined') __historyFullList = [];
+                if (typeof renderHistoryList === 'function') {
+                    try { renderHistoryList([]); } catch(e) { console.warn('退出时清空历史列表失败:', e); }
+                }
                 const overlay = document.getElementById('loginOverlay');
                 if (overlay) overlay.style.display = 'flex';
             }
@@ -1855,13 +1862,27 @@ if (window.Permission) {
                 });
                 prescriptionHistory = await Promise.race([loadPrescriptions(), timeoutPromise]);
             } catch(e) {
-                console.warn('getAllUserPrescriptions 失败，跳过:', e);
-                // ★修复历史处方消失：失败时不要清空 prescriptionHistory
-                // 原因：清空会导致 UI 显示空列表，用户误以为处方丢失。
-                //       保留上一次的数据（如果有），至少 UI 不会突然空白。
-                //       如果是首次加载（prescriptionHistory 为空），保持空数组。
-                if (!Array.isArray(prescriptionHistory)) {
-                    prescriptionHistory = [];
+                console.warn('getAllUserPrescriptions 失败，尝试 localStorage 降级:', e);
+                // ★修复"重新登入后历史处方不显示"：失败时优先从 localStorage 读取作为降级，
+                // 而非保留上一用户的数据（会被 filterPrescriptionsByPermission 过滤为空）。
+                // 这样即使 IndexedDB 事务冲突/超时，仍能从 localStorage 恢复处方数据。
+                let fallbackPrescriptions = [];
+                try {
+                    const savedPrescriptions = localStorage.getItem('all_prescription_list');
+                    if (savedPrescriptions) {
+                        const data = JSON.parse(savedPrescriptions);
+                        if (Array.isArray(data) && data.length > 0) {
+                            fallbackPrescriptions = data;
+                            console.warn('[loadData] 从 localStorage 降级读取到 ' + data.length + ' 条处方');
+                        }
+                    }
+                } catch(lsErr) {
+                    console.warn('[loadData] localStorage 降级读取失败:', lsErr);
+                }
+                // 仅当降级数据非空或当前 prescriptionHistory 为空时才覆盖，
+                // 避免降级失败时把已有数据清空
+                if (fallbackPrescriptions.length > 0 || !Array.isArray(prescriptionHistory) || prescriptionHistory.length === 0) {
+                    prescriptionHistory = fallbackPrescriptions;
                 }
             }
             defaultMedicines = [
@@ -3049,24 +3070,16 @@ if (window.Permission) {
         }
 
         function showSearchDropdown(element, query, column) {
+            // 立即设置位置（与云端APP一致，避免debounce延迟导致键盘弹出后位置变化）
+            const dropdown = DOM_CACHE.medicineSearchDropdown;
+            if (hideSearchTimer) { clearTimeout(hideSearchTimer); hideSearchTimer = null; }
+            const rect = element.getBoundingClientRect();
+            dropdown.style.left = rect.left + 'px';
+            dropdown.style.top = (rect.bottom + 2) + 'px';
+            dropdown.style.width = (rect.width) + 'px';
+
             if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
-                if (hideSearchTimer) { clearTimeout(hideSearchTimer); hideSearchTimer = null; }
-                const dropdown = DOM_CACHE.medicineSearchDropdown;
-                const rect = element.getBoundingClientRect();
-                dropdown.style.left = rect.left + 'px';
-                dropdown.style.width = (rect.width) + 'px';
-                // 智能位置：确保候选框在输入框下方显示（与云端APP一致）
-                const spaceBelow = window.innerHeight - rect.bottom - 4;
-                if (spaceBelow >= 120) {
-                    dropdown.style.top = (rect.bottom + 2) + 'px';
-                    dropdown.style.maxHeight = Math.min(250, spaceBelow) + 'px';
-                } else {
-                    const spaceAbove = rect.top - 4;
-                    dropdown.style.top = Math.max(0, rect.top - Math.min(250, spaceAbove) - 2) + 'px';
-                    dropdown.style.maxHeight = Math.min(250, spaceAbove) + 'px';
-                }
-
                 if (!query.trim()) {
                     dropdown.style.display = 'none';
                     return;
@@ -3494,7 +3507,16 @@ if (window.Permission) {
             if (window.AuthCore && AuthCore.isAdmin && AuthCore.isAdmin(currentUser)) return prescriptions;
             var role = (currentUser.role || '').toLowerCase();
             if (role === 'admin' || role === 'clinic_admin') return prescriptions;
-            return prescriptions.filter(function(p) { return p.createdBy === currentUser.username; });
+            var filtered = prescriptions.filter(function(p) { return p.createdBy === currentUser.username; });
+            // ★修复"重新登入后历史处方不显示"：与 getAllUserPrescriptions 防护逻辑保持一致，
+            // 过滤后为空但原始数据不为空时保留原始数据，避免因 createdBy 不匹配导致处方消失。
+            // 这通常发生在用户名曾修改过、或早期数据 createdBy 字段为空的情况。
+            if (filtered.length === 0 && Array.isArray(prescriptions) && prescriptions.length > 0) {
+                console.warn('[filterPrescriptionsByPermission] currentUser=' + currentUser.username +
+                             ' 过滤后为空，但原始有 ' + prescriptions.length + ' 条处方，保留全部数据避免处方消失');
+                return prescriptions;
+            }
+            return filtered;
         }
 
         // ★ 优化1：处方历史分页加载状态（默认15条/页，避免大数据量卡顿）
