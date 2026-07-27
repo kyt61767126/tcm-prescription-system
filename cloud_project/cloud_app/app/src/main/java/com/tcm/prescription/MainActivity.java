@@ -732,27 +732,20 @@ public class MainActivity extends BridgeActivity {
             "'<button class=\"action-btn\" style=\"flex:1;\" id=\"mobileActionBtn2\" onclick=\"showChangePwdModal()\">🔐 改密</button>';" +
             "}" +
             "}" +
-            "if(!window.__appButtonPatched){" +
-            "window.__appButtonPatched=true;" +
-            "if(window.updateMobileActionButtons){" +
             "window.updateMobileActionButtons=function(){" +
             "var btn2=document.getElementById('mobileActionBtn2');" +
             "if(!btn2||!window.currentUser)return;" +
-            "var isApp=!!window.AndroidNative||!!window.Capacitor;" +
-            "var changePwdText=isApp?'🔐 改密':'🔐 修改密码';" +
-            "var canManage=(window.Permission&&Permission.shouldShowUserManage)?Permission.shouldShowUserManage(currentUser):(currentUser.role==='admin');" +
+            "var canManage=(currentUser.role==='admin');" +
             "if(canManage){" +
             "btn2.innerHTML='👤 用户';" +
             "btn2.onclick=function(){showUserManageModal();};" +
             "}else{" +
-            "btn2.innerHTML=changePwdText;" +
+            "btn2.innerHTML='🔐 改密';" +
             "btn2.onclick=function(){showChangePwdModal();};" +
             "}" +
             "btn2.style.display='';" +
             "};" +
-            "}" +
-            "}" +
-            "if(window.updateMobileActionButtons){window.updateMobileActionButtons();}" +
+            "if(window.currentUser){window.updateMobileActionButtons();}" +
             "})();";
         webView.evaluateJavascript(js, null);
     }
