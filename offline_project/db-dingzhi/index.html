@@ -2121,6 +2121,11 @@ let currentUser = null;
             });
         }
 
+        // ★修复"重新登入后历史处方不显示"：loadData token 机制
+        // 防止 init() 异步触发的 loadData 在 handleLogin 的 loadData 之后完成，
+        // 用空数据（init 时 currentUser 为 null，IndexedDB 可能未就绪）覆盖已加载的处方。
+        let _loadDataToken = 0;
+
         async function loadData() {
             // ★修复历史处方消失：移除 renumberHistoricalPrescriptions 自动调用
             // 原因：renumber 的 saveAllPrescriptionsToDB(readwrite 事务) 会阻塞
@@ -2130,9 +2135,11 @@ let currentUser = null;
             //       getAll 等待 → 超时 → 处方消失。
             // renumber 功能保留，仅在需要时手动调用（如导入数据后）。
 
+            const myToken = ++_loadDataToken;
+
             let savedFormulas = localStorage.getItem('local_formulas');
             let savedMedicines = localStorage.getItem('local_medicines');
-            
+
             if (IS_ELECTRON) {
                 try {
                     const formulaResult = await window.electronAPI.getUserData('local_formulas');
@@ -2145,9 +2152,9 @@ let currentUser = null;
                     }
                 } catch(e) { console.warn('Electron getUserData 失败，使用 localStorage:', e); }
             }
-            
+
             formulas = safeParseJSON(savedFormulas, []);
-            
+
             // 根据用户权限加载处方数据（try/catch + 超时保护，防止 IndexedDB 挂起导致 defaultMedicines 不被赋值）
             try {
                 const loadPrescriptions = async () => {
@@ -2161,29 +2168,40 @@ let currentUser = null;
                 const timeoutPromise = new Promise((_, reject) => {
                     setTimeout(() => reject(new Error('处方加载超时')), 15000);
                 });
-                prescriptionHistory = await Promise.race([loadPrescriptions(), timeoutPromise]);
+                const result = await Promise.race([loadPrescriptions(), timeoutPromise]);
+                // ★token 机制：只允许最新的 loadData 调用设置 prescriptionHistory
+                if (myToken === _loadDataToken) {
+                    prescriptionHistory = result;
+                    // ★双重备份：加载成功后同步到 localStorage
+                    try {
+                        if (Array.isArray(result) && result.length > 0) {
+                            localStorage.setItem('all_prescription_list', JSON.stringify(result));
+                        }
+                    } catch(lsErr) { console.warn('[loadData] localStorage 备份失败:', lsErr); }
+                } else {
+                    console.warn('[loadData] token=' + myToken + ' 已过期（最新 token=' + _loadDataToken + '），跳过 prescriptionHistory 设置');
+                }
             } catch(e) {
                 console.warn('getAllUserPrescriptions 失败，尝试 localStorage 降级:', e);
-                // ★修复"重新登入后历史处方不显示"：失败时优先从 localStorage 读取作为降级，
-                // 而非保留上一用户的数据（会被 filterPrescriptionsByPermission 过滤为空）。
-                // 这样即使 IndexedDB 事务冲突/超时，仍能从 localStorage 恢复处方数据。
-                let fallbackPrescriptions = [];
-                try {
-                    const savedPrescriptions = localStorage.getItem('all_prescription_list');
-                    if (savedPrescriptions) {
-                        const data = JSON.parse(savedPrescriptions);
-                        if (Array.isArray(data) && data.length > 0) {
-                            fallbackPrescriptions = data;
-                            console.warn('[loadData] 从 localStorage 降级读取到 ' + data.length + ' 条处方');
+                if (myToken !== _loadDataToken) {
+                    console.warn('[loadData] token=' + myToken + ' 已过期，跳过降级处理');
+                } else {
+                    let fallbackPrescriptions = [];
+                    try {
+                        const savedPrescriptions = localStorage.getItem('all_prescription_list');
+                        if (savedPrescriptions) {
+                            const data = JSON.parse(savedPrescriptions);
+                            if (Array.isArray(data) && data.length > 0) {
+                                fallbackPrescriptions = data;
+                                console.warn('[loadData] 从 localStorage 降级读取到 ' + data.length + ' 条处方');
+                            }
                         }
+                    } catch(lsErr) {
+                        console.warn('[loadData] localStorage 降级读取失败:', lsErr);
                     }
-                } catch(lsErr) {
-                    console.warn('[loadData] localStorage 降级读取失败:', lsErr);
-                }
-                // 仅当降级数据非空或当前 prescriptionHistory 为空时才覆盖，
-                // 避免降级失败时把已有数据清空
-                if (fallbackPrescriptions.length > 0 || !Array.isArray(prescriptionHistory) || prescriptionHistory.length === 0) {
-                    prescriptionHistory = fallbackPrescriptions;
+                    if (fallbackPrescriptions.length > 0 || !Array.isArray(prescriptionHistory) || prescriptionHistory.length === 0) {
+                        prescriptionHistory = fallbackPrescriptions;
+                    }
                 }
             }
             
