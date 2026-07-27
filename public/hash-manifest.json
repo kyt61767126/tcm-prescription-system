@@ -32,10 +32,10 @@
     "dingzhi": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
-            "sha256": "d7f99376f1ffd3cd5c10f2d3f6953c28301c0e9ade90eb0e3f7c50165819f002",
+            "sha256": "186136afbbe78f6665af1568f0471a9420633110e1dc1af518c849ffe16f17e8",
             "url": "/downloads/惠康中医-定制.apk",
-            "size": 2049495,
-            "updateTime": "2026-07-27T10:59:55.229Z",
+            "size": 2049541,
+            "updateTime": "2026-07-27T11:08:03.837Z",
             "fileName": "惠康中医-定制.apk"
         },
         "portable": {
