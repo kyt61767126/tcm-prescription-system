@@ -157,6 +157,9 @@ if errorlevel 1 (
 echo [OK] JS obfuscation complete
 echo.
 
+REM Release Gradle daemon memory before assembleRelease (avoid OOM during R8 minify)
+call gradlew.bat --stop >nul 2>&1
+
 echo [5/6] Building signed APK...
 echo.
 call gradlew.bat assembleRelease
