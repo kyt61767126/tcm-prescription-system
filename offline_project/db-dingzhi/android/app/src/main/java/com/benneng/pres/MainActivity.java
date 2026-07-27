@@ -517,7 +517,17 @@ public class MainActivity extends AppCompatActivity {
             }
         });
 
-        webView.loadUrl(LOCAL_INDEX);
+        // ★ 热更新：优先加载热更新目录的 index.html，fallback 到打包文件
+        HotUpdateManager hotUpdateManager = new HotUpdateManager(this, "dingzhi");
+        String hotUpdateUrl = hotUpdateManager.getHotUpdateIndexUrl();
+        if (hotUpdateUrl != null) {
+            Log.i(TAG, "使用热更新版本: " + hotUpdateUrl);
+            webView.loadUrl(hotUpdateUrl);
+        } else {
+            Log.i(TAG, "使用打包版本: " + LOCAL_INDEX);
+            webView.loadUrl(LOCAL_INDEX);
+        }
+        hotUpdateManager.checkAndDownloadUpdate();
     }
 
     /**

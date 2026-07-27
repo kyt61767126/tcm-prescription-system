@@ -145,44 +145,6 @@
                     }
                 }
 
-                // P1-4: asarmor 完整性自检（仅 Electron 打包环境）
-                // - 仅在 Electron 环境（global.electronAPI.isElectron）执行
-                // - 通过 global.electronAPI.isPackaged 判断是否打包环境（API 不存在则跳过）
-                // - 调用 electronAPI.security.checkAsarmor() IPC（API 不存在则跳过，不报错）
-                // - 失败时仅记录日志，不强制退出（与现有完整性校验策略一致）
-                if (global.electronAPI && global.electronAPI.isElectron && global.electronAPI.isPackaged) {
-                    if (global.electronAPI.security &&
-                        typeof global.electronAPI.security.checkAsarmor === 'function') {
-                        try {
-                            Promise.resolve(global.electronAPI.security.checkAsarmor())
-                                .then(result => {
-                                    if (result && result.ok === false) {
-                                        console.error('[SecurityGuard] asarmor 完整性校验失败:', result.reason);
-                                    }
-                                })
-                                .catch(() => {
-                                    // 调用异常不报错（保持与现有完整性校验一致的策略）
-                                });
-                        } catch (e) {
-                            // 同步调用异常不报错
-                        }
-                    }
-                }
-
-                // P1-4: proguard 自检（仅 APP 端）
-                // - 通过 typeof global.Capacitor !== 'undefined' 判断 APP 环境
-                // - 检查 Capacitor.Plugins 与 Capacitor.Plugins.LicenseManager 是否存在
-                // - 仅记录日志，不强制退出
-                if (typeof global.Capacitor !== 'undefined') {
-                    if (!global.Capacitor.Plugins) {
-                        console.warn('[SecurityGuard] proguard 自检: Capacitor.Plugins 未配置');
-                    } else if (!global.Capacitor.Plugins.LicenseManager) {
-                        console.warn('[SecurityGuard] proguard 自检: LicenseManager 插件未配置');
-                    } else {
-                        console.log('[SecurityGuard] proguard 自检: LicenseManager 插件已配置');
-                    }
-                }
-
                 this._integrityChecked = true;
             } catch (e) {
                 console.warn('[SecurityGuard] 完整性校验异常:', e);

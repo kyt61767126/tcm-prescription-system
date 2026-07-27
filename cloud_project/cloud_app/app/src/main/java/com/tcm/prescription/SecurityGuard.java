@@ -32,7 +32,7 @@ public class SecurityGuard {
     // 留空则跳过校验；填入发布签名的 SHA-256 指纹（小写无冒号）后启用
     // 获取方式：keytool -printcert -jarfile your.apk （取 SHA256: 后的值，去冒号转小写）
     // 由 generate-sign-hash.ps1 自动注入
-    private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643dfa68deb2c2a3ed385e27779a4601b7b54e";
+private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643dfa68deb2c2a3ed385e27779a4601b7b54e";
 
     // ★ 安全检测开关
     private static final boolean ENABLE_ROOT_CHECK = true;

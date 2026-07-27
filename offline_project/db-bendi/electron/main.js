@@ -21,6 +21,7 @@ const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
 const activateManager = require('./activate');
 const updateNotifier = require('./update-notifier');
+const hotUpdate = require('./hot-update');
 
 let mainWindow;
 let loginWindow;
@@ -394,7 +395,16 @@ function createMainWindow() {
         } catch(e) { console.warn('[过滤toast] 注入失败:', e.message); }
     });
 
-    mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
+    // ★ 热更新：优先加载热更新目录的 index.html，fallback 到打包文件
+    const hotUpdatePath = hotUpdate.getHotUpdateIndexPath(app);
+    if (hotUpdatePath) {
+        console.log('[HotUpdate] 使用热更新版本:', hotUpdatePath);
+        mainWindow.loadFile(hotUpdatePath);
+    } else {
+        mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
+    }
+    // 异步检查并下载更新（下次启动生效）
+    hotUpdate.checkAndDownloadUpdate(app, 'bendi');
 
     mainWindow.on('closed', () => {
         mainWindow = null;

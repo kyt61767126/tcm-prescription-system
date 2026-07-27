@@ -711,7 +711,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【云端】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: yqjzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【云端】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -2673,7 +2673,7 @@ if (window.Permission) {
             }
             
             // 云端请求失败时，返回本地缓存作为后备（防止手机端断网时数据丢失）
-            if (DataCache.has('medicines')) {
+            if (DataCache.isValid('medicines')) {
                 console.log('云端获取失败，使用本地缓存');
                 return DataCache.get('medicines');
             }
@@ -2762,7 +2762,7 @@ if (window.Permission) {
                 console.warn('Failed to get formulas from cloud:', error);
             }
             // 4) fallback：内存缓存 → LocalDB
-            if (DataCache.has('formulas')) {
+            if (DataCache.isValid('formulas')) {
                 return DataCache.get('formulas');
             }
             if (canOffline) {
@@ -6031,7 +6031,7 @@ if (window.Permission) {
             
             // APP端（Capacitor）：每次打开都显示登录界面，确保用户可以切换账号
             // 桌面端和网页端：已登录则直接进入主界面
-            const isCapacitor = window.Capacitor && window.Capacitor.isNative;
+            // ★修复：删除重复的 isCapacitor 声明（init函数开头已声明），否则 SyntaxError 导致整个脚本无法执行
             if (hasValidUser && !isCapacitor) {
                 document.getElementById('loginOverlay').style.display = 'none';
                 const mainContainer = document.querySelector('.main-container');
