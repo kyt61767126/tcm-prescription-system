@@ -1401,7 +1401,7 @@ ipcMain.handle('show-message-box', async (event, options) => {
 // ★ 打印处方（解决 Electron iframe print() 不工作的问题）
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
-        const printWin = new BrowserWindow({ show: false, width: 800, height: 600 });
+        const printWin = new BrowserWindow({ show: true, width: 800, height: 600, modal: true });
         printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
         return new Promise((resolve) => {
             printWin.webContents.on('did-finish-load', () => {

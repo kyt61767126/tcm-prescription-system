@@ -7138,7 +7138,28 @@ if (window.Permission) {
     <div class="prescription-paper">${printContent}</div>
 </body>
 </html>`;
-            // 创建隐藏 iframe 写入内容并调用打印
+            // ★ 优先使用原生打印（APP/Electron），回退到 iframe 打印（网页）
+            if (window.AndroidNative) {
+                if (window.AndroidNative.printHtml) {
+                    window.AndroidNative.printHtml(htmlContent);
+                    return;
+                } else if (window.AndroidNative.invoke) {
+                    try {
+                        window.AndroidNative.invoke('printPrescription', JSON.stringify({
+                            html: htmlContent,
+                            orientation: orientation
+                        }));
+                        return;
+                    } catch(e) {
+                        console.error('[print] AndroidNative打印失败:', e);
+                    }
+                }
+            }
+            if (window.electronAPI && window.electronAPI.printPrescription) {
+                window.electronAPI.printPrescription(htmlContent, orientation);
+                return;
+            }
+            // 网页端：创建隐藏 iframe 写入内容并调用打印
             let printFrame = document.getElementById('__printFrame__');
             if (printFrame) printFrame.remove();
             printFrame = document.createElement('iframe');

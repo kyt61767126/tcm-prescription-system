@@ -4286,28 +4286,46 @@ if (window.Permission) {
         .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 12px; }
         .usage-text { margin-bottom: 10px; }
         .signature-row { display: flex; justify-content: space-between; }</style></head><body><div class="prescription-paper">${printContent}</div></body></html>`;
-            if (window.AndroidNative && window.AndroidNative.printHtml) {
-                window.AndroidNative.printHtml(html);
-            } else {
-                let printFrame = document.getElementById('printFrame');
-                if (!printFrame) {
-                    printFrame = document.createElement('iframe');
-                    printFrame.id = 'printFrame';
-                    printFrame.style.position = 'fixed';
-                    printFrame.style.right = '0';
-                    printFrame.style.bottom = '0';
-                    printFrame.style.width = '0';
-                    printFrame.style.height = '0';
-                    printFrame.style.border = '0';
-                    document.body.appendChild(printFrame);
+            // ★ 优先使用原生打印（APP/Electron），回退到 iframe 打印（网页）
+            if (window.AndroidNative) {
+                if (window.AndroidNative.printHtml) {
+                    window.AndroidNative.printHtml(html);
+                    return;
+                } else if (window.AndroidNative.invoke) {
+                    try {
+                        window.AndroidNative.invoke('printPrescription', JSON.stringify({
+                            html: html,
+                            orientation: orientation
+                        }));
+                        return;
+                    } catch(e) {
+                        console.error('[print] AndroidNative打印失败:', e);
+                    }
                 }
-                const doc = printFrame.contentWindow.document;
-                doc.open();
-                doc.write(html);
-                doc.close();
-                printFrame.contentWindow.focus();
-                printFrame.contentWindow.print();
             }
+            if (window.electronAPI && window.electronAPI.printPrescription) {
+                window.electronAPI.printPrescription(html, orientation);
+                return;
+            }
+            // 网页端：创建隐藏 iframe 写入内容并调用打印
+            let printFrame = document.getElementById('printFrame');
+            if (!printFrame) {
+                printFrame = document.createElement('iframe');
+                printFrame.id = 'printFrame';
+                printFrame.style.position = 'fixed';
+                printFrame.style.right = '0';
+                printFrame.style.bottom = '0';
+                printFrame.style.width = '0';
+                printFrame.style.height = '0';
+                printFrame.style.border = '0';
+                document.body.appendChild(printFrame);
+            }
+            const doc = printFrame.contentWindow.document;
+            doc.open();
+            doc.write(html);
+            doc.close();
+            printFrame.contentWindow.focus();
+            printFrame.contentWindow.print();
         }
 
         async function savePrescription() {
