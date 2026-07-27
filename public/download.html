@@ -984,7 +984,19 @@
         .decision-item .q { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
         .decision-item .a { font-size: 14px; font-weight: 600; color: var(--primary-dark); }
     </style>
-    <script src="/qrcode.min.js"></script>
+    <script src="/qrcode.min.js?v=3"></script>
+    <script>
+        if (typeof QRCode === 'undefined') {
+            var script = document.createElement('script');
+            script.src = 'https://cdn.jsdelivr.net/npm/davidshimjs-qrcodejs@0.0.2/qrcode.min.js';
+            script.onload = function() {
+                if (typeof generateUpdateQRCode === 'function') {
+                    generateUpdateQRCode();
+                }
+            };
+            document.head.appendChild(script);
+        }
+    </script>
 </head>
 <body>
     <div class="toast" id="toast"></div>
@@ -1363,49 +1375,6 @@
                         <a href="#" class="download-btn secondary" id="dl-geren-desktop-portable">
                             <span class="icon">📦</span>便携版
                         </a>
-                    </div>
-                </div>
-            </div>
-
-            <div class="section-title">
-                <span>🔄 离线程序更新方案</span>
-                <span class="sub">自动检测 · 一键升级</span>
-            </div>
-            <div class="card update-card">
-                <div class="update-content">
-                    <div class="update-left">
-                        <div class="update-step">
-                            <span class="step-num">1</span>
-                            <div>
-                                <strong>启动时自动检测</strong>
-                                <p>程序启动时会自动检查新版本，如有更新会弹出提示</p>
-                            </div>
-                        </div>
-                        <div class="update-step">
-                            <span class="step-num">2</span>
-                            <div>
-                                <strong>下载更新包</strong>
-                                <p>点击"立即更新"，程序自动下载最新版本安装包</p>
-                            </div>
-                        </div>
-                        <div class="update-step">
-                            <span class="step-num">3</span>
-                            <div>
-                                <strong>自动安装升级</strong>
-                                <p>下载完成后自动安装，安装完成后重启生效</p>
-                            </div>
-                        </div>
-                        <div class="update-note">
-                            <span class="icon">💡</span>
-                            <span>如果自动更新失败，请手动下载最新版本安装包覆盖安装（数据不会丢失）</span>
-                        </div>
-                    </div>
-                    <div class="update-right">
-                        <div class="qr-title">遇到更新问题？联系客服</div>
-                        <div id="qrcodeUpdate" class="qrcode-container"></div>
-                        <div class="qr-wechat">
-                            客服微信：<span class="wx-id" onclick="copyText(this)">hktzy1688</span>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -1860,6 +1829,49 @@
             </div>
         </div>
 
+            <div class="section-title">
+                <span>🔄 离线程序更新方案</span>
+                <span class="sub">自动检测 · 一键升级</span>
+            </div>
+            <div class="card update-card">
+                <div class="update-content">
+                    <div class="update-left">
+                        <div class="update-step">
+                            <span class="step-num">1</span>
+                            <div>
+                                <strong>启动时自动检测</strong>
+                                <p>程序启动时会自动检查新版本，如有更新会弹出提示</p>
+                            </div>
+                        </div>
+                        <div class="update-step">
+                            <span class="step-num">2</span>
+                            <div>
+                                <strong>下载更新包</strong>
+                                <p>点击"立即更新"，程序自动下载最新版本安装包</p>
+                            </div>
+                        </div>
+                        <div class="update-step">
+                            <span class="step-num">3</span>
+                            <div>
+                                <strong>自动安装升级</strong>
+                                <p>下载完成后自动安装，安装完成后重启生效</p>
+                            </div>
+                        </div>
+                        <div class="update-note">
+                            <span class="icon">💡</span>
+                            <span>如果自动更新失败，请手动下载最新版本安装包覆盖安装（数据不会丢失）</span>
+                        </div>
+                    </div>
+                    <div class="update-right">
+                        <div class="qr-title">遇到更新问题？联系客服</div>
+                        <div id="qrcodeUpdate" class="qrcode-container"></div>
+                        <div class="qr-wechat">
+                            客服微信：<span class="wx-id" onclick="copyText(this)">hktzy1688</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
         <!-- ============ Footer ============ -->
         <div class="footer">
             <p>惠康中医诊所管理系统 · 官方下载中心</p>
@@ -2058,10 +2070,10 @@
         function generateWechatQRCode() {
             var container = document.getElementById('qrcodeContainer');
             if (!container) return;
-            if (container.querySelector('canvas') || container.querySelector('svg')) return;
+            container.innerHTML = '';
             var wechatContent = 'hktzy1688';
             try {
-                new QRCode(container, {
+                var qr = new QRCode(container, {
                     text: wechatContent,
                     width: 180,
                     height: 180,
@@ -2069,6 +2081,12 @@
                     colorLight: '#ffffff',
                     correctLevel: QRCode.CorrectLevel.H
                 });
+                var img = container.querySelector('img');
+                if (img) {
+                    img.style.width = '100%';
+                    img.style.height = '100%';
+                    img.style.objectFit = 'contain';
+                }
             } catch(e) {
                 container.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;"><span style="font-size:40px;margin-bottom:8px;">💬</span>扫码加客服<br><span style="color:#07c160;font-weight:bold;">hktzy1688</span></div>';
             }
@@ -2078,10 +2096,10 @@
         function generateUpdateQRCode() {
             var container = document.getElementById('qrcodeUpdate');
             if (!container) return;
-            if (container.querySelector('canvas') || container.querySelector('svg')) return;
+            container.innerHTML = '';
             var wechatContent = 'hktzy1688';
             try {
-                new QRCode(container, {
+                var qr = new QRCode(container, {
                     text: wechatContent,
                     width: 180,
                     height: 180,
@@ -2089,6 +2107,12 @@
                     colorLight: '#ffffff',
                     correctLevel: QRCode.CorrectLevel.H
                 });
+                var img = container.querySelector('img');
+                if (img) {
+                    img.style.width = '100%';
+                    img.style.height = '100%';
+                    img.style.objectFit = 'contain';
+                }
             } catch(e) {
                 container.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;"><span style="font-size:40px;margin-bottom:8px;">💬</span>扫码加客服<br><span style="color:#07c160;font-weight:bold;">hktzy1688</span></div>';
             }
@@ -2260,6 +2284,10 @@
             .catch(err => console.warn('加载校验值失败:', err));
 
         bindSafeDownload();
+
+        document.addEventListener('DOMContentLoaded', function() {
+            setTimeout(generateUpdateQRCode, 500);
+        });
     </script>
 </body>
 </html>
