@@ -328,11 +328,11 @@ public class MainActivity extends AppCompatActivity {
             } catch (Throwable ignored) {}
         }
 
-        // ★ 清除 WebView 缓存和表单数据（防止旧版本页面内容闪动）
-        // 问题：改名后，WebView 缓存中可能残留旧版本 index.html（含"本能中医处方系统"字样）
-        // 当键盘弹出导致页面重绘时，旧缓存内容会短暂闪现
-        // 注意：不清除 localStorage（WebStorage），避免丢失 rememberedUsername 等用户数据
-        webView.clearCache(true);
+        // ★ 清除 WebView 内存缓存和表单数据（防止旧版本页面内容闪动）
+        // 注意：clearCache(false) 只清内存缓存，保护 IndexedDB/localStorage 等磁盘数据
+        // 历史教训：clearCache(true) 会清空磁盘缓存，导致 IndexedDB 中的处方数据丢失
+        // 这是"重新登入后历史处方消失"的真正根因（2026-07-27 修复）
+        webView.clearCache(false);
         webView.clearFormData();
         webView.clearHistory();
 
