@@ -92,10 +92,10 @@
     "cloud": {
         "apk": {
             "version": "1.15.${BUILD_TIME}",
-            "sha256": "863ce776028b0657f0c89e94b16559c25950e88591c2ebb464fce5bd7973c4ef",
+            "sha256": "4caea69e031b168e431e8e436f1077d3c873354458dc162719dd3089170343e7",
             "url": "/downloads/惠康中医-云端.apk",
-            "size": 11242219,
-            "updateTime": "2026-07-27T08:39:53.292Z",
+            "size": 11242213,
+            "updateTime": "2026-07-27T08:42:10.368Z",
             "fileName": "惠康中医-云端.apk"
         },
         "exe": {
