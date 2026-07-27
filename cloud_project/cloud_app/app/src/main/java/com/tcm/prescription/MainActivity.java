@@ -466,6 +466,10 @@ public class MainActivity extends BridgeActivity {
                 // 布局修复脚本立即注入（体积小，影响UI布局）
                 mainHandler.post(() -> injectLayoutFixScript(view));
 
+                // ★ 注入APP专属按钮布局（与离线APP一致：顶部5按钮+底部5按钮）
+                // 网页版保持不变，仅云端APP动态修改
+                mainHandler.post(() -> injectAppButtonLayout(view));
+
                 // 录像拍照脚本延迟到页面渲染稳定后注入（避免40KB脚本同步执行阻塞UI）
                 // 300ms 是经验值：足够 React 完成首屏渲染，又不至于让用户感觉录像功能迟钝
                 mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
@@ -693,6 +697,64 @@ public class MainActivity extends BridgeActivity {
             cachedVideoRecorderScript = "";
         }
         return cachedVideoRecorderScript;
+    }
+
+    /**
+     * ★ 注入APP专属按钮布局（与离线APP一致）
+     * 顶部5按钮：填资料、存验方、统计、纵向打印、横向打印
+     * 底部5按钮：录像、拍照、保存、清空、用户/改密
+     * 网页版保持不变，仅云端APP动态修改
+     */
+    private void injectAppButtonLayout(WebView webView) {
+        String js = "(function(){" +
+            "var topTabs=document.querySelector('.top-tabs-left');" +
+            "if(topTabs&&!topTabs.getAttribute('data-app-modified')){" +
+            "topTabs.setAttribute('data-app-modified','true');" +
+            "topTabs.style.display='flex';" +
+            "topTabs.innerHTML=" +
+            "'<div class=\"tab-left-item active\" style=\"flex:1;text-align:center;\">填资料</div>'+" +
+            "'<button class=\"action-btn\" onclick=\"saveAsFormula()\" style=\"flex:1;padding:4px 0;font-size:12px;\">存验方</button>'+" +
+            "'<button class=\"action-btn\" onclick=\"showModal(\\'analyticsModal\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">统计</button>'+" +
+            "'<button class=\"action-btn\" onclick=\"printPrescription(\\'portrait\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">纵向打印</button>'+" +
+            "'<button class=\"action-btn\" onclick=\"printPrescription(\\'landscape\\')\" style=\"flex:1;padding:4px 0;font-size:12px;\">横向打印</button>';" +
+            "}" +
+            "var actionBar=document.getElementById('mobileActionBar');" +
+            "if(actionBar&&!actionBar.getAttribute('data-app-modified')){" +
+            "actionBar.setAttribute('data-app-modified','true');" +
+            "var btns=actionBar.querySelector('.action-buttons');" +
+            "if(btns){" +
+            "btns.style.display='flex';" +
+            "btns.innerHTML=" +
+            "'<button class=\"action-btn\" style=\"flex:1;\" onclick=\"if(window.openRecordingOverlay)window.openRecordingOverlay();else alert(\\'录像功能加载中，请稍候\\')\">🎥 录像</button>'+" +
+            "'<button class=\"action-btn\" style=\"flex:1;\" onclick=\"if(window.openPhotoOverlay)window.openPhotoOverlay();else alert(\\'拍照功能加载中，请稍候\\')\">📷 拍照</button>'+" +
+            "'<button class=\"action-btn primary\" style=\"flex:1;\" onclick=\"savePrescription()\">💾 保存</button>'+" +
+            "'<button class=\"action-btn\" style=\"flex:1;\" onclick=\"clearPrescription()\">🗑️ 清空</button>'+" +
+            "'<button class=\"action-btn\" style=\"flex:1;\" id=\"mobileActionBtn2\" onclick=\"showChangePwdModal()\">🔐 改密</button>';" +
+            "}" +
+            "}" +
+            "if(!window.__appButtonPatched){" +
+            "window.__appButtonPatched=true;" +
+            "if(window.updateMobileActionButtons){" +
+            "window.updateMobileActionButtons=function(){" +
+            "var btn2=document.getElementById('mobileActionBtn2');" +
+            "if(!btn2||!window.currentUser)return;" +
+            "var isApp=!!window.AndroidNative||!!window.Capacitor;" +
+            "var changePwdText=isApp?'🔐 改密':'🔐 修改密码';" +
+            "var canManage=(window.Permission&&Permission.shouldShowUserManage)?Permission.shouldShowUserManage(currentUser):(currentUser.role==='admin');" +
+            "if(canManage){" +
+            "btn2.innerHTML='👤 用户';" +
+            "btn2.onclick=function(){showUserManageModal();};" +
+            "}else{" +
+            "btn2.innerHTML=changePwdText;" +
+            "btn2.onclick=function(){showChangePwdModal();};" +
+            "}" +
+            "btn2.style.display='';" +
+            "};" +
+            "}" +
+            "}" +
+            "if(window.updateMobileActionButtons){window.updateMobileActionButtons();}" +
+            "})();";
+        webView.evaluateJavascript(js, null);
     }
 
     /**
