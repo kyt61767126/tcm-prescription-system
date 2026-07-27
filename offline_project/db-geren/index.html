@@ -4292,6 +4292,8 @@ if (window.Permission) {
         .signature-row { display: flex; justify-content: space-between; }</style></head><body><div class="prescription-paper">${printContent}</div></body></html>`;
             if (window.AndroidNative && window.AndroidNative.printHtml) {
                 window.AndroidNative.printHtml(html);
+            } else if (window.electronAPI && window.electronAPI.printPrescription) {
+                window.electronAPI.printPrescription(html, orientation);
             } else {
                 let printFrame = document.getElementById('printFrame');
                 if (!printFrame) {
