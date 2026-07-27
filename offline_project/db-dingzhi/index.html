@@ -4026,140 +4026,47 @@ let currentUser = null;
                     console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
-                // 离线APP视频播放：两级降级策略，确保视频一定能播放
-                // 1. 主方案：分片读取 + Blob URL 内嵌播放（解决 Binder 1MB 限制，避免 data URL 大小限制，体验与云端一致）
-                // 2. 降级方案：系统播放器（兜底，内嵌播放失败时使用）
+                // 视频播放：与云端APP统一方案，使用 readFileAsBase64 + data URL
+                // 如果文件过大导致 Binder 限制，降级到系统播放器
                 var filePath = f.path;
-                var mimeType = '';
-                if (filePath.match(/\.webm$/i)) mimeType = 'video/webm';
-                else if (filePath.match(/\.mp4$/i)) mimeType = 'video/mp4';
+                var vidMime = '';
+                if (filePath.match(/\.webm$/i)) vidMime = 'video/webm';
+                else if (filePath.match(/\.mp4$/i)) vidMime = 'video/mp4';
 
-                view.innerHTML = '<div style="text-align:center;color:#fff;padding:30px 20px;font-size:13px;">' +
-                    '<div style="margin-bottom:15px;">🎬 正在加载视频...</div>' +
-                    '</div>';
+                view.innerHTML = '<div style="text-align:center;color:#fff;padding:30px 20px;font-size:13px;">🎬 正在加载视频...</div>';
 
-                // base64 转 ArrayBuffer（分片拼接后转换，避免 data URL 大小限制）
-                function base64ToArrayBuffer(base64) {
-                    var binaryString = atob(base64);
-                    var len = binaryString.length;
-                    var bytes = new Uint8Array(len);
-                    for (var i = 0; i < len; i++) {
-                        bytes[i] = binaryString.charCodeAt(i);
-                    }
-                    return bytes.buffer;
-                }
-
-                // 创建 Blob URL 并内嵌播放
-                function playWithBlobUrl(arrayBuffer, mime) {
-                    try {
-                        var blob = new Blob([arrayBuffer], { type: mime || mimeType || 'video/webm' });
-                        var blobUrl = URL.createObjectURL(blob);
-                        if (!window.__activeBlobUrls) window.__activeBlobUrls = {};
-                        var blobId = 'video_' + Date.now();
-                        window.__activeBlobUrls[blobId] = blobUrl;
-                        window.__currentBlobUrl = blobUrl;
-
+                window.electronAPI.readFileAsBase64(filePath).then(function(result) {
+                    if (result.success && (result.data || result.base64)) {
+                        var src = result.data || result.base64;
                         view.innerHTML = '';
                         var video = document.createElement('video');
-                        video.src = blobUrl;
+                        video.src = src;
                         video.controls = true;
                         video.playsInline = true;
                         video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
                         video.onerror = function() {
-                            console.error('[媒体查看] Blob URL 视频播放失败，降级到系统播放器');
-                            try { URL.revokeObjectURL(blobUrl); } catch(e) {}
-                            delete window.__activeBlobUrls[blobId];
-                            fallbackToSystemPlayer();
+                            console.error('[媒体查看] 视频播放失败，降级到系统播放器');
+                            if (window.electronAPI && window.electronAPI.openFile) {
+                                window.electronAPI.openFile(filePath, vidMime);
+                            }
                         };
                         view.appendChild(video);
-                        return true;
-                    } catch(e) {
-                        console.error('[媒体查看] 创建 Blob URL 失败:', e);
-                        return false;
-                    }
-                }
-
-                // 降级方案：系统播放器
-                function fallbackToSystemPlayer() {
-                    view.innerHTML = '<div style="text-align:center;color:#fff;padding:30px 20px;font-size:13px;">' +
-                        '<div style="margin-bottom:15px;">🎬 内嵌播放失败，正在打开系统播放器...</div>' +
-                        '<button onclick="window.__openSysPlayer()" ' +
-                        'style="padding:10px 20px;font-size:14px;background:#4CAF50;color:white;border:none;border-radius:6px;cursor:pointer;">' +
-                        '📱 重新打开系统播放器</button>' +
-                        '</div>';
-                    window.__openSysPlayer = function() {
+                    } else {
+                        console.error('[媒体查看] readFileAsBase64 失败，降级到系统播放器:', result.error);
                         if (window.electronAPI && window.electronAPI.openFile) {
-                            window.electronAPI.openFile(filePath, mimeType).then(function(result) {
-                                if (result && !result.success) {
-                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                        '打开失败: ' + escapeHtml(String((result && result.error) || '未知')) + '<br/>' +
-                                        '<button onclick="window.__openSysPlayer()" ' +
-                                        'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
-                                        '</div>';
-                                }
-                            }).catch(function(err) {
-                                console.error('[媒体查看] 系统播放器异常:', err);
-                            });
+                            window.electronAPI.openFile(filePath, vidMime);
                         } else {
-                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">electronAPI 不可用</div>';
+                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载失败</div>';
                         }
-                    };
-                    window.__openSysPlayer();
-                }
-
-                // 主方案：分片读取 + Blob URL 内嵌播放
-                if (window.electronAPI && window.electronAPI.startReadSession) {
-                    window.electronAPI.startReadSession(filePath).then(function(session) {
-                        if (!session || !session.success || !session.sessionId) {
-                            console.error('[媒体查看] startReadSession 失败，降级到系统播放器');
-                            fallbackToSystemPlayer();
-                            return;
-                        }
-                        var sessionId = session.sessionId;
-                        var allBase64 = '';
-                        var mimeType2 = session.mimeType || mimeType || 'video/webm';
-
-                        function readNext() {
-                            window.electronAPI.readNextChunk(sessionId).then(function(chunkResult) {
-                                if (!chunkResult || !chunkResult.success) {
-                                    console.error('[媒体查看] readNextChunk 失败，降级到系统播放器');
-                                    window.electronAPI.closeReadSession(sessionId);
-                                    fallbackToSystemPlayer();
-                                    return;
-                                }
-                                if (chunkResult.chunk) {
-                                    allBase64 += chunkResult.chunk;
-                                }
-                                if (chunkResult.eof) {
-                                    window.electronAPI.closeReadSession(sessionId);
-                                    try {
-                                        var arrayBuffer = base64ToArrayBuffer(allBase64);
-                                        if (!playWithBlobUrl(arrayBuffer, mimeType2)) {
-                                            console.error('[媒体查看] Blob URL 播放失败，降级到系统播放器');
-                                            fallbackToSystemPlayer();
-                                        }
-                                    } catch(e) {
-                                        console.error('[媒体查看] 分片拼接或 Blob 创建失败:', e);
-                                        fallbackToSystemPlayer();
-                                    }
-                                } else {
-                                    readNext();
-                                }
-                            }).catch(function(err) {
-                                console.error('[媒体查看] readNextChunk 异常:', err);
-                                window.electronAPI.closeReadSession(sessionId);
-                                fallbackToSystemPlayer();
-                            });
-                        }
-                        readNext();
-                    }).catch(function(err) {
-                        console.error('[媒体查看] startReadSession 异常:', err);
-                        fallbackToSystemPlayer();
-                    });
-                } else {
-                    console.error('[媒体查看] startReadSession 不可用，降级到系统播放器');
-                    fallbackToSystemPlayer();
-                }
+                    }
+                }).catch(function(err) {
+                    console.error('[媒体查看] 视频加载异常:', err);
+                    if (window.electronAPI && window.electronAPI.openFile) {
+                        window.electronAPI.openFile(filePath, vidMime);
+                    } else {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载异常</div>';
+                    }
+                });
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
             }

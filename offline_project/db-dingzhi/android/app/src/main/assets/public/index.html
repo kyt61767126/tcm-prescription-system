@@ -3340,8 +3340,17 @@ let currentUser = null;
                 const dropdown = DOM_CACHE.medicineSearchDropdown;
                 const rect = element.getBoundingClientRect();
                 dropdown.style.left = rect.left + 'px';
-                dropdown.style.top = (rect.bottom + 2) + 'px';
                 dropdown.style.width = (rect.width) + 'px';
+                // 智能位置：确保候选框在输入框下方显示（与云端APP一致）
+                const spaceBelow = window.innerHeight - rect.bottom - 4;
+                if (spaceBelow >= 120) {
+                    dropdown.style.top = (rect.bottom + 2) + 'px';
+                    dropdown.style.maxHeight = Math.min(250, spaceBelow) + 'px';
+                } else {
+                    const spaceAbove = rect.top - 4;
+                    dropdown.style.top = Math.max(0, rect.top - Math.min(250, spaceAbove) - 2) + 'px';
+                    dropdown.style.maxHeight = Math.min(250, spaceAbove) + 'px';
+                }
 
                 if (!query.trim()) {
                     dropdown.style.display = 'none';
