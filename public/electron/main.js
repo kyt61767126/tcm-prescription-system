@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, session, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, session, shell, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
@@ -191,8 +191,18 @@ function createMainWindow() {
     });
 
     const indexPath = path.join(__dirname, '..', 'index.html');
-    
+
     mainWindow.loadFile(indexPath);
+
+    // ★ 安全：拦截 window.open 防止钓鱼攻击，仅允许本应用内部页面
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('file://') || url.startsWith('http://localhost') || url.startsWith('https://tcm-prescription-system.pages.dev')) {
+            return { action: 'deny' };
+        }
+        // 外部链接用系统浏览器打开，不在应用内打开
+        shell.openExternal(url);
+        return { action: 'deny' };
+    });
 
     if (!app.isPackaged) {
         mainWindow.webContents.openDevTools();

@@ -406,6 +406,15 @@ function createMainWindow() {
     // 异步检查并下载更新（下次启动生效）
     hotUpdate.checkAndDownloadUpdate(app, 'bendi');
 
+    // ★ 安全：拦截 window.open 防止钓鱼攻击
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('file://') || url.startsWith('http://localhost')) {
+            return { action: 'deny' };
+        }
+        shell.openExternal(url);
+        return { action: 'deny' };
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
@@ -1082,10 +1091,11 @@ ipcMain.handle('rename-media-files', async (event, patientName, oldNo, newNo) =>
     return await renameMediaFiles(patientName, oldNo, newNo);
 });
 
-// ★ 删除文件（新增）
+// ★ 删除文件（新增）- 路径白名单校验，仅允许 downloads 目录下文件
 ipcMain.handle('delete-file', async (event, filePath) => {
     try {
         if (!filePath) return { success: false, error: '文件路径为空' };
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的目录内，已拒绝' };
         await fs.unlink(filePath);
         return { success: true };
     } catch (error) {
@@ -1094,10 +1104,11 @@ ipcMain.handle('delete-file', async (event, filePath) => {
     }
 });
 
-// ★ 打开文件（系统默认程序）（新增）
+// ★ 打开文件（系统默认程序）（新增）- 路径白名单校验
 ipcMain.handle('open-file', async (event, filePath, mimeType) => {
     try {
         if (!filePath) return { success: false, error: '文件路径为空' };
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的目录内，已拒绝' };
         await shell.openPath(filePath);
         return { success: true };
     } catch (error) {
@@ -1106,10 +1117,11 @@ ipcMain.handle('open-file', async (event, filePath, mimeType) => {
     }
 });
 
-// ★ 读取文件为Base64（新增）
+// ★ 读取文件为Base64（新增）- 路径白名单校验
 ipcMain.handle('read-file-as-base64', async (event, filePath) => {
     try {
         if (!filePath) return { success: false, error: '文件路径为空' };
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的目录内，已拒绝' };
         const buffer = await fs.readFile(filePath);
         const ext = path.extname(filePath).toLowerCase();
         let mimeType = 'image/png';

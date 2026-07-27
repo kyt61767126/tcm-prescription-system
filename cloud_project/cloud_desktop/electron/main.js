@@ -394,6 +394,15 @@ function createMainWindow() {
 
     mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
 
+    // ★ 安全：拦截 window.open 防止钓鱼攻击
+    mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('file://') || url.startsWith('http://localhost') || url.startsWith('https://tcm-prescription-system.pages.dev')) {
+            return { action: 'deny' };
+        }
+        shell.openExternal(url);
+        return { action: 'deny' };
+    });
+
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
