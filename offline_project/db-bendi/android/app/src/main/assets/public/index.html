@@ -1654,15 +1654,11 @@ let currentUser = null;
 
         // 根据用户角色更新移动端底部按钮
         function updateMobileActionButtons() {
-            const btn1 = document.getElementById('mobileActionBtn1');
             const btn2 = document.getElementById('mobileActionBtn2');
-            if (!btn1 || !btn2 || !currentUser) return;
+            if (!btn2 || !currentUser) return;
 
             const isApp = !!window.AndroidNative;
             const changePwdText = isApp ? '🔐 改密' : '🔐 修改密码';
-
-            btn1.innerHTML = '📊 统计';
-            btn1.onclick = function() { showModal('analyticsModal'); };
 
             // 管理员显示"账户"，普通用户显示"改密"（APP和桌面一致）
             const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');

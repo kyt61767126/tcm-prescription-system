@@ -1434,15 +1434,11 @@ if (window.Permission) {
 
         // 根据用户角色更新移动端底部按钮
         function updateMobileActionButtons() {
-            const btn1 = document.getElementById('mobileActionBtn1');
             const btn2 = document.getElementById('mobileActionBtn2');
-            if (!btn1 || !btn2 || !currentUser) return;
+            if (!btn2 || !currentUser) return;
 
             const isApp = !!window.AndroidNative; // Android APP独有桥接（window.electronAPI被注入shim不能用作判断）
             const changePwdText = isApp ? '🔐 改密' : '🔐 修改密码';
-
-            btn1.innerHTML = '📊 统计';
-            btn1.onclick = function() { showModal('analyticsModal'); };
 
             // 个人版统一显示"改密"按钮（不区分管理员/普通用户）
             btn2.innerHTML = changePwdText;
