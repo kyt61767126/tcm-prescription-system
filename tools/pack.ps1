@@ -914,6 +914,8 @@ function Build-App {
         Write-Host "  Java 预编译检查中（提前发现编译错误）..." -ForegroundColor Cyan
         Push-Location $script:AndroidDir
         try {
+            # 清理残留的 STOPPED Gradle daemon（避免"daemon has been stopped"错误）
+            & ".\gradlew.bat" --stop 2>&1 | Out-Null
             Invoke-External { & ".\gradlew.bat" compileReleaseJavaWithJavac --quiet } "Java pre-compile check"
         } catch {
             Write-Log "[ERROR] Java 预编译检查失败，终止打包（避免无效递增 versionCode）" "ERROR"
