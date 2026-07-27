@@ -876,7 +876,7 @@ public class MainActivity extends AppCompatActivity {
             "    var el = document.activeElement;" +
             "    if(!el) return;" +
             "    if(el.tagName==='INPUT'||el.tagName==='TEXTAREA'||el.isContentEditable){" +
-            "      try{ el.scrollIntoView({block:'center', behavior:'smooth'}); }catch(e){ el.scrollIntoView(false); }" +
+            "      try{ el.scrollIntoView({block:'nearest'}); }catch(e){ el.scrollIntoView(false); }" +
             "    }" +
             "  }" +
             "  document.addEventListener('focusin', function(e){" +
@@ -885,13 +885,6 @@ public class MainActivity extends AppCompatActivity {
             "      setTimeout(scrollToActive, 300);" +
             "    }" +
             "  });" +
-            "  if(window.visualViewport){" +
-            "    var timer = null;" +
-            "    window.visualViewport.addEventListener('resize', function(){" +
-            "      if(timer) clearTimeout(timer);" +
-            "      timer = setTimeout(scrollToActive, 100);" +
-            "    });" +
-            "  }" +
             "})();";
         webView.evaluateJavascript(js, null);
     }

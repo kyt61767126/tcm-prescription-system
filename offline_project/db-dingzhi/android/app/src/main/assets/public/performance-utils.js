@@ -303,6 +303,9 @@
     // 问题：showSearchDropdown 将候选框固定显示在输入框下方，键盘弹出时下方空间不足被遮挡
     // 修复：监听候选框显示，动态判断上方/下方空间，空间不足时显示在输入框上方
     function setupDropdownKeyboardFix() {
+        // ★ 已禁用：此函数会动态重新定位候选框到上方，与云端APP行为不一致
+        // 云端APP没有此函数，候选框始终在输入框下方显示（CSS max-height: 180px 控制高度）
+        return;
         if (window.innerWidth >= 769) return;
 
         var dropdown = document.getElementById('medicineSearchDropdown');

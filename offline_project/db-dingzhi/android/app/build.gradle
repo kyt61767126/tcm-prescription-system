@@ -57,7 +57,7 @@ android {
         applicationId "com.huikang.tcm.clinic"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 42
+        versionCode 49
         versionName "1.0.${BUILD_TIME}"
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.map'
