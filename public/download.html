@@ -737,15 +737,16 @@
             border-radius: var(--radius-md);
             margin: 16px 0;
         }
-        .qrcode-img {
+        .qrcode-container {
             width: 180px; height: 180px;
             border: 2px solid var(--border-color);
             border-radius: var(--radius-sm);
             margin-bottom: 12px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
             transition: var(--transition);
+            background: white;
         }
-        .qrcode-img:hover {
+        .qrcode-container:hover {
             transform: scale(1.02);
             box-shadow: 0 8px 20px rgba(0,0,0,0.15);
         }
@@ -908,6 +909,7 @@
         .decision-item .q { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
         .decision-item .a { font-size: 14px; font-weight: 600; color: var(--primary-dark); }
     </style>
+    <script src="/qrcode.min.js"></script>
 </head>
 <body>
     <div class="toast" id="toast"></div>
@@ -1428,7 +1430,7 @@
                         </div>
                     </div>
                     <div class="contact-box">
-                        <img src="/qr-wechat.svg" alt="客服微信二维码" class="qrcode-img">
+                        <div id="qrcodeContainer" class="qrcode-container"></div>
                         <div class="contact-wechat">
                             客服微信：
                             <span class="wx-id" onclick="copyText(this)" title="点击复制">hktzy1688</span>
@@ -1766,6 +1768,9 @@
                 btn.classList.add('active');
                 document.getElementById('tab-' + target).classList.add('active');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
+                if (target === 'purchase') {
+                    setTimeout(generateWechatQRCode, 100);
+                }
             });
         });
 
@@ -1929,6 +1934,26 @@
 
         function switchToPurchase() {
             document.querySelector('.tab-btn[data-tab="purchase"]').click();
+            generateWechatQRCode();
+        }
+
+        function generateWechatQRCode() {
+            var container = document.getElementById('qrcodeContainer');
+            if (!container) return;
+            if (container.querySelector('canvas') || container.querySelector('svg')) return;
+            var wechatContent = 'weixin://contacts/profile/hktzy1688';
+            try {
+                new QRCode(container, {
+                    text: wechatContent,
+                    width: 180,
+                    height: 180,
+                    colorDark: '#07c160',
+                    colorLight: '#ffffff',
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            } catch(e) {
+                container.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:#999;font-size:12px;"><span style="font-size:40px;margin-bottom:8px;">💬</span>扫码加客服<br><span style="color:#07c160;font-weight:bold;">hktzy1688</span></div>';
+            }
         }
 
         // =====================================================================
