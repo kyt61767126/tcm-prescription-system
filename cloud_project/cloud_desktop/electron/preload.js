@@ -10,6 +10,10 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
     isElectron: true,
 
+    // ---------- 打印处方（新增） ----------
+    printPrescription: (html, orientation) =>
+        ipcRenderer.invoke('print-prescription', html, orientation),
+
     // ---------- 图像保存 ----------
     savePrescriptionImage: (imageData, fileName) => {
         return ipcRenderer.invoke('save-prescription-image', imageData, fileName);

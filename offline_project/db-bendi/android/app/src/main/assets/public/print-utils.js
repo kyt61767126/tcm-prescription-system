@@ -22,7 +22,7 @@
 
             return `<!DOCTYPE html><html><head><title>打印处方</title><style>
 @page { size: ${pageSize}; margin: 0; }
-body { font-family: SimSun, serif; padding: 0; margin: 0; }
+body { font-family: SimSun, serif; padding: 0; margin: 0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }
 .prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 15mm; margin: 0 auto; box-sizing: border-box; }
 .clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
 .prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
@@ -45,12 +45,32 @@ body { font-family: SimSun, serif; padding: 0; margin: 0; }
             const html = this.generatePrescriptionPrintHTML(printContent, orientation);
 
             // 安卓原生打印
-            if (global.AndroidNative && global.AndroidNative.printHtml) {
-                global.AndroidNative.printHtml(html);
+            if (global.AndroidNative) {
+                if (global.AndroidNative.printHtml) {
+                    // 离线APP：直接调用 printHtml
+                    global.AndroidNative.printHtml(html);
+                    return;
+                } else if (global.AndroidNative.invoke) {
+                    // 云端APP：通过 invoke 调用 printPrescription
+                    try {
+                        global.AndroidNative.invoke('printPrescription', JSON.stringify({
+                            html: html,
+                            orientation: orientation
+                        }));
+                        return;
+                    } catch(e) {
+                        console.error('AndroidNative打印失败:', e);
+                    }
+                }
+            }
+
+            // Electron桌面端：通过IPC调用打印
+            if (global.electronAPI && global.electronAPI.printPrescription) {
+                global.electronAPI.printPrescription(html, orientation);
                 return;
             }
 
-            // 桌面端 iframe 打印
+            // 网页端：iframe打印
             let printFrame = document.getElementById('printFrame');
             if (!printFrame) {
                 printFrame = document.createElement('iframe');

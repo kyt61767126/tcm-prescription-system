@@ -843,6 +843,35 @@ public class MainActivity extends BridgeActivity {
     public class NativeBridge {
 
         @JavascriptInterface
+        public void printHtml(final String html) {
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        WebView printWebView = new WebView(MainActivity.this);
+                        printWebView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+
+                        PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                        PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter();
+
+                        PrintAttributes attrs = new PrintAttributes.Builder()
+                            .setMediaSize(PrintAttributes.MediaSize.ISO_A5)
+                            .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
+                            .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                            .build();
+
+                        String jobName = "惠康中医处方 " + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.CHINA).format(new java.util.Date());
+                        printManager.print(jobName, printAdapter, attrs);
+                        Log.d("TCM-Pres", "printHtml 已调起系统打印: " + jobName);
+                    } catch (Exception e) {
+                        Log.e("TCM-Pres", "printHtml 失败", e);
+                        Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
         public String invoke(String name, String jsonStr) {
             Log.d("TCM-Pres", "NativeBridge.invoke: " + name + ", jsonLen=" + (jsonStr != null ? jsonStr.length() : 0));
             // P1-6: 调用来源校验（分层策略）

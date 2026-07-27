@@ -1397,6 +1397,32 @@ ipcMain.handle('show-message-box', async (event, options) => {
     }
 });
 
+// ★ 打印处方（解决 Electron iframe print() 不工作的问题）
+ipcMain.handle('print-prescription', async (event, html, orientation) => {
+    try {
+        const printWin = new BrowserWindow({ show: false, width: 800, height: 600 });
+        printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
+        return new Promise((resolve) => {
+            printWin.webContents.on('did-finish-load', () => {
+                printWin.webContents.print({ silent: false, printBackground: true }, (success) => {
+                    printWin.close();
+                    resolve(success);
+                });
+            });
+            // 超时保护：30秒后自动关闭
+            setTimeout(() => {
+                if (!printWin.isDestroyed()) {
+                    printWin.close();
+                }
+                resolve(false);
+            }, 30000);
+        });
+    } catch (e) {
+        console.error('打印失败:', e);
+        return false;
+    }
+});
+
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
