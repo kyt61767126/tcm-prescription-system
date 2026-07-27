@@ -1398,25 +1398,78 @@ ipcMain.handle('show-message-box', async (event, options) => {
 });
 
 // ★ 打印处方（解决 Electron iframe print() 不工作的问题）
+// ★ 修复 2026-07-27：data: URL + encodeURIComponent 在 Electron 28+ 中存在两个问题：
+//   1) did-finish-load 事件对 data: URL 经常不触发，导致 print() 永不调用，30秒后超时关闭
+//   2) 处方 HTML 含大量内联样式，encodeURIComponent 后 URL 可能过长被截断
+//   修复方案：改用 base64 编码的 data URL（更短更可靠），监听 dom-ready 替代 did-finish-load，
+//            并处理 did-fail-load 错误，关联父窗口（modal）
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
-        const printWin = new BrowserWindow({ show: true, width: 800, height: 600, modal: true });
-        printWin.loadURL('data:text/html;charset=utf-8,' + encodeURIComponent(html));
-        return new Promise((resolve) => {
-            printWin.webContents.on('did-finish-load', () => {
-                printWin.webContents.print({ silent: false, printBackground: true }, (success) => {
-                    printWin.close();
-                    resolve(success);
-                });
-            });
-            // 超时保护：30秒后自动关闭
-            setTimeout(() => {
-                if (!printWin.isDestroyed()) {
-                    printWin.close();
-                }
-                resolve(false);
-            }, 30000);
+        const parentWin = BrowserWindow.fromWebContents(event.sender);
+        const printWin = new BrowserWindow({
+            show: true,
+            width: 800,
+            height: 600,
+            modal: !!parentWin && !parentWin.isDestroyed(),
+            parent: parentWin && !parentWin.isDestroyed() ? parentWin : undefined,
+            webPreferences: {
+                contextIsolation: true,
+                nodeIntegration: false
+            }
         });
+        // ★ 用 base64 编码替代 encodeURIComponent，避免 URL 长度截断和特殊字符问题
+        const base64Html = Buffer.from(html, 'utf8').toString('base64');
+        const dataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
+
+        return new Promise((resolve) => {
+            let printed = false;  // 防止重复打印
+            let settled = false;  // 防止重复 resolve
+
+            const safeResolve = (val) => {
+                if (settled) return;
+                settled = true;
+                if (!printWin.isDestroyed()) printWin.close();
+                resolve(val);
+            };
+
+            printWin.loadURL(dataUrl);
+
+        // ★ 监听 dom-ready（比 did-finish-load 更早更可靠）
+        printWin.webContents.once('dom-ready', () => {
+            // 给浏览器一点时间完成布局，否则可能打印空白页
+            setTimeout(() => {
+                if (printed || printWin.isDestroyed()) return;
+                printed = true;
+                printWin.webContents.print({ silent: false, printBackground: true }, (success) => {
+                    safeResolve(success);
+                });
+            }, 200);
+        });
+
+        // ★ 兜底：若 dom-ready 不触发，did-finish-load 作为备份
+        printWin.webContents.once('did-finish-load', () => {
+            if (printed || printWin.isDestroyed()) return;
+            console.warn('[print] dom-ready 未触发，由 did-finish-load 兜底打印');
+            printed = true;
+            printWin.webContents.print({ silent: false, printBackground: true }, (success) => {
+                safeResolve(success);
+            });
+        });
+
+        // ★ 错误处理：data URL 加载失败时立即返回
+        printWin.webContents.once('did-fail-load', (_e, errorCode, errorDesc) => {
+            console.error('[print] did-fail-load:', errorCode, errorDesc);
+            safeResolve(false);
+        });
+
+        // 超时保护：30秒后自动关闭
+        setTimeout(() => {
+            if (!settled) {
+                console.error('[print] 30秒超时未触发打印，强制关闭');
+                safeResolve(false);
+            }
+        }, 30000);
+        });  // 关闭 return new Promise
     } catch (e) {
         console.error('打印失败:', e);
         return false;
