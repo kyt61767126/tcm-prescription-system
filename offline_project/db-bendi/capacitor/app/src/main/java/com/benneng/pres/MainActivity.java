@@ -466,12 +466,12 @@ public class MainActivity extends BridgeActivity {
             "        } catch(e) { resolve({success:false, error:String(e)}); }" +
             "      });" +
             "    }," +
-            "    openFile: function(filePath, mimeType) { try { nativeBridge.openFile(filePath, mimeType||''); } catch(e){ console.error('openFile失败:', e); } }," +
-            "    quitApp: function() { nativeBridge.quitApp(); }," +
-            "    printPrescription: function(html) { nativeBridge.printHtml(html); }," +
-            "    showToast: function(message) { nativeBridge.showToast(message); }," +
-            "    encryptData: function(data, key) { return nativeBridge.encryptData(data, key); }," +
-            "    decryptData: function(encryptedData, key) { return nativeBridge.decryptData(encryptedData, key); }," +
+            "    openFile: function(filePath, mimeType) { return callNativeAsync('openFile', {filePath: filePath, mimeType: mimeType||''}); }," +
+            "    quitApp: function() { callNative('quitApp', {}); }," +
+            "    printPrescription: function(html, orientation) { return callNativeAsync('printPrescription', {html: html, orientation: orientation||'portrait'}); }," +
+            "    showToast: function(message) { callNative('showToast', {message: message}); }," +
+            "    encryptData: function(data, key) { return callNativeAsync('encryptData', {data: data, key: key}); }," +
+            "    decryptData: function(encryptedData, key) { return callNativeAsync('decryptData', {encryptedData: encryptedData, key: key}); }," +
             "    savePrescriptionImage: function(imageData, fileName) { return callNativeAsync('savePrescriptionImage', {imageData: imageData, fileName: fileName}); }," +
             "    saveVideoFile: function(base64Data, fileName) { return callNativeAsync('saveVideoFile', {base64Data: base64Data, fileName: fileName}); }," +
             "    startMediaSession: function(fileName) { return callNativeAsync('startMediaSession', {fileName: fileName}); }," +
@@ -482,17 +482,17 @@ public class MainActivity extends BridgeActivity {
             "    readNextChunk: function(sessionId) { return callNativeAsync('readNextChunk', {sessionId: sessionId}); }," +
             "    closeReadSession: function(sessionId) { callNative('closeReadSession', {sessionId: sessionId}); }," +
             "    license: {" +
-            "      getStatus: function() { return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.getLicenseStatus())); } catch(e){ resolve({valid:false,error:String(e)}); } }); }," +
-            "      validate: function() { return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.validateLicense())); } catch(e){ resolve({valid:false,message:String(e)}); } }); }," +
+            "      getStatus: function() { return callNativeAsync('getLicenseStatus', {}); }," +
+            "      validate: function() { return callNativeAsync('validateLicense', {}); }," +
             "      activate: { importLicense: function(){ return Promise.resolve({success:false, error:'APP端不支持离线license文件导入，请使用在线激活'}); } }," +
-            "      setTrialDays: function(days){ return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.setTrialDays(days))); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
-            "      getTrialDays: function(){ return new Promise(function(resolve){ try { resolve({success:true, trialDays: nativeBridge.getTrialDays()}); } catch(e){ resolve({success:false, trialDays:7, error:String(e)}); } }); }," +
-            "      verifyOnline: function(){ return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.verifyOnline())); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
-            "      getActivationRecord: function(){ return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.getActivationRecord())); } catch(e){ resolve({success:false,error:String(e)}); } }); }" +
+            "      setTrialDays: function(days){ return callNativeAsync('setTrialDays', {days: days}); }," +
+            "      getTrialDays: function(){ return callNativeAsync('getTrialDays', {}); }," +
+            "      verifyOnline: function(){ return callNativeAsync('verifyOnline', {}); }," +
+            "      getActivationRecord: function(){ return callNativeAsync('getActivationRecord', {}); }" +
             "    }," +
             "    activate: {" +
             "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
-            "      submit: function(code, user){ return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.activateLicense(code, user||''))); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
+            "      submit: function(code, user){ return callNativeAsync('activateLicense', {code: code, user: user||''}); }," +
             "      close: function(){ return Promise.resolve({success:true}); }," +
             "      restart: function(){ return Promise.resolve({success:true}); }" +
             "    }" +
@@ -772,6 +772,12 @@ public class MainActivity extends BridgeActivity {
             });
         }
 
+        // ★ 保留 quitApp 作为 @JavascriptInterface，供 index.html 直接调用 AndroidNative.quitApp()
+        @JavascriptInterface
+        public void quitApp() {
+            finishAffinity();
+        }
+
         @JavascriptInterface
         public String invoke(String name, String jsonStr) {
             Log.d(TAG, "NativeBridge.invoke: " + name + ", jsonLen=" + (jsonStr != null ? jsonStr.length() : 0));
@@ -831,6 +837,38 @@ public class MainActivity extends BridgeActivity {
                     case "printPrescription":
                         return printPrescription(args.optString("html", ""),
                                 args.optString("orientation", "portrait")).toString();
+                    // ★ 以下为从 NativeBridgePlugin 迁移的方法（方向3：统一到 JavascriptInterface 架构）
+                    case "getLicenseStatus":
+                        return getLicenseStatus().toString();
+                    case "validateLicense":
+                        return validateLicense().toString();
+                    case "activateLicense":
+                        return activateLicense(args.optString("code", ""),
+                                args.optString("user", "")).toString();
+                    case "verifyOnline":
+                        return verifyOnline().toString();
+                    case "getActivationRecord":
+                        return getActivationRecord().toString();
+                    case "setTrialDays":
+                        return setTrialDays(args.optInt("days", 7)).toString();
+                    case "getTrialDays":
+                        return getTrialDaysJson().toString();
+                    case "getPrescriptionStatus":
+                        return getPrescriptionStatus().toString();
+                    case "incrementPrescription":
+                        return incrementPrescriptionJson().toString();
+                    case "encryptData":
+                        return encryptData(args.optString("data", ""),
+                                args.optString("key", "")).toString();
+                    case "decryptData":
+                        return decryptData(args.optString("encryptedData", ""),
+                                args.optString("key", "")).toString();
+                    case "showToast":
+                        showToast(args.optString("message", ""));
+                        return ok().toString();
+                    case "quitApp":
+                        finishAffinity();
+                        return ok().toString();
                     default:
                         return fail("unknown method: " + name).toString();
                 }
@@ -1271,6 +1309,16 @@ public class MainActivity extends BridgeActivity {
             return name.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
         }
 
+        private JSONObject ok() {
+            try {
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                return r;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
         private JSONObject fail(String msg) {
             try {
                 JSONObject r = new JSONObject();
@@ -1280,6 +1328,116 @@ public class MainActivity extends BridgeActivity {
             } catch (Exception e) {
                 return null;
             }
+        }
+
+        // ------------------------------------------------------------------
+        // ★ License/加密/Toast（从 NativeBridgePlugin 迁移，方向3统一架构）
+        // ------------------------------------------------------------------
+        private LicenseManager licenseManager;
+
+        private LicenseManager getLM() {
+            if (licenseManager == null) {
+                licenseManager = new LicenseManager(MainActivity.this);
+            }
+            return licenseManager;
+        }
+
+        private JSONObject getLicenseStatus() {
+            try { return getLM().validateLicense(); }
+            catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject validateLicense() {
+            try { return getLM().validateLicense(); }
+            catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject activateLicense(String code, String user) {
+            try {
+                String machineId = getLM().getMachineId();
+                return getLM().activateOnline(code, machineId, user != null ? user : "");
+            } catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject verifyOnline() {
+            try {
+                String machineId = getLM().getMachineId();
+                return getLM().verifyOnline(machineId);
+            } catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject getActivationRecord() {
+            try { return getLM().getActivationRecord(); }
+            catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject setTrialDays(int days) {
+            try { return getLM().setTrialDays(days); }
+            catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject getTrialDaysJson() {
+            try {
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("trialDays", getLM().getTrialDays());
+                return r;
+            } catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject getPrescriptionStatus() {
+            try { return getLM().getPrescriptionStatus(); }
+            catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject incrementPrescriptionJson() {
+            try {
+                int count = getLM().incrementPrescription();
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("count", count);
+                return r;
+            } catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject encryptData(String data, String key) {
+            try {
+                javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding");
+                byte[] keyBytes = new byte[16];
+                byte[] providedKey = key.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                System.arraycopy(providedKey, 0, keyBytes, 0, Math.min(providedKey.length, 16));
+                javax.crypto.spec.SecretKeySpec secretKey = new javax.crypto.spec.SecretKeySpec(keyBytes, "AES");
+                javax.crypto.spec.IvParameterSpec iv = new javax.crypto.spec.IvParameterSpec(keyBytes);
+                cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, secretKey, iv);
+                byte[] encrypted = cipher.doFinal(data.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                String base64 = android.util.Base64.encodeToString(encrypted, android.util.Base64.NO_WRAP);
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("data", base64);
+                return r;
+            } catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject decryptData(String encryptedData, String key) {
+            try {
+                javax.crypto.Cipher cipher = javax.crypto.Cipher.getInstance("AES/CBC/PKCS5Padding");
+                byte[] keyBytes = new byte[16];
+                byte[] providedKey = key.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                System.arraycopy(providedKey, 0, keyBytes, 0, Math.min(providedKey.length, 16));
+                javax.crypto.spec.SecretKeySpec secretKey = new javax.crypto.spec.SecretKeySpec(keyBytes, "AES");
+                javax.crypto.spec.IvParameterSpec iv = new javax.crypto.spec.IvParameterSpec(keyBytes);
+                cipher.init(javax.crypto.Cipher.DECRYPT_MODE, secretKey, iv);
+                byte[] decrypted = cipher.doFinal(android.util.Base64.decode(encryptedData, android.util.Base64.NO_WRAP));
+                String plain = new String(decrypted, java.nio.charset.StandardCharsets.UTF_8);
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("data", plain);
+                return r;
+            } catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private void showToast(final String message) {
+            runOnUiThread(() -> android.widget.Toast.makeText(MainActivity.this, message, android.widget.Toast.LENGTH_SHORT).show());
         }
 
         private JSONObject findMediaFiles(String patientName, String prescriptionNo, String createdAt) {
