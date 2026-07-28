@@ -497,6 +497,7 @@ public class MainActivity extends BridgeActivity {
             "  window.electronAPI = {" +
             "    __nativeBridgeProxy: true," +
             "    isElectron: true," +
+            "    isAndroidAPP: true," +
             "    saveUserData: function(key, data) { return new Promise(function(resolve){ try { localStorage.setItem(key, JSON.stringify(data)); resolve(true); } catch(e){ resolve(false); } }); }," +
             "    getUserData: function(key) { return new Promise(function(resolve){ try { var v = localStorage.getItem(key); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
             "    loginSuccess: function(user) { return new Promise(function(resolve){ try { localStorage.setItem('currentUser', JSON.stringify(user)); resolve(true); } catch(e){ resolve(false); } }); }," +
