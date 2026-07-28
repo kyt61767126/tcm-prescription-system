@@ -2,14 +2,14 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
-title Huikang TCM Custom - Offline Desktop Build
+title Huikang TCM Local - Offline Desktop Build
 
 REM Record start time (for elapsed stats) - use PowerShell instead of wmic (deprecated in Windows 11)
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "BUILD_START_STAMP=%%t"
 
 echo ============================================
-echo  Huikang TCM Custom - Offline Desktop
+echo  Huikang TCM Local - Offline Desktop
 echo  Start: %BUILD_START_TIME%
 echo ============================================
 echo.
@@ -26,10 +26,10 @@ echo.
 
 echo [2/7] Closing remaining processes...
 REM P0-Optimization: precisely match project-related processes to avoid killing other Electron apps (e.g. VSCode, Slack)
-taskkill /F /IM "app-custom.exe" >nul 2>&1
-taskkill /F /IM "惠康中医定制.exe" >nul 2>&1
+taskkill /F /IM "app-local.exe" >nul 2>&1
+taskkill /F /IM "惠康中医本地.exe" >nul 2>&1
 REM P0-Optimization: replace deprecated wmic (deprecated in Windows 11) with PowerShell Get-Process (precise path-based match)
-powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-dingzhi*dist*' -or $_.Path -like '*db-dingzhi*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
+powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-bendi*dist*' -or $_.Path -like '*db-bendi*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 echo [OK] Processes cleaned
 echo.
 
@@ -75,12 +75,12 @@ if exist "%OUTPUT_DIR%" (
 echo [OK] Old artifacts cleaned
 echo.
 
-echo [5/7] Obfuscating JavaScript code (target=dingzhi, may take 1-2 minutes)...
-node "%~dp0..\..\tools\obfuscate.js" --target=dingzhi
+echo [5/7] Obfuscating JavaScript code (target=bendi, may take 1-2 minutes)...
+node "%~dp0..\..\tools\obfuscate.js" --target=bendi
 if errorlevel 1 (
     echo [ERROR] Obfuscation failed
     echo Restoring original files...
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    node "%~dp0..\..\tools\obfuscate.js" restore --target=bendi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -119,17 +119,17 @@ if not "%BUILD_RC%"=="0" (
     echo.
     echo [ERROR] Build failed, please check logs above
     echo Restoring original JavaScript code...
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    node "%~dp0..\..\tools\obfuscate.js" restore --target=bendi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
 echo.
 
 echo Restoring original JavaScript code...
-node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi
+node "%~dp0..\..\tools\obfuscate.js" restore --target=bendi
 if errorlevel 1 (
     echo [ERROR] Restore failed! Source code may remain obfuscated.
-    echo Please manually run: node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi
+    echo Please manually run: node "%~dp0..\..\tools\obfuscate.js" restore --target=bendi
     if not defined NO_PAUSE pause
     exit /b 1
 )

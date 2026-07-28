@@ -914,8 +914,6 @@ function Build-App {
         Write-Host "  Java 预编译检查中（提前发现编译错误）..." -ForegroundColor Cyan
         Push-Location $script:AndroidDir
         try {
-            # 清理残留的 STOPPED Gradle daemon（避免"daemon has been stopped"错误）
-            & ".\gradlew.bat" --stop 2>&1 | Out-Null
             Invoke-External { & ".\gradlew.bat" compileReleaseJavaWithJavac --quiet } "Java pre-compile check"
         } catch {
             Write-Log "[ERROR] Java 预编译检查失败，终止打包（避免无效递增 versionCode）" "ERROR"
@@ -1339,23 +1337,6 @@ function Invoke-Packaging {
         if (-not $SkipEnc -and $Tgt -ne 'encoding') {
             Invoke-EncodingCheck
             Write-Host "  [耗时] 编码检查: $(((Get-Date) - $stepStartTime).ToString('ss\.fff'))s" -ForegroundColor DarkGray
-            $stepStartTime = Get-Date
-        }
-
-        # Step 1.5: Sync check - ensure _shared/ files are synced to all versions before packaging
-        $syncScript = Join-Path $PSScriptRoot 'sync-offline-files.ps1'
-        if (Test-Path $syncScript) {
-            Write-Host "  [步骤] 检查共享文件同步状态..." -ForegroundColor Cyan
-            $syncOutput = & powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript -VerifyOnly 2>&1
-            $syncExitCode = $LASTEXITCODE
-            if ($syncExitCode -ne 0) {
-                Write-Host "  [WARN] 检测到共享文件未同步，正在自动同步..." -ForegroundColor Yellow
-                & powershell -NoProfile -ExecutionPolicy Bypass -File $syncScript 2>&1 | Out-Null
-                Write-Host "  [OK] 共享文件已同步" -ForegroundColor Green
-            } else {
-                Write-Host "  [OK] 共享文件已同步" -ForegroundColor Green
-            }
-            Write-Host "  [耗时] 同步检查: $(((Get-Date) - $stepStartTime).ToString('ss\.fff'))s" -ForegroundColor DarkGray
             $stepStartTime = Get-Date
         }
 

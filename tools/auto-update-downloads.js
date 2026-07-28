@@ -25,27 +25,21 @@ const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 const APP_CONFIG = {
     'bendi': {
         apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
-        gradlePath: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'android', 'app', 'build.gradle'),
         outputName: '惠康中医-本地.apk',
         configPath: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'config.json')
     },
     'dingzhi': {
         apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
-        gradlePath: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'android', 'app', 'build.gradle'),
         outputName: '惠康中医-定制.apk',
         configPath: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'config.json')
     },
     'geren': {
         apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
-        gradlePath: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'android', 'app', 'build.gradle'),
         outputName: '惠康中医-个人.apk',
         configPath: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'config.json')
     },
     'cloud': {
-        // 注意：云端 APP 是 Capacitor 项目，APK 输出在 cloud_app/app/build/（无 android/ 子目录）
-        // 离线版是原生 Android 项目，APK 输出在 db-xxx/android/app/build/（有 android/ 子目录）
-        apkDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),
-        gradlePath: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'app', 'build.gradle'),
+        apkDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
         outputName: '惠康中医-云端.apk',
         configPath: path.join(PROJECT_ROOT, 'cloud_project', 'config.json')
     }
@@ -69,8 +63,9 @@ function findApkFile(dir) {
     return path.join(dir, signed || files[0]);
 }
 
-function readVersionFromGradle(gradlePath) {
+function readVersionFromGradle(appDir) {
     try {
+        const gradlePath = path.join(appDir, 'android', 'app', 'build.gradle');
         if (!fs.existsSync(gradlePath)) return '';
         const content = fs.readFileSync(gradlePath, 'utf8');
         const nameMatch = content.match(/versionName\s+"([^"]+)"/);
@@ -126,7 +121,7 @@ function updateDownloads(target) {
         // 计算 SHA-256
         const sha256 = calculateSHA256(destPath);
         const size = getFileSize(destPath);
-        const version = readVersionFromGradle(config.gradlePath);
+        const version = readVersionFromGradle(path.join(config.apkDir, '..', '..', '..', '..'));
 
         // 更新 manifest
         if (!manifest[key]) manifest[key] = {};
@@ -145,10 +140,6 @@ function updateDownloads(target) {
 
     if (updated === 0) {
         console.log('[auto-update] 没有更新任何文件');
-        console.log('[auto-update] 请检查：');
-        console.log('  1. 是否已运行 build-app.bat 打包 APP（APK 输出在 android/app/build/outputs/apk/release/）');
-        console.log('  2. 云端 APP 路径不同：cloud_app/app/build/outputs/apk/release/');
-        console.log('  3. 桌面版 exe 不在本工具范围内，请运行 publish-release.js 上传 exe');
         return false;
     }
 

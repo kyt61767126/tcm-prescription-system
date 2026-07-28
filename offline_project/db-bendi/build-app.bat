@@ -1,9 +1,9 @@
 @echo off
 chcp 65001 >nul
-title Huikang TCM Personal - Offline APP Build
+title Huikang TCM Local - Offline APP Build
 
 echo ============================================
-echo   Huikang TCM Personal - Offline APP
+echo   Huikang TCM Local - Offline APP
 echo ============================================
 echo.
 
@@ -172,8 +172,8 @@ echo [5.5/10] Auto-increment versionCode...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='app\build.gradle'; $c=[System.IO.File]::ReadAllText($f); if($c -match 'versionCode\s+(\d+)'){ $old=$matches[1]; $new=[int]$old+1; $c=$c -replace 'versionCode\s+\d+', ('versionCode '+$new); [System.IO.File]::WriteAllText($f,$c,(New-Object System.Text.UTF8Encoding($false))); Write-Host ('  versionCode: ' + $old + ' -> ' + $new) } else { Write-Host '  [WARN] versionCode not found, skip' }"
 echo.
 
-echo [5.6/10] Obfuscating JavaScript (target=geren)...
-call node "%~dp0..\..\tools\obfuscate.js" --target=geren
+echo [5.6/10] Obfuscating JavaScript (target=bendi)...
+call node "%~dp0..\..\tools\obfuscate.js" --target=bendi
 if errorlevel 1 (
     echo [ERROR] JS obfuscation failed
     if not defined NO_PAUSE pause
@@ -188,7 +188,7 @@ call gradlew.bat assembleRelease
 if errorlevel 1 (
     echo.
     echo [WARN] Restoring JavaScript due to build failure...
-    call node "%~dp0..\..\tools\obfuscate.js" restore --target=geren
+    call node "%~dp0..\..\tools\obfuscate.js" restore --target=bendi
     echo [ERROR] Build failed! Please check error messages
     if not defined NO_PAUSE pause
     exit /b 1
@@ -196,7 +196,7 @@ if errorlevel 1 (
 echo.
 
 echo [6.5/10] Restoring JavaScript...
-call node "%~dp0..\..\tools\obfuscate.js" restore --target=geren
+call node "%~dp0..\..\tools\obfuscate.js" restore --target=bendi
 if errorlevel 1 (
     echo [WARN] JS restore failed - may need manual restore
 ) else (
@@ -243,7 +243,7 @@ if "%VERSION_STR%"=="" set "VERSION_STR=1.0"
 for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Content '..\config.json' -Encoding UTF8 -Raw | ConvertFrom-Json).productName"`) do (
     set "PRODUCT_NAME=%%p"
 )
-if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-个人"
+if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-本地"
 
 REM Verify source APK size (prevent copying empty file when Gradle fails or write incomplete)
 set "SRC_SIZE=0"
@@ -294,7 +294,7 @@ if errorlevel 1 (
 echo.
 
 echo [10/10] Auto-updating download page...
-node "%~dp0..\..\tools\auto-update-downloads.js" geren
+node "%~dp0..\..\tools\auto-update-downloads.js" bendi
 if errorlevel 1 (
     echo [WARN] Download page auto-update had issues, continuing anyway
 ) else (

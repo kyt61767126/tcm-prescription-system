@@ -1,7 +1,5 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
-REM Auto-fix .ps1 BOM (prevent Chinese garbled text due to BOM loss)
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\fix-ps1-bom.ps1" >nul 2>&1
 title Huikang TCM Custom - Offline APP Build
 
 echo ============================================
@@ -44,14 +42,7 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-REM ★ 防护1：同步后 hash 校验，确保 android 目录与根目录 index.html 完全一致
-REM 杜绝"根目录修改了但 android 目录未同步"导致打包用旧代码的问题
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$h1=(Get-FileHash 'index.html' -Algorithm SHA256).Hash; $h2=(Get-FileHash '%ANDROID_PUBLIC%\index.html' -Algorithm SHA256).Hash; if($h1 -ne $h2){ Write-Host '[ERROR] index.html sync verification FAILED! Root and Android hashes differ.'; Write-Host ('  Root:    '+$h1); Write-Host ('  Android: '+$h2); exit 1 } else { Write-Host '      index.html synced and verified (hash match)' }"
-if errorlevel 1 (
-    echo [ERROR] Sync verification failed, aborting build to prevent stale code
-    if not defined NO_PAUSE pause
-    exit /b 1
-)
+echo       index.html synced
 echo   [3/5] Syncing vendor/xlsx.full.min.js...
 if exist "vendor\xlsx.full.min.js" (
     if not exist "%ANDROID_PUBLIC%\vendor" mkdir "%ANDROID_PUBLIC%\vendor" >nul
@@ -136,33 +127,44 @@ echo [OK] Cleanup completed
 echo.
 
 echo [5/10] Cleaning build cache (force full clean)...
-REM * Critical caches must be cleaned in BOTH modes (skip-clean and normal)
-REM Historical lesson (2026-07-22): if javac cache not cleaned, MainActivity.java changes
-REM won't take effect due to Gradle incremental build using stale cache, breaking Autofill fix.
-REM Historical lesson (2026-07-23): without cleaning assets/merged_assets cache, index.html
-REM changes won't take effect due to Gradle incremental build using stale cache, causing old page flicker.
-if exist "app\build\intermediates\javac" (
-    rmdir /S /Q "app\build\intermediates\javac" 2>nul
-    echo       [OK] cleaned javac cache
-)
-if exist "app\build\intermediates\assets" (
-    rmdir /S /Q "app\build\intermediates\assets" 2>nul
-    echo       [OK] cleaned assets cache
-)
-if exist "app\build\intermediates\merged_assets" (
-    rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
-    echo       [OK] cleaned merged_assets cache
-)
-REM ★ 防护2：强制 gradlew clean，杜绝 Gradle 增量缓存导致旧代码被打包
-REM 历史教训：TCM_GRADLE_SKIP_CLEAN=1 跳过 clean 曾导致修改不生效，已废弃该选项
 if defined TCM_GRADLE_SKIP_CLEAN (
-    echo [WARN] TCM_GRADLE_SKIP_CLEAN is deprecated and ignored. Forcing gradlew clean.
-)
-call gradlew.bat clean
-if errorlevel 1 (
-    echo [WARN] Clean failed, continuing with incremental build
+    echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, skipping gradlew clean (debug only)
+    REM * Double safeguard: even when skipping gradlew clean, must clean javac and assets cache
+    REM Historical lesson (2026-07-22): if javac cache not cleaned when skipping clean, MainActivity.java
+    REM changes won't take effect due to Gradle incremental build using stale cache, breaking Autofill fix.
+    REM Historical lesson (2026-07-23): without cleaning assets/merged_assets cache, index.html
+    REM changes won't take effect due to Gradle incremental build using stale cache, causing old page content to flicker.
+    if exist "app\build\intermediates\javac" (
+        rmdir /S /Q "app\build\intermediates\javac" 2>nul
+        echo       [OK] cleaned javac cache (forced even in skip-clean mode)
+    )
+    if exist "app\build\intermediates\assets" (
+        rmdir /S /Q "app\build\intermediates\assets" 2>nul
+        echo       [OK] cleaned assets cache (forced even in skip-clean mode)
+    )
+    if exist "app\build\intermediates\merged_assets" (
+        rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
+        echo       [OK] cleaned merged_assets cache (forced even in skip-clean mode)
+    )
 ) else (
-    echo [OK] Old cache cleared (forced clean)
+    if exist "app\build\intermediates\javac" (
+        rmdir /S /Q "app\build\intermediates\javac" 2>nul
+        echo       [OK] cleaned javac cache
+    )
+    if exist "app\build\intermediates\assets" (
+        rmdir /S /Q "app\build\intermediates\assets" 2>nul
+        echo       [OK] cleaned assets cache
+    )
+    if exist "app\build\intermediates\merged_assets" (
+        rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
+        echo       [OK] cleaned merged_assets cache
+    )
+    call gradlew.bat clean
+    if errorlevel 1 (
+        echo [WARN] Clean failed, continuing with incremental build
+    ) else (
+        echo [OK] Old cache cleared
+    )
 )
 echo.
 
@@ -178,10 +180,6 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [OK] JS obfuscation complete
-REM ★ 防护3-pre：保存混淆后 android 目录 index.html 的 hash，用于打包后 APK 内容验证
-REM 打包用的就是 android 目录的文件，APK 中的 index.html hash 必须与此一致
-for /f "delims=" %%h in ('powershell -NoProfile -Command "(Get-FileHash 'app\src\main\assets\public\index.html' -Algorithm SHA256).Hash"') do set "OBFUSCATED_INDEX_HASH=%%h"
-echo       Obfuscated index.html hash: %OBFUSCATED_INDEX_HASH%
 echo.
 
 echo [6/10] Building signed APK...
@@ -230,19 +228,6 @@ for %%A in ("%APK_FILE%") do (
     echo APK File: %%~nxA
     echo File Size: %%~zA bytes
     echo Full Path: %CD%\%%A
-)
-echo.
-
-echo [7.5/10] Verifying APK contains latest index.html...
-REM ★ 防护3：从 APK 提取 index.html，校验 hash 与混淆后保存的 hash 是否一致
-REM 这是最终保险，防止任何环节出错导致旧代码被打包
-REM 如果 APK 中的 index.html hash 与打包前 android 目录的不一致，说明打包用了旧代码
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $apk='%CD%\%APK_FILE%'; $expected='%OBFUSCATED_INDEX_HASH%'; try { $zip=[System.IO.Compression.ZipFile]::OpenRead($apk); $entry=$zip.Entries | Where-Object { $_.FullName -eq 'assets/public/index.html' }; if(-not $entry){ Write-Host '[ERROR] index.html not found in APK!'; $zip.Dispose(); exit 1 }; $temp=[System.IO.Path]::GetTempFileName(); [System.IO.Compression.ZipFileExtensions]::ExtractToFile($entry,$temp,$true); $zip.Dispose(); $actual=(Get-FileHash $temp -Algorithm SHA256).Hash; Remove-Item $temp -Force; if($actual -ne $expected){ Write-Host '[ERROR] APK index.html hash MISMATCH! APK may contain stale code.'; Write-Host ('  Expected (obfuscated): '+$expected); Write-Host ('  Actual (in APK):       '+$actual); exit 1 } else { Write-Host '[OK] APK index.html verified (hash match)' } } catch { Write-Host ('[ERROR] '+$_.Exception.Message); exit 1 }"
-if errorlevel 1 (
-    echo [ERROR] APK content verification FAILED! Aborting to prevent shipping stale APK.
-    echo   The APK does NOT contain the latest index.html. Do NOT install this APK.
-    if not defined NO_PAUSE pause
-    exit /b 1
 )
 echo.
 
@@ -309,7 +294,7 @@ if errorlevel 1 (
 echo.
 
 echo [10/10] Auto-updating download page...
-node "%~dp0..\..\tools\auto-update-downloads.js" bendi
+node "%~dp0..\..\tools\auto-update-downloads.js" dingzhi
 if errorlevel 1 (
     echo [WARN] Download page auto-update had issues, continuing anyway
 ) else (

@@ -1,7 +1,5 @@
 @echo off
 chcp 65001 >nul
-REM Auto-fix .ps1 BOM (prevent Chinese garbled text due to BOM loss)
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\tools\fix-ps1-bom.ps1" >nul 2>&1
 title TCM Prescription System - Cloud APP Packager
 
 echo ============================================
@@ -117,25 +115,38 @@ echo [OK] Cleanup completed
 echo.
 
 echo [4/6] Cleaning build cache (force full clean)...
-REM * Critical caches must be cleaned in BOTH modes (skip-clean and normal)
-REM Historical lesson (2026-07-22): if javac cache not cleaned, MainActivity.java changes
-REM won't take effect due to Gradle incremental build using stale cache, breaking Autofill fix.
-REM Clean assets cache (align with offline version, prevent index.html/JS changes not taking effect)
-if exist "app\build\intermediates\javac" (
-    rmdir /S /Q "app\build\intermediates\javac" 2>nul
-    echo       [OK] cleaned javac cache
-)
-if exist "app\build\intermediates\assets" (
-    rmdir /S /Q "app\build\intermediates\assets" 2>nul
-    echo       [OK] cleaned assets cache
-)
-if exist "app\build\intermediates\merged_assets" (
-    rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
-    echo       [OK] cleaned merged_assets cache
-)
 if defined TCM_GRADLE_SKIP_CLEAN (
     echo [SKIP] TCM_GRADLE_SKIP_CLEAN=1, skipping gradlew clean
+    REM * Double safeguard: even if skipping gradlew clean, must clean javac cache
+    REM Historical lesson (2026-07-22): if javac cache not cleaned when skipping clean, MainActivity.java
+    REM changes will not take effect due to Gradle incremental build using old cache, causing Autofill fix to fail.
+    if exist "app\build\intermediates\javac" (
+        rmdir /S /Q "app\build\intermediates\javac" 2>nul
+        echo       [OK] cleaned javac cache (forced even in skip-clean mode)
+    )
+    REM * Clean assets cache (align with offline version, prevent index.html/JS changes not taking effect)
+    if exist "app\build\intermediates\assets" (
+        rmdir /S /Q "app\build\intermediates\assets" 2>nul
+        echo       [OK] cleaned assets cache
+    )
+    if exist "app\build\intermediates\merged_assets" (
+        rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
+        echo       [OK] cleaned merged_assets cache
+    )
 ) else (
+    if exist "app\build\intermediates\javac" (
+        rmdir /S /Q "app\build\intermediates\javac" 2>nul
+        echo       [OK] cleaned javac cache
+    )
+    REM * Clean assets cache (align with offline version, prevent index.html/JS changes not taking effect)
+    if exist "app\build\intermediates\assets" (
+        rmdir /S /Q "app\build\intermediates\assets" 2>nul
+        echo       [OK] cleaned assets cache
+    )
+    if exist "app\build\intermediates\merged_assets" (
+        rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
+        echo       [OK] cleaned merged_assets cache
+    )
     call gradlew.bat clean
     if errorlevel 1 (
         echo [WARN] clean failed, continuing with incremental build
@@ -156,9 +167,6 @@ if errorlevel 1 (
 )
 echo [OK] JS obfuscation complete
 echo.
-
-REM Release Gradle daemon memory before assembleRelease (avoid OOM during R8 minify)
-call gradlew.bat --stop >nul 2>&1
 
 echo [5/6] Building signed APK...
 echo.

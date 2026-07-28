@@ -10,12 +10,6 @@ if (-not (Test-Path $script:RootDir)) {
     $script:RootDir = Split-Path $PSScriptRoot -Parent
 }
 
-# Auto-fix .ps1 BOM (prevent Chinese garbled text due to BOM loss)
-$bomFixScript = Join-Path $PSScriptRoot 'fix-ps1-bom.ps1'
-if (Test-Path $bomFixScript) {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $bomFixScript 2>&1 | Out-Null
-}
-
 # Set NO_PAUSE=1 so child build.bat / build-app.bat don't pause at end
 $env:NO_PAUSE = '1'
 

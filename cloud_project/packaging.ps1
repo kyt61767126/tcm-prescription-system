@@ -13,12 +13,6 @@ $OutputEncoding = [System.Text.Encoding]::UTF8
 
 $scriptDir = $PSScriptRoot
 
-# Auto-fix .ps1 BOM (prevent Chinese garbled text due to BOM loss)
-$bomFixScript = Join-Path $scriptDir '..\tools\fix-ps1-bom.ps1'
-if (Test-Path $bomFixScript) {
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $bomFixScript 2>&1 | Out-Null
-}
-
 # UTF-8 encoders (reusable)
 $script:UTF8WithBom = New-Object System.Text.UTF8Encoding($true)
 $script:UTF8NoBom = New-Object System.Text.UTF8Encoding($false)
@@ -713,14 +707,6 @@ function Build-App {
             return 1
         }
         Write-Host "  [OK] Java 预编译检查通过" -ForegroundColor Green
-    } finally {
-        Pop-Location
-    }
-
-    # 释放预编译检查启动的 Gradle daemon 内存（避免后续 assembleRelease 时内存不足导致 daemon 被停止）
-    Push-Location $cloudAppDir
-    try {
-        & ".\gradlew.bat" --stop 2>&1 | Out-Null
     } finally {
         Pop-Location
     }
