@@ -66,9 +66,9 @@ echo.
 
 :done
 echo ============================================
-echo   [OK] Strict APP build complete!
-echo   APK: %~dp0..\惠康中医-本地.apk
-echo   Mode: Signature strict (anti-tamper enabled)
+echo   打包成功！
+echo   APK 文件: %~dp0..\惠康中医-本地.apk
+echo   模式: 签名严格模式（已启用防篡改）
 echo ============================================
 echo.
 if not defined NO_PAUSE pause

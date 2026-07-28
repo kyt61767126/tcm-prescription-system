@@ -27,10 +27,10 @@ set "NO_PAUSE="
 
 echo.
 if %EXIT_CODE% neq 0 (
-    echo [ERROR] Build failed, exit code: %EXIT_CODE%
+    echo [错误] 打包失败，退出码: %EXIT_CODE%
 ) else (
-    echo [OK] Strict APP build complete!
-    echo [INFO] APK located in: %~dp0惠康中医-个人.apk
+    echo [成功] 严格模式APP打包完成！
+    echo [位置] APK 文件: %~dp0惠康中医-个人.apk
 )
 echo.
 if not defined NO_PAUSE pause
