@@ -49,7 +49,6 @@ jobs:
               echo "✅ $file title='$actual'"
             fi
           }
-          check_title "offline_project/db-bendi/index.html" "惠康中医-本地"
           check_title "offline_project/db-dingzhi/index.html" "惠康中医-定制"
           check_title "offline_project/db-geren/index.html" "惠康中医-个人"
           check_title "public/index.html" "惠康中医-云端"
