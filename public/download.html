@@ -37,14 +37,19 @@
             line-height: 1.6;
             -webkit-font-smoothing: antialiased;
         }
-        .container { max-width: 1100px; margin: 0 auto; padding: 20px 16px 80px; }
+        .container { max-width: 1100px; margin: 0 auto; padding: 8px 12px 16px; }
 
         /* ============ Hero 头部 ============ */
         .hero {
             text-align: center;
             color: white;
-            padding: 40px 20px 30px;
+            padding: 6px 20px 4px;
             position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            flex-wrap: wrap;
         }
         .hero::before {
             content: '';
@@ -57,43 +62,49 @@
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 72px; height: 72px;
+            width: 32px; height: 32px;
             background: rgba(255,255,255,0.15);
             border: 2px solid rgba(255,255,255,0.3);
             border-radius: 50%;
-            font-size: 36px;
-            margin-bottom: 16px;
+            font-size: 16px;
             backdrop-filter: blur(10px);
-            box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+            box-shadow: 0 6px 18px rgba(0,0,0,0.2);
+            flex-shrink: 0;
+        }
+        .hero-text {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1px;
         }
         .hero h1 {
-            font-size: 30px;
+            font-size: 16px;
             font-weight: 700;
-            margin-bottom: 8px;
+            margin: 0;
             text-shadow: 0 2px 8px rgba(0,0,0,0.2);
             letter-spacing: 1px;
         }
         .hero p {
-            font-size: 14px;
+            font-size: 11px;
             opacity: 0.92;
-            margin-bottom: 24px;
+            margin: 0;
         }
         .hero-badge {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 4px;
             background: rgba(255,255,255,0.15);
             border: 1px solid rgba(255,255,255,0.25);
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
             backdrop-filter: blur(10px);
         }
         .hero-badge .dot {
-            width: 8px; height: 8px;
+            width: 6px; height: 6px;
             background: #4ade80;
             border-radius: 50%;
-            box-shadow: 0 0 8px #4ade80;
+            box-shadow: 0 0 6px #4ade80;
             animation: pulse 2s infinite;
         }
         @keyframes pulse {
@@ -106,18 +117,18 @@
             background: rgba(255,255,255,0.12);
             border: 1px solid rgba(255,255,255,0.2);
             border-radius: var(--radius-md);
-            padding: 14px 18px;
+            padding: 4px 10px;
             color: white;
-            font-size: 13px;
-            line-height: 1.7;
-            margin-bottom: 24px;
+            font-size: 10px;
+            line-height: 1.4;
+            margin-bottom: 6px;
             backdrop-filter: blur(10px);
             display: flex;
-            align-items: flex-start;
-            gap: 10px;
+            align-items: center;
+            gap: 6px;
         }
         .security-notice .icon {
-            font-size: 18px;
+            font-size: 14px;
             flex-shrink: 0;
         }
         .security-notice strong { color: #fde68a; }
@@ -125,11 +136,11 @@
         /* ============ Tab 导航 ============ */
         .tab-nav {
             display: flex;
-            gap: 6px;
+            gap: 2px;
             background: rgba(255,255,255,0.12);
-            padding: 6px;
+            padding: 3px;
             border-radius: var(--radius-md);
-            margin-bottom: 24px;
+            margin-bottom: 6px;
             backdrop-filter: blur(10px);
             overflow-x: auto;
             -webkit-overflow-scrolling: touch;
@@ -139,11 +150,11 @@
         .tab-btn {
             flex: 1;
             min-width: max-content;
-            padding: 10px 16px;
+            padding: 6px 10px;
             background: transparent;
             border: none;
             color: rgba(255,255,255,0.85);
-            font-size: 14px;
+            font-size: 12px;
             font-weight: 500;
             cursor: pointer;
             border-radius: var(--radius-sm);
@@ -152,7 +163,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 6px;
+            gap: 4px;
         }
         .tab-btn:hover {
             background: rgba(255,255,255,0.1);
@@ -176,17 +187,17 @@
         /* ============ 区块标题 ============ */
         .section-title {
             color: white;
-            font-size: 18px;
+            font-size: 15px;
             font-weight: 600;
-            margin: 0 0 16px 0;
-            padding-left: 12px;
+            margin: 0 0 8px 0;
+            padding-left: 10px;
             border-left: 3px solid rgba(255,255,255,0.6);
             display: flex;
             align-items: center;
             gap: 8px;
         }
         .section-title .sub {
-            font-size: 12px;
+            font-size: 11px;
             font-weight: 400;
             opacity: 0.75;
         }
@@ -194,23 +205,23 @@
         /* ============ 卡片 ============ */
         .card {
             background: var(--card-bg);
-            border-radius: var(--radius-lg);
-            padding: 22px;
-            margin-bottom: 18px;
-            box-shadow: var(--shadow-lg);
+            border-radius: var(--radius-md);
+            padding: 12px 14px;
+            margin-bottom: 8px;
+            box-shadow: var(--shadow-md);
             transition: var(--transition);
             border: 1px solid rgba(255,255,255,0.5);
             position: relative;
             overflow: hidden;
         }
         .card:hover {
-            transform: translateY(-3px);
-            box-shadow: var(--shadow-xl);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
         }
         .card::before {
             content: '';
             position: absolute;
-            top: 0; left: 0; right: 0; height: 4px;
+            top: 0; left: 0; right: 0; height: 3px;
             background: var(--bg-gradient);
             opacity: 0;
             transition: var(--transition);
@@ -223,21 +234,21 @@
         .card.featured::before { opacity: 1; }
 
         .card-title {
-            font-size: 17px;
+            font-size: 14px;
             font-weight: 700;
             color: var(--text-primary);
-            margin-bottom: 14px;
+            margin-bottom: 8px;
             display: flex;
             align-items: center;
             flex-wrap: wrap;
-            gap: 8px;
+            gap: 6px;
         }
-        .card-title .icon { font-size: 22px; }
+        .card-title .icon { font-size: 18px; }
         .badge {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 500;
-            padding: 3px 10px;
-            border-radius: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
             color: white;
         }
         .badge.cloud { background: linear-gradient(135deg, #3b82f6, #2563eb); }
@@ -258,16 +269,16 @@
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            padding: 9px 0;
+            padding: 4px 0;
             border-bottom: 1px solid #f3f4f6;
-            font-size: 13px;
-            gap: 12px;
+            font-size: 12px;
+            gap: 10px;
         }
         .info-row:last-child { border-bottom: none; }
         .info-label {
             color: var(--text-secondary);
             flex-shrink: 0;
-            min-width: 80px;
+            min-width: 72px;
         }
         .info-value {
             font-weight: 500;
@@ -275,23 +286,23 @@
             text-align: right;
             word-break: break-word;
         }
-        .info-value.version { color: var(--primary); font-weight: 700; font-size: 14px; }
-        .info-value.date { color: var(--text-tertiary); font-size: 12px; }
+        .info-value.version { color: var(--primary); font-weight: 700; font-size: 13px; }
+        .info-value.date { color: var(--text-tertiary); font-size: 11px; }
         .info-value.success { color: var(--success); }
         .info-value.danger { color: var(--danger); }
 
         /* ============ 提示框 ============ */
         .notice {
             border-radius: var(--radius-sm);
-            padding: 10px 14px;
-            margin-top: 12px;
-            font-size: 12px;
-            line-height: 1.7;
+            padding: 6px 10px;
+            margin-top: 6px;
+            font-size: 11px;
+            line-height: 1.5;
             display: flex;
             align-items: flex-start;
-            gap: 8px;
+            gap: 6px;
         }
-        .notice .icon { font-size: 14px; flex-shrink: 0; }
+        .notice .icon { font-size: 12px; flex-shrink: 0; }
         .notice-cloud {
             background: linear-gradient(135deg, #e0e7ff 0%, #c7d2fe 100%);
             border: 1px solid #818cf8;
@@ -321,21 +332,21 @@
             background: linear-gradient(135deg, #fff5e6 0%, #ffe9d6 100%);
             border: 1px solid #ffb87a;
             border-radius: var(--radius-sm);
-            padding: 10px 14px;
-            margin-top: 12px;
-            font-size: 12px;
+            padding: 6px 10px;
+            margin-top: 6px;
+            font-size: 11px;
             color: #8a5a1a;
-            line-height: 1.8;
+            line-height: 1.6;
         }
         .credential-box strong { color: #c2410c; }
         .cred-pair {
             display: inline-block;
             background: white;
-            padding: 2px 8px;
+            padding: 2px 6px;
             border-radius: 4px;
-            margin: 2px 3px;
+            margin: 1px 2px;
             font-family: 'Courier New', monospace;
-            font-size: 12px;
+            font-size: 11px;
             color: #333;
             border: 1px solid #f0d090;
             cursor: pointer;
@@ -349,44 +360,98 @@
             background: #f8f9fa;
             border: 1px solid var(--border-color);
             border-radius: var(--radius-sm);
-            padding: 10px 12px;
-            margin-top: 12px;
+            padding: 0 8px;
+            margin-top: 6px;
             font-family: 'Courier New', monospace;
-            font-size: 11px;
+            font-size: 10px;
             color: #555;
             word-break: break-all;
-            line-height: 1.6;
+            line-height: 1.4;
+            max-height: 24px;
+            overflow: hidden;
+            transition: max-height 0.25s ease;
         }
+        .hash-box.expanded { max-height: 100px; padding: 6px 8px; }
         .hash-label {
-            font-size: 11px;
-            color: var(--text-tertiary);
-            margin-bottom: 4px;
+            font-size: 10px;
+            color: var(--text-secondary);
+            margin-bottom: 0;
             font-family: -apple-system, sans-serif;
             display: flex;
             align-items: center;
             gap: 4px;
+            cursor: pointer;
+            height: 24px;
+            user-select: none;
         }
-        .hash-value { color: var(--primary); }
+        .hash-label:hover { color: var(--primary); }
+        .hash-label::before {
+            content: '▶';
+            font-size: 8px;
+            transition: transform 0.25s ease;
+            display: inline-block;
+        }
+        .hash-box.expanded .hash-label::before { transform: rotate(90deg); }
+        .hash-value {
+            color: var(--primary);
+            margin-top: 4px;
+            display: none;
+        }
+        .hash-box.expanded .hash-value { display: block; }
         .hash-value.pending { color: #aaa; font-style: italic; }
         .hash-copy {
             float: right;
             background: transparent;
             border: 1px solid var(--border-color);
             border-radius: 3px;
-            padding: 1px 6px;
-            font-size: 10px;
+            padding: 1px 5px;
+            font-size: 9px;
             color: var(--text-secondary);
             cursor: pointer;
             font-family: -apple-system, sans-serif;
             transition: var(--transition);
+            margin-left: auto;
         }
         .hash-copy:hover { background: var(--primary); color: white; border-color: var(--primary); }
+
+        /* ============ 卡片详情折叠 ============ */
+        .card-details {
+            display: none;
+            margin-top: 4px;
+        }
+        .card-details.expanded { display: block; animation: fadeIn 0.25s ease; }
+        .details-toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f3f4f6;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            cursor: pointer;
+            margin-top: 6px;
+            transition: var(--transition);
+            font-weight: 500;
+        }
+        .details-toggle:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+        .details-toggle::before {
+            content: '▶';
+            font-size: 9px;
+            transition: transform 0.25s ease;
+        }
+        .details-toggle.expanded::before { transform: rotate(90deg); }
 
         /* ============ 下载按钮 ============ */
         .btn-group {
             display: flex;
-            gap: 10px;
-            margin-top: 16px;
+            gap: 8px;
+            margin-top: 8px;
             flex-wrap: wrap;
         }
         .download-btn {
@@ -396,34 +461,34 @@
             gap: 6px;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 11px 24px;
+            padding: 8px 18px;
             border-radius: var(--radius-md);
             text-decoration: none;
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 600;
             transition: var(--transition);
             text-align: center;
             border: none;
             cursor: pointer;
             flex: 1;
-            min-width: 140px;
-            box-shadow: 0 4px 12px rgba(102,126,234,0.3);
+            min-width: 120px;
+            box-shadow: 0 3px 10px rgba(102,126,234,0.3);
         }
         .download-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102,126,234,0.45);
+            box-shadow: 0 6px 16px rgba(102,126,234,0.45);
         }
         .download-btn:active { transform: translateY(0); }
         .download-btn.secondary {
             background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-            box-shadow: 0 4px 12px rgba(245,158,11,0.3);
+            box-shadow: 0 3px 10px rgba(245,158,11,0.3);
         }
         .download-btn.secondary:hover {
-            box-shadow: 0 8px 20px rgba(245,158,11,0.45);
+            box-shadow: 0 6px 16px rgba(245,158,11,0.45);
         }
         .download-btn.success {
             background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            box-shadow: 0 4px 12px rgba(16,185,129,0.3);
+            box-shadow: 0 3px 10px rgba(16,185,129,0.3);
         }
         .download-btn.disabled {
             background: #d1d5db;
@@ -437,7 +502,7 @@
             cursor: wait;
             pointer-events: none;
         }
-        .download-btn .icon { font-size: 16px; }
+        .download-btn .icon { font-size: 14px; }
 
         /* ============ Toast ============ */
         .toast {
@@ -468,13 +533,13 @@
         /* ============ 网格布局 ============ */
         .grid-2 {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-            gap: 16px;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
         }
         .grid-3 {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
+            gap: 8px;
         }
 
         /* ============ 安装步骤 ============ */
@@ -485,23 +550,23 @@
         }
         .install-steps li {
             counter-increment: step;
-            padding: 10px 0 10px 40px;
+            padding: 5px 0 5px 32px;
             position: relative;
-            font-size: 13px;
-            line-height: 1.7;
+            font-size: 12px;
+            line-height: 1.5;
             color: var(--text-primary);
         }
         .install-steps li::before {
             content: counter(step);
             position: absolute;
-            left: 0; top: 8px;
-            width: 26px; height: 26px;
+            left: 0; top: 4px;
+            width: 22px; height: 22px;
             background: var(--bg-gradient);
             color: white;
             border-radius: 50%;
             text-align: center;
-            line-height: 26px;
-            font-size: 12px;
+            line-height: 22px;
+            font-size: 11px;
             font-weight: 700;
             box-shadow: 0 2px 6px rgba(102,126,234,0.3);
         }
@@ -522,23 +587,23 @@
         .compare-table th {
             background: var(--bg-gradient);
             color: white;
-            padding: 10px 8px;
+            padding: 6px 6px;
             border: 1px solid rgba(255,255,255,0.2);
             text-align: center;
             font-weight: 600;
             position: sticky;
             top: 0;
         }
-        .compare-table th:first-child { text-align: left; padding-left: 12px; }
+        .compare-table th:first-child { text-align: left; padding-left: 10px; }
         .compare-table td {
-            padding: 8px;
+            padding: 5px 6px;
             border: 1px solid var(--border-color);
             text-align: center;
             color: var(--text-primary);
         }
         .compare-table td:first-child {
             text-align: left;
-            padding-left: 12px;
+            padding-left: 10px;
             background: #f9fafb;
             font-weight: 500;
             color: var(--text-secondary);
@@ -552,14 +617,14 @@
         .faq-item {
             background: white;
             border-radius: var(--radius-md);
-            margin-bottom: 10px;
+            margin-bottom: 6px;
             overflow: hidden;
             box-shadow: var(--shadow-sm);
             border: 1px solid var(--border-color);
         }
         .faq-question {
-            padding: 14px 18px;
-            font-size: 14px;
+            padding: 8px 12px;
+            font-size: 13px;
             font-weight: 500;
             cursor: pointer;
             display: flex;
@@ -578,19 +643,19 @@
             max-height: 0;
             overflow: hidden;
             transition: max-height 0.3s ease;
-            font-size: 13px;
+            font-size: 12px;
             color: var(--text-secondary);
-            line-height: 1.7;
+            line-height: 1.6;
         }
         .faq-item.open .faq-answer { max-height: 500px; }
-        .faq-answer-inner { padding: 0 18px 14px; }
+        .faq-answer-inner { padding: 0 12px 8px; }
 
         /* ============ 购买激活码 ============ */
         .purchase-flow {
             background: white;
-            border-radius: var(--radius-lg);
-            padding: 24px;
-            box-shadow: var(--shadow-lg);
+            border-radius: var(--radius-md);
+            padding: 14px;
+            box-shadow: var(--shadow-md);
         }
         .purchase-step {
             display: none;
@@ -600,13 +665,13 @@
         .step-header {
             display: flex;
             align-items: center;
-            gap: 12px;
-            margin-bottom: 18px;
-            padding-bottom: 14px;
+            gap: 10px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
             border-bottom: 2px solid #f3f4f6;
         }
         .step-num {
-            width: 36px; height: 36px;
+            width: 28px; height: 28px;
             background: var(--bg-gradient);
             color: white;
             border-radius: 50%;
@@ -614,31 +679,31 @@
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 16px;
-            box-shadow: 0 4px 10px rgba(102,126,234,0.3);
+            font-size: 13px;
+            box-shadow: 0 3px 8px rgba(102,126,234,0.3);
         }
         .step-title {
-            font-size: 16px;
+            font-size: 14px;
             font-weight: 600;
             color: var(--text-primary);
         }
         .step-desc {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-secondary);
-            margin-top: 2px;
+            margin-top: 1px;
         }
 
         /* 版本选择卡片 */
         .version-pick {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-            margin-bottom: 18px;
+            gap: 8px;
+            margin-bottom: 10px;
         }
         .version-pick-item {
             border: 2px solid var(--border-color);
             border-radius: var(--radius-md);
-            padding: 16px;
+            padding: 10px;
             cursor: pointer;
             transition: var(--transition);
             background: white;
@@ -652,41 +717,41 @@
         .version-pick-item.selected {
             border-color: var(--primary);
             background: linear-gradient(180deg, #f0f4ff 0%, #ffffff 60%);
-            box-shadow: 0 6px 18px rgba(102,126,234,0.2);
+            box-shadow: 0 4px 14px rgba(102,126,234,0.2);
         }
         .version-pick-item.selected::after {
             content: '✓';
             position: absolute;
-            top: 8px; right: 8px;
-            width: 22px; height: 22px;
+            top: 6px; right: 6px;
+            width: 18px; height: 18px;
             background: var(--primary);
             color: white;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 13px;
+            font-size: 11px;
             font-weight: 700;
         }
         .version-pick-item .name {
-            font-size: 15px;
+            font-size: 13px;
             font-weight: 600;
             color: var(--text-primary);
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
         .version-pick-item .desc {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-secondary);
-            line-height: 1.6;
+            line-height: 1.5;
         }
         .version-pick-item .price {
-            margin-top: 10px;
-            font-size: 18px;
+            margin-top: 6px;
+            font-size: 15px;
             font-weight: 700;
             color: var(--primary);
         }
         .version-pick-item .price small {
-            font-size: 11px;
+            font-size: 10px;
             color: var(--text-tertiary);
             font-weight: 400;
         }
@@ -696,31 +761,31 @@
             background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
             border: 2px dashed var(--primary);
             border-radius: var(--radius-md);
-            padding: 18px;
+            padding: 10px;
             text-align: center;
-            margin: 16px 0;
+            margin: 8px 0;
         }
         .order-box .label {
-            font-size: 12px;
+            font-size: 11px;
             color: var(--text-secondary);
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
         .order-box .value {
             font-family: 'Courier New', monospace;
-            font-size: 18px;
+            font-size: 15px;
             font-weight: 700;
             color: var(--primary-dark);
             letter-spacing: 1px;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
             word-break: break-all;
         }
         .order-box .copy-btn {
             background: var(--primary);
             color: white;
             border: none;
-            padding: 7px 18px;
+            padding: 5px 14px;
             border-radius: var(--radius-sm);
-            font-size: 12px;
+            font-size: 11px;
             cursor: pointer;
             transition: var(--transition);
             font-weight: 500;
@@ -732,16 +797,16 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            padding: 20px;
+            padding: 10px;
             background: #f9fafb;
             border-radius: var(--radius-md);
-            margin: 16px 0;
+            margin: 8px 0;
         }
         .qrcode-container {
-            width: 180px; height: 180px;
+            width: 140px; height: 140px;
             border: 2px solid var(--border-color);
             border-radius: var(--radius-sm);
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.08);
             transition: var(--transition);
             background: white;
@@ -751,11 +816,11 @@
             box-shadow: 0 8px 20px rgba(0,0,0,0.15);
         }
         .update-card {
-            margin-bottom: 24px;
+            margin-bottom: 8px;
         }
         .update-content {
             display: flex;
-            gap: 32px;
+            gap: 20px;
             align-items: flex-start;
         }
         .update-left {
@@ -764,15 +829,15 @@
         .update-step {
             display: flex;
             align-items: flex-start;
-            gap: 16px;
-            margin-bottom: 20px;
+            gap: 12px;
+            margin-bottom: 10px;
         }
         .update-step:last-of-type {
-            margin-bottom: 12px;
+            margin-bottom: 8px;
         }
         .step-num {
-            width: 36px;
-            height: 36px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             background: var(--primary);
             color: white;
@@ -780,49 +845,49 @@
             align-items: center;
             justify-content: center;
             font-weight: 700;
-            font-size: 16px;
+            font-size: 13px;
             flex-shrink: 0;
         }
         .update-step strong {
             display: block;
             color: var(--text-primary);
-            font-size: 16px;
-            margin-bottom: 4px;
+            font-size: 13px;
+            margin-bottom: 2px;
         }
         .update-step p {
             color: var(--text-secondary);
-            font-size: 14px;
+            font-size: 11px;
             margin: 0;
-            line-height: 1.6;
+            line-height: 1.5;
         }
         .update-note {
             background: var(--bg-secondary);
-            padding: 12px 16px;
+            padding: 6px 10px;
             border-radius: var(--radius-sm);
             display: flex;
             align-items: flex-start;
-            gap: 8px;
-            font-size: 13px;
+            gap: 6px;
+            font-size: 11px;
             color: var(--text-secondary);
-            margin-top: 8px;
+            margin-top: 6px;
         }
         .update-right {
             flex-shrink: 0;
             text-align: center;
         }
         .qr-title {
-            font-size: 14px;
+            font-size: 12px;
             color: var(--text-secondary);
-            margin-bottom: 12px;
+            margin-bottom: 6px;
             font-weight: 500;
         }
         .qr-wechat {
-            font-size: 14px;
+            font-size: 12px;
             color: var(--text-primary);
             font-weight: 600;
         }
         .contact-wechat {
-            font-size: 14px;
+            font-size: 12px;
             color: var(--text-primary);
             font-weight: 600;
             display: flex;
@@ -831,11 +896,11 @@
         }
         .contact-wechat .wx-id {
             background: white;
-            padding: 3px 10px;
+            padding: 2px 8px;
             border-radius: 4px;
             border: 1px solid var(--border-color);
             font-family: 'Courier New', monospace;
-            font-size: 13px;
+            font-size: 12px;
             cursor: pointer;
             transition: var(--transition);
         }
@@ -846,28 +911,28 @@
             background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
             border: 1px solid #f59e0b;
             border-radius: var(--radius-md);
-            padding: 14px 18px;
-            margin-top: 16px;
-            font-size: 12px;
+            padding: 8px 12px;
+            margin-top: 8px;
+            font-size: 11px;
             color: #78350f;
-            line-height: 1.8;
+            line-height: 1.6;
         }
         .flow-guide strong { color: #92400e; }
-        .flow-guide ol { padding-left: 20px; margin-top: 6px; }
-        .flow-guide ol li { margin-bottom: 3px; }
+        .flow-guide ol { padding-left: 18px; margin-top: 4px; }
+        .flow-guide ol li { margin-bottom: 2px; }
 
         /* 导航按钮 */
         .step-nav {
             display: flex;
             justify-content: space-between;
-            margin-top: 20px;
-            gap: 10px;
+            margin-top: 10px;
+            gap: 8px;
         }
         .step-nav button {
-            padding: 10px 22px;
+            padding: 7px 18px;
             border: none;
             border-radius: var(--radius-md);
-            font-size: 13px;
+            font-size: 12px;
             font-weight: 600;
             cursor: pointer;
             transition: var(--transition);
@@ -880,22 +945,22 @@
         .step-nav .next {
             background: var(--bg-gradient);
             color: white;
-            box-shadow: 0 4px 10px rgba(102,126,234,0.3);
+            box-shadow: 0 3px 8px rgba(102,126,234,0.3);
         }
-        .step-nav .next:hover { transform: translateY(-2px); box-shadow: 0 6px 14px rgba(102,126,234,0.45); }
+        .step-nav .next:hover { transform: translateY(-2px); box-shadow: 0 5px 12px rgba(102,126,234,0.45); }
         .step-nav button:disabled { opacity: 0.4; cursor: not-allowed; transform: none; box-shadow: none; }
 
         /* ============ 浮动按钮 ============ */
         .float-buttons {
             position: fixed;
-            right: 20px; bottom: 20px;
+            right: 16px; bottom: 16px;
             display: flex;
             flex-direction: column;
-            gap: 10px;
+            gap: 8px;
             z-index: 100;
         }
         .float-btn {
-            width: 48px; height: 48px;
+            width: 40px; height: 40px;
             border-radius: 50%;
             background: var(--bg-gradient);
             color: white;
@@ -916,47 +981,48 @@
         .footer {
             text-align: center;
             color: rgba(255,255,255,0.7);
-            font-size: 12px;
-            margin-top: 40px;
-            padding: 20px;
-            line-height: 1.8;
+            font-size: 10px;
+            margin-top: 8px;
+            padding: 8px 10px;
+            line-height: 1.5;
             border-top: 1px solid rgba(255,255,255,0.15);
         }
         .footer a { color: rgba(255,255,255,0.9); text-decoration: none; }
+        .footer p { margin: 1px 0; }
 
         /* ============ 响应式 ============ */
         @media (max-width: 768px) {
-            .hero h1 { font-size: 22px; }
-            .hero p { font-size: 12px; }
-            .hero-logo { width: 56px; height: 56px; font-size: 28px; }
-            .card { padding: 16px; }
-            .card-title { font-size: 15px; }
-            .info-row { flex-direction: column; align-items: flex-start; gap: 3px; }
+            .hero h1 { font-size: 18px; }
+            .hero p { font-size: 11px; }
+            .hero-logo { width: 40px; height: 40px; font-size: 20px; }
+            .card { padding: 10px 12px; }
+            .card-title { font-size: 13px; }
+            .info-row { flex-direction: column; align-items: flex-start; gap: 2px; }
             .info-value { text-align: left; }
             .info-label { min-width: auto; }
-            .tab-btn { padding: 8px 12px; font-size: 13px; }
-            .download-btn { font-size: 13px; padding: 10px 18px; min-width: 120px; }
+            .tab-btn { padding: 6px 10px; font-size: 12px; }
+            .download-btn { font-size: 12px; padding: 8px 14px; min-width: 110px; }
             .grid-2, .grid-3 { grid-template-columns: 1fr; }
             .version-pick { grid-template-columns: 1fr; }
-            .section-title { font-size: 16px; }
+            .section-title { font-size: 13px; }
             .update-content { flex-direction: column; align-items: center; text-align: center; }
             .update-left { width: 100%; }
             .update-step { justify-content: center; }
             .update-note { justify-content: center; }
         }
         @media (max-width: 480px) {
-            .container { padding: 12px 10px 80px; }
+            .container { padding: 8px 8px 60px; }
             .btn-group { flex-direction: column; }
             .download-btn { width: 100%; }
         }
 
-        .loading { text-align: center; color: var(--text-tertiary); padding: 20px; font-size: 13px; }
+        .loading { text-align: center; color: var(--text-tertiary); padding: 10px; font-size: 12px; }
         .status-tag {
             display: inline-block;
             font-size: 10px;
-            padding: 2px 8px;
+            padding: 1px 6px;
             border-radius: 4px;
-            margin-left: 4px;
+            margin-left: 3px;
             font-weight: 500;
         }
         .status-tag.latest { background: #d4edda; color: #155724; }
@@ -1005,11 +1071,13 @@
         <!-- ============ Hero ============ -->
         <div class="hero">
             <div class="hero-logo">⚕️</div>
-            <h1>惠康中医诊所管理系统</h1>
-            <p>官方下载中心 · 安全可靠 · 持续更新</p>
+            <div class="hero-text">
+                <h1>惠康中医诊所管理系统</h1>
+                <p>官方下载中心 · 安全可靠 · 持续更新</p>
+            </div>
             <div class="hero-badge">
                 <span class="dot"></span>
-                <span>所有版本均通过 SHA-256 校验</span>
+                <span>SHA-256 校验</span>
             </div>
         </div>
 
@@ -1017,8 +1085,7 @@
         <div class="security-notice">
             <span class="icon">🛡️</span>
             <div>
-                <strong>安全提示：</strong>请仅从本页面下载软件。第三方渠道的软件可能被篡改，存在安全风险。<br>
-                下载后请核对 SHA-256 校验值，确保文件完整无损。
+                <strong>安全提示：</strong>请仅从本页面下载，下载后请核对 SHA-256 校验值确保文件完整无损。
             </div>
         </div>
 
@@ -1036,9 +1103,10 @@
         <!-- ============ Tab: 手机端 ============ -->
         <div class="tab-content active" id="tab-mobile">
             <div class="section-title">
-                <span>📱 云端版 APP</span>
-                <span class="sub">多设备同步 · 需账户</span>
+                <span>📱 手机端 APP</span>
+                <span class="sub">云端版 · 离线版</span>
             </div>
+            <div class="grid-2">
             <div class="card featured" id="card-cloud-app">
                 <div class="card-title">
                     <span class="icon">☁️</span>
@@ -1054,35 +1122,38 @@
                     <span class="info-label">发布日期</span>
                     <span class="info-value date" id="date-cloud-app">-</span>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">更新时间</span>
-                    <span class="info-value date" id="mtime-cloud-app">-</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">更新说明</span>
-                    <span class="info-value" id="notes-cloud-app">-</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">适用场景</span>
-                    <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">多设备登入</span>
-                    <span class="info-value success">✅ 支持（云端实时同步）</span>
-                </div>
-                <div class="notice notice-cloud">
-                    <span class="icon">⚠️</span>
-                    <div>
-                        <strong>无公开试用：</strong>云端版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
-                        <strong>试用建议：</strong>请先下载下方"离线版"体验功能，满意后联系开发者开通云端账户。
+                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
+                <div class="card-details">
+                    <div class="info-row">
+                        <span class="info-label">更新时间</span>
+                        <span class="info-value date" id="mtime-cloud-app">-</span>
                     </div>
-                </div>
-                <div class="hash-box">
-                    <div class="hash-label">
-                        🔒 SHA-256 校验值（APK）
-                        <button class="hash-copy" onclick="copyHash('hash-cloud-app')">复制</button>
+                    <div class="info-row">
+                        <span class="info-label">更新说明</span>
+                        <span class="info-value" id="notes-cloud-app">-</span>
                     </div>
-                    <div class="hash-value pending" id="hash-cloud-app">（打包后自动更新）</div>
+                    <div class="info-row">
+                        <span class="info-label">适用场景</span>
+                        <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">多设备登入</span>
+                        <span class="info-value success">✅ 支持（云端实时同步）</span>
+                    </div>
+                    <div class="notice notice-cloud">
+                        <span class="icon">⚠️</span>
+                        <div>
+                            <strong>无公开试用：</strong>云端版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
+                            <strong>试用建议：</strong>请先下载下方"离线版"体验功能，满意后联系开发者开通云端账户。
+                        </div>
+                    </div>
+                    <div class="hash-box">
+                        <div class="hash-label">
+                            🔒 SHA-256 校验值（APK）
+                            <button class="hash-copy" onclick="copyHash('hash-cloud-app')">复制</button>
+                        </div>
+                        <div class="hash-value pending" id="hash-cloud-app">（打包后自动更新）</div>
+                    </div>
                 </div>
                 <div class="btn-group">
                     <a href="#" class="download-btn" id="dl-cloud-app">
@@ -1107,32 +1178,35 @@
                     <span class="info-label">更新时间</span>
                     <span class="info-value date" id="mtime-geren-cloud">-</span>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">适用场景</span>
-                    <span class="info-value">个人医生联网使用，云端数据同步，轻量简洁</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">多设备登入</span>
-                    <span class="info-value success">✅ 支持（云端实时同步）</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">功能差异</span>
-                    <span class="info-value">与云端版相同，默认以"个人版"模式运行（无统计、无改密按钮）</span>
-                </div>
-                <div class="notice notice-cloud">
-                    <span class="icon">ℹ️</span>
-                    <div>
-                        <strong>关于云端个人版：</strong>此版本与"云端版"使用同一安装包，仅在服务端以个人版模式运行，界面更简洁。<br>
-                        <strong>适合人群：</strong>个人医生、单医师诊所，需要云端数据同步但无需多账户管理功能。<br>
-                        <strong>账户开通：</strong>需联系开发者（平台管理员）开通个人版账户后登录使用。
+                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
+                <div class="card-details">
+                    <div class="info-row">
+                        <span class="info-label">适用场景</span>
+                        <span class="info-value">个人医生联网使用，云端数据同步，轻量简洁</span>
                     </div>
-                </div>
-                <div class="hash-box">
-                    <div class="hash-label">
-                        🔒 SHA-256 校验值（APK）
-                        <button class="hash-copy" onclick="copyHash('hash-geren-cloud')">复制</button>
+                    <div class="info-row">
+                        <span class="info-label">多设备登入</span>
+                        <span class="info-value success">✅ 支持（云端实时同步）</span>
                     </div>
-                    <div class="hash-value pending" id="hash-geren-cloud">（打包后自动更新）</div>
+                    <div class="info-row">
+                        <span class="info-label">功能差异</span>
+                        <span class="info-value">与云端版相同，默认以"个人版"模式运行（无统计、无改密按钮）</span>
+                    </div>
+                    <div class="notice notice-cloud">
+                        <span class="icon">ℹ️</span>
+                        <div>
+                            <strong>关于云端个人版：</strong>此版本与"云端版"使用同一安装包，仅在服务端以个人版模式运行，界面更简洁。<br>
+                            <strong>适合人群：</strong>个人医生、单医师诊所，需要云端数据同步但无需多账户管理功能。<br>
+                            <strong>账户开通：</strong>需联系开发者（平台管理员）开通个人版账户后登录使用。
+                        </div>
+                    </div>
+                    <div class="hash-box">
+                        <div class="hash-label">
+                            🔒 SHA-256 校验值（APK）
+                            <button class="hash-copy" onclick="copyHash('hash-geren-cloud')">复制</button>
+                        </div>
+                        <div class="hash-value pending" id="hash-geren-cloud">（打包后自动更新）</div>
+                    </div>
                 </div>
                 <div class="btn-group">
                     <a href="#" class="download-btn" id="dl-geren-cloud">
@@ -1141,26 +1215,23 @@
                 </div>
             </div>
 
-            <div class="section-title">
-                <span>📱 离线版 APP</span>
-                <span class="sub">免费试用 7 天 · 无需注册</span>
-            </div>
-            <div class="grid-2">
-                <div class="card" id="card-dingzhi">
-                    <div class="card-title">
-                        <span class="icon">🏥</span>
-                        惠康中医 · 定制版
-                        <span class="badge offline">离线</span>
-                        <span class="status-tag latest" id="tag-dingzhi">最新</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">版本</span>
-                        <span class="info-value version" id="ver-dingzhi">加载中...</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">发布日期</span>
-                        <span class="info-value date" id="date-dingzhi">-</span>
-                    </div>
+            <div class="card" id="card-dingzhi">
+                <div class="card-title">
+                    <span class="icon">🏥</span>
+                    惠康中医 · 定制版
+                    <span class="badge offline">离线</span>
+                    <span class="status-tag latest" id="tag-dingzhi">最新</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">版本</span>
+                    <span class="info-value version" id="ver-dingzhi">加载中...</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">发布日期</span>
+                    <span class="info-value date" id="date-dingzhi">-</span>
+                </div>
+                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
+                <div class="card-details">
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
                         <span class="info-value date" id="mtime-dingzhi">-</span>
@@ -1200,28 +1271,31 @@
                         </div>
                         <div class="hash-value pending" id="hash-dingzhi">（打包后自动更新）</div>
                     </div>
-                    <div class="btn-group">
-                        <a href="#" class="download-btn secondary" id="dl-dingzhi">
-                            <span class="icon">⬇️</span>下载 APK（Android）
-                        </a>
-                    </div>
                 </div>
+                <div class="btn-group">
+                    <a href="#" class="download-btn secondary" id="dl-dingzhi">
+                        <span class="icon">⬇️</span>下载 APK（Android）
+                    </a>
+                </div>
+            </div>
 
-                <div class="card" id="card-geren">
-                    <div class="card-title">
-                        <span class="icon">👤</span>
-                        惠康中医 · 个人版
-                        <span class="badge offline">离线</span>
-                        <span class="status-tag latest" id="tag-geren">最新</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">版本</span>
-                        <span class="info-value version" id="ver-geren">加载中...</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">发布日期</span>
-                        <span class="info-value date" id="date-geren">-</span>
-                    </div>
+            <div class="card" id="card-geren">
+                <div class="card-title">
+                    <span class="icon">👤</span>
+                    惠康中医 · 个人版
+                    <span class="badge offline">离线</span>
+                    <span class="status-tag latest" id="tag-geren">最新</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">版本</span>
+                    <span class="info-value version" id="ver-geren">加载中...</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">发布日期</span>
+                    <span class="info-value date" id="date-geren">-</span>
+                </div>
+                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
+                <div class="card-details">
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
                         <span class="info-value date" id="mtime-geren">-</span>
@@ -1259,21 +1333,23 @@
                         </div>
                         <div class="hash-value pending" id="hash-geren">（打包后自动更新）</div>
                     </div>
-                    <div class="btn-group">
-                        <a href="#" class="download-btn secondary" id="dl-geren">
-                            <span class="icon">⬇️</span>下载 APK（Android）
-                        </a>
-                    </div>
                 </div>
+                <div class="btn-group">
+                    <a href="#" class="download-btn secondary" id="dl-geren">
+                        <span class="icon">⬇️</span>下载 APK（Android）
+                    </a>
+                </div>
+            </div>
             </div>
         </div>
 
         <!-- ============ Tab: 桌面端 ============ -->
         <div class="tab-content" id="tab-desktop">
             <div class="section-title">
-                <span>💻 云端桌面版</span>
-                <span class="sub">多设备同步 · 需账户</span>
+                <span>💻 桌面端程序</span>
+                <span class="sub">云端桌面版 · 离线桌面版</span>
             </div>
+            <div class="grid-2">
             <div class="card featured" id="card-cloud-desktop">
                 <div class="card-title">
                     <span class="icon">☁️</span>
@@ -1289,41 +1365,44 @@
                     <span class="info-label">发布日期</span>
                     <span class="info-value date" id="date-cloud">-</span>
                 </div>
-                <div class="info-row">
-                    <span class="info-label">更新时间</span>
-                    <span class="info-value date" id="mtime-cloud">-</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">更新说明</span>
-                    <span class="info-value" id="notes-cloud">-</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">适用场景</span>
-                    <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">多设备登入</span>
-                    <span class="info-value success">✅ 支持（云端实时同步）</span>
-                </div>
-                <div class="credential-box">
-                    <strong>📝 注册说明：</strong><br>
-                    诊所名称：注册时填写（基础设置中可修改）<br>
-                    管理员用户名：<span class="cred-pair" onclick="copyText(this)">管理员</span><br>
-                    <strong>⚠️ 云端版需联系开发者开通账户，注册时提供诊所名称和管理员姓名即可。</strong>
-                </div>
-                <div class="notice notice-cloud">
-                    <span class="icon">⚠️</span>
-                    <div>
-                        <strong>无公开试用：</strong>云端桌面版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
-                        <strong>试用建议：</strong>请先下载上方"离线版 APP"体验功能，满意后联系开发者开通云端账户。
+                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
+                <div class="card-details">
+                    <div class="info-row">
+                        <span class="info-label">更新时间</span>
+                        <span class="info-value date" id="mtime-cloud">-</span>
                     </div>
-                </div>
-                <div class="hash-box">
-                    <div class="hash-label">
-                        🔒 SHA-256 校验值（安装版）
-                        <button class="hash-copy" onclick="copyHash('hash-cloud')">复制</button>
+                    <div class="info-row">
+                        <span class="info-label">更新说明</span>
+                        <span class="info-value" id="notes-cloud">-</span>
                     </div>
-                    <div class="hash-value pending" id="hash-cloud">（打包后自动更新）</div>
+                    <div class="info-row">
+                        <span class="info-label">适用场景</span>
+                        <span class="info-value">云端数据同步，多设备协作，适合联网诊所</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">多设备登入</span>
+                        <span class="info-value success">✅ 支持（云端实时同步）</span>
+                    </div>
+                    <div class="credential-box">
+                        <strong>📝 注册说明：</strong><br>
+                        诊所名称：注册时填写（基础设置中可修改）<br>
+                        管理员用户名：<span class="cred-pair" onclick="copyText(this)">管理员</span><br>
+                        <strong>⚠️ 云端版需联系开发者开通账户，注册时提供诊所名称和管理员姓名即可。</strong>
+                    </div>
+                    <div class="notice notice-cloud">
+                        <span class="icon">⚠️</span>
+                        <div>
+                            <strong>无公开试用：</strong>云端桌面版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
+                            <strong>试用建议：</strong>请先下载上方"离线版 APP"体验功能，满意后联系开发者开通云端账户。
+                        </div>
+                    </div>
+                    <div class="hash-box">
+                        <div class="hash-label">
+                            🔒 SHA-256 校验值（安装版）
+                            <button class="hash-copy" onclick="copyHash('hash-cloud')">复制</button>
+                        </div>
+                        <div class="hash-value pending" id="hash-cloud">（打包后自动更新）</div>
+                    </div>
                 </div>
                 <div class="btn-group">
                     <a href="#" class="download-btn" id="dl-cloud">
@@ -1335,26 +1414,23 @@
                 </div>
             </div>
 
-            <div class="section-title">
-                <span>💻 离线桌面版</span>
-                <span class="sub">免费试用 7 天 · 无需注册</span>
-            </div>
-            <div class="grid-2">
-                <div class="card" id="card-dingzhi-desktop">
-                    <div class="card-title">
-                        <span class="icon">🏥</span>
-                        惠康中医 · 定制桌面版
-                        <span class="badge desktop">桌面</span>
-                        <span class="badge offline">离线</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">版本</span>
-                        <span class="info-value version" id="ver-dingzhi-desktop">加载中...</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">发布日期</span>
-                        <span class="info-value date" id="date-dingzhi-desktop">-</span>
-                    </div>
+            <div class="card" id="card-dingzhi-desktop">
+                <div class="card-title">
+                    <span class="icon">🏥</span>
+                    惠康中医 · 定制桌面版
+                    <span class="badge desktop">桌面</span>
+                    <span class="badge offline">离线</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">版本</span>
+                    <span class="info-value version" id="ver-dingzhi-desktop">加载中...</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">发布日期</span>
+                    <span class="info-value date" id="date-dingzhi-desktop">-</span>
+                </div>
+                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
+                <div class="card-details">
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
                         <span class="info-value date" id="mtime-dingzhi-desktop">-</span>
@@ -1394,31 +1470,34 @@
                         </div>
                         <div class="hash-value pending" id="hash-dingzhi-desktop">（打包后自动更新）</div>
                     </div>
-                    <div class="btn-group">
-                        <a href="#" class="download-btn" id="dl-dingzhi-desktop">
-                            <span class="icon">⬇️</span>下载安装版（推荐）
-                        </a>
-                        <a href="#" class="download-btn secondary" id="dl-dingzhi-desktop-portable">
-                            <span class="icon">📦</span>便携版
-                        </a>
-                    </div>
                 </div>
+                <div class="btn-group">
+                    <a href="#" class="download-btn" id="dl-dingzhi-desktop">
+                        <span class="icon">⬇️</span>下载安装版（推荐）
+                    </a>
+                    <a href="#" class="download-btn secondary" id="dl-dingzhi-desktop-portable">
+                        <span class="icon">📦</span>便携版
+                    </a>
+                </div>
+            </div>
 
-                <div class="card" id="card-geren-desktop">
-                    <div class="card-title">
-                        <span class="icon">👤</span>
-                        惠康中医 · 个人桌面版
-                        <span class="badge desktop">桌面</span>
-                        <span class="badge offline">离线</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">版本</span>
-                        <span class="info-value version" id="ver-geren-desktop">加载中...</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">发布日期</span>
-                        <span class="info-value date" id="date-geren-desktop">-</span>
-                    </div>
+            <div class="card" id="card-geren-desktop">
+                <div class="card-title">
+                    <span class="icon">👤</span>
+                    惠康中医 · 个人桌面版
+                    <span class="badge desktop">桌面</span>
+                    <span class="badge offline">离线</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">版本</span>
+                    <span class="info-value version" id="ver-geren-desktop">加载中...</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">发布日期</span>
+                    <span class="info-value date" id="date-geren-desktop">-</span>
+                </div>
+                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
+                <div class="card-details">
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
                         <span class="info-value date" id="mtime-geren-desktop">-</span>
@@ -1456,15 +1535,16 @@
                         </div>
                         <div class="hash-value pending" id="hash-geren-desktop">（打包后自动更新）</div>
                     </div>
-                    <div class="btn-group">
-                        <a href="#" class="download-btn" id="dl-geren-desktop">
-                            <span class="icon">⬇️</span>下载安装版（推荐）
-                        </a>
-                        <a href="#" class="download-btn secondary" id="dl-geren-desktop-portable">
-                            <span class="icon">📦</span>便携版
-                        </a>
-                    </div>
                 </div>
+                <div class="btn-group">
+                    <a href="#" class="download-btn" id="dl-geren-desktop">
+                        <span class="icon">⬇️</span>下载安装版（推荐）
+                    </a>
+                    <a href="#" class="download-btn secondary" id="dl-geren-desktop-portable">
+                        <span class="icon">📦</span>便携版
+                    </a>
+                </div>
+            </div>
             </div>
         </div>
 
@@ -1734,6 +1814,48 @@
                 <p style="font-size:13px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
                     将计算结果与上方页面的 SHA-256 值比对，完全一致则文件完整无损。
                 </p>
+            </div>
+            <div class="section-title">
+                <span>🔄 离线程序更新方案</span>
+                <span class="sub">自动检测 · 一键升级</span>
+            </div>
+            <div class="card update-card">
+                <div class="update-content">
+                    <div class="update-left">
+                        <div class="update-step">
+                            <span class="step-num">1</span>
+                            <div>
+                                <strong>启动时自动检测</strong>
+                                <p>程序启动时会自动检查新版本，如有更新会弹出提示</p>
+                            </div>
+                        </div>
+                        <div class="update-step">
+                            <span class="step-num">2</span>
+                            <div>
+                                <strong>下载更新包</strong>
+                                <p>点击"立即更新"，程序自动下载最新版本安装包</p>
+                            </div>
+                        </div>
+                        <div class="update-step">
+                            <span class="step-num">3</span>
+                            <div>
+                                <strong>自动安装升级</strong>
+                                <p>下载完成后自动安装，安装完成后重启生效</p>
+                            </div>
+                        </div>
+                        <div class="update-note">
+                            <span class="icon">💡</span>
+                            <span>如果自动更新失败，请手动下载最新版本安装包覆盖安装（数据不会丢失）</span>
+                        </div>
+                    </div>
+                    <div class="update-right">
+                        <div class="qr-title">遇到更新问题？联系客服</div>
+                        <div id="qrcodeUpdate" class="qrcode-container"></div>
+                        <div class="qr-wechat">
+                            客服微信：<span class="wx-id" onclick="copyText(this)">hktzy1688</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2033,54 +2155,9 @@
             </div>
         </div>
 
-            <div class="section-title">
-                <span>🔄 离线程序更新方案</span>
-                <span class="sub">自动检测 · 一键升级</span>
-            </div>
-            <div class="card update-card">
-                <div class="update-content">
-                    <div class="update-left">
-                        <div class="update-step">
-                            <span class="step-num">1</span>
-                            <div>
-                                <strong>启动时自动检测</strong>
-                                <p>程序启动时会自动检查新版本，如有更新会弹出提示</p>
-                            </div>
-                        </div>
-                        <div class="update-step">
-                            <span class="step-num">2</span>
-                            <div>
-                                <strong>下载更新包</strong>
-                                <p>点击"立即更新"，程序自动下载最新版本安装包</p>
-                            </div>
-                        </div>
-                        <div class="update-step">
-                            <span class="step-num">3</span>
-                            <div>
-                                <strong>自动安装升级</strong>
-                                <p>下载完成后自动安装，安装完成后重启生效</p>
-                            </div>
-                        </div>
-                        <div class="update-note">
-                            <span class="icon">💡</span>
-                            <span>如果自动更新失败，请手动下载最新版本安装包覆盖安装（数据不会丢失）</span>
-                        </div>
-                    </div>
-                    <div class="update-right">
-                        <div class="qr-title">遇到更新问题？联系客服</div>
-                        <div id="qrcodeUpdate" class="qrcode-container"></div>
-                        <div class="qr-wechat">
-                            客服微信：<span class="wx-id" onclick="copyText(this)">hktzy1688</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
         <!-- ============ Footer ============ -->
         <div class="footer">
-            <p>惠康中医诊所管理系统 · 官方下载中心</p>
-            <p>© 2026 惠康中医 · 本能中医处方系统</p>
-            <p>客服微信：<strong>hktzy1688</strong> · 技术支持请联系开发者</p>
+            <p>© 2026 惠康中医 · 本能中医处方系统 · 客服微信：<strong>hktzy1688</strong></p>
         </div>
     </div>
 
@@ -2107,6 +2184,32 @@
                 }
             });
         });
+
+        // =====================================================================
+        // 1.5 SHA-256 校验值折叠展开
+        // =====================================================================
+        document.querySelectorAll('.hash-label').forEach(label => {
+            label.addEventListener('click', (e) => {
+                // 点击复制按钮不触发折叠
+                if (e.target.classList.contains('hash-copy')) return;
+                const box = label.parentElement;
+                if (box && box.classList.contains('hash-box')) {
+                    box.classList.toggle('expanded');
+                }
+            });
+        });
+
+        // =====================================================================
+        // 1.6 卡片详情折叠展开
+        // =====================================================================
+        function toggleCardDetails(btn) {
+            const expanded = btn.classList.toggle('expanded');
+            const details = btn.nextElementSibling;
+            if (details && details.classList.contains('card-details')) {
+                details.classList.toggle('expanded', expanded);
+                btn.textContent = expanded ? '收起详情' : '查看详情';
+            }
+        }
 
         // =====================================================================
         // 2. FAQ 折叠
