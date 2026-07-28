@@ -1017,6 +1017,20 @@ function Build-AppStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step C. 重新打包手机 APP（签名严格模式 APK）" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
+    # ★ 关键修复：Step C 前必须停止 Step A 遗留的 Gradle daemon
+    # 原因：Step A 的 daemon 累积了构建内存，Step C 的 R8 full mode 会因内存不足崩溃
+    # 错误现象："Gradle build daemon has been stopped: stop command received"
+    Write-Host "  [INFO] 停止 Step A 遗留的 Gradle daemon（释放内存，避免 R8 OOM）..." -ForegroundColor Yellow
+    $appDir = Join-Path $scriptDir "cloud_app"
+    if (Test-Path "$appDir\gradlew.bat") {
+        Push-Location $appDir
+        try {
+            & .\gradlew.bat --stop 2>&1 | Out-Null
+        } catch {}
+        Pop-Location
+    }
+    Start-Sleep -Seconds 2
+    Write-Host "  [OK] Gradle daemon 已停止" -ForegroundColor Green
     # ★ 严格模式必须全量清理（不再跳过 clean），原因详见上方 Step D 注释
     $rc = Build-App -SkipConfirm
     if ($rc -ne 0) {
