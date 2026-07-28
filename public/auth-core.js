@@ -773,9 +773,11 @@
             // 3. 权限模式标准化
             user.allowedMode = resolveAllowedMode(user);
 
-            // 4. 网页环境：local 模式自动升级为 both
+            // 4. 网页环境：local 模式自动升级为 both（仅管理员，普通用户保持 local 永远离线）
             if (user.allowedMode === 'local' && !global.Capacitor) {
-                user.allowedMode = 'both';
+                if (isAdmin(user)) {
+                    user.allowedMode = 'both';
+                }
             }
 
             // 5. 写入登录态（统一 key）

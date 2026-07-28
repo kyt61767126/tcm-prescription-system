@@ -1784,7 +1784,8 @@ if (window.Permission) {
             async run() {
                 if (this._running) return;
                 if (!currentUser) return;
-                if (getAllowedMode() !== 'both') return;       // 仅 both 模式同步
+                const mode = getAllowedMode();
+                if (mode !== 'both' && mode !== 'local') return;  // both 和 local 模式同步
                 if (!navigator.onLine) return;
                 // P2-5: 指数退避 - 连续失败时跳过同步，避免云端不可达时频繁请求
                 // 失败次数：0-2 正常同步，3-5 延迟（2^n 秒），6+ 跳过直到下次 online 事件
@@ -1797,11 +1798,18 @@ if (window.Permission) {
                 this._running = true;
                 try {
                     await this.push();
-                    await this.pull();
+                    // local 模式仅 push（上传本地数据供管理员查看），不 pull（不拉取其他用户数据）
+                    if (mode === 'both') {
+                        await this.pull();
+                    }
                     const pending = await LocalDB.countUnsynced();
-                    await LocalDB.setSyncStatus('pull', pending);
+                    if (mode === 'both') {
+                        await LocalDB.setSyncStatus('pull', pending);
+                    } else {
+                        await LocalDB.setSyncStatus('push', pending);
+                    }
                     if (window.updateOfflineSyncInfo) updateOfflineSyncInfo();
-                    console.log('SyncEngine.run 完成，待同步:', pending);
+                    console.log('SyncEngine.run 完成 (mode=' + mode + ')，待同步:', pending);
                     // 成功时重置失败计数
                     this._consecutiveFailures = 0;
                 } catch (e) {
@@ -2415,6 +2423,19 @@ if (window.Permission) {
             historyDisplayCount = HISTORY_PAGE_SIZE;
             
             try {
+                // local 模式 + LocalDB 可用：从本地刷新
+                if (getAllowedMode() === 'local' && await LocalDB.ready().catch(() => false)) {
+                    console.log('refreshHistory: local 模式，从本地刷新');
+                    const localList = await LocalDB.getPrescriptions(currentUser.username);
+                    prescriptionHistory = Array.isArray(localList) ? localList.filter(p => !p.deleted) : [];
+                    sortPrescriptionsByTimeDesc(prescriptionHistory);
+                    // 触发后台同步
+                    try { SyncEngine.run(); } catch(e) {}
+                    renderHistoryList();
+                    showToast('已刷新');
+                    return;
+                }
+
                 // 强制刷新云端数据
                 const cloudResult = await getPrescriptionsFromCloud(true);
                 console.log('cloudResult:', cloudResult);
@@ -3041,9 +3062,11 @@ if (window.Permission) {
                 const fresh = users.find(u => u.username === currentUser.username);
                 if (fresh) {
                     let mode = fresh.allowedMode || 'both';
-                    // 桌面版环境下，'local' 模式自动升级为 'both'（无真正离线功能）
+                    // 桌面版环境下，'local' 模式自动升级为 'both'（仅管理员，普通用户保持 local 永远离线）
                     if (mode === 'local' && !window.Capacitor) {
-                        mode = 'both';
+                        if (isClinicAdmin(currentUser) || isPlatformAdmin(currentUser)) {
+                            mode = 'both';
+                        }
                     }
                     if (mode !== currentUser.allowedMode) {
                         console.log('用户权限已更新:', currentUser.allowedMode, '->', mode);
@@ -3392,9 +3415,11 @@ if (window.Permission) {
                     return;
                 }
                 const user = result.user;
-                // 桌面版环境下，'local' 模式自动升级为 'both'（无真正离线功能）
+                // 桌面版环境下，'local' 模式自动升级为 'both'（仅管理员，普通用户保持 local 永远离线）
                 if (user.allowedMode === 'local' && !window.Capacitor) {
-                    user.allowedMode = 'both';
+                    if (isClinicAdmin(user) || isPlatformAdmin(user)) {
+                        user.allowedMode = 'both';
+                    }
                 }
                 // P2-2: login-state 精简 - 剥离可能残留的敏感字段（双重保险）
                 // auth-core 已剥离 password，但防止云端 API 误返回 passwordHash/token 等
@@ -5072,12 +5097,19 @@ if (window.Permission) {
 
             console.log('=== loadData() 开始 ===');
             console.log('当前用户:', currentUser ? currentUser.username : '(未登录)');
+            console.log('allowedMode:', getAllowedMode());
 
-            // 并行请求云端数据，减少加载时间
+            // local 模式 + LocalDB 可用：处方历史从本地加载（药品/方剂仍从云端获取）
+            const mode = getAllowedMode();
+            const localDbReady = (mode === 'local') && (await LocalDB.ready().catch(() => false));
+
+            // 并行请求数据（local 模式 + LocalDB 可用时不从云端获取处方）
             const [cloudMedicines, cloudFormulas, cloudResult] = await Promise.all([
                 getMedicinesFromCloud().catch(e => { console.warn('Failed to get medicines:', e); return null; }),
                 getFormulasFromCloud().catch(e => { console.warn('Failed to get formulas:', e); return null; }),
-                getPrescriptionsFromCloud().catch(e => { console.warn('Failed to get prescriptions:', e); return null; })
+                localDbReady
+                    ? Promise.resolve(null)  // local 模式不从云端获取处方
+                    : getPrescriptionsFromCloud().catch(e => { console.warn('Failed to get prescriptions:', e); return null; })
             ]);
 
             // P2-3: 日志脱敏 - 只记录数量和状态，不输出完整数据（防止患者信息泄露）
@@ -5096,9 +5128,29 @@ if (window.Permission) {
 
             // 更新处方历史（最重要，优先处理）
             console.log('=== 更新处方历史 ===');
-            console.log('cloudResult.data.length:', cloudResult && cloudResult.data ? cloudResult.data.length : 'undefined');
 
-            if (cloudResult && cloudResult.data) {
+            // local 模式 + LocalDB 可用：从本地数据库加载处方历史
+            if (localDbReady) {
+                console.log('local 模式：从 LocalDB 加载处方历史');
+                try {
+                    const localList = await LocalDB.getPrescriptions(currentUser.username);
+                    console.log('local 模式：本地处方数量:', localList ? localList.length : 0);
+                    prescriptionHistory = Array.isArray(localList) ? localList.filter(p => !p.deleted) : [];
+                    sortPrescriptionsByTimeDesc(prescriptionHistory);
+                } catch (e) {
+                    console.warn('local 模式：本地加载失败，降级云端', e);
+                    const fallback = await getPrescriptionsFromCloud().catch(() => null);
+                    if (fallback && fallback.data) {
+                        prescriptionHistory = isClinicAdmin(currentUser)
+                            ? fallback.data
+                            : fallback.data.filter(p => p.createdBy === (fallback.currentUsername || currentUser?.username));
+                        prescriptionHistory = filterDeletedPrescriptions(prescriptionHistory);
+                        sortPrescriptionsByTimeDesc(prescriptionHistory);
+                    } else {
+                        prescriptionHistory = filterDeletedPrescriptions(restoreFromLocalBackup());
+                    }
+                }
+            } else if (cloudResult && cloudResult.data) {
                 if (cloudResult.data.length > 0) {
                     console.log('currentUser.role:', currentUser ? currentUser.role : 'undefined');
                     console.log('currentUser.username:', currentUser ? currentUser.username : 'undefined');
