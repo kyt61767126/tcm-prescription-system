@@ -1,4 +1,4 @@
-# fix-ps1-bom.ps1 - Add UTF-8 BOM to .ps1 files that are missing it
+﻿# fix-ps1-bom.ps1 - Add UTF-8 BOM to .ps1 files that are missing it
 # Usage: powershell -File tools\fix-ps1-bom.ps1
 #
 # This tool fixes .ps1 files that lost their BOM due to IDE edits.

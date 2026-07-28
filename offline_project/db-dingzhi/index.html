@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-本地</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -610,8 +610,21 @@
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
 window.EDITION = 'offline';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
+// ★ 修复 2026-07-28：APP 端启动时主动清除所有登录态（纵深防御），确保每次打开都必须手动登录
+// 使用 location.href 检测 APP（此时 electronAPI 尚未注入，无法用 isAndroidAPP）
 try {
-    if (localStorage.getItem('isLoggedIn') === 'true') {
+    var __isAPP = location.href.indexOf('android_asset') >= 0;
+    if (__isAPP) {
+        // APP 端：清除所有登录态，不隐藏登录界面
+        localStorage.removeItem('isLoggedIn');
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('user_login_data');
+        localStorage.removeItem('auth:isLoggedIn');
+        localStorage.removeItem('auth:currentUser');
+        localStorage.removeItem('auth:loginData');
+        localStorage.removeItem('cloud_isLoggedIn');
+        localStorage.removeItem('cloud_currentUser');
+    } else if (localStorage.getItem('isLoggedIn') === 'true') {
         var __lo = document.getElementById('loginOverlay');
         if (__lo) __lo.style.display = 'none';
     }
@@ -1214,12 +1227,20 @@ let currentUser = null;
         }
 
         window.handleLogout = async function() {
-            if (window.electronAPI && window.electronAPI.quitApp) {
-                await window.electronAPI.quitApp();
-            } else {
+            // ★ 修复 2026-07-28：无论 APP/桌面/网页端，退出时都先清除 localStorage 登录态
+            // 防止 APP 退出后重新打开时 localStorage 残留 isLoggedIn 导致自动登录
+            try {
                 localStorage.removeItem('currentUser');
                 localStorage.removeItem('isLoggedIn');
                 localStorage.removeItem('user_login_data');
+                localStorage.removeItem('auth:isLoggedIn');
+                localStorage.removeItem('auth:currentUser');
+                localStorage.removeItem('auth:loginData');
+            } catch(e) {}
+
+            if (window.electronAPI && window.electronAPI.quitApp) {
+                await window.electronAPI.quitApp();
+            } else {
                 currentUser = null;
                 // ★修复"重新登入后历史处方不显示"：退出时必须清空 prescriptionHistory 和 UI，
                 // 防止 loadData 失败时 catch 块保留上一用户数据被 filterPrescriptionsByPermission 过滤为空
@@ -1832,6 +1853,20 @@ let currentUser = null;
         }
 
         async function checkLoginStatus() {
+            // ★ 纵深防御 2026-07-28：APP 端启动时再次清除登录态
+            // 防止早期内联脚本和 AuthCore 迁移遗漏，确保每次打开都必须手动登录
+            try {
+                if (location.href.indexOf('android_asset') >= 0 ||
+                    (window.electronAPI && window.electronAPI.isAndroidAPP)) {
+                    localStorage.removeItem('isLoggedIn');
+                    localStorage.removeItem('currentUser');
+                    localStorage.removeItem('user_login_data');
+                    localStorage.removeItem('auth:isLoggedIn');
+                    localStorage.removeItem('auth:currentUser');
+                    localStorage.removeItem('auth:loginData');
+                }
+            } catch(e) {}
+
             if (window.AuthCore) { try { await AuthCore.checkSession(); } catch(e) {} }
             const SESSION_TIMEOUT_MS = 8 * 60 * 60 * 1000; try { const _ld = localStorage.getItem('user_login_data'); if (_ld) { const _lt = JSON.parse(_ld).loginTime; if (_lt && Date.now() - _lt > SESSION_TIMEOUT_MS) { localStorage.removeItem('currentUser'); localStorage.removeItem('user_login_data'); localStorage.removeItem('isLoggedIn'); } } } catch(e) {}
 
