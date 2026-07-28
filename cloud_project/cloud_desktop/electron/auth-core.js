@@ -987,6 +987,88 @@
     // 上次失败的消息（用于兜底弹窗显示）
     let lastFailMessage = '授权已失效，请激活';
 
+    // ★ P1-7 心跳验证：每 24 小时联网验证一次 License，离线超过 7 天锁定
+    // 防盗破解：破解版无法通过心跳验证，7 天后自动锁定
+    async function performHeartbeatCheck() {
+        try {
+            const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 小时
+            const OFFLINE_LOCK_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
+            const now = Date.now();
+
+            // 获取上次心跳时间
+            const lastHeartbeat = await StorageAdapter.getItem('license:lastHeartbeat');
+            if (lastHeartbeat) {
+                const lastTime = parseInt(lastHeartbeat, 10);
+                if (now - lastTime < HEARTBEAT_INTERVAL_MS) {
+                    return; // 24 小时内已心跳，跳过
+                }
+            }
+
+            // 获取 license code 和 machineId
+            const licenseCode = await StorageAdapter.getItem('license:code');
+            const machineId = await StorageAdapter.getItem('license:machineId');
+
+            if (!licenseCode || !machineId) {
+                console.log('[Heartbeat] 无 license code 或 machineId，跳过心跳');
+                return;
+            }
+
+            console.log('[Heartbeat] 开始心跳验证...');
+
+            // 调用心跳接口
+            const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: licenseCode, machineId: machineId })
+            });
+
+            if (!response.ok) {
+                console.warn('[Heartbeat] 网络错误，HTTP', response.status);
+                // 记录离线开始时间
+                const offlineStart = await StorageAdapter.getItem('license:offlineStart');
+                if (!offlineStart) {
+                    await StorageAdapter.setItem('license:offlineStart', String(now));
+                }
+                // 检查离线是否超过 7 天
+                if (offlineStart) {
+                    const offlineTime = now - parseInt(offlineStart, 10);
+                    if (offlineTime > OFFLINE_LOCK_MS) {
+                        console.error('[Heartbeat] 离线超过 7 天，锁定应用');
+                        global.__licenseExpired = true;
+                        await showExpireAlertAndActivate('应用已离线超过 7 天，请联网验证后继续使用');
+                    }
+                }
+                return;
+            }
+
+            const data = await response.json();
+
+            if (data.success && data.valid && data.action === 'ok') {
+                await StorageAdapter.setItem('license:lastHeartbeat', String(now));
+                await StorageAdapter.removeItem('license:offlineStart');
+                console.log('[Heartbeat] 心跳成功，剩余天数:', data.daysRemaining);
+            } else {
+                console.error('[Heartbeat] 心跳失败:', data.action);
+                global.__licenseExpired = true;
+                const msg = {
+                    'expired': '授权已过期，请续费后激活',
+                    'disabled': '授权已被禁用，请联系客服',
+                    'unknown': '授权信息无效，请重新激活',
+                    'device_mismatch': '设备不匹配，请在当前设备重新激活'
+                }[data.action] || '授权验证失败，请重新激活';
+                await showExpireAlertAndActivate(msg);
+            }
+        } catch (e) {
+            console.warn('[Heartbeat] 异常:', e.message);
+            // 心跳异常不阻断使用，但记录离线时间
+            const now = Date.now();
+            const offlineStart = await StorageAdapter.getItem('license:offlineStart');
+            if (!offlineStart) {
+                await StorageAdapter.setItem('license:offlineStart', String(now));
+            }
+        }
+    }
+
     async function checkLicenseAndShowActivate() {
         try {
             // 检查 license API 是否存在（APP 端无 window.electronAPI 时自动跳过）
@@ -1001,6 +1083,8 @@
                 // ★ 兼容逻辑：授权有效时清除失效标志
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ P1-7 心跳验证：异步执行，不阻断使用（24小时验证一次，7天离线锁定）
+                performHeartbeatCheck();
                 // ★ P1-1 在线验证：如果需要在线验证，自动触发（不阻断使用）
                 if (result.needOnlineVerify && global.electronAPI.license.verifyOnline) {
                     try {
@@ -1153,6 +1237,18 @@
             if (result && result.success) {
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ P1-7 心跳验证：存储 license code 和 machineId 供心跳使用
+                try {
+                    await StorageAdapter.setItem('license:code', codeTrim);
+                    if (global.electronAPI && global.electronAPI.license &&
+                        typeof global.electronAPI.license.getMachineId === 'function') {
+                        const mid = await global.electronAPI.license.getMachineId();
+                        if (mid) await StorageAdapter.setItem('license:machineId', String(mid));
+                    }
+                    // 清除旧的心跳记录，立即触发一次心跳
+                    await StorageAdapter.removeItem('license:lastHeartbeat');
+                    await StorageAdapter.removeItem('license:offlineStart');
+                } catch(e) { console.warn('[Heartbeat] 存储 license code 失败:', e); }
                 showHtmlAlert('✅ 激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启');
                 global.electronAPI.activate.restart();
             } else {
