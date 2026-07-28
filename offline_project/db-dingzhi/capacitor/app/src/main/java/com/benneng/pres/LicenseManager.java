@@ -1235,13 +1235,16 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             byte[] bytes = readFileBytes(f);
             String content = new String(bytes, StandardCharsets.UTF_8).trim();
 
+            // ★ 修复 2026-07-27：machineId 为 null 或空串时 fallback 到本机 machineId
+            // 防止上游调用方传入空串导致解密失败（实际场景：validateLicense() 无参调用）
+            String actualMachineId = (machineId != null && !machineId.isEmpty()) ? machineId : getMachineId();
+            if (actualMachineId == null || actualMachineId.isEmpty()) {
+                Log.e(TAG, "无法获取 machineId 解密 license");
+                return null;
+            }
+
             // ★ P3-C 新增：优先尝试 ENC2 格式（含 HMAC 校验）
             if (content.startsWith(LICENSE_ENC2_PREFIX)) {
-                String actualMachineId = machineId != null ? machineId : getMachineId();
-                if (actualMachineId == null || actualMachineId.isEmpty()) {
-                    Log.e(TAG, "无法获取 machineId 解密 license");
-                    return null;
-                }
                 String json = decryptLicenseContent(content, actualMachineId);
                 if (json == null) {
                     Log.e(TAG, "解密失败（machineId 不匹配 / 文件损坏 / HMAC 校验失败）");
@@ -1252,11 +1255,6 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
 
             // ★ P1-A 新增：旧加密格式（ENC1:）
             if (content.startsWith(LICENSE_ENC_PREFIX)) {
-                String actualMachineId = machineId != null ? machineId : getMachineId();
-                if (actualMachineId == null || actualMachineId.isEmpty()) {
-                    Log.e(TAG, "无法获取 machineId 解密 license");
-                    return null;
-                }
                 String json = decryptLicenseContent(content, actualMachineId);
                 if (json == null) {
                     Log.e(TAG, "解密失败（machineId 不匹配或文件损坏）");
@@ -1862,7 +1860,12 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     }
 
     public JSONObject validateLicense(String localMachineId) {
-        if (localMachineId == null) localMachineId = "";
+        // ★ 修复 2026-07-27：localMachineId 为 null/空时使用本机 machineId
+        // 原代码 if (localMachineId == null) localMachineId = ""; 会导致 readLicense 空串解密失败，
+        // 进而使激活后的 license.dat 无法读取，APP 误入试用模式（"授权状态 7 天"）
+        if (localMachineId == null || localMachineId.isEmpty()) {
+            localMachineId = getMachineId();
+        }
         long now = System.currentTimeMillis();
         try {
             // ★ 安全检测 1：Root 检测（防 root 设备篡改 license）
