@@ -137,7 +137,7 @@ function Edit-ClinicConfig {
         $configJsonNoSig = $config | Select-Object -Property * -ExcludeProperty configSignature | ConvertTo-Json -Depth 10
         [System.IO.File]::WriteAllText($configPath, $configJsonNoSig, $utf8NoBom)
 
-        $signContent = "$($config.clinicName)|$($config.doctorName)|$($config.edition)|$($config.configIssuedAt)"
+        $signContent = "$($config.clinicName)`|$($config.doctorName)`|$($config.edition)`|$($config.configIssuedAt)"
         $hmac = New-Object System.Security.Cryptography.HMACSHA256
         $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($CONFIG_SIGN_KEY)
         $hashBytes = $hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($signContent))
