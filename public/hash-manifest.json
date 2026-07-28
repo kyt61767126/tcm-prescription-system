@@ -88,5 +88,15 @@
             "releaseFileName": "huikang-cloud-1.2.0.exe",
             "releaseTag": "v2026.07.26-2313"
         }
+    },
+    "geren-cloud": {
+        "apk": {
+            "version": "",
+            "sha256": "cd51dd99863e3b4345c9cc5907ea7ca6c735e03879eece6a4fe74d23da7b21f1",
+            "url": "/downloads/惠康中医-云端个人版.apk",
+            "size": 11242214,
+            "updateTime": "2026-07-28T22:50:02.768Z",
+            "fileName": "惠康中医-云端个人版.apk"
+        }
     }
 }
