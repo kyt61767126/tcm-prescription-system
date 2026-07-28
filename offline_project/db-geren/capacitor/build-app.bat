@@ -278,9 +278,9 @@ REM Get absolute path of APK file (for display)
 for %%F in ("%FINAL_APK%") do set "APK_FULL_PATH=%%~fF"
 
 echo ============================================
-echo   Packing completed!
-echo   APK Path: %APK_FULL_PATH%
-echo   This APK is signed and ready for installation
+echo   [成功] APK 打包完成！
+echo   路径: %APK_FULL_PATH%
+echo   已签名，可直接安装
 echo ============================================
 echo.
 

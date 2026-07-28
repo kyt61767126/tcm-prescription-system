@@ -462,26 +462,16 @@ public class MainActivity extends BridgeActivity {
 
     /**
      * ★ 注入状态栏适配脚本（离线APP特有）
-     * 根据 window.__STATUS_BAR_HEIGHT__ 设置 body padding-top，
-     * 防止内容被状态栏遮挡。
-     * 注意：onCreate 中已通过 WebView setPadding 处理状态栏，此 JS 为补充适配。
+     * 原逻辑：根据 window.__STATUS_BAR_HEIGHT__ 注入 body{padding-top: hpx}
+     * 问题：onCreate 中已通过 WebView setPadding(0, statusBarHeight, 0, 0) 处理状态栏遮挡，
+     *       再注入 body padding-top 会造成"双重 padding"，顶部出现灰白条
+     * 修复：保留 __STATUS_BAR_HEIGHT__ 变量（供其他脚本读取），不再注入 body padding-top
      */
     private void injectStatusBarFix(WebView webView) {
         String js = "(function(){" +
             "  if (window.__statusBarFixApplied) return;" +
             "  window.__statusBarFixApplied = true;" +
-            "  function apply(){" +
-            "    var h = window.__STATUS_BAR_HEIGHT__ || 0;" +
-            "    if (h <= 0) { setTimeout(apply, 50); return; }" +
-            "    var style = document.getElementById('status-bar-fix');" +
-            "    if (!style) {" +
-            "      style = document.createElement('style');" +
-            "      style.id = 'status-bar-fix';" +
-            "      document.head.appendChild(style);" +
-            "    }" +
-            "    style.textContent = 'body{padding-top:' + h + 'px !important;}';" +
-            "  }" +
-            "  apply();" +
+            "  // WebView setPadding 已处理状态栏遮挡，不再注入 body padding-top，避免双重 padding 产生灰白条" +
             "})();";
         webView.evaluateJavascript(js, null);
     }

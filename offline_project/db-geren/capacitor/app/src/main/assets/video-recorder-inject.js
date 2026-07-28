@@ -192,8 +192,10 @@
                     try {
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
                         if (!startR || !startR.success) {
-                            console.error('[离线APP] startReadSession 失败:', startR && startR.error);
-                            resolve({ success: false, error: 'startReadSession 失败: ' + (startR && startR.error || '未知') });
+                            // 回退到原 API（参考云端APP），避免 startReadSession 失败时视频无法播放
+                            console.warn('[离线APP] startReadSession 失败，回退原 API:', startR && startR.error);
+                            var rFallback = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
+                            resolve(rFallback || { success: false, error: 'readFileAsBase64 返回无效' });
                             return;
                         }
                         var sessionId = startR.sessionId;

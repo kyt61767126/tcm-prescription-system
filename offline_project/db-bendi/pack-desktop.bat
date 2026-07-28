@@ -24,9 +24,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -Version bendi 
 set "EXIT_CODE=%errorlevel%"
 echo.
 if %EXIT_CODE% neq 0 (
-    echo [ERROR] Build failed, exit code: %EXIT_CODE%
+    echo [错误] 打包失败，退出码: %EXIT_CODE%
 ) else (
-    echo [OK] Desktop build complete!
+    echo [成功] 桌面版打包完成！
+    echo.
+    echo ============================================
+    echo   打包成功！
+    echo   产品: 惠康中医-本地（桌面版）
+    echo ============================================
 )
 echo.
 if not defined NO_PAUSE pause
