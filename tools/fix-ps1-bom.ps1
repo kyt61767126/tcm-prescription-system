@@ -1,4 +1,4 @@
-﻿# fix-ps1-bom.ps1 - Add UTF-8 BOM to .ps1 files that are missing it
+# fix-ps1-bom.ps1 - Add UTF-8 BOM to .ps1 files that are missing it
 # Usage: powershell -File tools\fix-ps1-bom.ps1
 #
 # This tool fixes .ps1 files that lost their BOM due to IDE edits.
@@ -14,6 +14,8 @@ $ok = 0
 $ps1Files = @()
 $ps1Files += Get-ChildItem -Path 'offline_project' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
 $ps1Files += Get-ChildItem -Path 'tools' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
+$ps1Files += Get-ChildItem -Path 'cloud_project' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
+$ps1Files += Get-ChildItem -Path '.' -Filter '*.ps1' -File -ErrorAction SilentlyContinue
 $ps1Files = $ps1Files | Where-Object { $_.FullName -notmatch '\\node_modules\\' }
 
 foreach ($f in $ps1Files) {

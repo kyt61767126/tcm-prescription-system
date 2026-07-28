@@ -9,6 +9,10 @@ echo.
 
 cd /d "%~dp0"
 
+echo [0.5/10] Fixing .ps1 BOM encoding...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\fix-ps1-bom.ps1"
+echo.
+
 echo [1/10] Configuring clinic info...
 if /i "%1"=="--skip-config" (
     echo       [SKIP] --skip-config parameter detected
@@ -62,6 +66,14 @@ if exist "..\video-recorder-inject.js" (
     copy /Y "..\video-recorder-inject.js" "%ANDROID_ASSETS%\video-recorder-inject.js" >nul
     if errorlevel 1 ( echo [WARN] Failed to sync video-recorder-inject.js ) else ( echo       video-recorder-inject.js synced )
 ) else ( echo [SKIP] video-recorder-inject.js not found )
+echo.
+
+echo [2.1/10] Verifying index.html sync (hash check)...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$src='..\index.html'; $dst='%ANDROID_PUBLIC%\index.html'; $h1=(Get-FileHash $src -Algorithm SHA256).Hash; $h2=(Get-FileHash $dst -Algorithm SHA256).Hash; if($h1 -ne $h2){ Write-Host '[ERROR] index.html hash mismatch!'; Write-Host ('  src: '+$h1); Write-Host ('  dst: '+$h2); Write-Host '  Root index.html was not synced correctly to android dir'; exit 1 } else { Write-Host '[OK] index.html hash verified (SHA256 matches)' }"
+if errorlevel 1 (
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
 echo.
 
 echo [2.5/10] Minifying JavaScript files (security hardening)...
@@ -228,6 +240,15 @@ for %%A in ("%APK_FILE%") do (
     echo APK File: %%~nxA
     echo File Size: %%~zA bytes
     echo Full Path: %CD%\%%A
+)
+echo.
+
+echo [7.5/10] Verifying APK contains latest index.html (content hash)...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $apk='%CD%\%APK_FILE%'; $zip=[System.IO.Compression.ZipFile]::OpenRead($apk); $entry=$zip.GetEntry('assets/public/index.html'); if(-not $entry){ $zip.Dispose(); Write-Host '[ERROR] assets/public/index.html not found in APK'; exit 1 }; $sr=New-Object System.IO.StreamReader($entry.Open()); $content=$sr.ReadToEnd(); $sr.Close(); $zip.Dispose(); $hash=[System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($content)); $hashStr=($hash|ForEach-Object{$_.ToString('x2')})-join ''; if($content.Length -lt 1000){ Write-Host '[ERROR] index.html in APK is too small ('+$content.Length+' bytes), build may be broken'; exit 1 }; Write-Host '[OK] APK contains index.html ('+$content.Length+' bytes, sha256='+$hashStr.Substring(0,16)+'...)'"
+if errorlevel 1 (
+    echo [ERROR] APK content verification failed! APK may not contain latest code.
+    if not defined NO_PAUSE pause
+    exit /b 1
 )
 echo.
 

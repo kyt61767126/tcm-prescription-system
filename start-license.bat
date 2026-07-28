@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 REM ============================================================
 REM  Huikang TCM - Customer Service Offline Activation Launcher
 REM  Double-click to run generate-license.ps1

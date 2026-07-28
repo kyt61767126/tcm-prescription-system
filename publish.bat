@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Huikang TCM - One-Click Publish

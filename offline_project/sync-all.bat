@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 title Sync Shared Code to All Versions
 setlocal enabledelayedexpansion
