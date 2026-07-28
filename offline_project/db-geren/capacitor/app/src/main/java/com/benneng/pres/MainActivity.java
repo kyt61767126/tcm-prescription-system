@@ -722,11 +722,12 @@ public class MainActivity extends BridgeActivity {
             // 重复设置 WebSettings 会触发 WebView 重新计算配置，影响恢复速度
             if (hasDoneFirstResume) {
                 // 非首次恢复：通过JS触发页面内同步逻辑（SyncEngine+药品刷新），不整页reload避免丢失编辑状态
-                // ★ 修复 2026-07-27：lambda 闭包持有 webView 引用，必须检查 isDestroyed() 防止崩溃
+                // ★ 修复 2026-07-27：lambda 闭包持有 webView 引用，WebView 销毁后调用 evaluateJavascript 会抛异常
+                //   WebView 没有 isDestroyed() 公共 API，用 try-catch 兜底是最稳妥的方案
                 final WebView finalWebView = webView;
                 mainHandler.postDelayed(() -> {
-                    if (finalWebView == null || finalWebView.isDestroyed()) {
-                        Log.w(TAG, "onResume postDelayed: WebView 已销毁，跳过 JS 注入");
+                    if (finalWebView == null) {
+                        Log.w(TAG, "onResume postDelayed: WebView 为 null，跳过 JS 注入");
                         return;
                     }
                     try {
@@ -737,7 +738,8 @@ public class MainActivity extends BridgeActivity {
                             "})();", null);
                         injectLayoutFixScript(finalWebView);
                     } catch (Exception e) {
-                        Log.e(TAG, "onResume JS 注入失败", e);
+                        // WebView 已销毁或不可用时 evaluateJavascript 会抛 IllegalStateException
+                        Log.w(TAG, "onResume JS 注入失败（WebView 可能已销毁）: " + e.getMessage());
                     }
                 }, 100);
             } else {
