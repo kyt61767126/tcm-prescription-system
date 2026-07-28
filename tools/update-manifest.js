@@ -14,13 +14,11 @@
 //
 //  示例：
 //    node tools/update-manifest.js geren
-//    node tools/update-manifest.js bendi --release-notes="修复处方保存bug"
 //    node tools/update-manifest.js dingzhi --release-notes="新增打印功能"
 //    node tools/update-manifest.js cloud --release-notes="同步云端功能"
 //
 //  channel 取值：
 //    geren    → offline_project/db-geren/
-//    bendi    → offline_project/db-bendi/
 //    dingzhi  → offline_project/db-dingzhi/
 //    cloud    → cloud_project/cloud_desktop/
 // ============================================================================
@@ -34,11 +32,6 @@ const CHANNEL_CONFIG = {
     geren: {
         dir: 'offline_project/db-geren',
         productName: '惠康中医-个人',
-        outputDir: 'dist'
-    },
-    bendi: {
-        dir: 'offline_project/db-bendi',
-        productName: '惠康中医-本地',
         outputDir: 'dist'
     },
     dingzhi: {
@@ -71,7 +64,7 @@ function parseArgs() {
 
     if (!channel || !CHANNEL_CONFIG[channel]) {
         console.error('用法: node tools/update-manifest.js <channel> [--release-notes="更新说明"]');
-        console.error('channel 取值: geren, bendi, dingzhi, cloud');
+        console.error('channel 取值: geren, dingzhi, cloud');
         process.exit(1);
     }
 

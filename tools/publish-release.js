@@ -7,7 +7,6 @@
 //   node tools/publish-release.js v1.0.0           # 指定版本号
 //   node tools/publish-release.js --target=apk     # 只上传 APK
 //   node tools/publish-release.js --target=exe     # 只上传 exe
-//   node tools/publish-release.js --target=bendi   # 只处理 bendi 版本
 //   node tools/publish-release.js --dry-run        # 预演不实际上传
 //   node tools/publish-release.js --no-push        # 不 git push
 //
@@ -45,12 +44,6 @@ const APP_CONFIG = {
         gradlePath: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_desktop', 'dist'),
         latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'cloud', 'latest.json'),
-    },
-    'bendi': {
-        apkName: '惠康中医-本地.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'android', 'app', 'build.gradle'),
-        distDir: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'dist'),
-        latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'bendi', 'latest.json'),
     },
     'dingzhi': {
         apkName: '惠康中医-定制.apk',
@@ -392,7 +385,7 @@ function main() {
         }
     }
 
-    const validTargets = ['all', 'apk', 'exe', 'cloud', 'bendi', 'dingzhi', 'geren'];
+    const validTargets = ['all', 'apk', 'exe', 'cloud', 'dingzhi', 'geren'];
     if (!validTargets.includes(target)) {
         console.error(`[ERROR] 未知 target: ${target}，可选: ${validTargets.join('/')}`);
         process.exit(1);

@@ -112,24 +112,16 @@ const ALL_DISTRIBUTION_DIRS = [
     'cloud_project/cloud_desktop/electron',
     'cloud_project/cloud_app/app/src/main/assets/public',
     'cloud_project/cloud_app/app/src/main/assets',
-    'offline_project/db-bendi',
-    'offline_project/db-bendi/electron',
     'offline_project/db-dingzhi',
     'offline_project/db-dingzhi/electron',
     'offline_project/db-geren',
     'offline_project/db-geren/electron',
-    'offline_project/db-bendi/android/app/src/main/assets/public',
     'offline_project/db-dingzhi/android/app/src/main/assets/public',
     'offline_project/db-geren/android/app/src/main/assets/public'
 ];
 
-// 按 target 分组（用于 --target=bendi 等参数，只处理对应版本，大幅加速打包）
+// 按 target 分组（用于 --target=dingzhi 等参数，只处理对应版本，大幅加速打包）
 const TARGET_DIRS = {
-    bendi: [
-        'offline_project/db-bendi',
-        'offline_project/db-bendi/electron',
-        'offline_project/db-bendi/android/app/src/main/assets/public'
-    ],
     dingzhi: [
         'offline_project/db-dingzhi',
         'offline_project/db-dingzhi/electron',
@@ -252,12 +244,12 @@ function restoreFile(filePath) {
 const JavaScriptObfuscator = loadObfuscator();
 const projectRoot = path.resolve(__dirname, '..');
 
-// 解析参数：支持 --target=bendi|dingzhi|geren|cloud|all 和 restore
+// 解析参数：支持 --target=dingzhi|geren|cloud|all 和 restore
 // 用法示例:
 //   node tools/obfuscate.js                          # 混淆全部（默认）
-//   node tools/obfuscate.js --target=bendi           # 仅混淆 bendi
+//   node tools/obfuscate.js --target=dingzhi         # 仅混淆 dingzhi
 //   node tools/obfuscate.js restore                  # 还原全部
-//   node tools/obfuscate.js restore --target=bendi   # 仅还原 bendi
+//   node tools/obfuscate.js restore --target=dingzhi # 仅还原 dingzhi
 const argv = process.argv.slice(2);
 const mode = argv.includes('restore') ? 'restore' : 'obfuscate';
 const targetArg = argv.find(a => a.startsWith('--target='));

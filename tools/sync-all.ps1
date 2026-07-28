@@ -51,8 +51,6 @@ $BusinessJsTargets = @(
     'public/electron',
     'cloud_project/cloud_desktop',
     'cloud_project/cloud_desktop/electron',
-    'offline_project/db-bendi',
-    'offline_project/db-bendi/capacitor/app/src/main/assets/public',
     'offline_project/db-geren',
     'offline_project/db-geren/capacitor/app/src/main/assets/public',
     'offline_project/db-dingzhi',
@@ -61,15 +59,12 @@ $BusinessJsTargets = @(
 
 # Group 2: permission.js extra targets (3 offline electron/, beyond Group 1)
 $PermissionExtraTargets = @(
-    'offline_project/db-bendi/electron',
     'offline_project/db-geren/electron',
     'offline_project/db-dingzhi/electron'
 )
 
 # Group 3: calculate-hash.js targets (6 offline directories)
 $CalculateHashTargets = @(
-    'offline_project/db-bendi',
-    'offline_project/db-bendi/capacitor/app/src/main/assets/public',
     'offline_project/db-geren',
     'offline_project/db-geren/capacitor/app/src/main/assets/public',
     'offline_project/db-dingzhi',
@@ -86,20 +81,16 @@ $LicenseFiles = @(
 # license targets (4 electron/ + 3 root/license/ + 3 nndroidicense/)
 $LicenseTargets = @(
     'cloud_project/cloud_desktop/electron',
-    'offline_project/db-bendi/electron',
     'offline_project/db-geren/electron',
     'offline_project/db-dingzhi/electron',
-    'offline_project/db-bendi/license',
     'offline_project/db-geren/license',
     'offline_project/db-dingzhi/license',
-    'offline_project/db-bendi/capacitor/app/src/main/assets/public/license',
     'offline_project/db-geren/capacitor/app/src/main/assets/public/license',
     'offline_project/db-dingzhi/capacitor/app/src/main/assets/public/license'
 )
 
 # Group 5: electron/hot-update.js targets (3 offline electron/)
 $HotUpdateTargets = @(
-    'offline_project/db-bendi/electron',
     'offline_project/db-geren/electron',
     'offline_project/db-dingzhi/electron'
 )
@@ -113,7 +104,6 @@ $ResXmlFiles = @(
 
 # res/xml targets (3 capacitor/res/xml/)
 $ResXmlTargets = @(
-    'offline_project/db-bendi/capacitor/app/src/main/res/xml',
     'offline_project/db-geren/capacitor/app/src/main/res/xml',
     'offline_project/db-dingzhi/capacitor/app/src/main/res/xml'
 )
@@ -125,10 +115,8 @@ $VendorFiles = @(
 
 # vendor targets (3 root/vendor/ + 3 capacitor/vendor/)
 $VendorTargets = @(
-    'offline_project/db-bendi/vendor',
     'offline_project/db-geren/vendor',
     'offline_project/db-dingzhi/vendor',
-    'offline_project/db-bendi/capacitor/app/src/main/assets/public/vendor',
     'offline_project/db-geren/capacitor/app/src/main/assets/public/vendor',
     'offline_project/db-dingzhi/capacitor/app/src/main/assets/public/vendor'
 )

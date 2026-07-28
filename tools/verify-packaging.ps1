@@ -1,4 +1,4 @@
-﻿# verify-packaging.ps1 - Verify encoding integrity of packaging files
+# verify-packaging.ps1 - Verify encoding integrity of packaging files
 # Usage: powershell -File tools\verify-packaging.ps1
 # Exit code: 0 = all pass, 1 = issues found
 #
@@ -78,10 +78,8 @@ Write-Host ""
 # --- Check 2: index.html files MUST NOT have BOM ---
 Write-Host "[Check 2] index.html files (MUST NOT have BOM - causes white screen)"
 $htmlFiles = @(
-    'offline_project\db-bendi\index.html',
     'offline_project\db-dingzhi\index.html',
     'offline_project\db-geren\index.html',
-    'offline_project\db-bendi\android\app\src\main\assets\public\index.html',
     'offline_project\db-dingzhi\android\app\src\main\assets\public\index.html',
     'offline_project\db-geren\android\app\src\main\assets\public\index.html',
     'public\index.html',

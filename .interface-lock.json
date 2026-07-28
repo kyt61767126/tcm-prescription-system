@@ -10,10 +10,6 @@
                                             "sha256":  "4b04e12c6eecb67ed75d0e40cb779a947b4165b119b91575c230138322326ec1",
                                             "html_length":  49261
                                         },
-                  "offline_project/db-bendi/index.html":  {
-                                                              "sha256":  "b896297e553811d0df68234bbc45bdaf9a971c363a48738b7ed187c093aba65f",
-                                                              "html_length":  21946
-                                                          },
                   "offline_project/db-dingzhi/index.html":  {
                                                                 "sha256":  "c167b933318d95a4350f62151c072849ba13129dd943562b30b55a7b5ec8a000",
                                                                 "html_length":  22004
@@ -30,10 +26,6 @@
                                                      "sha256":  "68969c148cf933c1b612a22dd84a0e360951aa3d746cee8338c0bd4b627ba277",
                                                      "html_length":  1680
                                                  },
-                  "offline_project/db-bendi/electron/login.html":  {
-                                                                       "sha256":  "f0e02bfee7aec8f0db198732939c2fec8e3bd16ebf987ac96a6894a296e397f7",
-                                                                       "html_length":  1702
-                                                                   },
                   "offline_project/db-dingzhi/electron/login.html":  {
                                                                          "sha256":  "8d638433c16137ef3646c879fd91a269b33a9ef49f5a8b4f042f5cc44308953a",
                                                                          "html_length":  1702

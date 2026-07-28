@@ -2,13 +2,13 @@
 .SYNOPSIS
     Edit clinic configuration for offline TCM APP/Desktop builds.
 .DESCRIPTION
-    Standalone config editor for db-bendi/db-dingzhi/db-geren versions.
+    Standalone config editor for db-dingzhi/db-geren versions.
     Updates config.json with HMAC-SHA256 signature for security.
     Syncs config.json to Capacitor public/ directory for APP packaging.
 .PARAMETER SkipConfig
     Skip interactive config editing (for automated builds).
 .PARAMETER Version
-    Target version: bendi | dingzhi | geren (auto-detected from directory name).
+    Target version: dingzhi | geren (auto-detected from directory name).
 .EXAMPLE
     powershell -File edit-config.ps1
     powershell -File edit-config.ps1 -SkipConfig
@@ -26,11 +26,11 @@ $ErrorActionPreference = "Stop"
 $scriptDir = $PSScriptRoot
 if (-not $Version) {
     $version = Split-Path $scriptDir -Leaf
-    $versions = @('db-bendi', 'db-dingzhi', 'db-geren')
+    $versions = @('db-dingzhi', 'db-geren')
     if ($versions -contains $version) {
         $Version = $version -replace 'db-', ''
     } else {
-        $Version = 'bendi'
+        $Version = 'geren'
     }
 }
 

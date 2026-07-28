@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -6,7 +6,7 @@
     Solves recurring issues: encoding corruption, error propagation, versionCode management.
     Future-proof: pattern-based file sync, isolated from project code changes.
 .PARAMETER Version
-    Target version: bendi | dingzhi | geren
+    Target version: dingzhi | geren
 .PARAMETER Target
     Build target: desktop | app | all | sync | config | encoding
 .PARAMETER SkipConfig
@@ -16,14 +16,14 @@
 .PARAMETER Interactive
     Show interactive menu (for launcher use)
 .EXAMPLE
-    .\pack.ps1 -Version bendi -Target app
-    .\pack.ps1 -Version bendi -Target app -SkipConfig
-    .\pack.ps1 -Version bendi -Target appstrict
+    .\pack.ps1 -Version dingzhi -Target app
+    .\pack.ps1 -Version dingzhi -Target app -SkipConfig
+    .\pack.ps1 -Version dingzhi -Target appstrict
 #>
 
 param(
     [Parameter()]
-    [ValidateSet('bendi','dingzhi','geren')]
+    [ValidateSet('dingzhi','geren')]
     [string]$Version,
     [Parameter()]
     [ValidateSet('desktop','app','all','sync','config','encoding','appstrict')]
@@ -51,7 +51,7 @@ $script:OldVersionCode = $null
 $script:UTF8WithBom = New-Object System.Text.UTF8Encoding($true)
 $script:UTF8NoBom = New-Object System.Text.UTF8Encoding($false)
 
-# 速度优化：npm cache 跨版本共享（bendi/dingzhi/geren 共用同一缓存目录）
+# 速度优化：npm cache 跨版本共享（dingzhi/geren 共用同一缓存目录）
 # 默认 npm cache 位于 %LOCALAPPDATA%\npm-cache，可能受 AV 扫描影响较慢
 # 改为项目级共享目录，所有版本复用，避免重复下载 electron/better-sqlite3 等大包
 $script:SharedNpmCache = "$script:ProjectRoot\tools\.npm-cache"
@@ -964,7 +964,6 @@ function Build-App {
         # Read productName from config.json (reference: cloud_app uses "惠康中医-云端")
         $configPath = "$script:VersionDir\config.json"
         $productName = switch ($Version) {
-            'bendi'   { '惠康中医-本地' }
             'geren'   { '惠康中医-个人' }
             'dingzhi' { '惠康中医-定制' }
             default   { '惠康中医' }
@@ -1033,7 +1032,6 @@ function Show-Menu {
     param([string]$Ver)
     Clear-Host
     $versionLabel = switch ($Ver) {
-        'bendi'   { '本地版 (bendi)' }
         'dingzhi' { '定制版 (dingzhi)' }
         'geren'   { '个人版 (geren)' }
     }
@@ -1415,7 +1413,7 @@ if (-not $Version) {
     Write-Host "    pack-app-strict.bat     严格模式 APP (APK+签名哈希+重打包)"
     Write-Host ""
     Write-Host "  或直接调用:" -ForegroundColor DarkGray
-    Write-Host "    pack.ps1 -Version <bendi|dingzhi|geren> -Target <desktop|app|appstrict>"
+    Write-Host "    pack.ps1 -Version <dingzhi|geren> -Target <desktop|app|appstrict>"
     Write-Host ""
     exit 0
 }

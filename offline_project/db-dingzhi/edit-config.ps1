@@ -2,13 +2,13 @@
 .SYNOPSIS
     Edit clinic configuration for offline TCM APP/Desktop builds.
 .DESCRIPTION
-    Standalone config editor for db-bendi/db-dingzhi/db-geren versions.
+    Standalone config editor for db-dingzhi/db-geren versions.
     Updates config.json with HMAC-SHA256 signature for security.
     Syncs config.json to Capacitor public/ directory for APP packaging.
 .PARAMETER SkipConfig
     Skip interactive config editing (for automated builds).
 .PARAMETER Version
-    Target version: bendi | dingzhi | geren (auto-detected from directory name).
+    Target version: dingzhi | geren (auto-detected from directory name).
 .EXAMPLE
     powershell -File edit-config.ps1
     powershell -File edit-config.ps1 -SkipConfig
@@ -26,11 +26,11 @@ $ErrorActionPreference = "Stop"
 $scriptDir = $PSScriptRoot
 if (-not $Version) {
     $version = Split-Path $scriptDir -Leaf
-    $versions = @('db-bendi', 'db-dingzhi', 'db-geren')
+    $versions = @('db-dingzhi', 'db-geren')
     if ($versions -contains $version) {
         $Version = $version -replace 'db-', ''
     } else {
-        $Version = 'bendi'
+        $Version = 'dingzhi'
     }
 }
 
@@ -137,11 +137,13 @@ function Edit-ClinicConfig {
         $configJsonNoSig = $config | Select-Object -Property * -ExcludeProperty configSignature | ConvertTo-Json -Depth 10
         [System.IO.File]::WriteAllText($configPath, $configJsonNoSig, $utf8NoBom)
 
-        $signContent = "$($config.clinicName)`|$($config.doctorName)`|$($config.edition)`|$($config.configIssuedAt)"
+        # 构建 HMAC 签名内容：用 -join 拼接，避免双引号字符串中 | 被解析为管道操作符
+        $signParts = @($config.clinicName, $config.doctorName, $config.edition, $config.configIssuedAt)
+        $signContent = $signParts -join '|'
         $hmac = New-Object System.Security.Cryptography.HMACSHA256
         $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($CONFIG_SIGN_KEY)
         $hashBytes = $hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($signContent))
-        $configSignature = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ''
+        $configSignature = ($hashBytes | ForEach-Object { $_.ToString('x2') }) -join ''
         $config | Add-Member -NotePropertyName configSignature -NotePropertyValue $configSignature -Force
 
         $configJson = $config | ConvertTo-Json -Depth 10

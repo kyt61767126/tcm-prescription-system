@@ -22,15 +22,13 @@ const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 
 // APK 文件搜索路径 (Capacitor 架构)
 const APK_PATHS = {
-    'bendi': path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
     'dingzhi': path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
     'geren': path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
 };
 
-// 桌面版 exe 搜索路径 (key 与 APK_PATHS 一致, bendi/dingzhi/geren 同时含 APK+EXE)
+// 桌面版 exe 搜索路径 (key 与 APK_PATHS 一致, dingzhi/geren 同时含 APK+EXE)
 const EXE_PATHS = {
     'cloud': path.join(PROJECT_ROOT, 'cloud_project', 'cloud_desktop', 'dist'),
-    'bendi': path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'dist'),
     'dingzhi': path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'dist'),
     'geren': path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'dist'),
 };

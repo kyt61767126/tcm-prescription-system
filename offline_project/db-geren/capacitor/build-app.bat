@@ -88,6 +88,23 @@ echo.
 cd /d "%~dp0"
 
 echo [3/10] Checking environment...
+REM JDK/JAVA_HOME check (align with cloud build-app.bat)
+if defined JAVA_HOME (
+    if not exist "%JAVA_HOME%\bin\java.exe" (
+        echo [ERROR] JAVA_HOME points to invalid path: %JAVA_HOME%
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+    echo       JAVA_HOME: %JAVA_HOME%
+) else (
+    java -version >nul 2>&1
+    if errorlevel 1 (
+        echo [ERROR] Java not found. Please install JDK 17+ and set JAVA_HOME, or add java to PATH
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+    echo       java OK ^(JAVA_HOME not set, using PATH^)
+)
 if not exist "gradlew.bat" (
     echo [ERROR] gradlew.bat not found
     echo   Path: %CD%\gradlew.bat
@@ -103,6 +120,12 @@ if not exist "app\signing.properties" (
 if not exist "app\app-release.jks" (
     echo [ERROR] app-release.jks not found
     echo   Path: %CD%\app\app-release.jks
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+if not exist "app\src\main\assets\capacitor.config.json" (
+    echo [ERROR] Capacitor config not found
+    echo   Path: %CD%\app\src\main\assets\capacitor.config.json
     if not defined NO_PAUSE pause
     exit /b 1
 )

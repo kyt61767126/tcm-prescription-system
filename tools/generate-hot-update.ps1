@@ -1,21 +1,21 @@
-﻿# ============================================================================
+# ============================================================================
 #  generate-hot-update.ps1 - Generate hot-update packages for offline apps
 #
 #  Purpose:
-#    Generate version.json + package.zip for each offline version (bendi/geren/dingzhi)
+#    Generate version.json + package.zip for each offline version (geren/dingzhi)
 #    Output to cloud_project/public/hot-update/<version>/
 #    Push to GitHub → Cloudflare Pages auto-deploys → apps check for updates
 #
 #  Usage:
 #    cd D:\trae_projects\kyt-zy
 #    .\tools\generate-hot-update.ps1                    # Generate for all 3 versions
-#    .\tools\generate-hot-update.ps1 -Version bendi     # Generate for bendi only
+#    .\tools\generate-hot-update.ps1 -Version dingzhi   # Generate for dingzhi only
 #    .\tools\generate-hot-update.ps1 -VersionNumber "2026-07-26-v1"
 # ============================================================================
 #Requires -Version 5.0
 [CmdletBinding()]
 param(
-    [string]$Version = "",  # bendi | geren | dingzhi | "" (all)
+    [string]$Version = "",  # geren | dingzhi | "" (all)
     [string]$VersionNumber = ""  # Custom version number, auto-generated if empty
 )
 
@@ -24,7 +24,7 @@ $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pa
 $CloudHost = "tcm-prescription-system.pages.dev"
 
 # All offline versions
-$AllVersions = @('bendi', 'geren', 'dingzhi')
+$AllVersions = @('geren', 'dingzhi')
 
 # Files to include in hot-update package (relative to assets/public/)
 $UpdateFiles = @(
@@ -197,7 +197,6 @@ if ($successCount -gt 0) {
     Write-Host "[OK] Hot-update packages generated" -ForegroundColor Green
     Write-Host ""
     Write-Host "Output: cloud_project/public/hot-update/" -ForegroundColor Cyan
-    Write-Host "  ├── bendi/version.json + package.zip" -ForegroundColor Gray
     Write-Host "  ├── geren/version.json + package.zip" -ForegroundColor Gray
     Write-Host "  └── dingzhi/version.json + package.zip" -ForegroundColor Gray
     Write-Host ""

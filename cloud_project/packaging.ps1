@@ -1,5 +1,5 @@
-﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
-# 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-bendi/db-dingzhi）
+# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+# 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-dingzhi）
 param(
     [switch]$AutoDesktop,
     [switch]$AutoApp,

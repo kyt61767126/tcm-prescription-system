@@ -1,10 +1,10 @@
-﻿# ============================================================================
+# ============================================================================
 #  gen-code-sign-cert.ps1 — 生成 Windows 代码签名自签证书（任务3）
 #
 #  用途：
 #    1. 生成自签代码签名证书（Code Signing Self-Signed Certificate）
 #    2. 导出 .pfx 文件（含私钥，用于 electron-builder 签名 exe）
-#    3. 提示用户配置 4 端 package.json 的 win.certificateFile 字段
+#    3. 提示用户配置 3 端 package.json 的 win.certificateFile 字段
 #
 #  限制：
 #    - 自签证书不会被 Windows 信任，SmartScreen 仍会拦截首次运行
@@ -144,10 +144,9 @@ Write-Host ""
 Write-Host "【密码】 已保存在 cert-password.txt（gitignore 排除，不会入库）"
 Write-Host ""
 Write-Host "【下一步操作】"
-Write-Host "1) 检查 4 端 package.json 是否已配置 win.certificateFile"
+Write-Host "1) 检查 3 端 package.json 是否已配置 win.certificateFile"
 Write-Host "   证书密码通过 cert-password.txt + CSC_KEY_PASSWORD 环境变量自动注入"
 Write-Host "   - cloud_project/cloud_desktop/package.json"
-Write-Host "   - offline_project/db-bendi/package.json"
 Write-Host "   - offline_project/db-geren/package.json"
 Write-Host "   - offline_project/db-dingzhi/package.json"
 Write-Host ""

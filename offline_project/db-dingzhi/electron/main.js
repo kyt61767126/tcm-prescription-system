@@ -5,7 +5,7 @@
 //      contextIsolation 仍确保渲染进程无法直接访问 Node API
 //  所有 API 通过 preload.js 的 contextBridge 暴露
 //
-//  ★ 本文件基于 offline_project/db-bendi/electron/main.js 增加：
+//  ★ 本文件为定制版 electron/main.js，基于原本地版增加：
 //    - session.setPermissionRequestHandler：自动授予 camera/microphone 权限
 //    - save-video-file IPC handler：视频 ArrayBuffer 写入文件
 //    - get-video-directory / open-video-directory IPC handler

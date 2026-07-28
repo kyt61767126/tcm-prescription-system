@@ -36,10 +36,10 @@ public class HotUpdateManager {
     private static final String CLOUD_HOST = "tcm-prescription-system.pages.dev";
     private static final String PREF_NAME = "hot_update_prefs";
     private static final String PREF_VERSION = "local_version";
-    private static final String PREF_VERSION_NAME = "version_name"; // bendi/geren/dingzhi
+    private static final String PREF_VERSION_NAME = "version_name"; // geren/dingzhi
 
     private final Context context;
-    private final String versionName; // bendi | geren | dingzhi
+    private final String versionName; // geren | dingzhi
 
     public HotUpdateManager(Context context, String versionName) {
         this.context = context;

@@ -3,7 +3,7 @@
 // auto-update-downloads.js — 自动更新下载页面的APK文件
 //
 // 用法：node auto-update-downloads.js <target>
-//   target: bendi / dingzhi / geren / cloud / all
+//   target: dingzhi / geren / cloud / all
 //
 // 功能：
 //   1. 查找刚打包的APK文件
@@ -23,11 +23,6 @@ const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 
 // 各APP的APK搜索路径和产品名称
 const APP_CONFIG = {
-    'bendi': {
-        apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
-        outputName: '惠康中医-本地.apk',
-        configPath: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'config.json')
-    },
     'dingzhi': {
         apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
         outputName: '惠康中医-定制.apk',
@@ -183,9 +178,9 @@ function pushToGitHub() {
 function main() {
     const target = process.argv[2] || 'all';
 
-    if (!['bendi', 'dingzhi', 'geren', 'cloud', 'all'].includes(target)) {
+    if (!['dingzhi', 'geren', 'cloud', 'all'].includes(target)) {
         console.error('用法: node auto-update-downloads.js <target>');
-        console.error('  target: bendi / dingzhi / geren / cloud / all');
+        console.error('  target: dingzhi / geren / cloud / all');
         process.exit(1);
     }
 

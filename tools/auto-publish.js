@@ -36,11 +36,6 @@ const APP_CONFIG = {
         gradlePath: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_desktop', 'dist'),
     },
-    'bendi': {
-        apkName: '惠康中医-本地.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'android', 'app', 'build.gradle'),
-        distDir: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'dist'),
-    },
     'dingzhi': {
         apkName: '惠康中医-定制.apk',
         gradlePath: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'android', 'app', 'build.gradle'),

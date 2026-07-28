@@ -2,7 +2,7 @@
 //  preload.js - 在 contextIsolation 模式下向渲染进程暴露安全 API
 //  所有方法均通过 contextBridge 暴露，渲染进程无法直接访问 ipcRenderer/require
 //
-//  ★ 本文件基于 offline_project/db-bendi/electron/preload.js 增加：
+//  ★ 本文件为定制版 electron/preload.js，基于原本地版增加：
 //    - saveVideoFile：视频文件保存（ArrayBuffer → 文件）
 //    - getVideoDirectory：获取视频保存目录
 //    - openVideoDirectory：在文件管理器中打开视频目录

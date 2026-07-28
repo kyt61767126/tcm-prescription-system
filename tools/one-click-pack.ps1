@@ -1,4 +1,4 @@
-﻿# one-click-pack.ps1 - One-click packaging tool for all 4 versions
+# one-click-pack.ps1 - One-click packaging tool for all 4 versions
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -96,7 +96,6 @@ function Build-Offline {
         [string]$Target = "all"
     )
     $verLabel = switch ($Version) {
-        "bendi"   { "本地" }
         "dingzhi" { "定制" }
         "geren"   { "个人" }
         default   { $Version }
@@ -185,16 +184,15 @@ function Build-All {
     $allStart = Get-TimeStamp
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  全部4个版本打包开始: $allStart" -ForegroundColor Cyan
+    Write-Host "  全部3个版本打包开始: $allStart" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Build-Cloud -Target "all"
-    Build-Offline -Version "bendi" -Target "all"
     Build-Offline -Version "dingzhi" -Target "all"
     Build-Offline -Version "geren" -Target "all"
     $allEnd = Get-TimeStamp
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  全部4个版本打包完成！" -ForegroundColor Green
+    Write-Host "  全部3个版本打包完成！" -ForegroundColor Green
     Write-Host "  开始: $allStart" -ForegroundColor Green
     Write-Host "  结束: $allEnd" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
@@ -212,16 +210,14 @@ function Show-PickVersionMenu {
         Write-Host "  请选择版本 - 打$modeLabel" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host "  [1] 云端版"
-        Write-Host "  [2] 离线本地版"
-        Write-Host "  [3] 离线定制版"
-        Write-Host "  [4] 离线个人版"
+        Write-Host "  [2] 离线定制版"
+        Write-Host "  [3] 离线个人版"
         Write-Host "  [0] 返回主菜单"
         $choice = Read-Host "请选择"
         switch ($choice) {
             "1" { Build-Cloud -Target $Mode; return }
-            "2" { Build-Offline -Version "bendi" -Target $Mode; return }
-            "3" { Build-Offline -Version "dingzhi" -Target $Mode; return }
-            "4" { Build-Offline -Version "geren" -Target $Mode; return }
+            "2" { Build-Offline -Version "dingzhi" -Target $Mode; return }
+            "3" { Build-Offline -Version "geren" -Target $Mode; return }
             "0" { return }
         }
     }
@@ -235,11 +231,6 @@ function Show-StandaloneUsage {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  云端版 (cloud_project):" -ForegroundColor Yellow
-    Write-Host "    pack-desktop.bat       打包桌面版"
-    Write-Host "    pack-app.bat           打包手机APP"
-    Write-Host "    pack-app-strict.bat    严格模式APP"
-    Write-Host ""
-    Write-Host "  离线本地版 (db-bendi):" -ForegroundColor Yellow
     Write-Host "    pack-desktop.bat       打包桌面版"
     Write-Host "    pack-app.bat           打包手机APP"
     Write-Host "    pack-app-strict.bat    严格模式APP"
@@ -267,21 +258,20 @@ while ($true) {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  惠康中医 - 一键打包工具" -ForegroundColor Cyan
-    Write-Host "  (4版本统一入口 - 桌面+APP 一键搞定)" -ForegroundColor Cyan
+    Write-Host "  (3版本统一入口 - 桌面+APP 一键搞定)" -ForegroundColor Cyan
     Write-Host "  当前: $menuStart" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  [1] 云端版 (桌面+APP)"
-    Write-Host "  [2] 离线本地版 (桌面+APP)"
-    Write-Host "  [3] 离线定制版 (桌面+APP)"
-    Write-Host "  [4] 离线个人版 (桌面+APP)"
-    Write-Host "  [5] 全部4个版本 (耗时较长)"
+    Write-Host "  [2] 离线定制版 (桌面+APP)"
+    Write-Host "  [3] 离线个人版 (桌面+APP)"
+    Write-Host "  [4] 全部3个版本 (耗时较长)"
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  --- 更多选项 ---"
-    Write-Host "  [6] 单独某个版本打包 exe"
-    Write-Host "  [7] 单独某个版本打 APP"
-    Write-Host "  [8] 查看各版本独立打包入口"
+    Write-Host "  [5] 单独某个版本打包 exe"
+    Write-Host "  [6] 单独某个版本打 APP"
+    Write-Host "  [7] 查看各版本独立打包入口"
     Write-Host ""
     Write-Host "  菜单说明:"
     Write-Host "  - 桌面程序: 各版本目录\dist\*.exe"
@@ -290,16 +280,15 @@ while ($true) {
     Write-Host "  - 全部打包全自动顺序执行"
     Write-Host "  - 耗时统计会在结束时显示"
     Write-Host "--------------------------------------------"
-    $choice = Read-Host "请选择 [0-8]"
+    $choice = Read-Host "请选择 [0-7]"
     switch ($choice) {
         "1" { Build-Cloud -Target "all" }
-        "2" { Build-Offline -Version "bendi" -Target "all" }
-        "3" { Build-Offline -Version "dingzhi" -Target "all" }
-        "4" { Build-Offline -Version "geren" -Target "all" }
-        "5" { Build-All }
-        "6" { Show-PickVersionMenu -Mode "desktop" }
-        "7" { Show-PickVersionMenu -Mode "app" }
-        "8" { Show-StandaloneUsage }
+        "2" { Build-Offline -Version "dingzhi" -Target "all" }
+        "3" { Build-Offline -Version "geren" -Target "all" }
+        "4" { Build-All }
+        "5" { Show-PickVersionMenu -Mode "desktop" }
+        "6" { Show-PickVersionMenu -Mode "app" }
+        "7" { Show-StandaloneUsage }
         "0" { exit 0 }
         default { Write-Host "无效选择，请重试" -ForegroundColor Red; Start-Sleep -Seconds 1 }
     }
