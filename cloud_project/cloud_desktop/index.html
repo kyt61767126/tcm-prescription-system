@@ -1884,7 +1884,7 @@ if (window.Permission) {
                                 const cloudNo = cp.prescriptionNo || cp.outpatientNo || '';
                                 if (localNo && cloudNo && localNo !== cloudNo && localNo.startsWith('LOCAL-')) {
                                     if (window.electronAPI && window.electronAPI.renameMediaFiles) {
-                                        window.electronAPI.renameMediaFiles(localP.patientName || '', localNo, cloudNo)
+                                        window.electronAPI.renameMediaFiles(localP.patientName || '', localP.patientName || '', localNo, cloudNo)
                                             .then(r => {
                                                 if (r.success && r.renamed > 0) {
                                                     console.log('pull: 重命名媒体文件 ' + localNo + ' → ' + cloudNo + ': ' + r.renamed + ' 个');
@@ -7418,7 +7418,7 @@ if (window.Permission) {
                     if (oldPrescriptionNo && officialNo && oldPrescriptionNo !== officialNo) {
                         console.log('[重命名检查] oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo, 'patientName:', record.patientName);
                         if (window.electronAPI && window.electronAPI.renameMediaFiles) {
-                            window.electronAPI.renameMediaFiles(record.patientName, oldPrescriptionNo, officialNo)
+                            window.electronAPI.renameMediaFiles(record.patientName, record.patientName, oldPrescriptionNo, officialNo)
                                 .then(r => {
                                     console.log('[重命名结果] success:', r.success, 'renamed:', r.renamed);
                                     if (r.success && r.renamed > 0) {
@@ -7439,6 +7439,29 @@ if (window.Permission) {
                     } else {
                         console.log('[重命名跳过] 条件不满足 - oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo);
                         collectAndUpdateMediaFiles(savedRecord, officialNo);
+                    }
+                    // 即使编号没变，如果拍照时用的是 unknown 或与当前处方姓名不同，也要重命名为实际姓名
+                    if (oldPrescriptionNo && officialNo && oldPrescriptionNo === officialNo) {
+                        const lastUsedName = window.__lastUsedMediaPatientName || localStorage.getItem('lastUsedMediaPatientName') || '';
+                        if (lastUsedName && lastUsedName !== record.patientName) {
+                            if (window.electronAPI && window.electronAPI.renameMediaFiles) {
+                                window.electronAPI.renameMediaFiles(lastUsedName, record.patientName, officialNo, officialNo)
+                                    .then(r => {
+                                        if (r.success && r.renamed > 0) {
+                                            console.log('已绑定 ' + r.renamed + ' 个媒体文件到患者: ' + record.patientName);
+                                        }
+                                        collectAndUpdateMediaFiles(savedRecord, officialNo);
+                                    })
+                                    .catch(e => {
+                                        console.warn('绑定媒体文件失败:', e);
+                                        collectAndUpdateMediaFiles(savedRecord, officialNo);
+                                    });
+                            } else {
+                                collectAndUpdateMediaFiles(savedRecord, officialNo);
+                            }
+                        } else {
+                            collectAndUpdateMediaFiles(savedRecord, officialNo);
+                        }
                     }
                     // 保存后清空表单，方便下一次使用（跳过确认弹窗）
                     clearPrescription(true);

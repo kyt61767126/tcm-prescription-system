@@ -729,9 +729,9 @@ public class MainActivity extends AppCompatActivity {
             "        catch(e){ resolve({success:false, error:String(e)}); }" +
             "      });" +
             "    }," +
-            "    renameMediaFiles: function(patientName, oldNo, newNo){" +
+            "    renameMediaFiles: function(oldPatientName, newPatientName, oldNo, newNo){" +
             "      return new Promise(function(resolve){" +
-            "        try { var r = callNative('renameMediaFiles', JSON.stringify({patientName:patientName,oldNo:oldNo,newNo:newNo})); resolve(r); }" +
+            "        try { var r = callNative('renameMediaFiles', JSON.stringify({oldPatientName:oldPatientName,newPatientName:newPatientName,oldNo:oldNo,newNo:newNo})); resolve(r); }" +
             "        catch(e){ resolve({success:false, error:String(e), renamed:0}); }" +
             "      });" +
             "    }," +
@@ -1101,7 +1101,9 @@ public class MainActivity extends AppCompatActivity {
                     case "closeReadSession":
                         return closeReadSession(args.optString("sessionId", "")).toString();
                     case "renameMediaFiles":
-                        return renameMediaFiles(args.optString("patientName", ""),
+                        return renameMediaFiles(
+                                args.optString("oldPatientName", args.optString("patientName", "")),
+                                args.optString("newPatientName", args.optString("patientName", "")),
                                 args.optString("oldNo", ""),
                                 args.optString("newNo", "")).toString();
                     // ★ P0-2 数据加密：AES-256-CBC 加密/解密
@@ -2117,27 +2119,24 @@ public class MainActivity extends AppCompatActivity {
             }
         }
 
-        private JSONObject renameMediaFiles(String patientName, String oldNo, String newNo) {
+        private JSONObject renameMediaFiles(String oldPatientName, String newPatientName, String oldNo, String newNo) {
             try {
-                String safeName = sanitize(patientName);
+                String safeOldName = sanitize(oldPatientName);
+                String safeNewName = sanitize(newPatientName);
                 String safeOldNo = sanitize(oldNo);
                 String safeNewNo = sanitize(newNo);
-                if (safeName.isEmpty() || safeOldNo.isEmpty() || safeNewNo.isEmpty()) {
+                if (safeOldName.isEmpty() || safeNewName.isEmpty() || safeOldNo.isEmpty() || safeNewNo.isEmpty()) {
                     return fail("参数不完整");
                 }
-                if (safeOldNo.equals(safeNewNo)) {
-                    JSONObject result = new JSONObject();
-                    result.put("success", true);
-                    result.put("renamed", 0);
-                    result.put("message", "编号相同，无需重命名");
-                    return result;
-                }
-                String oldPrefix = safeName + "_" + safeOldNo;
-                String newPrefix = safeName + "_" + safeNewNo;
+                // 支持两种命名格式：姓名_编号 和 编号_姓名
+                String[] oldPrefixes = {safeOldName + "_" + safeOldNo, safeOldNo + "_" + safeOldName};
+                String[] newPrefixes = {safeNewName + "_" + safeNewNo, safeNewNo + "_" + safeNewName};
                 JSONArray renamedFiles = new JSONArray();
                 int renamed = 0;
-                renamed += renameFilesInDir(getImageDir(), oldPrefix, newPrefix, renamedFiles);
-                renamed += renameFilesInDir(getVideoDir(), oldPrefix, newPrefix, renamedFiles);
+                for (int i = 0; i < oldPrefixes.length; i++) {
+                    renamed += renameFilesInDir(getImageDir(), oldPrefixes[i], newPrefixes[i], renamedFiles);
+                    renamed += renameFilesInDir(getVideoDir(), oldPrefixes[i], newPrefixes[i], renamedFiles);
+                }
                 JSONObject result = new JSONObject();
                 result.put("success", true);
                 result.put("renamed", renamed);

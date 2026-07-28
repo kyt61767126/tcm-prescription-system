@@ -40,8 +40,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readFileAsBase64: (filePath) =>
         ipcRenderer.invoke('read-file-as-base64', filePath),
 
-    renameMediaFiles: (patientName, oldNo, newNo) =>
-        ipcRenderer.invoke('rename-media-files', patientName, oldNo, newNo),
+    renameMediaFiles: (oldPatientName, newPatientName, oldNo, newNo) =>
+        ipcRenderer.invoke('rename-media-files', oldPatientName, newPatientName, oldNo, newNo),
 
     deleteFile: (filePath) =>
         ipcRenderer.invoke('delete-file', filePath),

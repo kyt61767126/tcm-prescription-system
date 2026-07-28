@@ -915,7 +915,9 @@ public class MainActivity extends BridgeActivity {
                     case "closeReadSession":
                         return closeReadSession(args.optString("sessionId", "")).toString();
                     case "renameMediaFiles":
-                        return renameMediaFiles(args.optString("patientName", ""),
+                        return renameMediaFiles(
+                                args.optString("oldPatientName", args.optString("patientName", "")),
+                                args.optString("newPatientName", args.optString("patientName", "")),
                                 args.optString("oldNo", ""),
                                 args.optString("newNo", "")).toString();
                     case "deleteFile":
@@ -1745,24 +1747,18 @@ public class MainActivity extends BridgeActivity {
             }
         }
 
-        private JSONObject renameMediaFiles(String patientName, String oldNo, String newNo) {
+        private JSONObject renameMediaFiles(String oldPatientName, String newPatientName, String oldNo, String newNo) {
             try {
-                String safeName = sanitize(patientName);
+                String safeOldName = sanitize(oldPatientName);
+                String safeNewName = sanitize(newPatientName);
                 String safeOldNo = sanitize(oldNo);
                 String safeNewNo = sanitize(newNo);
-                if (safeName.isEmpty() || safeOldNo.isEmpty() || safeNewNo.isEmpty()) {
+                if (safeOldName.isEmpty() || safeNewName.isEmpty() || safeOldNo.isEmpty() || safeNewNo.isEmpty()) {
                     return fail("参数不完整");
                 }
-                if (safeOldNo.equals(safeNewNo)) {
-                    JSONObject result = new JSONObject();
-                    result.put("success", true);
-                    result.put("renamed", 0);
-                    result.put("message", "编号相同，无需重命名");
-                    return result;
-                }
                 // 支持两种命名格式：姓名_编号 和 编号_姓名
-                String[] oldPrefixes = {safeName + "_" + safeOldNo, safeOldNo + "_" + safeName};
-                String[] newPrefixes = {safeName + "_" + safeNewNo, safeNewNo + "_" + safeName};
+                String[] oldPrefixes = {safeOldName + "_" + safeOldNo, safeOldNo + "_" + safeOldName};
+                String[] newPrefixes = {safeNewName + "_" + safeNewNo, safeNewNo + "_" + safeNewName};
                 JSONArray renamedFiles = new JSONArray();
                 int renamed = 0;
                 for (int i = 0; i < oldPrefixes.length; i++) {

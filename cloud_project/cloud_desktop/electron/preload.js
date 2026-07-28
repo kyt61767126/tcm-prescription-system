@@ -61,8 +61,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return ipcRenderer.invoke('read-file-as-base64', filePath);
     },
 
-    renameMediaFiles: (patientName, oldNo, newNo) => {
-        return ipcRenderer.invoke('rename-media-files', patientName, oldNo, newNo);
+    renameMediaFiles: (oldPatientName, newPatientName, oldNo, newNo) => {
+        return ipcRenderer.invoke('rename-media-files', oldPatientName, newPatientName, oldNo, newNo);
     },
 
     deleteFile: (filePath) => {

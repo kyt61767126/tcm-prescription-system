@@ -241,10 +241,15 @@
                     }
                 });
             },
-            renameMediaFiles: function (patientName, oldNo, newNo) {
+            renameMediaFiles: function (oldPatientName, newPatientName, oldNo, newNo) {
                 return new Promise(function (resolve) {
                     try {
-                        var r = callNative('renameMediaFiles', JSON.stringify({ patientName: patientName, oldNo: oldNo, newNo: newNo }));
+                        var r = callNative('renameMediaFiles', JSON.stringify({ 
+                            oldPatientName: oldPatientName, 
+                            newPatientName: newPatientName, 
+                            oldNo: oldNo, 
+                            newNo: newNo 
+                        }));
                         resolve(r);
                     } catch (e) { resolve({ success: false, error: String(e), renamed: 0 }); }
                 });

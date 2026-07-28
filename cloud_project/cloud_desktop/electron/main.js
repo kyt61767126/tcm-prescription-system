@@ -210,18 +210,20 @@ async function saveVideoFile(arrayBuffer, fileName) {
     }
 }
 
-// ★ 重命名处方文件（处方保存后云端分配新编号时同步重命名本地文件）
-async function renameMediaFiles(patientName, oldNo, newNo) {
+// ★ 重命名处方文件（支持改姓名和编号，用于"先拍照后录入姓名"场景的媒体文件绑定）
+async function renameMediaFiles(oldPatientName, newPatientName, oldNo, newNo) {
     try {
         const sanitizeStr = s => (s || '').trim().replace(/[\/\\:*?"<>|]/g, '_').replace(/ /g, '');
-        const cleanName = sanitizeStr(patientName);
+        const cleanOldName = sanitizeStr(oldPatientName);
+        const cleanNewName = sanitizeStr(newPatientName);
         const cleanOldNo = sanitizeStr(oldNo);
         const cleanNewNo = sanitizeStr(newNo);
-        if (!cleanName || !cleanOldNo || !cleanNewNo || cleanOldNo === cleanNewNo) {
+        if (!cleanOldName || !cleanNewName || !cleanOldNo || !cleanNewNo) {
             return { success: true, renamed: 0 };
         }
-        const oldPrefix = `${cleanName}_${cleanOldNo}`;
-        const newPrefix = `${cleanName}_${cleanNewNo}`;
+        // 支持两种命名格式：姓名_编号 和 编号_姓名
+        const oldPrefixes = [`${cleanOldName}_${cleanOldNo}`, `${cleanOldNo}_${cleanOldName}`];
+        const newPrefixes = [`${cleanNewName}_${cleanNewNo}`, `${cleanNewNo}_${cleanNewName}`];
         const downloadsDir = getDownloadsDirectory();
         let renamed = 0;
         let monthDirs = [];
@@ -237,13 +239,16 @@ async function renameMediaFiles(patientName, oldNo, newNo) {
             for (const fe of fileEntries) {
                 if (!fe.isFile()) continue;
                 const fileName = fe.name;
-                if (!fileName.includes(oldPrefix)) continue;
-                const newFileName = fileName.replace(oldPrefix, newPrefix);
-                if (newFileName === fileName) continue;
-                try {
-                    await fs.rename(path.join(monthDir, fileName), path.join(monthDir, newFileName));
-                    renamed++;
-                } catch (e) { /* 跳过无法重命名的文件 */ }
+                for (let i = 0; i < oldPrefixes.length; i++) {
+                    if (!fileName.includes(oldPrefixes[i])) continue;
+                    const newFileName = fileName.replace(oldPrefixes[i], newPrefixes[i]);
+                    if (newFileName === fileName) continue;
+                    try {
+                        await fs.rename(path.join(monthDir, fileName), path.join(monthDir, newFileName));
+                        renamed++;
+                    } catch (e) { /* 跳过无法重命名的文件 */ }
+                    break; // 匹配到一个前缀即可，避免重复替换
+                }
             }
         }
         return { success: true, renamed };
@@ -1085,8 +1090,8 @@ ipcMain.handle('find-media-files', async (event, patientName, prescriptionNo, cr
 });
 
 // ★ 重命名处方文件（新增）
-ipcMain.handle('rename-media-files', async (event, patientName, oldNo, newNo) => {
-    return await renameMediaFiles(patientName, oldNo, newNo);
+ipcMain.handle('rename-media-files', async (event, oldPatientName, newPatientName, oldNo, newNo) => {
+    return await renameMediaFiles(oldPatientName, newPatientName, oldNo, newNo);
 });
 
 // ★ 删除文件（新增）

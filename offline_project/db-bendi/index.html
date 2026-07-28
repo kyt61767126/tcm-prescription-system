@@ -4665,7 +4665,30 @@ let currentUser = null;
             // 全部放到 setTimeout(0) 中，让 UI 先渲染清空表单+成功提示
             setTimeout(function() {
                 try { savePrescriptionAsImage(record, newPrescriptionNo); } catch (e) { console.warn('生成处方图片失败:', e); }
-                try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) { console.warn('收集媒体文件失败:', e); }
+                // 保存处方后，把最近拍照录像的文件绑定到当前患者姓名（支持先拍照后录入姓名的流程）
+                try {
+                    var oldMediaName = window.__lastUsedMediaPatientName || localStorage.getItem('lastUsedMediaPatientName') || '';
+                    var oldMediaNo = window.__lastUsedMediaIdentifier || localStorage.getItem('lastUsedMediaIdentifier') || '';
+                    if (oldMediaName && oldMediaNo && window.electronAPI && window.electronAPI.renameMediaFiles &&
+                        (oldMediaName !== record.patientName || oldMediaNo !== newPrescriptionNo)) {
+                        window.electronAPI.renameMediaFiles(oldMediaName, record.patientName, oldMediaNo, newPrescriptionNo)
+                            .then(function(r) {
+                                if (r.success && r.renamed > 0) {
+                                    console.log('已绑定 ' + r.renamed + ' 个媒体文件到患者: ' + record.patientName);
+                                }
+                                try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) {}
+                            })
+                            .catch(function(e) {
+                                console.warn('绑定媒体文件失败:', e);
+                                try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) {}
+                            });
+                    } else {
+                        try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) {}
+                    }
+                } catch (e) {
+                    console.warn('媒体文件绑定失败:', e);
+                    try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) {}
+                }
                 try { updateMedicineFrequency(record.items); } catch (e) { console.warn('更新药品频次失败:', e); }
                 try { saveLocalBackup(); } catch (e) { console.warn('自动备份失败:', e); }
                 try {
