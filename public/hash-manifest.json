@@ -61,11 +61,11 @@
     },
     "geren": {
         "apk": {
-            "version": "1.0.${BUILD_TIME}",
-            "sha256": "2198ab96e3270c7fd1efac83cbd7f76703d6f65e2012657239b5bd8751aeb8d6",
+            "version": "",
+            "sha256": "821da247ef3467874bc4413e1e8f727ca8d45407965fdbecc3f5043fca51be62",
             "url": "/downloads/惠康中医-个人.apk",
-            "size": 2049192,
-            "updateTime": "2026-07-27T15:14:48.742Z",
+            "size": 4355872,
+            "updateTime": "2026-07-28T02:18:51.578Z",
             "fileName": "惠康中医-个人.apk"
         },
         "portable": {
