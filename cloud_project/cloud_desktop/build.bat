@@ -151,12 +151,7 @@ if exist "dist\win-unpacked-path.txt" (
     set /p WIN_UNPACKED_PATH=<dist\win-unpacked-path.txt
 )
 echo       Using prepackaged: %WIN_UNPACKED_PATH%
-REM P1-Security hardening: Read cert password from local gitignored file to avoid hardcoded leak
-if exist "%~dp0..\..\tools\certs\cert-password.txt" (
-    for /f "delims=" %%p in (%~dp0..\..\tools\certs\cert-password.txt) do set "CSC_KEY_PASSWORD=%%p"
-) else (
-    echo [WARN] cert-password.txt not found, code signing may be skipped
-)
+REM Code signing disabled (pfx and cert-password.txt removed; package.json has no certificateFile)
 set "PREV_TEMP=%TEMP%"
 set "PREV_TMP=%TMP%"
 if not exist "tmp" mkdir tmp

@@ -1,4 +1,4 @@
-# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-dingzhi）
 param(
     [switch]$AutoDesktop,
@@ -576,14 +576,7 @@ function Build-Desktop {
         Write-Host "        [OK]"
 
         Write-Host "  [6.5/8] Running electron-builder --prepackaged..." -ForegroundColor White
-        # P1-安全加固: 证书密码从本地 cert-password.txt 读取
-        $certPwdFile = "$toolsDir\certs\cert-password.txt"
-        if (Test-Path $certPwdFile) {
-            $env:CSC_KEY_PASSWORD = (Get-Content $certPwdFile -Raw).Trim()
-            Write-Host "        [OK] Certificate password loaded" -ForegroundColor Green
-        } else {
-            Write-Host "        [WARN] cert-password.txt not found, code signing may be skipped" -ForegroundColor Yellow
-        }
+        # Code signing disabled (pfx and cert-password.txt removed; package.json has no certificateFile)
         $localTemp = "$desktopDir\tmp"
         if (-not (Test-Path $localTemp)) { New-Item -ItemType Directory -Path $localTemp -Force | Out-Null }
         $prevTemp = $env:TEMP; $prevTmp = $env:TMP

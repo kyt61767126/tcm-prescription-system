@@ -158,6 +158,7 @@ echo.
 
 echo [4/10] Stopping residual Gradle processes...
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
+call gradlew.bat --stop >nul 2>&1
 echo [OK] Cleanup completed
 echo.
 

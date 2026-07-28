@@ -92,12 +92,7 @@ set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
 REM better-sqlite3 prebuild-install downloads prebuilt packages from GitHub Releases, sometimes SSL cert verification fails
 REM Temporarily disable TLS cert verification (build only) to ensure prebuild-install downloads packages matching electron ABI
-REM P1-Security hardening: read cert password from local gitignored file to avoid hardcoded leak
-if exist "%~dp0..\..\tools\certs\cert-password.txt" (
-    for /f "delims=" %%p in (%~dp0..\..\tools\certs\cert-password.txt) do set "CSC_KEY_PASSWORD=%%p"
-) else (
-    echo [WARN] cert-password.txt not found, code signing may be skipped
-)
+REM Code signing disabled (pfx and cert-password.txt removed; package.json has no certificateFile)
 echo.
 echo [CHECK] ============================================
 echo [CHECK] 打包前安全完整性验证
