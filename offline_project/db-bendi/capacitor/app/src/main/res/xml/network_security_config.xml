@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    network_security_config.xml - 网络安全配置
+    network_security_config.xml - 网络安全配置（离线版通用）
     P1-A5 新增：HTTPS only + 拒绝用户 CA（防 Charles/Fiddler 抓包）
 
     策略：
@@ -9,9 +9,8 @@
     3. 调试模式下允许用户 CA（开发调试用，release 版不受影响）
     4. localhost 例外（用于本地 socket 连接，如安全检测中的 Frida 端口扫描）
 
-    可选：证书钉扎（防 Cloudflare 证书伪造）
-    注意：Cloudflare 证书公钥会定期轮换，启用钉扎可能导致 APP 失效
-          建议仅在确保证书稳定时启用，或在 APP 内动态拉取最新公钥
+    注意：离线 APP 仅在在线激活 license 时联网（POST /api/license/validate），
+          HTTPS 仍可防止中间人攻击窃取激活码
 -->
 <network-security-config>
     <!-- 基础配置：拒绝明文流量（HTTPS only），拒绝用户 CA -->
@@ -37,7 +36,7 @@
     </debug-overrides>
 
     <!--
-        可选：云端域名证书钉扎（防中间人攻击）
+        可选：云端激活 API 证书钉扎（防激活码被中间人截获）
         启用方式：取消注释并填入实际公钥哈希
         获取方式：
           echo | openssl s_client -connect tcm-prescription-system.pages.dev:443 \

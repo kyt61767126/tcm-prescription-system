@@ -1,0 +1,15 @@
+{
+	"appId": "com.benneng.pres.dingzhi",
+	"appName": "惠康中医-定制",
+	"plugins": {
+		"Preferences": {
+			"enabled": true
+		},
+		"NativeBridge": {
+			"enabled": true
+		},
+		"VideoRecorder": {
+			"enabled": true
+		}
+	}
+}

@@ -1,5 +1,5 @@
 // ============================================================================
-//  惠康中医-个人  Electron 主进程
+//  惠康中医-定制  Electron 主进程
 //  安全配置：contextIsolation=true / nodeIntegration=false
 //  注：未启用 sandbox，以保留原生 window.prompt/confirm/alert（业务大量使用）
 //      contextIsolation 仍确保渲染进程无法直接访问 Node API
@@ -28,7 +28,7 @@ let loginWindow;
 let packagingWindow = null;
 let sharedSession;
 let currentLoggedInUser = null;
-const SESSION_PARTITION = 'persist:tcm-prescription-personal';
+const SESSION_PARTITION = 'persist:tcm-prescription-dingzhi';
 
 // 全局异常捕获，避免静默崩溃
 process.on('uncaughtException', (err) => {

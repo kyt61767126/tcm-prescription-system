@@ -45,18 +45,18 @@ $BusinessJsFiles = @(
     'security-guard.js'
 )
 
-# 10 directories for business JS (cloud + offline root + android assets)
+# 10 directories for business JS (cloud + offline root + capacitor assets)
 $BusinessJsTargets = @(
     'public',
     'public/electron',
     'cloud_project/cloud_desktop',
     'cloud_project/cloud_desktop/electron',
     'offline_project/db-bendi',
-    'offline_project/db-bendi/android/app/src/main/assets/public',
+    'offline_project/db-bendi/capacitor/app/src/main/assets/public',
     'offline_project/db-geren',
-    'offline_project/db-geren/android/app/src/main/assets/public',
+    'offline_project/db-geren/capacitor/app/src/main/assets/public',
     'offline_project/db-dingzhi',
-    'offline_project/db-dingzhi/android/app/src/main/assets/public'
+    'offline_project/db-dingzhi/capacitor/app/src/main/assets/public'
 )
 
 # Group 2: permission.js extra targets (3 offline electron/, beyond Group 1)
@@ -69,11 +69,11 @@ $PermissionExtraTargets = @(
 # Group 3: calculate-hash.js targets (6 offline directories)
 $CalculateHashTargets = @(
     'offline_project/db-bendi',
-    'offline_project/db-bendi/android/app/src/main/assets/public',
+    'offline_project/db-bendi/capacitor/app/src/main/assets/public',
     'offline_project/db-geren',
-    'offline_project/db-geren/android/app/src/main/assets/public',
+    'offline_project/db-geren/capacitor/app/src/main/assets/public',
     'offline_project/db-dingzhi',
-    'offline_project/db-dingzhi/android/app/src/main/assets/public'
+    'offline_project/db-dingzhi/capacitor/app/src/main/assets/public'
 )
 
 # Group 4: license files (3 files)
@@ -83,7 +83,7 @@ $LicenseFiles = @(
     'license/prescription-counter.js'
 )
 
-# license targets (4 electron/ + 3 root/license/ + 3 android/license/)
+# license targets (4 electron/ + 3 root/license/ + 3 nndroidicense/)
 $LicenseTargets = @(
     'cloud_project/cloud_desktop/electron',
     'offline_project/db-bendi/electron',
@@ -92,9 +92,9 @@ $LicenseTargets = @(
     'offline_project/db-bendi/license',
     'offline_project/db-geren/license',
     'offline_project/db-dingzhi/license',
-    'offline_project/db-bendi/android/app/src/main/assets/public/license',
-    'offline_project/db-geren/android/app/src/main/assets/public/license',
-    'offline_project/db-dingzhi/android/app/src/main/assets/public/license'
+    'offline_project/db-bendi/capacitor/app/src/main/assets/public/license',
+    'offline_project/db-geren/capacitor/app/src/main/assets/public/license',
+    'offline_project/db-dingzhi/capacitor/app/src/main/assets/public/license'
 )
 
 # Group 5: electron/hot-update.js targets (3 offline electron/)
@@ -111,11 +111,11 @@ $ResXmlFiles = @(
     'res/xml/file_paths.xml'
 )
 
-# res/xml targets (3 android/res/xml/)
+# res/xml targets (3 capacitor/res/xml/)
 $ResXmlTargets = @(
-    'offline_project/db-bendi/android/app/src/main/res/xml',
-    'offline_project/db-geren/android/app/src/main/res/xml',
-    'offline_project/db-dingzhi/android/app/src/main/res/xml'
+    'offline_project/db-bendi/capacitor/app/src/main/res/xml',
+    'offline_project/db-geren/capacitor/app/src/main/res/xml',
+    'offline_project/db-dingzhi/capacitor/app/src/main/res/xml'
 )
 
 # Group 7: vendor files
@@ -123,14 +123,14 @@ $VendorFiles = @(
     'vendor/xlsx.full.min.js'
 )
 
-# vendor targets (3 root/vendor/ + 3 android/vendor/)
+# vendor targets (3 root/vendor/ + 3 capacitor/vendor/)
 $VendorTargets = @(
     'offline_project/db-bendi/vendor',
     'offline_project/db-geren/vendor',
     'offline_project/db-dingzhi/vendor',
-    'offline_project/db-bendi/android/app/src/main/assets/public/vendor',
-    'offline_project/db-geren/android/app/src/main/assets/public/vendor',
-    'offline_project/db-dingzhi/android/app/src/main/assets/public/vendor'
+    'offline_project/db-bendi/capacitor/app/src/main/assets/public/vendor',
+    'offline_project/db-geren/capacitor/app/src/main/assets/public/vendor',
+    'offline_project/db-dingzhi/capacitor/app/src/main/assets/public/vendor'
 )
 
 # ============================================================================
@@ -266,8 +266,8 @@ $result = Sync-Group -GroupName 'hot-update.js -> 3 offline electron/' -Files @(
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
-# Group 6: res/xml files -> 3 android/res/xml/
-$result = Sync-Group -GroupName 'res/xml (3 files -> 3 android/res/xml/)' -Files $ResXmlFiles -Targets $ResXmlTargets -VerifyOnly $VerifyOnly
+# Group 6: res/xml files -> 3 capacitor/res/xml/
+$result = Sync-Group -GroupName 'res/xml (3 files -> 3 capacitor/res/xml/)' -Files $ResXmlFiles -Targets $ResXmlTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

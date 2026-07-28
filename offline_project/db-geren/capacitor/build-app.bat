@@ -77,7 +77,7 @@ if errorlevel 1 (
 echo.
 
 echo [2.5/10] Minifying JavaScript files (security hardening)...
-node "%~dp0..\..\_shared\minify-js.js" "%ANDROID_PUBLIC%"
+node "%~dp0..\..\..\shared\minify-js.js" "%ANDROID_PUBLIC%"
 if errorlevel 1 (
     echo [WARN] JS minification had issues, continuing anyway
 ) else (

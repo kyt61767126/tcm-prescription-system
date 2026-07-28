@@ -41,7 +41,7 @@ android {
         applicationId "com.benneng.pres.dingzhi"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 14
+        versionCode 54
         versionName "1.0.${BUILD_TIME}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

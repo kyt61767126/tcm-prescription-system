@@ -1,5 +1,5 @@
 // ============================================================================
-//  惠康中医-个人  Electron 主进程
+//  惠康中医-云端  Electron 主进程
 //  安全配置：contextIsolation=true / nodeIntegration=false
 //  注：未启用 sandbox，以保留原生 window.prompt/confirm/alert（业务大量使用）
 //      contextIsolation 仍确保渲染进程无法直接访问 Node API
@@ -27,7 +27,7 @@ let loginWindow;
 let packagingWindow = null;
 let sharedSession;
 let currentLoggedInUser = null;
-const SESSION_PARTITION = 'persist:tcm-prescription-personal';
+const SESSION_PARTITION = 'persist:tcm-prescription-cloud';
 
 // ★ 诊断日志：输出到 stdout + 文件（临时诊断用，定位"表格消失/历史不显示"问题）
 const DIAG_LOG_PATH = path.join(app.getPath('userData'), 'diagnose.log');
