@@ -1,12 +1,13 @@
 name: Sync Shared Modules
 
-# 当 shared/ 目录下的 .js 文件变更时，自动同步到 13 个分发目录
-# 避免手动 Copy-Item 分发遗漏
+# 当 shared/ 目录下的任何文件变更时，自动同步到所有分发目录
+# 覆盖范围：10 个业务 JS + calculate-hash.js + license/ + electron/ + res/xml/ + vendor/
+# 由 tools/sync-all.ps1 统一处理（跨平台 pwsh，Windows + Linux 均可运行）
 on:
   push:
     branches: [main]
     paths:
-      - 'shared/*.js'
+      - 'shared/**'
   workflow_dispatch:
     inputs:
       force:
@@ -31,70 +32,33 @@ jobs:
           fetch-depth: 0
 
       - name: Sync shared modules to distribution directories
+        shell: pwsh
         run: |
-          set -e
-          echo "=== 同步 shared/*.js 到 13 个分发目录 ==="
-
-          # 10 个分发目标目录
-          # 注：3 个 offline db-*/electron 目录已于 2026-07-18 清理（electron 主进程
-          # 加载父目录的 shared 模块，子目录无需副本），从同步目标中移除避免撤销清理。
-          # 保留的 permission.js 例外由 code-quality.yml 单独处理。
-          TARGETS=(
-            "public"
-            "public/electron"
-            "cloud_project/cloud_desktop"
-            "cloud_project/cloud_desktop/electron"
-            "offline_project/db-bendi"
-            "offline_project/db-bendi/android/app/src/main/assets/public"
-            "offline_project/db-dingzhi"
-            "offline_project/db-dingzhi/android/app/src/main/assets/public"
-            "offline_project/db-geren"
-            "offline_project/db-geren/android/app/src/main/assets/public"
-          )
-
-          CHANGED=0
-
-          for SRC in shared/*.js; do
-            [ -f "$SRC" ] || continue
-            FILENAME=$(basename "$SRC")
-            echo "--- 同步 $FILENAME ---"
-            for TARGET in "${TARGETS[@]}"; do
-              DEST="$TARGET/$FILENAME"
-              mkdir -p "$TARGET"
-              if [ ! -f "$DEST" ] || ! diff -q "$SRC" "$DEST" > /dev/null 2>&1; then
-                cp "$SRC" "$DEST"
-                echo "  [更新] $DEST"
-                CHANGED=$((CHANGED + 1))
-              fi
-            done
-          done
-
-          echo ""
-          echo "=== 同步完成: $CHANGED 个文件需要更新 ==="
-
-          # 保存变更计数供后续步骤使用
-          echo "CHANGED=$CHANGED" >> $GITHUB_ENV
+          ./tools/sync-all.ps1
 
       - name: Commit and push if changed
-        if: env.CHANGED != '0'
+        shell: bash
         run: |
+          set -e
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "chore(sync): 自动同步 shared/ 模块到分发目录 [skip ci]
+          if git diff --cached --quiet; then
+            echo "=== No changes, skipping commit ==="
+          else
+            git commit -m "chore(sync): 自动同步 shared/ 模块到分发目录 [skip ci]
 
           由 GitHub Actions sync-shared-modules 工作流自动生成。
-          源文件: shared/*.js
-          分发目标: 13 个目录 (8个index + 5个electron)"
-          git push
-          echo "=== 已推送同步提交 ==="
+          源文件: shared/**
+          同步脚本: tools/sync-all.ps1
+          分发目标: 13+ 个目录 (cloud + offline)"
+            git push
+            echo "=== 已推送同步提交 ==="
+          fi
 
       - name: Summary
+        shell: bash
         run: |
           echo "### 同步结果" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ env.CHANGED }}" = "0" ]; then
-            echo "✅ 所有分发目录已是最新，无需更新" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "✅ 已更新 ${{ env.CHANGED }} 个文件并推送" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "✅ sync-all.ps1 已执行" >> $GITHUB_STEP_SUMMARY

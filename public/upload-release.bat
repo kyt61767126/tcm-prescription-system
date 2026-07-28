@@ -143,7 +143,7 @@ echo.
 REM Auto-run calculate-hash.js to update checksums
 set /p RUN_HASH="Auto-calculate SHA-256 and update hash-manifest.json? (y/n): "
 if /i "!RUN_HASH!"=="y" (
-    node "%~dp0..\offline_project\_shared\calculate-hash.js"
+    node "%~dp0..\shared\calculate-hash.js"
 )
 
 pause

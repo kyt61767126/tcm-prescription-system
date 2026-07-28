@@ -1,6 +1,7 @@
 name: Code Quality Check
 
-# PR 检查：验证 shared/ 源文件与分发文件一致性，防止手动修改分发文件导致不一致
+# PR 检查：验证 shared/ 源文件与分发目录一致性，防止手动修改分发文件导致不一致
+# 由 tools/sync-all.ps1 -VerifyOnly 统一处理（跨平台 pwsh）
 on:
   pull_request:
     branches: [main]
@@ -16,58 +17,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Verify shared modules consistency
+        shell: pwsh
         run: |
-          set -e
-          echo "=== 检查 shared/*.js 与分发目录的一致性 ==="
-          echo ""
-
-          TARGETS=(
-            "public"
-            "public/electron"
-            "cloud_project/cloud_desktop"
-            "cloud_project/cloud_desktop/electron"
-            "offline_project/db-bendi"
-            "offline_project/db-bendi/electron"
-            "offline_project/db-bendi/android/app/src/main/assets/public"
-            "offline_project/db-dingzhi"
-            "offline_project/db-dingzhi/electron"
-            "offline_project/db-dingzhi/android/app/src/main/assets/public"
-            "offline_project/db-geren"
-            "offline_project/db-geren/electron"
-            "offline_project/db-geren/android/app/src/main/assets/public"
-          )
-
-          ERRORS=0
-          WARNINGS=0
-
-          for SRC in shared/*.js; do
-            [ -f "$SRC" ] || continue
-            FILENAME=$(basename "$SRC")
-            echo "检查 $FILENAME ..."
-            for TARGET in "${TARGETS[@]}"; do
-              DEST="$TARGET/$FILENAME"
-              if [ ! -f "$DEST" ]; then
-                echo "  ⚠️  缺失: $DEST"
-                WARNINGS=$((WARNINGS + 1))
-              elif ! diff -q "$SRC" "$DEST" > /dev/null 2>&1; then
-                echo "  ❌ 不一致: $DEST"
-                ERRORS=$((ERRORS + 1))
-              fi
-            done
-          done
-
-          echo ""
-          echo "=== 检查结果 ==="
-          echo "错误: $ERRORS"
-          echo "警告: $WARNINGS"
-
-          if [ "$ERRORS" -gt 0 ]; then
-            echo ""
-            echo "❌ 发现 $ERRORS 个不一致文件，请运行同步或检查 shared/ 源文件"
-            exit 1
-          fi
-
-          echo "✅ 一致性检查通过"
+          ./tools/sync-all.ps1 -VerifyOnly
 
       - name: Check for junk files
         run: |

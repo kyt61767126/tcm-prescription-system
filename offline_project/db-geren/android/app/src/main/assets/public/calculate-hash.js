@@ -16,15 +16,15 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// 项目根目录
-const PROJECT_ROOT = path.resolve(__dirname, '..');
+// 项目根目录 (kyt-zy/)
+const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 
-// APK 文件搜索路径
+// APK 文件搜索路径 (Capacitor 架构)
 const APK_PATHS = {
-    'bendi': path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
-    'dingzhi': path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
-    'geren': path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
+    'bendi': path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+    'dingzhi': path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+    'geren': path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
 };
 
 // 桌面版 exe 搜索路径 (key 与 APK_PATHS 一致, bendi/dingzhi/geren 同时含 APK+EXE)
@@ -84,8 +84,11 @@ function findExeFile(dir) {
  */
 function readVersionFromGradle(appDir) {
     try {
-        const gradlePath = path.join(appDir, 'android', 'app', 'build.gradle');
-        if (!fs.existsSync(gradlePath)) return '';
+        // Support both capacitor/ and android/ directory structures
+        const capPath = path.join(appDir, 'capacitor', 'app', 'build.gradle');
+        const androidPath = path.join(appDir, 'android', 'app', 'build.gradle');
+        const gradlePath = fs.existsSync(capPath) ? capPath : (fs.existsSync(androidPath) ? androidPath : '');
+        if (!gradlePath) return '';
         const content = fs.readFileSync(gradlePath, 'utf8');
         const match = content.match(/versionCode\s+(\d+)/);
         const nameMatch = content.match(/versionName\s+"([^"]+)"/);

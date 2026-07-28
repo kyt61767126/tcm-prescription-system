@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="my_images" path="." />
+    <external-path name="backup_files" path="." />
+    <!-- 显式声明 external-files-path，确保 getExternalFilesDir 路径在 Android 10+ 可被 FileProvider 授权 -->
+    <external-files-path name="external_files_img" path="." />
+    <cache-path name="my_cache_images" path="." />
+    <files-path name="internal_files" path="." />
+</paths>

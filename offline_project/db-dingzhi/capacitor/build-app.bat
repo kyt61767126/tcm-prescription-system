@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 title Huikang TCM Custom - Offline APP Build
 
@@ -77,7 +77,7 @@ if errorlevel 1 (
 echo.
 
 echo [2.5/10] Minifying JavaScript files (security hardening)...
-node "%~dp0..\..\_shared\minify-js.js" "%ANDROID_PUBLIC%"
+node "%~dp0..\..\..\shared\minify-js.js" "%ANDROID_PUBLIC%"
 if errorlevel 1 (
     echo [WARN] JS minification had issues, continuing anyway
 ) else (
@@ -181,7 +181,8 @@ if defined TCM_GRADLE_SKIP_CLEAN (
 echo.
 
 echo [5.5/10] Auto-increment versionCode...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='app\build.gradle'; $c=[System.IO.File]::ReadAllText($f); if($c -match 'versionCode\s+(\d+)'){ $old=$matches[1]; $new=[int]$old+1; $c=$c -replace 'versionCode\s+\d+', ('versionCode '+$new); [System.IO.File]::WriteAllText($f,$c,(New-Object System.Text.UTF8Encoding($false))); Write-Host ('  versionCode: ' + $old + ' -> ' + $new) } else { Write-Host '  [WARN] versionCode not found, skip' }"
+REM P0-3: Save old value to .build_vcode_prev for rollback on build failure (align with cloud build-app.bat)
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='app\build.gradle'; $c=[System.IO.File]::ReadAllText($f); if($c -match 'versionCode\s+(\d+)'){ $old=[int]$matches[1]; $new=$old+1; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $new\"; [System.IO.File]::WriteAllText($f,$nc,(New-Object System.Text.UTF8Encoding($false))); Set-Content -Path '%~dp0.build_vcode_prev' -Value $old -Encoding ASCII -NoNewline; Write-Host ('  [OK] versionCode: '+$old+' -> '+$new+' (prev saved)') } else { Write-Host '  [WARN] versionCode not found in build.gradle' }"
 echo.
 
 echo [5.6/10] Obfuscating JavaScript (target=dingzhi)...
@@ -199,12 +200,16 @@ echo.
 call gradlew.bat assembleRelease
 if errorlevel 1 (
     echo.
+    echo [ERROR] Build failed! Rolling back versionCode...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='app\build.gradle'; $prevFile='%~dp0.build_vcode_prev'; if(Test-Path $prevFile){ $prev=Get-Content $prevFile -Raw; $c=[System.IO.File]::ReadAllText($f); $nc=$c -replace 'versionCode\s+\d+', \"versionCode $prev\"; [System.IO.File]::WriteAllText($f,$nc,(New-Object System.Text.UTF8Encoding($false))); Remove-Item $prevFile -Force; Write-Host ('  [OK] versionCode rolled back to '+$prev) } else { Write-Host '  [WARN] No prev versionCode to rollback' }"
     echo [WARN] Restoring JavaScript due to build failure...
     call node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi
     echo [ERROR] Build failed! Please check error messages
     if not defined NO_PAUSE pause
     exit /b 1
 )
+REM P0-3: Clean up versionCode rollback temp file after successful build
+if exist "%~dp0.build_vcode_prev" del "%~dp0.build_vcode_prev"
 echo.
 
 echo [6.5/10] Restoring JavaScript...
@@ -306,7 +311,7 @@ echo ============================================
 echo.
 
 echo [9/10] Calculating SHA-256 hash for download page...
-node "%~dp0..\..\_shared\calculate-hash.js"
+node "%~dp0..\..\..\shared\calculate-hash.js"
 if errorlevel 1 (
     echo [WARN] Hash calculation had issues, continuing anyway
 ) else (
