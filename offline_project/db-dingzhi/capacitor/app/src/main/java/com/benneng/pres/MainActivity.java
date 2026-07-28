@@ -322,8 +322,12 @@ public class MainActivity extends BridgeActivity {
             public void exit() {
                 // 必须在主线程执行，且用 finishAndRemoveTask 确保真正退出到桌面
                 // postAtFrontOfQueue 插入队列最前面，比 runOnUiThread 更快
+                // ★ 修复 2026-07-28：追加 System.exit(0) 杀死进程，确保下次启动是全新进程
+                //   仅 finishAndRemoveTask() 不杀进程，Android 可能保留进程在后台，
+                //   用户再次点击图标时只是恢复旧任务，WebView 状态保留导致跳过登录界面
                 mainHandler.postAtFrontOfQueue(() -> {
                     finishAndRemoveTask();
+                    System.exit(0);
                 });
             }
         }, "AndroidAppExit");
@@ -832,9 +836,14 @@ public class MainActivity extends BridgeActivity {
         }
 
         // ★ 保留 quitApp 作为 @JavascriptInterface，供 index.html 直接调用 AndroidNative.quitApp()
+        // ★ 修复 2026-07-28：finishAffinity() 必须在 UI 线程调用（JavascriptInterface 默认在后台线程）
+        //   追加 System.exit(0) 杀死进程，确保下次启动是全新进程，彻底解决"退出后重开自动登入"问题
         @JavascriptInterface
         public void quitApp() {
-            finishAffinity();
+            mainHandler.post(() -> {
+                finishAffinity();
+                System.exit(0);
+            });
         }
 
         @JavascriptInterface
@@ -928,7 +937,11 @@ public class MainActivity extends BridgeActivity {
                         showToast(args.optString("message", ""));
                         return ok().toString();
                     case "quitApp":
-                        finishAffinity();
+                        // ★ 修复 2026-07-28：切到 UI 线程 + 杀进程，与 quitApp() @JavascriptInterface 一致
+                        mainHandler.post(() -> {
+                            finishAffinity();
+                            System.exit(0);
+                        });
                         return ok().toString();
                     default:
                         return fail("unknown method: " + name).toString();

@@ -1268,12 +1268,16 @@ public class MainActivity extends AppCompatActivity {
 
         @JavascriptInterface
         public void quitApp() {
+            // ★ 修复 2026-07-28：追加 System.exit(0) 杀死进程，确保下次启动是全新进程
+            //   仅 finishAndRemoveTask()/finish() 不杀进程，Android 可能保留进程在后台，
+            //   用户再次点击图标时只是恢复旧任务，WebView 状态保留导致跳过登录界面
             mainHandler.post(() -> {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     finishAndRemoveTask();
                 } else {
                     finish();
                 }
+                System.exit(0);
             });
         }
 
