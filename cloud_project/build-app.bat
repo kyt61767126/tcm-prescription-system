@@ -2,8 +2,12 @@
 chcp 65001 >nul
 title TCM Prescription System - Cloud APP Packager
 
+REM Record start time for elapsed calculation
+for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
+
 echo ============================================
 echo   TCM Prescription System - Cloud APP Packager
+echo   开始: %BUILD_START_TIME%
 echo ============================================
 echo.
 
@@ -255,9 +259,30 @@ node "%~dp0..\tools\auto-update-downloads.js" cloud
 if errorlevel 1 (
     echo [WARN] Download page auto-update had issues, continuing anyway
 ) else (
-    echo [OK] Download page updated successfully
+    echo [OK] Download page updated successfully (cloud)
 )
 echo.
 
-if not defined NO_PAUSE pause
+echo [7.5/6] Auto-updating download page (geren-cloud)...
+node "%~dp0..\tools\auto-update-downloads.js" geren-cloud
+if errorlevel 1 (
+    echo [WARN] Download page auto-update (geren-cloud) had issues, continuing anyway
+) else (
+    echo [OK] Download page updated successfully (geren-cloud)
+)
+echo.
+
+for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
+for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
+echo ============================================
+echo   APK 打包完成!
+echo   路径: %FINAL_APK%
+echo   开始: %BUILD_START_TIME%
+echo   结束: %BUILD_END_TIME%
+echo   总耗时: %BUILD_ELAPSED%
+echo ============================================
+if not defined NO_PAUSE (
+    set "EXIT_KEY="
+    set /p "EXIT_KEY=按 0 或回车键退出: "
+)
 exit /b 0

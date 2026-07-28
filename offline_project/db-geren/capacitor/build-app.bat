@@ -2,8 +2,12 @@
 chcp 65001 >nul
 title Huikang TCM Personal - Offline APP Build
 
+REM Record start time for elapsed calculation
+for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
+
 echo ============================================
 echo   Huikang TCM Personal - Offline APP
+echo   开始: %BUILD_START_TIME%
 echo ============================================
 echo.
 
@@ -309,11 +313,7 @@ echo.
 REM Get absolute path of APK file (for display)
 for %%F in ("%FINAL_APK%") do set "APK_FULL_PATH=%%~fF"
 
-echo ============================================
-echo   [成功] APK 打包完成！
-echo   路径: %APK_FULL_PATH%
-echo   已签名，可直接安装
-echo ============================================
+echo [OK] APK ready: %APK_FULL_PATH%
 echo.
 
 echo [9/10] Calculating SHA-256 hash for download page...
@@ -334,5 +334,17 @@ if errorlevel 1 (
 )
 echo.
 
-if not defined NO_PAUSE pause
+for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
+for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
+echo ============================================
+echo   APK 打包完成!
+echo   路径: %APK_FULL_PATH%
+echo   开始: %BUILD_START_TIME%
+echo   结束: %BUILD_END_TIME%
+echo   总耗时: %BUILD_ELAPSED%
+echo ============================================
+if not defined NO_PAUSE (
+    set "EXIT_KEY="
+    set /p "EXIT_KEY=按 0 或回车键退出: "
+)
 exit /b 0

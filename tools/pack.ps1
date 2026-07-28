@@ -1374,11 +1374,12 @@ function Invoke-Packaging {
 
         $elapsed = (Get-Date) - $startTime
         Write-Host ""
-        Write-Host "========================================" -ForegroundColor Green
-        Write-Host "  打包完成!" -ForegroundColor Green
-        Write-Host "  总耗时: $($elapsed.ToString('hh\:mm\:ss'))" -ForegroundColor Green
-        Write-Host "  日志:   $($script:LogFile)" -ForegroundColor Green
-        Write-Host "========================================" -ForegroundColor Green
+        Write-Host "========================================" -ForegroundColor Yellow
+        Write-Host "  打包完成!" -ForegroundColor Yellow
+        Write-Host "  总耗时: $($elapsed.ToString('hh\:mm\:ss'))" -ForegroundColor Yellow
+        Write-Host "  日志:   $($script:LogFile)" -ForegroundColor Yellow
+        Write-Host "  按 0 或回车键退出..." -ForegroundColor Yellow
+        Write-Host "========================================" -ForegroundColor Yellow
         Write-Log "[OK] Packaging completed in $($elapsed.ToString('hh\:mm\:ss'))"
 
     } catch {
@@ -1389,10 +1390,13 @@ function Invoke-Packaging {
         Write-Host "  错误: $_" -ForegroundColor Red
         Write-Host "  总耗时: $($elapsed.ToString('hh\:mm\:ss'))" -ForegroundColor Red
         Write-Host "  日志:   $($script:LogFile)" -ForegroundColor Red
+        Write-Host "  按 0 或回车键退出..." -ForegroundColor Yellow
         Write-Host "========================================" -ForegroundColor Red
         Write-Log "[ERROR] Packaging failed: $_" "ERROR"
+        $exitKey = Read-Host "  按 0 或回车键退出"
         return 1
     }
+    $exitKey = Read-Host "  按 0 或回车键退出"
     return 0
 }
 

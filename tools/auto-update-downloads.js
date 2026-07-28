@@ -3,7 +3,7 @@
 // auto-update-downloads.js — 自动更新下载页面的APK文件
 //
 // 用法：node auto-update-downloads.js <target>
-//   target: dingzhi / geren / cloud / all
+//   target: dingzhi / geren / cloud / geren-cloud / all
 //
 // 功能：
 //   1. 查找刚打包的APK文件
@@ -34,8 +34,14 @@ const APP_CONFIG = {
         configPath: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'config.json')
     },
     'cloud': {
-        apkDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
+        apkDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),
         outputName: '惠康中医-云端.apk',
+        configPath: path.join(PROJECT_ROOT, 'cloud_project', 'config.json')
+    },
+    'geren-cloud': {
+        // 云端个人版：复用云端APP的APK（同一安装包，个人版edition由服务端config控制）
+        apkDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),
+        outputName: '惠康中医-云端个人版.apk',
         configPath: path.join(PROJECT_ROOT, 'cloud_project', 'config.json')
     }
 };
@@ -178,9 +184,9 @@ function pushToGitHub() {
 function main() {
     const target = process.argv[2] || 'all';
 
-    if (!['dingzhi', 'geren', 'cloud', 'all'].includes(target)) {
+    if (!['dingzhi', 'geren', 'cloud', 'geren-cloud', 'all'].includes(target)) {
         console.error('用法: node auto-update-downloads.js <target>');
-        console.error('  target: dingzhi / geren / cloud / all');
+        console.error('  target: dingzhi / geren / cloud / geren-cloud / all');
         process.exit(1);
     }
 

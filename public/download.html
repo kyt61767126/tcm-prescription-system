@@ -1055,6 +1055,10 @@
                     <span class="info-value date" id="date-cloud-app">-</span>
                 </div>
                 <div class="info-row">
+                    <span class="info-label">更新时间</span>
+                    <span class="info-value date" id="mtime-cloud-app">-</span>
+                </div>
+                <div class="info-row">
                     <span class="info-label">更新说明</span>
                     <span class="info-value" id="notes-cloud-app">-</span>
                 </div>
@@ -1087,6 +1091,56 @@
                 </div>
             </div>
 
+            <div class="card featured" id="card-geren-cloud">
+                <div class="card-title">
+                    <span class="icon">👤</span>
+                    惠康中医 · 云端个人版
+                    <span class="badge cloud">云端</span>
+                    <span class="badge offline">个人</span>
+                    <span class="status-tag latest" id="tag-geren-cloud">最新</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">版本</span>
+                    <span class="info-value version" id="ver-geren-cloud">加载中...</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">更新时间</span>
+                    <span class="info-value date" id="mtime-geren-cloud">-</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">适用场景</span>
+                    <span class="info-value">个人医生联网使用，云端数据同步，轻量简洁</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">多设备登入</span>
+                    <span class="info-value success">✅ 支持（云端实时同步）</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">功能差异</span>
+                    <span class="info-value">与云端版相同，默认以"个人版"模式运行（无统计、无改密按钮）</span>
+                </div>
+                <div class="notice notice-cloud">
+                    <span class="icon">ℹ️</span>
+                    <div>
+                        <strong>关于云端个人版：</strong>此版本与"云端版"使用同一安装包，仅在服务端以个人版模式运行，界面更简洁。<br>
+                        <strong>适合人群：</strong>个人医生、单医师诊所，需要云端数据同步但无需多账户管理功能。<br>
+                        <strong>账户开通：</strong>需联系开发者（平台管理员）开通个人版账户后登录使用。
+                    </div>
+                </div>
+                <div class="hash-box">
+                    <div class="hash-label">
+                        🔒 SHA-256 校验值（APK）
+                        <button class="hash-copy" onclick="copyHash('hash-geren-cloud')">复制</button>
+                    </div>
+                    <div class="hash-value pending" id="hash-geren-cloud">（打包后自动更新）</div>
+                </div>
+                <div class="btn-group">
+                    <a href="#" class="download-btn" id="dl-geren-cloud">
+                        <span class="icon">⬇️</span>下载 APK（Android）
+                    </a>
+                </div>
+            </div>
+
             <div class="section-title">
                 <span>📱 离线版 APP</span>
                 <span class="sub">免费试用 7 天 · 无需注册</span>
@@ -1106,6 +1160,10 @@
                     <div class="info-row">
                         <span class="info-label">发布日期</span>
                         <span class="info-value date" id="date-dingzhi">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">更新时间</span>
+                        <span class="info-value date" id="mtime-dingzhi">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">更新说明</span>
@@ -1163,6 +1221,10 @@
                     <div class="info-row">
                         <span class="info-label">发布日期</span>
                         <span class="info-value date" id="date-geren">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">更新时间</span>
+                        <span class="info-value date" id="mtime-geren">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">更新说明</span>
@@ -1228,6 +1290,10 @@
                     <span class="info-value date" id="date-cloud">-</span>
                 </div>
                 <div class="info-row">
+                    <span class="info-label">更新时间</span>
+                    <span class="info-value date" id="mtime-cloud">-</span>
+                </div>
+                <div class="info-row">
                     <span class="info-label">更新说明</span>
                     <span class="info-value" id="notes-cloud">-</span>
                 </div>
@@ -1290,6 +1356,10 @@
                         <span class="info-value date" id="date-dingzhi-desktop">-</span>
                     </div>
                     <div class="info-row">
+                        <span class="info-label">更新时间</span>
+                        <span class="info-value date" id="mtime-dingzhi-desktop">-</span>
+                    </div>
+                    <div class="info-row">
                         <span class="info-label">更新说明</span>
                         <span class="info-value" id="notes-dingzhi-desktop">-</span>
                     </div>
@@ -1348,6 +1418,10 @@
                     <div class="info-row">
                         <span class="info-label">发布日期</span>
                         <span class="info-value date" id="date-geren-desktop">-</span>
+                    </div>
+                    <div class="info-row">
+                        <span class="info-label">更新时间</span>
+                        <span class="info-value date" id="mtime-geren-desktop">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">更新说明</span>
@@ -2364,7 +2438,18 @@
         fetch(BASE + '/hash-manifest.json', { cache: 'no-cache' })
             .then(r => r.json())
             .then(manifest => {
-                ['cloud-app', 'dingzhi', 'geren'].forEach(key => {
+                // 格式化更新时间到小时精度 (YYYY-MM-DD HH:MM)
+                function fmtUpdateTime(iso) {
+                    if (!iso) return '-';
+                    try {
+                        const d = new Date(iso);
+                        const pad = n => String(n).padStart(2, '0');
+                        return d.getFullYear() + '-' + pad(d.getMonth()+1) + '-' + pad(d.getDate())
+                             + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+                    } catch(e) { return '-'; }
+                }
+
+                ['cloud-app', 'geren-cloud', 'dingzhi', 'geren'].forEach(key => {
                     const manifestKey = key === 'cloud-app' ? 'cloud' : key;
                     const hashEl = document.getElementById('hash-' + key);
                     const data = manifest[manifestKey] && manifest[manifestKey].apk;
@@ -2377,6 +2462,20 @@
                             dlEl.classList.remove('disabled');
                         }
                     }
+                    // 显示更新时间（精确到小时）
+                    const mtimeEl = document.getElementById('mtime-' + key);
+                    if (mtimeEl && data && data.updateTime) {
+                        mtimeEl.textContent = fmtUpdateTime(data.updateTime);
+                    }
+                    // 云端个人版无 latest.json，从 manifest 显示版本
+                    if (key === 'geren-cloud') {
+                        const verEl = document.getElementById('ver-' + key);
+                        if (verEl && data && data.version) {
+                            verEl.textContent = 'v' + data.version;
+                        } else if (verEl) {
+                            verEl.textContent = 'v1.0';
+                        }
+                    }
                 });
                 ['cloud', 'dingzhi-desktop', 'geren-desktop'].forEach(key => {
                     const manifestKey = key === 'dingzhi-desktop' ? 'dingzhi'
@@ -2387,6 +2486,11 @@
                     if (hashEl && data && data.sha256) {
                         hashEl.textContent = data.sha256;
                         hashEl.classList.remove('pending');
+                    }
+                    // 显示桌面版更新时间（精确到小时）
+                    const mtimeEl = document.getElementById('mtime-' + key);
+                    if (mtimeEl && data && data.updateTime) {
+                        mtimeEl.textContent = fmtUpdateTime(data.updateTime);
                     }
                     if (data && data.url) {
                         const dlEl = document.getElementById('dl-' + key);

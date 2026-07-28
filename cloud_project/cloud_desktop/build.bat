@@ -206,7 +206,15 @@ echo [8/8] Build completed
 echo Output dir: %CD%\%OUTPUT_DIR%
 echo ============================================
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
-echo Start: %BUILD_START_TIME%
-echo End:   %BUILD_END_TIME%
-if not defined NO_PAUSE pause
+for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
+echo ============================================
+echo   打包完成!
+echo   开始: %BUILD_START_TIME%
+echo   结束: %BUILD_END_TIME%
+echo   总耗时: %BUILD_ELAPSED%
+echo ============================================
+if not defined NO_PAUSE (
+    set "EXIT_KEY="
+    set /p "EXIT_KEY=按 0 或回车键退出: "
+)
 exit /b 0

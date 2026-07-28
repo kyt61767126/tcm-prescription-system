@@ -773,12 +773,12 @@ function Build-All {
     }
 
     Write-Host ""
-    Write-Host "================================================================" -ForegroundColor Green
-    Write-Host "  全部打包完成！" -ForegroundColor Green
-    Write-Host "================================================================" -ForegroundColor Green
+    Write-Host "================================================================" -ForegroundColor Yellow
+    Write-Host "  全部打包完成！" -ForegroundColor Yellow
+    Write-Host "================================================================" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  桌面版: $scriptDir\cloud_desktop\dist\" -ForegroundColor Green
-    Write-Host "  手机 APP: $scriptDir\*.apk" -ForegroundColor Green
+    Write-Host "  桌面版: $scriptDir\cloud_desktop\dist\" -ForegroundColor Yellow
+    Write-Host "  手机 APP: $scriptDir\*.apk" -ForegroundColor Yellow
     Write-Host ""
     return 0
 }
@@ -1073,6 +1073,14 @@ if ($SyncOnly) {
 
 $totalElapsed = (Get-Date) - $totalStart
 Write-Host ""
-Write-Host "  本次操作总耗时: $($totalElapsed.ToString('hh\:mm\:ss'))" -ForegroundColor DarkGray
-Write-Host "  退出码: $autoRC" -ForegroundColor $(if ($autoRC -eq 0) { 'Green' } else { 'Red' })
+Write-Host "========================================" -ForegroundColor Yellow
+Write-Host "  本次操作总耗时: $($totalElapsed.ToString('hh\:mm\:ss'))" -ForegroundColor Yellow
+Write-Host "  退出码: $autoRC" -ForegroundColor $(if ($autoRC -eq 0) { 'Yellow' } else { 'Red' })
+if ($autoRC -eq 0) {
+    Write-Host "  按 0 或回车键退出..." -ForegroundColor Yellow
+}
+Write-Host "========================================" -ForegroundColor Yellow
+if (-not $env:NO_PAUSE) {
+    $exitKey = Read-Host "  按 0 或回车键退出"
+}
 exit $autoRC
