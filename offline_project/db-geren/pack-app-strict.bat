@@ -4,6 +4,7 @@ setlocal enableextensions
 cd /d "%~dp0"
 
 REM pack-app-strict.bat - Strict APP build (Capacitor APK + signature hash + repack)
+REM Calls capacitor/pack-app-strict.bat which handles full strict flow
 
 set "CAP_DIR=%~dp0capacitor"
 if not exist "%CAP_DIR%\pack-app-strict.bat" (
@@ -22,18 +23,12 @@ echo.
 call "%CAP_DIR%\pack-app-strict.bat"
 set "EXIT_CODE=%errorlevel%"
 
-if %EXIT_CODE% equ 0 (
-    if exist "%CAP_DIR%\惠康中医-个人-Capacitor.apk" (
-        copy "%CAP_DIR%\惠康中医-个人-Capacitor.apk" "%~dp0惠康中医-个人-Capacitor.apk" /y >nul
-        echo [OK] APK copied to: %~dp0惠康中医-个人-Capacitor.apk
-    )
-)
-
 echo.
 if %EXIT_CODE% neq 0 (
     echo [ERROR] Build failed, exit code: %EXIT_CODE%
 ) else (
     echo [OK] Strict APP build complete!
+    echo [INFO] APK located in: %~dp0惠康中医-个人.apk
 )
 echo.
 if not defined NO_PAUSE pause

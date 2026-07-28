@@ -4,7 +4,7 @@ setlocal enableextensions
 cd /d "%~dp0"
 
 REM pack-app.bat - APP build entry (Capacitor Android APK)
-REM Capacitor APP: stable architecture, unified with cloud APP
+REM Calls capacitor/build-app.bat which handles full 10-step flow including APK copy to parent dir
 
 set "CAP_DIR=%~dp0capacitor"
 if not exist "%CAP_DIR%\build-app.bat" (
@@ -22,18 +22,12 @@ echo.
 call "%CAP_DIR%\build-app.bat"
 set "EXIT_CODE=%errorlevel%"
 
-if %EXIT_CODE% equ 0 (
-    if exist "%CAP_DIR%\惠康中医-定制-Capacitor.apk" (
-        copy "%CAP_DIR%\惠康中医-定制-Capacitor.apk" "%~dp0惠康中医-定制-Capacitor.apk" /y >nul
-        echo [OK] APK copied to: %~dp0惠康中医-定制-Capacitor.apk
-    )
-)
-
 echo.
 if %EXIT_CODE% neq 0 (
     echo [ERROR] Build failed, exit code: %EXIT_CODE%
 ) else (
     echo [OK] Mobile APP build complete!
+    echo [INFO] APK located in: %~dp0惠康中医-定制.apk
 )
 echo.
 if not defined NO_PAUSE pause

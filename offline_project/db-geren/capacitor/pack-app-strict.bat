@@ -53,7 +53,7 @@ echo.
 :done
 echo ============================================
 echo   [OK] Strict APP build complete!
-echo   APK: %CD%\惠康中医-个人-Capacitor.apk
+echo   APK: %~dp0..\惠康中医-个人.apk
 echo   Mode: Signature strict (anti-tamper enabled)
 echo ============================================
 echo.
