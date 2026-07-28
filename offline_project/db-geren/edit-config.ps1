@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Edit clinic configuration for offline TCM APP/Desktop builds.
 .DESCRIPTION
@@ -48,8 +48,10 @@ function Show-CurrentConfig {
     Write-Host "  ===========================================" -ForegroundColor Cyan
     Write-Host "    诊所名称: $($config.clinicName)" -ForegroundColor Yellow
     Write-Host "    医师姓名: $($config.doctorName)" -ForegroundColor Yellow
-    Write-Host "    产品名称: $($config.productName)" -ForegroundColor Yellow
-    Write-Host "    版本标签: $($config.versionLabel)" -ForegroundColor Yellow
+    Write-Host "  -------------------------------------------" -ForegroundColor DarkGray
+    Write-Host "  （以下为系统固定信息，不可修改）" -ForegroundColor DarkGray
+    Write-Host "    产品名称: $($config.productName)" -ForegroundColor DarkGray
+    Write-Host "    版本标签: $($config.versionLabel)" -ForegroundColor DarkGray
     if ($config.configSignature) {
         Write-Host "    签名:     $($config.configSignature.Substring(0, [Math]::Min(16, $config.configSignature.Length)))..." -ForegroundColor DarkGray
     }
@@ -90,15 +92,9 @@ function Edit-ClinicConfig {
         $newDoctor = $currentDoctor
     }
 
-    $newProduct = Read-Host "  请输入产品名称 [$currentProduct]"
-    if ([string]::IsNullOrWhiteSpace($newProduct)) {
-        $newProduct = $currentProduct
-    }
-
-    $newVersionLabel = Read-Host "  请输入版本标签 [$currentVersionLabel]"
-    if ([string]::IsNullOrWhiteSpace($newVersionLabel)) {
-        $newVersionLabel = $currentVersionLabel
-    }
+    # 产品名称和版本标签为系统固定配置，不接受用户修改
+    $newProduct = $currentProduct
+    $newVersionLabel = $currentVersionLabel
 
     Write-Host ""
     Write-Host "  ===========================================" -ForegroundColor Cyan
@@ -106,8 +102,10 @@ function Edit-ClinicConfig {
     Write-Host "  ===========================================" -ForegroundColor Cyan
     Write-Host "    诊所名称: $newClinic" -ForegroundColor Green
     Write-Host "    医师姓名: $newDoctor" -ForegroundColor Green
-    Write-Host "    产品名称: $newProduct" -ForegroundColor Green
-    Write-Host "    版本标签: $newVersionLabel" -ForegroundColor Green
+    Write-Host "  -------------------------------------------" -ForegroundColor DarkGray
+    Write-Host "  （以下为系统固定信息，不可修改）" -ForegroundColor DarkGray
+    Write-Host "    产品名称: $newProduct" -ForegroundColor DarkGray
+    Write-Host "    版本标签: $newVersionLabel" -ForegroundColor DarkGray
     Write-Host "  ===========================================" -ForegroundColor Cyan
     Write-Host ""
 
