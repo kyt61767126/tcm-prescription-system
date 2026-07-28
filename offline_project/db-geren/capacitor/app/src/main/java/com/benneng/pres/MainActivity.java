@@ -1267,26 +1267,74 @@ public class MainActivity extends BridgeActivity {
             return dir;
         }
 
-        // 统一路径校验：使用 canonicalPath.startsWith(root) 校验文件路径必须在允许的根目录下
-        // 同步离线版本 isMediaPathAllowed 安全实现，供 readFileAsBase64/deleteFile/openFile 共用
-        private boolean isMediaPathAllowed(String filePath) {
-            try {
-                if (filePath == null || filePath.isEmpty()) return false;
-                File f = new File(filePath);
-                String canonicalPath = f.getCanonicalPath();
-                File imgDir = getImageDir();
-                File vidDir = getVideoDir();
-                String imgDirPath = imgDir != null ? imgDir.getCanonicalPath() : "";
-                String vidDirPath = vidDir != null ? vidDir.getCanonicalPath() : "";
-                if (!imgDirPath.isEmpty() && canonicalPath.startsWith(imgDirPath)) return true;
-                if (!vidDirPath.isEmpty() && canonicalPath.startsWith(vidDirPath)) return true;
-                Log.w(TAG, "isMediaPathAllowed 拒绝非白名单路径: " + canonicalPath);
-                return false;
-            } catch (Exception e) {
-                Log.e(TAG, "isMediaPathAllowed 异常: " + filePath, e);
-                return false;
+        // 获取所有可能的媒体目录（新旧目录都包含）
+    // 解决：用户既用过旧版本（本能中医处方）又用过新版本（惠康中医处方）时，
+    // getImageDir() 只返回一个目录，导致另一个目录下的文件无法通过白名单校验
+    private java.util.List<File> getAllMediaDirs() {
+        java.util.List<File> dirs = new java.util.ArrayList<>();
+        File imgDir = getImageDir();
+        File vidDir = getVideoDir();
+        if (imgDir != null) dirs.add(imgDir);
+        if (vidDir != null) dirs.add(vidDir);
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                File extPic = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+                File extMov = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                if (extPic != null) {
+                    File newImg = new File(extPic, "惠康中医处方");
+                    File oldImg = new File(extPic, "本能中医处方");
+                    if (!dirs.contains(newImg)) dirs.add(newImg);
+                    if (!dirs.contains(oldImg)) dirs.add(oldImg);
+                }
+                if (extMov != null) {
+                    File newVid = new File(extMov, "惠康中医处方");
+                    File oldVid = new File(extMov, "本能中医处方");
+                    if (!dirs.contains(newVid)) dirs.add(newVid);
+                    if (!dirs.contains(oldVid)) dirs.add(oldVid);
+                }
+            } else {
+                File picDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+                File movDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                if (picDir != null) {
+                    File newImg = new File(picDir, "惠康中医处方");
+                    File oldImg = new File(picDir, "本能中医处方");
+                    if (!dirs.contains(newImg)) dirs.add(newImg);
+                    if (!dirs.contains(oldImg)) dirs.add(oldImg);
+                }
+                if (movDir != null) {
+                    File newVid = new File(movDir, "惠康中医处方");
+                    File oldVid = new File(movDir, "本能中医处方");
+                    if (!dirs.contains(newVid)) dirs.add(newVid);
+                    if (!dirs.contains(oldVid)) dirs.add(oldVid);
+                }
             }
+        } catch (Exception e) {
+            Log.e(TAG, "getAllMediaDirs 异常", e);
         }
+        return dirs;
+    }
+
+    // 统一路径校验：使用 canonicalPath.startsWith(root) 校验文件路径必须在允许的根目录下
+    // 同步离线版本 isMediaPathAllowed 安全实现，供 readFileAsBase64/deleteFile/openFile 共用
+    // ★ 兼容新旧两个目录（惠康中医处方 / 本能中医处方），避免旧文件无法打开
+    private boolean isMediaPathAllowed(String filePath) {
+        try {
+            if (filePath == null || filePath.isEmpty()) return false;
+            File f = new File(filePath);
+            String canonicalPath = f.getCanonicalPath();
+            for (File dir : getAllMediaDirs()) {
+                if (dir != null) {
+                    String dirPath = dir.getCanonicalPath();
+                    if (!dirPath.isEmpty() && canonicalPath.startsWith(dirPath)) return true;
+                }
+            }
+            Log.w(TAG, "isMediaPathAllowed 拒绝非白名单路径: " + canonicalPath);
+            return false;
+        } catch (Exception e) {
+            Log.e(TAG, "isMediaPathAllowed 异常: " + filePath, e);
+            return false;
+        }
+    }
 
         private String getCurrentMonthFolder() {
             java.util.Calendar cal = java.util.Calendar.getInstance();
@@ -1455,15 +1503,17 @@ public class MainActivity extends BridgeActivity {
                 
                 String prefix1 = safeName + "_" + safeNo;
                 String prefix2 = safeNo + "_" + safeName;
-                
-                File imgDir = getImageDir();
-                File vidDir = getVideoDir();
-                
+
+                // ★ 扫描所有可能的媒体目录（新旧目录都扫描），避免遗漏旧版本保存的文件
+                java.util.List<File> allDirs = getAllMediaDirs();
                 java.util.Set<String> foundPaths = new java.util.HashSet<>();
-                
-                scanDirForMediaWithPrefixes(imgDir, prefix1, prefix2, files, foundPaths);
-                scanDirForMediaWithPrefixes(vidDir, prefix1, prefix2, files, foundPaths);
-                
+
+                for (File dir : allDirs) {
+                    if (dir != null && dir.exists()) {
+                        scanDirForMediaWithPrefixes(dir, prefix1, prefix2, files, foundPaths);
+                    }
+                }
+
                 // 回退策略：如果按编号未找到文件，用患者姓名+创建时间范围查找
                 if (files.length() == 0) {
                     long[] timeRange;
@@ -1474,25 +1524,27 @@ public class MainActivity extends BridgeActivity {
                         long now = System.currentTimeMillis();
                         timeRange = new long[]{now - 30L * 24 * 60 * 60 * 1000, now + 24 * 60 * 60 * 1000L};
                     }
-                    scanDirForMediaByNameAndTime(imgDir, safeName, timeRange[0], timeRange[1], files, foundPaths);
-                    scanDirForMediaByNameAndTime(vidDir, safeName, timeRange[0], timeRange[1], files, foundPaths);
+                    for (File dir : allDirs) {
+                        if (dir != null && dir.exists()) {
+                            scanDirForMediaByNameAndTime(dir, safeName, timeRange[0], timeRange[1], files, foundPaths);
+                        }
+                    }
                 }
-                
+
                 StringBuilder debug = new StringBuilder();
                 debug.append("prefix1=").append(prefix1);
                 debug.append(" | prefix2=").append(prefix2);
                 debug.append(" | createdAt=").append(createdAt);
-                debug.append(" | imgDir=").append(imgDir != null ? imgDir.getAbsolutePath() : "null").append(" exists=").append(imgDir != null && imgDir.exists());
-                debug.append(" | vidDir=").append(vidDir != null ? vidDir.getAbsolutePath() : "null").append(" exists=").append(vidDir != null && vidDir.exists());
-                if (imgDir != null && imgDir.exists()) {
-                    java.util.List<String> af = new java.util.ArrayList<>();
-                    collectAllFiles(imgDir, af, 10);
-                    debug.append(" | imgFiles: ").append(String.join(", ", af));
-                }
-                if (vidDir != null && vidDir.exists()) {
-                    java.util.List<String> af = new java.util.ArrayList<>();
-                    collectAllFiles(vidDir, af, 10);
-                    debug.append(" | vidFiles: ").append(String.join(", ", af));
+                debug.append(" | scannedDirs=").append(allDirs.size());
+                for (File dir : allDirs) {
+                    if (dir != null) {
+                        debug.append(" | dir=").append(dir.getAbsolutePath()).append(" exists=").append(dir.exists());
+                        if (dir.exists()) {
+                            java.util.List<String> af = new java.util.ArrayList<>();
+                            collectAllFiles(dir, af, 10);
+                            debug.append(" files:").append(String.join(", ", af));
+                        }
+                    }
                 }
                 JSONObject result = new JSONObject();
                 result.put("success", true);
@@ -1713,16 +1765,17 @@ public class MainActivity extends BridgeActivity {
                 if (!file.exists()) {
                     return fail("文件不存在: " + filePath);
                 }
-                // 路径白名单校验：只允许读取图片/视频目录下的文件
-                // 替代 isCallerAllowed 来源校验，避免 WebView URL 短暂变化导致误拦截
+                // 路径白名单校验：使用 getAllMediaDirs() 兼容新旧目录
                 String canonicalPath = file.getCanonicalPath();
-                File imgDir = getImageDir();
-                File vidDir = getVideoDir();
-                String imgDirPath = imgDir != null ? imgDir.getCanonicalPath() : "";
-                String vidDirPath = vidDir != null ? vidDir.getCanonicalPath() : "";
-                boolean allowed = !imgDirPath.isEmpty() && canonicalPath.startsWith(imgDirPath);
-                if (!allowed) {
-                    allowed = !vidDirPath.isEmpty() && canonicalPath.startsWith(vidDirPath);
+                boolean allowed = false;
+                for (File dir : getAllMediaDirs()) {
+                    if (dir != null) {
+                        String dirPath = dir.getCanonicalPath();
+                        if (!dirPath.isEmpty() && canonicalPath.startsWith(dirPath)) {
+                            allowed = true;
+                            break;
+                        }
+                    }
                 }
                 if (!allowed) {
                     Log.w(TAG, "startReadSession 拒绝非白名单路径: " + canonicalPath);
