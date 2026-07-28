@@ -85,6 +85,13 @@ public class MainActivity extends BridgeActivity {
         // 异步执行避免阻塞启动，检测到威胁时 Toast 提示并退出
         mainHandler.post(() -> SecurityGuard.checkAndExit(this));
 
+        // ★ P1-8 多层校验 Layer 2：Android 原生 License 启动校验
+        // 在 WebView 加载前由 Java 层独立校验 license 有效性（试用过期/license 篡改/绑定不符等）
+        // 与 JS 层 checkLicenseAndShowActivate 形成双保险
+        if (!performNativeStartupLicenseCheck()) {
+            return;
+        }
+
         // Android 6.0+ 动态申请相机和麦克风权限（录像拍照功能需要）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -117,6 +124,61 @@ public class MainActivity extends BridgeActivity {
 
         // ★ 离线APP：加载本地 assets 页面（带就绪轮询，参考云端APP）
         loadLocalAssetWithRetry();
+    }
+
+    // ★ P1-8 多层校验 Layer 2：Android 原生启动 License 校验
+    // 在 WebView 加载前由 Java 层独立校验，与 JS 层（auth-core.js checkLicenseAndShowActivate）形成双保险
+    // 即使攻击者 hook JS 层绕过校验，Java 层仍会拦截
+    // 返回 true=允许启动，false=已弹窗并阻止启动
+    private boolean performNativeStartupLicenseCheck() {
+        try {
+            LicenseManager lm = new LicenseManager(this);
+            String machineId = lm.getMachineId();
+            JSONObject result = lm.validateLicense(machineId);
+            if (result == null) {
+                Log.w(TAG, "[StartupCheck] validateLicense 返回 null，跳过原生校验");
+                return true;
+            }
+            boolean valid = result.optBoolean("valid", false);
+            if (valid) {
+                Log.i(TAG, "[StartupCheck] 授权有效，允许启动：type=" + result.optString("type", ""));
+                // ★ P1-9 代码完整性校验：检测 auth-core.js / license-manager.js 是否被篡改
+                if (!lm.verifyJsIntegrity()) {
+                    showFatalLicenseErrorAndExit("检测到关键代码文件已被篡改，软件无法启动。\n请从官方渠道重新下载安装。");
+                    return false;
+                }
+                return true;
+            }
+            String reason = result.optString("type", "unknown");
+            String message = result.optString("message", "授权校验失败，应用无法启动");
+            Log.e(TAG, "[StartupCheck] 授权校验失败：type=" + reason + " msg=" + message);
+            showFatalLicenseErrorAndExit(message);
+            return false;
+        } catch (Exception e) {
+            Log.e(TAG, "[StartupCheck] 原生校验异常，降级到 JS 层校验", e);
+            return true;
+        }
+    }
+
+    // 显示致命 License 错误对话框并退出 APP
+    private void showFatalLicenseErrorAndExit(String message) {
+        mainHandler.post(() -> {
+            try {
+                new androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("授权校验失败")
+                        .setMessage(message)
+                        .setCancelable(false)
+                        .setPositiveButton("退出", (d, w) -> {
+                            finishAffinity();
+                            android.os.Process.killProcess(android.os.Process.myPid());
+                        })
+                        .show();
+            } catch (Exception e) {
+                Log.e(TAG, "[StartupCheck] 显示错误对话框失败", e);
+                finishAffinity();
+                android.os.Process.killProcess(android.os.Process.myPid());
+            }
+        });
     }
 
     /**

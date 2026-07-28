@@ -16,6 +16,7 @@ const { app, BrowserWindow, ipcMain, session, dialog, shell, safeStorage } = req
 const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
+const crypto = require('crypto');
 const licenseManager = require('./license-manager');
 const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
@@ -535,6 +536,58 @@ function createLoginWindow() {
     });
 }
 
+// ★ P1-9 代码完整性校验：检测关键 JS 文件是否被篡改
+// 原理：首次运行时计算关键文件 SHA256 哈希并存储为基线，后续启动重新计算并比对
+// 防护效果：攻击者修改 auth-core.js / license-manager.js 绕过 license 校验时，哈希不匹配将阻止启动
+async function verifyCodeIntegrity() {
+    const criticalFiles = [
+        path.join(__dirname, 'auth-core.js'),
+        path.join(__dirname, 'license-manager.js')
+    ];
+    const baselinePath = path.join(app.getPath('userData'), 'integrity.dat');
+
+    const hashes = [];
+    for (const filePath of criticalFiles) {
+        try {
+            const content = await fs.readFile(filePath);
+            const hash = crypto.createHash('sha256').update(content).digest('hex');
+            hashes.push(hash);
+        } catch (e) {
+            console.warn('[Integrity] 读取文件失败，跳过:', filePath, e.message);
+            return true;
+        }
+    }
+    const combinedHash = crypto.createHash('sha256').update(hashes.join('|')).digest('hex');
+
+    let baseline = null;
+    try {
+        const raw = await fs.readFile(baselinePath, 'utf8');
+        baseline = raw.trim();
+    } catch (e) {
+        // 基线文件不存在，首次运行
+    }
+
+    if (!baseline) {
+        try {
+            await fs.writeFile(baselinePath, combinedHash, 'utf8');
+            console.log('[Integrity] 首次运行，已建立完整性基线');
+        } catch (e) {
+            console.warn('[Integrity] 无法写入基线文件:', e.message);
+        }
+        return true;
+    }
+
+    if (baseline === combinedHash) {
+        console.log('[Integrity] 代码完整性校验通过');
+        return true;
+    }
+
+    console.error('[Integrity] 代码完整性校验失败！检测到关键文件被篡改');
+    console.error('[Integrity] 基线:', baseline.substring(0, 16) + '...');
+    console.error('[Integrity] 当前:', combinedHash.substring(0, 16) + '...');
+    return false;
+}
+
 app.whenReady().then(async () => {
     // ★ License 授权校验（启动时校验，未授权或过期则弹双按钮：前往激活/退出软件）
     // ★ v3 新增：传入 localMachineId 用于三因子绑定校验（clinicName + machineId）
@@ -560,6 +613,25 @@ app.whenReady().then(async () => {
     // 授权有效时，在控制台显示授权信息（不弹窗，避免干扰用户）
     if (licenseResult.type === 'trial') {
         console.log('[License] 试用模式：', licenseResult.message);
+    }
+
+    // ★ P1-9 代码完整性校验：检测 auth-core.js / license-manager.js 是否被篡改
+    // 防盗破解：攻击者修改 JS 文件绕过 license 校验时，本检测会阻止启动
+    // 首次运行建立基线，后续启动比对哈希
+    try {
+        const integrityOk = await verifyCodeIntegrity();
+        if (!integrityOk) {
+            dialog.showMessageBoxSync({
+                type: 'error',
+                title: '完整性校验失败',
+                message: '检测到关键代码文件已被篡改，软件无法启动。\n请从官方渠道重新下载安装，或联系客服。',
+                buttons: ['退出']
+            });
+            app.exit(1);
+            return;
+        }
+    } catch (e) {
+        console.warn('[Integrity] 完整性校验异常（降级放行）:', e.message);
     }
 
     // ★ 启动自动更新检查（第4周任务，延迟 5 秒检查避免影响启动）

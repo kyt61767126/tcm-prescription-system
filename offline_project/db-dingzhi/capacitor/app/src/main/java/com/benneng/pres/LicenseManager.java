@@ -153,6 +153,9 @@ public class LicenseManager {
     private static final int ACTIVATE_FAIL_THRESHOLD = 5;        // 5 次失败后进入冷却
     private static final long ACTIVATE_COOLDOWN_MS = 5L * 60 * 1000;  // 冷却 5 分钟
 
+    // ★ P1-9 代码完整性校验：检测关键 JS 文件是否被篡改
+    private static final String PREF_KEY_JS_INTEGRITY_HASH = "js_integrity_baseline";
+
     // ★ APK 签名校验（防反编译重打包）
     // 留空则不校验；填入发布签名的 SHA-256 指纹（小写无冒号）后启用
     // 获取方式：keytool -printcert -jarfile your.apk （取 SHA256: 后的值，去冒号转小写）
@@ -1819,6 +1822,73 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         } catch (Exception e) {
             return "";
         }
+    }
+
+    // ★ P1-9 代码完整性校验：检测 auth-core.js / license-manager.js 是否被篡改
+    public boolean verifyJsIntegrity() {
+        try {
+            String[] criticalFiles = {"public/auth-core.js", "public/license/license-manager.js"};
+            StringBuilder combined = new StringBuilder();
+            for (String assetPath : criticalFiles) {
+                try {
+                    InputStream is = context.getAssets().open(assetPath);
+                    byte[] bytes = readStreamBytes(is);
+                    String hash = sha256Hex(bytes);
+                    combined.append(hash).append('|');
+                } catch (Exception e) {
+                    Log.w(TAG, "[Integrity] 读取文件失败，跳过: " + assetPath);
+                    return true;
+                }
+            }
+            String currentHash = sha256Hex(combined.toString().getBytes(StandardCharsets.UTF_8));
+
+            SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
+            String baseline = prefs.getString(PREF_KEY_JS_INTEGRITY_HASH, "");
+
+            if (baseline.isEmpty()) {
+                prefs.edit().putString(PREF_KEY_JS_INTEGRITY_HASH, currentHash).apply();
+                Log.i(TAG, "[Integrity] 首次运行，已建立完整性基线");
+                return true;
+            }
+
+            if (baseline.equals(currentHash)) {
+                Log.i(TAG, "[Integrity] 代码完整性校验通过");
+                return true;
+            }
+
+            Log.e(TAG, "[Integrity] 代码完整性校验失败！检测到关键文件被篡改");
+            Log.e(TAG, "[Integrity] 基线: " + baseline.substring(0, Math.min(16, baseline.length())) + "...");
+            Log.e(TAG, "[Integrity] 当前: " + currentHash.substring(0, Math.min(16, currentHash.length())) + "...");
+            return false;
+        } catch (Exception e) {
+            Log.w(TAG, "[Integrity] 完整性校验异常（降级放行）: " + e.getMessage());
+            return true;
+        }
+    }
+
+    private String sha256Hex(byte[] data) {
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(data);
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            return "";
+        }
+    }
+
+    private byte[] readStreamBytes(InputStream is) throws Exception {
+        java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        byte[] buffer = new byte[4096];
+        int len;
+        while ((len = is.read(buffer)) != -1) {
+            baos.write(buffer, 0, len);
+        }
+        is.close();
+        return baos.toByteArray();
     }
 
     // 成功结果工厂
