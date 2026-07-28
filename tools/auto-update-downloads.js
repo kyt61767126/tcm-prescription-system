@@ -24,17 +24,17 @@ const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 // 各APP的APK搜索路径和产品名称
 const APP_CONFIG = {
     'bendi': {
-        apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
+        apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
         outputName: '惠康中医-本地.apk',
         configPath: path.join(PROJECT_ROOT, 'offline_project', 'db-bendi', 'config.json')
     },
     'dingzhi': {
-        apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
+        apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
         outputName: '惠康中医-定制.apk',
         configPath: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'config.json')
     },
     'geren': {
-        apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'android', 'app', 'build', 'outputs', 'apk', 'release'),
+        apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
         outputName: '惠康中医-个人.apk',
         configPath: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'config.json')
     },
@@ -65,8 +65,11 @@ function findApkFile(dir) {
 
 function readVersionFromGradle(appDir) {
     try {
-        const gradlePath = path.join(appDir, 'android', 'app', 'build.gradle');
-        if (!fs.existsSync(gradlePath)) return '';
+        // Support both capacitor/ and android/ directory structures
+        const capPath = path.join(appDir, 'capacitor', 'app', 'build.gradle');
+        const androidPath = path.join(appDir, 'android', 'app', 'build.gradle');
+        const gradlePath = fs.existsSync(capPath) ? capPath : (fs.existsSync(androidPath) ? androidPath : '');
+        if (!gradlePath) return '';
         const content = fs.readFileSync(gradlePath, 'utf8');
         const nameMatch = content.match(/versionName\s+"([^"]+)"/);
         if (nameMatch) return nameMatch[1];
