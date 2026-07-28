@@ -68,6 +68,8 @@ public class MainActivity extends BridgeActivity {
     private Handler mainHandler;
     private volatile String cachedVideoRecorderScript = null;
     private boolean hasDoneFirstResume = false;
+    // ★ 修复 2026-07-27：NativeBridge 实例引用，用于 onDestroy 时清理会话资源
+    private NativeBridge nativeBridge = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,11 +108,43 @@ public class MainActivity extends BridgeActivity {
         // 立即配置 WebView，不延迟，加快启动速度
         configureWebView();
 
+        // ★ 修复 2026-07-27：清理上次启动遗留的 upload_*临时文件（用户可能未 commit 就退出）
+        // 在后台线程执行避免阻塞启动
+        new Thread(this::cleanupStaleTempFiles, "cleanup-temp").start();
+
         // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
         preloadVideoRecorderScript();
 
         // ★ 离线APP：加载本地 assets 页面（带就绪轮询，参考云端APP）
         loadLocalAssetWithRetry();
+    }
+
+    /**
+     * ★ 修复 2026-07-27：清理 cacheDir 中的 upload_*临时文件
+     * 上次启动时用户可能在 startMediaSession 后未 commit 就退出，临时文件会一直占用 cacheDir
+     * 启动时清理避免 cacheDir 无限增长
+     */
+    private void cleanupStaleTempFiles() {
+        try {
+            File cacheDir = getCacheDir();
+            File[] files = cacheDir.listFiles();
+            if (files == null) return;
+            int cleaned = 0;
+            for (File f : files) {
+                String name = f.getName();
+                // 仅清理 mediaSession 的临时文件（upload_ 前缀），不清理其他缓存
+                if (name.startsWith("upload_")) {
+                    if (f.delete()) {
+                        cleaned++;
+                    }
+                }
+            }
+            if (cleaned > 0) {
+                Log.d(TAG, "清理上次启动遗留临时文件: " + cleaned + " 个");
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "清理临时文件失败（非致命）: " + e.getMessage());
+        }
     }
 
     /**
@@ -199,6 +233,9 @@ public class MainActivity extends BridgeActivity {
         webView.setWebChromeClient(new WebChromeClient() {
             // 授权摄像头和麦克风权限（录像拍照功能需要）
             // ★ 参考云端APP：校验 request.getOrigin() 必须为本地 file:// 资源
+            // ★ 修复 2026-07-27：精细化 grant，只授予 VIDEO/AUDIO 权限，不授予其他资源
+            //   原代码 request.grant(request.getResources()) 会授予请求中的全部资源，
+            //   如果将来 WebView 请求了新的敏感资源（如地理位置），也会被自动授予
             @Override
             public void onPermissionRequest(PermissionRequest request) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -209,14 +246,20 @@ public class MainActivity extends BridgeActivity {
                         request.deny();
                         return;
                     }
+                    // ★ 修复：收集请求中实际属于 VIDEO/AUDIO 的资源，只 grant 这些
+                    java.util.List<String> allowed = new java.util.ArrayList<>();
                     for (String permission : request.getResources()) {
-                        if (permission.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE) ||
-                            permission.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
-                            request.grant(request.getResources());
-                            return;
+                        if (PermissionRequest.RESOURCE_VIDEO_CAPTURE.equals(permission) ||
+                            PermissionRequest.RESOURCE_AUDIO_CAPTURE.equals(permission)) {
+                            allowed.add(permission);
                         }
                     }
-                    request.deny();
+                    if (allowed.isEmpty()) {
+                        Log.w(TAG, "onPermissionRequest 无 VIDEO/AUDIO 资源，拒绝");
+                        request.deny();
+                    } else {
+                        request.grant(allowed.toArray(new String[0]));
+                    }
                 }
             }
 
@@ -289,7 +332,9 @@ public class MainActivity extends BridgeActivity {
         // 录像拍照功能通过此桥接将文件保存到本地文件系统（按月份分类 YYYY-MM）
         // 注意：nativeBridge 对象由 NativeBridgePlugin（Capacitor插件）自动注册，
         //       此处注册的 AndroidNative 提供更完整的 invoke 分发能力（供 video-recorder-inject.js 使用）
-        webView.addJavascriptInterface(new NativeBridge(), "AndroidNative");
+        // ★ 修复 2026-07-27：保存 NativeBridge 实例引用，onDestroy 时清理会话资源
+        nativeBridge = new NativeBridge();
+        webView.addJavascriptInterface(nativeBridge, "AndroidNative");
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
@@ -610,19 +655,18 @@ public class MainActivity extends BridgeActivity {
     /**
      * 预加载录像拍照脚本到内存缓存（在后台线程执行，避免阻塞UI）
      * 首次调用会触发assets读取，后续调用直接使用缓存
+     * ★ 修复 2026-07-27：改用 try-with-resources 确保异常时 InputStream 关闭，防止 FD 泄漏
      */
     private void preloadVideoRecorderScript() {
         if (cachedVideoRecorderScript != null) return;
         new Thread(() -> {
-            try {
-                InputStream is = getAssets().open("video-recorder-inject.js");
+            try (InputStream is = getAssets().open("video-recorder-inject.js")) {
                 java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
                 byte[] buffer = new byte[8192];
                 int len;
                 while ((len = is.read(buffer)) > 0) {
                     baos.write(buffer, 0, len);
                 }
-                is.close();
                 cachedVideoRecorderScript = baos.toString("UTF-8");
                 Log.d(TAG, "录像拍照脚本预加载完成，长度: " + cachedVideoRecorderScript.length());
             } catch (Exception e) {
@@ -634,18 +678,17 @@ public class MainActivity extends BridgeActivity {
     /**
      * 同步读取录像拍照脚本（带缓存）
      * 优先使用预加载缓存，未命中则同步读取并缓存
+     * ★ 修复 2026-07-27：改用 try-with-resources 确保异常时 InputStream 关闭，防止 FD 泄漏
      */
     private String getVideoRecorderScript() {
         if (cachedVideoRecorderScript != null) return cachedVideoRecorderScript;
-        try {
-            InputStream is = getAssets().open("video-recorder-inject.js");
+        try (InputStream is = getAssets().open("video-recorder-inject.js")) {
             java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
             byte[] buffer = new byte[8192];
             int len;
             while ((len = is.read(buffer)) > 0) {
                 baos.write(buffer, 0, len);
             }
-            is.close();
             cachedVideoRecorderScript = baos.toString("UTF-8");
             Log.d(TAG, "录像拍照脚本同步加载完成，长度: " + cachedVideoRecorderScript.length());
         } catch (Exception e) {
@@ -679,14 +722,22 @@ public class MainActivity extends BridgeActivity {
             // 重复设置 WebSettings 会触发 WebView 重新计算配置，影响恢复速度
             if (hasDoneFirstResume) {
                 // 非首次恢复：通过JS触发页面内同步逻辑（SyncEngine+药品刷新），不整页reload避免丢失编辑状态
+                // ★ 修复 2026-07-27：lambda 闭包持有 webView 引用，必须检查 isDestroyed() 防止崩溃
+                final WebView finalWebView = webView;
                 mainHandler.postDelayed(() -> {
-                    if (webView != null) {
-                        webView.evaluateJavascript(
+                    if (finalWebView == null || finalWebView.isDestroyed()) {
+                        Log.w(TAG, "onResume postDelayed: WebView 已销毁，跳过 JS 注入");
+                        return;
+                    }
+                    try {
+                        finalWebView.evaluateJavascript(
                             "(function(){" +
                             "  window._layoutFixInjected = false;" +
                             "  if (typeof window.__onAppResume === 'function') { window.__onAppResume(); }" +
                             "})();", null);
-                        injectLayoutFixScript(webView);
+                        injectLayoutFixScript(finalWebView);
+                    } catch (Exception e) {
+                        Log.e(TAG, "onResume JS 注入失败", e);
                     }
                 }, 100);
             } else {
@@ -712,6 +763,11 @@ public class MainActivity extends BridgeActivity {
         // T5: 清理所有待执行的 Handler 回调，防止 Activity 销毁后延迟任务执行导致崩溃
         if (mainHandler != null) {
             mainHandler.removeCallbacksAndMessages(null);
+        }
+        // ★ 修复 2026-07-27：清理 mediaSessions 临时文件（防止 cacheDir 文件泄漏）
+        // 用户可能在 startMediaSession 后未 commit 就退出 APP，临时文件会一直占用 cacheDir
+        if (nativeBridge != null) {
+            nativeBridge.cleanupSessions();
         }
         WebView webView = this.getBridge() != null ? this.getBridge().getWebView() : null;
         if (webView != null) {
@@ -773,7 +829,6 @@ public class MainActivity extends BridgeActivity {
         }
 
         // ★ 保留 quitApp 作为 @JavascriptInterface，供 index.html 直接调用 AndroidNative.quitApp()
-        // （printPrescription 的 printHtml 仍走 invoke 分发，printHtml 这里保留是 index.html 直接调用入口）
         @JavascriptInterface
         public void quitApp() {
             finishAffinity();
@@ -1038,6 +1093,49 @@ public class MainActivity extends BridgeActivity {
         // ------------------------------------------------------------------
         private final java.util.Map<String, File> mediaSessions = new java.util.concurrent.ConcurrentHashMap<>();
 
+        /**
+         * ★ 修复 2026-07-27：清理所有未完成的 mediaSession 和 readSession（用于 onDestroy）
+         * 防止用户在 startMediaSession 后未 commit 就退出 APP，临时文件和 FileInputStream 泄漏
+         */
+        public void cleanupSessions() {
+            try {
+                // 清理 mediaSessions：删除临时文件
+                if (!mediaSessions.isEmpty()) {
+                    int cleaned = 0;
+                    java.util.Iterator<java.util.Map.Entry<String, File>> it = mediaSessions.entrySet().iterator();
+                    while (it.hasNext()) {
+                        java.util.Map.Entry<String, File> entry = it.next();
+                        File f = entry.getValue();
+                        if (f != null && f.exists()) {
+                            if (f.delete()) cleaned++;
+                        }
+                        it.remove();
+                    }
+                    if (cleaned > 0) {
+                        Log.d(TAG, "onDestroy 清理 mediaSessions 临时文件: " + cleaned + " 个");
+                    }
+                }
+                // 清理 readSessions：关闭 FileInputStream
+                if (!readSessions.isEmpty()) {
+                    int closed = 0;
+                    java.util.Iterator<java.util.Map.Entry<String, ReadSession>> it2 = readSessions.entrySet().iterator();
+                    while (it2.hasNext()) {
+                        java.util.Map.Entry<String, ReadSession> entry = it2.next();
+                        ReadSession rs = entry.getValue();
+                        if (rs != null && rs.fis != null) {
+                            try { rs.fis.close(); closed++; } catch (Exception ignored) {}
+                        }
+                        it2.remove();
+                    }
+                    if (closed > 0) {
+                        Log.d(TAG, "onDestroy 关闭 readSessions 文件句柄: " + closed + " 个");
+                    }
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "cleanupSessions 异常（非致命）: " + e.getMessage());
+            }
+        }
+
         private JSONObject startMediaSession(String fileName) {
             try {
                 String sessionId = "media_" + System.currentTimeMillis() + "_" + (int) (Math.random() * 100000);
@@ -1268,74 +1366,75 @@ public class MainActivity extends BridgeActivity {
             return dir;
         }
 
+        // 统一路径校验：使用 canonicalPath.startsWith(root) 校验文件路径必须在允许的根目录下
         // 获取所有可能的媒体目录（新旧目录都包含）
-    // 解决：用户既用过旧版本（本能中医处方）又用过新版本（惠康中医处方）时，
-    // getImageDir() 只返回一个目录，导致另一个目录下的文件无法通过白名单校验
-    private java.util.List<File> getAllMediaDirs() {
-        java.util.List<File> dirs = new java.util.ArrayList<>();
-        File imgDir = getImageDir();
-        File vidDir = getVideoDir();
-        if (imgDir != null) dirs.add(imgDir);
-        if (vidDir != null) dirs.add(vidDir);
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                File extPic = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-                File extMov = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
-                if (extPic != null) {
-                    File newImg = new File(extPic, "惠康中医处方");
-                    File oldImg = new File(extPic, "本能中医处方");
-                    if (!dirs.contains(newImg)) dirs.add(newImg);
-                    if (!dirs.contains(oldImg)) dirs.add(oldImg);
+        // 解决：用户既用过旧版本（本能中医处方）又用过新版本（惠康中医处方）时，
+        // getImageDir() 只返回一个目录，导致另一个目录下的文件无法通过白名单校验
+        private java.util.List<File> getAllMediaDirs() {
+            java.util.List<File> dirs = new java.util.ArrayList<>();
+            File imgDir = getImageDir();
+            File vidDir = getVideoDir();
+            if (imgDir != null) dirs.add(imgDir);
+            if (vidDir != null) dirs.add(vidDir);
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    File extPic = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+                    File extMov = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                    if (extPic != null) {
+                        File newImg = new File(extPic, "惠康中医处方");
+                        File oldImg = new File(extPic, "本能中医处方");
+                        if (!dirs.contains(newImg)) dirs.add(newImg);
+                        if (!dirs.contains(oldImg)) dirs.add(oldImg);
+                    }
+                    if (extMov != null) {
+                        File newVid = new File(extMov, "惠康中医处方");
+                        File oldVid = new File(extMov, "本能中医处方");
+                        if (!dirs.contains(newVid)) dirs.add(newVid);
+                        if (!dirs.contains(oldVid)) dirs.add(oldVid);
+                    }
+                } else {
+                    File picDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+                    File movDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                    if (picDir != null) {
+                        File newImg = new File(picDir, "惠康中医处方");
+                        File oldImg = new File(picDir, "本能中医处方");
+                        if (!dirs.contains(newImg)) dirs.add(newImg);
+                        if (!dirs.contains(oldImg)) dirs.add(oldImg);
+                    }
+                    if (movDir != null) {
+                        File newVid = new File(movDir, "惠康中医处方");
+                        File oldVid = new File(movDir, "本能中医处方");
+                        if (!dirs.contains(newVid)) dirs.add(newVid);
+                        if (!dirs.contains(oldVid)) dirs.add(oldVid);
+                    }
                 }
-                if (extMov != null) {
-                    File newVid = new File(extMov, "惠康中医处方");
-                    File oldVid = new File(extMov, "本能中医处方");
-                    if (!dirs.contains(newVid)) dirs.add(newVid);
-                    if (!dirs.contains(oldVid)) dirs.add(oldVid);
-                }
-            } else {
-                File picDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-                File movDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-                if (picDir != null) {
-                    File newImg = new File(picDir, "惠康中医处方");
-                    File oldImg = new File(picDir, "本能中医处方");
-                    if (!dirs.contains(newImg)) dirs.add(newImg);
-                    if (!dirs.contains(oldImg)) dirs.add(oldImg);
-                }
-                if (movDir != null) {
-                    File newVid = new File(movDir, "惠康中医处方");
-                    File oldVid = new File(movDir, "本能中医处方");
-                    if (!dirs.contains(newVid)) dirs.add(newVid);
-                    if (!dirs.contains(oldVid)) dirs.add(oldVid);
-                }
+            } catch (Exception e) {
+                Log.e(TAG, "getAllMediaDirs 异常", e);
             }
-        } catch (Exception e) {
-            Log.e(TAG, "getAllMediaDirs 异常", e);
+            return dirs;
         }
-        return dirs;
-    }
 
-    // 统一路径校验：使用 canonicalPath.startsWith(root) 校验文件路径必须在允许的根目录下
-    // 同步离线版本 isMediaPathAllowed 安全实现，供 readFileAsBase64/deleteFile/openFile 共用
-    // ★ 兼容新旧两个目录（惠康中医处方 / 本能中医处方），避免旧文件无法打开
-    private boolean isMediaPathAllowed(String filePath) {
-        try {
-            if (filePath == null || filePath.isEmpty()) return false;
-            File f = new File(filePath);
-            String canonicalPath = f.getCanonicalPath();
-            for (File dir : getAllMediaDirs()) {
-                if (dir != null) {
-                    String dirPath = dir.getCanonicalPath();
-                    if (!dirPath.isEmpty() && canonicalPath.startsWith(dirPath)) return true;
+        // 统一路径校验：使用 canonicalPath.startsWith(root) 校验文件路径必须在允许的根目录下
+        // 同步离线版本 isMediaPathAllowed 安全实现，供 readFileAsBase64/deleteFile/openFile 共用
+        // ★ 兼容新旧两个目录（惠康中医处方 / 本能中医处方），避免旧文件无法打开
+        private boolean isMediaPathAllowed(String filePath) {
+            try {
+                if (filePath == null || filePath.isEmpty()) return false;
+                File f = new File(filePath);
+                String canonicalPath = f.getCanonicalPath();
+                for (File dir : getAllMediaDirs()) {
+                    if (dir != null) {
+                        String dirPath = dir.getCanonicalPath();
+                        if (!dirPath.isEmpty() && canonicalPath.startsWith(dirPath)) return true;
+                    }
                 }
+                Log.w(TAG, "isMediaPathAllowed 拒绝非白名单路径: " + canonicalPath);
+                return false;
+            } catch (Exception e) {
+                Log.e(TAG, "isMediaPathAllowed 异常: " + filePath, e);
+                return false;
             }
-            Log.w(TAG, "isMediaPathAllowed 拒绝非白名单路径: " + canonicalPath);
-            return false;
-        } catch (Exception e) {
-            Log.e(TAG, "isMediaPathAllowed 异常: " + filePath, e);
-            return false;
         }
-    }
 
         private String getCurrentMonthFolder() {
             java.util.Calendar cal = java.util.Calendar.getInstance();
@@ -1381,7 +1480,7 @@ public class MainActivity extends BridgeActivity {
         }
 
         // ------------------------------------------------------------------
-        // ★ License/加密/Toast/quitApp（从 NativeBridgePlugin 迁移，方向3统一架构）
+        // ★ License/加密/Toast（从 NativeBridgePlugin 迁移，方向3统一架构）
         // ------------------------------------------------------------------
         private LicenseManager licenseManager;
 
