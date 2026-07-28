@@ -26,9 +26,9 @@ echo   (Clean build + hash verify + sig inject)
 echo ============================================
 echo.
 
-REM Step A: First build (default mode with full security)
+REM Step A: First build (default mode with full security, skip config edit)
 echo [Step A] First build (default mode)...
-call build-app.bat
+call build-app.bat --skip-config
 if errorlevel 1 (
     echo [ERROR] First build failed
     if not defined NO_PAUSE pause
@@ -55,7 +55,7 @@ echo.
 
 REM Step C: Rebuild with strict signature mode
 echo [Step C] Rebuilding (strict signature mode)...
-call build-app.bat
+call build-app.bat --skip-config
 if errorlevel 1 (
     echo [ERROR] Strict rebuild failed
     if not defined NO_PAUSE pause
