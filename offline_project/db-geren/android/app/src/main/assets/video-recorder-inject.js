@@ -475,6 +475,35 @@
     // ========================================================================
     // 5. 文件名生成
     // ========================================================================
+
+    // 预查最近保存处方的患者姓名和编号（支持先拍照后录入姓名的流程）
+    // 异步查询 IndexedDB，结果写入 window.__latestPrescriptionPatientName / __latestPrescriptionNo
+    function preloadLatestPrescriptionInfo() {
+        try {
+            if (typeof getAllUserPrescriptions !== 'function') return;
+            getAllUserPrescriptions().then(function (prescriptions) {
+                if (!prescriptions || !prescriptions.length) return;
+                // 按 createdAt 降序找最近一条
+                var latest = prescriptions[0];
+                for (var i = 1; i < prescriptions.length; i++) {
+                    if ((prescriptions[i].createdAt || 0) > (latest.createdAt || 0)) {
+                        latest = prescriptions[i];
+                    }
+                }
+                if (latest.patientName) {
+                    window.__latestPrescriptionPatientName = latest.patientName;
+                }
+                if (latest.prescriptionNo) {
+                    window.__latestPrescriptionNo = latest.prescriptionNo;
+                }
+            }).catch(function (e) {
+                console.warn('[video-recorder] 预查最近处方失败:', e);
+            });
+        } catch (e) {
+            console.warn('[video-recorder] preloadLatestPrescriptionInfo 异常:', e);
+        }
+    }
+
     function generateFileName(type, subtype) {
         var patientName = '';
         var prescriptionNo = '';
@@ -487,10 +516,18 @@
             var nameSpan = document.querySelector('.patient-name, [data-patient-name]');
             if (nameSpan) patientName = (nameSpan.textContent || '').trim();
         }
+        // 回退1：表单为空时，使用最近保存处方的患者姓名（支持先拍照后录入姓名的流程）
+        if (!patientName && window.__latestPrescriptionPatientName) {
+            patientName = window.__latestPrescriptionPatientName;
+        }
 
         var noEl = document.querySelector('input[name="prescriptionNo"], #prescriptionNo, [data-field="prescriptionNo"]');
         if (noEl) {
             prescriptionNo = (noEl.value || noEl.textContent || '').trim();
+        }
+        // 回退1：表单为空时，使用最近保存处方的编号
+        if (!prescriptionNo && window.__latestPrescriptionNo) {
+            prescriptionNo = window.__latestPrescriptionNo;
         }
 
         var sanitizeStr = function (s) {
@@ -526,6 +563,9 @@
         injectStyles();
         var existing = document.getElementById('cloudVrOverlay');
         if (existing) existing.remove();
+
+        // 预查最近保存处方的患者姓名（支持先拍照后录入姓名的流程）
+        preloadLatestPrescriptionInfo();
 
         var overlay = document.createElement('div');
         overlay.id = 'cloudVrOverlay';
@@ -840,6 +880,9 @@
         injectStyles();
         var existing = document.getElementById('cloudVrOverlay');
         if (existing) existing.remove();
+
+        // 预查最近保存处方的患者姓名（支持先拍照后录入姓名的流程）
+        preloadLatestPrescriptionInfo();
 
         currentCaptureStep = 1;
         capturedPhotos = [];
