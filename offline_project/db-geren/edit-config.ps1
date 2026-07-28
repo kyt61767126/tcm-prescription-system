@@ -137,11 +137,13 @@ function Edit-ClinicConfig {
         $configJsonNoSig = $config | Select-Object -Property * -ExcludeProperty configSignature | ConvertTo-Json -Depth 10
         [System.IO.File]::WriteAllText($configPath, $configJsonNoSig, $utf8NoBom)
 
-        $signContent = "$($config.clinicName)`|$($config.doctorName)`|$($config.edition)`|$($config.configIssuedAt)"
+        # 构建 HMAC 签名内容：用 -join 拼接，避免双引号字符串中 | 被解析为管道操作符
+        $signParts = @($config.clinicName, $config.doctorName, $config.edition, $config.configIssuedAt)
+        $signContent = $signParts -join '|'
         $hmac = New-Object System.Security.Cryptography.HMACSHA256
         $hmac.Key = [System.Text.Encoding]::UTF8.GetBytes($CONFIG_SIGN_KEY)
         $hashBytes = $hmac.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($signContent))
-        $configSignature = ($hashBytes | ForEach-Object { $_.ToString("x2") }) -join ''
+        $configSignature = ($hashBytes | ForEach-Object { $_.ToString('x2') }) -join ''
         $config | Add-Member -NotePropertyName configSignature -NotePropertyValue $configSignature -Force
 
         $configJson = $config | ConvertTo-Json -Depth 10
