@@ -39,9 +39,9 @@ if errorlevel 1 (
 echo [OK] Signature hash injected
 echo.
 
-REM Step C: Rebuild with strict signature mode
+REM Step C: Rebuild with strict signature mode (skip config edit, already done in Step A)
 echo [Step C] Rebuilding (strict signature mode)...
-call build-app.bat
+call build-app.bat --skip-config
 if errorlevel 1 (
     echo [ERROR] Strict rebuild failed
     if not defined NO_PAUSE pause
