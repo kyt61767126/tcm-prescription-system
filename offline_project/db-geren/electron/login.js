@@ -11,9 +11,7 @@
     const KEY_CLINIC_NAME = 'local_clinicName';
 
     const DEFAULT_USERS = [
-        { username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin' },
-        { username: 'doctor1', password: '6861055dc561644683c0e517c4e2eb68cfb5ba234ccc4c6da7fc78071771b1b1', name: '张医生', role: 'user' },
-        { username: 'doctor2', password: '6861055dc561644683c0e517c4e2eb68cfb5ba234ccc4c6da7fc78071771b1b1', name: '李医生', role: 'user' }
+        { username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin' }
     ];
 
     const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
@@ -111,7 +109,7 @@
 
     function loadClinicName(config) {
         const name = localStorage.getItem(KEY_CLINIC_NAME) || config.clinicName;
-        $('clinicName').textContent = name || '卢二灼中医诊所';
+        $('clinicName').textContent = name || '中医诊所';
     }
 
     // 缓存登录用户信息

@@ -29,14 +29,6 @@ let sharedSession;
 let currentLoggedInUser = null;
 const SESSION_PARTITION = 'persist:tcm-prescription-cloud';
 
-// ★ 诊断日志：输出到 stdout + 文件（临时诊断用，定位"表格消失/历史不显示"问题）
-const DIAG_LOG_PATH = path.join(app.getPath('userData'), 'diagnose.log');
-function diagLog(tag, msg) {
-    const line = `[${new Date().toISOString()}] [${tag}] ${typeof msg === 'string' ? msg : JSON.stringify(msg)}`;
-    console.log(line);
-    try { require('fs').appendFileSync(DIAG_LOG_PATH, line + '\n'); } catch(e) {}
-}
-
 // 全局异常捕获，避免静默崩溃
 process.on('uncaughtException', (err) => {
     console.error('[uncaughtException]', err && err.stack ? err.stack : err);
@@ -321,22 +313,7 @@ function createMainWindow() {
     // ★ P1-A6：DevTools 反调试（仅打包环境生效）
     installDevToolsGuard(mainWindow.webContents);
 
-    // ★ 诊断：捕获渲染进程 console.log，输出到主进程 stdout + 日志文件
-    mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
-        const levelStr = ['LOG', 'WARN', 'ERROR'][level] || 'LOG';
-        diagLog(`renderer:${levelStr}`, `${message} (${path.basename(sourceId)}:${line})`);
-    });
-
-    mainWindow.webContents.on('did-finish-load', () => {
-        diagLog('main:did-finish-load', '主窗口 index.html 加载完成');
-    });
-
-    mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-        diagLog('main:did-fail-load', `加载失败 code=${errorCode} desc=${errorDescription} url=${validatedURL}`);
-    });
-
     mainWindow.webContents.on('dom-ready', async () => {
-        diagLog('main:dom-ready', `主窗口 DOM ready, currentLoggedInUser=${currentLoggedInUser ? currentLoggedInUser.username : 'null'}`);
         // ★修复登录界面闪现（2026-07-19）：
         // 原因：index.html 中 loginOverlay 默认 style="display:flex;visibility:visible;"
         //       dom-ready 时 loginOverlay 已渲染显示，但 checkLoginStatus() 是异步执行
@@ -500,12 +477,6 @@ function createLoginWindow() {
     // ★ P1-A6：DevTools 反调试（仅打包环境生效）
     installDevToolsGuard(loginWindow.webContents);
 
-    // ★ 诊断：捕获登录窗口渲染进程日志
-    loginWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
-        const levelStr = ['LOG', 'WARN', 'ERROR'][level] || 'LOG';
-        diagLog(`login-renderer:${levelStr}`, `${message} (${path.basename(sourceId)}:${line})`);
-    });
-
     loginWindow.loadFile(path.join(__dirname, 'login.html'));
 
     loginWindow.on('closed', () => {
@@ -599,7 +570,6 @@ app.whenReady().then(async () => {
         }
     });
 
-    diagLog('app:ready', 'app.whenReady 完成，准备创建 loginWindow');
     createLoginWindow();
 
     app.on('activate', () => {
@@ -1210,10 +1180,8 @@ ipcMain.handle('get-user-data', (event, key) => getUserData(key));
 
 // 登录成功：保存用户、关闭登录窗口、打开主窗口
 ipcMain.handle('login-success', async (event, userData) => {
-    diagLog('ipc:login-success', `userData=${userData ? JSON.stringify({username: userData.username, role: userData.role, name: userData.name, hasToken: !!userData.token}) : 'null'}`);
     try {
         await saveLoginState(true, userData);
-        diagLog('ipc:login-success', `saveLoginState后 currentLoggedInUser=${currentLoggedInUser ? currentLoggedInUser.username : 'null'}`);
         if (loginWindow && !loginWindow.isDestroyed()) {
             loginWindow.close();
         }
@@ -1222,7 +1190,7 @@ ipcMain.handle('login-success', async (event, userData) => {
         }
         return { success: true };
     } catch (e) {
-        diagLog('ipc:login-success', `异常: ${e.message}\n${e.stack}`);
+        console.error('login-success 异常:', e);
         return { success: false, error: e.message };
     }
 });
@@ -1230,7 +1198,6 @@ ipcMain.handle('login-success', async (event, userData) => {
 // ★修复：preload.js 调用的是 get-logged-in-user（曾只有 get-current-user 导致 IPC 不匹配）
 // 已删除冗余的 get-current-user handler，统一使用 get-logged-in-user
 ipcMain.handle('get-logged-in-user', async () => {
-    diagLog('ipc:get-logged-in-user', `返回 currentLoggedInUser=${currentLoggedInUser ? currentLoggedInUser.username : 'null'}`);
     return currentLoggedInUser;
 });
 

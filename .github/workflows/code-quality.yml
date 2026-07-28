@@ -66,6 +66,26 @@ jobs:
           done
           echo "✅ legacy 目录检查完成"
 
+      - name: Check .bak file residues
+        shell: bash
+        run: |
+          echo "=== 检查 .bak 残留文件 ==="
+          # P3-3: 扫描代码中的 .bak 文件残留（编辑工具或手动备份遗留）
+          # 排除 node_modules、build 输出、.git 等目录
+          BAK_FILES=$(find . -type f -name "*.bak" \
+            -not -path "*/node_modules/*" \
+            -not -path "*/.git/*" \
+            -not -path "*/build/*" \
+            -not -path "*/dist/*" \
+            -not -path "*/app/build/*" \
+            2>/dev/null || true)
+          if [ -n "$BAK_FILES" ]; then
+            echo "❌ 发现 .bak 残留文件（请删除后提交）:"
+            echo "$BAK_FILES"
+            exit 1
+          fi
+          echo "✅ 未发现 .bak 残留文件"
+
       - name: Summary
         run: |
           echo "### 代码质量检查结果" >> $GITHUB_STEP_SUMMARY
@@ -74,3 +94,4 @@ jobs:
           echo "✅ 垃圾文件检查通过" >> $GITHUB_STEP_SUMMARY
           echo "✅ index.html title 一致性检查通过" >> $GITHUB_STEP_SUMMARY
           echo "✅ legacy 目录检查通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ .bak 残留文件检查通过" >> $GITHUB_STEP_SUMMARY
