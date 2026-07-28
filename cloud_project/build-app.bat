@@ -259,16 +259,16 @@ node "%~dp0..\tools\auto-update-downloads.js" cloud
 if errorlevel 1 (
     echo [WARN] Download page auto-update had issues, continuing anyway
 ) else (
-    echo [OK] Download page updated successfully (cloud)
+    echo [OK] Download page updated successfully - cloud
 )
 echo.
 
 echo [7.5/6] Auto-updating download page (geren-cloud)...
 node "%~dp0..\tools\auto-update-downloads.js" geren-cloud
 if errorlevel 1 (
-    echo [WARN] Download page auto-update (geren-cloud) had issues, continuing anyway
+    echo [WARN] Download page auto-update geren-cloud had issues, continuing anyway
 ) else (
-    echo [OK] Download page updated successfully (geren-cloud)
+    echo [OK] Download page updated successfully geren-cloud
 )
 echo.
 
