@@ -1026,11 +1026,11 @@ function Build-AppStrict {
     }
 
     Write-Host ""
-    Write-Host "================================================================" -ForegroundColor Green
-    Write-Host "  APP 严格模式打包完成！" -ForegroundColor Green
-    Write-Host "================================================================" -ForegroundColor Green
+    Write-Host "================================================================" -ForegroundColor Yellow
+    Write-Host "  APP 严格模式打包完成！" -ForegroundColor Yellow
+    Write-Host "================================================================" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  手机 APP: $scriptDir\*.apk（签名严格模式）" -ForegroundColor Green
+    Write-Host "  手机 APP: $scriptDir\*.apk（签名严格模式）" -ForegroundColor Yellow
     Write-Host ""
     return 0
 }

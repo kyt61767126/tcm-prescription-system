@@ -1221,11 +1221,11 @@ function Build-AllStrict {
     }
 
     Write-Host ""
-    Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  一键打包严格模式完成!" -ForegroundColor Green
-    Write-Host "  桌面版: $versionDir\dist\" -ForegroundColor Green
-    Write-Host "  手机版: $versionDir\*.apk (严格模式)" -ForegroundColor Green
-    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host "  一键打包严格模式完成!" -ForegroundColor Yellow
+    Write-Host "  桌面版: $versionDir\dist\" -ForegroundColor Yellow
+    Write-Host "  手机版: $versionDir\*.apk (严格模式)" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Yellow
     return 0
 }
 
@@ -1286,10 +1286,10 @@ function Build-AppStrict {
     }
 
     Write-Host ""
-    Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  APP 严格模式打包完成!" -ForegroundColor Green
-    Write-Host "  手机版: $versionDir\*.apk (严格模式)" -ForegroundColor Green
-    Write-Host "========================================" -ForegroundColor Green
+    Write-Host "========================================" -ForegroundColor Yellow
+    Write-Host "  APP 严格模式打包完成!" -ForegroundColor Yellow
+    Write-Host "  手机版: $versionDir\*.apk (严格模式)" -ForegroundColor Yellow
+    Write-Host "========================================" -ForegroundColor Yellow
     return 0
 }
 

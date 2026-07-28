@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
@@ -51,11 +51,10 @@ echo [OK] Strict rebuild complete
 echo.
 
 :done
-echo ============================================
-echo   打包成功！
-echo   APK 文件: %~dp0..\惠康中医-定制.apk
-echo   模式: 签名严格模式（已启用防篡改）
-echo ============================================
+powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  打包成功！' -ForegroundColor Yellow; Write-Host '  APK 文件: %~dp0..\惠康中医-定制.apk' -ForegroundColor Yellow; Write-Host '  模式: 签名严格模式（已启用防篡改）' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
 echo.
-if not defined NO_PAUSE pause
+if not defined NO_PAUSE (
+    set "EXIT_KEY="
+    set /p "EXIT_KEY=按 0 或回车键退出: "
+)
 exit /b 0
