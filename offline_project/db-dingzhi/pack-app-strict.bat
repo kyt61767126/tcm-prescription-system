@@ -20,8 +20,10 @@ echo   (APK + signature hash + repack)
 echo ============================================
 echo.
 
+set "NO_PAUSE=1"
 call "%CAP_DIR%\pack-app-strict.bat"
 set "EXIT_CODE=%errorlevel%"
+set "NO_PAUSE="
 
 echo.
 if %EXIT_CODE% neq 0 (
