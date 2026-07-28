@@ -1,0 +1,1732 @@
+package com.benneng.pres;
+
+import android.Manifest;
+import android.content.ContentValues;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
+import android.provider.MediaStore;
+import android.util.Base64;
+import android.util.Log;
+import android.view.View;
+import android.view.Window;
+import android.view.ViewGroup;
+import android.webkit.JavascriptInterface;
+import android.webkit.JsPromptResult;
+import android.webkit.JsResult;
+import android.webkit.PermissionRequest;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceError;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceResponse;
+import android.webkit.WebSettings;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.EditText;
+import android.widget.Toast;
+
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.core.content.FileProvider;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+
+import com.getcapacitor.BridgeActivity;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+
+public class MainActivity extends BridgeActivity {
+
+    // ============ 常量配置 ============
+    private static final String TAG = "TCM_Pres";
+    // 离线APP：本地 assets 页面路径
+    private static final String LOCAL_ASSET_URL = "file:///android_asset/public/index.html";
+    private static final int REQ_CAMERA = 1003;
+    private static final int REQ_STORAGE = 1001;
+
+    private Handler mainHandler;
+    private volatile String cachedVideoRecorderScript = null;
+    private boolean hasDoneFirstResume = false;
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        // 只隐藏标题栏，不使用FLAG_FULLSCREEN（会导致内容延伸到状态栏下面）
+        requestWindowFeature(Window.FEATURE_NO_TITLE);
+
+        super.onCreate(savedInstanceState);
+
+        // T5: 使用主线程 Looper 的 Handler，便于 onDestroy 统一清理
+        mainHandler = new Handler(Looper.getMainLooper());
+
+        // Android 6.0+ 动态申请相机和麦克风权限（录像拍照功能需要）
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                    != PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, REQ_CAMERA);
+            }
+        }
+
+        // Android 9 及以下需要 WRITE_EXTERNAL_STORAGE 权限保存文件
+        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQ_STORAGE);
+            }
+        }
+
+        // 立即配置 WebView，不延迟，加快启动速度
+        configureWebView();
+
+        // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
+        preloadVideoRecorderScript();
+
+        // ★ 离线APP：加载本地 assets 页面
+        WebView webView = this.getBridge().getWebView();
+        if (webView != null) {
+            webView.loadUrl(LOCAL_ASSET_URL);
+        } else {
+            Log.e(TAG, "onCreate: WebView 为 null，无法加载本地页面");
+        }
+    }
+
+    private void configureWebView() {
+        WebView webView = this.getBridge().getWebView();
+        if (webView == null) {
+            Log.e(TAG, "configureWebView: WebView 为 null");
+            return;
+        }
+
+        // ★ 适配状态栏（解决 Android 16 edge-to-edge 强制模式）
+        // Capacitor BridgeActivity 内部管理 WebView 布局，但 Android 15+ targetSdk=36
+        // 强制 edge-to-edge，WebView 内容会延伸到状态栏下方。
+        // 通过 WindowInsetsListener + 资源 ID 双保险设置 WebView 顶部 padding。
+        final int statusBarHeight = getStatusBarHeightPx();
+        webView.setPadding(0, statusBarHeight, 0, 0);
+        ViewCompat.setOnApplyWindowInsetsListener(webView, (v, insets) -> {
+            Insets systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            Insets cutout = insets.getInsets(WindowInsetsCompat.Type.displayCutout());
+            int insetTop = Math.max(systemBars.top, cutout.top);
+            int finalTop = Math.max(insetTop, statusBarHeight);
+            if (v.getPaddingTop() != finalTop) {
+                v.setPadding(0, finalTop, 0, 0);
+            }
+            return insets;
+        });
+        ViewCompat.requestApplyInsets(webView);
+
+        WebSettings settings = webView.getSettings();
+
+        // 离线APP：不使用缓存，每次从本地 assets 加载
+        settings.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        // 启用硬件加速，提升页面渲染性能
+        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        settings.setDomStorageEnabled(true);
+        settings.setDatabaseEnabled(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setUseWideViewPort(true);
+        settings.setJavaScriptEnabled(true);
+
+        // ★ 离线APP：允许访问本地文件系统（file:// URL 加载本地页面和资源）
+        settings.setAllowFileAccess(true);
+        settings.setAllowContentAccess(true);
+        settings.setAllowFileAccessFromFileURLs(true);
+        settings.setAllowUniversalAccessFromFileURLs(true);
+        // 允许混合内容（离线页面可能需要加载 http 资源）
+        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+        settings.setTextZoom(100);
+
+        // ★ 禁用表单自动填充（防止 Android Autofill 弹出凭据提示）
+        settings.setSaveFormData(false);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            webView.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+            disableAutofillRecursive(webView);
+            // 拦截 Autofill 服务的所有未完成请求（系统级，最强防线）
+            try {
+                android.view.autofill.AutofillManager afm = (android.view.autofill.AutofillManager) getSystemService(android.view.autofill.AutofillManager.class);
+                if (afm != null) {
+                    afm.cancel();
+                }
+            } catch (Throwable ignored) {}
+        }
+
+        webView.clearHistory();
+
+        // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
+        webView.setWebChromeClient(new WebChromeClient() {
+            // 授权摄像头和麦克风权限（录像拍照功能需要）
+            @Override
+            public void onPermissionRequest(PermissionRequest request) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    for (String permission : request.getResources()) {
+                        if (permission.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE) ||
+                            permission.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                            request.grant(request.getResources());
+                            return;
+                        }
+                    }
+                    request.deny();
+                }
+            }
+
+            @Override
+            public boolean onJsPrompt(WebView view, String url, String message, String defaultValue, JsPromptResult result) {
+                // 创建输入框，显示默认值（原账户信息）
+                final EditText input = new EditText(view.getContext());
+                input.setLayoutParams(new ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ));
+                if (defaultValue != null && !defaultValue.isEmpty()) {
+                    input.setText(defaultValue);
+                    // 选中所有文本，方便用户直接修改
+                    input.selectAll();
+                }
+
+                // 显示带输入框的弹框
+                new android.app.AlertDialog.Builder(view.getContext())
+                    .setTitle("提示")
+                    .setMessage(message)
+                    .setView(input)
+                    .setPositiveButton("确定", (dialog, which) -> {
+                        String value = input.getText().toString();
+                        result.confirm(value);
+                    })
+                    .setNegativeButton("取消", (dialog, which) -> result.cancel())
+                    .setOnCancelListener(dialog -> result.cancel())
+                    .show();
+                return true;
+            }
+
+            @Override
+            public boolean onJsAlert(WebView view, String url, String message, JsResult result) {
+                new android.app.AlertDialog.Builder(view.getContext())
+                    .setTitle("提示")
+                    .setMessage(message)
+                    .setPositiveButton("确定", (dialog, which) -> result.confirm())
+                    .setOnCancelListener(dialog -> result.cancel())
+                    .show();
+                return true;
+            }
+
+            @Override
+            public boolean onJsConfirm(WebView view, String url, String message, JsResult result) {
+                new android.app.AlertDialog.Builder(view.getContext())
+                    .setTitle("提示")
+                    .setMessage(message)
+                    .setPositiveButton("确定", (dialog, which) -> result.confirm())
+                    .setNegativeButton("取消", (dialog, which) -> result.cancel())
+                    .setOnCancelListener(dialog -> result.cancel())
+                    .show();
+                return true;
+            }
+        });
+
+        // 添加 JavaScript 接口，供网页调用退出 APP（点击"退出"按钮时直接返回手机主屏）
+        webView.addJavascriptInterface(new Object() {
+            @android.webkit.JavascriptInterface
+            public void exit() {
+                // 必须在主线程执行，且用 finishAndRemoveTask 确保真正退出到桌面
+                // postAtFrontOfQueue 插入队列最前面，比 runOnUiThread 更快
+                mainHandler.postAtFrontOfQueue(() -> {
+                    finishAndRemoveTask();
+                });
+            }
+        }, "AndroidAppExit");
+
+        // 注入 NativeBridge：提供 savePrescriptionImage/saveVideoFile 等原生保存能力
+        // 录像拍照功能通过此桥接将文件保存到本地文件系统（按月份分类 YYYY-MM）
+        // 注意：nativeBridge 对象由 NativeBridgePlugin（Capacitor插件）自动注册，
+        //       此处注册的 AndroidNative 提供更完整的 invoke 分发能力（供 video-recorder-inject.js 使用）
+        webView.addJavascriptInterface(new NativeBridge(), "AndroidNative");
+
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                // 离线APP：允许加载本地 file:// URL，拦截外部导航
+                String url = request.getUrl().toString();
+                if (url.startsWith("file://") || url.startsWith("content://")) {
+                    return false; // 允许加载本地 URL
+                }
+                return true; // 拦截外部导航，防止重定向到钓鱼站点
+            }
+
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                // 提前注入 anti-autofill（虽然 DOM 可能未加载完，但 evaluateJavascript 会排队执行）
+                injectAutocompleteOff(view);
+            }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                int statusBarHeightPx = getStatusBarHeightPx();
+                float density = getResources().getDisplayMetrics().density;
+                int cssPx = (int) (statusBarHeightPx / density);
+                view.evaluateJavascript("window.__STATUS_BAR_HEIGHT__ = " + cssPx + ";", null);
+                injectAutocompleteOff(view);
+
+                // ★ 注入 electronAPI 桥接（离线APP特有）
+                mainHandler.post(() -> injectElectronApiShim(view));
+
+                // ★ 注入状态栏适配
+                mainHandler.post(() -> injectStatusBarFix(view));
+
+                // ★ 注入键盘适配
+                mainHandler.post(() -> injectKeyboardAdapter(view));
+
+                // 布局修复脚本立即注入（体积小，影响UI布局）
+                mainHandler.post(() -> injectLayoutFixScript(view));
+
+                // 录像拍照脚本延迟到页面渲染稳定后注入（避免40KB脚本同步执行阻塞UI）
+                // 300ms 是经验值：足够 React 完成首屏渲染，又不至于让用户感觉录像功能迟钝
+                mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
+            }
+
+            // 网络错误处理，避免白屏
+            @Override
+            public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+                super.onReceivedError(view, request, error);
+                // 只处理主框架错误，子资源错误不影响页面整体展示
+                if (request.isForMainFrame()) {
+                    showErrorPage(view);
+                }
+            }
+
+            @Override
+            public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
+                super.onReceivedHttpError(view, request, response);
+                // 主框架 5xx 错误显示错误页
+                if (request.isForMainFrame() && response.getStatusCode() >= 500) {
+                    showErrorPage(view);
+                }
+            }
+        });
+    }
+
+    /**
+     * 显示本地错误页（页面加载失败时避免白屏）
+     */
+    private void showErrorPage(WebView webView) {
+        String errorHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
+            "<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>" +
+            "<style>" +
+            "  body { font-family: -apple-system, sans-serif; text-align: center; padding: 60px 24px; background: #f9fafb; color: #374151; }" +
+            "  h2 { font-size: 20px; margin-bottom: 12px; color: #111827; }" +
+            "  p { font-size: 14px; color: #6b7280; margin-bottom: 24px; line-height: 1.6; }" +
+            "  button { padding: 12px 28px; font-size: 15px; background: #2563eb; color: #fff; " +
+            "    border: none; border-radius: 6px; -webkit-tap-highlight-color: transparent; }" +
+            "  button:active { background: #1d4ed8; }" +
+            "</style></head><body>" +
+            "<h2>页面加载失败</h2>" +
+            "<p>无法加载本地页面，请重试</p>" +
+            "<button onclick=\"location.href='" + LOCAL_ASSET_URL + "'\">重新加载</button>" +
+            "</body></html>";
+        webView.loadDataWithBaseURL(LOCAL_ASSET_URL, errorHtml, "text/html", "UTF-8", null);
+    }
+
+    /**
+     * dp 转 px
+     */
+    private int dpToPx(int dp) {
+        float density = getResources().getDisplayMetrics().density;
+        return (int) (dp * density + 0.5f);
+    }
+
+    /**
+     * NativeBridge 调用来源校验，仅允许本地 file:// 页面调用
+     * 防止 XSS 注入页面或第三方页面调用 readFileAsBase64 读取沙箱任意文件
+     */
+    private boolean isCallerAllowed() {
+        try {
+            WebView webView = this.getBridge().getWebView();
+            if (webView == null) return false;
+            String url = webView.getUrl();
+            if (url == null) return false;
+            // 允许 file:// (离线assets) 和 https://localhost (Capacitor内部URL)
+            return url.startsWith("file://") || url.startsWith("https://localhost") || url.startsWith("http://localhost");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /**
+     * 获取状态栏高度（px）
+     */
+    private int getStatusBarHeightPx() {
+        int result = 0;
+        int resourceId = getResources().getIdentifier("status_bar_height", "dimen", "android");
+        if (resourceId > 0) {
+            result = getResources().getDimensionPixelSize(resourceId);
+        }
+        return result;
+    }
+
+    /**
+     * ★ 注入 electronAPI 桥接（离线APP特有）
+     * 将 window.electronAPI 的方法代理到 nativeBridge（由 NativeBridgePlugin 通过
+     * addJavascriptInterface 注入的对象），使原本为 Electron 设计的网页能在
+     * Android 离线环境中运行。
+     *
+     * 注意：本方法注入的是基础版本，video-recorder-inject.js 加载后会覆盖为更完整的版本
+     * （包含分片上传、录像拍照 overlay 等），并提供基于 AndroidNative.invoke 的会话方法。
+     */
+    private void injectElectronApiShim(WebView webView) {
+        String js = "(function(){" +
+            "  if (window.electronAPI && window.electronAPI.__nativeBridgeProxy) return;" +
+            "  function callNative(name, args) {" +
+            "    try { return AndroidNative.invoke(name, JSON.stringify(args)); }" +
+            "    catch(e){ return JSON.stringify({success:false,error:String(e)}); }" +
+            "  }" +
+            "  function callNativeAsync(name, args) {" +
+            "    return new Promise(function(resolve, reject) {" +
+            "      try {" +
+            "        var r = callNative(name, args);" +
+            "        var obj = JSON.parse(r);" +
+            "        resolve(obj);" +
+            "      } catch(e) { reject(e); }" +
+            "    });" +
+            "  }" +
+            "  window.electronAPI = {" +
+            "    __nativeBridgeProxy: true," +
+            "    isElectron: true," +
+            "    saveUserData: function(key, data) { return new Promise(function(resolve){ try { localStorage.setItem(key, JSON.stringify(data)); resolve(true); } catch(e){ resolve(false); } }); }," +
+            "    getUserData: function(key) { return new Promise(function(resolve){ try { var v = localStorage.getItem(key); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
+            "    loginSuccess: function(user) { return new Promise(function(resolve){ try { localStorage.setItem('currentUser', JSON.stringify(user)); resolve(true); } catch(e){ resolve(false); } }); }," +
+            "    getCurrentUser: function() { return new Promise(function(resolve){ try { var v = localStorage.getItem('currentUser'); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
+            "    saveBackupFile: function(filename, content) { return callNativeAsync('saveBackupFile', {jsonStr: content, fileName: filename}); }," +
+            "    readFileAsBase64: function(filePath) {" +
+            "      return new Promise(function(resolve, reject){" +
+            "        try {" +
+            "          var r = callNative('readFileAsBase64', {filePath: filePath});" +
+            "          var obj = JSON.parse(r);" +
+            "          resolve(obj);" +
+            "        } catch(e) { resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
+            "    openFile: function(filePath, mimeType) { try { nativeBridge.openFile(filePath, mimeType||''); } catch(e){ console.error('openFile失败:', e); } }," +
+            "    quitApp: function() { nativeBridge.quitApp(); }," +
+            "    printPrescription: function(html) { nativeBridge.printHtml(html); }," +
+            "    showToast: function(message) { nativeBridge.showToast(message); }," +
+            "    encryptData: function(data, key) { return nativeBridge.encryptData(data, key); }," +
+            "    decryptData: function(encryptedData, key) { return nativeBridge.decryptData(encryptedData, key); }," +
+            "    savePrescriptionImage: function(imageData, fileName) { return callNativeAsync('savePrescriptionImage', {imageData: imageData, fileName: fileName}); }," +
+            "    saveVideoFile: function(base64Data, fileName) { return callNativeAsync('saveVideoFile', {base64Data: base64Data, fileName: fileName}); }," +
+            "    startMediaSession: function(fileName) { return callNativeAsync('startMediaSession', {fileName: fileName}); }," +
+            "    appendMediaChunk: function(sessionId, chunkBase64, index, total) { return callNativeAsync('appendMediaChunk', {sessionId: sessionId, chunkBase64: chunkBase64, index: index, total: total}); }," +
+            "    commitMediaSession: function(sessionId, fileName, type) { return callNativeAsync('commitMediaSession', {sessionId: sessionId, fileName: fileName, type: type||'image'}); }," +
+            "    findMediaFiles: function(patientName, prescriptionNo, createdAt) { return callNativeAsync('findMediaFiles', {patientName: patientName||'', prescriptionNo: prescriptionNo||'', createdAt: createdAt||''}); }," +
+            "    startReadSession: function(filePath) { return callNativeAsync('startReadSession', {filePath: filePath}); }," +
+            "    readNextChunk: function(sessionId) { return callNativeAsync('readNextChunk', {sessionId: sessionId}); }," +
+            "    closeReadSession: function(sessionId) { callNative('closeReadSession', {sessionId: sessionId}); }," +
+            "    license: {" +
+            "      getStatus: function() { return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.getLicenseStatus())); } catch(e){ resolve({valid:false,error:String(e)}); } }); }," +
+            "      validate: function() { return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.validateLicense())); } catch(e){ resolve({valid:false,message:String(e)}); } }); }," +
+            "      activate: { importLicense: function(){ return Promise.resolve({success:false, error:'APP端不支持离线license文件导入，请使用在线激活'}); } }," +
+            "      setTrialDays: function(days){ return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.setTrialDays(days))); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
+            "      getTrialDays: function(){ return new Promise(function(resolve){ try { resolve({success:true, trialDays: nativeBridge.getTrialDays()}); } catch(e){ resolve({success:false, trialDays:7, error:String(e)}); } }); }," +
+            "      verifyOnline: function(){ return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.verifyOnline())); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
+            "      getActivationRecord: function(){ return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.getActivationRecord())); } catch(e){ resolve({success:false,error:String(e)}); } }); }" +
+            "    }," +
+            "    activate: {" +
+            "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
+            "      submit: function(code, user){ return new Promise(function(resolve){ try { resolve(JSON.parse(nativeBridge.activateLicense(code, user||''))); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
+            "      close: function(){ return Promise.resolve({success:true}); }," +
+            "      restart: function(){ return Promise.resolve({success:true}); }" +
+            "    }" +
+            "  };" +
+            "})();";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * ★ 注入状态栏适配脚本（离线APP特有）
+     * 根据 window.__STATUS_BAR_HEIGHT__ 设置 body padding-top，
+     * 防止内容被状态栏遮挡。
+     * 注意：onCreate 中已通过 WebView setPadding 处理状态栏，此 JS 为补充适配。
+     */
+    private void injectStatusBarFix(WebView webView) {
+        String js = "(function(){" +
+            "  if (window.__statusBarFixApplied) return;" +
+            "  window.__statusBarFixApplied = true;" +
+            "  function apply(){" +
+            "    var h = window.__STATUS_BAR_HEIGHT__ || 0;" +
+            "    if (h <= 0) { setTimeout(apply, 50); return; }" +
+            "    var style = document.getElementById('status-bar-fix');" +
+            "    if (!style) {" +
+            "      style = document.createElement('style');" +
+            "      style.id = 'status-bar-fix';" +
+            "      document.head.appendChild(style);" +
+            "    }" +
+            "    style.textContent = 'body{padding-top:' + h + 'px !important;}';" +
+            "  }" +
+            "  apply();" +
+            "})();";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * ★ 注入键盘适配脚本（离线APP特有）
+     * 监听窗口 resize 事件，处理虚拟键盘弹出/收起时的视口变化，
+     * 并确保输入框在键盘弹出时滚动到可见区域。
+     */
+    private void injectKeyboardAdapter(WebView webView) {
+        String js = "(function(){" +
+            "  if (window.__keyboardAdapterApplied) return;" +
+            "  window.__keyboardAdapterApplied = true;" +
+            "  var originalHeight = window.innerHeight;" +
+            "  window.addEventListener('resize', function() {" +
+            "    var currentHeight = window.innerHeight;" +
+            "    if (currentHeight < originalHeight - 50) {" +
+            "      document.body.classList.add('keyboard-visible');" +
+            "    } else {" +
+            "      document.body.classList.remove('keyboard-visible');" +
+            "    }" +
+            "  });" +
+            "  document.addEventListener('focusin', function(e) {" +
+            "    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {" +
+            "      setTimeout(function() {" +
+            "        e.target.scrollIntoView({ behavior: 'smooth', block: 'center' });" +
+            "      }, 300);" +
+            "    }" +
+            "  });" +
+            "})();";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * ★ 彻底禁用密码输入框的自动填充（防止 Android Autofill 弹出旧版应用名称提示）
+     * 问题：点击密码输入框时，Android 系统弹出"惠康中医诊所管理系统"凭据提示（旧名"本能中医处方系统"）
+     * 根因：Android Autofill 通过 Accessibility 虚拟节点树直接访问 WebView 内部 input，
+     *       View 级别 setImportantForAutofill(NO) 无法阻止；Autofill 提示显示系统数据库中的旧应用名
+     * 彻底修复（三层防线）：
+     *   1. AndroidManifest android:importantForAutofill="no"（系统级禁用，最强防线）
+     *   2. disableAutofillRecursive 递归设置所有子 View IMPORTANT_FOR_AUTOFILL_NO（双保险）
+     *   3. 本方法 JS 注入：MutationObserver 持续监控动态密码框
+     *      + data-lpignore/data-form-type/role 等多属性，防止第三方密码管理器识别
+     *   注意：不可将 type='password' 改为 type='text' + webkitTextSecurity
+     *         HarmonyOS 4.2 上 webkitTextSecurity 不生效，且 type='text' 导致输入法弹出旧应用名候选词
+     */
+    private void injectAutocompleteOff(WebView webView) {
+        String js = "(function(){" +
+            "  function np(p){" +
+            "    if (!p || p.__bnAf) return;" +
+            "    p.__bnAf = 1;" +
+            "    p.setAttribute('autocomplete', 'new-password');" +
+            "    p.setAttribute('data-lpignore', 'true');" +
+            "    p.setAttribute('data-form-type', 'other');" +
+            "    p.setAttribute('role', 'textbox');" +
+            "    p.setAttribute('readonly', '');" +
+            "    p.addEventListener('focus', function() { this.removeAttribute('readonly'); });" +
+            "  }" +
+            "  function scan(){" +
+            "    var s = 'input[type=\"password\"],input[autocomplete*=\"password\"],input[name*=\"password\"],input[name*=\"pwd\"]';" +
+            "    var l = document.querySelectorAll(s);" +
+            "    for (var i = 0; i < l.length; i++) { np(l[i]); }" +
+            "  }" +
+            "  scan();" +
+            "  if (!window.__bnAfObs) {" +
+            "    window.__bnAfObs = new MutationObserver(function() { scan(); });" +
+            "    var t = document.body || document.documentElement;" +
+            "    if (t) window.__bnAfObs.observe(t, {childList: true, subtree: true, attributes: true, attributeFilter: ['type']});" +
+            "  }" +
+            "})();";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * 递归设置 View 及所有子 View 的 importantForAutofill=NO（双保险）
+     * 配合 AndroidManifest 的 android:importantForAutofill="no" 彻底禁用 Autofill
+     */
+    private void disableAutofillRecursive(View view) {
+        if (view == null) return;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            view.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                disableAutofillRecursive(group.getChildAt(i));
+            }
+        }
+    }
+
+    /**
+     * 注入布局修正脚本
+     * 注意：状态栏已由 Android 主题处理（windowTranslucentStatus=false + statusBarColor），
+     * WebView 内容从状态栏下方开始，不再注入 padding-top，避免顶部出现双重空白。
+     */
+    private void injectLayoutFixScript(WebView webView) {
+        String js = "(function() {" +
+            "  if (window._layoutFixInjected) return;" +
+            "  window._layoutFixInjected = true;" +
+            "  var style = document.createElement('style');" +
+            "  style.id = 'app-layout-fix';" +
+            "  style.textContent = '" +
+            "    html, body { box-sizing: border-box !important; }" +
+            "    .top-tabs-left, .top-tabs { position: relative !important; z-index: 10 !important; }" +
+            "  ';" +
+            "  document.head.appendChild(style);" +
+            "})();";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * 预加载录像拍照脚本到内存缓存（在后台线程执行，避免阻塞UI）
+     * 首次调用会触发assets读取，后续调用直接使用缓存
+     */
+    private void preloadVideoRecorderScript() {
+        if (cachedVideoRecorderScript != null) return;
+        new Thread(() -> {
+            try {
+                InputStream is = getAssets().open("video-recorder-inject.js");
+                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = is.read(buffer)) > 0) {
+                    baos.write(buffer, 0, len);
+                }
+                is.close();
+                cachedVideoRecorderScript = baos.toString("UTF-8");
+                Log.d(TAG, "录像拍照脚本预加载完成，长度: " + cachedVideoRecorderScript.length());
+            } catch (Exception e) {
+                Log.e(TAG, "录像拍照脚本预加载失败", e);
+            }
+        }, "preload-vr-script").start();
+    }
+
+    /**
+     * 同步读取录像拍照脚本（带缓存）
+     * 优先使用预加载缓存，未命中则同步读取并缓存
+     */
+    private String getVideoRecorderScript() {
+        if (cachedVideoRecorderScript != null) return cachedVideoRecorderScript;
+        try {
+            InputStream is = getAssets().open("video-recorder-inject.js");
+            java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            int len;
+            while ((len = is.read(buffer)) > 0) {
+                baos.write(buffer, 0, len);
+            }
+            is.close();
+            cachedVideoRecorderScript = baos.toString("UTF-8");
+            Log.d(TAG, "录像拍照脚本同步加载完成，长度: " + cachedVideoRecorderScript.length());
+        } catch (Exception e) {
+            Log.e(TAG, "录像拍照脚本同步加载失败", e);
+            cachedVideoRecorderScript = "";
+        }
+        return cachedVideoRecorderScript;
+    }
+
+    /**
+     * 注入录像拍照功能脚本（使用内存缓存，避免每次IO）
+     * 脚本包含：electronAPI shim（完整版）、录像/拍照 overlay、本地保存逻辑
+     * 注：注入逻辑采用懒加载策略，shim 立即注入，样式和按钮延迟到首次打开overlay时
+     */
+    private void injectVideoRecorderScript(WebView webView) {
+        String script = getVideoRecorderScript();
+        if (script == null || script.isEmpty()) {
+            Log.e(TAG, "录像拍照脚本为空，跳过注入");
+            return;
+        }
+        webView.evaluateJavascript(script, null);
+        Log.d(TAG, "录像拍照脚本注入成功");
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        WebView webView = this.getBridge().getWebView();
+        if (webView != null) {
+            // ★ 优化：onCreate 已配置 WebSettings，onResume 不再重复设置
+            // 重复设置 WebSettings 会触发 WebView 重新计算配置，影响恢复速度
+            if (hasDoneFirstResume) {
+                // 非首次恢复：通过JS触发页面内同步逻辑（SyncEngine+药品刷新），不整页reload避免丢失编辑状态
+                mainHandler.postDelayed(() -> {
+                    if (webView != null) {
+                        webView.evaluateJavascript(
+                            "(function(){" +
+                            "  window._layoutFixInjected = false;" +
+                            "  if (typeof window.__onAppResume === 'function') { window.__onAppResume(); }" +
+                            "})();", null);
+                        injectLayoutFixScript(webView);
+                    }
+                }, 100);
+            } else {
+                hasDoneFirstResume = true;
+            }
+        }
+    }
+
+    @Override
+    public void onBackPressed() {
+        WebView webView = this.getBridge().getWebView();
+        if (webView != null && webView.canGoBack()) {
+            webView.goBack();
+        } else {
+            super.onBackPressed();
+        }
+    }
+
+    // T4: onDestroy 释放 WebView 资源，防止内存泄漏
+    // 注意：BridgeActivity 的 onDestroy 是 public，覆盖时必须保持 public
+    @Override
+    public void onDestroy() {
+        // T5: 清理所有待执行的 Handler 回调，防止 Activity 销毁后延迟任务执行导致崩溃
+        if (mainHandler != null) {
+            mainHandler.removeCallbacksAndMessages(null);
+        }
+        WebView webView = this.getBridge() != null ? this.getBridge().getWebView() : null;
+        if (webView != null) {
+            // 移除 JS Interface，防止持有 Activity 引用
+            webView.removeJavascriptInterface("AndroidAppExit");
+            webView.removeJavascriptInterface("AndroidNative");
+            // 从父视图移除并销毁
+            ViewGroup parent = (ViewGroup) webView.getParent();
+            if (parent != null) {
+                parent.removeView(webView);
+            }
+            webView.removeAllViews();
+            webView.destroy();
+        }
+        super.onDestroy();
+    }
+
+    // ========================================================================
+    // NativeBridge：JavaScript 桥接，提供本地文件保存能力
+    // 录像拍照功能通过此桥接将文件保存到本地文件系统
+    // 保存路径：
+    //   图片：Pictures/惠康中医处方/YYYY-MM/患者姓名_处方编号_photo.png
+    //   视频：Movies/惠康中医处方/YYYY-MM/患者姓名_处方编号_video.webm
+    //
+    // 注意：基础文件操作（saveBackupFile/readFileAsBase64/openFile/quitApp/printHtml 等）
+    //       已由 NativeBridgePlugin（Capacitor插件）通过 nativeBridge 对象提供。
+    //       本类注册为 AndroidNative，提供更完整的 invoke 分发能力（供 video-recorder-inject.js 使用），
+    //       包含分片上传/读取、文件查找、重命名、删除等会话型操作。
+    // ========================================================================
+    public class NativeBridge {
+
+        @JavascriptInterface
+        public void printHtml(final String html) {
+            mainHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    try {
+                        WebView printWebView = new WebView(MainActivity.this);
+                        printWebView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null);
+
+                        PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                        PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter();
+
+                        PrintAttributes attrs = new PrintAttributes.Builder()
+                            .setMediaSize(PrintAttributes.MediaSize.ISO_A5)
+                            .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
+                            .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                            .build();
+
+                        String jobName = "惠康中医处方 " + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.CHINA).format(new java.util.Date());
+                        printManager.print(jobName, printAdapter, attrs);
+                        Log.d(TAG, "printHtml 已调起系统打印: " + jobName);
+                    } catch (Exception e) {
+                        Log.e(TAG, "printHtml 失败", e);
+                        Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public String invoke(String name, String jsonStr) {
+            Log.d(TAG, "NativeBridge.invoke: " + name + ", jsonLen=" + (jsonStr != null ? jsonStr.length() : 0));
+            // P1-6: 调用来源校验（分层策略）
+            // 敏感读取/删除操作必须校验来源，防止 XSS 读取沙箱任意文件
+            // 保存/查找/分片上传操作放宽校验，避免 WebView URL 短暂变化导致功能不可用
+            if (isSensitiveOperation(name) && !isCallerAllowed()) {
+                Log.w(TAG, "NativeBridge.invoke 拒绝非本地调用: " + name);
+                return fail("permission denied").toString();
+            }
+            try {
+                JSONObject args = new JSONObject(jsonStr);
+                switch (name) {
+                    case "savePrescriptionImage":
+                        return savePrescriptionImage(args.optString("imageData", ""),
+                                args.optString("fileName", "")).toString();
+                    case "saveVideoFile":
+                        return saveVideoFile(args.optString("base64Data", ""),
+                                args.optString("fileName", "")).toString();
+                    case "startMediaSession":
+                        return startMediaSession(args.optString("fileName", "")).toString();
+                    case "appendMediaChunk":
+                        return appendMediaChunk(args.optString("sessionId", ""),
+                                args.optString("chunkBase64", ""),
+                                args.optInt("index", 0),
+                                args.optInt("total", 0)).toString();
+                    case "commitMediaSession":
+                        return commitMediaSession(args.optString("sessionId", ""),
+                                args.optString("fileName", ""),
+                                args.optString("type", "image")).toString();
+                    case "getVideoDirectory":
+                        return getVideoDirectory().toString();
+                    case "saveBackupFile":
+                        return saveBackupFile(args.optString("jsonStr", ""),
+                                args.optString("fileName", "")).toString();
+                    case "findMediaFiles":
+                        return findMediaFiles(args.optString("patientName", ""),
+                                args.optString("prescriptionNo", ""),
+                                args.optString("createdAt", "")).toString();
+                    case "openFile":
+                        return openFile(args.optString("filePath", ""),
+                                args.optString("mimeType", "")).toString();
+                    case "readFileAsBase64":
+                        return readFileAsBase64(args.optString("filePath", "")).toString();
+                    case "startReadSession":
+                        return startReadSession(args.optString("filePath", "")).toString();
+                    case "readNextChunk":
+                        return readNextChunk(args.optString("sessionId", "")).toString();
+                    case "closeReadSession":
+                        return closeReadSession(args.optString("sessionId", "")).toString();
+                    case "renameMediaFiles":
+                        return renameMediaFiles(args.optString("patientName", ""),
+                                args.optString("oldNo", ""),
+                                args.optString("newNo", "")).toString();
+                    case "deleteFile":
+                        return deleteFile(args.optString("filePath", "")).toString();
+                    case "printPrescription":
+                        return printPrescription(args.optString("html", ""),
+                                args.optString("orientation", "portrait")).toString();
+                    default:
+                        return fail("unknown method: " + name).toString();
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "invoke " + name + " 失败", e);
+                return fail(e.getMessage()).toString();
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // P1-6 分层校验：仅敏感操作需要来源校验
+        // 敏感：readFileAsBase64（旧 API，可读任意文件）、deleteFile（可删文件）
+        // 非敏感：startReadSession/readNextChunk/closeReadSession（路径白名单校验，见 startReadSession）
+        //        savePrescriptionImage/saveVideoFile/saveMediaSession（只写指定目录）、findMediaFiles（按模式查找）
+        // ------------------------------------------------------------------
+        private boolean isSensitiveOperation(String name) {
+            // ★ Capacitor迁移：移除 readFileAsBase64 的敏感标记，改用路径白名单校验
+            // 原因：Capacitor的WebView URL scheme可能是 https://localhost 或 capacitor://localhost
+            // 导致 isCallerAllowed() 校验失败，readFileAsBase64 被拒绝
+            return "deleteFile".equals(name);
+        }
+
+        // ------------------------------------------------------------------
+        // 处方图片：写入 Pictures/惠康中医处方/YYYY-MM/ 目录
+        // ------------------------------------------------------------------
+        private JSONObject savePrescriptionImage(String imageData, String fileName) {
+            try {
+                String base64 = imageData;
+                if (base64.startsWith("data:image/png;base64,")) {
+                    base64 = base64.substring("data:image/png;base64,".length());
+                } else if (base64.startsWith("data:image/jpeg;base64,")) {
+                    base64 = base64.substring("data:image/jpeg;base64,".length());
+                }
+                byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "prescription_" + System.currentTimeMillis() + ".jpg";
+                }
+
+                File dir = getImageDir();
+                if (dir == null) {
+                    return fail("无法创建图片目录");
+                }
+                // 按月份分类子目录，方便查阅（与桌面版保持一致）
+                dir = new File(dir, getCurrentMonthFolder());
+                if (!dir.exists() && !dir.mkdirs()) {
+                    return fail("无法创建月份目录");
+                }
+                File file = new File(dir, safeName);
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(bytes);
+                    fos.flush();
+                }
+                notifyMediaScanner(file);
+
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("filePath", file.getAbsolutePath());
+                r.put("directory", dir.getAbsolutePath());
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "savePrescriptionImage 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 打印处方：通过 Android 原生 PrintManager API 调起系统打印对话框
+        // 背景：Android WebView 默认不支持 window.print()，iframe.print() 会静默失败
+        // 实现：创建临时 WebView 加载 HTML，使用其 PrintDocumentAdapter 交给 PrintManager
+        // ------------------------------------------------------------------
+        private JSONObject printPrescription(String html, String orientation) {
+            try {
+                if (html == null || html.isEmpty()) {
+                    return fail("打印内容为空");
+                }
+                // 必须在主线程创建 WebView 和调用 PrintManager
+                final String htmlContent = html;
+                final boolean isLandscape = "landscape".equals(orientation);
+                final String jobName = "惠康中医处方 " + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.CHINA).format(new java.util.Date());
+
+                mainHandler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            WebView printWebView = new WebView(MainActivity.this);
+                            printWebView.loadDataWithBaseURL(null, htmlContent, "text/html", "UTF-8", null);
+
+                            PrintManager printManager = (PrintManager) getSystemService(Context.PRINT_SERVICE);
+                            PrintDocumentAdapter printAdapter = printWebView.createPrintDocumentAdapter();
+
+                            PrintAttributes attrs = new PrintAttributes.Builder()
+                                .setMediaSize(isLandscape ? PrintAttributes.MediaSize.ISO_A5.asLandscape() : PrintAttributes.MediaSize.ISO_A5)
+                                .setResolution(new PrintAttributes.Resolution("res", "pdf", 300, 300))
+                                .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
+                                .build();
+
+                            printManager.print(jobName, printAdapter, attrs);
+                            Log.d(TAG, "printPrescription 已调起系统打印: " + jobName);
+                        } catch (Exception e) {
+                            Log.e(TAG, "printPrescription 调起打印失败", e);
+                            Toast.makeText(MainActivity.this, "打印失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
+
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("message", "已调起系统打印对话框");
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "printPrescription 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 视频文件：写入 Pictures/惠康中医处方/YYYY-MM/ 目录（与图片同目录，方便导出）
+        // ------------------------------------------------------------------
+        private JSONObject saveVideoFile(String base64Data, String fileName) {
+            try {
+                byte[] bytes = Base64.decode(base64Data, Base64.DEFAULT);
+
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "video_" + System.currentTimeMillis() + ".webm";
+                }
+                // 保留前端传入的原始扩展名（mp4/webm），不强制改名
+                // 前端根据设备 MediaRecorder 支持的 mimeType 决定扩展名
+                // 强制改 .webm 会导致 MP4 内容的文件扩展名不匹配，播放器无法识别
+
+                File dir = getImageDir();
+                if (dir == null) {
+                    return fail("无法创建视频目录");
+                }
+                // 按月份分类子目录，方便查阅（与桌面版保持一致）
+                dir = new File(dir, getCurrentMonthFolder());
+                if (!dir.exists() && !dir.mkdirs()) {
+                    return fail("无法创建月份目录");
+                }
+                File file = new File(dir, safeName);
+                try (FileOutputStream fos = new FileOutputStream(file)) {
+                    fos.write(bytes);
+                    fos.flush();
+                }
+                notifyMediaScanner(file);
+
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("filePath", file.getAbsolutePath());
+                r.put("directory", dir.getAbsolutePath());
+                r.put("fileName", safeName);
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "saveVideoFile 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 分片上传（解决 Binder 事务 1MB 限制）
+        // 大文件（视频、高清照片）的 base64 编码远超 1MB，无法通过单次 invoke 调用传递
+        // 流程：startMediaSession → 多次 appendMediaChunk → commitMediaSession
+        // 临时文件存放在 app cacheDir，commit 时迁移到目标月份目录
+        // ------------------------------------------------------------------
+        private final java.util.Map<String, File> mediaSessions = new java.util.concurrent.ConcurrentHashMap<>();
+
+        private JSONObject startMediaSession(String fileName) {
+            try {
+                String sessionId = "media_" + System.currentTimeMillis() + "_" + (int) (Math.random() * 100000);
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "media_" + System.currentTimeMillis();
+                }
+                File tempFile = new File(getCacheDir(), "upload_" + sessionId + "_" + safeName);
+                // 确保临时文件不存在（清理可能的残留）
+                if (tempFile.exists()) tempFile.delete();
+                mediaSessions.put(sessionId, tempFile);
+                Log.d(TAG, "startMediaSession: sessionId=" + sessionId + ", tempFile=" + tempFile.getAbsolutePath());
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("sessionId", sessionId);
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "startMediaSession 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        private JSONObject appendMediaChunk(String sessionId, String chunkBase64, int index, int total) {
+            try {
+                File tempFile = mediaSessions.get(sessionId);
+                if (tempFile == null) {
+                    return fail("无效或已过期的 sessionId: " + sessionId);
+                }
+                byte[] bytes = Base64.decode(chunkBase64, Base64.DEFAULT);
+                try (java.io.FileOutputStream fos = new java.io.FileOutputStream(tempFile, true)) {
+                    fos.write(bytes);
+                    fos.flush();
+                }
+                if (index % 10 == 0 || index == total - 1) {
+                    Log.d(TAG, "appendMediaChunk: sessionId=" + sessionId + ", index=" + (index + 1) + "/" + total + ", fileSize=" + tempFile.length());
+                }
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("index", index);
+                r.put("total", total);
+                r.put("fileSize", tempFile.length());
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "appendMediaChunk 失败 (sessionId=" + sessionId + ", index=" + index + ")", e);
+                // 失败时清理临时文件
+                File tempFile = mediaSessions.remove(sessionId);
+                if (tempFile != null && tempFile.exists()) tempFile.delete();
+                return fail(e.getMessage());
+            }
+        }
+
+        private JSONObject commitMediaSession(String sessionId, String fileName, String type) {
+            File tempFile = null;
+            try {
+                tempFile = mediaSessions.remove(sessionId);
+                if (tempFile == null || !tempFile.exists()) {
+                    return fail("会话文件不存在: " + sessionId);
+                }
+                Log.d(TAG, "commitMediaSession: sessionId=" + sessionId + ", type=" + type + ", tempSize=" + tempFile.length());
+
+                // 统一保存到 Pictures/惠康中医处方/YYYY-MM/ 目录（图片视频同目录，方便导出）
+                File targetDir = getImageDir();
+                if (targetDir == null) {
+                    tempFile.delete();
+                    return fail("无法创建目标目录");
+                }
+                targetDir = new File(targetDir, getCurrentMonthFolder());
+                if (!targetDir.exists() && !targetDir.mkdirs()) {
+                    tempFile.delete();
+                    return fail("无法创建月份目录");
+                }
+
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "media_" + System.currentTimeMillis() + ("video".equals(type) ? ".webm" : ".jpg");
+                }
+
+                File targetFile = new File(targetDir, safeName);
+                // 若目标已存在则覆盖
+                if (targetFile.exists()) targetFile.delete();
+
+                // 先尝试 rename（同分区快速），失败则复制
+                if (!tempFile.renameTo(targetFile)) {
+                    try (java.io.FileInputStream fis = new java.io.FileInputStream(tempFile);
+                         java.io.FileOutputStream fos = new java.io.FileOutputStream(targetFile)) {
+                        byte[] buffer = new byte[8192];
+                        int len;
+                        while ((len = fis.read(buffer)) > 0) {
+                            fos.write(buffer, 0, len);
+                        }
+                        fos.flush();
+                    }
+                    tempFile.delete();
+                }
+
+                notifyMediaScanner(targetFile);
+                Log.d(TAG, "commitMediaSession 成功: " + targetFile.getAbsolutePath() + ", size=" + targetFile.length());
+
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("filePath", targetFile.getAbsolutePath());
+                r.put("directory", targetDir.getAbsolutePath());
+                r.put("fileName", safeName);
+                r.put("fileSize", targetFile.length());
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "commitMediaSession 失败 (sessionId=" + sessionId + ")", e);
+                if (tempFile != null && tempFile.exists()) tempFile.delete();
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 获取视频目录路径
+        // ------------------------------------------------------------------
+        private JSONObject getVideoDirectory() {
+            try {
+                File dir = getVideoDir();
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("directory", dir != null ? dir.getAbsolutePath() : "");
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "getVideoDirectory 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 备份文件：写入公共 Downloads/中医处方系统/ 目录
+        // ------------------------------------------------------------------
+        private JSONObject saveBackupFile(String jsonStr, String fileName) {
+            try {
+                String safeName = sanitize(fileName);
+                if (safeName.isEmpty()) {
+                    safeName = "backup_" + System.currentTimeMillis() + ".json";
+                }
+
+                String subDir = "中医处方系统";
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Downloads.DISPLAY_NAME, safeName);
+                    values.put(MediaStore.Downloads.MIME_TYPE, "application/json");
+                    values.put(MediaStore.Downloads.RELATIVE_PATH,
+                            Environment.DIRECTORY_DOWNLOADS + "/" + subDir + "/");
+                    Uri uri = getContentResolver().insert(
+                            MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+                    if (uri == null) {
+                        return fail("无法创建备份文件");
+                    }
+                    try (OutputStream os = getContentResolver().openOutputStream(uri)) {
+                        if (os == null) return fail("无法打开备份文件输出流");
+                        os.write(jsonStr.getBytes("UTF-8"));
+                        os.flush();
+                    }
+                    JSONObject r = new JSONObject();
+                    r.put("success", true);
+                    r.put("fileName", safeName);
+                    r.put("filePath", "downloads/" + subDir + "/" + safeName);
+                    return r;
+                } else {
+                    File downloads = Environment.getExternalStoragePublicDirectory(
+                            Environment.DIRECTORY_DOWNLOADS);
+                    File dir = new File(downloads, subDir);
+                    if (!dir.exists() && !dir.mkdirs()) {
+                        dir = new File(getFilesDir(), "backups");
+                        if (!dir.exists()) dir.mkdirs();
+                    }
+                    File file = new File(dir, safeName);
+                    try (FileOutputStream fos = new FileOutputStream(file)) {
+                        fos.write(jsonStr.getBytes("UTF-8"));
+                        fos.flush();
+                    }
+                    notifyMediaScanner(file);
+                    JSONObject r = new JSONObject();
+                    r.put("success", true);
+                    r.put("fileName", safeName);
+                    r.put("filePath", "downloads/" + subDir + "/" + safeName);
+                    return r;
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "saveBackupFile 失败", e);
+                return fail(e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 工具方法
+        // ------------------------------------------------------------------
+        private File getImageDir() {
+            File dir;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                File external = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+                File newDir = new File(external, "惠康中医处方");
+                File oldDir = new File(external, "本能中医处方");
+                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
+            } else {
+                File pictures = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+                File newDir = new File(pictures, "惠康中医处方");
+                File oldDir = new File(pictures, "本能中医处方");
+                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
+            }
+            if (!dir.exists() && !dir.mkdirs()) {
+                dir = new File(getFilesDir(), "prescription_images");
+                if (!dir.exists()) dir.mkdirs();
+            }
+            return dir;
+        }
+
+        private File getVideoDir() {
+            File dir;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                File external = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
+                File newDir = new File(external, "惠康中医处方");
+                File oldDir = new File(external, "本能中医处方");
+                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
+            } else {
+                File movies = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
+                File newDir = new File(movies, "惠康中医处方");
+                File oldDir = new File(movies, "本能中医处方");
+                dir = (newDir.exists() || !oldDir.exists()) ? newDir : oldDir;
+            }
+            if (!dir.exists() && !dir.mkdirs()) {
+                dir = new File(getFilesDir(), "prescription_videos");
+                if (!dir.exists()) dir.mkdirs();
+            }
+            return dir;
+        }
+
+        // 统一路径校验：使用 canonicalPath.startsWith(root) 校验文件路径必须在允许的根目录下
+        // 同步离线版本 isMediaPathAllowed 安全实现，供 readFileAsBase64/deleteFile/openFile 共用
+        private boolean isMediaPathAllowed(String filePath) {
+            try {
+                if (filePath == null || filePath.isEmpty()) return false;
+                File f = new File(filePath);
+                String canonicalPath = f.getCanonicalPath();
+                File imgDir = getImageDir();
+                File vidDir = getVideoDir();
+                String imgDirPath = imgDir != null ? imgDir.getCanonicalPath() : "";
+                String vidDirPath = vidDir != null ? vidDir.getCanonicalPath() : "";
+                if (!imgDirPath.isEmpty() && canonicalPath.startsWith(imgDirPath)) return true;
+                if (!vidDirPath.isEmpty() && canonicalPath.startsWith(vidDirPath)) return true;
+                Log.w(TAG, "isMediaPathAllowed 拒绝非白名单路径: " + canonicalPath);
+                return false;
+            } catch (Exception e) {
+                Log.e(TAG, "isMediaPathAllowed 异常: " + filePath, e);
+                return false;
+            }
+        }
+
+        private String getCurrentMonthFolder() {
+            java.util.Calendar cal = java.util.Calendar.getInstance();
+            int year = cal.get(java.util.Calendar.YEAR);
+            int month = cal.get(java.util.Calendar.MONTH) + 1;
+            return year + "-" + (month < 10 ? "0" + month : String.valueOf(month));
+        }
+
+        private void notifyMediaScanner(File file) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                android.media.MediaScannerConnection.scanFile(
+                        getApplicationContext(),
+                        new String[]{file.getAbsolutePath()},
+                        new String[]{(file.getName().endsWith(".webm") || file.getName().endsWith(".mp4")) ? (file.getName().endsWith(".mp4") ? "video/mp4" : "video/webm") : (file.getName().endsWith(".jpg") || file.getName().endsWith(".jpeg")) ? "image/jpeg" : "image/png"},
+                        null);
+            }
+        }
+
+        private String sanitize(String name) {
+            if (name == null) return "";
+            return name.replaceAll("[\\\\/:*?\"<>|]", "_").trim();
+        }
+
+        private JSONObject fail(String msg) {
+            try {
+                JSONObject r = new JSONObject();
+                r.put("success", false);
+                r.put("error", msg);
+                return r;
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        private JSONObject findMediaFiles(String patientName, String prescriptionNo, String createdAt) {
+            try {
+                JSONArray files = new JSONArray();
+                String safeName = sanitize(patientName);
+                String safeNo = sanitize(prescriptionNo);
+                if (safeName.isEmpty()) {
+                    JSONObject result = new JSONObject();
+                    result.put("success", true);
+                    result.put("files", files);
+                    return result;
+                }
+                
+                String prefix1 = safeName + "_" + safeNo;
+                String prefix2 = safeNo + "_" + safeName;
+                
+                File imgDir = getImageDir();
+                File vidDir = getVideoDir();
+                
+                java.util.Set<String> foundPaths = new java.util.HashSet<>();
+                
+                scanDirForMediaWithPrefixes(imgDir, prefix1, prefix2, files, foundPaths);
+                scanDirForMediaWithPrefixes(vidDir, prefix1, prefix2, files, foundPaths);
+                
+                // 回退策略：如果按编号未找到文件，用患者姓名+创建时间范围查找
+                if (files.length() == 0) {
+                    long[] timeRange;
+                    if (!createdAt.isEmpty()) {
+                        timeRange = parseTimeRange(createdAt);
+                    } else {
+                        // createdAt为空，使用宽松时间范围（前后30天）
+                        long now = System.currentTimeMillis();
+                        timeRange = new long[]{now - 30L * 24 * 60 * 60 * 1000, now + 24 * 60 * 60 * 1000L};
+                    }
+                    scanDirForMediaByNameAndTime(imgDir, safeName, timeRange[0], timeRange[1], files, foundPaths);
+                    scanDirForMediaByNameAndTime(vidDir, safeName, timeRange[0], timeRange[1], files, foundPaths);
+                }
+                
+                StringBuilder debug = new StringBuilder();
+                debug.append("prefix1=").append(prefix1);
+                debug.append(" | prefix2=").append(prefix2);
+                debug.append(" | createdAt=").append(createdAt);
+                debug.append(" | imgDir=").append(imgDir != null ? imgDir.getAbsolutePath() : "null").append(" exists=").append(imgDir != null && imgDir.exists());
+                debug.append(" | vidDir=").append(vidDir != null ? vidDir.getAbsolutePath() : "null").append(" exists=").append(vidDir != null && vidDir.exists());
+                if (imgDir != null && imgDir.exists()) {
+                    java.util.List<String> af = new java.util.ArrayList<>();
+                    collectAllFiles(imgDir, af, 10);
+                    debug.append(" | imgFiles: ").append(String.join(", ", af));
+                }
+                if (vidDir != null && vidDir.exists()) {
+                    java.util.List<String> af = new java.util.ArrayList<>();
+                    collectAllFiles(vidDir, af, 10);
+                    debug.append(" | vidFiles: ").append(String.join(", ", af));
+                }
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                result.put("files", files);
+                result.put("debug", debug.toString());
+                return result;
+            } catch (Exception e) {
+                return fail("查找处方文件失败: " + e.getMessage());
+            }
+        }
+
+        // 解析 createdAt 时间字符串，返回 [startTime, endTime] 毫秒时间戳范围（当天 ±1 天）
+        private long[] parseTimeRange(String createdAt) {
+            try {
+                // 支持 ISO 格式：2026-07-12T10:30:00.000Z 或 2026-07-12 10:30:00
+                String dateStr = createdAt.trim().replace('T', ' ');
+                if (dateStr.contains(".")) dateStr = dateStr.substring(0, dateStr.indexOf('.'));
+                if (dateStr.contains("Z")) dateStr = dateStr.replace("Z", "");
+                java.text.SimpleDateFormat sdf = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US);
+                sdf.setTimeZone(java.util.TimeZone.getTimeZone("UTC"));
+                java.util.Date date = sdf.parse(dateStr);
+                long time = date.getTime();
+                // 当天 00:00 - 次日 23:59:59（±1天容错）
+                long dayStart = time - 24 * 60 * 60 * 1000L;
+                long dayEnd = time + 48 * 60 * 60 * 1000L;
+                return new long[]{dayStart, dayEnd};
+            } catch (Exception e) {
+                // 解析失败，返回宽松时间范围（前后7天）
+                long now = System.currentTimeMillis();
+                return new long[]{now - 7L * 24 * 60 * 60 * 1000, now + 7L * 24 * 60 * 60 * 1000};
+            }
+        }
+
+        // 按患者姓名和时间范围查找文件（回退策略）
+        private void scanDirForMediaByNameAndTime(File dir, String patientName, long startTime, long endTime, JSONArray files, java.util.Set<String> foundPaths) {
+            if (dir == null || !dir.exists()) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    scanDirForMediaByNameAndTime(f, patientName, startTime, endTime, files, foundPaths);
+                } else {
+                    String fileName = f.getName();
+                    // 文件名必须包含患者姓名
+                    if (!fileName.contains(patientName)) continue;
+                    // 文件修改时间必须在时间范围内
+                    long lastMod = f.lastModified();
+                    if (lastMod < startTime || lastMod > endTime) continue;
+                    String filePath = f.getAbsolutePath();
+                    if (foundPaths.contains(filePath)) continue;
+                    foundPaths.add(filePath);
+                    try {
+                        JSONObject fileObj = new JSONObject();
+                        fileObj.put("name", fileName);
+                        fileObj.put("path", filePath);
+                        fileObj.put("type", fileName.endsWith(".webm") || fileName.endsWith(".mp4") ? "video" : "image");
+                        fileObj.put("size", f.length());
+                        fileObj.put("lastModified", lastMod);
+                        files.put(fileObj);
+                    } catch (Exception e) {
+                        Log.e(TAG, "添加文件信息失败: " + fileName, e);
+                    }
+                }
+            }
+        }
+
+        private void scanDirForMedia(File dir, String prefix, JSONArray files) {
+            if (dir == null || !dir.exists()) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    scanDirForMedia(f, prefix, files);
+                } else if (f.getName().contains(prefix)) {
+                    try {
+                        JSONObject fileObj = new JSONObject();
+                        fileObj.put("name", f.getName());
+                        fileObj.put("path", f.getAbsolutePath());
+                        fileObj.put("type", f.getName().endsWith(".webm") || f.getName().endsWith(".mp4") ? "video" : "image");
+                        fileObj.put("size", f.length());
+                        fileObj.put("lastModified", f.lastModified());
+                        files.put(fileObj);
+                    } catch (Exception e) {
+                        Log.e(TAG, "添加文件信息失败: " + f.getName(), e);
+                    }
+                }
+            }
+        }
+
+        private void scanDirForMediaWithPrefixes(File dir, String prefix1, String prefix2, JSONArray files, java.util.Set<String> foundPaths) {
+            if (dir == null || !dir.exists()) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    scanDirForMediaWithPrefixes(f, prefix1, prefix2, files, foundPaths);
+                } else {
+                    String fileName = f.getName();
+                    if (fileName.contains(prefix1) || fileName.contains(prefix2)) {
+                        String filePath = f.getAbsolutePath();
+                        if (foundPaths.contains(filePath)) continue;
+                        foundPaths.add(filePath);
+                        try {
+                            JSONObject fileObj = new JSONObject();
+                            fileObj.put("name", fileName);
+                            fileObj.put("path", filePath);
+                            fileObj.put("type", fileName.endsWith(".webm") || fileName.endsWith(".mp4") ? "video" : "image");
+                            fileObj.put("size", f.length());
+                            fileObj.put("lastModified", f.lastModified());
+                            files.put(fileObj);
+                        } catch (Exception e) {
+                            Log.e(TAG, "添加文件信息失败: " + fileName, e);
+                        }
+                    }
+                }
+            }
+        }
+
+        private void collectAllFiles(File dir, java.util.List<String> files, int max) {
+            if (dir == null || !dir.exists() || files.size() >= max) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (files.size() >= max) return;
+                if (f.isDirectory()) {
+                    collectAllFiles(f, files, max);
+                } else {
+                    files.add(f.getName());
+                }
+            }
+        }
+
+        private JSONObject openFile(String filePath, String mimeType) {
+            try {
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    return fail("文件不存在: " + filePath);
+                }
+                // 路径白名单校验：只允许打开图片/视频目录下的文件
+                if (!isMediaPathAllowed(filePath)) {
+                    return fail("路径不在允许的目录内");
+                }
+                if (mimeType == null || mimeType.isEmpty()) {
+                    if (filePath.endsWith(".webm")) mimeType = "video/webm";
+                    else if (filePath.endsWith(".mp4")) mimeType = "video/mp4";
+                    else if (filePath.endsWith(".png")) mimeType = "image/png";
+                    else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) mimeType = "image/jpeg";
+                    else mimeType = "*/*";
+                }
+                Uri uri = FileProvider.getUriForFile(MainActivity.this,
+                        getPackageName() + ".fileprovider", file);
+                Intent intent = new Intent(Intent.ACTION_VIEW);
+                intent.setDataAndType(uri, mimeType);
+                intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startActivity(intent);
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                return result;
+            } catch (Exception e) {
+                return fail("打开文件失败: " + e.getMessage());
+            }
+        }
+
+        private JSONObject readFileAsBase64(String filePath) {
+            try {
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    return fail("文件不存在: " + filePath);
+                }
+                // 路径白名单校验：只允许读取图片/视频目录下的文件
+                if (!isMediaPathAllowed(filePath)) {
+                    return fail("路径不在允许的目录内");
+                }
+                java.io.FileInputStream fis = new java.io.FileInputStream(file);
+                java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+                byte[] buffer = new byte[8192];
+                int len;
+                while ((len = fis.read(buffer)) > 0) {
+                    baos.write(buffer, 0, len);
+                }
+                fis.close();
+                byte[] bytes = baos.toByteArray();
+                String base64 = Base64.encodeToString(bytes, Base64.NO_WRAP);
+                String mimeType;
+                if (filePath.endsWith(".webm")) mimeType = "video/webm";
+                else if (filePath.endsWith(".mp4")) mimeType = "video/mp4";
+                else if (filePath.endsWith(".png")) mimeType = "image/png";
+                else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) mimeType = "image/jpeg";
+                else mimeType = "application/octet-stream";
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                result.put("data", "data:" + mimeType + ";base64," + base64);
+                return result;
+            } catch (Exception e) {
+                return fail("读取文件失败: " + e.getMessage());
+            }
+        }
+
+        // ------------------------------------------------------------------
+        // 分片读取（解决 Binder 事务 1MB 限制）
+        // 大文件读取时返回的 base64 字符串远超 1MB，必须分片读取
+        // 流程：startReadSession → 多次 readNextChunk → closeReadSession
+        // 用 session 维护 FileInputStream 和已读位置，每片 256KB 原始字节
+        // ------------------------------------------------------------------
+        private static class ReadSession {
+            java.io.FileInputStream fis;
+            long fileSize;
+            long readOffset;
+            String mimeType;
+        }
+        private final java.util.Map<String, ReadSession> readSessions = new java.util.concurrent.ConcurrentHashMap<>();
+
+        private JSONObject startReadSession(String filePath) {
+            ReadSession rs = new ReadSession();
+            try {
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    return fail("文件不存在: " + filePath);
+                }
+                // 路径白名单校验：只允许读取图片/视频目录下的文件
+                // 替代 isCallerAllowed 来源校验，避免 WebView URL 短暂变化导致误拦截
+                String canonicalPath = file.getCanonicalPath();
+                File imgDir = getImageDir();
+                File vidDir = getVideoDir();
+                String imgDirPath = imgDir != null ? imgDir.getCanonicalPath() : "";
+                String vidDirPath = vidDir != null ? vidDir.getCanonicalPath() : "";
+                boolean allowed = !imgDirPath.isEmpty() && canonicalPath.startsWith(imgDirPath);
+                if (!allowed) {
+                    allowed = !vidDirPath.isEmpty() && canonicalPath.startsWith(vidDirPath);
+                }
+                if (!allowed) {
+                    Log.w(TAG, "startReadSession 拒绝非白名单路径: " + canonicalPath);
+                    return fail("路径不在允许的目录内");
+                }
+
+                rs.fis = new java.io.FileInputStream(file);
+                rs.fileSize = file.length();
+                rs.readOffset = 0;
+                if (filePath.endsWith(".webm")) rs.mimeType = "video/webm";
+                else if (filePath.endsWith(".mp4")) rs.mimeType = "video/mp4";
+                else if (filePath.endsWith(".png")) rs.mimeType = "image/png";
+                else if (filePath.endsWith(".jpg") || filePath.endsWith(".jpeg")) rs.mimeType = "image/jpeg";
+                else rs.mimeType = "application/octet-stream";
+
+                String sessionId = "read_" + System.currentTimeMillis() + "_" + (int) (Math.random() * 100000);
+                readSessions.put(sessionId, rs);
+                Log.d(TAG, "startReadSession: sessionId=" + sessionId + ", fileSize=" + rs.fileSize + ", mime=" + rs.mimeType);
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("sessionId", sessionId);
+                r.put("fileSize", rs.fileSize);
+                r.put("mimeType", rs.mimeType);
+                return r;
+            } catch (Exception e) {
+                try { if (rs.fis != null) rs.fis.close(); } catch (Exception ignored) {}
+                return fail("启动读取会话失败: " + e.getMessage());
+            }
+        }
+
+        private JSONObject readNextChunk(String sessionId) {
+            ReadSession rs = readSessions.get(sessionId);
+            if (rs == null || rs.fis == null) {
+                return fail("无效或已关闭的读取会话: " + sessionId);
+            }
+            try {
+                // 每片 256KB 原始字节（base64 后约 349KB，加 JSON 包装远低于 1MB）
+                int chunkLen = 256 * 1024;
+                byte[] buffer = new byte[chunkLen];
+                int read = rs.fis.read(buffer);
+                if (read < 0) {
+                    // EOF
+                    JSONObject r = new JSONObject();
+                    r.put("success", true);
+                    r.put("chunk", "");
+                    r.put("read", 0);
+                    r.put("eof", true);
+                    r.put("offset", rs.readOffset);
+                    r.put("total", rs.fileSize);
+                    return r;
+                }
+                byte[] actual;
+                if (read == chunkLen) {
+                    actual = buffer;
+                } else {
+                    actual = new byte[read];
+                    System.arraycopy(buffer, 0, actual, 0, read);
+                }
+                String chunkBase64 = Base64.encodeToString(actual, Base64.NO_WRAP);
+                rs.readOffset += read;
+                boolean eof = rs.readOffset >= rs.fileSize;
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("chunk", chunkBase64);
+                r.put("read", read);
+                r.put("eof", eof);
+                r.put("offset", rs.readOffset);
+                r.put("total", rs.fileSize);
+                return r;
+            } catch (Exception e) {
+                Log.e(TAG, "readNextChunk 失败 (sessionId=" + sessionId + ")", e);
+                closeReadSession(sessionId);
+                return fail("读取分片失败: " + e.getMessage());
+            }
+        }
+
+        private JSONObject closeReadSession(String sessionId) {
+            ReadSession rs = readSessions.remove(sessionId);
+            if (rs != null) {
+                try { rs.fis.close(); } catch (Exception ignored) {}
+                Log.d(TAG, "closeReadSession: sessionId=" + sessionId + ", readOffset=" + rs.readOffset + "/" + rs.fileSize);
+            }
+            try {
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                return r;
+            } catch (Exception e) {
+                return fail(e.getMessage());
+            }
+        }
+
+        private JSONObject renameMediaFiles(String patientName, String oldNo, String newNo) {
+            try {
+                String safeName = sanitize(patientName);
+                String safeOldNo = sanitize(oldNo);
+                String safeNewNo = sanitize(newNo);
+                if (safeName.isEmpty() || safeOldNo.isEmpty() || safeNewNo.isEmpty()) {
+                    return fail("参数不完整");
+                }
+                if (safeOldNo.equals(safeNewNo)) {
+                    JSONObject result = new JSONObject();
+                    result.put("success", true);
+                    result.put("renamed", 0);
+                    result.put("message", "编号相同，无需重命名");
+                    return result;
+                }
+                // 支持两种命名格式：姓名_编号 和 编号_姓名
+                String[] oldPrefixes = {safeName + "_" + safeOldNo, safeOldNo + "_" + safeName};
+                String[] newPrefixes = {safeName + "_" + safeNewNo, safeNewNo + "_" + safeName};
+                JSONArray renamedFiles = new JSONArray();
+                int renamed = 0;
+                for (int i = 0; i < oldPrefixes.length; i++) {
+                    renamed += renameFilesInDir(getImageDir(), oldPrefixes[i], newPrefixes[i], renamedFiles);
+                    renamed += renameFilesInDir(getVideoDir(), oldPrefixes[i], newPrefixes[i], renamedFiles);
+                }
+                JSONObject result = new JSONObject();
+                result.put("success", true);
+                result.put("renamed", renamed);
+                result.put("files", renamedFiles);
+                return result;
+            } catch (Exception e) {
+                return fail("重命名文件失败: " + e.getMessage());
+            }
+        }
+
+        private int renameFilesInDir(File dir, String oldPrefix, String newPrefix, JSONArray renamedFiles) {
+            if (dir == null || !dir.exists()) return 0;
+            int count = 0;
+            File[] children = dir.listFiles();
+            if (children == null) return 0;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    count += renameFilesInDir(f, oldPrefix, newPrefix, renamedFiles);
+                } else {
+                    String name = f.getName();
+                    if (name.contains(oldPrefix)) {
+                        String newName = name.replace(oldPrefix, newPrefix);
+                        File newFile = new File(f.getParent(), newName);
+                        if (f.renameTo(newFile)) {
+                            count++;
+                            try {
+                                JSONObject fileObj = new JSONObject();
+                                fileObj.put("oldName", name);
+                                fileObj.put("newName", newName);
+                                fileObj.put("path", newFile.getAbsolutePath());
+                                renamedFiles.put(fileObj);
+                            } catch (Exception e) {
+                                Log.e(TAG, "记录重命名信息失败", e);
+                            }
+                        }
+                    }
+                }
+            }
+            return count;
+        }
+
+        private JSONObject deleteFile(String filePath) {
+            try {
+                File file = new File(filePath);
+                if (!file.exists()) {
+                    return fail("文件不存在: " + filePath);
+                }
+                // 路径白名单校验：只允许删除图片/视频目录下的文件
+                if (!isMediaPathAllowed(filePath)) {
+                    return fail("路径不在允许的目录内");
+                }
+                if (file.delete()) {
+                    JSONObject result = new JSONObject();
+                    result.put("success", true);
+                    return result;
+                } else {
+                    return fail("删除文件失败");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "deleteFile 失败", e);
+                return fail("删除文件失败: " + e.getMessage());
+            }
+        }
+    }
+}
