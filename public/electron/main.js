@@ -207,6 +207,21 @@ function createMainWindow() {
     if (!app.isPackaged) {
         mainWindow.webContents.openDevTools();
     }
+
+    // ★ 安全：生产环境禁止打开 DevTools（防盗破解）
+    if (app.isPackaged) {
+        mainWindow.webContents.on('devtools-opened', () => {
+            mainWindow.webContents.closeDevTools();
+            console.warn('[Security] DevTools 已被阻止（生产环境）');
+        });
+        // 拦截 F12/Ctrl+Shift+I 快捷键
+        mainWindow.webContents.on('before-input-event', (event, input) => {
+            if (input.key === 'F12' ||
+                (input.control && input.shift && (input.key === 'I' || input.key === 'i'))) {
+                event.preventDefault();
+            }
+        });
+    }
 }
 app.whenReady().then(() => {
     sharedSession = session.fromPartition('persist:tcm-prescription-system');

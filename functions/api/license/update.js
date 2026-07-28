@@ -40,7 +40,7 @@ import {
 
 function corsHeaders() {
     return {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': 'https://tcm-prescription-system.pages.dev',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
         'Access-Control-Max-Age': '86400',

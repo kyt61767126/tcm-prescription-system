@@ -1,0 +1,33 @@
+# Cloudflare Pages 安全头配置
+# 文档: https://developers.cloudflare.com/pages/configuration/headers/
+
+/*
+  # 防止点击劫持（Clickjacking）
+  X-Frame-Options: SAMEORIGIN
+  # 防止 MIME 类型嗅探
+  X-Content-Type-Options: nosniff
+  # 控制 Referrer 信息泄露
+  Referrer-Policy: strict-origin-when-cross-origin
+  # 禁用不必要的浏览器功能
+  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
+  # 防止 XSS Auditor（旧版浏览器）
+  X-XSS-Protection: 1; mode=block
+
+# API 接口：添加缓存控制
+/api/*
+  # 防止缓存敏感 API 响应
+  Cache-Control: no-store, no-cache, must-revalidate
+  # 防止点击劫持
+  X-Frame-Options: DENY
+
+# 静态资源：长缓存
+/*.js
+  Cache-Control: public, max-age=86400
+/*.css
+  Cache-Control: public, max-age=86400
+/*.png
+  Cache-Control: public, max-age=604800
+/*.jpg
+  Cache-Control: public, max-age=604800
+/*.svg
+  Cache-Control: public, max-age=604800

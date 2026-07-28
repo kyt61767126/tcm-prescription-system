@@ -35,9 +35,10 @@ import {
     generateActivationCode, LICENSE_TYPE_CONFIG, appendLicenseLog
 } from './_lib/license-core.js';
 
+// P1-6 安全：CORS 收紧为固定域名（客服 PowerShell 调用不受 CORS 限制）
 function corsHeaders() {
     return {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': 'https://tcm-prescription-system.pages.dev',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
         'Access-Control-Max-Age': '86400',
