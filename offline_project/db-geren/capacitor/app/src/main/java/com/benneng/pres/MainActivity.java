@@ -539,7 +539,7 @@ public class MainActivity extends BridgeActivity {
             "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
             "      submit: function(code, user){ return callNativeAsync('activateLicense', {code: code, user: user||''}); }," +
             "      close: function(){ return Promise.resolve({success:true}); }," +
-            "      restart: function(){ return Promise.resolve({success:true}); }" +
+            "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
             "    }" +
             "  };" +
             "})();";
@@ -907,6 +907,8 @@ public class MainActivity extends BridgeActivity {
                         return verifyOnline().toString();
                     case "getActivationRecord":
                         return getActivationRecord().toString();
+                    case "appRestart":
+                        return appRestart().toString();
                     case "setTrialDays":
                         return setTrialDays(args.optInt("days", 7)).toString();
                     case "getTrialDays":
@@ -1506,8 +1508,49 @@ public class MainActivity extends BridgeActivity {
         private JSONObject activateLicense(String code, String user) {
             try {
                 String machineId = getLM().getMachineId();
-                return getLM().activateOnline(code, machineId, user != null ? user : "");
+                JSONObject result = getLM().activateOnline(code, machineId, user != null ? user : "");
+                // ★ 修复 2026-07-27：激活成功后立即验证 license.dat 是否可正确读取
+                // 这样可以在激活时就发现问题，而不是等用户重启后才发现问题
+                if (result != null && result.optBoolean("success", false)) {
+                    JSONObject verify = getLM().validateLicense(machineId);
+                    boolean valid = verify != null && verify.optBoolean("valid", false);
+                    String verifyType = verify != null ? verify.optString("type", "") : "";
+                    Log.d(TAG, "激活后验证: valid=" + valid + " type=" + verifyType +
+                               " machineId=" + machineId);
+                    if (!valid) {
+                        // license.dat 写入成功但读取失败，说明加密/解密有问题
+                        String verifyMsg = verify != null ? verify.optString("message", "未知") : "验证返回 null";
+                        Log.e(TAG, "激活后验证失败: " + verifyMsg);
+                        result.put("warning", "激活数据写入后验证异常: " + verifyMsg + "（machineId=" + machineId + "）");
+                    }
+                }
+                return result;
             } catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        // ★ 修复 2026-07-27：真正重启 APP（替代原来空实现的 restart）
+        // 激活成功后 JS 端调用 electronAPI.activate.restart()，此处真正重启
+        private JSONObject appRestart() {
+            try {
+                Log.d(TAG, "appRestart: 正在重启 APP");
+                mainHandler.post(() -> {
+                    try {
+                        Intent intent = getPackageManager().getLaunchIntentForPackage(getPackageName());
+                        if (intent != null) {
+                            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(intent);
+                        }
+                        finish();
+                    } catch (Exception e) {
+                        Log.e(TAG, "appRestart 异常", e);
+                    }
+                });
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                return r;
+            } catch (Exception e) {
+                return fail(e.getMessage());
+            }
         }
 
         private JSONObject verifyOnline() {

@@ -1867,6 +1867,11 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             localMachineId = getMachineId();
         }
         long now = System.currentTimeMillis();
+        // ★ 修复 2026-07-27：添加诊断日志，帮助定位激活后重启仍显示试用模式的问题
+        File licenseFile = getFile(LICENSE_FILE);
+        Log.d(TAG, "validateLicense: machineId=" + localMachineId +
+                   " license.dat exists=" + licenseFile.exists() +
+                   " size=" + (licenseFile.exists() ? licenseFile.length() : 0));
         try {
             // ★ 安全检测 1：Root 检测（防 root 设备篡改 license）
             if (isRooted()) {
@@ -1920,6 +1925,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             // 2. 读取 license 文件
             // ★ P1-A 新增：传入 localMachineId 用于解密
             JSONObject rawLicense = readLicense(localMachineId);
+            Log.d(TAG, "validateLicense: readLicense=" + (rawLicense != null ? "OK" : "null"));
             if (rawLicense != null) {
                 // 先用原始字段验证签名
                 if (!verifySignature(rawLicense)) {
