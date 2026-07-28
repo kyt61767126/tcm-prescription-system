@@ -39,8 +39,8 @@ const APP_CONFIG = {
         configPath: path.join(PROJECT_ROOT, 'cloud_project', 'config.json')
     },
     'geren-cloud': {
-        // 云端个人版：复用云端APP的APK（同一安装包，个人版edition由服务端config控制）
-        apkDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),
+        // 云端个人版：独立项目 cloud_app_geren（包名 com.tcm.prescription.geren）
+        apkDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app_geren', 'app', 'build', 'outputs', 'apk', 'release'),
         outputName: '惠康中医-云端个人版.apk',
         configPath: path.join(PROJECT_ROOT, 'cloud_project', 'config.json')
     }
@@ -66,10 +66,11 @@ function findApkFile(dir) {
 
 function readVersionFromGradle(appDir) {
     try {
-        // Support both capacitor/ and android/ directory structures
+        // Support capacitor/, android/, and direct app/ directory structures
         const capPath = path.join(appDir, 'capacitor', 'app', 'build.gradle');
         const androidPath = path.join(appDir, 'android', 'app', 'build.gradle');
-        const gradlePath = fs.existsSync(capPath) ? capPath : (fs.existsSync(androidPath) ? androidPath : '');
+        const directPath = path.join(appDir, 'app', 'build.gradle');
+        const gradlePath = fs.existsSync(capPath) ? capPath : (fs.existsSync(androidPath) ? androidPath : (fs.existsSync(directPath) ? directPath : ''));
         if (!gradlePath) return '';
         const content = fs.readFileSync(gradlePath, 'utf8');
         const nameMatch = content.match(/versionName\s+"([^"]+)"/);
