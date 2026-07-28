@@ -33,9 +33,44 @@ jobs:
           fi
           echo "✅ 未发现垃圾文件"
 
+      - name: Check index.html title consistency
+        shell: bash
+        run: |
+          echo "=== 检查 index.html title 一致性 ==="
+          ERROR=0
+          check_title() {
+            local file="$1"
+            local expected="$2"
+            local actual=$(grep -oP '<title>\K[^<]+' "$file" | head -1)
+            if [ "$actual" != "$expected" ]; then
+              echo "❌ $file title='$actual' (期望: '$expected')"
+              ERROR=1
+            else
+              echo "✅ $file title='$actual'"
+            fi
+          }
+          check_title "offline_project/db-bendi/index.html" "惠康中医-本地"
+          check_title "offline_project/db-dingzhi/index.html" "惠康中医-定制"
+          check_title "offline_project/db-geren/index.html" "惠康中医-个人"
+          check_title "public/index.html" "惠康中医-云端"
+          if [ $ERROR -eq 1 ]; then exit 1; fi
+
+      - name: Check legacy android directories
+        shell: bash
+        run: |
+          echo "=== 检查 legacy android 目录 ==="
+          for dir in offline_project/db-geren/android offline_project/db-dingzhi/android; do
+            if [ -d "$dir" ]; then
+              echo "⚠️  $dir 存在(legacy目录,不再用于构建,构建请使用 capacitor/)"
+            fi
+          done
+          echo "✅ legacy 目录检查完成"
+
       - name: Summary
         run: |
           echo "### 代码质量检查结果" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ shared/ 模块一致性检查通过" >> $GITHUB_STEP_SUMMARY
           echo "✅ 垃圾文件检查通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ index.html title 一致性检查通过" >> $GITHUB_STEP_SUMMARY
+          echo "✅ legacy 目录检查通过" >> $GITHUB_STEP_SUMMARY
