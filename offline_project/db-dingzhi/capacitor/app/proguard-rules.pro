@@ -1,12 +1,12 @@
 # ============================================================================
-# ProGuard / R8 优化规则
+# ProGuard / R8 优化规则（与云端 APP 一致）
 # ============================================================================
 
 # 保留行号信息，便于崩溃日志分析
 -keepattributes SourceFile,LineNumberTable
 -renamesourcefileattribute SourceFile
 
-# 保留泛型签名
+# 保留泛型签名（Capacitor / Retrofit 等库需要）
 -keepattributes Signature
 -keepattributes InnerClasses
 -keepattributes EnclosingMethod
@@ -28,17 +28,24 @@
 -overloadaggressively
 
 # ============================================================================
+# Capacitor 框架（启用 minifyEnabled 后必须保留）
+# ============================================================================
+-keep class com.getcapacitor.** { *; }
+-keep @com.getcapacitor.annotation.CapacitorPlugin class * { *; }
+-keepclassmembers class * {
+    @com.getcapacitor.annotation.CapacitorPlugin <methods>;
+}
+
+# ============================================================================
 # JavaScript 接口（WebView JS 调用）
 # ============================================================================
-# 旧规则过度保留 public *，R8 full mode 下仅保留 @JavascriptInterface 方法即可
-# MainActivity lifecycle 方法由 Android framework 自动保留
-# NativeBridge 的 JS 方法由下方规则覆盖
+# 仅保留 @JavascriptInterface 注解的方法（R8 full mode 可优化其他 public 方法）
 -keepclassmembers class * {
     @android.webkit.JavascriptInterface <methods>;
 }
 
 # ============================================================================
-# AndroidX
+# AndroidX / Material
 # ============================================================================
 -keep class com.google.android.material.** { *; }
 -dontwarn com.google.android.material.**
@@ -48,10 +55,15 @@
 # ============================================================================
 -dontwarn com.google.errorprone.annotations.**
 -dontwarn javax.annotation.**
+-dontwarn com.google.api.client.**
+-dontwarn org.joda.time.**
 
 # ============================================================================
 # 优化选项
 # ============================================================================
+# 不预验证，加快编译
 -dontpreverify
+# 忽略警告（非致命）
 -ignorewarnings
+# 输出详细日志
 -verbose

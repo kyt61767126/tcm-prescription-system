@@ -55,11 +55,15 @@ import java.io.OutputStream;
 public class MainActivity extends BridgeActivity {
 
     // ============ 常量配置 ============
-    private static final String TAG = "TCM_Pres";
+    private static final String TAG = "TCM_Prescription";
     // 离线APP：本地 assets 页面路径
     private static final String LOCAL_ASSET_URL = "file:///android_asset/public/index.html";
     private static final int REQ_CAMERA = 1003;
     private static final int REQ_STORAGE = 1001;
+    // ★ WebView 就绪轮询（参考云端APP）：BridgeActivity 初始化时 WebView 可能未就绪
+    private static final int MAX_WEBVIEW_READY_RETRIES = 30;
+    private static final int WEBVIEW_READY_INTERVAL_MS = 100;
+    private int webViewReadyRetries = 0;
 
     private Handler mainHandler;
     private volatile String cachedVideoRecorderScript = null;
@@ -74,6 +78,10 @@ public class MainActivity extends BridgeActivity {
 
         // T5: 使用主线程 Looper 的 Handler，便于 onDestroy 统一清理
         mainHandler = new Handler(Looper.getMainLooper());
+
+        // ★ 安全检测（参考云端APP SecurityGuard）：root/调试器/签名/Frida/Xposed/模拟器
+        // 异步执行避免阻塞启动，检测到威胁时 Toast 提示并退出
+        mainHandler.post(() -> SecurityGuard.checkAndExit(this));
 
         // Android 6.0+ 动态申请相机和麦克风权限（录像拍照功能需要）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -101,12 +109,27 @@ public class MainActivity extends BridgeActivity {
         // 后台预加载录像拍照脚本（避免 onPageFinished 时同步IO阻塞UI）
         preloadVideoRecorderScript();
 
-        // ★ 离线APP：加载本地 assets 页面
+        // ★ 离线APP：加载本地 assets 页面（带就绪轮询，参考云端APP）
+        loadLocalAssetWithRetry();
+    }
+
+    /**
+     * 加载本地 assets 页面（带 WebView 就绪轮询）
+     * 参考云端APP MainActivity：BridgeActivity 初始化时 WebView 可能未就绪
+     * 最多重试 30 次 ×100ms = 3秒，避免白屏
+     */
+    private void loadLocalAssetWithRetry() {
         WebView webView = this.getBridge().getWebView();
         if (webView != null) {
             webView.loadUrl(LOCAL_ASSET_URL);
+            return;
+        }
+        if (webViewReadyRetries < MAX_WEBVIEW_READY_RETRIES) {
+            webViewReadyRetries++;
+            Log.w(TAG, "WebView 未就绪，重试 " + webViewReadyRetries + "/" + MAX_WEBVIEW_READY_RETRIES);
+            mainHandler.postDelayed(this::loadLocalAssetWithRetry, WEBVIEW_READY_INTERVAL_MS);
         } else {
-            Log.e(TAG, "onCreate: WebView 为 null，无法加载本地页面");
+            Log.e(TAG, "WebView 就绪轮询失败，无法加载本地页面");
         }
     }
 
@@ -175,9 +198,17 @@ public class MainActivity extends BridgeActivity {
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
         webView.setWebChromeClient(new WebChromeClient() {
             // 授权摄像头和麦克风权限（录像拍照功能需要）
+            // ★ 参考云端APP：校验 request.getOrigin() 必须为本地 file:// 资源
             @Override
             public void onPermissionRequest(PermissionRequest request) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                    // 来源校验：仅允许本地 file:// 页面请求摄像头/麦克风
+                    String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
+                    if (origin == null || !origin.startsWith("file://")) {
+                        Log.w(TAG, "onPermissionRequest 拒绝非本地来源: " + origin);
+                        request.deny();
+                        return;
+                    }
                     for (String permission : request.getResources()) {
                         if (permission.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE) ||
                             permission.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
@@ -263,12 +294,18 @@ public class MainActivity extends BridgeActivity {
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                // 离线APP：允许加载本地 file:// URL，拦截外部导航
-                String url = request.getUrl().toString();
-                if (url.startsWith("file://") || url.startsWith("content://")) {
-                    return false; // 允许加载本地 URL
+                // ★ 参考云端APP严格校验：仅允许本地 file:// + path 前缀 /android_asset/
+                // 防止 file://attacker.com/payload 这类伪 URL 绕过
+                android.net.Uri uri = request.getUrl();
+                String scheme = uri.getScheme();
+                String path = uri.getPath();
+                if ("file".equals(scheme) && path != null && path.startsWith("/android_asset/")) {
+                    return false; // 允许加载本地 assets
                 }
-                return true; // 拦截外部导航，防止重定向到钓鱼站点
+                if ("content".equals(scheme)) {
+                    return false; // 允许 ContentProvider
+                }
+                return true; // 拦截外部导航
             }
 
             @Override
@@ -287,13 +324,11 @@ public class MainActivity extends BridgeActivity {
                 view.evaluateJavascript("window.__STATUS_BAR_HEIGHT__ = " + cssPx + ";", null);
                 injectAutocompleteOff(view);
 
-                // ★ 注入 electronAPI 桥接（离线APP特有）
+                // ★ 注入 electronAPI 桥接（离线APP特有：license/login/print 等方法）
+                // video-recorder-inject.js 加载后会在此基础上增强（分片上传、录像拍照）
                 mainHandler.post(() -> injectElectronApiShim(view));
 
-                // ★ 注入状态栏适配
-                mainHandler.post(() -> injectStatusBarFix(view));
-
-                // ★ 注入键盘适配
+                // ★ 注入键盘适配（状态栏已由 WebView setPadding 处理，不再注入 statusBarFix）
                 mainHandler.post(() -> injectKeyboardAdapter(view));
 
                 // 布局修复脚本立即注入（体积小，影响UI布局）
@@ -302,6 +337,12 @@ public class MainActivity extends BridgeActivity {
                 // 录像拍照脚本延迟到页面渲染稳定后注入（避免40KB脚本同步执行阻塞UI）
                 // 300ms 是经验值：足够 React 完成首屏渲染，又不至于让用户感觉录像功能迟钝
                 mainHandler.postDelayed(() -> injectVideoRecorderScript(view), 300);
+            }
+
+            // ★ 参考云端APP：SSL 证书错误直接取消，防止中间人攻击
+            @Override
+            public void onReceivedSslError(WebView view, android.net.http.SslErrorHandler handler, android.net.http.SslError error) {
+                handler.cancel();
             }
 
             // 网络错误处理，避免白屏
@@ -456,22 +497,6 @@ public class MainActivity extends BridgeActivity {
             "      restart: function(){ return Promise.resolve({success:true}); }" +
             "    }" +
             "  };" +
-            "})();";
-        webView.evaluateJavascript(js, null);
-    }
-
-    /**
-     * ★ 注入状态栏适配脚本（离线APP特有）
-     * 原逻辑：根据 window.__STATUS_BAR_HEIGHT__ 注入 body{padding-top: hpx}
-     * 问题：onCreate 中已通过 WebView setPadding(0, statusBarHeight, 0, 0) 处理状态栏遮挡，
-     *       再注入 body padding-top 会造成"双重 padding"，顶部出现灰白条
-     * 修复：保留 __STATUS_BAR_HEIGHT__ 变量（供其他脚本读取），不再注入 body padding-top
-     */
-    private void injectStatusBarFix(WebView webView) {
-        String js = "(function(){" +
-            "  if (window.__statusBarFixApplied) return;" +
-            "  window.__statusBarFixApplied = true;" +
-            "  // WebView setPadding 已处理状态栏遮挡，不再注入 body padding-top，避免双重 padding 产生灰白条" +
             "})();";
         webView.evaluateJavascript(js, null);
     }
@@ -822,10 +847,9 @@ public class MainActivity extends BridgeActivity {
         //        savePrescriptionImage/saveVideoFile/saveMediaSession（只写指定目录）、findMediaFiles（按模式查找）
         // ------------------------------------------------------------------
         private boolean isSensitiveOperation(String name) {
-            // ★ Capacitor迁移：移除 readFileAsBase64 的敏感标记，改用路径白名单校验
-            // 原因：Capacitor的WebView URL scheme可能是 https://localhost 或 capacitor://localhost
-            // 导致 isCallerAllowed() 校验失败，readFileAsBase64 被拒绝
-            return "deleteFile".equals(name);
+            // ★ 恢复 readFileAsBase64 到敏感列表（参考云端APP）：路径白名单+来源校验双重保险
+            // isCallerAllowed() 已支持 file:// 和 https://localhost（见下方方法），不会误拒
+            return "readFileAsBase64".equals(name) || "deleteFile".equals(name);
         }
 
         // ------------------------------------------------------------------

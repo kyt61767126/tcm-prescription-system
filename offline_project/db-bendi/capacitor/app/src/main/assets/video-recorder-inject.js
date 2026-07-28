@@ -46,32 +46,9 @@
             }
         }
 
-        // Uint8Array → base64 编码（避免 btoa 不支持 >127 字节的问题）
-        // btoa 只支持 ASCII 字符（0-127），视频二进制数据包含 >127 的字节会失败
-        var _base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-        function _uint8ArrayToBase64(bytes) {
-            var len = bytes.length;
-            var base64 = '';
-            var i = 0;
-            while (i < len) {
-                var b1 = bytes[i++] || 0;
-                var b2 = i < len ? bytes[i++] : 0;
-                var b3 = i < len ? bytes[i++] : 0;
-                var group = (b1 << 16) | (b2 << 8) | b3;
-                base64 += _base64Chars[(group >> 18) & 0x3F];
-                base64 += _base64Chars[(group >> 12) & 0x3F];
-                base64 += _base64Chars[(group >> 6) & 0x3F];
-                base64 += _base64Chars[group & 0x3F];
-            }
-            var padLen = (3 - (len % 3)) % 3;
-            if (padLen > 0) {
-                base64 = base64.substring(0, base64.length - padLen) + '=='.substring(0, padLen);
-            }
-            return base64;
-        }
-
         // 分片上传：解决 Binder 事务 1MB 限制
-        var CHUNK_SIZE = 256 * 1024;
+        // 大文件 base64 编码后远超 1MB，必须分片传输
+        var CHUNK_SIZE = 256 * 1024;  // 256KB 一片（base64 解码后 192KB，加 JSON 包装远低于 1MB）
         function chunkedUpload(base64Data, fileName, type) {
             return new Promise(function (resolve) {
                 var startR = callNative('startMediaSession', JSON.stringify({ fileName: fileName }));
@@ -248,7 +225,8 @@
                                     var blobUrl = URL.createObjectURL(blob);
                                     window.__currentBlobUrl = blobUrl;
                                     console.log('[离线APP] 分片读取完成，blob URL=' + blobUrl + ', 片数=' + uint8Arrays.length + ', 总字节=' + totalBytes);
-                                    resolve({ success: true, base64: blobUrl, data: blobUrl });
+                                    // 与云端APP统一：仅返回 data 字段（blob URL）
+                                    resolve({ success: true, data: blobUrl });
                                 } catch (e) {
                                     console.error('[离线APP] 创建 blob URL 失败:', e);
                                     resolve({ success: false, error: '创建 blob URL 失败: ' + String(e) });
