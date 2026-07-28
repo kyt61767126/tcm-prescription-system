@@ -1,11 +1,11 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
 
 REM pack-app.bat - APP build entry (Capacitor Android APK)
-REM Capacitor APP: 稳定架构，与云端APP统一技术栈
-REM 打包流程：环境检查 → 清理缓存 → 构建签名APK → hash验证 → 复制输出
+REM Capacitor APP: stable architecture, unified with cloud APP
+REM Flow: env check -> clean cache -> build signed APK -> hash verify -> copy output
 
 set "CAP_DIR=%~dp0capacitor"
 if not exist "%CAP_DIR%\build-app.bat" (
@@ -16,15 +16,15 @@ if not exist "%CAP_DIR%\build-app.bat" (
 
 echo ============================================
 echo   Huikang-TCM Build - Mobile APP (Capacitor)
-echo   Version: bendi (本地版)
+echo   Version: bendi
 echo ============================================
 echo.
 
-REM 调用 Capacitor APP 完整安全打包（含8步安全机制）
+REM Call Capacitor APP full security build (8-step security)
 call "%CAP_DIR%\build-app.bat"
 set "EXIT_CODE=%errorlevel%"
 
-REM 复制 APK 到当前目录（方便统一管理）
+REM Copy APK to current directory
 if %EXIT_CODE% equ 0 (
     if exist "%CAP_DIR%\惠康中医-本地-Capacitor.apk" (
         copy "%CAP_DIR%\惠康中医-本地-Capacitor.apk" "%~dp0惠康中医-本地-Capacitor.apk" /y >nul
