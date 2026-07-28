@@ -5844,27 +5844,29 @@ if (window.Permission) {
                 const userManageBtn = document.getElementById('userManageBtn');
                 if (userManageBtn && !isClinicAdmin(currentUser)) userManageBtn.style.display = 'none';
             }
-            
-            // 检查是否是Electron环境
+
+            // ★ 安全要求：每次打开都必须显示登录窗口，禁止自动登录
+            // 清除可能残留的会话登录状态（sessionStorage 仅在会话内有效，关闭即清除）
+            sessionStorage.removeItem('currentUser');
+            sessionStorage.removeItem('cloud_isLoggedIn');
+            currentUser = null;
+
+            // ★ 例外：Electron 桌面端通过 login.html 登录窗口完成登录后，
+            // 主进程通过 IPC 传递登录用户，这是合法的登录流程（非自动登录）
             const isElectron = window.electronAPI && window.electronAPI.isElectron;
-            
-            // Electron模式：优先通过IPC从主进程获取登录用户（跨源localStorage隔离）
             if (isElectron && window.electronAPI.getLoggedInUser) {
                 try {
                     const ipcUser = await window.electronAPI.getLoggedInUser();
                     if (ipcUser) {
                         currentUser = ipcUser;
-                        const userData = JSON.stringify(ipcUser);
-                        localStorage.setItem('cloud_currentUser', userData);
-                        sessionStorage.setItem('currentUser', userData);
-                        // 确保登录覆盖层隐藏
+                        sessionStorage.setItem('currentUser', JSON.stringify(ipcUser));
                         document.getElementById('loginOverlay').style.display = 'none';
+                        const mainContainer = document.querySelector('.main-container');
+                        if (mainContainer) mainContainer.style.display = 'flex';
                         updateUserDisplay();
-                        // 先从云端刷新用户权限（管理员可能已修改 allowedMode）
                         await refreshCurrentUserFromCloud();
                         await loadData();
                         renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
-                        // 继续初始化界面
                         finishInitUI(true);
                         return;
                     }
@@ -5872,54 +5874,17 @@ if (window.Permission) {
                     console.error('从主进程获取登录用户失败:', e);
                 }
             }
-            
-            // 非Electron模式或IPC获取失败：回退到localStorage/sessionStorage
-            const sessionUser = sessionStorage.getItem('currentUser');
-            const localUser = localStorage.getItem('cloud_currentUser');
-            let hasValidUser = false;
-            
-            // 优先使用sessionStorage（会话级别）
-            if (sessionUser) {
-                try {
-                    currentUser = JSON.parse(sessionUser);
-                    hasValidUser = true;
-                } catch (e) {
-                    console.error('解析sessionStorage用户数据失败:', e);
-                }
+
+            // 网页端和 APP 端：每次都显示登录界面
+            document.getElementById('loginOverlay').style.display = 'flex';
+            const mainContainer = document.querySelector('.main-container');
+            if (mainContainer) {
+                mainContainer.style.display = 'none';
             }
-            
-            // 如果sessionStorage没有，尝试localStorage（持久化）
-            if (!hasValidUser && localUser) {
-                try {
-                    currentUser = JSON.parse(localUser);
-                    sessionStorage.setItem('currentUser', localUser);
-                    hasValidUser = true;
-                } catch (e) {
-                    console.error('解析localStorage用户数据失败:', e);
-                }
-            }
-            
-            // APP端（Capacitor）：每次打开都显示登录界面，确保用户可以切换账号
-            // 桌面端和网页端：已登录则直接进入主界面
-            const isCapacitor = window.Capacitor && window.Capacitor.isNative;
-            if (hasValidUser && !isCapacitor) {
-                document.getElementById('loginOverlay').style.display = 'none';
-                const mainContainer = document.querySelector('.main-container');
-                if (mainContainer) {
-                    mainContainer.style.display = 'flex';
-                }
-                updateUserDisplay();
-            } else {
-                document.getElementById('loginOverlay').style.display = 'flex';
-                const mainContainer = document.querySelector('.main-container');
-                if (mainContainer) {
-                    mainContainer.style.display = 'none';
-                }
-                initLoginDropdown();
-            }
-            
-            // 继续初始化界面
-            finishInitUI(hasValidUser);
+            initLoginDropdown();
+
+            // 继续初始化界面（hasValidUser=false，不自动加载数据）
+            finishInitUI(false);
         }
         
         function finishInitUI(hasValidUser) {

@@ -266,7 +266,8 @@
         // 如果 injectElectronApiShim 已抢先注入了简单版本的 electronAPI，
         // 用增强版方法覆盖关键方法（readFileAsBase64/savePrescriptionImage/saveVideoFile 等
         // 解决"图片无法加载，视频可以播放"的问题：图片走简单版 readFileAsBase64 超出 data URL 限制
-        if (oldAPI && oldAPI.__injected) {
+        // ★ 兼容 injectElectronApiShim 的 __nativeBridgeProxy 标记（之前只检查 __injected，导致 license 丢失）
+        if (oldAPI && (oldAPI.__injected || oldAPI.__nativeBridgeProxy)) {
             console.log('[离线APP] electronAPI 已存在（injectElectronApiShim 先注入），覆盖增强版方法到旧对象');
             var newAPI = window.electronAPI;
             oldAPI.savePrescriptionImage = newAPI.savePrescriptionImage;
@@ -278,7 +279,7 @@
             oldAPI.renameMediaFiles = newAPI.renameMediaFiles;
             oldAPI.getVideoDirectory = newAPI.getVideoDirectory;
             oldAPI.__videoRecorderEnhanced = true;
-            // 恢复旧对象为 electronAPI
+            // 恢复旧对象为 electronAPI（保留 license/activate/printPrescription/encryptData 等方法）
             window.electronAPI = oldAPI;
         }
 

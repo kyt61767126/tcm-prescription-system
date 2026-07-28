@@ -880,14 +880,15 @@ public class MainActivity extends BridgeActivity {
 
         // ------------------------------------------------------------------
         // P1-6 分层校验：仅敏感操作需要来源校验
-        // 敏感：readFileAsBase64（旧 API，可读任意文件）、deleteFile（可删文件）
-        // 非敏感：startReadSession/readNextChunk/closeReadSession（路径白名单校验，见 startReadSession）
+        // 敏感：deleteFile（可删文件）
+        // 非敏感：readFileAsBase64（已有 isMediaPathAllowed 路径白名单校验，仅允许读取媒体目录文件）
+        //        startReadSession/readNextChunk/closeReadSession（路径白名单校验，见 startReadSession）
         //        savePrescriptionImage/saveVideoFile/saveMediaSession（只写指定目录）、findMediaFiles（按模式查找）
+        // ★ readFileAsBase64 从敏感列表移除：避免 startReadSession 失败回退到 readFileAsBase64 时
+        //    被 isCallerAllowed 误拦截（URL 短暂变化导致），路径白名单已足够安全
         // ------------------------------------------------------------------
         private boolean isSensitiveOperation(String name) {
-            // ★ 恢复 readFileAsBase64 到敏感列表（参考云端APP）：路径白名单+来源校验双重保险
-            // isCallerAllowed() 已支持 file:// 和 https://localhost（见下方方法），不会误拒
-            return "readFileAsBase64".equals(name) || "deleteFile".equals(name);
+            return "deleteFile".equals(name);
         }
 
         // ------------------------------------------------------------------
