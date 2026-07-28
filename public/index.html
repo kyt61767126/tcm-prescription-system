@@ -7,6 +7,21 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <title>惠康中医-云端</title>
+    <script>
+    // ★ 个人版云端APP：通过URL参数 edition=personal 区分版本
+    // 个人版：单用户管理员，不显示账户管理/新增管理员功能
+    // 定制版（默认）：多用户管理员，可新增离线普通管理员
+    (function() {
+        try {
+            var params = new URLSearchParams(window.location.search);
+            var edition = params.get('edition');
+            if (edition === 'personal') {
+                window.EDITION = 'personal';
+                console.log('[Edition] 个人版云端APP模式');
+            }
+        } catch(e) { /* 忽略URL解析错误 */ }
+    })();
+    </script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
