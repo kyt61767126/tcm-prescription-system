@@ -341,7 +341,7 @@ public class MainActivity extends BridgeActivity {
 
             // ★ 参考云端APP：SSL 证书错误直接取消，防止中间人攻击
             @Override
-            public void onReceivedSslError(WebView view, android.net.http.SslErrorHandler handler, android.net.http.SslError error) {
+            public void onReceivedSslError(WebView view, android.webkit.SslErrorHandler handler, android.net.http.SslError error) {
                 handler.cancel();
             }
 
