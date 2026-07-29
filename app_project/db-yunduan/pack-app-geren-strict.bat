@@ -55,6 +55,24 @@ if not exist "%GEN_HASH_PS1%" (
 )
 
 REM ==========================================================
+REM Step 0: Java 预编译检查（提前发现编译错误，对齐 packaging.ps1 逻辑）
+REM ==========================================================
+echo [Step 0] Java 预编译检查中（提前发现编译错误）...
+echo.
+pushd "%APP_DIR%"
+call gradlew.bat compileReleaseJavaWithJavac --quiet 2>&1
+set "PRECOMPILE_RC=%errorlevel%"
+popd
+if %PRECOMPILE_RC% neq 0 (
+    echo.
+    echo [ERROR] Java 预编译检查失败，终止打包
+    set "EXIT_CODE=1"
+    goto :end
+)
+echo   [OK] Java 预编译检查通过
+echo.
+
+REM ==========================================================
 REM Step A: Build APK (default mode, no signature strictness)
 REM ==========================================================
 echo [Step A] Building APK - default mode...
