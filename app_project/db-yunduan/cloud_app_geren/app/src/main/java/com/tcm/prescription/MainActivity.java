@@ -736,15 +736,9 @@ public class MainActivity extends BridgeActivity {
             "}" +
             "window.updateMobileActionButtons=function(){" +
             "var btn2=document.getElementById('mobileActionBtn2');" +
-            "if(!btn2||!window.currentUser)return;" +
-            "var canManage=(currentUser.role==='admin'||currentUser.role==='clinic_admin'||currentUser.role==='platform_admin');" +
-            "if(canManage){" +
-            "btn2.innerHTML='👤 用户';" +
-            "btn2.onclick=function(){showUserManageModal();};" +
-            "}else{" +
+            "if(!btn2)return;" +
             "btn2.innerHTML='🔐 改密';" +
             "btn2.onclick=function(){showChangePwdModal();};" +
-            "}" +
             "btn2.style.display='';" +
             "};" +
             "if(window.currentUser){window.updateMobileActionButtons();}" +
