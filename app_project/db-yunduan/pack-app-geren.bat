@@ -32,7 +32,7 @@ if errorlevel 1 (
 )
 
 REM Sync shared/ core files to db-yunduan/cloud_app_geren assets
-set "SHARED_DIR=%~dp0..\..\..\shared"
+set "SHARED_DIR=%~dp0..\..\shared"
 set "PUBLIC_DIR=%APP_DIR%\app\src\main\assets\public"
 if not exist "%PUBLIC_DIR%" mkdir "%PUBLIC_DIR%"
 
@@ -80,7 +80,7 @@ if exist "%APK_SRC%" (
 REM Auto-update download page
 echo.
 echo [4/4] Auto-updating download page...
-node "%~dp0..\..\..\tools\auto-update-downloads.js" geren-cloud
+node "%~dp0..\..\tools\auto-update-downloads.js" geren-cloud
 if errorlevel 1 (
     echo [WARN] Download page auto-update geren-cloud had issues, continuing anyway
 ) else (

@@ -1,4 +1,4 @@
-# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-dingzhi）
 param(
     [switch]$AutoDesktop,
@@ -190,7 +190,7 @@ function Sync-FilesToCloudApp {
     Write-Host "  Syncing shared files to cloud_app assets..." -ForegroundColor White
     Write-Host ""
 
-    $sharedDir = "$scriptDir\..\..\..\shared"
+    $sharedDir = "$scriptDir\..\..\shared"
     $publicDir = "$scriptDir\cloud_app\app\src\main\assets\public"
     $assetsDir = "$scriptDir\cloud_app\app\src\main\assets"
 
@@ -484,7 +484,7 @@ function Build-Desktop {
 
     $stepStart = Get-Date
     $desktopDir = "$scriptDir\cloud_desktop"
-    $toolsDir = "$scriptDir\..\..\..\tools"
+    $toolsDir = "$scriptDir\..\..\tools"
 
     $certPath = "$toolsDir\certs\惠康中医-codesign.pfx"
     $pkgPath = "$desktopDir\package.json"
@@ -881,7 +881,7 @@ function Enable-StrictMode {
     Write-Host "  说明：Root 检测 + 调试器检测默认已启用，无需此步骤"
     Write-Host "----------------------------------------------------------------"
     Write-Host ""
-    & "$scriptDir\..\..\..\tools\generate-sign-hash.ps1" -Version cloud
+    & "$scriptDir\..\..\tools\generate-sign-hash.ps1" -Version cloud
     Write-Host ""
     return $LASTEXITCODE
 }
@@ -928,7 +928,7 @@ function Build-AllStrict {
     $env:NO_PAUSE = '1'
     try {
         Push-Location $scriptDir
-        & "$scriptDir\..\..\..\tools\generate-sign-hash.ps1" -Version cloud 2>&1 | ForEach-Object {
+        & "$scriptDir\..\..\tools\generate-sign-hash.ps1" -Version cloud 2>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.Exception.Message -ForegroundColor Yellow }
             else { Write-Host $_ }
         }
@@ -998,7 +998,7 @@ function Build-AppStrict {
     $env:NO_PAUSE = '1'
     try {
         Push-Location $scriptDir
-        & "$scriptDir\..\..\..\tools\generate-sign-hash.ps1" -Version cloud 2>&1 | ForEach-Object {
+        & "$scriptDir\..\..\tools\generate-sign-hash.ps1" -Version cloud 2>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) { Write-Host $_.Exception.Message -ForegroundColor Yellow }
             else { Write-Host $_ }
         }
