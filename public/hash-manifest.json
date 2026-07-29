@@ -92,10 +92,10 @@
     "geren-cloud": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
-            "sha256": "c26300e2a6e5dfa01654bbf52520a082394051fb1e83b91135e44265b1ddc791",
+            "sha256": "9d1d155eed2ac0b88aac0aeadde92d40d38ede7396a26df79c70215e7709e561",
             "url": "/downloads/惠康中医-云端个人版.apk",
             "size": 11222777,
-            "updateTime": "2026-07-29T22:52:36.150Z",
+            "updateTime": "2026-07-29T22:54:14.142Z",
             "fileName": "惠康中医-云端个人版.apk"
         }
     }
