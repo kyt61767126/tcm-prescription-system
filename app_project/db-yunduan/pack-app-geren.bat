@@ -51,6 +51,13 @@ if exist "%SHARED_DIR%\permission.js" (
 )
 echo.
 
+REM Sync APP version from cloud_desktop/index.html to cloud_app_geren MainActivity
+echo [1.5/4] Syncing APP version...
+set "CLOUD_DIR_TMP=%~dp0"
+set "CLOUD_DIR_TMP=%CLOUD_DIR_TMP:~0,-1%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sync-app-version.ps1" "%CLOUD_DIR_TMP%" "%APP_DIR%"
+echo.
+
 REM Build APK
 echo [2/4] Building APK - personal edition com.tcm.prescription.geren...
 cd /d "%APP_DIR%"

@@ -96,12 +96,10 @@ echo.
 echo [2.6/6] Syncing APP version from index.html to MainActivity...
 REM Read __APP_VERSION__ from cloud_desktop/index.html, inject into MainActivity.EXPECTED_APP_VERSION
 REM Avoid cache clearing on every launch caused by MainActivity/index.html version mismatch
-REM Use standalone .ps1 script to avoid cmd/PowerShell double-escape issues
+REM sync-app-version.ps1 自动同步 cloud_app 和 cloud_app_geren 两个 APP
 set "CLOUD_DIR_TMP=%~dp0"
 set "CLOUD_DIR_TMP=%CLOUD_DIR_TMP:~0,-1%"
-set "ANDROID_DIR_TMP=%ANDROID_DIR%"
-set "ANDROID_DIR_TMP=%ANDROID_DIR_TMP:~0,-1%"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sync-app-version.ps1" "%CLOUD_DIR_TMP%" "%ANDROID_DIR%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sync-app-version.ps1" "%CLOUD_DIR_TMP%"
 echo.
 
 echo [2.7/6] Auto-incrementing versionCode...
