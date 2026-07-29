@@ -38,31 +38,6 @@
         console.log('[云端APP] AndroidNative 桥接已找到，开始构建 electronAPI shim');
         
         function P(v) { return Promise.resolve(v); }
-
-        // Uint8Array → base64 编码（避免 btoa 不支持 >127 字节的问题）
-        // btoa 只支持 ASCII 字符（0-127），视频二进制数据包含 >127 的字节会失败
-        var _base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-        function _uint8ArrayToBase64(bytes) {
-            var len = bytes.length;
-            var base64 = '';
-            var i = 0;
-            while (i < len) {
-                var b1 = bytes[i++] || 0;
-                var b2 = i < len ? bytes[i++] : 0;
-                var b3 = i < len ? bytes[i++] : 0;
-                var group = (b1 << 16) | (b2 << 8) | b3;
-                base64 += _base64Chars[(group >> 18) & 0x3F];
-                base64 += _base64Chars[(group >> 12) & 0x3F];
-                base64 += _base64Chars[(group >> 6) & 0x3F];
-                base64 += _base64Chars[group & 0x3F];
-            }
-            var padLen = (3 - (len % 3)) % 3;
-            if (padLen > 0) {
-                base64 = base64.substring(0, base64.length - padLen) + '=='.substring(0, padLen);
-            }
-            return base64;
-        }
-
         function callNative(name, json) {
             try {
                 var result = N.invoke(name, json || '{}');
@@ -126,7 +101,6 @@
         window.electronAPI = {
             __injected: true,
             isElectron: true,
-            isCloudApp: true,  // ★ 标记为云端APP，用于区分桌面版（隐藏图片保存位置按钮等）
             saveUserData: function (k, d) { return P({ success: true }); },
             getUserData: function (k) { return P({ success: false, data: null }); },
             saveBackupFile: function (jsonStr, fileName) {
@@ -161,8 +135,12 @@
                 return new Promise(function (resolve) {
                     try {
                         var bytes = new Uint8Array(arrayBuffer);
-                        // ★ 修复 btoa 不支持 >127 字节的问题：使用自定义 _uint8ArrayToBase64
-                        var base64Data = _uint8ArrayToBase64(bytes);
+                        var chunkSize = 8192;
+                        var binary = '';
+                        for (var i = 0; i < bytes.length; i += chunkSize) {
+                            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+                        }
+                        var base64Data = btoa(binary);
                         console.log('[云端APP] 视频总大小: ' + base64Data.length + ' 字节 base64');
                         // 视频几乎都超 1MB Binder 限制，统一走分片上传
                         chunkedUpload(base64Data, fileName, 'video').then(resolve);
@@ -195,9 +173,7 @@
             },
             readFileAsBase64: function (filePath) {
                 // 统一走分片读取，避免 Binder 1MB 限制和 isCallerAllowed 误拦截
-                // ★ 修复视频无法播放：改为 data URL 方案（与云端桌面版一致）
-                //   原因：Blob URL 在 Android WebView 中无法被 video 标签加载
-                //   大文件降级：超过 8MB 时回退到系统播放器 openFile
+                // 最终用 Blob URL 代替 data URL，避免大视频 data URL 超出 WebView 限制
                 return new Promise(function (resolve) {
                     try {
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
@@ -212,17 +188,7 @@
                         var mimeType = startR.mimeType || 'application/octet-stream';
                         var fileSize = startR.fileSize || 0;
                         console.log('[云端APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
-
-                        // ★ 大文件降级：视频超过 8MB 直接用系统播放器打开
-                        if (mimeType.indexOf('video') === 0 && fileSize > 8 * 1024 * 1024) {
-                            callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
-                            console.log('[云端APP] 视频过大(' + fileSize + ')，降级到系统播放器');
-                            var openR = callNative('openFile', JSON.stringify({ filePath: filePath, mimeType: mimeType }));
-                            resolve(openR);
-                            return;
-                        }
-
-                        var chunks = [];
+                        var uint8Arrays = [];
 
                         function nextChunk() {
                             var r = callNative('readNextChunk', JSON.stringify({ sessionId: sessionId }));
@@ -233,18 +199,34 @@
                                 return;
                             }
                             if (r.chunk) {
-                                chunks.push(r.chunk);
+                                // 分片解码 base64 → Uint8Array，避免大字符串 atob 内存翻倍
+                                try {
+                                    var binary = atob(r.chunk);
+                                    var len = binary.length;
+                                    var bytes = new Uint8Array(len);
+                                    for (var i = 0; i < len; i++) {
+                                        bytes[i] = binary.charCodeAt(i);
+                                    }
+                                    uint8Arrays.push(bytes);
+                                } catch (e) {
+                                    console.error('[云端APP] base64 解码失败:', e);
+                                }
                             }
                             if (r.eof) {
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
                                 try {
-                                    var base64 = chunks.join('');
-                                    var dataUrl = 'data:' + mimeType + ';base64,' + base64;
-                                    console.log('[云端APP] 分片读取完成，data URL 长度=' + base64.length);
-                                    resolve({ success: true, data: dataUrl });
+                                    var blob = new Blob(uint8Arrays, { type: mimeType });
+                                    // 清理旧 blob URL 避免内存泄漏
+                                    if (window.__currentBlobUrl) {
+                                        try { URL.revokeObjectURL(window.__currentBlobUrl); } catch (e) {}
+                                    }
+                                    var blobUrl = URL.createObjectURL(blob);
+                                    window.__currentBlobUrl = blobUrl;
+                                    console.log('[云端APP] 分片读取完成，blob URL=' + blobUrl + ', 片数=' + uint8Arrays.length + ', 总字节=' + blob.size);
+                                    resolve({ success: true, data: blobUrl });
                                 } catch (e) {
-                                    console.error('[云端APP] 创建 data URL 失败:', e);
-                                    resolve({ success: false, error: '创建 data URL 失败: ' + String(e) });
+                                    console.error('[云端APP] 创建 blob URL 失败:', e);
+                                    resolve({ success: false, error: '创建 blob URL 失败: ' + String(e) });
                                 }
                                 return;
                             }

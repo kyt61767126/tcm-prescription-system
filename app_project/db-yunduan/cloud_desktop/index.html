@@ -7765,16 +7765,14 @@ if (window.Permission) {
         async function updateImageSavePathDisplay() {
             const pathDisplay = document.getElementById('imageSavePath');
             const desktopSettings = document.getElementById('desktopSettings');
-
-            // 云端APP隐藏图片保存位置按钮（仅桌面版可用）
-            const isCloudApp = window.electronAPI && window.electronAPI.isCloudApp;
-            if (!window.electronAPI || !window.electronAPI.isElectron || isCloudApp) {
+            
+            if (!window.electronAPI || !window.electronAPI.isElectron) {
                 if (desktopSettings) {
                     desktopSettings.style.display = 'none';
                 }
                 return;
             }
-
+            
             try {
                 const path = await window.electronAPI.getImageDirectory();
                 if (pathDisplay) {
