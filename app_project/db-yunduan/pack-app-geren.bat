@@ -1,5 +1,7 @@
 @echo off
 chcp 65001 >nul
+REM P0: Auto-fix .ps1 BOM encoding before packaging
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\fix-ps1-bom.ps1" >nul 2>&1
 setlocal enableextensions
 cd /d "%~dp0"
 
@@ -36,7 +38,7 @@ set "SHARED_DIR=%~dp0..\..\shared"
 set "PUBLIC_DIR=%APP_DIR%\app\src\main\assets\public"
 if not exist "%PUBLIC_DIR%" mkdir "%PUBLIC_DIR%"
 
-echo [1/4] Syncing core JS modules...
+echo [1/6] Syncing core JS modules...
 if exist "%SHARED_DIR%\auth-core.js" (
     copy /y "%SHARED_DIR%\auth-core.js" "%PUBLIC_DIR%\auth-core.js" >nul
     echo   [OK] auth-core.js
@@ -52,33 +54,58 @@ if exist "%SHARED_DIR%\permission.js" (
 echo.
 
 REM Sync APP version from cloud_desktop/index.html to cloud_app_geren MainActivity
-echo [1.5/4] Syncing APP version...
+echo [1.5/6] Syncing APP version...
 set "CLOUD_DIR_TMP=%~dp0"
 set "CLOUD_DIR_TMP=%CLOUD_DIR_TMP:~0,-1%"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sync-app-version.ps1" "%CLOUD_DIR_TMP%" "%APP_DIR%"
 echo.
 
-REM Java 预编译检查（提前发现编译错误，对齐 packaging.ps1 逻辑）
-echo [1.7/4] Java 预编译检查中（提前发现编译错误）...
+REM Clean build cache (force full clean) - critical for strict mode Step C rebuild
+REM Without clean, stale .class files from previous build conflict with modified Java files
+echo [2/6] Cleaning build cache (force full clean)...
 cd /d "%APP_DIR%"
-call "%GRADLEW%" compileReleaseJavaWithJavac --quiet
+if exist "app\build\intermediates\javac" (
+    rmdir /S /Q "app\build\intermediates\javac" 2>nul
+    echo   [OK] cleaned javac cache
+)
+if exist "app\build\intermediates\assets" (
+    rmdir /S /Q "app\build\intermediates\assets" 2>nul
+    echo   [OK] cleaned assets cache
+)
+if exist "app\build\intermediates\merged_assets" (
+    rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
+    echo   [OK] cleaned merged_assets cache
+)
+call "%GRADLEW%" clean --no-daemon 2>nul
+if errorlevel 1 (
+    echo   [WARN] Gradle clean failed, continuing with incremental build
+) else (
+    echo   [OK] Old cache cleared
+)
+cd /d "%~dp0%"
+echo.
+
+REM Java pre-compile check (use --no-daemon for consistency with APK build)
+echo [3/6] Java pre-compile check...
+cd /d "%APP_DIR%"
+call "%GRADLEW%" compileReleaseJavaWithJavac --quiet --no-daemon
 set "PRECOMPILE_RC=%errorlevel%"
-cd /d "%~dp0"
+cd /d "%~dp0%"
 if %PRECOMPILE_RC% neq 0 (
     echo.
-    echo [ERROR] Java 预编译检查失败，终止打包
+    echo [ERROR] Java pre-compile check failed
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo   [OK] Java 预编译检查通过
+echo   [OK] Java pre-compile check passed
 echo.
 
 REM Build APK
-echo [2/4] Building APK - personal edition com.tcm.prescription.geren...
+echo [4/6] Building APK - personal edition com.tcm.prescription.geren...
 cd /d "%APP_DIR%"
 call "%GRADLEW%" assembleRelease --no-daemon
 set "EXIT_CODE=%errorlevel%"
-cd /d "%~dp0"
+cd /d "%~dp0%"
 
 if %EXIT_CODE% neq 0 (
     echo.
@@ -89,7 +116,7 @@ if %EXIT_CODE% neq 0 (
 
 REM Copy and rename APK
 echo.
-echo [3/4] Copying APK...
+echo [5/6] Copying APK...
 if exist "%APK_SRC%" (
     copy /y "%APK_SRC%" "%APK_DST%" >nul
     echo   [OK] APK generated: %APK_DST%
@@ -101,7 +128,7 @@ if exist "%APK_SRC%" (
 
 REM Auto-update download page
 echo.
-echo [4/4] Auto-updating download page...
+echo [6/6] Auto-updating download page...
 node "%~dp0..\..\tools\auto-update-downloads.js" geren-cloud
 if errorlevel 1 (
     echo [WARN] Download page auto-update geren-cloud had issues, continuing anyway
