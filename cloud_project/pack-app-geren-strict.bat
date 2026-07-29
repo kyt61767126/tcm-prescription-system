@@ -126,6 +126,6 @@ if %EXIT_CODE% neq 0 (
 echo.
 if not defined NO_PAUSE (
     set "EXIT_KEY="
-    set /p "EXIT_KEY=Press 0 or Enter to exit: "
+    set /p "EXIT_KEY=按 0 或回车键退出: "
 )
 exit /b %EXIT_CODE%

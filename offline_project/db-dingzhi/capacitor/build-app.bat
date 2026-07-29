@@ -336,13 +336,7 @@ echo.
 
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
-echo ============================================
-echo   APK 打包完成!
-echo   路径: %APK_FULL_PATH%
-echo   开始: %BUILD_START_TIME%
-echo   结束: %BUILD_END_TIME%
-echo   总耗时: %BUILD_ELAPSED%
-echo ============================================
+powershell -NoProfile -Command "Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  APK 打包完成!' -ForegroundColor Yellow; Write-Host '  路径: %APK_FULL_PATH%' -ForegroundColor Yellow; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  总耗时: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
 if not defined NO_PAUSE (
     set "EXIT_KEY="
     set /p "EXIT_KEY=按 0 或回车键退出: "

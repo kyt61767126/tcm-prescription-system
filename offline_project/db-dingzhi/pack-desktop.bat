@@ -16,22 +16,29 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
+REM Record start time
+for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
+
 echo ============================================
 echo   Huikang-TCM Build - Desktop (Custom)
+echo   Start: %BUILD_START_TIME%
 echo ============================================
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -Version dingzhi -Target desktop
 set "EXIT_CODE=%errorlevel%"
+
+for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
+for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
+
 echo.
 if %EXIT_CODE% neq 0 (
-    echo [错误] 打包失败，退出码: %EXIT_CODE%
+    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Red; Write-Host '  [ERROR] Build failed, exit code: %EXIT_CODE%' -ForegroundColor Red; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Red; Write-Host '========================================' -ForegroundColor Red"
 ) else (
-    echo [成功] 桌面版打包完成！
-    echo.
-    echo ============================================
-    echo   打包成功！
-    echo   产品: 惠康中医-定制（桌面版）
-    echo ============================================
+    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] Desktop (Custom) build complete!' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
 )
 echo.
-if not defined NO_PAUSE pause
+if not defined NO_PAUSE (
+    set "EXIT_KEY="
+    set /p "EXIT_KEY=按 0 或回车键退出: "
+)
+exit /b %EXIT_CODE%
