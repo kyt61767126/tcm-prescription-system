@@ -1848,7 +1848,7 @@ if (window.Permission) {
                                 const cloudNo = cp.prescriptionNo || cp.outpatientNo || '';
                                 if (localNo && cloudNo && localNo !== cloudNo && localNo.startsWith('LOCAL-')) {
                                     if (window.electronAPI && window.electronAPI.renameMediaFiles) {
-                                        window.electronAPI.renameMediaFiles(localP.patientName || '', localNo, cloudNo)
+                                        window.electronAPI.renameMediaFiles(localP.patientName || '', localP.patientName || '', localNo, cloudNo)
                                             .then(r => {
                                                 if (r.success && r.renamed > 0) {
                                                     console.log('pull: 重命名媒体文件 ' + localNo + ' → ' + cloudNo + ': ' + r.renamed + ' 个');
@@ -7367,30 +7367,27 @@ if (window.Permission) {
                 setTimeout(() => {
                     // 生成处方签图片并自动下载（使用云端返回的编号）
                     savePrescriptionAsImage(savedRecord, officialNo);
-                    // 云端分配的编号可能与拍照时使用的编号不同，重命名已保存的处方文件
-                    if (oldPrescriptionNo && officialNo && oldPrescriptionNo !== officialNo) {
-                        console.log('[重命名检查] oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo, 'patientName:', record.patientName);
-                        if (window.electronAPI && window.electronAPI.renameMediaFiles) {
-                            window.electronAPI.renameMediaFiles(record.patientName, oldPrescriptionNo, officialNo)
-                                .then(r => {
-                                    console.log('[重命名结果] success:', r.success, 'renamed:', r.renamed);
-                                    if (r.success && r.renamed > 0) {
-                                        console.log('已重命名 ' + r.renamed + ' 个处方文件: ' + oldPrescriptionNo + ' → ' + officialNo);
-                                    } else if (r.success && r.renamed === 0) {
-                                        console.warn('[重命名警告] 没有找到需要重命名的文件，请检查文件名格式');
-                                    }
-                                    collectAndUpdateMediaFiles(savedRecord, officialNo);
-                                })
-                                .catch(e => {
-                                    console.error('重命名处方文件失败:', e);
-                                    collectAndUpdateMediaFiles(savedRecord, officialNo);
-                                });
-                        } else {
-                            console.warn('[重命名警告] electronAPI.renameMediaFiles 不可用');
-                            collectAndUpdateMediaFiles(savedRecord, officialNo);
-                        }
+                    // 保存处方后，把最近拍照录像的文件绑定到当前患者姓名（支持先拍照后录入姓名的流程）
+                    // 对齐离线APP db-dingzhi/index.html 的 renameMediaFiles 4参数调用
+                    var oldMediaName = window.__lastUsedMediaPatientName || localStorage.getItem('lastUsedMediaPatientName') || '';
+                    var oldMediaNo = window.__lastUsedMediaIdentifier || localStorage.getItem('lastUsedMediaIdentifier') || '';
+                    if (oldMediaName && oldMediaNo && window.electronAPI && window.electronAPI.renameMediaFiles &&
+                        (oldMediaName !== record.patientName || oldMediaNo !== officialNo)) {
+                        console.log('[重命名检查] oldMediaName:', oldMediaName, 'newName:', record.patientName, 'oldMediaNo:', oldMediaNo, 'officialNo:', officialNo);
+                        window.electronAPI.renameMediaFiles(oldMediaName, record.patientName, oldMediaNo, officialNo)
+                            .then(r => {
+                                console.log('[重命名结果] success:', r.success, 'renamed:', r.renamed);
+                                if (r.success && r.renamed > 0) {
+                                    console.log('已绑定 ' + r.renamed + ' 个媒体文件到患者: ' + record.patientName);
+                                }
+                                collectAndUpdateMediaFiles(savedRecord, officialNo);
+                            })
+                            .catch(e => {
+                                console.error('绑定媒体文件失败:', e);
+                                collectAndUpdateMediaFiles(savedRecord, officialNo);
+                            });
                     } else {
-                        console.log('[重命名跳过] 条件不满足 - oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo);
+                        console.log('[重命名跳过] 条件不满足 - oldMediaName:', oldMediaName, 'oldMediaNo:', oldMediaNo);
                         collectAndUpdateMediaFiles(savedRecord, officialNo);
                     }
                     // 保存后清空表单，方便下一次使用（跳过确认弹窗）

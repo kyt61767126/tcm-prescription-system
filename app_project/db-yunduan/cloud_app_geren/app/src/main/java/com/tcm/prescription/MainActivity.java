@@ -735,7 +735,7 @@ public class MainActivity extends BridgeActivity {
             "window.updateMobileActionButtons=function(){" +
             "var btn2=document.getElementById('mobileActionBtn2');" +
             "if(!btn2||!window.currentUser)return;" +
-            "var canManage=(currentUser.role==='admin');" +
+            "var canManage=(currentUser.role==='admin'||currentUser.role==='clinic_admin');" +
             "if(canManage){" +
             "btn2.innerHTML='👤 用户';" +
             "btn2.onclick=function(){showUserManageModal();};" +
