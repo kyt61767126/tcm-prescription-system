@@ -288,36 +288,16 @@ public class MainActivity extends BridgeActivity {
         webView.clearHistory();
 
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
-        // ★ 关键修复：混合方案 - 先检查系统权限，已授予则直接同步grant；
-        //   未授予则回退到 BridgeWebChromeClient 默认实现（permissionLauncher 异步请求）。
-        //   直接 grant 绕过了 permissionLauncher 的异步流程，避免 WebView 超时拒绝。
         webView.setWebChromeClient(new BridgeWebChromeClient(this.getBridge()) {
+            // 授权摄像头和麦克风权限（录像拍照功能需要）
             @Override
-            public void onPermissionRequest(final PermissionRequest request) {
+            public void onPermissionRequest(PermissionRequest request) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
                     Log.d(TAG, "onPermissionRequest origin=" + origin + " resources=" + java.util.Arrays.toString(request.getResources()));
-
-                    // 检查系统级权限是否已授予
-                    boolean cameraOk = ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
-                    boolean audioOk = ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
-                    Log.d(TAG, "onPermissionRequest systemPerms camera=" + cameraOk + " audio=" + audioOk);
-
-                    if (cameraOk && audioOk) {
-                        // 系统权限已授予，直接同步 grant（避免 WebView 超时）
-                        try {
-                            request.grant(request.getResources());
-                            Log.d(TAG, "onPermissionRequest GRANTED (system perms already granted)");
-                        } catch (Exception e) {
-                            Log.e(TAG, "onPermissionRequest grant failed: " + e.getMessage(), e);
-                            try { request.deny(); } catch (Exception ignored) {}
-                        }
-                    } else {
-                        // 系统权限未授予，回退到 BridgeWebChromeClient 默认实现
-                        // （它会通过 permissionLauncher 异步请求系统权限）
-                        Log.d(TAG, "onPermissionRequest falling back to super (need system perms)");
-                        super.onPermissionRequest(request);
-                    }
+                    // Directly grant all requested resources (diagnostic: bypass isCloudUrl + permissionLauncher)
+                    request.grant(request.getResources());
+                    Log.d(TAG, "onPermissionRequest GRANTED (direct)");
                 }
             }
 
@@ -783,32 +763,6 @@ public class MainActivity extends BridgeActivity {
 
     private boolean hasDoneFirstResume = false;
 
-    // ★ 修复摄像头权限：处理系统权限请求结果
-    @Override
-    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (requestCode == REQ_CAMERA) {
-            boolean allGranted = true;
-            for (int result : grantResults) {
-                if (result != PackageManager.PERMISSION_GRANTED) {
-                    allGranted = false;
-                    break;
-                }
-            }
-            if (allGranted) {
-                Log.d(TAG, "摄像头/麦克风权限已授予");
-            } else {
-                Log.w(TAG, "摄像头/麦克风权限被拒绝！getUserMedia 将返回 NotAllowedError");
-                // 提示用户去设置中授予权限
-                mainHandler.post(() -> {
-                    android.widget.Toast.makeText(this,
-                        "摄像头/麦克风权限被拒绝，请在手机设置→应用管理中授予权限",
-                        android.widget.Toast.LENGTH_LONG).show();
-                });
-            }
-        }
-    }
-
     @Override
     public void onResume() {
         super.onResume();
@@ -824,10 +778,8 @@ public class MainActivity extends BridgeActivity {
         }
         WebView webView = this.getBridge().getWebView();
         if (webView != null) {
-            // ★ 防御性修复：确保 MediaPlaybackRequiresUserGesture 始终为 false
-            // 某些 Capacitor 版本可能在生命周期中重置 WebSettings，导致 getUserMedia 失败
-            webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
-
+            // ★ 优化：onCreate 已配置 WebSettings，onResume 不再重复设置
+            // 重复设置 WebSettings 会触发 WebView 重新计算配置，影响恢复速度
             if (hasDoneFirstResume) {
                 // 非首次恢复：通过JS触发页面内同步逻辑（SyncEngine+药品刷新），不整页reload避免丢失编辑状态
                 mainHandler.postDelayed(() -> {

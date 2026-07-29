@@ -256,11 +256,6 @@ public class MainActivity extends BridgeActivity {
         settings.setUseWideViewPort(true);
         settings.setJavaScriptEnabled(true);
 
-        // ★ 修复摄像头权限被拒绝问题：getUserMedia 在 async/await 中调用，
-        // 可能脱离用户手势调用栈，导致 WebView 不触发 onPermissionRequest
-        // 必须显式关闭"媒体播放需要用户手势"的默认行为（与 cloud_app 对齐）
-        settings.setMediaPlaybackRequiresUserGesture(false);
-
         // S1: 关闭文件访问权限（APP 通过 server.url 远程加载云端页面，不需要访问本地文件系统）
         // 默认值在部分旧版本为 true，显式关闭可防止 XSS 读取 file:// 资源
         settings.setAllowFileAccess(false);
@@ -289,31 +284,16 @@ public class MainActivity extends BridgeActivity {
         webView.clearHistory();
 
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
-        // ★ 关键修复：混合方案 - 先检查系统权限，已授予则直接同步grant；
-        //   未授予则回退到 BridgeWebChromeClient 默认实现（permissionLauncher 异步请求）。
         webView.setWebChromeClient(new BridgeWebChromeClient(this.getBridge()) {
+            // 授权摄像头和麦克风权限（录像拍照功能需要）
             @Override
-            public void onPermissionRequest(final PermissionRequest request) {
+            public void onPermissionRequest(PermissionRequest request) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
                     Log.d(TAG, "onPermissionRequest origin=" + origin + " resources=" + java.util.Arrays.toString(request.getResources()));
-
-                    boolean cameraOk = ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
-                    boolean audioOk = ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
-                    Log.d(TAG, "onPermissionRequest systemPerms camera=" + cameraOk + " audio=" + audioOk);
-
-                    if (cameraOk && audioOk) {
-                        try {
-                            request.grant(request.getResources());
-                            Log.d(TAG, "onPermissionRequest GRANTED (system perms already granted)");
-                        } catch (Exception e) {
-                            Log.e(TAG, "onPermissionRequest grant failed: " + e.getMessage(), e);
-                            try { request.deny(); } catch (Exception ignored) {}
-                        }
-                    } else {
-                        Log.d(TAG, "onPermissionRequest falling back to super (need system perms)");
-                        super.onPermissionRequest(request);
-                    }
+                    // Directly grant all requested resources (diagnostic: bypass isCloudUrl + permissionLauncher)
+                    request.grant(request.getResources());
+                    Log.d(TAG, "onPermissionRequest GRANTED (direct)");
                 }
             }
 
@@ -794,10 +774,8 @@ public class MainActivity extends BridgeActivity {
         }
         WebView webView = this.getBridge().getWebView();
         if (webView != null) {
-            // ★ 防御性修复：确保 MediaPlaybackRequiresUserGesture 始终为 false
-            // 某些 Capacitor 版本可能在生命周期中重置 WebSettings，导致 getUserMedia 失败
-            webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
-
+            // ★ 优化：onCreate 已配置 WebSettings，onResume 不再重复设置
+            // 重复设置 WebSettings 会触发 WebView 重新计算配置，影响恢复速度
             if (hasDoneFirstResume) {
                 // 非首次恢复：通过JS触发页面内同步逻辑（SyncEngine+药品刷新），不整页reload避免丢失编辑状态
                 mainHandler.postDelayed(() -> {
