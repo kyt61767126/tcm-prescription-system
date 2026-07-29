@@ -16,21 +16,21 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// 项目根目录 (kyt-zy/)
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+// 项目根目录 (kyt-zy/) — shared/ 在根目录下1层，只需上溯1级
+const PROJECT_ROOT = path.resolve(__dirname, '..');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 
 // APK 文件搜索路径 (Capacitor 架构)
 const APK_PATHS = {
-    'dingzhi': path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
-    'geren': path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+    'dingzhi': path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+    'geren': path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
 };
 
 // 桌面版 exe 搜索路径 (key 与 APK_PATHS 一致, dingzhi/geren 同时含 APK+EXE)
 const EXE_PATHS = {
-    'cloud': path.join(PROJECT_ROOT, 'cloud_project', 'cloud_desktop', 'dist'),
-    'dingzhi': path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'dist'),
-    'geren': path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'dist'),
+    'cloud': path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'dist'),
+    'dingzhi': path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'dist'),
+    'geren': path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'dist'),
 };
 
 /**

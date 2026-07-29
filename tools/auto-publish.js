@@ -33,18 +33,18 @@ const DOWNLOADS_DIR = path.join(PROJECT_ROOT, 'public', 'downloads');
 const APP_CONFIG = {
     'cloud': {
         apkName: '惠康中医-云端.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'app', 'build.gradle'),
-        distDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_desktop', 'dist'),
+        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build.gradle'),
+        distDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'dist'),
     },
     'dingzhi': {
         apkName: '惠康中医-定制.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'android', 'app', 'build.gradle'),
-        distDir: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'dist'),
+        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'capacitor', 'app', 'build.gradle'),
+        distDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'dist'),
     },
     'geren': {
         apkName: '惠康中医-个人.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'android', 'app', 'build.gradle'),
-        distDir: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'dist'),
+        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'capacitor', 'app', 'build.gradle'),
+        distDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'dist'),
     }
 };
 
