@@ -289,10 +289,14 @@ public class MainActivity extends BridgeActivity {
         webView.clearHistory();
 
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
-        // ★ 关键修复：使用原生 WebChromeClient 而非 BridgeWebChromeClient（对齐离线APP方案）
-        webView.setWebChromeClient(new WebChromeClient() {
+        // ★ 关键修复：必须继承 BridgeWebChromeClient 而非原生 WebChromeClient
+        //   BridgeWebChromeClient 构造函数会通过 bridge.registerForActivityResult() 注册
+        //   permissionLauncher，这是 WebView 权限系统正常工作的前提。
+        //   架构统一优化时误改为原生 WebChromeClient 导致 permissionLauncher 未注册，
+        //   getUserMedia 返回 NotAllowedError（摄像头权限被拒绝）。
+        webView.setWebChromeClient(new BridgeWebChromeClient(this.getBridge()) {
             // 授权摄像头和麦克风权限（录像拍照功能需要）
-            // ★ onPermissionRequest 已在主线程调用，必须同步 grant（异步 post 会导致 WebView 超时返回 NotAllowedError）
+            // ★ 直接同步 grant，绕过 permissionLauncher 的异步流程
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
@@ -300,7 +304,7 @@ public class MainActivity extends BridgeActivity {
                     Log.d(TAG, "onPermissionRequest origin=" + origin + " resources=" + java.util.Arrays.toString(request.getResources()));
                     try {
                         request.grant(request.getResources());
-                        Log.d(TAG, "onPermissionRequest GRANTED (sync)");
+                        Log.d(TAG, "onPermissionRequest GRANTED (direct)");
                     } catch (Exception e) {
                         Log.e(TAG, "onPermissionRequest grant failed: " + e.getMessage(), e);
                         try { request.deny(); } catch (Exception ignored) {}
