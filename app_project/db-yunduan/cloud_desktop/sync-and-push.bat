@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal
 
 REM ============================================================
-REM  Sync and Push - db-yudan/cloud_desktop -> public -> git commit -> push
+REM  Sync and Push - db-yunduan/cloud_desktop -> public -> git commit -> push
 REM
 REM  Usage:
 REM    sync-and-push.bat           (default: sync + commit + push)
@@ -60,7 +60,7 @@ if exist "%SRC%xlsx.full.min.js" (
 REM [3/4] Git add + commit
 echo [3/4] git add ...
 cd /d "%REPO%"
-git add public app_project/db-yudan/cloud_desktop 2>nul
+git add public app_project/db-yunduan/cloud_desktop 2>nul
 if errorlevel 1 ( echo [WARN] git add may have missed some files )
 
 git diff --cached --quiet
@@ -72,7 +72,7 @@ if %errorlevel% equ 0 (
 )
 
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss' -ca") do set "NOW=%%t"
-git commit -m "sync: db-yudan/cloud_desktop frontend sync (%NOW%)"
+git commit -m "sync: db-yunduan/cloud_desktop frontend sync (%NOW%)"
 if errorlevel 1 ( echo [ERROR] git commit failed & if not defined NO_PAUSE pause & exit /b 1 )
 
 REM [4/4] Push (unless --no-push)

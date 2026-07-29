@@ -83,7 +83,7 @@ function Build-Cloud {
     Write-Host "  云端版打包完成！" -ForegroundColor Green
     Write-Host "  开始: $startTime" -ForegroundColor Green
     Write-Host "  结束: $endTime" -ForegroundColor Green
-    Write-Host "  桌面: app_project\db-yudan/cloud_desktop\dist\*.exe" -ForegroundColor Green
+    Write-Host "  桌面: app_project\db-yunduan/cloud_desktop\dist\*.exe" -ForegroundColor Green
     Write-Host "  APP:  app_project\*.apk" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     pause

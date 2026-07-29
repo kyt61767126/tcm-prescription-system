@@ -104,7 +104,7 @@ function getCurrentMonthDirectory() {
 }
 
 // ★ 安全文件名清理：剥离目录部分，过滤危险字符，防止路径穿越
-// 与 db-yudan/cloud_desktop/electron/main.js 保持一致
+// 与 db-yunduan/cloud_desktop/electron/main.js 保持一致
 function sanitizeFileName(fileName) {
     if (!fileName || typeof fileName !== 'string') return '';
     let name = path.basename(fileName);

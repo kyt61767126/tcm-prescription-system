@@ -290,14 +290,23 @@ public class MainActivity extends BridgeActivity {
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
         webView.setWebChromeClient(new BridgeWebChromeClient(this.getBridge()) {
             // 授权摄像头和麦克风权限（录像拍照功能需要）
+            // ★ 修复 NotAllowedError：确保 request.grant() 在主线程同步执行
             @Override
-            public void onPermissionRequest(PermissionRequest request) {
+            public void onPermissionRequest(final PermissionRequest request) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
+                    final String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
                     Log.d(TAG, "onPermissionRequest origin=" + origin + " resources=" + java.util.Arrays.toString(request.getResources()));
-                    // Directly grant all requested resources (diagnostic: bypass isCloudUrl + permissionLauncher)
-                    request.grant(request.getResources());
-                    Log.d(TAG, "onPermissionRequest GRANTED (direct)");
+
+                    // 必须在主线程执行 grant()，否则 WebView 可能忽略授权
+                    mainHandler.post(() -> {
+                        try {
+                            request.grant(request.getResources());
+                            Log.d(TAG, "onPermissionRequest GRANTED (main thread)");
+                        } catch (Exception e) {
+                            Log.e(TAG, "onPermissionRequest grant failed: " + e.getMessage(), e);
+                            try { request.deny(); } catch (Exception ignored) {}
+                        }
+                    });
                 }
             }
 
@@ -762,6 +771,32 @@ public class MainActivity extends BridgeActivity {
     }
 
     private boolean hasDoneFirstResume = false;
+
+    // ★ 修复摄像头权限：处理系统权限请求结果
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQ_CAMERA) {
+            boolean allGranted = true;
+            for (int result : grantResults) {
+                if (result != PackageManager.PERMISSION_GRANTED) {
+                    allGranted = false;
+                    break;
+                }
+            }
+            if (allGranted) {
+                Log.d(TAG, "摄像头/麦克风权限已授予");
+            } else {
+                Log.w(TAG, "摄像头/麦克风权限被拒绝！getUserMedia 将返回 NotAllowedError");
+                // 提示用户去设置中授予权限
+                mainHandler.post(() -> {
+                    android.widget.Toast.makeText(this,
+                        "摄像头/麦克风权限被拒绝，请在手机设置→应用管理中授予权限",
+                        android.widget.Toast.LENGTH_LONG).show();
+                });
+            }
+        }
+    }
 
     @Override
     public void onResume() {

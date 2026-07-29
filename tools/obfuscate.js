@@ -108,10 +108,10 @@ const MODULE_FILES = [
 const ALL_DISTRIBUTION_DIRS = [
     'public',
     'public/electron',
-    'app_project/db-yudan/cloud_desktop',
-    'app_project/db-yudan/cloud_desktop/electron',
-    'app_project/db-yudan/cloud_app/app/src/main/assets/public',
-    'app_project/db-yudan/cloud_app/app/src/main/assets',
+    'app_project/db-yunduan/cloud_desktop',
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
+    'app_project/db-yunduan/cloud_app/app/src/main/assets',
     'app_project/db-dingzhi',
     'app_project/db-dingzhi/electron',
     'app_project/db-geren',
@@ -135,10 +135,10 @@ const TARGET_DIRS = {
     cloud: [
         'public',
         'public/electron',
-        'app_project/db-yudan/cloud_desktop',
-        'app_project/db-yudan/cloud_desktop/electron',
-        'app_project/db-yudan/cloud_app/app/src/main/assets/public',
-        'app_project/db-yudan/cloud_app/app/src/main/assets'
+        'app_project/db-yunduan/cloud_desktop',
+        'app_project/db-yunduan/cloud_desktop/electron',
+        'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
+        'app_project/db-yunduan/cloud_app/app/src/main/assets'
     ],
     all: ALL_DISTRIBUTION_DIRS
 };
@@ -151,7 +151,7 @@ const TARGET_DIRS = {
 // 影响：login.js 不再被混淆（保持明文），可被反编译读取登录流程，
 //       但密码哈希值存于 config.json/localStorage，不在 login.js 中，安全性损失可接受
 const EXTRA_FILES = {
-    'app_project/db-yudan/cloud_app/app/src/main/assets': ['video-recorder-inject.js']
+    'app_project/db-yunduan/cloud_app/app/src/main/assets': ['video-recorder-inject.js']
 };
 
 /**
