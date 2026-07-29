@@ -24,11 +24,10 @@
     // 1. 注入 window.electronAPI shim
     // ========================================================================
     function injectElectronAPIShim() {
-        if (window.electronAPI && window.electronAPI.__injected) {
-            console.log('[云端APP] electronAPI shim 已存在，跳过注入');
-            return true;
-        }
-        
+        // 保存旧引用（如果 injectElectronApiShim 已抢先注入简单版本）
+        // 云端APP同步离线APP策略：覆盖关键方法而非跳过，避免简单版导致大文件读取失败
+        var oldAPI = window.electronAPI;
+
         var N = window.AndroidNative;
         if (!N) {
             console.warn('[云端APP] AndroidNative 桥接未找到');
@@ -189,15 +188,26 @@
                         var fileSize = startR.fileSize || 0;
                         console.log('[云端APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
                         var uint8Arrays = [];
+                        var totalBytes = 0;
+                        var chunkRetryCount = 0;
+                        var MAX_CHUNK_RETRY = 2;
 
                         function nextChunk() {
                             var r = callNative('readNextChunk', JSON.stringify({ sessionId: sessionId }));
                             if (!r || !r.success) {
+                                // chunk 重试机制（同步离线APP）：弱网/低配机型读取成功率提升
+                                if (chunkRetryCount < MAX_CHUNK_RETRY) {
+                                    chunkRetryCount++;
+                                    console.warn('[云端APP] readNextChunk 失败，重试 ' + chunkRetryCount + '/' + MAX_CHUNK_RETRY + ':', r && r.error);
+                                    setTimeout(nextChunk, 50);
+                                    return;
+                                }
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
-                                console.error('[云端APP] readNextChunk 失败:', r && r.error);
+                                console.error('[云端APP] readNextChunk 最终失败:', r && r.error);
                                 resolve(r || { success: false, error: 'readNextChunk 返回无效' });
                                 return;
                             }
+                            chunkRetryCount = 0;
                             if (r.chunk) {
                                 // 分片解码 base64 → Uint8Array，避免大字符串 atob 内存翻倍
                                 try {
@@ -208,6 +218,7 @@
                                         bytes[i] = binary.charCodeAt(i);
                                     }
                                     uint8Arrays.push(bytes);
+                                    totalBytes += len;
                                 } catch (e) {
                                     console.error('[云端APP] base64 解码失败:', e);
                                 }
@@ -264,7 +275,26 @@
                 return P({ success: true });
             }
         };
-        
+
+        // 如果 injectElectronApiShim 已抢先注入了简单版本的 electronAPI，
+        // 用增强版方法覆盖关键方法（readFileAsBase64/savePrescriptionImage/saveVideoFile 等）
+        // 解决"图片无法加载，视频可以播放"的问题：图片走简单版 readFileAsBase64 超出 data URL 限制
+        if (oldAPI && oldAPI.__injected) {
+            console.log('[云端APP] electronAPI 已存在（injectElectronApiShim 先注入），覆盖增强版方法到旧对象');
+            var newAPI = window.electronAPI;
+            oldAPI.savePrescriptionImage = newAPI.savePrescriptionImage;
+            oldAPI.saveVideoFile = newAPI.saveVideoFile;
+            oldAPI.readFileAsBase64 = newAPI.readFileAsBase64;
+            oldAPI.findMediaFiles = newAPI.findMediaFiles;
+            oldAPI.openFile = newAPI.openFile;
+            oldAPI.deleteFile = newAPI.deleteFile;
+            oldAPI.renameMediaFiles = newAPI.renameMediaFiles;
+            oldAPI.getVideoDirectory = newAPI.getVideoDirectory;
+            oldAPI.__videoRecorderEnhanced = true;
+            // 恢复旧对象为 electronAPI
+            window.electronAPI = oldAPI;
+        }
+
         console.log('[云端APP] electronAPI shim 已成功注入');
         return true;
     }
@@ -632,9 +662,9 @@
             }
 
             if (!mediaStreamResult) {
-                // 权限被拒绝的特殊提示
+                // 权限被拒绝的特殊提示（同步离线APP：录像需麦克风权限）
                 if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
-                    throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头权限');
+                    throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头和麦克风权限');
                 }
                 throw lastError || new Error('无法获取摄像头权限');
             }
