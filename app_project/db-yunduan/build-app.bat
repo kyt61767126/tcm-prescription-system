@@ -218,9 +218,9 @@ for %%A in ("%APK_FILE%") do (
     echo File Size: %%~zA bytes
 )
 
-echo [6.2/6] Verifying APK contains latest index.html...
-REM P3: Extract index.html from APK and verify it exists and has reasonable size
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; try { $zip=[System.IO.Compression.ZipFile]::OpenRead('%APK_FILE%'); $entry=$zip.GetEntry('assets/public/index.html'); if($entry){ $sz=$entry.Length; if($sz -lt 1000){ Write-Host '[ERROR] APK index.html too small:' $sz 'bytes'; exit 1 }; $reader=New-Object System.IO.StreamReader($entry.Open()); $content=$reader.ReadToEnd(); $reader.Close(); $hash=(Get-FileHash -InputStream ([System.IO.MemoryStream]::new([System.Text.Encoding]::UTF8.GetBytes($content))) -Algorithm SHA256).Hash; Write-Host '[OK] APK index.html:' $sz 'bytes SHA256:' $hash.Substring(0,16) } else { Write-Host '[ERROR] index.html not found in APK'; exit 1 }; $zip.Dispose() } catch { Write-Host '[ERROR] APK verify failed:' $_.Exception.Message; exit 1 }"
+echo [6.2/6] Verifying APK contains latest auth-core.js...
+REM P3: Cloud APP loads from URL, no index.html in APK. Verify auth-core.js instead.
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; try { $zip=[System.IO.Compression.ZipFile]::OpenRead('%APK_FILE%'); $entry=$zip.GetEntry('assets/public/auth-core.js'); if($entry){ $sz=$entry.Length; if($sz -lt 1000){ Write-Host '[ERROR] APK auth-core.js too small:' $sz 'bytes'; exit 1 }; Write-Host '[OK] APK auth-core.js:' $sz 'bytes (cloud APP loads index.html from URL)' } else { Write-Host '[ERROR] auth-core.js not found in APK'; exit 1 }; $zip.Dispose() } catch { Write-Host '[ERROR] APK verify failed:' $_.Exception.Message; exit 1 }"
 if errorlevel 1 (
     echo [ERROR] APK content verification failed! APK may not contain latest code.
     if not defined NO_PAUSE pause
