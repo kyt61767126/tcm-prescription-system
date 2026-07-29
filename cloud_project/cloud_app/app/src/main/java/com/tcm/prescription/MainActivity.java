@@ -255,6 +255,11 @@ public class MainActivity extends BridgeActivity {
         settings.setUseWideViewPort(true);
         settings.setJavaScriptEnabled(true);
 
+        // ★ 修复摄像头权限被拒绝问题：getUserMedia 在 async/await 中调用，
+        // 可能脱离用户手势调用栈，导致 WebView 不触发 onPermissionRequest
+        // 必须显式关闭"媒体播放需要用户手势"的默认行为
+        settings.setMediaPlaybackRequiresUserGesture(false);
+
         // S1: 关闭文件访问权限（APP 通过 server.url 远程加载云端页面，不需要访问本地文件系统）
         // 默认值在部分旧版本为 true，显式关闭可防止 XSS 读取 file:// 资源
         settings.setAllowFileAccess(false);
