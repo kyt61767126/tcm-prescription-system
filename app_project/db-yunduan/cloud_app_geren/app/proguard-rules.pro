@@ -51,6 +51,15 @@
 }
 
 # ============================================================================
+# WebView 回调类（关键修复：摄像头权限授权依赖）
+# ============================================================================
+# WebChromeClient 的 onPermissionRequest 被 WebView 内部通过虚函数调用
+# ProGuard/R8 优化模式下可能认为这些方法"未被直接调用"而将其移除/内联
+# 导致 getUserMedia 返回 NotAllowedError（摄像头权限被拒绝）
+-keep class * extends android.webkit.WebChromeClient { *; }
+-keep class * extends android.webkit.WebViewClient { *; }
+
+# ============================================================================
 # SQLite 加密库
 # ============================================================================
 -keep class net.sqlcipher.** { *; }
