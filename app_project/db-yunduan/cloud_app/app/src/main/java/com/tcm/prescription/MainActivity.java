@@ -736,13 +736,18 @@ public class MainActivity extends BridgeActivity {
             "var __appFixBtn=function(){" +
             "var btn2=document.getElementById('mobileActionBtn2');" +
             "if(!btn2)return;" +
+            "var u=(typeof currentUser!=='undefined')?currentUser:window.currentUser;" +
             "var canManage=false;" +
-            "if(window.currentUser){" +
+            "if(u){" +
+            "try{" +
             "if(window.Permission&&Permission.shouldShowUserManage){" +
-            "canManage=Permission.shouldShowUserManage(currentUser);" +
+            "canManage=Permission.shouldShowUserManage(u);" +
+            "}else if(window.AuthCore&&AuthCore.isClinicAdmin){" +
+            "canManage=AuthCore.isClinicAdmin(u)||AuthCore.isPlatformAdmin(u);" +
             "}else{" +
-            "canManage=(currentUser.role==='admin'||currentUser.role==='clinic_admin'||currentUser.role==='platform_admin');" +
+            "canManage=(u.role==='admin'||u.role==='clinic_admin'||u.role==='platform_admin');" +
             "}" +
+            "}catch(e){canManage=(u.role==='admin'||u.role==='clinic_admin'||u.role==='platform_admin');}" +
             "}" +
             "if(canManage){" +
             "btn2.innerHTML='👤 用户';" +
