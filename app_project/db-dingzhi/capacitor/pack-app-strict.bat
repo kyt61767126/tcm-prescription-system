@@ -34,7 +34,9 @@ if not exist "%HASH_PS1%" (
     echo [INFO] APK is still usable in default mode
     goto :done
 )
+set "NO_PAUSE=1"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%HASH_PS1%" -Version dingzhi 2>nul
+set "NO_PAUSE="
 if errorlevel 1 (
     echo [WARN] Signature hash extraction failed, using default mode APK
     goto :done

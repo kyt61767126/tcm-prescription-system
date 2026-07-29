@@ -94,8 +94,10 @@ REM Step B: Extract signature hash and inject into SecurityGuard.java
 REM ==========================================================
 echo [Step B] Extracting signature hash and injecting into SecurityGuard.java...
 echo.
+set "NO_PAUSE=1"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%GEN_HASH_PS1%" -Version geren-cloud
 set "EXIT_CODE=%errorlevel%"
+set "NO_PAUSE="
 if %EXIT_CODE% neq 0 (
     echo.
     echo [ERROR] Step B failed, exit code: %EXIT_CODE%
