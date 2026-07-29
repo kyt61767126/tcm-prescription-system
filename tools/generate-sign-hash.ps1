@@ -4,7 +4,7 @@
 
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet('cloud','dingzhi','geren')]
+    [ValidateSet('cloud','geren-cloud','dingzhi','geren')]
     [string]$Version
 )
 
@@ -15,18 +15,30 @@ $rootDir = $PSScriptRoot | Split-Path -Parent  # project root: d:\trae_projects\
 
 # Decide project directory, target file, and placeholder based on Version
 $verLabel = switch ($Version) {
-    'cloud'   { '云端' }
-    'dingzhi' { '定制' }
-    'geren'   { '个人' }
-    default   { $Version }
+    'cloud'       { '云端' }
+    'geren-cloud' { '云端个人' }
+    'dingzhi'     { '定制' }
+    'geren'       { '个人' }
+    default       { $Version }
 }
+
+# APK file filter for precise matching (avoid finding wrong APK)
+$apkFilter = '*.apk'
 
 if ($Version -eq 'cloud') {
     $projectDir = Join-Path $rootDir "cloud_project"
     $guardFileName = 'SecurityGuard.java'
     $guardSearchPath = Join-Path $projectDir "cloud_app\app\src\main\java\com\tcm\prescription"
     $placeholder = 'EXPECTED_SIGN_HASH'
-    $useRecurse = $true
+    $useRecurse = $false
+    $apkFilter = '惠康中医-云端.apk'
+} elseif ($Version -eq 'geren-cloud') {
+    $projectDir = Join-Path $rootDir "cloud_project"
+    $guardFileName = 'SecurityGuard.java'
+    $guardSearchPath = Join-Path $projectDir "cloud_app_geren\app\src\main\java\com\tcm\prescription"
+    $placeholder = 'EXPECTED_SIGN_HASH'
+    $useRecurse = $false
+    $apkFilter = '惠康中医-云端个人版.apk'
 } else {
     $projectDir = Join-Path $rootDir "offline_project\db-$Version"
     $guardFileName = 'LicenseManager.java'
@@ -45,7 +57,7 @@ Write-Host ""
 # [1/4] Find the latest APK file
 # ------------------------------------------------------------
 Write-Host "[1/4] 查找 APK 文件..."
-$apkFiles = Get-ChildItem -Path $projectDir -Filter "*.apk" -File -ErrorAction SilentlyContinue |
+$apkFiles = Get-ChildItem -Path $projectDir -Filter $apkFilter -File -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime -Descending
 if (-not $apkFiles -or $apkFiles.Count -eq 0) {
     Write-Host "  [错误] 未找到 APK 文件: $projectDir"
