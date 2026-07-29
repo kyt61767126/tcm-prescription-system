@@ -41,7 +41,7 @@ android {
         applicationId "com.tcm.prescription"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 92
+        versionCode 93
         versionName "1.0.${BUILD_TIME}"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
