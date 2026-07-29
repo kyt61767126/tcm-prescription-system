@@ -730,13 +730,13 @@ public class MainActivity extends BridgeActivity {
             "'<button class=\"action-btn\" style=\"flex:1;\" onclick=\"if(window.openPhotoOverlay)window.openPhotoOverlay();else alert(\\'拍照功能加载中，请稍候\\')\">📷 拍照</button>'+" +
             "'<button class=\"action-btn primary\" style=\"flex:1;\" onclick=\"savePrescription()\">💾 保存</button>'+" +
             "'<button class=\"action-btn\" style=\"flex:1;\" onclick=\"clearPrescription()\">🗑️ 清空</button>'+" +
-            "'<button class=\"action-btn\" style=\"flex:1;\" id=\"mobileActionBtn2\" onclick=\"showUserManageModal()\">👤 用户</button>';" +
+            "'<button class=\"action-btn\" style=\"flex:1;\" id=\"mobileActionBtn2\" onclick=\"showChangePwdModal()\">🔐 改密</button>';" +
             "}" +
             "}" +
             "window.updateMobileActionButtons=function(){" +
             "var btn2=document.getElementById('mobileActionBtn2');" +
-            "if(!btn2||!window.currentUser)return;" +
-            "var canManage=(currentUser.role==='admin'||currentUser.role==='clinic_admin'||currentUser.role==='platform_admin');" +
+            "if(!btn2)return;" +
+            "var canManage=(window.currentUser&&(currentUser.role==='admin'||currentUser.role==='clinic_admin'||currentUser.role==='platform_admin'));" +
             "if(canManage){" +
             "btn2.innerHTML='👤 用户';" +
             "btn2.onclick=function(){showUserManageModal();};" +
@@ -746,7 +746,7 @@ public class MainActivity extends BridgeActivity {
             "}" +
             "btn2.style.display='';" +
             "};" +
-            "if(window.currentUser){window.updateMobileActionButtons();}" +
+            "window.updateMobileActionButtons();" +
             "})();";
         webView.evaluateJavascript(js, null);
     }
