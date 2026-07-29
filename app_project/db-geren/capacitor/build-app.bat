@@ -205,6 +205,18 @@ if errorlevel 1 (
 echo [OK] JS obfuscation complete
 echo.
 
+echo [5.7/10] Java 预编译检查中（提前发现编译错误）...
+call gradlew.bat compileReleaseJavaWithJavac --quiet
+if errorlevel 1 (
+    echo [ERROR] Java 预编译检查失败，终止打包
+    echo [WARN] Restoring JavaScript due to pre-compile failure...
+    call node "%~dp0..\..\..\tools\obfuscate.js" restore --target=geren
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] Java 预编译检查通过
+echo.
+
 echo [6/10] Building signed APK...
 echo.
 call gradlew.bat assembleRelease

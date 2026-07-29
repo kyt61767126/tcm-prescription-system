@@ -58,6 +58,21 @@ set "CLOUD_DIR_TMP=%CLOUD_DIR_TMP:~0,-1%"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sync-app-version.ps1" "%CLOUD_DIR_TMP%" "%APP_DIR%"
 echo.
 
+REM Java 预编译检查（提前发现编译错误，对齐 packaging.ps1 逻辑）
+echo [1.7/4] Java 预编译检查中（提前发现编译错误）...
+cd /d "%APP_DIR%"
+call "%GRADLEW%" compileReleaseJavaWithJavac --quiet
+set "PRECOMPILE_RC=%errorlevel%"
+cd /d "%~dp0"
+if %PRECOMPILE_RC% neq 0 (
+    echo.
+    echo [ERROR] Java 预编译检查失败，终止打包
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo   [OK] Java 预编译检查通过
+echo.
+
 REM Build APK
 echo [2/4] Building APK - personal edition com.tcm.prescription.geren...
 cd /d "%APP_DIR%"
