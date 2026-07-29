@@ -733,10 +733,17 @@ public class MainActivity extends BridgeActivity {
             "'<button class=\"action-btn\" style=\"flex:1;\" id=\"mobileActionBtn2\" onclick=\"showChangePwdModal()\">🔐 改密</button>';" +
             "}" +
             "}" +
-            "window.updateMobileActionButtons=function(){" +
+            "var __appFixBtn=function(){" +
             "var btn2=document.getElementById('mobileActionBtn2');" +
             "if(!btn2)return;" +
-            "var canManage=(window.currentUser&&(currentUser.role==='admin'||currentUser.role==='clinic_admin'||currentUser.role==='platform_admin'));" +
+            "var canManage=false;" +
+            "if(window.currentUser){" +
+            "if(window.Permission&&Permission.shouldShowUserManage){" +
+            "canManage=Permission.shouldShowUserManage(currentUser);" +
+            "}else{" +
+            "canManage=(currentUser.role==='admin'||currentUser.role==='clinic_admin'||currentUser.role==='platform_admin');" +
+            "}" +
+            "}" +
             "if(canManage){" +
             "btn2.innerHTML='👤 用户';" +
             "btn2.onclick=function(){showUserManageModal();};" +
@@ -746,7 +753,9 @@ public class MainActivity extends BridgeActivity {
             "}" +
             "btn2.style.display='';" +
             "};" +
-            "window.updateMobileActionButtons();" +
+            "window.updateMobileActionButtons=__appFixBtn;" +
+            "__appFixBtn();" +
+            "setInterval(__appFixBtn,500);" +
             "})();";
         webView.evaluateJavascript(js, null);
     }
