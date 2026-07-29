@@ -288,28 +288,35 @@ public class MainActivity extends BridgeActivity {
         webView.clearHistory();
 
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
-        // ★ 关键修复：必须继承 BridgeWebChromeClient 而非原生 WebChromeClient
-        //   BridgeWebChromeClient 构造函数会通过 bridge.registerForActivityResult() 注册
-        //   permissionLauncher，这是 WebView 权限系统正常工作的前提。
-        //   架构统一优化时误改为原生 WebChromeClient 导致 permissionLauncher 未注册，
-        //   getUserMedia 返回 NotAllowedError（摄像头权限被拒绝）。
-        //   继承 BridgeWebChromeClient 但覆写 onPermissionRequest 直接 grant，
-        //   既保留 permissionLauncher 注册，又简化权限流程（与架构统一优化前的正常方案一致）。
+        // ★ 关键修复：混合方案 - 先检查系统权限，已授予则直接同步grant；
+        //   未授予则回退到 BridgeWebChromeClient 默认实现（permissionLauncher 异步请求）。
+        //   直接 grant 绕过了 permissionLauncher 的异步流程，避免 WebView 超时拒绝。
         webView.setWebChromeClient(new BridgeWebChromeClient(this.getBridge()) {
-            // 授权摄像头和麦克风权限（录像拍照功能需要）
-            // ★ 直接同步 grant，绕过 permissionLauncher 的异步流程
-            //   （onCreate 中已通过 ActivityCompat.requestPermissions 请求系统级权限）
             @Override
             public void onPermissionRequest(final PermissionRequest request) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    final String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
+                    String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
                     Log.d(TAG, "onPermissionRequest origin=" + origin + " resources=" + java.util.Arrays.toString(request.getResources()));
-                    try {
-                        request.grant(request.getResources());
-                        Log.d(TAG, "onPermissionRequest GRANTED (direct)");
-                    } catch (Exception e) {
-                        Log.e(TAG, "onPermissionRequest grant failed: " + e.getMessage(), e);
-                        try { request.deny(); } catch (Exception ignored) {}
+
+                    // 检查系统级权限是否已授予
+                    boolean cameraOk = ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED;
+                    boolean audioOk = ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+                    Log.d(TAG, "onPermissionRequest systemPerms camera=" + cameraOk + " audio=" + audioOk);
+
+                    if (cameraOk && audioOk) {
+                        // 系统权限已授予，直接同步 grant（避免 WebView 超时）
+                        try {
+                            request.grant(request.getResources());
+                            Log.d(TAG, "onPermissionRequest GRANTED (system perms already granted)");
+                        } catch (Exception e) {
+                            Log.e(TAG, "onPermissionRequest grant failed: " + e.getMessage(), e);
+                            try { request.deny(); } catch (Exception ignored) {}
+                        }
+                    } else {
+                        // 系统权限未授予，回退到 BridgeWebChromeClient 默认实现
+                        // （它会通过 permissionLauncher 异步请求系统权限）
+                        Log.d(TAG, "onPermissionRequest falling back to super (need system perms)");
+                        super.onPermissionRequest(request);
                     }
                 }
             }
