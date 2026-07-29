@@ -56,7 +56,7 @@ function Build-Cloud {
     if ($Target -eq "all" -or $Target -eq "desktop") {
         Write-Host ""
         Write-Host "[Step 1/2] 打包云端桌面 exe..." -ForegroundColor Yellow
-        $rc = Invoke-BatFile "$script:RootDir\app_project\pack-desktop.bat" "$script:RootDir\app_project" "cloud desktop build"
+        $rc = Invoke-BatFile "$script:RootDir\app_project\db-yunduan\pack-desktop.bat" "$script:RootDir\app_project\db-yunduan" "cloud desktop build"
         if ($rc -ne 0) {
             Write-Host ""
             Write-Host "[ERROR] 云端桌面打包失败，退出码: $rc" -ForegroundColor Red
@@ -68,7 +68,7 @@ function Build-Cloud {
     if ($Target -eq "all" -or $Target -eq "app") {
         Write-Host ""
         Write-Host "[Step 2/2] 打包云端手机 APP..." -ForegroundColor Yellow
-        $rc = Invoke-BatFile "$script:RootDir\app_project\build-app.bat" "$script:RootDir\app_project" "cloud app build"
+        $rc = Invoke-BatFile "$script:RootDir\app_project\db-yunduan\build-app.bat" "$script:RootDir\app_project\db-yunduan" "cloud app build"
         if ($rc -ne 0) {
             Write-Host ""
             Write-Host "[ERROR] 云端APP打包失败，退出码: $rc" -ForegroundColor Red
@@ -84,7 +84,7 @@ function Build-Cloud {
     Write-Host "  开始: $startTime" -ForegroundColor Green
     Write-Host "  结束: $endTime" -ForegroundColor Green
     Write-Host "  桌面: app_project\db-yunduan/cloud_desktop\dist\*.exe" -ForegroundColor Green
-    Write-Host "  APP:  app_project\*.apk" -ForegroundColor Green
+    Write-Host "  APP:  app_project\db-yunduan\*.apk" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     pause
 }

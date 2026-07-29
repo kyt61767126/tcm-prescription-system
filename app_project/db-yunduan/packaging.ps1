@@ -157,8 +157,8 @@ function Invoke-EncodingCheck {
 
     # Check index.html: MUST NOT have BOM (浏览器 BOM 会破坏 HTML 解析)
     $htmlFiles = @(
-        "$scriptDir\db-yunduan/cloud_desktop\index.html",
-        "$scriptDir\db-yunduan/cloud_app\app\src\main\assets\public\index.html"
+        "$scriptDir\cloud_desktop\index.html",
+        "$scriptDir\cloud_app\app\src\main\assets\public\index.html"
     ) | Where-Object { Test-Path $_ }
 
     foreach ($f in $htmlFiles) {
@@ -182,17 +182,17 @@ function Invoke-EncodingCheck {
 }
 
 # ============================================================================
-# Section 3: File Sync (shared/ -> db-yunduan/cloud_app，对齐离线版 Sync-FilesToApp)
+# Section 3: File Sync (shared/ -> cloud_app，对齐离线版 Sync-FilesToApp)
 # ============================================================================
 
 function Sync-FilesToCloudApp {
-    Write-Step "同步文件到 db-yunduan/cloud_app"
-    Write-Host "  Syncing shared files to db-yunduan/cloud_app assets..." -ForegroundColor White
+    Write-Step "同步文件到 cloud_app"
+    Write-Host "  Syncing shared files to cloud_app assets..." -ForegroundColor White
     Write-Host ""
 
     $sharedDir = "$scriptDir\..\shared"
-    $publicDir = "$scriptDir\db-yunduan/cloud_app\app\src\main\assets\public"
-    $assetsDir = "$scriptDir\db-yunduan/cloud_app\app\src\main\assets"
+    $publicDir = "$scriptDir\cloud_app\app\src\main\assets\public"
+    $assetsDir = "$scriptDir\cloud_app\app\src\main\assets"
 
     if (-not (Test-Path $sharedDir)) {
         Write-Host "  [ERROR] shared 目录未找到: $sharedDir" -ForegroundColor Red
@@ -258,7 +258,7 @@ function Show-Menu {
     Write-Host "  [4] 严格模式 APP (APP+签名哈希+重打包)"
     Write-Host ""
     Write-Host "  --- 辅助工具 ---" -ForegroundColor DarkGray
-    Write-Host "  [5] 仅同步文件到 db-yunduan/cloud_app"
+    Write-Host "  [5] 仅同步文件到 cloud_app"
     Write-Host "  [6] 修改云端配置 (URL/产品名/版本号)"
     Write-Host "  [7] 仅编码检查"
     Write-Host "  [8] 查看当前配置"
@@ -291,16 +291,16 @@ function Edit-CloudConfig {
     Write-Step "云端配置修改"
 
     # ----- 读取当前配置 -----
-    $capFile = Join-Path $scriptDir 'db-yunduan/cloud_app\app\src\main\assets\capacitor.config.json'
-    $pkgFile = Join-Path $scriptDir 'db-yunduan/cloud_desktop\package.json'
+    $capFile = Join-Path $scriptDir 'cloud_app\app\src\main\assets\capacitor.config.json'
+    $pkgFile = Join-Path $scriptDir 'cloud_desktop\package.json'
 
     if (-not (Test-Path $capFile)) {
         Write-Host "  [错误] 未找到 capacitor.config.json: $capFile" -ForegroundColor Red
-        Write-Host "  请确认 db-yunduan/cloud_app 目录结构完整" -ForegroundColor White
+        Write-Host "  请确认 cloud_app 目录结构完整" -ForegroundColor White
         return 1
     }
     if (-not (Test-Path $pkgFile)) {
-        Write-Host "  [错误] 未找到 db-yunduan/cloud_desktop/package.json: $pkgFile" -ForegroundColor Red
+        Write-Host "  [错误] 未找到 cloud_desktop/package.json: $pkgFile" -ForegroundColor Red
         return 1
     }
 
@@ -408,7 +408,7 @@ function Edit-CloudConfig {
         Write-Host "  [OK] 应用名称已更新: $currentAppName -> $newAppName" -ForegroundColor Green
     }
 
-    # ----- 写入 db-yunduan/cloud_desktop/package.json -----
+    # ----- 写入 cloud_desktop/package.json -----
     if ($productNameChanged) { $pkg.build.productName = $newProductName }
     if ($versionChanged) { $pkg.version = $newVersion }
     $pkgJson = $pkg | ConvertTo-Json -Depth 10
@@ -434,8 +434,8 @@ function Confirm-BuildConfig {
     Write-Host "  打包前配置确认 - $Target" -ForegroundColor Cyan
     Write-Host "==========================================" -ForegroundColor Cyan
 
-    # 从 db-yunduan/cloud_desktop/package.json 读取
-    $pkgFile = Join-Path $scriptDir 'db-yunduan/cloud_desktop\package.json'
+    # 从 cloud_desktop/package.json 读取
+    $pkgFile = Join-Path $scriptDir 'cloud_desktop\package.json'
     if (Test-Path $pkgFile) {
         try {
             $pkg = Get-Content $pkgFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -447,7 +447,7 @@ function Confirm-BuildConfig {
     }
 
     # 从 build.gradle 读取 versionName
-    $gradleFile = Join-Path $scriptDir 'db-yunduan/cloud_app\app\build.gradle'
+    $gradleFile = Join-Path $scriptDir 'cloud_app\app\build.gradle'
     if (Test-Path $gradleFile) {
         $gradleContent = Get-Content $gradleFile -Raw -Encoding UTF8
         $versionNameMatch = [regex]::Match($gradleContent, 'versionName\s+"([^"]+)"')
@@ -457,7 +457,7 @@ function Confirm-BuildConfig {
     }
 
     # 从 capacitor.config.json 读取云端URL
-    $capFile = Join-Path $scriptDir 'db-yunduan/cloud_app\app\src\main\assets\capacitor.config.json'
+    $capFile = Join-Path $scriptDir 'cloud_app\app\src\main\assets\capacitor.config.json'
     if (Test-Path $capFile) {
         try {
             $cap = Get-Content $capFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -483,7 +483,7 @@ function Build-Desktop {
     }
 
     $stepStart = Get-Date
-    $desktopDir = "$scriptDir\db-yunduan/cloud_desktop"
+    $desktopDir = "$scriptDir\cloud_desktop"
     $toolsDir = "$scriptDir\..\tools"
 
     $certPath = "$toolsDir\certs\惠康中医-codesign.pfx"
@@ -541,7 +541,7 @@ function Build-Desktop {
         Write-Host "        [OK]"
 
         Write-Host "  [3/8] Closing processes..." -ForegroundColor White
-        Get-Process | Where-Object { try { $_.Path -like "*db-yunduan/cloud_desktop*dist*" } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue
+        Get-Process | Where-Object { try { $_.Path -like "*cloud_desktop*dist*" } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue
         Write-Host "        [OK]"
 
         Write-Host "  [4/8] Cleaning old artifacts..." -ForegroundColor White
@@ -659,7 +659,7 @@ function Build-App {
     }
 
     Write-Host "  将执行以下步骤："
-    Write-Host "  1. 同步 shared 文件到 db-yunduan/cloud_app"
+    Write-Host "  1. 同步 shared 文件到 cloud_app"
     Write-Host "  2. 同步 APP 版本号"
     Write-Host "  3. 自动递增 versionCode"
     Write-Host "  4. 清理旧构建缓存"
@@ -677,7 +677,7 @@ function Build-App {
     # ★ Java 预编译检查（在调用 build-app.bat 前，提前发现编译错误）
     # 对齐离线版 pack.ps1 的预编译检查逻辑
     Write-Host "  Java 预编译检查中（提前发现编译错误）..." -ForegroundColor Cyan
-    $cloudAppDir = Join-Path $scriptDir 'db-yunduan/cloud_app'
+    $cloudAppDir = Join-Path $scriptDir 'cloud_app'
     Push-Location $cloudAppDir
     try {
         $prevEAP = $ErrorActionPreference
@@ -747,7 +747,7 @@ function Build-All {
     Write-Host "  Step B. 打包手机 APP (默认模式：Root+调试器检测)"
     Write-Host ""
     Write-Host "  输出："
-    Write-Host "  - 桌面版: db-yunduan/cloud_desktop\dist\*.exe"
+    Write-Host "  - 桌面版: cloud_desktop\dist\*.exe"
     Write-Host "  - 手机 APP: 当前目录\*.apk"
     Write-Host ""
     Write-Host "  [INFO] 自动开始全部打包..." -ForegroundColor Green
@@ -777,7 +777,7 @@ function Build-All {
     Write-Host "  全部打包完成！" -ForegroundColor Yellow
     Write-Host "================================================================" -ForegroundColor Yellow
     Write-Host ""
-    Write-Host "  桌面版: $scriptDir\db-yunduan/cloud_desktop\dist\" -ForegroundColor Yellow
+    Write-Host "  桌面版: $scriptDir\cloud_desktop\dist\" -ForegroundColor Yellow
     Write-Host "  手机 APP: $scriptDir\*.apk" -ForegroundColor Yellow
     Write-Host ""
     return 0
@@ -791,8 +791,8 @@ function Show-Config {
     Write-Step "当前云端配置信息"
     Write-Host ""
 
-    # 从 db-yunduan/cloud_desktop/package.json 读取 productName
-    $pkgFile = Join-Path $scriptDir 'db-yunduan/cloud_desktop\package.json'
+    # 从 cloud_desktop/package.json 读取 productName
+    $pkgFile = Join-Path $scriptDir 'cloud_desktop\package.json'
     if (Test-Path $pkgFile) {
         try {
             $pkg = Get-Content $pkgFile -Raw -Encoding UTF8 | ConvertFrom-Json
@@ -803,11 +803,11 @@ function Show-Config {
             Write-Host "  [警告] 无法解析 package.json" -ForegroundColor Yellow
         }
     } else {
-        Write-Host "  [警告] 未找到 db-yunduan/cloud_desktop/package.json" -ForegroundColor Yellow
+        Write-Host "  [警告] 未找到 cloud_desktop/package.json" -ForegroundColor Yellow
     }
 
-    # 从 db-yunduan/cloud_app/app/build.gradle 读取 applicationId 和 versionName
-    $gradleFile = Join-Path $scriptDir 'db-yunduan/cloud_app\app\build.gradle'
+    # 从 cloud_app/app/build.gradle 读取 applicationId 和 versionName
+    $gradleFile = Join-Path $scriptDir 'cloud_app\app\build.gradle'
     if (Test-Path $gradleFile) {
         Write-Host ""
         Write-Host "  Android 配置:" -ForegroundColor White
@@ -823,7 +823,7 @@ function Show-Config {
     }
 
     # 从 capacitor.config.json 读取云端URL
-    $capFile = Join-Path $scriptDir 'db-yunduan/cloud_app\app\src\main\assets\capacitor.config.json'
+    $capFile = Join-Path $scriptDir 'cloud_app\app\src\main\assets\capacitor.config.json'
     if (Test-Path $capFile) {
         Write-Host ""
         Write-Host "  Capacitor 配置:" -ForegroundColor White
@@ -836,7 +836,7 @@ function Show-Config {
     Write-Host ""
     Write-Host "----------------------------------------------------------------"
     Write-Host "  安全防护状态（SecurityGuard.java）：" -ForegroundColor White
-    $guardFile = Join-Path $scriptDir 'db-yunduan/cloud_app\app\src\main\java\com\tcm\prescription\SecurityGuard.java'
+    $guardFile = Join-Path $scriptDir 'cloud_app\app\src\main\java\com\tcm\prescription\SecurityGuard.java'
     if (Test-Path $guardFile) {
         $guardContent = Get-Content $guardFile -Raw -Encoding UTF8
         $signMatch = [regex]::Match($guardContent, 'EXPECTED_SIGN_HASH = "([^"]*)"')
@@ -896,7 +896,7 @@ function Build-AllStrict {
     Write-Host "  Step D. 重新打包手机 APP（签名严格模式 APK）"
     Write-Host ""
     Write-Host "  最终输出："
-    Write-Host "  - 桌面版: db-yunduan/cloud_desktop\dist\*.exe"
+    Write-Host "  - 桌面版: cloud_desktop\dist\*.exe"
     Write-Host "  - 手机 APP: 当前目录\*.apk（已启用签名严格模式）"
     Write-Host ""
     Write-Host "  [INFO] 自动开始一键打包..." -ForegroundColor Green
@@ -962,7 +962,7 @@ function Build-AllStrict {
     Write-Host "  一键打包完成！" -ForegroundColor Green
     Write-Host "================================================================" -ForegroundColor Green
     Write-Host ""
-    Write-Host "  桌面版: $scriptDir\db-yunduan/cloud_desktop\dist\" -ForegroundColor Green
+    Write-Host "  桌面版: $scriptDir\cloud_desktop\dist\" -ForegroundColor Green
     Write-Host "  手机 APP: $scriptDir\*.apk（签名严格模式）" -ForegroundColor Green
     Write-Host ""
     return 0
@@ -1021,7 +1021,7 @@ function Build-AppStrict {
     # 原因：Step A 的 daemon 累积了构建内存，Step C 的 R8 full mode 会因内存不足崩溃
     # 错误现象："Gradle build daemon has been stopped: stop command received"
     Write-Host "  [INFO] 停止 Step A 遗留的 Gradle daemon（释放内存，避免 R8 OOM）..." -ForegroundColor Yellow
-    $appDir = Join-Path $scriptDir "db-yunduan/cloud_app"
+    $appDir = Join-Path $scriptDir "cloud_app"
     if (Test-Path "$appDir\gradlew.bat") {
         Push-Location $appDir
         try {
