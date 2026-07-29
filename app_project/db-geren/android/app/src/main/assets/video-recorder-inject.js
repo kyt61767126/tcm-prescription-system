@@ -71,7 +71,9 @@
         }
 
         // 分片上传：解决 Binder 事务 1MB 限制
-        var CHUNK_SIZE = 256 * 1024;
+        // ★ 优化：分片大小从 256KB 提升到 512KB，减少分片次数约 50%，提升整体传输速度
+        // 512KB base64 解码后约 384KB，加 JSON 包装仍远低于 1MB Binder 限制，安全可靠
+        var CHUNK_SIZE = 512 * 1024; // 512KB 一片（base64 解码后 384KB，加 JSON 包装远低于 1MB）
         function chunkedUpload(base64Data, fileName, type) {
             return new Promise(function (resolve) {
                 var startR = callNative('startMediaSession', JSON.stringify({ fileName: fileName }));
@@ -149,14 +151,23 @@
                 return new Promise(function (resolve) {
                     try {
                         var bytes = new Uint8Array(arrayBuffer);
-                        var chunkSize = 8192;
-                        var binary = '';
-                        for (var i = 0; i < bytes.length; i += chunkSize) {
-                            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
-                        }
-                        var base64Data = btoa(binary);
+                        // ★ 优化：用 _uint8ArrayToBase64 代替 btoa
+                        // 1. btoa 不支持 >127 字节，视频二进制数据会失败
+                        // 2. _uint8ArrayToBase64 直接按位计算，省去 String.fromCharCode.apply + btoa 两步开销
+                        var base64Data = _uint8ArrayToBase64(bytes);
                         console.log('[离线APP] 视频总大小: ' + base64Data.length + ' 字节 base64');
-                        chunkedUpload(base64Data, fileName, 'video').then(resolve);
+                        // ★ 优化：小文件（<512KB 原始，base64 后约 683KB）直接走原生 API，避免分片开销
+                        // 加 JSON 包装后约 700KB，远低于 1MB Binder 限制，安全可靠
+                        if (bytes.length < 512 * 1024) {
+                            var r = callNative('saveVideoFile', JSON.stringify({
+                                base64Data: base64Data,
+                                fileName: fileName
+                            }));
+                            resolve(r);
+                        } else {
+                            // 大视频走分片上传
+                            chunkedUpload(base64Data, fileName, 'video').then(resolve);
+                        }
                     } catch (e) { resolve({ success: false, error: String(e) }); }
                 });
             },
