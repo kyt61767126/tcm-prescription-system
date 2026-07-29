@@ -49,6 +49,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebChromeClient;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -283,32 +284,21 @@ public class MainActivity extends BridgeActivity {
         webView.clearHistory();
 
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
-        webView.setWebChromeClient(new WebChromeClient() {
+        webView.setWebChromeClient(new BridgeWebChromeClient(this.getBridge()) {
             // 授权摄像头和麦克风权限（录像拍照功能需要）
             @Override
             public void onPermissionRequest(PermissionRequest request) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     // P1-10: 仅允许云端页面请求相机/麦克风权限，防止 XSS 或第三方页面获取摄像头
                     String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
-                    String[] resources = request.getResources();
-                    StringBuilder resStr = new StringBuilder();
-                    for (String r : resources) { resStr.append(r).append(","); }
-                    Log.d(TAG, "onPermissionRequest origin=" + origin + " resources=[" + resStr + "]");
+                    Log.d(TAG, "onPermissionRequest origin=" + origin);
                     if (!isCloudUrl(origin)) {
                         Log.w(TAG, "onPermissionRequest 拒绝非云端来源: " + origin);
                         request.deny();
                         return;
                     }
-                    for (String permission : resources) {
-                        if (permission.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE) ||
-                            permission.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
-                            Log.d(TAG, "onPermissionRequest GRANTED for origin=" + origin);
-                            request.grant(resources);
-                            return;
-                        }
-                    }
-                    Log.w(TAG, "onPermissionRequest DENIED (no camera/mic resources)");
-                    request.deny();
+                    // 委托 BridgeWebChromeClient 处理 Android 权限链 + WebView 授权
+                    super.onPermissionRequest(request);
                 }
             }
 
