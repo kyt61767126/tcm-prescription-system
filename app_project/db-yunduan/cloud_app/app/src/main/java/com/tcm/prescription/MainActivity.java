@@ -68,7 +68,7 @@ public class MainActivity extends BridgeActivity {
     private static final String TAG = "TCM_Prescription";
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
-    private static final String EXPECTED_APP_VERSION = "2026-07-15-v1";
+    private static final String EXPECTED_APP_VERSION = "2026-07-18-v1";
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
@@ -812,8 +812,10 @@ public class MainActivity extends BridgeActivity {
         }
         WebView webView = this.getBridge().getWebView();
         if (webView != null) {
-            // ★ 优化：onCreate 已配置 WebSettings，onResume 不再重复设置
-            // 重复设置 WebSettings 会触发 WebView 重新计算配置，影响恢复速度
+            // ★ 防御性修复：确保 MediaPlaybackRequiresUserGesture 始终为 false
+            // 某些 Capacitor 版本可能在生命周期中重置 WebSettings，导致 getUserMedia 失败
+            webView.getSettings().setMediaPlaybackRequiresUserGesture(false);
+
             if (hasDoneFirstResume) {
                 // 非首次恢复：通过JS触发页面内同步逻辑（SyncEngine+药品刷新），不整页reload避免丢失编辑状态
                 mainHandler.postDelayed(() -> {
