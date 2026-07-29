@@ -8,8 +8,8 @@
   X-Content-Type-Options: nosniff
   # 控制 Referrer 信息泄露
   Referrer-Policy: strict-origin-when-cross-origin
-  # 禁用不必要的浏览器功能
-  Permissions-Policy: geolocation=(), microphone=(), camera=(), payment=(), usb=()
+  # 权限策略：允许同源使用摄像头和麦克风（APP录像拍照功能需要），禁用其他不必要的功能
+  Permissions-Policy: geolocation=(), microphone=(self), camera=(self), payment=(), usb=()
   # 防止 XSS Auditor（旧版浏览器）
   X-XSS-Protection: 1; mode=block
 
