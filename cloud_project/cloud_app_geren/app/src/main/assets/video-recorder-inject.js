@@ -577,6 +577,8 @@
         var startBtn = document.getElementById('cloudVrStartBtn');
 
         try {
+            console.log('[视频录制] initCamera: isSecureContext=' + window.isSecureContext + ' href=' + window.location.href);
+            console.log('[视频录制] mediaDevices=' + (navigator.mediaDevices ? 'yes' : 'NO') + ' getUserMedia=' + (navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? 'yes' : 'NO'));
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'cloud-vr-status';
 
@@ -630,9 +632,9 @@
             }
 
             if (!mediaStreamResult) {
-                // 权限被拒绝的特殊提示
+                // 权限被拒绝的特殊提示（附带诊断信息）
                 if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
-                    throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头和麦克风权限');
+                    throw new Error('摄像头权限被拒绝 [' + lastError.name + '] href=' + window.location.href + ' secure=' + window.isSecureContext);
                 }
                 throw lastError || new Error('无法获取摄像头权限');
             }
