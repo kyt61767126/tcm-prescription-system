@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 title 惠康中医 · 自动官网上架流水线
 
@@ -23,7 +23,7 @@ if "%CHOICE%"=="4" goto EXIT
 
 echo.
 echo [ERROR] 无效的选择: %CHOICE%
-pause
+if not defined NO_PAUSE pause
 goto MENU
 
 :PACKONLY
@@ -35,7 +35,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\one-click-pack.p
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] 打包失败，请检查上方日志
-    pause
+    if not defined NO_PAUSE pause
     goto MENU
 )
 echo.
@@ -46,7 +46,7 @@ echo   下一步指引：
 echo     - 运行 release-all.bat 选择 2 或 3 进行发布
 echo     - 或直接执行: node tools\auto-publish.js
 echo --------------------------------------------
-pause
+if not defined NO_PAUSE pause
 goto MENU
 
 :PUBONLY
@@ -58,7 +58,7 @@ node "%~dp0tools\auto-publish.js"
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] 发布失败，请检查上方日志
-    pause
+    if not defined NO_PAUSE pause
     goto MENU
 )
 echo.
@@ -70,7 +70,7 @@ echo     - 建议运行 node tools\verify-release.js 验证 URL
 echo     - 下载页: https://tcm-prescription-system.pages.dev/download
 echo     - Release 页: https://github.com/kyt61767126/tcm-prescription-system/releases
 echo --------------------------------------------
-pause
+if not defined NO_PAUSE pause
 goto MENU
 
 :FULL
@@ -82,7 +82,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0tools\one-click-pack.p
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] 打包失败，请检查上方日志
-    pause
+    if not defined NO_PAUSE pause
     goto MENU
 )
 echo.
@@ -95,7 +95,7 @@ node "%~dp0tools\auto-publish.js"
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] 发布失败，请检查上方日志
-    pause
+    if not defined NO_PAUSE pause
     goto MENU
 )
 echo.
@@ -108,7 +108,7 @@ node "%~dp0tools\verify-release.js"
 if %ERRORLEVEL% neq 0 (
     echo.
     echo [ERROR] 验证失败，请检查 URL 是否可访问
-    pause
+    if not defined NO_PAUSE pause
     goto MENU
 )
 echo.
@@ -121,7 +121,7 @@ echo   - 下载页: https://tcm-prescription-system.pages.dev/download
 echo   - Release 页: https://github.com/kyt61767126/tcm-prescription-system/releases
 echo   - Cloudflare Pages 将在 1-2 分钟内自动部署
 echo ============================================
-pause
+if not defined NO_PAUSE pause
 goto MENU
 
 :EXIT

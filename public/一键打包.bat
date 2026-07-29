@@ -17,4 +17,4 @@ echo ==============================================
 echo Build completed!
 echo Output: %~dp0dist\
 echo ==============================================
-pause
+if not defined NO_PAUSE pause

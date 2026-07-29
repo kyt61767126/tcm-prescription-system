@@ -44,8 +44,10 @@ if errorlevel 1 (
 echo [OK] Signature hash injected
 echo.
 
-REM Step C: Rebuild with strict signature mode (skip config edit, already done in Step A)
-echo [Step C] Rebuilding (strict signature mode)...
+REM Step C: Stop Gradle daemon from Step A, then rebuild with strict signature mode
+echo [Step C] Stopping Gradle daemon and rebuilding (strict signature mode)...
+call gradlew.bat --stop 2>nul
+timeout /t 2 /nobreak >nul
 call build-app.bat --skip-config
 if errorlevel 1 (
     echo [ERROR] Strict rebuild failed

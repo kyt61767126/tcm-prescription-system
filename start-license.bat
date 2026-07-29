@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 REM ============================================================
 REM  Huikang TCM - Customer Service Offline Activation Launcher
 REM  Double-click to run generate-license.ps1
@@ -26,4 +26,4 @@ echo  Script finished (exit code %errorlevel%)
 echo  If no success message above, contact technical support
 echo ============================================================
 echo.
-pause
+if not defined NO_PAUSE pause

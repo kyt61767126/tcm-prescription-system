@@ -1,5 +1,7 @@
 @echo off
 chcp 65001 >nul
+REM P0: Auto-fix .ps1 BOM encoding before packaging
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\fix-ps1-bom.ps1" >nul 2>&1
 title TCM Prescription System - Cloud APP Packager
 
 REM Record start time for elapsed calculation
@@ -88,6 +90,8 @@ if exist "%SHARED_DIR%\permission.js" (
 )
 echo.
 
+REM P1: Cloud APP loads index.html from URL, no sync hash check needed
+
 echo [2.5/6] Current configuration...
 findstr "url" "app\src\main\assets\capacitor.config.json"
 findstr "versionName" "app\build.gradle"
@@ -152,6 +156,19 @@ if errorlevel 1 (
 echo [OK] JS obfuscation complete
 echo.
 
+echo [4.6/6] Java pre-compile check...
+REM Pre-compile check: catch Java errors early before full APK build
+call gradlew.bat compileReleaseJavaWithJavac --quiet
+if errorlevel 1 (
+    echo [ERROR] Java pre-compile check failed
+    echo [WARN] Restoring JavaScript due to pre-compile failure...
+    call node "%~dp0..\..\tools\obfuscate.js" restore --target=cloud
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] Java pre-compile check passed
+echo.
+
 echo [5/6] Building signed APK...
 echo.
 call gradlew.bat assembleRelease
@@ -200,6 +217,16 @@ for %%A in ("%APK_FILE%") do (
     echo APK File: %%~nxA
     echo File Size: %%~zA bytes
 )
+
+echo [6.2/6] Verifying APK contains latest index.html...
+REM P3: Extract index.html from APK and verify it exists and has reasonable size
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; try { $zip=[System.IO.Compression.ZipFile]::OpenRead('%APK_FILE%'); $entry=$zip.GetEntry('assets/public/index.html'); if($entry){ $sz=$entry.Length; if($sz -lt 1000){ Write-Host '[ERROR] APK index.html too small:' $sz 'bytes'; exit 1 }; $reader=New-Object System.IO.StreamReader($entry.Open()); $content=$reader.ReadToEnd(); $reader.Close(); $hash=(Get-FileHash -InputStream ([System.IO.MemoryStream]::new([System.Text.Encoding]::UTF8.GetBytes($content))) -Algorithm SHA256).Hash; Write-Host '[OK] APK index.html:' $sz 'bytes SHA256:' $hash.Substring(0,16) } else { Write-Host '[ERROR] index.html not found in APK'; exit 1 }; $zip.Dispose() } catch { Write-Host '[ERROR] APK verify failed:' $_.Exception.Message; exit 1 }"
+if errorlevel 1 (
+    echo [ERROR] APK content verification failed! APK may not contain latest code.
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo.
 
 echo [6.5/6] Reading product name and version...
 set "PRODUCT_NAME="
@@ -255,4 +282,8 @@ echo.
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
 powershell -NoProfile -Command "Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  APK 打包完成!' -ForegroundColor Yellow; Write-Host '  路径: %FINAL_APK%' -ForegroundColor Yellow; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  总耗时: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
+if not defined NO_PAUSE (
+    set "EXIT_KEY="
+    set /p "EXIT_KEY=按 0 或回车键退出: "
+)
 exit /b 0

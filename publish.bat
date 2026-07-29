@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Huikang TCM - One-Click Publish
@@ -13,7 +13,7 @@ REM Check node
 where node >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] node not found. Please install Node.js first.
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -21,7 +21,7 @@ REM Check gh
 where gh >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] gh CLI not found. Install: winget install GitHub.cli
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -47,5 +47,5 @@ if "%RC%"=="0" (
 )
 echo ============================================
 echo.
-pause
+if not defined NO_PAUSE pause
 exit /b %RC%

@@ -25,7 +25,7 @@ if errorlevel 1 (
     echo After install, run:
     echo   gh auth login
     echo.
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -34,7 +34,7 @@ gh auth status >nul 2>&1
 if errorlevel 1 (
     echo [ERROR] Not logged in to GitHub
     echo Please run: gh auth login
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -51,7 +51,7 @@ if "%VERSION%"=="" (
 
 if "%VERSION%"=="" (
     echo [ERROR] Version number cannot be empty
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -101,7 +101,7 @@ if "%~2"=="" (
 
 if %FILE_COUNT% EQU 0 (
     echo [ERROR] No files selected
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -125,7 +125,7 @@ if "!NOTES!"=="" (
 if errorlevel 1 (
     echo.
     echo [ERROR] Upload failed, please check error messages
-    pause
+    if not defined NO_PAUSE pause
     exit /b 1
 )
 
@@ -146,5 +146,5 @@ if /i "!RUN_HASH!"=="y" (
     node "%~dp0..\shared\calculate-hash.js"
 )
 
-pause
+if not defined NO_PAUSE pause
 exit /b 0
