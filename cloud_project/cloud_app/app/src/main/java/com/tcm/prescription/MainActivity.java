@@ -289,18 +289,24 @@ public class MainActivity extends BridgeActivity {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     // P1-10: 仅允许云端页面请求相机/麦克风权限，防止 XSS 或第三方页面获取摄像头
                     String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
+                    String[] resources = request.getResources();
+                    StringBuilder resStr = new StringBuilder();
+                    for (String r : resources) { resStr.append(r).append(","); }
+                    Log.d(TAG, "onPermissionRequest origin=" + origin + " resources=[" + resStr + "]");
                     if (!isCloudUrl(origin)) {
                         Log.w(TAG, "onPermissionRequest 拒绝非云端来源: " + origin);
                         request.deny();
                         return;
                     }
-                    for (String permission : request.getResources()) {
+                    for (String permission : resources) {
                         if (permission.equals(PermissionRequest.RESOURCE_VIDEO_CAPTURE) ||
                             permission.equals(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
-                            request.grant(request.getResources());
+                            Log.d(TAG, "onPermissionRequest GRANTED for origin=" + origin);
+                            request.grant(resources);
                             return;
                         }
                     }
+                    Log.w(TAG, "onPermissionRequest DENIED (no camera/mic resources)");
                     request.deny();
                 }
             }
@@ -770,6 +776,16 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onResume() {
         super.onResume();
+        // Re-check camera permission on resume (in case revoked while app was backgrounded)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
+                    != PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                        new String[]{Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO}, REQ_CAMERA);
+            }
+        }
         WebView webView = this.getBridge().getWebView();
         if (webView != null) {
             // ★ 优化：onCreate 已配置 WebSettings，onResume 不再重复设置

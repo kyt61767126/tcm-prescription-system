@@ -580,6 +580,13 @@
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'cloud-vr-status';
 
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusEl.textContent = '摄像头初始化失败：浏览器不支持 getUserMedia';
+                statusEl.className = 'cloud-vr-status error';
+                startBtn.disabled = true;
+                return;
+            }
+
             // 多级分辨率兜底：从高到低尝试不同约束组合，适配不同手机型号
             var constraintOptions = [
                 // 1. 理想配置：720p + 指定摄像头 + 原始音频
@@ -953,6 +960,13 @@
         try {
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'cloud-vr-status';
+
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusEl.textContent = '摄像头初始化失败：浏览器不支持 getUserMedia';
+                statusEl.className = 'cloud-vr-status error';
+                captureBtn.disabled = true;
+                return;
+            }
 
             // 多级分辨率兜底：从高到低尝试不同约束组合，适配不同手机型号
             var constraintOptions = [
