@@ -22,27 +22,32 @@ const DOWNLOADS_DIR = path.join(PROJECT_ROOT, 'public', 'downloads');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 
 // 各APP的APK搜索路径和产品名称
+// appDir: 项目根目录（包含 capacitor/ 或 android/ 或 app/ 子目录），用于读取 build.gradle 版本号
 const APP_CONFIG = {
     'dingzhi': {
-        apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+        appDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi'),
         outputName: '惠康中医-定制.apk',
-        configPath: path.join(PROJECT_ROOT, 'offline_project', 'db-dingzhi', 'config.json')
+        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'config.json')
     },
     'geren': {
-        apkDir: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+        appDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren'),
         outputName: '惠康中医-个人.apk',
-        configPath: path.join(PROJECT_ROOT, 'offline_project', 'db-geren', 'config.json')
+        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'config.json')
     },
     'cloud': {
-        apkDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),
+        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),
+        appDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app'),
         outputName: '惠康中医-云端.apk',
-        configPath: path.join(PROJECT_ROOT, 'cloud_project', 'config.json')
+        configPath: null
     },
     'geren-cloud': {
         // 云端个人版：独立项目 cloud_app_geren（包名 com.tcm.prescription.geren）
-        apkDir: path.join(PROJECT_ROOT, 'cloud_project', 'cloud_app_geren', 'app', 'build', 'outputs', 'apk', 'release'),
+        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app_geren', 'app', 'build', 'outputs', 'apk', 'release'),
+        appDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app_geren'),
         outputName: '惠康中医-云端个人版.apk',
-        configPath: path.join(PROJECT_ROOT, 'cloud_project', 'config.json')
+        configPath: null
     }
 };
 
@@ -126,7 +131,7 @@ function updateDownloads(target) {
         // 计算 SHA-256
         const sha256 = calculateSHA256(destPath);
         const size = getFileSize(destPath);
-        const version = readVersionFromGradle(path.join(config.apkDir, '..', '..', '..', '..'));
+        const version = readVersionFromGradle(config.appDir);
 
         // 更新 manifest
         if (!manifest[key]) manifest[key] = {};
