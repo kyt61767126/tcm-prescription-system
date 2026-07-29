@@ -626,6 +626,20 @@
                 return { success: true, user: { ...data.user, token: data.token } };
             } catch (e) {
                 console.error('云端登录失败:', e);
+                // ★ 离线登录缓存：网络错误时尝试离线登录
+                const isNetworkError = !navigator.onLine ||
+                    (e.message && (e.message.includes('Failed to fetch') ||
+                                   e.message.includes('NetworkError') ||
+                                   e.message.includes('network') ||
+                                   e.message.includes('ERR_')));
+                if (isNetworkError) {
+                    console.log('[auth] 网络不可用，尝试离线登录缓存...');
+                    const offlineResult = await tryOfflineLogin(username, password);
+                    if (offlineResult.success) {
+                        return { success: true, user: offlineResult.user, offline: true };
+                    }
+                    return { success: false, error: '网络不可用，' + (offlineResult.error || '离线登录失败') };
+                }
                 return { success: false, error: '登录失败：' + (e.message || '网络错误') };
             }
         }
@@ -816,6 +830,11 @@
 
             const user = result.user;
 
+            // ★ 离线登录缓存：在线登录成功后缓存凭证（仅在线登录时缓存，不覆盖已有缓存）
+            if (!result.offline) {
+                await cacheOfflineLogin(username, password, user);
+            }
+
             // 3. 权限模式标准化
             user.allowedMode = resolveAllowedMode(user);
 
@@ -860,12 +879,91 @@
             'cloud_currentUser', 'cloud_isLoggedIn',
             'currentUser', 'isLoggedIn',
             'user_login_data',
-            'cloud_prescription_cache', 'cloud_prescription_cache_time'
+            'cloud_prescription_cache', 'cloud_prescription_cache_time',
+            // ★ 离线登录缓存：退出时清除（下次需在线登录重新缓存）
+            'auth:offlineLoginCache'
         ];
         for (const key of allKeys) {
             await StorageAdapter.removeItem(key);
             StorageAdapter.removeSessionItem(key);
         }
+    }
+
+    // ==================== 离线登录缓存 ====================
+    // 首次在线登录成功后缓存用户凭证（加密存储），断网时可离线登录
+    // 安全策略：密码通过 encryptPassword（safeStorage/XOR）加密，不存储明文
+    // 有效期：30天，超时需重新在线登录
+
+    async function cacheOfflineLogin(username, password, user) {
+        try {
+            if (!username || !password || !user) return false;
+            const encryptedPwd = await encryptPassword(password);
+            if (!encryptedPwd) {
+                console.warn('[auth] 离线缓存：密码加密失败，跳过缓存');
+                return false;
+            }
+            const cacheData = {
+                username: username,
+                encryptedPassword: encryptedPwd,
+                user: user,
+                cachedAt: Date.now()
+            };
+            await StorageAdapter.setItem('auth:offlineLoginCache', JSON.stringify(cacheData));
+            console.log('[auth] 离线登录缓存已保存');
+            return true;
+        } catch (e) {
+            console.warn('[auth] 缓存离线登录失败:', e);
+            return false;
+        }
+    }
+
+    async function tryOfflineLogin(username, password) {
+        try {
+            if (!username || !password) {
+                return { success: false, error: '请输入用户名和密码' };
+            }
+            const cached = await StorageAdapter.getItem('auth:offlineLoginCache');
+            if (!cached) {
+                return { success: false, error: '无离线登录缓存，请联网登录' };
+            }
+
+            const cacheData = JSON.parse(cached);
+            if (cacheData.username !== username) {
+                return { success: false, error: '该用户无离线缓存，请联网登录' };
+            }
+
+            // 检查缓存是否过期（30天）
+            const CACHE_TTL = 30 * 24 * 60 * 60 * 1000;
+            if (Date.now() - cacheData.cachedAt > CACHE_TTL) {
+                await StorageAdapter.removeItem('auth:offlineLoginCache');
+                return { success: false, error: '离线登录缓存已过期，请联网登录' };
+            }
+
+            // 解密缓存的密码
+            const decryptedPwd = await decryptPassword(cacheData.encryptedPassword);
+            if (!decryptedPwd) {
+                await StorageAdapter.removeItem('auth:offlineLoginCache');
+                return { success: false, error: '缓存密码解密失败，请联网登录' };
+            }
+
+            // 验证密码
+            if (decryptedPwd !== password) {
+                return { success: false, error: '密码错误' };
+            }
+
+            console.log('[auth] 离线登录成功（使用缓存凭证）');
+            return { success: true, user: cacheData.user, offline: true };
+        } catch (e) {
+            console.warn('[auth] 离线登录失败:', e);
+            return { success: false, error: '离线登录异常: ' + (e.message || '未知错误') };
+        }
+    }
+
+    async function clearOfflineLoginCache() {
+        try {
+            await StorageAdapter.removeItem('auth:offlineLoginCache');
+            console.log('[auth] 离线登录缓存已清除');
+        } catch (e) {}
     }
 
     // ==================== 记住用户名层 ====================
@@ -977,6 +1075,11 @@
         validateUsername,
         validateAdminUsername,
         clearRememberedPassword,
+
+        // 离线登录缓存
+        cacheOfflineLogin,
+        tryOfflineLogin,
+        clearOfflineLoginCache,
 
         // 权限解析
         resolveAllowedMode,

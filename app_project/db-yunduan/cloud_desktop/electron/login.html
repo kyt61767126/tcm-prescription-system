@@ -460,6 +460,10 @@
                 if (data.token) {
                     user.token = data.token;
                 }
+                // ★ 离线登录缓存：在线登录成功后缓存凭证
+                if (window.AuthCore && AuthCore.cacheOfflineLogin) {
+                    await AuthCore.cacheOfflineLogin(username, password, user);
+                }
                 localStorage.setItem('cloud_currentUser', JSON.stringify(user));
                 if (window.AuthCore) {
                     try {
@@ -519,9 +523,40 @@
                 await window.electronAPI.loginSuccess(user);
             } catch (err) {
                 console.error('Login error:', err);
-                errorDiv.textContent = '登录失败：' + (err.message || '网络错误');
+                // ★ 离线登录缓存：网络错误时尝试离线登录
+                const isNetworkError = !navigator.onLine ||
+                    (err.message && (err.message.includes('Failed to fetch') ||
+                                     err.message.includes('NetworkError') ||
+                                     err.message.includes('ERR_')));
+                if (isNetworkError && window.AuthCore && AuthCore.tryOfflineLogin) {
+                    errorDiv.textContent = '网络不可用，正在尝试离线登录...';
+                    errorDiv.style.color = '#f59e0b';
+                    const offlineResult = await AuthCore.tryOfflineLogin(username, password);
+                    if (offlineResult.success) {
+                        const user = offlineResult.user;
+                        localStorage.setItem('cloud_currentUser', JSON.stringify(user));
+                        try {
+                            await AuthCore.StorageAdapter.setItem('auth:currentUser', JSON.stringify(user));
+                            await AuthCore.StorageAdapter.setItem('auth:isLoggedIn', 'true');
+                            await AuthCore.StorageAdapter.setItem('auth:loginData', JSON.stringify({loginTime: Date.now(), username: user.username}));
+                        } catch(e2) { console.warn('AuthCore存储失败:', e2); }
+                        localStorage.setItem('cloud_isLoggedIn', 'true');
+                        localStorage.setItem('currentUser', JSON.stringify(user));
+                        localStorage.setItem('isLoggedIn', 'true');
+                        errorDiv.textContent = '离线登录成功，正在打开...';
+                        errorDiv.style.color = '#4CAF50';
+                        if (window.electronAPI) {
+                            await window.electronAPI.loginSuccess(user);
+                        }
+                        return;
+                    }
+                    errorDiv.textContent = '网络不可用，' + (offlineResult.error || '离线登录失败');
+                    errorDiv.style.color = '#dc2626';
+                } else {
+                    errorDiv.textContent = '登录失败：' + (err.message || '网络错误');
+                    errorDiv.style.color = '#dc2626';
+                }
                 errorDiv.style.display = 'block';
-                errorDiv.style.color = '#dc2626';
             }
         }
 

@@ -347,6 +347,11 @@
                     user.token = data.token;
                 }
 
+                // ★ 离线登录缓存：在线登录成功后缓存凭证
+                if (window.AuthCore && AuthCore.cacheOfflineLogin) {
+                    await AuthCore.cacheOfflineLogin(username, password, user);
+                }
+
                 localStorage.setItem('lastUsername', username);
                 const userStr = JSON.stringify(user);
                 const loginDataStr = JSON.stringify({ loginTime: Date.now(), username: user.username });
@@ -396,7 +401,40 @@
                 ipcRenderer.invoke('login-success', user);
             } catch (e) {
                 console.error('[login] handleLogin 异常:', e);
-                errorDiv.textContent = '登录失败：' + (e && e.message ? e.message : '网络错误，请检查网络连接');
+                // ★ 离线登录缓存：网络错误时尝试离线登录
+                const isNetworkError = !navigator.onLine ||
+                    (e.message && (e.message.includes('Failed to fetch') ||
+                                   e.message.includes('NetworkError') ||
+                                   e.message.includes('ERR_')));
+                if (isNetworkError && window.AuthCore && AuthCore.tryOfflineLogin) {
+                    errorDiv.textContent = '网络不可用，正在尝试离线登录...';
+                    errorDiv.style.color = '#f59e0b';
+                    const offlineResult = await AuthCore.tryOfflineLogin(username, password);
+                    if (offlineResult.success) {
+                        const user = offlineResult.user;
+                        localStorage.setItem('lastUsername', username);
+                        const userStr = JSON.stringify(user);
+                        const loginDataStr = JSON.stringify({ loginTime: Date.now(), username: user.username });
+                        localStorage.setItem('currentUser', userStr);
+                        try {
+                            await Promise.all([
+                                AuthCore.StorageAdapter.setItem('auth:currentUser', userStr),
+                                AuthCore.StorageAdapter.setItem('auth:isLoggedIn', 'true'),
+                                AuthCore.StorageAdapter.setItem('auth:loginData', loginDataStr)
+                            ]);
+                        } catch(e2) { console.warn('AuthCore存储失败:', e2); }
+                        sessionStorage.setItem('currentUser', userStr);
+                        errorDiv.textContent = '离线登录成功，正在打开...';
+                        errorDiv.style.color = '#4CAF50';
+                        ipcRenderer.invoke('login-success', user);
+                        return;
+                    }
+                    errorDiv.textContent = '网络不可用，' + (offlineResult.error || '离线登录失败');
+                    errorDiv.style.color = '#dc2626';
+                } else {
+                    errorDiv.textContent = '登录失败：' + (e && e.message ? e.message : '网络错误，请检查网络连接');
+                    errorDiv.style.color = '#dc2626';
+                }
                 errorDiv.style.display = 'block';
             } finally {
                 _loginInFlight = false;
