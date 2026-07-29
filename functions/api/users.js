@@ -542,10 +542,11 @@ export async function onRequest(context) {
             if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
                 return json({ success: false, error: '管理员登录账号不能使用中文' }, 400);
             }
-            // 命名规则强制校验：必须为 admin_{诊所简拼} 格式（如 admin_bnt）
-            // 规则：以 admin_ 开头，后缀为 2-12 位小写字母/数字（诊所简拼）
+            // 命名规则强制校验：必须为 admin_{诊所简码} 格式（如 admin_hkt）
+            // 规则：以 admin_ 开头，后缀为 2-12 位小写字母/数字（诊所简码）
+            // ★ 统一管理员命名规则：admin + 诊所简码（admin_hkt = 惠康中医）
             if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(adminUsername)) {
-                return json({ success: false, error: '管理员账号必须为 admin_诊所简拼 格式（如 admin_bnt），仅小写字母和数字，2-12 位' }, 400);
+                return json({ success: false, error: '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅小写字母和数字，2-12 位' }, 400);
             }
 
             // 检查用户名是否已存在（全局唯一，跨诊所 + platform_admins）

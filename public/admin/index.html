@@ -354,7 +354,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     </div>
                     <div class="form-group">
                         <label>管理员账号 *</label>
-                        <input type="text" id="newClinicAdminUsername" placeholder="英文/拼音，不可中文">
+                        <input type="text" id="newClinicAdminUsername" placeholder="admin_诊所简码（如 admin_hkt）">
                     </div>
                     <div class="form-group">
                         <label>管理员密码 *</label>
@@ -1532,7 +1532,7 @@ async function handleCreateClinic() {
         return;
     }
     if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
-        showAlert('clinicAlert', '管理员登录账号不能使用中文', 'error');
+        showAlert('clinicAlert', '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅英文小写字母和数字', 'error');
         return;
     }
     try {

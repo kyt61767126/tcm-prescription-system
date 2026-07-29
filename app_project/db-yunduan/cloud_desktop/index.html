@@ -780,7 +780,7 @@
                     <div style="color:#2c5530;font-weight:bold;font-size:13px;margin-bottom:8px;">➕ 创建新诊所（同时下发首个诊所管理员账号）</div>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
                         <input type="text" id="newClinicName" placeholder="诊所名称（如：本能堂中医诊所）" style="padding:6px;">
-                        <input type="text" id="newClinicAdminUsername" placeholder="诊所管理员登录账号（英文/拼音）" style="padding:6px;">
+                        <input type="text" id="newClinicAdminUsername" placeholder="admin_诊所简码（如 admin_hkt）" style="padding:6px;">
                         <input type="password" id="newClinicAdminPassword" placeholder="诊所管理员密码" style="padding:6px;">
                         <input type="text" id="newClinicAdminName" placeholder="管理员姓名（可选，默认用账号）" style="padding:6px;">
                     </div>
@@ -4010,7 +4010,7 @@ if (window.Permission) {
                 return;
             }
             if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
-                alert('管理员登录账号不能使用中文，请使用英文或拼音');
+                alert('管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅英文小写字母和数字');
                 return;
             }
 

@@ -303,6 +303,52 @@
         return storedPassword === inputPassword;
     }
 
+    // ==================== 用户名语言规则（系统稳定性与使用安全）====================
+    // ★ 统一规则：
+    //   1. 用户名（username）：必须为英文（ASCII 小写字母 + 数字 + 下划线），禁止中文
+    //      - 稳定性：避免编码问题导致 KV/DB 存储异常、跨系统乱码
+    //      - 安全性：防止 Unicode 同形异义攻击（homograph attack）、SQL 注入
+    //      - 兼容性：英文用户名在 URL/Header/Token 中无需额外编码，跨端一致
+    //   2. 管理员账号格式：admin_{诊所简码}（如 admin_hkt = 惠康中医）
+    //      - 诊所简码：2-12 位小写字母/数字，全局唯一
+    //   3. 密码（password）：允许中文/英文/符号（哈希后存储，不影响稳定性）
+    //   4. 显示姓名（name）：允许中文（仅用于 UI 展示，不参与登录比对）
+    function validateUsername(username) {
+        if (!username || typeof username !== 'string') {
+            return { valid: false, error: '用户名不能为空' };
+        }
+        const trimmed = username.trim();
+        if (trimmed.length < 2 || trimmed.length > 30) {
+            return { valid: false, error: '用户名长度需 2-30 个字符' };
+        }
+        // 禁止中文（系统稳定性 + 安全性）
+        if (/[\u4e00-\u9fa5]/.test(trimmed)) {
+            return { valid: false, error: '用户名不能使用中文（系统稳定性与安全要求）' };
+        }
+        // 禁止非 ASCII 字符（全角符号、日韩文等）
+        if (/[^\x20-\x7e]/.test(trimmed)) {
+            return { valid: false, error: '用户名仅允许英文字母、数字和下划线' };
+        }
+        // 仅允许小写字母、数字、下划线、连字符
+        if (!/^[a-z0-9_-]+$/i.test(trimmed)) {
+            return { valid: false, error: '用户名仅允许英文字母、数字、下划线和连字符' };
+        }
+        return { valid: true, username: trimmed };
+    }
+
+    // ★ 管理员账号格式校验：admin_{诊所简码}
+    function validateAdminUsername(username) {
+        const base = validateUsername(username);
+        if (!base.valid) return base;
+        if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(base.username)) {
+            return {
+                valid: false,
+                error: '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅小写字母和数字，2-12 位'
+            };
+        }
+        return base;
+    }
+
     // 记住密码加密存储（非明文）
     // P0-2: 优先使用 safeStorage（DPAPI），降级到 XOR PWDv2，向后兼容 PWDv1
     async function encryptPassword(password) {
@@ -926,6 +972,10 @@
         decryptPassword,
         saveRememberedPassword,
         getRememberedPassword,
+
+        // 用户名语言规则校验（系统稳定性与安全）
+        validateUsername,
+        validateAdminUsername,
         clearRememberedPassword,
 
         // 权限解析
