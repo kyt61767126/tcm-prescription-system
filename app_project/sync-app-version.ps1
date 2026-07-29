@@ -1,6 +1,6 @@
-﻿# ============================================================================
+# ============================================================================
 #  sync-app-version.ps1
-#  从 cloud_desktop/index.html 读取 __APP_VERSION__，自动注入到
+#  从 db-yudan/cloud_desktop/index.html 读取 __APP_VERSION__，自动注入到
 #  MainActivity.EXPECTED_APP_VERSION，避免版本号不同步导致每次启动清缓存
 #  用法: powershell -NoProfile -ExecutionPolicy Bypass -File sync-app-version.ps1 <cloud_dir> <android_dir>
 # ============================================================================
@@ -15,7 +15,7 @@ if ($args.Count -lt 2) {
 $cloudDir  = $args[0]
 $androidDir = $args[1]
 
-$indexFile = Join-Path $cloudDir 'cloud_desktop\index.html'
+$indexFile = Join-Path $cloudDir 'db-yudan/cloud_desktop\index.html'
 $mainFile  = Join-Path $androidDir 'app\src\main\java\com\tcm\prescription\MainActivity.java'
 
 if (-not (Test-Path $indexFile)) {

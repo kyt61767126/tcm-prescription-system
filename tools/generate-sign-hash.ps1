@@ -28,14 +28,14 @@ $apkFilter = '*.apk'
 if ($Version -eq 'cloud') {
     $projectDir = Join-Path $rootDir "app_project"
     $guardFileName = 'SecurityGuard.java'
-    $guardSearchPath = Join-Path $projectDir "cloud_app\app\src\main\java\com\tcm\prescription"
+    $guardSearchPath = Join-Path $projectDir "db-yudan/cloud_app\app\src\main\java\com\tcm\prescription"
     $placeholder = 'EXPECTED_SIGN_HASH'
     $useRecurse = $false
     $apkFilter = '惠康中医-云端.apk'
 } elseif ($Version -eq 'geren-cloud') {
     $projectDir = Join-Path $rootDir "app_project"
     $guardFileName = 'SecurityGuard.java'
-    $guardSearchPath = Join-Path $projectDir "cloud_app_geren\app\src\main\java\com\tcm\prescription"
+    $guardSearchPath = Join-Path $projectDir "db-yudan/cloud_app_geren\app\src\main\java\com\tcm\prescription"
     $placeholder = 'EXPECTED_SIGN_HASH'
     $useRecurse = $false
     $apkFilter = '惠康中医-云端个人版.apk'

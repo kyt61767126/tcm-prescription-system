@@ -20,7 +20,7 @@
 //  channel 取值：
 //    geren    → app_project/db-geren/
 //    dingzhi  → app_project/db-dingzhi/
-//    cloud    → app_project/cloud_desktop/
+//    cloud    → app_project/db-yudan/cloud_desktop/
 // ============================================================================
 
 const fs = require('fs');
@@ -40,7 +40,7 @@ const CHANNEL_CONFIG = {
         outputDir: 'dist'
     },
     cloud: {
-        dir: 'app_project/cloud_desktop',
+        dir: 'app_project/db-yudan/cloud_desktop',
         productName: '惠康中医-云端',
         outputDir: 'build_output'
     }

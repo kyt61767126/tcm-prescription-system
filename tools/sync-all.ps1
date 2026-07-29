@@ -49,8 +49,8 @@ $BusinessJsFiles = @(
 $BusinessJsTargets = @(
     'public',
     'public/electron',
-    'app_project/cloud_desktop',
-    'app_project/cloud_desktop/electron',
+    'app_project/db-yudan/cloud_desktop',
+    'app_project/db-yudan/cloud_desktop/electron',
     'app_project/db-geren',
     'app_project/db-geren/capacitor/app/src/main/assets/public',
     'app_project/db-dingzhi',
@@ -80,7 +80,7 @@ $LicenseFiles = @(
 
 # license targets (4 electron/ + 3 root/license/ + 3 nndroidicense/)
 $LicenseTargets = @(
-    'app_project/cloud_desktop/electron',
+    'app_project/db-yudan/cloud_desktop/electron',
     'app_project/db-geren/electron',
     'app_project/db-dingzhi/electron',
     'app_project/db-geren/license',

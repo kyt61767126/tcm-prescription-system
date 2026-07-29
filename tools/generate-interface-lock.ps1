@@ -11,11 +11,11 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $files = @(
-    'app_project/cloud_desktop/index.html',
+    'app_project/db-yudan/cloud_desktop/index.html',
     'public/index.html',
     'app_project/db-dingzhi/index.html',
     'app_project/db-geren/index.html',
-    'app_project/cloud_desktop/electron/login.html',
+    'app_project/db-yudan/cloud_desktop/electron/login.html',
     'public/electron/login.html',
     'app_project/db-dingzhi/electron/login.html',
     'app_project/db-geren/electron/login.html'

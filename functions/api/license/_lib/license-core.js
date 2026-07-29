@@ -9,7 +9,7 @@
 //
 //  ★ 签名密钥和 LICENSE_TYPE_CONFIG 必须与客户端保持一致：
 //    - app_project/db-geren/electron/license-manager.js
-//    - app_project/cloud_desktop/electron/license-manager.js
+//    - app_project/db-yudan/cloud_desktop/electron/license-manager.js
 // ============================================================================
 
 // ★ 必须与客户端 license-manager.js 中的 LICENSE_HMAC_KEY 保持一致

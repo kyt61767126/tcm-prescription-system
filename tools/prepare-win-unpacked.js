@@ -179,7 +179,7 @@ async function main() {
   // Apply asarmor ASAR protection (防解包: 100GB bloat patch)
   // afterPack.js doesn't execute in --prepackaged mode, so we apply it here
   // ★关键修复：必须用 path.resolve() 生成绝对路径，require() 无法解析 path.join 的相对路径
-  // 历史bug：path.join(versionDir, ...) 产生 'app_project/cloud_desktop/node_modules/asarmor'
+  // 历史bug：path.join(versionDir, ...) 产生 'app_project/db-yudan/cloud_desktop/node_modules/asarmor'
   //          require() 把它当作模块名查找，报 Cannot find module，被 catch 静默跳过
   try {
     const asarmorPath = path.resolve(versionDir, 'node_modules', 'asarmor');

@@ -66,7 +66,7 @@ echo.
 echo [3/8] Closing remaining processes...
 taskkill /F /IM "HuikangTCM*.exe" >nul 2>&1
 taskkill /F /IM "Huikang*.exe" >nul 2>&1
-powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*cloud_desktop*dist*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
+powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-yudan/cloud_desktop*dist*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 echo [OK] Processes cleaned
 echo.
 

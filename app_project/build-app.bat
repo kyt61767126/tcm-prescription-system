@@ -11,7 +11,7 @@ echo   开始: %BUILD_START_TIME%
 echo ============================================
 echo.
 
-set "PROJECT_DIR=%~dp0cloud_app"
+set "PROJECT_DIR=%~dp0db-yudan/cloud_app"
 set "ANDROID_DIR=%PROJECT_DIR%"
 set "APK_OUTPUT_DIR=%ANDROID_DIR%\app\build\outputs\apk\release"
 
@@ -94,7 +94,7 @@ findstr "versionName" "app\build.gradle"
 echo.
 
 echo [2.6/6] Syncing APP version from index.html to MainActivity...
-REM Read __APP_VERSION__ from cloud_desktop/index.html, inject into MainActivity.EXPECTED_APP_VERSION
+REM Read __APP_VERSION__ from db-yudan/cloud_desktop/index.html, inject into MainActivity.EXPECTED_APP_VERSION
 REM Avoid cache clearing on every launch caused by MainActivity/index.html version mismatch
 REM Use standalone .ps1 script to avoid cmd/PowerShell double-escape issues
 set "CLOUD_DIR_TMP=%~dp0"
@@ -142,7 +142,7 @@ if errorlevel 1 (
 )
 echo.
 
-echo [4.5/6] Obfuscating JavaScript (cloud target - includes cloud_app assets)...
+echo [4.5/6] Obfuscating JavaScript (cloud target - includes db-yudan/cloud_app assets)...
 REM P1: restore JS code after build
 REM P1: Obfuscate JS to prevent reverse engineering of APK assets
 call node "%~dp0..\tools\obfuscate.js" --target=cloud
@@ -205,7 +205,7 @@ for %%A in ("%APK_FILE%") do (
 
 echo [6.5/6] Reading product name and version...
 set "PRODUCT_NAME="
-for /f "delims=" %%p in ('powershell -NoProfile -Command "(Get-Content '..\cloud_desktop\package.json' -Encoding UTF8 -Raw | ConvertFrom-Json).build.productName"') do (
+for /f "delims=" %%p in ('powershell -NoProfile -Command "(Get-Content '..\db-yudan/cloud_desktop\package.json' -Encoding UTF8 -Raw | ConvertFrom-Json).build.productName"') do (
     set "PRODUCT_NAME=%%p"
 )
 if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-云端"
