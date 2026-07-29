@@ -69,7 +69,7 @@ public class MainActivity extends BridgeActivity {
     private static final String TAG = "TCM_Prescription";
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
-    private static final String EXPECTED_APP_VERSION = "2026-07-29-v1";
+    private static final String EXPECTED_APP_VERSION = "2026-07-29-v2";
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
@@ -256,6 +256,11 @@ public class MainActivity extends BridgeActivity {
         settings.setUseWideViewPort(true);
         settings.setJavaScriptEnabled(true);
 
+        // ★ 修复摄像头权限被拒绝问题：getUserMedia 在 async/await 中调用，
+        // 可能脱离用户手势调用栈，导致 WebView 不触发 onPermissionRequest
+        // 必须显式关闭"媒体播放需要用户手势"的默认行为
+        settings.setMediaPlaybackRequiresUserGesture(false);
+
         // S1: 关闭文件访问权限（APP 通过 server.url 远程加载云端页面，不需要访问本地文件系统）
         // 默认值在部分旧版本为 true，显式关闭可防止 XSS 读取 file:// 资源
         settings.setAllowFileAccess(false);
@@ -284,7 +289,11 @@ public class MainActivity extends BridgeActivity {
         webView.clearHistory();
 
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
-        webView.setWebChromeClient(new BridgeWebChromeClient(this.getBridge()) {
+        // ★ 关键修复：改用原生 WebChromeClient 替代 BridgeWebChromeClient
+        // BridgeWebChromeClient.onPermissionRequest 通过 permissionLauncher 异步请求系统权限，
+        // 当系统权限已授予时不触发回调，导致 WebView 权限卡死 → getUserMedia 返回 NotAllowedError
+        // 原生 WebChromeClient 直接 grant，与离线 APP 方案一致（已验证可正常录像）
+        webView.setWebChromeClient(new WebChromeClient() {
             // 授权摄像头和麦克风权限（录像拍照功能需要）
             @Override
             public void onPermissionRequest(PermissionRequest request) {
