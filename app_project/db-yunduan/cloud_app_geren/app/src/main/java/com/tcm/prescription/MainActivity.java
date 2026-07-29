@@ -286,14 +286,23 @@ public class MainActivity extends BridgeActivity {
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
         webView.setWebChromeClient(new BridgeWebChromeClient(this.getBridge()) {
             // 授权摄像头和麦克风权限（录像拍照功能需要）
+            // ★ 修复 NotAllowedError：确保 request.grant() 在主线程同步执行
+            // 必须在主线程执行 grant()，否则 WebView 可能忽略授权
             @Override
-            public void onPermissionRequest(PermissionRequest request) {
+            public void onPermissionRequest(final PermissionRequest request) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                    String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
+                    final String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
                     Log.d(TAG, "onPermissionRequest origin=" + origin + " resources=" + java.util.Arrays.toString(request.getResources()));
-                    // Directly grant all requested resources (diagnostic: bypass isCloudUrl + permissionLauncher)
-                    request.grant(request.getResources());
-                    Log.d(TAG, "onPermissionRequest GRANTED (direct)");
+
+                    mainHandler.post(() -> {
+                        try {
+                            request.grant(request.getResources());
+                            Log.d(TAG, "onPermissionRequest GRANTED (main thread)");
+                        } catch (Exception e) {
+                            Log.e(TAG, "onPermissionRequest grant failed: " + e.getMessage(), e);
+                            try { request.deny(); } catch (Exception ignored) {}
+                        }
+                    });
                 }
             }
 
