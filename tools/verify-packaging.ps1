@@ -1,4 +1,4 @@
-﻿# verify-packaging.ps1 - Verify encoding integrity of packaging files
+# verify-packaging.ps1 - Verify encoding integrity of packaging files
 # Usage: powershell -File tools\verify-packaging.ps1
 # Exit code: 0 = all pass, 1 = issues found
 #
@@ -66,7 +66,7 @@ Write-Host ""
 # ★ 举一反三：扫描所有 .ps1 文件而非硬编码列表（遗漏 pack.ps1 导致 BOM 问题未被发现）
 Write-Host "[Check 1] .ps1 files (MUST have UTF-8 BOM for Chinese support)"
 $ps1Files = @()
-$ps1Files += Get-ChildItem -Path 'offline_project' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
+$ps1Files += Get-ChildItem -Path 'app_project' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
 $ps1Files += Get-ChildItem -Path 'tools' -Recurse -Filter '*.ps1' -File -ErrorAction SilentlyContinue
 $ps1Files = $ps1Files | Where-Object { $_.FullName -notmatch '\\node_modules\\' }
 foreach ($f in $ps1Files) {
@@ -78,24 +78,24 @@ Write-Host ""
 # --- Check 2: index.html files MUST NOT have BOM ---
 Write-Host "[Check 2] index.html files (MUST NOT have BOM - causes white screen)"
 $htmlFiles = @(
-    'offline_project\db-dingzhi\index.html',
-    'offline_project\db-geren\index.html',
-    'offline_project\db-dingzhi\android\app\src\main\assets\public\index.html',
-    'offline_project\db-geren\android\app\src\main\assets\public\index.html',
+    'app_project\db-dingzhi\index.html',
+    'app_project\db-geren\index.html',
+    'app_project\db-dingzhi\android\app\src\main\assets\public\index.html',
+    'app_project\db-geren\android\app\src\main\assets\public\index.html',
     'public\index.html',
-    'cloud_project\cloud_desktop\index.html'
+    'app_project\cloud_desktop\index.html'
 )
 foreach ($f in $htmlFiles) { Check-Bom -Path $f -ShouldHaveBom $false -Label $f }
 Write-Host ""
 
 # --- Check 3: .bat files MUST be ASCII-only ---
 Write-Host "[Check 3] .bat files (MUST be ASCII-only - cmd.exe reads as GBK)"
-$batFiles = Get-ChildItem -Path 'offline_project' -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.Name -ne 'gradlew.bat' }
+$batFiles = Get-ChildItem -Path 'app_project' -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.Name -ne 'gradlew.bat' }
 foreach ($bf in $batFiles) {
     $rel = $bf.FullName.Substring($root.Length + 1)
     Check-Ascii -Path $bf.FullName -Label $rel
 }
-$cloudBat = Get-ChildItem -Path 'cloud_project' -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.Name -ne 'gradlew.bat' }
+$cloudBat = Get-ChildItem -Path 'app_project' -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.Name -ne 'gradlew.bat' }
 foreach ($bf in $cloudBat) {
     $rel = $bf.FullName.Substring($root.Length + 1)
     Check-Ascii -Path $bf.FullName -Label $rel

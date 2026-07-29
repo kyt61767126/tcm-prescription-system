@@ -108,37 +108,37 @@ const MODULE_FILES = [
 const ALL_DISTRIBUTION_DIRS = [
     'public',
     'public/electron',
-    'cloud_project/cloud_desktop',
-    'cloud_project/cloud_desktop/electron',
-    'cloud_project/cloud_app/app/src/main/assets/public',
-    'cloud_project/cloud_app/app/src/main/assets',
-    'offline_project/db-dingzhi',
-    'offline_project/db-dingzhi/electron',
-    'offline_project/db-geren',
-    'offline_project/db-geren/electron',
-    'offline_project/db-dingzhi/android/app/src/main/assets/public',
-    'offline_project/db-geren/android/app/src/main/assets/public'
+    'app_project/cloud_desktop',
+    'app_project/cloud_desktop/electron',
+    'app_project/cloud_app/app/src/main/assets/public',
+    'app_project/cloud_app/app/src/main/assets',
+    'app_project/db-dingzhi',
+    'app_project/db-dingzhi/electron',
+    'app_project/db-geren',
+    'app_project/db-geren/electron',
+    'app_project/db-dingzhi/android/app/src/main/assets/public',
+    'app_project/db-geren/android/app/src/main/assets/public'
 ];
 
 // 按 target 分组（用于 --target=dingzhi 等参数，只处理对应版本，大幅加速打包）
 const TARGET_DIRS = {
     dingzhi: [
-        'offline_project/db-dingzhi',
-        'offline_project/db-dingzhi/electron',
-        'offline_project/db-dingzhi/android/app/src/main/assets/public'
+        'app_project/db-dingzhi',
+        'app_project/db-dingzhi/electron',
+        'app_project/db-dingzhi/android/app/src/main/assets/public'
     ],
     geren: [
-        'offline_project/db-geren',
-        'offline_project/db-geren/electron',
-        'offline_project/db-geren/android/app/src/main/assets/public'
+        'app_project/db-geren',
+        'app_project/db-geren/electron',
+        'app_project/db-geren/android/app/src/main/assets/public'
     ],
     cloud: [
         'public',
         'public/electron',
-        'cloud_project/cloud_desktop',
-        'cloud_project/cloud_desktop/electron',
-        'cloud_project/cloud_app/app/src/main/assets/public',
-        'cloud_project/cloud_app/app/src/main/assets'
+        'app_project/cloud_desktop',
+        'app_project/cloud_desktop/electron',
+        'app_project/cloud_app/app/src/main/assets/public',
+        'app_project/cloud_app/app/src/main/assets'
     ],
     all: ALL_DISTRIBUTION_DIRS
 };
@@ -151,7 +151,7 @@ const TARGET_DIRS = {
 // 影响：login.js 不再被混淆（保持明文），可被反编译读取登录流程，
 //       但密码哈希值存于 config.json/localStorage，不在 login.js 中，安全性损失可接受
 const EXTRA_FILES = {
-    'cloud_project/cloud_app/app/src/main/assets': ['video-recorder-inject.js']
+    'app_project/cloud_app/app/src/main/assets': ['video-recorder-inject.js']
 };
 
 /**

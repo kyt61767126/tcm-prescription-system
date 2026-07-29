@@ -45,7 +45,3 @@ if %EXIT_CODE% neq 0 (
     powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] Strict mode APP build complete!' -ForegroundColor Yellow; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  总耗时: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
 )
 echo.
-if not defined NO_PAUSE (
-    set "EXIT_KEY="
-    set /p "EXIT_KEY=按 0 或回车键退出: "
-)

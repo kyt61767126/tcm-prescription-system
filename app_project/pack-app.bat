@@ -3,28 +3,35 @@ chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
 
-REM pack-desktop.bat - Desktop build entry (Electron exe)
-set "PACK_PS1=%~dp0..\..\tools\pack.ps1"
+REM pack-app.bat - Mobile APP Build entry (Android APK)
+REM Direct build, no menu interaction
+
+set "PACK_PS1=%~dp0packaging.ps1"
 if not exist "%PACK_PS1%" (
-    echo [ERROR] pack.ps1 not found
+    echo [ERROR] packaging.ps1 not found
+    echo   Path: %PACK_PS1%
     if not defined NO_PAUSE pause
     exit /b 1
 )
+
 where node >nul 2>nul
 if errorlevel 1 (
     echo [ERROR] Node.js not found
+    echo   Please install from https://nodejs.org/
     if not defined NO_PAUSE pause
     exit /b 1
 )
+
 REM Record start time
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
 echo ============================================
-echo   Huikang-TCM Build - Desktop (Personal)
+echo   Huikang-TCM Build - Mobile APP (Android APK)
 echo   Start: %BUILD_START_TIME%
 echo ============================================
 echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -Version geren -Target desktop
+
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -AutoApp
 set "EXIT_CODE=%errorlevel%"
 
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
@@ -34,11 +41,7 @@ echo.
 if %EXIT_CODE% neq 0 (
     powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Red; Write-Host '  [ERROR] Build failed, exit code: %EXIT_CODE%' -ForegroundColor Red; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Red; Write-Host '========================================' -ForegroundColor Red"
 ) else (
-    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] Desktop (Personal) build complete!' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
+    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] Mobile APP build complete!' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
 )
 echo.
-if not defined NO_PAUSE (
-    set "EXIT_KEY="
-    set /p "EXIT_KEY=按 0 或回车键退出: "
-)
 exit /b %EXIT_CODE%

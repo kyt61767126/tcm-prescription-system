@@ -1,12 +1,12 @@
 @echo off
 chcp 65001 >nul
-title Huikang TCM Custom - Offline APP Build
+title Huikang TCM Personal - Offline APP Build
 
 REM Record start time for elapsed calculation
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
 echo ============================================
-echo   Huikang TCM Custom - Offline APP
+echo   Huikang TCM Personal - Offline APP
 echo   开始: %BUILD_START_TIME%
 echo ============================================
 echo.
@@ -195,8 +195,8 @@ REM P0-3: Save old value to .build_vcode_prev for rollback on build failure (ali
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='app\build.gradle'; $c=[System.IO.File]::ReadAllText($f); if($c -match 'versionCode\s+(\d+)'){ $old=[int]$matches[1]; $new=$old+1; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $new\"; [System.IO.File]::WriteAllText($f,$nc,(New-Object System.Text.UTF8Encoding($false))); Set-Content -Path '%~dp0.build_vcode_prev' -Value $old -Encoding ASCII -NoNewline; Write-Host ('  [OK] versionCode: '+$old+' -> '+$new+' (prev saved)') } else { Write-Host '  [WARN] versionCode not found in build.gradle' }"
 echo.
 
-echo [5.6/10] Obfuscating JavaScript (target=dingzhi)...
-call node "%~dp0..\..\..\tools\obfuscate.js" --target=dingzhi
+echo [5.6/10] Obfuscating JavaScript (target=geren)...
+call node "%~dp0..\..\..\tools\obfuscate.js" --target=geren
 if errorlevel 1 (
     echo [ERROR] JS obfuscation failed
     if not defined NO_PAUSE pause
@@ -213,7 +213,7 @@ if errorlevel 1 (
     echo [ERROR] Build failed! Rolling back versionCode...
     powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='app\build.gradle'; $prevFile='%~dp0.build_vcode_prev'; if(Test-Path $prevFile){ $prev=Get-Content $prevFile -Raw; $c=[System.IO.File]::ReadAllText($f); $nc=$c -replace 'versionCode\s+\d+', \"versionCode $prev\"; [System.IO.File]::WriteAllText($f,$nc,(New-Object System.Text.UTF8Encoding($false))); Remove-Item $prevFile -Force; Write-Host ('  [OK] versionCode rolled back to '+$prev) } else { Write-Host '  [WARN] No prev versionCode to rollback' }"
     echo [WARN] Restoring JavaScript due to build failure...
-    call node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi
+    call node "%~dp0..\..\..\tools\obfuscate.js" restore --target=geren
     echo [ERROR] Build failed! Please check error messages
     if not defined NO_PAUSE pause
     exit /b 1
@@ -223,7 +223,7 @@ if exist "%~dp0.build_vcode_prev" del "%~dp0.build_vcode_prev"
 echo.
 
 echo [6.5/10] Restoring JavaScript...
-call node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi
+call node "%~dp0..\..\..\tools\obfuscate.js" restore --target=geren
 if errorlevel 1 (
     echo [WARN] JS restore failed - may need manual restore
 ) else (
@@ -279,7 +279,7 @@ if "%VERSION_STR%"=="" set "VERSION_STR=1.0"
 for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Content '..\config.json' -Encoding UTF8 -Raw | ConvertFrom-Json).productName"`) do (
     set "PRODUCT_NAME=%%p"
 )
-if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-定制"
+if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-个人"
 
 REM Verify source APK size (prevent copying empty file when Gradle fails or write incomplete)
 set "SRC_SIZE=0"
@@ -326,7 +326,7 @@ if errorlevel 1 (
 echo.
 
 echo [10/10] Auto-updating download page...
-node "%~dp0..\..\..\tools\auto-update-downloads.js" dingzhi
+node "%~dp0..\..\..\tools\auto-update-downloads.js" geren
 if errorlevel 1 (
     echo [WARN] Download page auto-update had issues, continuing anyway
 ) else (
@@ -337,8 +337,4 @@ echo.
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
 powershell -NoProfile -Command "Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  APK 打包完成!' -ForegroundColor Yellow; Write-Host '  路径: %APK_FULL_PATH%' -ForegroundColor Yellow; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  总耗时: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
-if not defined NO_PAUSE (
-    set "EXIT_KEY="
-    set /p "EXIT_KEY=按 0 或回车键退出: "
-)
 exit /b 0

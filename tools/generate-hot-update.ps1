@@ -1,9 +1,9 @@
-﻿# ============================================================================
+# ============================================================================
 #  generate-hot-update.ps1 - Generate hot-update packages for offline apps
 #
 #  Purpose:
 #    Generate version.json + package.zip for each offline version (geren/dingzhi)
-#    Output to cloud_project/public/hot-update/<version>/
+#    Output to app_project/public/hot-update/<version>/
 #    Push to GitHub → Cloudflare Pages auto-deploys → apps check for updates
 #
 #  Usage:
@@ -76,14 +76,14 @@ function Generate-VersionUpdate {
 
     Write-Host "--- [$VerName] Generating hot-update ---" -ForegroundColor Cyan
 
-    $sourceDir = Join-Path $ProjectRoot "offline_project\db-$VerName\android\app\src\main\assets\public"
+    $sourceDir = Join-Path $ProjectRoot "app_project\db-$VerName\android\app\src\main\assets\public"
     if (-not (Test-Path $sourceDir)) {
         Write-Host "  [SKIP] Source not found: $sourceDir" -ForegroundColor Yellow
         return $false
     }
 
     # Output directory
-    $outputDir = Join-Path $ProjectRoot "cloud_project\public\hot-update\$VerName"
+    $outputDir = Join-Path $ProjectRoot "app_project\public\hot-update\$VerName"
     if (Test-Path $outputDir) {
         Remove-Item $outputDir -Recurse -Force
     }
@@ -196,12 +196,12 @@ Write-Host ""
 if ($successCount -gt 0) {
     Write-Host "[OK] Hot-update packages generated" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Output: cloud_project/public/hot-update/" -ForegroundColor Cyan
+    Write-Host "Output: app_project/public/hot-update/" -ForegroundColor Cyan
     Write-Host "  ├── geren/version.json + package.zip" -ForegroundColor Gray
     Write-Host "  └── dingzhi/version.json + package.zip" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Next steps:" -ForegroundColor Cyan
-    Write-Host "  1. git add cloud_project/public/hot-update/"
+    Write-Host "  1. git add app_project/public/hot-update/"
     Write-Host "  2. git commit -m 'hot-update: $VersionNumber'"
     Write-Host "  3. git push (Cloudflare Pages auto-deploys)"
     Write-Host "  4. Apps will auto-check for updates on next launch"

@@ -1,4 +1,4 @@
-﻿# generate-sign-hash.ps1 - Unified APK signature hash extraction and injection tool
+# generate-sign-hash.ps1 - Unified APK signature hash extraction and injection tool
 # Extracts SHA-256 from APK and injects into LicenseManager.java (offline) or SecurityGuard.java (cloud)
 # Enables strict signature mode: APP rejects any repackaged APK with mismatched signature
 
@@ -26,21 +26,21 @@ $verLabel = switch ($Version) {
 $apkFilter = '*.apk'
 
 if ($Version -eq 'cloud') {
-    $projectDir = Join-Path $rootDir "cloud_project"
+    $projectDir = Join-Path $rootDir "app_project"
     $guardFileName = 'SecurityGuard.java'
     $guardSearchPath = Join-Path $projectDir "cloud_app\app\src\main\java\com\tcm\prescription"
     $placeholder = 'EXPECTED_SIGN_HASH'
     $useRecurse = $false
     $apkFilter = '惠康中医-云端.apk'
 } elseif ($Version -eq 'geren-cloud') {
-    $projectDir = Join-Path $rootDir "cloud_project"
+    $projectDir = Join-Path $rootDir "app_project"
     $guardFileName = 'SecurityGuard.java'
     $guardSearchPath = Join-Path $projectDir "cloud_app_geren\app\src\main\java\com\tcm\prescription"
     $placeholder = 'EXPECTED_SIGN_HASH'
     $useRecurse = $false
     $apkFilter = '惠康中医-云端个人版.apk'
 } else {
-    $projectDir = Join-Path $rootDir "offline_project\db-$Version"
+    $projectDir = Join-Path $rootDir "app_project\db-$Version"
     $guardFileName = 'LicenseManager.java'
     $guardSearchPath = Join-Path $projectDir "android\app\src\main\java\com\benneng\pres"
     $placeholder = 'EXPECTED_APK_SIGNATURE_SHA256'

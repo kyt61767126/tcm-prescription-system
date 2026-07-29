@@ -2,7 +2,7 @@
     "generated_at":  "2026-07-23 07:27:53 +08:00",
     "description":  "Interface structure fingerprint. SHA256 of HTML body (before first \u003cscript\u003e). Changes to \u003cscript\u003e blocks do NOT affect fingerprint.",
     "files":  {
-                  "cloud_project/cloud_desktop/index.html":  {
+                  "app_project/cloud_desktop/index.html":  {
                                                                  "sha256":  "dc19413fa936006f5b4b1ba40aa3ba70167c931edd9661790e15aedb6607d468",
                                                                  "html_length":  49293
                                                              },
@@ -10,15 +10,15 @@
                                             "sha256":  "4b04e12c6eecb67ed75d0e40cb779a947b4165b119b91575c230138322326ec1",
                                             "html_length":  49261
                                         },
-                  "offline_project/db-dingzhi/index.html":  {
+                  "app_project/db-dingzhi/index.html":  {
                                                                 "sha256":  "c167b933318d95a4350f62151c072849ba13129dd943562b30b55a7b5ec8a000",
                                                                 "html_length":  22004
                                                             },
-                  "offline_project/db-geren/index.html":  {
+                  "app_project/db-geren/index.html":  {
                                                               "sha256":  "36e7f93edc301ac6696a203761596202a0868cb5f5fa7acc40d30200de852e60",
                                                               "html_length":  21878
                                                           },
-                  "cloud_project/cloud_desktop/electron/login.html":  {
+                  "app_project/cloud_desktop/electron/login.html":  {
                                                                           "sha256":  "8168458cfd1c34da93133e061a8418ffc6dcf3fb3bea0e14ea0410547c0b5b01",
                                                                           "html_length":  2005
                                                                       },
@@ -26,11 +26,11 @@
                                                      "sha256":  "68969c148cf933c1b612a22dd84a0e360951aa3d746cee8338c0bd4b627ba277",
                                                      "html_length":  1680
                                                  },
-                  "offline_project/db-dingzhi/electron/login.html":  {
+                  "app_project/db-dingzhi/electron/login.html":  {
                                                                          "sha256":  "8d638433c16137ef3646c879fd91a269b33a9ef49f5a8b4f042f5cc44308953a",
                                                                          "html_length":  1702
                                                                      },
-                  "offline_project/db-geren/electron/login.html":  {
+                  "app_project/db-geren/electron/login.html":  {
                                                                        "sha256":  "1f49a1a502d247ee19781eef9da819db6ed92e2207393b29723610ea2fde164e",
                                                                        "html_length":  1785
                                                                    }

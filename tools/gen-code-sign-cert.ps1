@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  gen-code-sign-cert.ps1 — 生成 Windows 代码签名自签证书（任务3）
 #
 #  用途：
@@ -146,9 +146,9 @@ Write-Host ""
 Write-Host "【下一步操作】"
 Write-Host "1) 检查 3 端 package.json 是否已配置 win.certificateFile"
 Write-Host "   证书密码通过 cert-password.txt + CSC_KEY_PASSWORD 环境变量自动注入"
-Write-Host "   - cloud_project/cloud_desktop/package.json"
-Write-Host "   - offline_project/db-geren/package.json"
-Write-Host "   - offline_project/db-dingzhi/package.json"
+Write-Host "   - app_project/cloud_desktop/package.json"
+Write-Host "   - app_project/db-geren/package.json"
+Write-Host "   - app_project/db-dingzhi/package.json"
 Write-Host ""
 Write-Host "2) 首次打包前需把证书加入 Windows 信任根（仅本机测试用）："
 Write-Host "   certutil -addstore -user Root `"$CerPath`""

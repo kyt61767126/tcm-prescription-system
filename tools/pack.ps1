@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -228,7 +228,7 @@ function Invoke-EncodingCheck {
 
     # ★ 举一反三：扫描并修复所有 .ps1 文件的 BOM（不仅限于 edit-config.ps1）
     # 修复前问题：只检查 $script:VersionDir\edit-config.ps1，遗漏 tools/pack.ps1 等
-    # 修复后：调用 fix-ps1-bom.ps1 扫描 offline_project/ 和 tools/ 下所有 .ps1 文件
+    # 修复后：调用 fix-ps1-bom.ps1 扫描 app_project/ 和 tools/ 下所有 .ps1 文件
     # 原因：Edit 工具会剥离 .ps1 文件 BOM，导致 PowerShell 5.x 解析中文失败
     $fixBomScript = "$script:ProjectRoot\tools\fix-ps1-bom.ps1"
     if (Test-Path $fixBomScript) {
@@ -1068,7 +1068,7 @@ function Show-Menu {
 
 function Show-CurrentConfig {
     param([string]$Ver)
-    $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
+    $versionDir = "$script:ProjectRoot\app_project\db-$Ver"
     $configPath = "$versionDir\config.json"
     if (-not (Test-Path $configPath)) {
         Write-Host "[错误] 未找到 config.json: $configPath" -ForegroundColor Red
@@ -1101,7 +1101,7 @@ function Show-CurrentConfig {
 
 function Enable-StrictMode {
     param([string]$Ver)
-    $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
+    $versionDir = "$script:ProjectRoot\app_project\db-$Ver"
     $hashPs1 = "$script:ProjectRoot\tools\generate-sign-hash.ps1"
 
     Write-Host ""
@@ -1150,7 +1150,7 @@ function Enable-StrictMode {
 
 function Build-AllStrict {
     param([string]$Ver)
-    $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
+    $versionDir = "$script:ProjectRoot\app_project\db-$Ver"
     $hashPs1 = "$script:ProjectRoot\tools\generate-sign-hash.ps1"
 
     Write-Host ""
@@ -1231,7 +1231,7 @@ function Build-AllStrict {
 
 function Build-AppStrict {
     param([string]$Ver)
-    $versionDir = "$script:ProjectRoot\offline_project\db-$Ver"
+    $versionDir = "$script:ProjectRoot\app_project\db-$Ver"
     $hashPs1 = "$script:ProjectRoot\tools\generate-sign-hash.ps1"
 
     Write-Host ""
@@ -1312,7 +1312,7 @@ function Invoke-Packaging {
     )
 
     # Setup paths
-    $script:VersionDir = "$script:ProjectRoot\offline_project\db-$Ver"
+    $script:VersionDir = "$script:ProjectRoot\app_project\db-$Ver"
     $script:AndroidDir = "$script:VersionDir\android"
     $script:ElectronDir = "$script:VersionDir\electron"
 

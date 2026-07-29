@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  sync-all.ps1 - Unified sync script for all shared modules
 #
 #  Purpose:
@@ -49,26 +49,26 @@ $BusinessJsFiles = @(
 $BusinessJsTargets = @(
     'public',
     'public/electron',
-    'cloud_project/cloud_desktop',
-    'cloud_project/cloud_desktop/electron',
-    'offline_project/db-geren',
-    'offline_project/db-geren/capacitor/app/src/main/assets/public',
-    'offline_project/db-dingzhi',
-    'offline_project/db-dingzhi/capacitor/app/src/main/assets/public'
+    'app_project/cloud_desktop',
+    'app_project/cloud_desktop/electron',
+    'app_project/db-geren',
+    'app_project/db-geren/capacitor/app/src/main/assets/public',
+    'app_project/db-dingzhi',
+    'app_project/db-dingzhi/capacitor/app/src/main/assets/public'
 )
 
 # Group 2: permission.js extra targets (3 offline electron/, beyond Group 1)
 $PermissionExtraTargets = @(
-    'offline_project/db-geren/electron',
-    'offline_project/db-dingzhi/electron'
+    'app_project/db-geren/electron',
+    'app_project/db-dingzhi/electron'
 )
 
 # Group 3: calculate-hash.js targets (6 offline directories)
 $CalculateHashTargets = @(
-    'offline_project/db-geren',
-    'offline_project/db-geren/capacitor/app/src/main/assets/public',
-    'offline_project/db-dingzhi',
-    'offline_project/db-dingzhi/capacitor/app/src/main/assets/public'
+    'app_project/db-geren',
+    'app_project/db-geren/capacitor/app/src/main/assets/public',
+    'app_project/db-dingzhi',
+    'app_project/db-dingzhi/capacitor/app/src/main/assets/public'
 )
 
 # Group 4: license files (3 files)
@@ -80,19 +80,19 @@ $LicenseFiles = @(
 
 # license targets (4 electron/ + 3 root/license/ + 3 nndroidicense/)
 $LicenseTargets = @(
-    'cloud_project/cloud_desktop/electron',
-    'offline_project/db-geren/electron',
-    'offline_project/db-dingzhi/electron',
-    'offline_project/db-geren/license',
-    'offline_project/db-dingzhi/license',
-    'offline_project/db-geren/capacitor/app/src/main/assets/public/license',
-    'offline_project/db-dingzhi/capacitor/app/src/main/assets/public/license'
+    'app_project/cloud_desktop/electron',
+    'app_project/db-geren/electron',
+    'app_project/db-dingzhi/electron',
+    'app_project/db-geren/license',
+    'app_project/db-dingzhi/license',
+    'app_project/db-geren/capacitor/app/src/main/assets/public/license',
+    'app_project/db-dingzhi/capacitor/app/src/main/assets/public/license'
 )
 
 # Group 5: electron/hot-update.js targets (3 offline electron/)
 $HotUpdateTargets = @(
-    'offline_project/db-geren/electron',
-    'offline_project/db-dingzhi/electron'
+    'app_project/db-geren/electron',
+    'app_project/db-dingzhi/electron'
 )
 
 # Group 6: res/xml files (3 XML)
@@ -104,8 +104,8 @@ $ResXmlFiles = @(
 
 # res/xml targets (3 capacitor/res/xml/)
 $ResXmlTargets = @(
-    'offline_project/db-geren/capacitor/app/src/main/res/xml',
-    'offline_project/db-dingzhi/capacitor/app/src/main/res/xml'
+    'app_project/db-geren/capacitor/app/src/main/res/xml',
+    'app_project/db-dingzhi/capacitor/app/src/main/res/xml'
 )
 
 # Group 7: vendor files
@@ -115,10 +115,10 @@ $VendorFiles = @(
 
 # vendor targets (3 root/vendor/ + 3 capacitor/vendor/)
 $VendorTargets = @(
-    'offline_project/db-geren/vendor',
-    'offline_project/db-dingzhi/vendor',
-    'offline_project/db-geren/capacitor/app/src/main/assets/public/vendor',
-    'offline_project/db-dingzhi/capacitor/app/src/main/assets/public/vendor'
+    'app_project/db-geren/vendor',
+    'app_project/db-dingzhi/vendor',
+    'app_project/db-geren/capacitor/app/src/main/assets/public/vendor',
+    'app_project/db-dingzhi/capacitor/app/src/main/assets/public/vendor'
 )
 
 # ============================================================================

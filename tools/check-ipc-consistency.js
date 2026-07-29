@@ -22,8 +22,8 @@ const projectRoot = path.resolve(__dirname, '..');
 const targets = [
     {
         name: '云端桌面版',
-        preload: 'cloud_project/cloud_desktop/electron/preload.js',
-        main: 'cloud_project/cloud_desktop/electron/main.js'
+        preload: 'app_project/cloud_desktop/electron/preload.js',
+        main: 'app_project/cloud_desktop/electron/main.js'
     }
 ];
 

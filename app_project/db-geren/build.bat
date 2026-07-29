@@ -2,14 +2,14 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
-title Huikang TCM Custom - Offline Desktop Build
+title Huikang TCM Personal - Offline Desktop Build
 
 REM Record start time (for elapsed stats) - use PowerShell instead of wmic (deprecated in Windows 11)
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "BUILD_START_STAMP=%%t"
 
 echo ============================================
-echo  Huikang TCM Custom - Offline Desktop
+echo  Huikang TCM Personal - Offline Desktop
 echo  Start: %BUILD_START_TIME%
 echo ============================================
 echo.
@@ -26,10 +26,10 @@ echo.
 
 echo [2/7] Closing remaining processes...
 REM P0-Optimization: precisely match project-related processes to avoid killing other Electron apps (e.g. VSCode, Slack)
-taskkill /F /IM "app-custom.exe" >nul 2>&1
-taskkill /F /IM "惠康中医定制.exe" >nul 2>&1
+taskkill /F /IM "app-personal.exe" >nul 2>&1
+taskkill /F /IM "惠康中医个人.exe" >nul 2>&1
 REM P0-Optimization: replace deprecated wmic (deprecated in Windows 11) with PowerShell Get-Process (precise path-based match)
-powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-dingzhi*dist*' -or $_.Path -like '*db-dingzhi*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
+powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-geren*dist*' -or $_.Path -like '*db-geren*build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 echo [OK] Processes cleaned
 echo.
 
@@ -75,12 +75,12 @@ if exist "%OUTPUT_DIR%" (
 echo [OK] Old artifacts cleaned
 echo.
 
-echo [5/7] Obfuscating JavaScript code (target=dingzhi, may take 1-2 minutes)...
-node "%~dp0..\..\tools\obfuscate.js" --target=dingzhi
+echo [5/7] Obfuscating JavaScript code (target=geren, may take 1-2 minutes)...
+node "%~dp0..\..\tools\obfuscate.js" --target=geren
 if errorlevel 1 (
     echo [ERROR] Obfuscation failed
     echo Restoring original files...
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    node "%~dp0..\..\tools\obfuscate.js" restore --target=geren >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -114,17 +114,17 @@ if not "%BUILD_RC%"=="0" (
     echo.
     echo [ERROR] Build failed, please check logs above
     echo Restoring original JavaScript code...
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    node "%~dp0..\..\tools\obfuscate.js" restore --target=geren >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
 echo.
 
 echo Restoring original JavaScript code...
-node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi
+node "%~dp0..\..\tools\obfuscate.js" restore --target=geren
 if errorlevel 1 (
     echo [ERROR] Restore failed! Source code may remain obfuscated.
-    echo Please manually run: node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi
+    echo Please manually run: node "%~dp0..\..\tools\obfuscate.js" restore --target=geren
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -152,8 +152,4 @@ REM P1-Enhancement: show build elapsed time
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
 powershell -NoProfile -Command "Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  打包完成!' -ForegroundColor Yellow; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  总耗时: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
-if not defined NO_PAUSE (
-    set "EXIT_KEY="
-    set /p "EXIT_KEY=按 0 或回车键退出: "
-)
 exit /b 0

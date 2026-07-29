@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  generate-interface-lock.ps1
 #  生成 .interface-lock.json 界面指纹基线文件
 #  提取每个 index.html / login.html 的 <body> 到第一个 <script> 之间的 HTML 结构
@@ -11,14 +11,14 @@ $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
 
 $files = @(
-    'cloud_project/cloud_desktop/index.html',
+    'app_project/cloud_desktop/index.html',
     'public/index.html',
-    'offline_project/db-dingzhi/index.html',
-    'offline_project/db-geren/index.html',
-    'cloud_project/cloud_desktop/electron/login.html',
+    'app_project/db-dingzhi/index.html',
+    'app_project/db-geren/index.html',
+    'app_project/cloud_desktop/electron/login.html',
     'public/electron/login.html',
-    'offline_project/db-dingzhi/electron/login.html',
-    'offline_project/db-geren/electron/login.html'
+    'app_project/db-dingzhi/electron/login.html',
+    'app_project/db-geren/electron/login.html'
 )
 
 $result = [ordered]@{

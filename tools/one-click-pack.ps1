@@ -1,4 +1,4 @@
-﻿# one-click-pack.ps1 - One-click packaging tool for all 4 versions
+# one-click-pack.ps1 - One-click packaging tool for all 4 versions
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -56,7 +56,7 @@ function Build-Cloud {
     if ($Target -eq "all" -or $Target -eq "desktop") {
         Write-Host ""
         Write-Host "[Step 1/2] 打包云端桌面 exe..." -ForegroundColor Yellow
-        $rc = Invoke-BatFile "$script:RootDir\cloud_project\pack-desktop.bat" "$script:RootDir\cloud_project" "cloud desktop build"
+        $rc = Invoke-BatFile "$script:RootDir\app_project\pack-desktop.bat" "$script:RootDir\app_project" "cloud desktop build"
         if ($rc -ne 0) {
             Write-Host ""
             Write-Host "[ERROR] 云端桌面打包失败，退出码: $rc" -ForegroundColor Red
@@ -68,7 +68,7 @@ function Build-Cloud {
     if ($Target -eq "all" -or $Target -eq "app") {
         Write-Host ""
         Write-Host "[Step 2/2] 打包云端手机 APP..." -ForegroundColor Yellow
-        $rc = Invoke-BatFile "$script:RootDir\cloud_project\build-app.bat" "$script:RootDir\cloud_project" "cloud app build"
+        $rc = Invoke-BatFile "$script:RootDir\app_project\build-app.bat" "$script:RootDir\app_project" "cloud app build"
         if ($rc -ne 0) {
             Write-Host ""
             Write-Host "[ERROR] 云端APP打包失败，退出码: $rc" -ForegroundColor Red
@@ -83,8 +83,8 @@ function Build-Cloud {
     Write-Host "  云端版打包完成！" -ForegroundColor Green
     Write-Host "  开始: $startTime" -ForegroundColor Green
     Write-Host "  结束: $endTime" -ForegroundColor Green
-    Write-Host "  桌面: cloud_project\cloud_desktop\dist\*.exe" -ForegroundColor Green
-    Write-Host "  APP:  cloud_project\*.apk" -ForegroundColor Green
+    Write-Host "  桌面: app_project\cloud_desktop\dist\*.exe" -ForegroundColor Green
+    Write-Host "  APP:  app_project\*.apk" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     pause
 }
@@ -108,7 +108,7 @@ function Build-Offline {
     Write-Host "  开始: $startTime" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
 
-    $verDir = "$script:RootDir\offline_project\db-$Version"
+    $verDir = "$script:RootDir\app_project\db-$Version"
 
     # Step 1: Edit config (for all / app modes)
     if ($Target -eq "all" -or $Target -eq "app") {
@@ -173,8 +173,8 @@ function Build-Offline {
     Write-Host "  离线$verLabel 版打包完成！" -ForegroundColor Green
     Write-Host "  开始: $startTime" -ForegroundColor Green
     Write-Host "  结束: $endTime" -ForegroundColor Green
-    Write-Host "  桌面: offline_project\db-$Version\dist\*.exe" -ForegroundColor Green
-    Write-Host "  APP:  offline_project\db-$Version\*.apk" -ForegroundColor Green
+    Write-Host "  桌面: app_project\db-$Version\dist\*.exe" -ForegroundColor Green
+    Write-Host "  APP:  app_project\db-$Version\*.apk" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
     pause
 }
@@ -230,7 +230,7 @@ function Show-StandaloneUsage {
     Write-Host "  各版本独立打包入口" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  云端版 (cloud_project):" -ForegroundColor Yellow
+    Write-Host "  云端版 (app_project):" -ForegroundColor Yellow
     Write-Host "    pack-desktop.bat       打包桌面版"
     Write-Host "    pack-app.bat           打包手机APP"
     Write-Host "    pack-app-strict.bat    严格模式APP"

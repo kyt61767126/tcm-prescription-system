@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 # check-interface.ps1 - 界面结构完整性校验脚本
 #
 # 目的：检测 index.html 的 body DOM 结构是否被意外修改
@@ -20,10 +20,10 @@ $baselineDir = Join-Path $projectRoot '.interface-baseline'
 
 # 待校验的 index.html
 $targets = @(
-    'offline_project\db-geren\index.html',
-    'offline_project\db-dingzhi\index.html',
-    'offline_project\db-geren\android\app\src\main\assets\public\index.html',
-    'offline_project\db-dingzhi\android\app\src\main\assets\public\index.html'
+    'app_project\db-geren\index.html',
+    'app_project\db-dingzhi\index.html',
+    'app_project\db-geren\android\app\src\main\assets\public\index.html',
+    'app_project\db-dingzhi\android\app\src\main\assets\public\index.html'
 )
 
 function Get-BodyDOM {

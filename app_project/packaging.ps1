@@ -1,4 +1,4 @@
-﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-geren/db-dingzhi）
 param(
     [switch]$AutoDesktop,
@@ -1090,11 +1090,5 @@ Write-Host ""
 Write-Host "========================================" -ForegroundColor Yellow
 Write-Host "  本次操作总耗时: $($totalElapsed.ToString('hh\:mm\:ss'))" -ForegroundColor Yellow
 Write-Host "  退出码: $autoRC" -ForegroundColor $(if ($autoRC -eq 0) { 'Yellow' } else { 'Red' })
-if ($autoRC -eq 0) {
-    Write-Host "  按 0 或回车键退出..." -ForegroundColor Yellow
-}
 Write-Host "========================================" -ForegroundColor Yellow
-if (-not $env:NO_PAUSE) {
-    $exitKey = Read-Host "  按 0 或回车键退出"
-}
 exit $autoRC

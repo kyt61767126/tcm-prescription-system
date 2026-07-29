@@ -49,8 +49,8 @@ jobs:
               echo "✅ $file title='$actual'"
             fi
           }
-          check_title "offline_project/db-dingzhi/index.html" "惠康中医-定制"
-          check_title "offline_project/db-geren/index.html" "惠康中医-个人"
+          check_title "app_project/db-dingzhi/index.html" "惠康中医-定制"
+          check_title "app_project/db-geren/index.html" "惠康中医-个人"
           check_title "public/index.html" "惠康中医-云端"
           if [ $ERROR -eq 1 ]; then exit 1; fi
 
@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           echo "=== 检查 legacy android 目录 ==="
-          for dir in offline_project/db-geren/android offline_project/db-dingzhi/android; do
+          for dir in app_project/db-geren/android app_project/db-dingzhi/android; do
             if [ -d "$dir" ]; then
               echo "⚠️  $dir 存在(legacy目录,不再用于构建,构建请使用 capacitor/)"
             fi

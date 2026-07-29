@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 setlocal
 
@@ -60,7 +60,7 @@ if exist "%SRC%xlsx.full.min.js" (
 REM [3/4] Git add + commit
 echo [3/4] git add ...
 cd /d "%REPO%"
-git add public cloud_project/cloud_desktop 2>nul
+git add public app_project/cloud_desktop 2>nul
 if errorlevel 1 ( echo [WARN] git add may have missed some files )
 
 git diff --cached --quiet

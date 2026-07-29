@@ -9,7 +9,7 @@
 //       本脚本防止类似问题再次发生。
 //
 // 用法：node tools/pre-build-check.js <项目目录>
-//   例如：node tools/pre-build-check.js offline_project/db-geren
+//   例如：node tools/pre-build-check.js app_project/db-geren
 //   退出码：0=通过，1=发现缺失
 // ============================================================================
 'use strict';
@@ -21,7 +21,7 @@ function main() {
     const targetDir = process.argv[2];
     if (!targetDir) {
         console.error('[ERROR] 用法: node pre-build-check.js <项目目录>');
-        console.error('  例如: node pre-build-check.js offline_project/db-geren');
+        console.error('  例如: node pre-build-check.js app_project/db-geren');
         process.exit(1);
     }
 

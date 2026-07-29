@@ -92,8 +92,4 @@ for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy
 for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
 powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] Cloud Personal APP build complete!' -ForegroundColor Yellow; Write-Host '  APK: %APK_DST%' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
 echo.
-if not defined NO_PAUSE (
-    set "EXIT_KEY="
-    set /p "EXIT_KEY=按 0 或回车键退出: "
-)
 exit /b 0
