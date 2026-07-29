@@ -468,7 +468,9 @@ public class MainActivity extends BridgeActivity {
 
                 // ★ 注入APP专属按钮布局（与离线APP一致：顶部5按钮+底部5按钮）
                 // 网页版保持不变，仅云端APP动态修改
+                // 首次注入 + 延迟重试（onPageCommitVisible 时 React 可能尚未渲染 mobileActionBar）
                 mainHandler.post(() -> injectAppButtonLayout(view));
+                mainHandler.postDelayed(() -> injectAppButtonLayout(view), 1500);
 
                 // 录像拍照脚本延迟到页面渲染稳定后注入（避免40KB脚本同步执行阻塞UI）
                 // 300ms 是经验值：足够 React 完成首屏渲染，又不至于让用户感觉录像功能迟钝
@@ -729,13 +731,13 @@ public class MainActivity extends BridgeActivity {
             "'<button class=\"action-btn\" style=\"flex:1;\" onclick=\"if(window.openPhotoOverlay)window.openPhotoOverlay();else alert(\\'拍照功能加载中，请稍候\\')\">📷 拍照</button>'+" +
             "'<button class=\"action-btn primary\" style=\"flex:1;\" onclick=\"savePrescription()\">💾 保存</button>'+" +
             "'<button class=\"action-btn\" style=\"flex:1;\" onclick=\"clearPrescription()\">🗑️ 清空</button>'+" +
-            "'<button class=\"action-btn\" style=\"flex:1;\" id=\"mobileActionBtn2\" onclick=\"showChangePwdModal()\">🔐 改密</button>';" +
+            "'<button class=\"action-btn\" style=\"flex:1;\" id=\"mobileActionBtn2\" onclick=\"showUserManageModal()\">👤 用户</button>';" +
             "}" +
             "}" +
             "window.updateMobileActionButtons=function(){" +
             "var btn2=document.getElementById('mobileActionBtn2');" +
             "if(!btn2||!window.currentUser)return;" +
-            "var canManage=(currentUser.role==='admin'||currentUser.role==='clinic_admin');" +
+            "var canManage=(currentUser.role==='admin'||currentUser.role==='clinic_admin'||currentUser.role==='platform_admin');" +
             "if(canManage){" +
             "btn2.innerHTML='👤 用户';" +
             "btn2.onclick=function(){showUserManageModal();};" +
