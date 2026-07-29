@@ -16,8 +16,8 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
-// 项目根目录 (kyt-zy/)
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+// 项目根目录 (kyt-zy/) — shared/ 在根目录下1层，只需上溯1级
+const PROJECT_ROOT = path.resolve(__dirname, '..');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 
 // APK 文件搜索路径 (Capacitor 架构)
