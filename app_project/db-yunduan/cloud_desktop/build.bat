@@ -108,7 +108,7 @@ echo.
 echo [CHECK] ============================================
 echo [CHECK] 打包前安全完整性验证
 echo [CHECK] ============================================
-node "%~dp0..\..\tools\pre-build-check.js" "%CD%"
+node "%~dp0..\..\..\tools\pre-build-check.js" "%CD%"
 if errorlevel 1 (
     echo [FAIL] 安全检查未通过，终止打包！请修复 package.json 的 files 列表
     exit /b 1
@@ -117,11 +117,11 @@ echo [OK] 安全检查通过
 echo.
 
 echo [5/8] Obfuscating JavaScript code (target=cloud)...
-node "%~dp0..\..\tools\obfuscate.js" --target=cloud
+node "%~dp0..\..\..\tools\obfuscate.js" --target=cloud
 if errorlevel 1 (
     echo [ERROR] Obfuscation failed
     echo Restoring original files...
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -133,11 +133,11 @@ set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/ele
 set NODE_TLS_REJECT_UNAUTHORIZED=0
 REM VERSION_DIR no longer needed, using %CD%
 REM stripped trailing backslash not needed with %CD%
-node "%~dp0..\..\tools\prepare-win-unpacked.js" "%CD%"
+node "%~dp0..\..\..\tools\prepare-win-unpacked.js" "%CD%"
 if errorlevel 1 (
     echo [ERROR] prepare-win-unpacked failed
     set NODE_TLS_REJECT_UNAUTHORIZED=
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -173,7 +173,7 @@ if not "%BUILD_RC%"=="0" (
     ) else (
         echo [ERROR] Build failed - no exe files found
         echo Restoring original JavaScript code...
-        node "%~dp0..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+        node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
         if not defined NO_PAUSE pause
         exit /b 1
     )
@@ -181,7 +181,7 @@ if not "%BUILD_RC%"=="0" (
 echo.
 
 echo [7/8] Restoring original JavaScript code...
-node "%~dp0..\..\tools\obfuscate.js" restore --target=cloud
+node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud
 if errorlevel 1 (
     echo [ERROR] Restore failed
     if not defined NO_PAUSE pause

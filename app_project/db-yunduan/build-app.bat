@@ -63,7 +63,7 @@ echo [OK] Environment check passed
 echo.
 
 echo [1.5/6] Patching Capacitor Java version (21 to 17)...
-call node "%~dp0..\tools\patch-java-version.js" "%~dp0.."
+call node "%~dp0..\..\..\tools\patch-java-version.js" "%~dp0..\.."
 if errorlevel 1 (
     echo [WARN] Java version patch had issues, continuing anyway
 ) else (
@@ -72,7 +72,7 @@ if errorlevel 1 (
 echo.
 
 echo [2/6] Syncing shared files...
-set "SHARED_DIR=%~dp0..\shared"
+set "SHARED_DIR=%~dp0..\..\..\shared"
 set "ASSETS_PUBLIC=%ANDROID_DIR%\app\src\main\assets\public"
 if exist "%SHARED_DIR%\auth-core.js" (
     copy /Y "%SHARED_DIR%\auth-core.js" "%ASSETS_PUBLIC%\auth-core.js" >nul
@@ -145,7 +145,7 @@ echo.
 echo [4.5/6] Obfuscating JavaScript (cloud target - includes cloud_app assets)...
 REM P1: restore JS code after build
 REM P1: Obfuscate JS to prevent reverse engineering of APK assets
-call node "%~dp0..\tools\obfuscate.js" --target=cloud
+call node "%~dp0..\..\..\tools\obfuscate.js" --target=cloud
 if errorlevel 1 (
     echo [ERROR] JS obfuscation failed
     if not defined NO_PAUSE pause
@@ -162,7 +162,7 @@ if errorlevel 1 (
     echo [ERROR] Build failed! Rolling back versionCode...
     powershell -NoProfile -ExecutionPolicy Bypass -Command "$g='%ANDROID_DIR%\app\build.gradle'; $prevFile='%~dp0.build_vcode_prev'; if(Test-Path $prevFile){ $prev=Get-Content $prevFile -Raw; $c=Get-Content $g -Raw -Encoding UTF8; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $prev\"; [System.IO.File]::WriteAllText($g,$nc,(New-Object System.Text.UTF8Encoding $false)); Remove-Item $prevFile -Force; Write-Host ('  [OK] versionCode rolled back to '+$prev) } else { Write-Host '  [WARN] No prev versionCode to rollback' }"
     echo [WARN] Restoring JavaScript due to build failure...
-    call node "%~dp0..\tools\obfuscate.js" restore --target=cloud
+    call node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud
     echo [ERROR] Build failed! Please check error messages
     if not defined NO_PAUSE pause
     exit /b 1
@@ -173,7 +173,7 @@ echo.
 
 echo [5.5/6] Restoring JavaScript (cloud target)...
 REM P1: restore JS code after build
-call node "%~dp0..\tools\obfuscate.js" restore --target=cloud
+call node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud
 if errorlevel 1 (
     echo [WARN] JS restore failed - may need manual restore: node tools\obfuscate.js restore --target=cloud
 ) else (
@@ -237,7 +237,7 @@ echo ============================================
 echo.
 
 echo [7/6] Auto-updating download page...
-node "%~dp0..\tools\auto-update-downloads.js" cloud
+node "%~dp0..\..\..\tools\auto-update-downloads.js" cloud
 if errorlevel 1 (
     echo [WARN] Download page auto-update had issues, continuing anyway
 ) else (
@@ -246,7 +246,7 @@ if errorlevel 1 (
 echo.
 
 echo [7.5/6] Auto-updating download page (geren-cloud)...
-node "%~dp0..\tools\auto-update-downloads.js" geren-cloud
+node "%~dp0..\..\..\tools\auto-update-downloads.js" geren-cloud
 if errorlevel 1 (
     echo [WARN] Download page auto-update geren-cloud had issues, continuing anyway
 ) else (

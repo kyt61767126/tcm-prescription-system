@@ -8,9 +8,9 @@ REM Flow: Step A (build APK) -> Step B (extract signature hash) -> Step C (rebui
 REM Package: com.tcm.prescription (db-yunduan/cloud_app_geren project)
 REM Output:  惠康中医-云端个人版.apk
 
-set "GEN_HASH_PS1=%~dp0..\tools\generate-sign-hash.ps1"
+set "GEN_HASH_PS1=%~dp0..\..\..\tools\generate-sign-hash.ps1"
 set "PACK_APP_BAT=%~dp0pack-app-geren.bat"
-set "APP_DIR=%~dp0db-yunduan/cloud_app_geren"
+set "APP_DIR=%~dp0cloud_app_geren"
 set "EXIT_CODE=0"
 
 REM Record start time

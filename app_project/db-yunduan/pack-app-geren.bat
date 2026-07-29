@@ -12,7 +12,7 @@ REM URL: https://tcm-prescription-system.pages.dev/?edition=personal
 REM Record start time
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
-set "APP_DIR=%~dp0db-yunduan/cloud_app_geren"
+set "APP_DIR=%~dp0cloud_app_geren"
 set "GRADLEW=%APP_DIR%\gradlew.bat"
 set "APK_SRC=%APP_DIR%\app\build\outputs\apk\release\app-release.apk"
 set "APK_DST=%~dp0惠康中医-云端个人版.apk"
@@ -32,7 +32,7 @@ if errorlevel 1 (
 )
 
 REM Sync shared/ core files to db-yunduan/cloud_app_geren assets
-set "SHARED_DIR=%~dp0..\shared"
+set "SHARED_DIR=%~dp0..\..\..\shared"
 set "PUBLIC_DIR=%APP_DIR%\app\src\main\assets\public"
 if not exist "%PUBLIC_DIR%" mkdir "%PUBLIC_DIR%"
 
@@ -80,7 +80,7 @@ if exist "%APK_SRC%" (
 REM Auto-update download page
 echo.
 echo [4/4] Auto-updating download page...
-node "%~dp0..\tools\auto-update-downloads.js" geren-cloud
+node "%~dp0..\..\..\tools\auto-update-downloads.js" geren-cloud
 if errorlevel 1 (
     echo [WARN] Download page auto-update geren-cloud had issues, continuing anyway
 ) else (
