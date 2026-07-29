@@ -634,7 +634,7 @@
             if (!mediaStreamResult) {
                 // 权限被拒绝的特殊提示（附带诊断信息）
                 if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
-                    throw new Error('摄像头权限被拒绝 [' + lastError.name + '] href=' + window.location.href + ' secure=' + window.isSecureContext);
+                    throw new Error('摄像头权限被拒绝 [' + lastError.name + '] v=' + (window.__APP_VERSION__||'?') + ' secure=' + window.isSecureContext + ' origin=' + window.location.origin + ' href=' + window.location.href);
                 }
                 throw lastError || new Error('无法获取摄像头权限');
             }
@@ -994,7 +994,7 @@
 
             if (!mediaStreamResult) {
                 if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
-                    throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头权限');
+                    throw new Error('拍照权限被拒绝 [' + lastError.name + '] v=' + (window.__APP_VERSION__||'?') + ' secure=' + window.isSecureContext + ' origin=' + window.location.origin);
                 }
                 throw lastError || new Error('无法获取摄像头权限');
             }

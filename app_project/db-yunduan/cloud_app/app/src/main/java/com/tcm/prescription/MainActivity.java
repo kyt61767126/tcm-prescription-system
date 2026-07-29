@@ -68,7 +68,7 @@ public class MainActivity extends BridgeActivity {
     private static final String TAG = "TCM_Prescription";
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步
     // 修改云端逻辑后需同步更新此值与 index.html 中的版本号
-    private static final String EXPECTED_APP_VERSION = "2026-07-29-v2";
+    private static final String EXPECTED_APP_VERSION = "2026-07-29-v3";
     // T1: WebView 就绪轮询上限（30 次 × 100ms = 3 秒），避免无限循环且更快检测就绪
     private static final int MAX_WEBVIEW_READY_RETRIES = 30;
     private static final int WEBVIEW_READY_DELAY_MS = 100;
@@ -299,7 +299,10 @@ public class MainActivity extends BridgeActivity {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
                     Log.d(TAG, "onPermissionRequest origin=" + origin + " resources=" + java.util.Arrays.toString(request.getResources()));
-                    // Directly grant all requested resources (diagnostic: bypass isCloudUrl + permissionLauncher)
+                    // ★ 诊断 Toast：确认 onPermissionRequest 是否被触发
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this,
+                        "诊断: onPermissionRequest 触发 origin=" + origin, Toast.LENGTH_LONG).show());
+                    // Directly grant all requested resources
                     request.grant(request.getResources());
                     Log.d(TAG, "onPermissionRequest GRANTED (direct)");
                 }
