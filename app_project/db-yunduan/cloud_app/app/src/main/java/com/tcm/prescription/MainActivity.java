@@ -299,10 +299,6 @@ public class MainActivity extends BridgeActivity {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
                     String origin = request.getOrigin() != null ? request.getOrigin().toString() : null;
                     Log.d(TAG, "onPermissionRequest origin=" + origin + " resources=" + java.util.Arrays.toString(request.getResources()));
-                    // ★ 诊断 Toast：确认 onPermissionRequest 是否被触发
-                    runOnUiThread(() -> Toast.makeText(MainActivity.this,
-                        "诊断: onPermissionRequest 触发 origin=" + origin, Toast.LENGTH_LONG).show());
-                    // Directly grant all requested resources
                     request.grant(request.getResources());
                     Log.d(TAG, "onPermissionRequest GRANTED (direct)");
                 }
