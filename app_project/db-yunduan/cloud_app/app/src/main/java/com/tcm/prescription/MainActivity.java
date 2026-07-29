@@ -288,7 +288,10 @@ public class MainActivity extends BridgeActivity {
         webView.clearHistory();
 
         // 设置WebChromeClient，确保prompt/alert/confirm弹框正常工作
-        webView.setWebChromeClient(new BridgeWebChromeClient(this.getBridge()) {
+        // ★ 关键修复：使用原生 WebChromeClient 而非 BridgeWebChromeClient
+        //   BridgeWebChromeClient 构造函数中 bridge.registerForActivityResult() 会导致权限处理冲突
+        //   离线APP（db-geren/capacitor）使用原生 WebChromeClient 录像正常，云端APP对齐此方案
+        webView.setWebChromeClient(new WebChromeClient() {
             // 授权摄像头和麦克风权限（录像拍照功能需要）
             // ★ onPermissionRequest 已在主线程调用，必须同步 grant（异步 post 会导致 WebView 超时返回 NotAllowedError）
             @Override
