@@ -16,6 +16,7 @@ const { app, BrowserWindow, ipcMain, session, dialog, shell, safeStorage } = req
 const path = require('path');
 const fs = require('fs').promises;
 const fse = require('fs-extra');
+const crypto = require('crypto');
 const licenseManager = require('./license-manager');
 const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
@@ -507,6 +508,90 @@ function createLoginWindow() {
     });
 }
 
+// ★ P1-9 / P2-2 代码完整性校验：检测关键 JS 文件是否被篡改
+// 原理：首次运行时计算关键文件 SHA256 哈希并存储为基线，后续启动重新计算并比对
+// 防护效果：攻击者修改 auth-core.js / license-manager.js 绕过 license 校验时，哈希不匹配将阻止启动
+// ★ P2-3 基线哈希使用 safeStorage（DPAPI）加密存储，攻击者无法直接伪造基线文件
+// safeStorage 不可用时回退明文存储（向后兼容）
+async function verifyCodeIntegrity() {
+    const criticalFiles = [
+        path.join(__dirname, 'auth-core.js'),
+        path.join(__dirname, 'license-manager.js')
+    ];
+    const baselinePath = path.join(app.getPath('userData'), 'integrity.dat');
+
+    // 计算所有关键文件的合并哈希
+    const hashes = [];
+    for (const filePath of criticalFiles) {
+        try {
+            const content = await fs.readFile(filePath);
+            const hash = crypto.createHash('sha256').update(content).digest('hex');
+            hashes.push(hash);
+        } catch (e) {
+            console.warn('[Integrity] 读取文件失败，跳过:', filePath, e.message);
+            // 文件读取失败不阻止启动（可能是文件路径变化）
+            return true;
+        }
+    }
+    const combinedHash = crypto.createHash('sha256').update(hashes.join('|')).digest('hex');
+
+    // 读取基线
+    let baseline = null;
+    try {
+        const raw = await fs.readFile(baselinePath, 'utf8');
+        const trimmed = raw.trim();
+        if (trimmed.startsWith('ENC:')) {
+            // ★ P2-3: 加密基线（safeStorage / DPAPI）
+            try {
+                if (safeStorage.isEncryptionAvailable()) {
+                    const buf = Buffer.from(trimmed.slice(4), 'base64');
+                    baseline = safeStorage.decryptString(buf);
+                } else {
+                    // safeStorage 不可用，无法解密旧基线 → 视为首次运行重建基线
+                    baseline = null;
+                }
+            } catch (e) {
+                console.warn('[Integrity] 基线解密失败，视为首次运行重建基线:', e.message);
+                baseline = null;
+            }
+        } else {
+            // 向后兼容：明文基线（旧版本写入）
+            baseline = trimmed;
+        }
+    } catch (e) {
+        // 基线文件不存在，首次运行
+    }
+
+    if (!baseline) {
+        // 首次运行：存储当前哈希作为基线（优先加密存储）
+        try {
+            if (safeStorage.isEncryptionAvailable()) {
+                const encrypted = safeStorage.encryptString(combinedHash);
+                await fs.writeFile(baselinePath, 'ENC:' + encrypted.toString('base64'), 'utf8');
+                console.log('[Integrity] 首次运行，已建立加密完整性基线');
+            } else {
+                // safeStorage 不可用，回退明文存储（向后兼容）
+                await fs.writeFile(baselinePath, combinedHash, 'utf8');
+                console.log('[Integrity] 首次运行，已建立明文完整性基线（safeStorage 不可用）');
+            }
+        } catch (e) {
+            console.warn('[Integrity] 无法写入基线文件:', e.message);
+        }
+        return true;
+    }
+
+    // 比对哈希
+    if (baseline === combinedHash) {
+        console.log('[Integrity] 代码完整性校验通过');
+        return true;
+    }
+
+    console.error('[Integrity] 代码完整性校验失败！检测到关键文件被篡改');
+    console.error('[Integrity] 基线:', baseline.substring(0, 16) + '...');
+    console.error('[Integrity] 当前:', combinedHash.substring(0, 16) + '...');
+    return false;
+}
+
 app.whenReady().then(async () => {
     // ★ License 授权校验（启动时校验，未授权或过期则弹双按钮：前往激活/退出软件）
     // ★ v3 新增：传入 localMachineId 用于三因子绑定校验（clinicName + machineId）
@@ -525,6 +610,25 @@ app.whenReady().then(async () => {
     // 授权有效时，在控制台显示授权信息（不弹窗，避免干扰用户）
     if (licenseResult.type === 'trial') {
         console.log('[License] 试用模式：', licenseResult.message);
+    }
+
+    // ★ P2-2 代码完整性校验：检测 auth-core.js / license-manager.js 是否被篡改
+    // 防盗破解：攻击者修改 JS 文件绕过 license 校验时，本检测会阻止启动
+    // 首次运行建立基线，后续启动比对哈希
+    try {
+        const integrityOk = await verifyCodeIntegrity();
+        if (!integrityOk) {
+            dialog.showMessageBoxSync({
+                type: 'error',
+                title: '完整性校验失败',
+                message: '检测到关键代码文件已被篡改，软件无法启动。\n请从官方渠道重新下载安装，或联系客服。',
+                buttons: ['退出']
+            });
+            app.exit(1);
+            return;
+        }
+    } catch (e) {
+        console.warn('[Integrity] 完整性校验异常（降级放行）:', e.message);
     }
 
     // ★ 启动自动更新检查（第4周任务，延迟 5 秒检查避免影响启动）
@@ -801,6 +905,10 @@ ipcMain.handle('license:get-machine-id', () => {
     }
 });
 
+// ★ P2-7 安全修复：已移除测试用 license:set-trial-days IPC handler
+// 原因：该 IPC 允许渲染进程任意修改试用期天数，可被用于绕过试用期限制
+// 如需调试试用期功能，请在主进程中直接调用 licenseManager.setTrialDays()
+/*
 // ★ 设置试用期天数（测试用，0=立即过期触发激活，默认 7）
 ipcMain.handle('license:set-trial-days', (event, days) => {
     try {
@@ -810,6 +918,7 @@ ipcMain.handle('license:set-trial-days', (event, days) => {
         return { success: false, error: String(e) };
     }
 });
+*/
 
 // ★ 获取试用期天数（默认 7）
 ipcMain.handle('license:get-trial-days', () => {
@@ -1068,6 +1177,7 @@ ipcMain.handle('rename-media-files', async (event, oldPatientName, newPatientNam
 ipcMain.handle('delete-file', async (event, filePath) => {
     try {
         if (!filePath) return { success: false, error: '文件路径为空' };
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许范围内' };
         await fs.unlink(filePath);
         return { success: true };
     } catch (error) {
@@ -1080,6 +1190,7 @@ ipcMain.handle('delete-file', async (event, filePath) => {
 ipcMain.handle('open-file', async (event, filePath, mimeType) => {
     try {
         if (!filePath) return { success: false, error: '文件路径为空' };
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许范围内' };
         await shell.openPath(filePath);
         return { success: true };
     } catch (error) {
@@ -1092,6 +1203,7 @@ ipcMain.handle('open-file', async (event, filePath, mimeType) => {
 ipcMain.handle('read-file-as-base64', async (event, filePath) => {
     try {
         if (!filePath) return { success: false, error: '文件路径为空' };
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许范围内' };
         const buffer = await fs.readFile(filePath);
         const ext = path.extname(filePath).toLowerCase();
         let mimeType = 'image/png';

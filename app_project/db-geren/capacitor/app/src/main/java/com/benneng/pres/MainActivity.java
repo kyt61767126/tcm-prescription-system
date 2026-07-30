@@ -269,7 +269,9 @@ public class MainActivity extends BridgeActivity {
         // ★ 离线APP：允许访问本地文件系统（file:// URL 加载本地页面和资源）
         settings.setAllowFileAccess(true);
         settings.setAllowContentAccess(true);
-        settings.setAllowFileAccessFromFileURLs(true);
+        // ★ P2 安全修复：禁止 JS 通过 file:// URL 读取本地文件（与 android 版对齐）
+        // Capacitor 使用 https://localhost 协议加载资源，不依赖 file:// 协议
+        settings.setAllowFileAccessFromFileURLs(false);
         settings.setAllowUniversalAccessFromFileURLs(true);
         // 允许混合内容（离线页面可能需要加载 http 资源）
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);

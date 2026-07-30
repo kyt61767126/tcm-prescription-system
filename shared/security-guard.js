@@ -9,7 +9,8 @@
 //   - 轻量级：不阻塞主线程，不影响正常使用
 //   - 透明：仅在检测到异常时记录日志，不强制退出
 //   - 兼容：同时支持 Electron 桌面版和 Android APP
-//   - 可关闭：通过 localStorage.securityGuardDisabled='1' 可临时关闭
+//   - ★ P1 修复：移除 localStorage.securityGuardDisabled 关闭开关（防止攻击者一键关闭防护）
+//     仅在 URL 含 ?debug 且本地文件协议下允许关闭（开发调试用）
 //
 // 详见《public/云端版开发规范.md》第七节 7.5 安全防护规范
 // ============================================================================
@@ -22,22 +23,17 @@
         _integrityChecked: false,
 
         init() {
-            // 检查是否被手动关闭
+            // ★ P1 修复：移除 localStorage.securityGuardDisabled 关闭开关
+            // 原因：任何能注入 JS 的攻击者均可通过 localStorage 一键关闭所有反调试防护
+            // 现仅允许通过 URL ?debug 且本地文件协议下关闭（开发调试用，生产环境无法触发）
             try {
-                if (localStorage.getItem('securityGuardDisabled') === '1') {
+                var isLocalFile = location.protocol === 'file:' || location.protocol === 'capacitor:';
+                var hasDebugParam = location.search.indexOf('debug') !== -1;
+                if (isLocalFile && hasDebugParam) {
                     this._enabled = false;
                     return;
                 }
-            } catch (e) { /* localStorage 不可用时默认启用 */ }
-
-            // 调试模式下不启用（开发环境）
-            try {
-                if (location.search.includes('debug') ||
-                    localStorage.getItem('debug') === '1') {
-                    this._enabled = false;
-                    return;
-                }
-            } catch (e) { /* 忽略 */ }
+            } catch (e) { /* 忽略，默认启用 */ }
 
             if (!this._enabled) return;
 

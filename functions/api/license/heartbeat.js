@@ -34,9 +34,27 @@ import {
     getKV, getLicense, updateLicense, checkRateLimit, getDevices, getMaxDevices, appendLicenseLog
 } from './_lib/license-core.js';
 
+// ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
+const ALLOWED_ORIGINS = [
+    'https://tcm-prescription-system.pages.dev',
+    'capacitor://localhost',
+    'ionic://localhost',
+    'http://localhost',
+    'https://localhost',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1',
+    'https://127.0.0.1'
+];
+let _currentRequest = null;
+
 function corsHeaders() {
+    const origin = _currentRequest ? (_currentRequest.headers.get('Origin') || '') : '';
+    const allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'https://tcm-prescription-system.pages.dev';
     return {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': allowedOrigin,
+        'Vary': 'Origin',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, X-Request-ID',
         'Access-Control-Max-Age': '86400',
@@ -63,6 +81,7 @@ function isValidCodeFormat(code) {
 }
 
 export async function onRequest(context) {
+    _currentRequest = context.request;  // ★ P2：保存 request 供 CORS 动态检查
     const method = context.request.method;
 
     if (method === 'OPTIONS') {

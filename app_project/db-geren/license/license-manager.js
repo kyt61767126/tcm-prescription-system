@@ -567,8 +567,10 @@ function verifySignature(data) {
         console.warn('[License] v5 ECDSA 验签失败，降级为 HMAC');
     }
 
-    // ★ P1-3 新增：如果 license 含 masterKey 字段，先用 masterKey 派生密钥验签
-    // 若验签失败，再 fallback 到硬编码密钥（向后兼容旧 license，但新 license 不会通过此路径）
+    // ★ P1-3 新增：如果 license 含 masterKey 字段，必须使用 masterKey 派生密钥验签
+    // ★ 安全修复：masterKey 存在时拒绝 fallback 到硬编码密钥
+    //   - masterKey 派生密钥验签失败 → 直接返回 false（license 已被篡改或 masterKey 不匹配）
+    //   - 旧版 license（无 masterKey 字段）仍走硬编码密钥 fallback（向后兼容）
     if (data.masterKey) {
         // 已在 setLicenseDataContext(data) 中缓存 masterKey，下面 generateSignatureV3/V2 会自动派生
         const expectedV3mk = generateSignatureV3(data);
@@ -576,15 +578,18 @@ function verifySignature(data) {
             if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV3mk, 'hex'))) {
                 return true;
             }
-        } catch (e) { /* 长度不匹配，继续尝试其他方式 */ }
+        } catch (e) { /* 长度不匹配，继续尝试 v2 派生密钥 */ }
         const expectedV2mk = generateSignature(data);
         try {
             if (crypto.timingSafeEqual(Buffer.from(data.signature, 'hex'), Buffer.from(expectedV2mk, 'hex'))) {
                 return true;
             }
-        } catch (e) { /* 继续尝试硬编码密钥 fallback */ }
-        // ★ masterKey 派生密钥验签失败，清除上下文，后续用硬编码密钥 fallback
+        } catch (e) { /* 派生密钥验签失败，拒绝 fallback */ }
+        // ★ 安全修复：masterKey 存在但派生密钥验签失败，拒绝 fallback 到硬编码密钥
+        //   防止攻击者篡改 masterKey 后用硬编码密钥重算签名绕过验签
+        console.warn('[License] license 含 masterKey 但派生密钥验签失败，拒绝 fallback 到硬编码密钥');
         setLicenseDataContext(null);
+        return false;
     }
 
     // ★ v3 签名优先校验（含 clinicName/machineId/licenseBinding 时使用）— 硬编码密钥 fallback

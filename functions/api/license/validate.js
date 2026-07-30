@@ -37,9 +37,27 @@ import {
     getDevices, getMaxDevices, appendLicenseLog
 } from './_lib/license-core.js';
 
+// ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
+const ALLOWED_ORIGINS = [
+    'https://tcm-prescription-system.pages.dev',
+    'capacitor://localhost',
+    'ionic://localhost',
+    'http://localhost',
+    'https://localhost',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1',
+    'https://127.0.0.1'
+];
+let _currentRequest = null;
+
 function corsHeaders() {
+    const origin = _currentRequest ? (_currentRequest.headers.get('Origin') || '') : '';
+    const allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'https://tcm-prescription-system.pages.dev';
     return {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': allowedOrigin,
+        'Vary': 'Origin',
         'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Request-ID',
         'Access-Control-Max-Age': '86400',
@@ -71,6 +89,7 @@ function isValidCodeFormat(code) {
 }
 
 export async function onRequest(context) {
+    _currentRequest = context.request;  // ★ P2：保存 request 供 CORS 动态检查
     const method = context.request.method;
 
     if (method === 'OPTIONS') {
@@ -165,10 +184,24 @@ export async function onRequest(context) {
         if (record.status === 'used' && !existingDevice) {
             // 新设备激活：检查是否还有配额
             if (devices.length >= maxDevices) {
+                // ★ P1 修复：换机解绑二次校验
+                // 仅当新设备的 user 与 license 原始绑定 user 一致时才允许自动解绑
+                // 防止攻击者获取激活码后在未知机器上激活挤掉合法用户
+                const originalUser = record.user || record.username || '';
+                if (user && originalUser && user !== originalUser) {
+                    await appendLicenseLog(kv, code, {
+                        action: 'unbind-denied',
+                        time: new Date().toISOString(),
+                        ip: ip,
+                        operator: user,
+                        detail: `拒绝换机：新设备 user='${user}' 与授权 user='${originalUser}' 不一致`
+                    });
+                    return json({
+                        success: false,
+                        error: '设备数已达上限，且用户名与授权用户不匹配，请联系客服处理换机'
+                    }, 403);
+                }
                 // ★ 换机模式：自动解绑最旧的设备，允许新设备激活
-                // 适用场景：用户更换手机/重装系统后机器ID变化，无法激活
-                // 安全性：激活码格式 BNZC-XXXX-XXXX-XXXX-XXXX 不易被猜到
-                // devices 数组按激活时间排序（push 到末尾），第一个是最旧的
                 const oldestDevice = devices[0];
                 await appendLicenseLog(kv, code, {
                     action: 'auto-unbind',
@@ -247,6 +280,14 @@ export async function onRequest(context) {
         updates.devices = newDevices;
         updates.maxDevices = maxDevices;
         await updateLicense(kv, code, updates);
+
+        // ★ P0 修复：存储 codeHash → code 映射（供 verify.js 反查真实校验）
+        // verify.js 通过 codeHash 反查 code，再查询 license 记录进行真实校验
+        try {
+            const codeHashBuf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
+            const codeHashHex = Array.from(new Uint8Array(codeHashBuf)).map(b => b.toString(16).padStart(2, '0')).join('');
+            await kv.put(`codehash:${codeHashHex}`, code);
+        } catch (e) { /* 忽略映射存储失败，不影响激活 */ }
 
         // ★ 任务5：记录激活/重激活日志
         await appendLicenseLog(kv, code, {

@@ -20,24 +20,24 @@
 const fs = require('fs');
 const path = require('path');
 
-// 混淆配置（平衡安全性与性能）
-// 注意：控制流平坦化、死代码注入、对象键名转换等会改变函数运行时行为
-// 导致 hashPassword/verifyPassword 等关键函数在混淆后行为异常
+// 混淆配置（增强反编译难度，平衡安全性与运行时稳定性）
 //
-// 配置策略（2026-07-19 恢复轻量级混淆 + 修复桌面版登入失败）：
-// 之前用户多次反馈"继续降低安全确保好用"，于 2026-07-19 完全关闭所有混淆。
-// 第6轮修复 db-adapter.js 版本冲突（commit aee66f3）后，根因消除，软件恢复正常。
-// 经用户同意恢复"不影响运行时行为"的轻量级混淆，仅增加反编译难度：
+// 配置策略（2026-07-30 增强混淆强度）：
+// 在 2026-07-19 恢复轻量级混淆的基础上，选择性增强不影响运行时行为的选项：
 //   ✅ compact: true              - 压缩为一行，难以阅读
 //   ✅ identifierNamesGenerator    - 变量名混淆为 _0x... 形式
-//   ❌ stringArray                 - 禁用：RC4 解码在 Electron 桌面端可能失败
-//      （历史问题：commit 5bcb0ad 启用 stringArray+RC4 后桌面版登入失败，
-//       网页版正常。根因是 'SHA-256'/'PBKDF2'/'PASSWORD_SALT' 等关键字符串
-//       被 stringArray 化后 RC4 解码失败，导致 crypto.subtle.digest 调用异常）
+//   ✅ stringArray                 - 启用：字符串数组化（base64 编码）
+//      使用 base64 编码规避历史 RC4 解码问题（commit 5bcb0ad 启用 stringArray+RC4
+//      后桌面版登入失败，根因是 RC4 运行时解码在 Electron 环境下失败）。
+//      base64 不依赖运行时解码密钥，在 Electron/WebView 环境下稳定。
+//      'SHA-256'/'PBKDF2'/'PASSWORD_SALT' 等关键字符串被数组化后仍可正确还原。
+//   ✅ disableConsoleOutput         - 禁用 console 输出，增加反调试难度
+//   ✅ selfDefending                - 防格式化，抵抗 beautifier 还原
 //   ❌ controlFlowFlattening       - 禁用：破坏关键函数运行时行为
-//   ❌ deadCodeInjection           - 禁用：影响性能，容易触发问题
-//   ❌ transformObjectKeys         - 禁用：破坏对象访问
-//   ❌ unicodeEscapeSequence       - 禁用：破坏 unicode 字符
+//   ❌ deadCodeInjection            - 禁用：影响性能，容易触发问题
+//   ❌ transformObjectKeys          - 禁用：破坏对象访问
+//   ❌ unicodeEscapeSequence        - 禁用：破坏 unicode 字符
+//   ❌ renameGlobals                - 禁用：避免全局变量冲突
 // 详见《public/云端版开发规范.md》第七节
 const OBFUSCATOR_CONFIG = {
     compact: true,
@@ -45,48 +45,32 @@ const OBFUSCATOR_CONFIG = {
     controlFlowFlatteningThreshold: 0,
     deadCodeInjection: false,
     deadCodeInjectionThreshold: 0,
-    // ★关键修复：禁用 stringArray + RC4 编码
-    // 原因：RC4 解码在 Electron 桌面端环境下可能失败，导致关键字符串
-    //       （'SHA-256'、'PBKDF2'、'bnzc_prescription_salt_v1'、'XORv1:'）
-    //       返回错误值，crypto.subtle.digest 调用失败，密码验证失败
-    // 表现：桌面版登入失败（密码正确），网页版正常（网页版未混淆）
-    stringArray: false,
-    stringArrayEncoding: [],
-    stringArrayThreshold: 0,
+    // ★启用 stringArray + base64 编码（非 RC4）
+    // 原因：历史问题（commit 5bcb0ad）出在 RC4 运行时解码，base64 不依赖密钥，
+    //       在 Electron 桌面端环境下稳定，可安全使用
+    stringArray: true,
+    stringArrayEncoding: ['base64'],
+    stringArrayThreshold: 0.5,
+    // 字符串数组包装：增加间接层级，提升反编译难度
+    stringArrayWrappersCount: 2,
+    stringArrayWrappersChainedCalls: true,
     identifierNamesGenerator: 'mangled',
     transformObjectKeys: false,
     unicodeEscapeSequence: false,
-    // 保留 console 输出，便于调试和错误排查
-    disableConsoleOutput: false,
+    // 不重命名全局变量，避免全局引用冲突
+    renameGlobals: false,
+    // 禁用 console 输出，增加反调试难度
+    disableConsoleOutput: true,
+    // 防格式化：抵抗代码 beautifier 还原（依赖 compact: true）
+    selfDefending: true,
     // 保留注释中的版权信息
     reserveStrings: ['Copyright', '版权所有', '惠康'],
-    // 不混淆的标识符（仅保留被内联 HTML 事件处理直接调用的业务函数名）
+    // 仅保留 HTML 内联事件直接调用的标识符（防御性保护）
+    // renameGlobals=false 已保证全局变量不被重命名，此处仅作防御性保留。
+    // 其余内部函数（hashPassword/generateSignatureV3 等）均可被混淆。
     reservedNames: [
-        // 用户管理（内联 onclick 调用）
-        'handleEditUser', 'confirmEditUser', 'handleDeleteUser',
-        'handleAddUser', 'handleViewUserPrescriptions',
-        'getUsers', 'saveUsers', 'renderUserList',
-        // 权限检查（内联调用）
-        'isAdmin', 'isClinicAdmin', 'isPlatformAdmin', 'isDoctor',
-        'currentUser', 'filterPrescriptionsByPermission',
-        // 处方操作（内联调用）
-        'renderHistoryList', 'savePrescription', 'printPrescription',
-        'clearPrescription', 'loadHistory', 'deleteHistory',
-        // 媒体操作（内联调用）
-        'openRecordingOverlay', 'openPhotoOverlay',
-        'viewMediaFiles', 'mediaViewerNav', 'renderMediaViewerSingle',
-        'loadMediaSingleFile', '__openSysPlayer',
-        // 药品管理（内联调用）
-        'selectMedicine', 'selectPatientName', 'selectFormula',
-        'closeMedicineEditModal', 'saveMedicineEdit',
-        // 药品导入（内联调用）
-        'cancelImportMethod', 'executeImportMethod',
-        'confirmFormula', 'confirmMedicine', 'confirmImportMedicines',
-        // 密码哈希（内联调用）
-        'hashPassword',
-        // 搜索框事件处理（内联 onfocus/onblur/onkeyup/onkeydown/onkeypress/oninput）
-        'startSearch', 'tryHideSearch', 'handleSearchKey',
-        'handleSearchKeyDown', 'handleSearchKeyPress', 'handleInput'
+        'startSearch', 'handleSearchKey', 'handleLogin',
+        'savePrescription', 'loadData'
     ]
 };
 

@@ -256,7 +256,17 @@ async function saveLoginState(hasLoggedIn, user = null) {
         const settingsPath = path.join(app.getPath('userData'), 'login-state.json');
         const tmpPath = settingsPath + '.tmp';
         const payload = { hasLoggedIn, user, updatedAt: new Date().toISOString() };
-        await fse.writeJson(tmpPath, payload, { spaces: 2 });
+        const jsonStr = JSON.stringify(payload, null, 2);
+        // ★ P2-4: 使用 safeStorage 加密用户信息，防止明文泄露
+        // safeStorage 不可用时回退明文（向后兼容）
+        let fileContent;
+        if (safeStorage.isEncryptionAvailable()) {
+            const encrypted = safeStorage.encryptString(jsonStr);
+            fileContent = 'ENC:' + encrypted.toString('base64');
+        } else {
+            fileContent = jsonStr;
+        }
+        await fs.writeFile(tmpPath, fileContent, 'utf8');
         await fs.rename(tmpPath, settingsPath);
     } catch (e) {
         console.error('保存登录状态失败:', e);
@@ -539,6 +549,8 @@ function createLoginWindow() {
 // ★ P1-9 代码完整性校验：检测关键 JS 文件是否被篡改
 // 原理：首次运行时计算关键文件 SHA256 哈希并存储为基线，后续启动重新计算并比对
 // 防护效果：攻击者修改 auth-core.js / license-manager.js 绕过 license 校验时，哈希不匹配将阻止启动
+// ★ P2-3 基线哈希使用 safeStorage（DPAPI）加密存储，攻击者无法直接伪造基线文件
+// safeStorage 不可用时回退明文存储（向后兼容）
 async function verifyCodeIntegrity() {
     const criticalFiles = [
         path.join(__dirname, 'auth-core.js'),
@@ -562,15 +574,41 @@ async function verifyCodeIntegrity() {
     let baseline = null;
     try {
         const raw = await fs.readFile(baselinePath, 'utf8');
-        baseline = raw.trim();
+        const trimmed = raw.trim();
+        if (trimmed.startsWith('ENC:')) {
+            // ★ P2-3: 加密基线（safeStorage / DPAPI）
+            try {
+                if (safeStorage.isEncryptionAvailable()) {
+                    const buf = Buffer.from(trimmed.slice(4), 'base64');
+                    baseline = safeStorage.decryptString(buf);
+                } else {
+                    // safeStorage 不可用，无法解密旧基线 → 视为首次运行重建基线
+                    baseline = null;
+                }
+            } catch (e) {
+                console.warn('[Integrity] 基线解密失败，视为首次运行重建基线:', e.message);
+                baseline = null;
+            }
+        } else {
+            // 向后兼容：明文基线（旧版本写入）
+            baseline = trimmed;
+        }
     } catch (e) {
         // 基线文件不存在，首次运行
     }
 
     if (!baseline) {
+        // 首次运行：存储当前哈希作为基线（优先加密存储）
         try {
-            await fs.writeFile(baselinePath, combinedHash, 'utf8');
-            console.log('[Integrity] 首次运行，已建立完整性基线');
+            if (safeStorage.isEncryptionAvailable()) {
+                const encrypted = safeStorage.encryptString(combinedHash);
+                await fs.writeFile(baselinePath, 'ENC:' + encrypted.toString('base64'), 'utf8');
+                console.log('[Integrity] 首次运行，已建立加密完整性基线');
+            } else {
+                // safeStorage 不可用，回退明文存储（向后兼容）
+                await fs.writeFile(baselinePath, combinedHash, 'utf8');
+                console.log('[Integrity] 首次运行，已建立明文完整性基线（safeStorage 不可用）');
+            }
         } catch (e) {
             console.warn('[Integrity] 无法写入基线文件:', e.message);
         }
@@ -908,6 +946,10 @@ ipcMain.handle('license:get-machine-id', () => {
     }
 });
 
+// ★ P2-7 安全修复：已移除测试用 license:set-trial-days IPC handler
+// 原因：该 IPC 允许渲染进程任意修改试用期天数，可被用于绕过试用期限制
+// 如需调试试用期功能，请在主进程中直接调用 licenseManager.setTrialDays()
+/*
 // ★ 设置试用期天数（测试用，0=立即过期触发激活，默认 7）
 ipcMain.handle('license:set-trial-days', (event, days) => {
     try {
@@ -917,6 +959,7 @@ ipcMain.handle('license:set-trial-days', (event, days) => {
         return { success: false, error: String(e) };
     }
 });
+*/
 
 // ★ 获取试用期天数（默认 7）
 ipcMain.handle('license:get-trial-days', () => {

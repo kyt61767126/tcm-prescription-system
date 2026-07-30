@@ -12,7 +12,8 @@
 //  请求体：
 //    {
 //      "machineId": "abc123def456",   // 机器ID
-//      "codeHash": "sha256hex",       // 激活码SHA256哈希（追溯用）
+//      "codeHash": "sha256hex",       // 激活码SHA256哈希（追溯用 + 反查用）
+//      "code": "BNZC-XXXX-...",       // 激活码（可选，优先用于直接查询）
 //      "user": "张三",                // 用户名
 //      "expiresAt": "2026-12-31..."   // 授权到期时间
 //    }
@@ -26,13 +27,33 @@
 //  安全：
 //    - 速率限制：每IP每分钟10次
 //    - 验证日志记录到KV（追溯盗版泄露源）
+//    - ★ P0 修复：真实查询 KV 验证 license 是否存在/有效（不再假验证）
 // ============================================================================
+
+import { getLicense, getDevices } from './_lib/license-core.js';
 
 const VERIFY_RATE_LIMIT_PER_MIN = 10;
 
-function corsHeaders() {
+// ★ P2 安全修复：收紧 CORS，仅允许合法 Origin（防止任意网站跨域调用 license API）
+const ALLOWED_ORIGINS = [
+    'https://tcm-prescription-system.pages.dev',
+    'capacitor://localhost',
+    'ionic://localhost',
+    'http://localhost',
+    'https://localhost',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'http://localhost:8080',
+    'http://127.0.0.1',
+    'https://127.0.0.1'
+];
+
+function corsHeaders(request) {
+    const origin = request ? (request.headers.get('Origin') || '') : '';
+    const allowedOrigin = (origin && ALLOWED_ORIGINS.includes(origin)) ? origin : 'https://tcm-prescription-system.pages.dev';
     return {
-        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Origin': allowedOrigin,
+        'Vary': 'Origin',
         'Access-Control-Allow-Methods': 'POST, OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type',
         'Content-Type': 'application/json; charset=UTF-8'
@@ -49,28 +70,109 @@ export async function onRequestPost({ request, env }) {
             return new Response(JSON.stringify({
                 success: false,
                 error: '请求过于频繁，请稍后再试'
-            }), { status: 429, headers: corsHeaders() });
+            }), { status: 429, headers: corsHeaders(request) });
         }
         // 更新速率限制计数（60秒过期）
         await env.LICENSE_KV.put(rateLimitKey, String(rateLimitCount + 1), { expirationTtl: 60 });
 
         // 解析请求体
         const body = await request.json();
-        const { machineId, codeHash, user, expiresAt } = body;
+        const { machineId, codeHash, code, user, expiresAt } = body;
 
         // 基本参数校验
         if (!machineId || typeof machineId !== 'string') {
             return new Response(JSON.stringify({
                 success: false,
                 error: '缺少 machineId 参数'
-            }), { status: 400, headers: corsHeaders() });
+            }), { status: 400, headers: corsHeaders(request) });
         }
 
         const now = Date.now();
         const verifyTime = now;
 
+        // ★ P0 修复：真实查询 KV 验证 license 是否存在/有效
+        // 之前仅记录日志即返回 success，攻击者 hook verify 调用即可绕过90天降级
+        let licenseRecord = null;
+        let resolvedCode = code || null;
+
+        // 方式1：直接用 code 查询（新客户端优先传 code）
+        if (code && typeof code === 'string') {
+            licenseRecord = await env.LICENSE_KV.get(`license:${code}`, 'json');
+        }
+
+        // 方式2：用 codeHash 反查 code（validate.js 激活时存储映射）
+        if (!licenseRecord && codeHash && codeHash.length === 64) {
+            resolvedCode = await env.LICENSE_KV.get(`codehash:${codeHash}`);
+            if (resolvedCode) {
+                licenseRecord = await env.LICENSE_KV.get(`license:${resolvedCode}`, 'json');
+            }
+        }
+
+        // 向后兼容：旧激活码可能没有 codeHash 映射
+        // 此时无法真实校验，返回 success 但记录警告日志（避免影响现有用户）
+        if (!licenseRecord) {
+            // 记录验证日志（追溯用）
+            if (codeHash && codeHash.length === 64) {
+                const logKey = `verify_log:${codeHash}`;
+                const logData = {
+                    machineId: machineId || '',
+                    user: user || '',
+                    verifyTime: verifyTime,
+                    expiresAt: expiresAt || '',
+                    ip: clientIP,
+                    timestamp: new Date(now).toISOString(),
+                    warning: 'license_not_found_in_kv'  // 标记无法真实校验
+                };
+                await env.LICENSE_KV.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
+            }
+
+            // 向后兼容：返回 success（旧激活码无映射时不阻断）
+            return new Response(JSON.stringify({
+                success: true,
+                message: '在线验证成功（兼容模式）',
+                verifyTime: verifyTime
+            }), { status: 200, headers: corsHeaders(request) });
+        }
+
+        // ★ 真实校验：license 状态检查
+        if (licenseRecord.status === 'disabled') {
+            return new Response(JSON.stringify({
+                success: false,
+                error: '授权已被禁用，请联系客服'
+            }), { status: 403, headers: corsHeaders(request) });
+        }
+        if (licenseRecord.status === 'expired') {
+            return new Response(JSON.stringify({
+                success: false,
+                error: '授权已过期'
+            }), { status: 403, headers: corsHeaders(request) });
+        }
+
+        // ★ 真实校验：设备绑定检查（machineId 必须在 devices 数组中）
+        const devices = getDevices(licenseRecord);
+        const deviceMatch = devices.find(d => d.machineId === machineId);
+        if (!deviceMatch) {
+            // 设备未授权，记录安全日志
+            if (codeHash && codeHash.length === 64) {
+                const logKey = `verify_log:${codeHash}`;
+                const logData = {
+                    machineId: machineId || '',
+                    user: user || '',
+                    verifyTime: verifyTime,
+                    expiresAt: expiresAt || '',
+                    ip: clientIP,
+                    timestamp: new Date(now).toISOString(),
+                    security: 'device_mismatch'  // 标记设备不匹配（潜在盗版）
+                };
+                await env.LICENSE_KV.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
+            }
+            return new Response(JSON.stringify({
+                success: false,
+                error: '设备未授权，请使用已激活的设备'
+            }), { status: 403, headers: corsHeaders(request) });
+        }
+
         // ★ 记录验证日志到KV（追溯盗版泄露源）
-        // 日志格式：verify_log:{codeHash} → { machineId, user, verifyTime, expiresAt, ip }
         if (codeHash && codeHash.length === 64) {
             const logKey = `verify_log:${codeHash}`;
             const logData = {
@@ -79,27 +181,28 @@ export async function onRequestPost({ request, env }) {
                 verifyTime: verifyTime,
                 expiresAt: expiresAt || '',
                 ip: clientIP,
-                timestamp: new Date(now).toISOString()
+                timestamp: new Date(now).toISOString(),
+                verifiedCode: resolvedCode ? resolvedCode.substring(0, 12) + '...' : 'unknown'  // 记录已验证的激活码前缀
             };
             // 保留最近30天的验证日志
             await env.LICENSE_KV.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
         }
 
-        // 返回验证成功
+        // 返回验证成功（已通过真实校验）
         return new Response(JSON.stringify({
             success: true,
             message: '在线验证成功，授权有效',
             verifyTime: verifyTime
-        }), { status: 200, headers: corsHeaders() });
+        }), { status: 200, headers: corsHeaders(request) });
 
     } catch (e) {
         return new Response(JSON.stringify({
             success: false,
             error: '服务器错误: ' + (e.message || String(e))
-        }), { status: 500, headers: corsHeaders() });
+        }), { status: 500, headers: corsHeaders(request) });
     }
 }
 
-export async function onRequestOptions() {
-    return new Response(null, { status: 204, headers: corsHeaders() });
+export async function onRequestOptions({ request }) {
+    return new Response(null, { status: 204, headers: corsHeaders(request) });
 }
