@@ -46,11 +46,11 @@ if exist "..\config.json" (
 echo   [2/5] Verifying APP index.html (independent from desktop)...
 if not exist "%ANDROID_PUBLIC%\index.html" (
     echo [ERROR] APP index.html not found: %ANDROID_PUBLIC%\index.html
-    echo   APP version maintains its own index.html (5-button top menu)
+    echo   APP version maintains its own index.html ^(5-button top menu^)
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo       APP index.html OK (5-button top menu preserved)
+echo       APP index.html OK ^(5-button top menu preserved^)
 echo   [3/5] Syncing vendor/xlsx.full.min.js...
 if exist "..\vendor\xlsx.full.min.js" (
     if not exist "%ANDROID_PUBLIC%\vendor" mkdir "%ANDROID_PUBLIC%\vendor" >nul
@@ -73,7 +73,7 @@ if exist "..\video-recorder-inject.js" (
 echo.
 
 echo [2.1/10] Verifying APP index.html integrity (5-button top menu)...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='%ANDROID_PUBLIC%\index.html'; $c=[System.IO.File]::ReadAllText($f,[System.Text.Encoding]::UTF8); if($c.Length -lt 50000){ Write-Host '[ERROR] APP index.html too small'; exit 1 }; if(-not ($c -match 'showModal\(.analyticsModal.\)')){ Write-Host '[ERROR] APP index.html missing analyticsModal - not 5-button version'; exit 1 }; Write-Host '[OK] APP index.html OK'"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='%ANDROID_PUBLIC%\index.html'; $c=[System.IO.File]::ReadAllText($f,[System.Text.Encoding]::UTF8); if($c.Length -lt 50000){ Write-Host '[ERROR] APP index.html too small'; exit 1 }; if(-not ($c -match 'showModal\(.analyticsModal.\)')){ Write-Host '[ERROR] APP index.html missing analyticsModal - not 5-button version'; exit 1 }; Write-Host '[OK] APP index.html OK 5-button'"
 if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
