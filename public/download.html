@@ -1554,7 +1554,7 @@
                 <span>🌐 云端网页版</span>
                 <span class="sub">无需下载 · 浏览器即用</span>
             </div>
-            <div class="card featured">
+            <div class="card featured" id="card-cloud-web">
                 <div class="card-title">
                     <span class="icon">🌐</span>
                     惠康中医 · 云端网页版
@@ -1750,33 +1750,149 @@
         <div class="tab-content" id="tab-install">
             <div class="section-title">
                 <span>📋 安装说明</span>
-                <span class="sub">Android · Windows · 激活流程</span>
+                <span class="sub">下载链接 · 安装步骤 · 首次使用</span>
+            </div>
+            <div class="card">
+                <div class="card-title"><span class="icon">📦</span>各版本下载链接快速选择</div>
+                <div class="info-row">
+                    <span class="info-label">云端版</span>
+                    <span class="info-value">多设备联网使用，云端数据同步 · 需联系开发者开通账户</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">下载入口</span>
+                    <span class="info-value">
+                        📱 <a href="#card-cloud-app" onclick="switchTab('mobile','card-cloud-app')">云端版 APK</a> ·
+                        💻 <a href="#card-cloud-desktop" onclick="switchTab('desktop','card-cloud-desktop')">云端桌面版</a> ·
+                        🌐 <a href="#card-cloud-web" onclick="switchTab('web','card-cloud-web')">云端网页版</a>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">离线定制版</span>
+                    <span class="info-value">固定诊所多医师使用，数据完全离线 · 7 天免费试用</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">下载入口</span>
+                    <span class="info-value">
+                        📱 <a href="#card-dingzhi" onclick="switchTab('mobile','card-dingzhi')">定制版 APK</a> ·
+                        💻 <a href="#card-dingzhi-desktop" onclick="switchTab('desktop','card-dingzhi-desktop')">定制版桌面版</a>
+                    </span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">离线个人版</span>
+                    <span class="info-value">个人医生单机使用，数据完全离线 · 7 天免费试用</span>
+                </div>
+                <div class="info-row">
+                    <span class="info-label">下载入口</span>
+                    <span class="info-value">
+                        📱 <a href="#card-geren" onclick="switchTab('mobile','card-geren')">个人版 APK</a> ·
+                        💻 <a href="#card-geren-desktop" onclick="switchTab('desktop','card-geren-desktop')">个人版桌面版</a>
+                    </span>
+                </div>
+                <p style="font-size:12px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
+                    💡 <strong>选择建议：</strong>需要多设备登入或云端协作选<strong>云端版</strong>；固定诊所多医师单机使用选<strong>定制版</strong>；个人医生单机使用选<strong>个人版</strong>。各版本详细功能差异请查看"<strong>版本对比</strong>"Tab。
+                </p>
             </div>
             <div class="grid-2">
                 <div class="card">
                     <div class="card-title"><span class="icon">📱</span>Android APP 安装步骤</div>
+                    <div class="step-title" style="margin-top:6px;">通用安装步骤</div>
                     <ol class="install-steps">
-                        <li>下载对应版本的 APK 文件到手机</li>
+                        <li>切换到"<strong>手机 APP</strong>"Tab，下载对应版本的 APK 文件到手机</li>
                         <li>在手机设置中允许"安装未知来源应用"（设置 → 安全 → 未知来源）</li>
-                        <li>点击下载的 APK 文件进行安装</li>
-                        <li>安装完成后打开 APP，使用上方"默认账号"登录（如 admin/admin）</li>
-                        <li>首次使用有 7 天试用期（限 30 张处方），到期后需输入授权激活码</li>
-                        <li>登录后请立即到"设置"中修改默认密码，确保账户安全</li>
+                        <li>在文件管理器中点击下载的 APK 文件进行安装</li>
+                        <li>安装完成后打开 APP，按下方对应版本的登录方式登录</li>
                         <li>如遇"安装包损坏"提示，请重新下载并核对 SHA-256 校验值</li>
+                    </ol>
+                    <div class="step-title" style="margin-top:10px;">☁️ 云端版登录方式</div>
+                    <ol class="install-steps">
+                        <li>需先联系开发者开通云端账户（无公开试用）</li>
+                        <li>使用收到的诊所名称 + 管理员账号 + 密码登录</li>
+                        <li>首次登录后请到"设置"中修改默认密码</li>
+                    </ol>
+                    <div class="step-title" style="margin-top:10px;">🏥 离线定制版登录方式</div>
+                    <ol class="install-steps">
+                        <li>默认诊所名称：<span class="cred-pair" onclick="copyText(this)">慧仁堂</span></li>
+                        <li>默认管理员用户名：<span class="cred-pair" onclick="copyText(this)">慧仁堂</span></li>
+                        <li>默认密码：<span class="cred-pair" onclick="copyText(this)">admin</span></li>
+                        <li>7 天试用期（限 30 张处方），到期后需输入授权激活码</li>
+                        <li>首次登录后请立即到"基础设置"中修改诊所名称、医师姓名和密码</li>
+                    </ol>
+                    <div class="step-title" style="margin-top:10px;">👤 离线个人版登录方式</div>
+                    <ol class="install-steps">
+                        <li>默认诊所名称：<span class="cred-pair" onclick="copyText(this)">张仲景中医诊所</span></li>
+                        <li>默认管理员用户名：<span class="cred-pair" onclick="copyText(this)">张仲景</span></li>
+                        <li>默认密码：<span class="cred-pair" onclick="copyText(this)">admin</span></li>
+                        <li>7 天试用期（限 30 张处方），到期后需输入授权激活码</li>
+                        <li>首次登录后请立即到"基础设置"中修改诊所名称、医师姓名和密码</li>
                     </ol>
                 </div>
                 <div class="card">
                     <div class="card-title"><span class="icon">💻</span>Windows 桌面版安装步骤</div>
+                    <div class="step-title" style="margin-top:6px;">安装版（推荐）</div>
                     <ol class="install-steps">
-                        <li>下载安装版 exe 文件（推荐）或便携版</li>
-                        <li>双击运行安装程序，按提示完成安装</li>
-                        <li>安装完成后从桌面快捷方式启动</li>
-                        <li>便携版无需安装，解压后直接运行 exe 即可</li>
-                        <li>使用上方"默认账号"登录（如 admin/admin）</li>
-                        <li>首次使用有 7 天试用期（限 30 张处方），到期后需输入授权激活码</li>
-                        <li>登录后请立即到"设置"中修改默认密码，确保账户安全</li>
+                        <li>切换到"<strong>桌面端</strong>"Tab，下载"安装版"exe 文件</li>
+                        <li>双击运行安装程序（如提示 SmartScreen，点击"仍要运行"）</li>
+                        <li>按安装向导提示完成安装（建议安装到默认路径）</li>
+                        <li>安装完成后从桌面快捷方式"惠康中医"启动</li>
+                        <li>按下方对应版本的登录方式登录</li>
+                    </ol>
+                    <div class="step-title" style="margin-top:10px;">便携版（免安装）</div>
+                    <ol class="install-steps">
+                        <li>下载"便携版"exe 文件</li>
+                        <li>将文件放入固定目录（如 D:\惠康中医），建议不要放在 C 盘系统目录</li>
+                        <li>双击 exe 直接运行，无需安装</li>
+                        <li>建议右键"发送到 → 桌面快捷方式"方便日常启动</li>
+                    </ol>
+                    <div class="step-title" style="margin-top:10px;">☁️ 云端桌面版登录</div>
+                    <ol class="install-steps">
+                        <li>需先联系开发者开通云端账户</li>
+                        <li>使用收到的账户信息登录，数据云端同步</li>
+                    </ol>
+                    <div class="step-title" style="margin-top:10px;">🏥 离线定制版 / 👤 个人版登录</div>
+                    <ol class="install-steps">
+                        <li>使用对应版本默认账号登录（账号同 APP 版本，见左侧卡片）</li>
+                        <li>7 天试用期，到期后需输入授权激活码激活</li>
+                        <li>首次登录后请立即到"基础设置"中修改诊所名称、医师姓名和密码</li>
+                    </ol>
+                    <div class="step-title" style="margin-top:10px;">🌐 云端网页版</div>
+                    <ol class="install-steps">
+                        <li>无需下载安装，浏览器直接访问网页地址</li>
+                        <li>需联系开发者开通账户后登录使用</li>
+                        <li>建议使用 Chrome / Edge 浏览器，兼容性最佳</li>
                     </ol>
                 </div>
+            </div>
+            <div class="card">
+                <div class="card-title"><span class="icon">📝</span>安装后首次使用指引</div>
+                <div class="step-title" style="margin-top:6px;">离线版（定制版 / 个人版）</div>
+                <ol class="install-steps">
+                    <li>使用默认账号登录后，立即进入"<strong>基础设置</strong>"</li>
+                    <li>修改诊所名称、医师姓名（定制版支持多医师，个人版仅一个管理员）</li>
+                    <li>修改默认密码为自定义密码，确保账户安全</li>
+                    <li>根据需要配置药材库、处方模板、图片保存位置等</li>
+                    <li>开始录入处方：选择患者 → 添加药材 → 调整剂量 → 保存处方</li>
+                    <li>定期使用"<strong>设置 → 数据备份</strong>"导出数据到安全位置</li>
+                </ol>
+                <div class="step-title" style="margin-top:10px;">☁️ 云端版</div>
+                <ol class="install-steps">
+                    <li>使用开发者提供的账户信息登录</li>
+                    <li>多设备登入同一账户，数据自动云端同步</li>
+                    <li>管理员可在云端管理后台管理用户、查看统计数据</li>
+                    <li>云端数据自动备份，无需手动备份</li>
+                </ol>
+                <div class="step-title" style="margin-top:10px;">📷 录像拍照功能（APP）</div>
+                <ol class="install-steps">
+                    <li>安装时请允许相机、麦克风、存储权限</li>
+                    <li>在处方录入页面点击 🎥 录像按钮或 📷 拍照按钮</li>
+                    <li>媒体文件自动按"处方编号_患者姓名"命名，保存在手机本地存储</li>
+                    <li>支持先拍照录像后录入处方，系统自动绑定到最近保存的患者</li>
+                </ol>
+                <div class="step-title" style="margin-top:10px;">🔒 试用期与激活</div>
+                <ol class="install-steps">
+                    <li>离线版提供 7 天免费试用（限 30 张处方），无需注册即可使用</li>
+                    <li>试用满意后，请切换到"<strong>购买激活码</strong>"Tab 获取永久授权</li>
+                    <li>激活码与设备绑定，一台设备对应一个激活码</li>
+                </ol>
             </div>
             <div class="card">
                 <div class="card-title"><span class="icon">🔑</span>激活流程（试用到期后）</div>
@@ -2184,6 +2300,21 @@
                 }
             });
         });
+
+        // 切换 Tab 并滚动到指定卡片（用于"安装说明"中的下载链接跳转）
+        function switchTab(tabName, cardId) {
+            const btn = document.querySelector('.tab-btn[data-tab="' + tabName + '"]');
+            if (btn) btn.click();
+            if (cardId) {
+                // 等 Tab 切换动画完成后再滚动到卡片
+                setTimeout(() => {
+                    const card = document.getElementById(cardId);
+                    if (card) {
+                        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 150);
+            }
+        }
 
         // =====================================================================
         // 1.5 SHA-256 校验值折叠展开
