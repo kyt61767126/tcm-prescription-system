@@ -1,4 +1,4 @@
-﻿# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
+# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
 # 用 PowerShell 替代 release-all.bat，避免 .bat 中文 GBK 编码问题
 # 支持选择单个版本（云端/定制/个人 × 桌面/APP/全部）进行发布
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -136,13 +136,23 @@ function Invoke-Publish {
     Write-Host "  发布到 GitHub Release + 下载页..." -ForegroundColor Cyan
     Write-Host "  Target: $Target" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  提示: 上传 75MB exe 需要 5-10 分钟，请耐心等待..." -ForegroundColor Yellow
+    Write-Host "  提示: 若卡住无输出，可能是在上传大文件，请勿关闭窗口..." -ForegroundColor Yellow
+    Write-Host ""
 
-    if ($Target -eq "all") {
-        & node $publishScript
-    } else {
-        & node $publishScript "--target=$Target"
+    # 同步调用 node，stdout/stderr 直通终端（不经过 PowerShell 管道缓冲）
+    Push-Location $script:RootDir
+    try {
+        if ($Target -eq "all") {
+            & node $publishScript
+        } else {
+            & node $publishScript "--target=$Target"
+        }
+        $rc = $LASTEXITCODE
+    } finally {
+        Pop-Location
     }
-    return $LASTEXITCODE
+    return $rc
 }
 
 # ============ 验证 ============
@@ -156,8 +166,14 @@ function Invoke-Verify {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  验证发布结果..." -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
-    & node $verifyScript
-    return $LASTEXITCODE
+    Push-Location $script:RootDir
+    try {
+        & node $verifyScript
+        $rc = $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+    return $rc
 }
 
 # ============ 显示版本选择菜单 ============

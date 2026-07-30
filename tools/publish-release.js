@@ -574,8 +574,14 @@ function main() {
     // 上传每个文件
     const uploadedAssets = [];  // 记录成功上传的 { file, downloadUrl }
     let failCount = 0;
-    for (const f of uploadFiles) {
-        process.stdout.write('  上传 ' + f.uploadName + ' (' + formatSize(f.size) + ') ... ');
+    for (let fi = 0; fi < uploadFiles.length; fi++) {
+        const f = uploadFiles[fi];
+        const sizeMB = (f.size / 1024 / 1024).toFixed(1);
+        console.log('  [' + (fi + 1) + '/' + uploadFiles.length + '] 上传 ' + f.uploadName + ' (' + sizeMB + ' MB) ...');
+        if (f.size > 10 * 1024 * 1024) {
+            console.log('      文件较大，上传可能需要几分钟，请耐心等待（勿关闭窗口）...');
+        }
+        process.stdout.write('      ');
 
         // 若同名 asset 已存在，先删除
         if (assetNameToId[f.uploadName]) {
@@ -589,7 +595,7 @@ function main() {
             failCount++;
         } else {
             console.log('OK');
-            console.log('    ' + upResult.browser_download_url);
+            console.log('      ' + upResult.browser_download_url);
             uploadedAssets.push({ file: f, downloadUrl: upResult.browser_download_url });
         }
     }
