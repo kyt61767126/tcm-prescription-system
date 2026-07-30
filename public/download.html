@@ -761,9 +761,8 @@
             background: linear-gradient(135deg, #f0f4ff 0%, #e0e7ff 100%);
             border: 2px dashed var(--primary);
             border-radius: var(--radius-md);
-            padding: 10px;
-            text-align: center;
-            margin: 8px 0;
+            padding: 12px;
+            margin-bottom: 10px;
         }
         .order-box .label {
             font-size: 11px;
@@ -771,13 +770,56 @@
             margin-bottom: 4px;
         }
         .order-box .value {
-            font-family: 'Courier New', monospace;
-            font-size: 15px;
+            font-size: 16px;
             font-weight: 700;
-            color: var(--primary-dark);
-            letter-spacing: 1px;
-            margin-bottom: 6px;
+            color: var(--primary);
+            font-family: monospace;
             word-break: break-all;
+            margin-bottom: 8px;
+        }
+        /* 客户信息收集表单 */
+        .cust-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 8px;
+            margin: 10px 0;
+            padding: 10px;
+            background: #f9fafc;
+            border-radius: var(--radius-sm);
+            border: 1px solid #ebeef5;
+        }
+        .cust-form .form-item { display: flex; flex-direction: column; gap: 3px; }
+        .cust-form .form-item label {
+            font-size: 11px; color: var(--text-secondary); font-weight: 500;
+        }
+        .cust-form .form-item label .req { color: #e74c3c; margin-left: 2px; }
+        .cust-form .form-item input,
+        .cust-form .form-item textarea {
+            padding: 6px 8px; border: 1px solid #dcdfe6; border-radius: 4px;
+            font-size: 12px; font-family: inherit; resize: vertical;
+        }
+        .cust-form .form-item input:focus,
+        .cust-form .form-item textarea:focus {
+            outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px rgba(102,126,234,0.1);
+        }
+        .cust-form .form-item textarea { min-height: 50px; }
+        /* 订单汇总文本框 */
+        .order-summary {
+            margin-top: 10px; padding: 10px; background: #fff8e1;
+            border: 1px solid #ffe082; border-radius: var(--radius-sm);
+        }
+        .order-summary .summary-label {
+            font-size: 11px; color: #78350f; font-weight: 600; margin-bottom: 4px;
+        }
+        .order-summary textarea {
+            width: 100%; min-height: 110px; padding: 8px;
+            border: 1px solid #ffe082; border-radius: 4px;
+            font-size: 11px; font-family: "Courier New", monospace;
+            background: white; color: #2c3e50; resize: vertical;
+            line-height: 1.6;
+        }
+        .order-summary .summary-tip {
+            font-size: 11px; color: #78350f; margin-top: 6px; line-height: 1.5;
         }
         .order-box .copy-btn {
             background: var(--primary);
@@ -1643,13 +1685,13 @@
                     </div>
                 </div>
 
-                <!-- Step 2: 生成订单号 -->
+                <!-- Step 2: 生成订单号 + 填写客户信息 -->
                 <div class="purchase-step" data-step="2">
                     <div class="step-header">
                         <div class="step-num">2</div>
                         <div>
-                            <div class="step-title">生成专属订单号</div>
-                            <div class="step-desc">请复制您的订单号，付款后发送给客服</div>
+                            <div class="step-title">生成订单号并填写信息</div>
+                            <div class="step-desc">请如实填写以下信息，生成订单后一键复制发给客服</div>
                         </div>
                     </div>
                     <div class="order-box">
@@ -1669,9 +1711,39 @@
                         <span class="info-label">创建时间</span>
                         <span class="info-value date" id="orderTime">-</span>
                     </div>
+                    <!-- ★ 客户信息收集表单 -->
+                    <div class="cust-form">
+                        <div class="form-item">
+                            <label>姓名 / 诊所名称 <span class="req">*</span></label>
+                            <input type="text" id="custName" placeholder="如：张三 / 慧仁堂中医诊所" oninput="updateOrderSummary()">
+                        </div>
+                        <div class="form-item">
+                            <label>联系电话 <span class="req">*</span></label>
+                            <input type="tel" id="custPhone" placeholder="如：13800138000" oninput="updateOrderSummary()">
+                        </div>
+                        <div class="form-item">
+                            <label>微信号（选填）</label>
+                            <input type="text" id="custWechat" placeholder="用于售后联系" oninput="updateOrderSummary()">
+                        </div>
+                        <div class="form-item">
+                            <label>设备识别码 <span class="req">*</span></label>
+                            <input type="text" id="custMachineId" placeholder="在软件激活弹窗中复制" oninput="updateOrderSummary()">
+                        </div>
+                        <div class="form-item" style="grid-column: 1 / -1;">
+                            <label>备注（选填）</label>
+                            <textarea id="custNote" placeholder="如：老客户介绍、特殊需求、期望激活时长等" oninput="updateOrderSummary()"></textarea>
+                        </div>
+                    </div>
+                    <!-- ★ 结构化订单汇总文本 -->
+                    <div class="order-summary">
+                        <div class="summary-label">📋 订单汇总（请完整复制发送给客服）</div>
+                        <textarea id="orderSummaryText" readonly onclick="this.select()"></textarea>
+                        <button class="copy-btn" onclick="copyOrderSummary()" style="margin-top:6px;">📋 一键复制订单信息</button>
+                        <div class="summary-tip">提示：上方文本框包含订单号、版本、金额、您的信息和设备识别码，客服收到后可快速生成激活码。</div>
+                    </div>
                     <div class="step-nav">
                         <button class="prev" onclick="goStep(1)">← 上一步</button>
-                        <button class="next" onclick="goStep(3)">下一步：扫码加客服 →</button>
+                        <button class="next" id="step2Next" onclick="goStep(3)">下一步：扫码加客服 →</button>
                     </div>
                 </div>
 
@@ -1694,11 +1766,9 @@
                     <div class="notice notice-warning">
                         <span class="icon">📋</span>
                         <div>
-                            <strong>请向客服发送以下信息：</strong><br>
-                            ① 订单号（上一步生成）<br>
-                            ② 诊所名称 / 个人姓名<br>
-                            ③ 设备识别码（在软件激活弹窗中复制）<br>
-                            ④ 付款截图
+                            <strong>请向客服发送：</strong><br>
+                            ① 上一步"一键复制订单信息"的全部内容（含订单号+您的信息+设备识别码）<br>
+                            ② 付款截图（付款后发送）
                         </div>
                     </div>
                     <div class="step-nav">
@@ -2467,6 +2537,66 @@
             document.getElementById('orderPrice').textContent = orderInfo.price;
             document.getElementById('orderTime').textContent = orderInfo.time;
             document.getElementById('orderNumberRepeat').textContent = orderInfo.number;
+            updateOrderSummary();  // 生成订单后立即更新汇总文本
+        }
+
+        // ★ 实时更新结构化订单汇总文本
+        function updateOrderSummary() {
+            const name = (document.getElementById('custName').value || '').trim();
+            const phone = (document.getElementById('custPhone').value || '').trim();
+            const wechat = (document.getElementById('custWechat').value || '').trim();
+            const machineId = (document.getElementById('custMachineId').value || '').trim();
+            const note = (document.getElementById('custNote').value || '').trim();
+
+            // 校验必填项，控制"下一步"按钮状态
+            const step2Next = document.getElementById('step2Next');
+            const requiredOk = name && phone && machineId;
+            step2Next.disabled = !requiredOk;
+            if (!requiredOk) {
+                step2Next.title = '请先填写必填项：姓名/诊所名称、联系电话、设备识别码';
+            } else {
+                step2Next.title = '';
+            }
+
+            // 拼接结构化订单文本（客服可直接复制到管理后台）
+            const lines = [];
+            lines.push('═══ 惠康中医激活码订单 ═══');
+            lines.push('订单号：' + (orderInfo.number || '（未生成）'));
+            lines.push('激活版本：' + (orderInfo.version || '-'));
+            lines.push('订单金额：' + (orderInfo.price || '-'));
+            lines.push('创建时间：' + (orderInfo.time || '-'));
+            lines.push('─────────────────────');
+            lines.push('姓名/诊所：' + (name || '【未填写】'));
+            lines.push('联系电话：' + (phone || '【未填写】'));
+            lines.push('微信号：' + (wechat || '无'));
+            lines.push('设备识别码：' + (machineId || '【未填写】'));
+            if (note) lines.push('备注：' + note);
+            lines.push('─────────────────────');
+            lines.push('付款截图：付款后在此发送');
+            lines.push('═══════════════════════');
+
+            document.getElementById('orderSummaryText').value = lines.join('\n');
+        }
+
+        // ★ 一键复制订单汇总文本
+        function copyOrderSummary() {
+            const text = document.getElementById('orderSummaryText').value;
+            if (!text || text.indexOf('（未生成）') > 0) {
+                showToast('订单信息未完整，请先填写必填项');
+                return;
+            }
+            const fallback = () => {
+                const ta = document.createElement('textarea');
+                ta.value = text;
+                document.body.appendChild(ta);
+                ta.select();
+                try { document.execCommand('copy'); } catch(e) {}
+                document.body.removeChild(ta);
+                showToast('订单信息已复制，请粘贴发送给客服');
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => showToast('订单信息已复制，请粘贴发送给客服')).catch(fallback);
+            } else { fallback(); }
         }
 
         function copyOrder() {
@@ -2496,6 +2626,12 @@
             document.querySelectorAll('.version-pick-item').forEach(i => i.classList.remove('selected'));
             document.getElementById('step1Next').disabled = true;
             orderInfo = { number: '', version: '', price: '', time: '' };
+            // ★ 清空客户信息表单
+            ['custName','custPhone','custWechat','custMachineId','custNote'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+            updateOrderSummary();
             goStep(1);
             showToast('已重置，请重新选择版本');
         }

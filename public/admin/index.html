@@ -321,9 +321,22 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <label>最大设备数</label>
                     <input type="number" id="genMaxDevices" value="1" min="1" max="10" title="1=单机激活码；5=可激活5台设备（专业版推荐）">
                 </div>
+                <!-- ★ 售后管理字段：订单号/电话/微信，生成时拼接到备注字段，方便售后查询 -->
+                <div class="form-group">
+                    <label>订单号（售后关联）</label>
+                    <input type="text" id="genOrderNo" placeholder="如：BNZC-GR-20260730-AB12CD（可留空）">
+                </div>
+                <div class="form-group">
+                    <label>联系电话（售后）</label>
+                    <input type="tel" id="genPhone" placeholder="如：13800138000（可留空）">
+                </div>
+                <div class="form-group">
+                    <label>微信号（售后）</label>
+                    <input type="text" id="genWechat" placeholder="如：customer_wx（可留空）">
+                </div>
                 <div class="form-group">
                     <label>备注</label>
-                    <input type="text" id="genNote" placeholder="如：客户A">
+                    <input type="text" id="genNote" placeholder="如：客户A（订单号/电话/微信会自动拼接到备注前）">
                 </div>
             </div>
             <!-- ★ datalist：诊所名/医师用户名自动补全（登录后由 loadClinicNames 填充） -->
@@ -352,7 +365,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <option value="personal">个人版</option>
                 <option value="pro">专业版</option>
             </select>
-            <input type="text" id="filterQ" placeholder="搜索激活码/用户名/备注" onkeyup="if(event.key==='Enter') loadList()">
+            <input type="text" id="filterQ" placeholder="搜索激活码/用户名/备注/订单号/电话/微信" onkeyup="if(event.key==='Enter') loadList()">
             <button class="btn btn-sm" onclick="loadList()">搜索</button>
             <button class="btn btn-sm" onclick="clearFilter()">重置</button>
             <button class="btn btn-sm btn-warning" onclick="openBatchExtendModal()">批量延期</button>
@@ -622,9 +635,22 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <label>最大设备数</label>
                 <input type="number" id="batchGenMaxDevices" value="1" min="1" max="10">
             </div>
+            <!-- ★ 售后管理字段（批量） -->
+            <div class="form-group">
+                <label>订单号（售后关联）</label>
+                <input type="text" id="batchGenOrderNo" placeholder="如：BNZC-GR-20260730-AB12CD（可留空）">
+            </div>
+            <div class="form-group">
+                <label>联系电话（售后）</label>
+                <input type="tel" id="batchGenPhone" placeholder="如：13800138000（可留空）">
+            </div>
+            <div class="form-group">
+                <label>微信号（售后）</label>
+                <input type="text" id="batchGenWechat" placeholder="如：customer_wx（可留空）">
+            </div>
             <div class="form-group">
                 <label>备注</label>
-                <input type="text" id="batchGenNote" placeholder="如：批量客户">
+                <input type="text" id="batchGenNote" placeholder="如：批量客户（订单号/电话/微信会自动拼接）">
             </div>
         </div>
         <div style="margin-top:12px;text-align:right;">
@@ -919,11 +945,24 @@ async function generateCodes() {
     const note = document.getElementById('genNote').value.trim();
     const clinicName = document.getElementById('genClinicName').value.trim();
     const maxDevices = document.getElementById('genMaxDevices').value;
+    // ★ 售后管理字段
+    const orderNo = document.getElementById('genOrderNo').value.trim();
+    const phone = document.getElementById('genPhone').value.trim();
+    const wechat = document.getElementById('genWechat').value.trim();
 
     if (!user) { showAlert('mainAlert', '请输入用户名', 'error'); return; }
     if (!days && !expiresAt) { showAlert('mainAlert', '请填写有效天数或到期日期', 'error'); return; }
 
-    const body = { user, type, count: parseInt(count, 10), note };
+    // ★ 拼接售后字段到 note：[订单号:XXX][电话:XXX][微信:XXX] 原备注
+    // 这样售后可通过列表搜索（激活码/用户名/备注）快速定位客户
+    let fullNote = note;
+    const afterSalesPrefix = [];
+    if (orderNo) afterSalesPrefix.push('[订单号:' + orderNo + ']');
+    if (phone) afterSalesPrefix.push('[电话:' + phone + ']');
+    if (wechat) afterSalesPrefix.push('[微信:' + wechat + ']');
+    if (afterSalesPrefix.length > 0) fullNote = afterSalesPrefix.join('') + (note ? ' ' + note : '');
+
+    const body = { user, type, count: parseInt(count, 10), note: fullNote };
     if (days) body.days = parseInt(days, 10);
     if (expiresAt) body.expiresAt = expiresAt;
     if (clinicName) body.clinicName = clinicName;
@@ -939,11 +978,14 @@ async function generateCodes() {
         if (data.success) {
             // ★ 优化：使用结果弹窗展示生成结果（含 CSV 导出）
             showResultModal(data.codes || [], 'generate');
-            // ★ 优化：保留 type/days/clinicName/maxDevices，仅清空 user/note/count，便于连续生成
+            // ★ 优化：保留 type/days/clinicName/maxDevices，仅清空 user/note/count/售后字段，便于连续生成
             document.getElementById('genUser').value = '';
             document.getElementById('genNote').value = '';
             document.getElementById('genCount').value = '1';
-            // ★ 快捷模板优化：记忆当前配置（user/note 已清空，不记忆这两个）
+            document.getElementById('genOrderNo').value = '';
+            document.getElementById('genPhone').value = '';
+            document.getElementById('genWechat').value = '';
+            // ★ 快捷模板优化：记忆当前配置（user/note/售后字段已清空，不记忆这些）
             rememberGenConfig();
             loadList();
         } else {
@@ -1039,6 +1081,10 @@ function syncBatchFromMain() {
     document.getElementById('batchGenClinicName').value = document.getElementById('genClinicName').value;
     document.getElementById('batchGenMaxDevices').value = document.getElementById('genMaxDevices').value || 1;
     document.getElementById('batchGenNote').value = document.getElementById('genNote').value;
+    // ★ 同步售后字段
+    document.getElementById('batchGenOrderNo').value = document.getElementById('genOrderNo').value;
+    document.getElementById('batchGenPhone').value = document.getElementById('genPhone').value;
+    document.getElementById('batchGenWechat').value = document.getElementById('genWechat').value;
     showAlert('batchGenAlert', '已从主表单同步配置', 'info');
 }
 
@@ -1051,6 +1097,10 @@ async function batchGenerate() {
     const clinicName = document.getElementById('batchGenClinicName').value.trim();
     const maxDevices = document.getElementById('batchGenMaxDevices').value;
     const note = document.getElementById('batchGenNote').value.trim();
+    // ★ 售后字段（批量）
+    const orderNo = document.getElementById('batchGenOrderNo').value.trim();
+    const phone = document.getElementById('batchGenPhone').value.trim();
+    const wechat = document.getElementById('batchGenWechat').value.trim();
 
     if (!usersText) { showAlert('batchGenAlert', '请输入用户名列表', 'error'); return; }
     if (!days && !expiresAt) { showAlert('batchGenAlert', '请填写有效天数或到期日期', 'error'); return; }
@@ -1059,12 +1109,20 @@ async function batchGenerate() {
     if (users.length === 0) { showAlert('batchGenAlert', '未识别到有效用户名', 'error'); return; }
     if (users.length > 100) { showAlert('batchGenAlert', '最多 100 个用户', 'error'); return; }
 
+    // ★ 拼接售后字段到 note
+    let fullNote = note;
+    const afterSalesPrefix = [];
+    if (orderNo) afterSalesPrefix.push('[订单号:' + orderNo + ']');
+    if (phone) afterSalesPrefix.push('[电话:' + phone + ']');
+    if (wechat) afterSalesPrefix.push('[微信:' + wechat + ']');
+    if (afterSalesPrefix.length > 0) fullNote = afterSalesPrefix.join('') + (note ? ' ' + note : '');
+
     const body = { users, type };
     if (days) body.days = parseInt(days, 10);
     if (expiresAt) body.expiresAt = expiresAt;
     if (clinicName) body.clinicName = clinicName;
     if (maxDevices) body.maxDevices = parseInt(maxDevices, 10);
-    if (note) body.note = note;
+    if (fullNote) body.note = fullNote;
 
     try {
         const res = await fetch(API_BASE + '/license/batch', {
@@ -1224,6 +1282,9 @@ function clearGenForm() {
     document.getElementById('genClinicName').value = '';
     document.getElementById('genMaxDevices').value = '1';
     document.getElementById('genNote').value = '';
+    document.getElementById('genOrderNo').value = '';
+    document.getElementById('genPhone').value = '';
+    document.getElementById('genWechat').value = '';
     // 取消模板高亮
     document.querySelectorAll('.tpl-btn').forEach(b => b.classList.remove('active'));
 }
