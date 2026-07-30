@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
@@ -103,6 +103,10 @@ if exist "%OUTPUT_DIR%" (
 )
 
 echo [OK] Old artifacts cleaned
+echo.
+
+echo [BUMP] Auto bumping patch version (integrity baseline rebuild)...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
 echo.
 
 echo [CHECK] ============================================
