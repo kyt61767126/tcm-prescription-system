@@ -1847,10 +1847,11 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             String currentHash = sha256Hex(combined.toString().getBytes(StandardCharsets.UTF_8));
 
             SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
-            String baseline = prefs.getString(PREF_KEY_JS_INTEGRITY_HASH, "");
+            // ★ 版本化基线：版本号变化时自动重建基线，避免升级后完整性校验误报
+            String baseline = prefs.getString(PREF_KEY_JS_INTEGRITY_HASH + "_v" + versionName, "");
 
             if (baseline.isEmpty()) {
-                prefs.edit().putString(PREF_KEY_JS_INTEGRITY_HASH, currentHash).apply();
+                prefs.edit().putString(PREF_KEY_JS_INTEGRITY_HASH + "_v" + versionName, currentHash).apply();
                 Log.i(TAG, "[Integrity] 首次运行，已建立完整性基线");
                 return true;
             }

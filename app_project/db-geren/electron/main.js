@@ -556,7 +556,9 @@ async function verifyCodeIntegrity() {
         path.join(__dirname, 'auth-core.js'),
         path.join(__dirname, 'license-manager.js')
     ];
-    const baselinePath = path.join(app.getPath('userData'), 'integrity.dat');
+    // ★ 版本化基线：版本号变化时自动重建基线，避免升级后完整性校验误报
+    const appVersion = app.getVersion();
+    const baselinePath = path.join(app.getPath('userData'), 'integrity-v' + appVersion + '.dat');
 
     // 计算所有关键文件的合并哈希
     const hashes = [];
