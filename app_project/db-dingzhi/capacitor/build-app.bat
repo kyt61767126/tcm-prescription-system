@@ -43,14 +43,14 @@ if exist "..\config.json" (
     copy /Y "..\config.json" "%ANDROID_PUBLIC%\config.json" >nul
     if errorlevel 1 ( echo [WARN] Failed to sync config.json ) else ( echo       config.json synced )
 ) else ( echo [SKIP] config.json not found )
-echo   [2/5] Syncing index.html...
-copy /Y "..\index.html" "%ANDROID_PUBLIC%\index.html" >nul
-if errorlevel 1 (
-    echo [ERROR] Failed to sync index.html
+echo   [2/5] Verifying APP index.html (independent from desktop)...
+if not exist "%ANDROID_PUBLIC%\index.html" (
+    echo [ERROR] APP index.html not found: %ANDROID_PUBLIC%\index.html
+    echo   APP version maintains its own index.html (5-button top menu)
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo       index.html synced
+echo       APP index.html OK (5-button top menu preserved)
 echo   [3/5] Syncing vendor/xlsx.full.min.js...
 if exist "..\vendor\xlsx.full.min.js" (
     if not exist "%ANDROID_PUBLIC%\vendor" mkdir "%ANDROID_PUBLIC%\vendor" >nul
@@ -72,14 +72,13 @@ if exist "..\video-recorder-inject.js" (
 ) else ( echo [SKIP] video-recorder-inject.js not found )
 echo.
 
-echo [2.1/10] Verifying index.html sync (hash check)...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$src='..\index.html'; $dst='%ANDROID_PUBLIC%\index.html'; $h1=(Get-FileHash $src -Algorithm SHA256).Hash; $h2=(Get-FileHash $dst -Algorithm SHA256).Hash; if($h1 -ne $h2){ Write-Host '[ERROR] index.html hash mismatch!'; Write-Host ('  src: '+$h1); Write-Host ('  dst: '+$h2); Write-Host '  Root index.html was not synced correctly to android dir'; exit 1 } else { Write-Host '[OK] index.html hash verified (SHA256 matches)' }"
+echo [2.1/10] Verifying APP index.html integrity (5-button top menu)...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='%ANDROID_PUBLIC%\index.html'; $c=[System.IO.File]::ReadAllText($f,[System.Text.Encoding]::UTF8); if($c.Length -lt 50000){ Write-Host '[ERROR] APP index.html too small'; exit 1 }; if(-not ($c -match 'showModal\(.analyticsModal.\)')){ Write-Host '[ERROR] APP index.html missing analyticsModal - not 5-button version'; exit 1 }; Write-Host '[OK] APP index.html OK'"
 if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
 echo.
-
 echo [2.5/10] Minifying JavaScript files (security hardening)...
 node "%~dp0..\..\..\shared\minify-js.js" "%ANDROID_PUBLIC%"
 if errorlevel 1 (
