@@ -140,19 +140,27 @@ function Invoke-Publish {
     Write-Host "  提示: 若卡住无输出，可能是在上传大文件，请勿关闭窗口..." -ForegroundColor Yellow
     Write-Host ""
 
-    # 同步调用 node，stdout/stderr 直通终端（不经过 PowerShell 管道缓冲）
+    if ($Target -eq "all") {
+        return Invoke-NodeScript -ScriptPath $publishScript
+    } else {
+        return Invoke-NodeScript -ScriptPath $publishScript -Arguments "--target=$Target"
+    }
+}
+
+# ============ 调用 node 脚本（用 Start-Process 继承控制台，避免 stdout 缓冲）============
+function Invoke-NodeScript {
+    param(
+        [Parameter(Mandatory=$true)][string]$ScriptPath,
+        [string[]]$Arguments = @()
+    )
     Push-Location $script:RootDir
     try {
-        if ($Target -eq "all") {
-            & node $publishScript
-        } else {
-            & node $publishScript "--target=$Target"
-        }
-        $rc = $LASTEXITCODE
+        $argList = @($ScriptPath) + $Arguments
+        $proc = Start-Process -FilePath "node" -ArgumentList $argList -Wait -NoNewWindow -PassThru
+        return $proc.ExitCode
     } finally {
         Pop-Location
     }
-    return $rc
 }
 
 # ============ 验证 ============
@@ -166,14 +174,7 @@ function Invoke-Verify {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  验证发布结果..." -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
-    Push-Location $script:RootDir
-    try {
-        & node $verifyScript
-        $rc = $LASTEXITCODE
-    } finally {
-        Pop-Location
-    }
-    return $rc
+    return Invoke-NodeScript -ScriptPath $verifyScript
 }
 
 # ============ 显示版本选择菜单 ============
@@ -382,7 +383,7 @@ while ($true) {
                 Write-Host "  智能发布 (auto-publish.js)" -ForegroundColor Cyan
                 Write-Host "  仅发布有变化的端" -ForegroundColor Cyan
                 Write-Host "========================================" -ForegroundColor Cyan
-                & node $autoPublish
+                Invoke-NodeScript -ScriptPath $autoPublish | Out-Null
             } else {
                 Invoke-Publish -Target "all" | Out-Null
             }
