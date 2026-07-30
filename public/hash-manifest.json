@@ -1,11 +1,11 @@
 {
     "dingzhi": {
         "apk": {
-            "version": "",
-            "sha256": "65156a410991990ba999d6ca8cf486d76050d1262f4bfbec5d18a25c70003124",
+            "version": "1.0.${BUILD_TIME}",
+            "sha256": "57c6732a621cf436d63d3790796cce487a889a998fa4f7083f7284b28e9091f2",
             "url": "/downloads/惠康中医-定制.apk",
-            "size": 2165332,
-            "updateTime": "2026-07-28T23:11:52.284Z",
+            "size": 2168813,
+            "updateTime": "2026-07-30T00:46:34.855Z",
             "fileName": "惠康中医-定制.apk"
         },
         "portable": {
@@ -31,32 +31,35 @@
     },
     "geren": {
         "apk": {
-            "version": "",
-            "sha256": "cc3154651f3f4065311582a2cadd56dd09190705f80e9f73a1612789e2c48c87",
+            "version": "1.0.20260730-1046",
+            "sha256": "a7ab6165d0fc8327aad4624ec440af94eebf739e32076d97e5498bb922dddc2a",
             "url": "/downloads/惠康中医-个人.apk",
-            "size": 2165031,
-            "updateTime": "2026-07-28T23:01:09.407Z",
-            "fileName": "惠康中医-个人.apk"
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.07.30/huikang-geren.apk",
+            "size": 2167627,
+            "updateTime": "2026-07-30T02:51:53.621Z",
+            "fileName": "惠康中医-个人.apk",
+            "releaseFileName": "huikang-geren.apk",
+            "releaseTag": "v2026.07.30"
         },
         "portable": {
-            "version": "1.0.20260726-2313",
-            "sha256": "ace290c80c7670bca94e88c264c59361863bd924a2f1032d677fcd64bd3cd321",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.07.26-2313/huikang-geren-1.0.0.exe",
-            "size": 78403384,
-            "updateTime": "2026-07-26T15:15:05.746Z",
+            "version": "1.0.20260730-1046",
+            "sha256": "e01f60536d8be5279998f1e0575786d0196d779de49cdd9e27e141a705911f95",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.07.30/huikang-geren-1.0.0.exe",
+            "size": 78429535,
+            "updateTime": "2026-07-30T02:51:53.621Z",
             "fileName": "惠康中医-个人 1.0.0.exe",
             "releaseFileName": "huikang-geren-1.0.0.exe",
-            "releaseTag": "v2026.07.26-2313"
+            "releaseTag": "v2026.07.30"
         },
         "exe": {
-            "version": "1.0.20260726-2313",
-            "sha256": "42d597bae5fbc94b0a244386302ae9fd87cbe93a8622ce70977af37ad3cdf4bd",
-            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.07.26-2313/huikang-geren-setup-1.0.0.exe",
-            "size": 78618171,
-            "updateTime": "2026-07-26T15:15:05.746Z",
+            "version": "1.0.20260730-1046",
+            "sha256": "32fc5a4ae4a826c478a2c72a3245cc065cda9110b9bbf01f9dab690a6b5390f6",
+            "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.07.30/huikang-geren-setup-1.0.0.exe",
+            "size": 78644366,
+            "updateTime": "2026-07-30T02:51:53.621Z",
             "fileName": "惠康中医-个人 Setup 1.0.0.exe",
             "releaseFileName": "huikang-geren-setup-1.0.0.exe",
-            "releaseTag": "v2026.07.26-2313"
+            "releaseTag": "v2026.07.30"
         }
     },
     "cloud": {
