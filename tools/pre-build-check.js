@@ -144,7 +144,8 @@ function main() {
         console.log('====================================');
         console.log('  IPC 一致性检查（云端桌面版）');
         console.log('====================================');
-        execSync('node tools/check-ipc-consistency.js', { stdio: 'inherit', cwd: process.cwd() });
+        const checkIpcScript = path.join(__dirname, 'check-ipc-consistency.js');
+        execSync('node "' + checkIpcScript + '"' , { stdio: 'inherit' });
     } catch (e) {
         // check-ipc-consistency.js 退出码 1 表示发现不匹配
         console.log('');
