@@ -43,14 +43,15 @@ if exist "..\config.json" (
     copy /Y "..\config.json" "%ANDROID_PUBLIC%\config.json" >nul
     if errorlevel 1 ( echo [WARN] Failed to sync config.json ) else ( echo       config.json synced )
 ) else ( echo [SKIP] config.json not found )
-echo   [2/5] Verifying APP index.html (independent from desktop)...
-if not exist "%ANDROID_PUBLIC%\index.html" (
-    echo [ERROR] APP index.html not found: %ANDROID_PUBLIC%\index.html
-    echo   APP version maintains its own index.html ^(5-button top menu^)
+echo   [2/5] Syncing APP index.html from android dir ^(5-button top menu^)...
+copy /Y "..\android\app\src\main\assets\public\index.html" "%ANDROID_PUBLIC%\index.html" >nul
+if errorlevel 1 (
+    echo [ERROR] Failed to sync APP index.html
+    echo   Source: ..\android\app\src\main\assets\public\index.html
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo       APP index.html OK ^(5-button top menu preserved^)
+echo       APP index.html synced ^(5-button top menu with 统计^)
 echo   [3/5] Syncing vendor/xlsx.full.min.js...
 if exist "..\vendor\xlsx.full.min.js" (
     if not exist "%ANDROID_PUBLIC%\vendor" mkdir "%ANDROID_PUBLIC%\vendor" >nul
