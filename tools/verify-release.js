@@ -44,7 +44,7 @@ const { spawnSync } = require('child_process');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 const CLOUDFLARE_BASE = 'https://tcm-prescription-system.pages.dev';
-const TIMEOUT_MS = 5000;
+const TIMEOUT_MS = 15000;
 const MAX_REDIRECTS = 5;
 
 // ANSI 颜色码
