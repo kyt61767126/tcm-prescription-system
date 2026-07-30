@@ -93,7 +93,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 /* 提示框 */
 .alert {
     padding: 10px 16px; border-radius: 4px; margin-bottom: 16px;
-    display: none;
+    display: none; white-space: pre-wrap; word-break: break-word;
 }
 .alert.show { display: block; }
 .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
@@ -139,13 +139,40 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 .clinic-name { font-size: 11px; color: #8e44ad; margin-top: 2px; }
 
 /* ★ 激活码生成优化：快捷模板按钮 */
-.tpl-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.tpl-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+.tpl-label { color: #909399; font-size: 12px; margin-right: 4px; }
 .tpl-btn {
     padding: 6px 14px; background: white; border: 1px dashed #3498db; color: #3498db;
     border-radius: 16px; cursor: pointer; font-size: 12px; transition: all 0.2s;
 }
 .tpl-btn:hover { background: #3498db; color: white; border-style: solid; }
 .tpl-btn.active { background: #3498db; color: white; border-style: solid; }
+.tpl-btn.tpl-save { border-color: #27ae60; color: #27ae60; }
+.tpl-btn.tpl-save:hover { background: #27ae60; color: white; }
+.tpl-btn.tpl-manage { border-color: #f39c12; color: #f39c12; }
+.tpl-btn.tpl-manage:hover { background: #f39c12; color: white; }
+.tpl-btn.tpl-custom { border-color: #8e44ad; color: #8e44ad; }
+.tpl-btn.tpl-custom:hover { background: #8e44ad; color: white; }
+.tpl-btn.tpl-custom .tpl-del { margin-left: 6px; color: #e74c3c; font-weight: bold; }
+.tpl-divider { width: 1px; height: 20px; background: #dcdfe6; margin: 0 4px; }
+/* 自定义模板管理面板 */
+.tpl-manage-panel {
+    display: none; margin-top: 8px; padding: 10px; background: #f9fafc;
+    border: 1px solid #ebeef5; border-radius: 4px;
+}
+.tpl-manage-panel.show { display: block; }
+.tpl-manage-panel .empty-tip { color: #909399; font-size: 12px; }
+.tpl-manage-list { display: flex; flex-direction: column; gap: 6px; }
+.tpl-manage-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 10px; background: white; border-radius: 4px; border-left: 3px solid #8e44ad;
+    font-size: 12px;
+}
+.tpl-manage-item .tmi-info { color: #606266; }
+.tpl-manage-item .tmi-actions { display: flex; gap: 6px; }
+.tpl-manage-item .tmi-btn { padding: 2px 8px; font-size: 11px; cursor: pointer; border-radius: 3px; border: 1px solid #dcdfe6; background: white; }
+.tpl-manage-item .tmi-btn.apply-btn { color: #3498db; border-color: #3498db; }
+.tpl-manage-item .tmi-btn.del-btn { color: #e74c3c; border-color: #e74c3c; }
 
 /* ★ 生成结果弹窗：激活码列表 */
 .result-list {
@@ -239,14 +266,27 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <!-- 生成激活码 -->
         <h2>生成激活码</h2>
         <div class="gen-box">
-            <!-- ★ 快捷模板：一键填充常用配置 -->
+            <!-- ★ 快捷模板：预设 + 自定义 -->
             <div class="tpl-bar">
-                <span style="color:#909399;font-size:12px;line-height:32px;margin-right:4px;">快捷模板：</span>
-                <button class="tpl-btn" onclick="applyTemplate('trial')">试用版 · 7天</button>
-                <button class="tpl-btn" onclick="applyTemplate('personal1y')">个人版 · 1年</button>
-                <button class="tpl-btn" onclick="applyTemplate('personal3y')">个人版 · 3年</button>
-                <button class="tpl-btn" onclick="applyTemplate('pro1y')">专业版 · 1年 · 5设备</button>
-                <button class="tpl-btn" onclick="applyTemplate('pro3y')">专业版 · 3年 · 10设备</button>
+                <span class="tpl-label">快捷模板：</span>
+                <button class="tpl-btn" data-tpl="trial7" onclick="applyTemplate('trial7')">试用 · 7天</button>
+                <button class="tpl-btn" data-tpl="trial30" onclick="applyTemplate('trial30')">试用 · 30天</button>
+                <button class="tpl-btn" data-tpl="personal1y" onclick="applyTemplate('personal1y')">个人 · 1年</button>
+                <button class="tpl-btn" data-tpl="personal3y" onclick="applyTemplate('personal3y')">个人 · 3年</button>
+                <button class="tpl-btn" data-tpl="personalForever" onclick="applyTemplate('personalForever')">个人 · 永久</button>
+                <button class="tpl-btn" data-tpl="pro1y" onclick="applyTemplate('pro1y')">专业 · 1年 · 5设备</button>
+                <button class="tpl-btn" data-tpl="pro3y" onclick="applyTemplate('pro3y')">专业 · 3年 · 10设备</button>
+                <button class="tpl-btn" data-tpl="proForever" onclick="applyTemplate('proForever')">专业 · 永久 · 10设备</button>
+                <span class="tpl-divider"></span>
+                <span id="customTplBar"></span>
+                <button class="tpl-btn tpl-save" onclick="saveCurrentAsTemplate()">💾 存为模板</button>
+                <button class="tpl-btn tpl-manage" onclick="toggleCustomTplManage()">⚙️ 管理</button>
+            </div>
+            <!-- 自定义模板管理面板 -->
+            <div id="tplManagePanel" class="tpl-manage-panel">
+                <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#606266;">📦 自定义模板管理</div>
+                <div id="tplManageList" class="tpl-manage-list"></div>
+                <div style="margin-top:8px;font-size:11px;color:#909399;">提示：自定义模板保存在本浏览器（localStorage），换浏览器需重新保存。</div>
             </div>
             <div class="gen-row">
                 <div class="form-group">
@@ -546,6 +586,17 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <textarea id="batchGenUsers" class="batch-textarea" placeholder="张三&#10;李四&#10;王五&#10;本能堂中医诊所_赵医师"></textarea>
             <div class="batch-tip">提示：用户名长度 1-50，支持中文。同名用户也可生成多个不同激活码。</div>
         </div>
+        <!-- ★ 快捷模板栏（批量生成） -->
+        <div class="tpl-bar" style="margin-bottom:8px;">
+            <span class="tpl-label">快捷模板：</span>
+            <button class="tpl-btn" data-btpl="trial7" onclick="applyBatchTemplate('trial7')">试用 · 7天</button>
+            <button class="tpl-btn" data-btpl="personal1y" onclick="applyBatchTemplate('personal1y')">个人 · 1年</button>
+            <button class="tpl-btn" data-btpl="personal3y" onclick="applyBatchTemplate('personal3y')">个人 · 3年</button>
+            <button class="tpl-btn" data-btpl="personalForever" onclick="applyBatchTemplate('personalForever')">个人 · 永久</button>
+            <button class="tpl-btn" data-btpl="pro1y" onclick="applyBatchTemplate('pro1y')">专业 · 1年 · 5设备</button>
+            <button class="tpl-btn" data-btpl="pro3y" onclick="applyBatchTemplate('pro3y')">专业 · 3年 · 10设备</button>
+            <button class="tpl-btn tpl-save" onclick="autoMatchBatchVersion()">🤖 智能匹配</button>
+        </div>
         <div class="gen-row">
             <div class="form-group">
                 <label>版本类型 *</label>
@@ -669,6 +720,9 @@ function showMain() {
     loadList();
     // ★ 激活码生成优化：登录后异步加载诊所名/用户名补全列表
     loadClinicNames();
+    // ★ 快捷模板优化：恢复上次配置 + 渲染自定义模板按钮
+    restoreLastGenConfig();
+    renderCustomTplBar();
 }
 
 // ★ 加载诊所列表到 datalist（用于诊所名/用户名自动补全）
@@ -696,35 +750,164 @@ async function loadClinicNames() {
     }
 }
 
-// ★ 快捷模板：一键填充常用配置
-function applyTemplate(tpl) {
-    // 高亮当前选中模板按钮
-    document.querySelectorAll('.tpl-btn').forEach(b => b.classList.remove('active'));
-    const btnMap = { trial: 0, personal1y: 1, personal3y: 2, pro1y: 3, pro3y: 4 };
-    const btns = document.querySelectorAll('.tpl-btn');
-    if (btns[btnMap[tpl]]) btns[btnMap[tpl]].classList.add('active');
+// ★ 快捷模板系统：预设 + 自定义 + 记忆
+// 预设模板（系统内置，永久版用 36500 天 = 100 年模拟）
+const PRESET_TEMPLATES = {
+    trial7:           { name: '试用 · 7天',           type: 'trial',    days: 7,     maxDevices: 1  },
+    trial30:          { name: '试用 · 30天',          type: 'trial',    days: 30,    maxDevices: 1  },
+    personal1y:       { name: '个人 · 1年',           type: 'personal', days: 365,   maxDevices: 1  },
+    personal3y:       { name: '个人 · 3年',           type: 'personal', days: 1095,  maxDevices: 1  },
+    personalForever:  { name: '个人 · 永久',          type: 'personal', days: 36500, maxDevices: 1  },
+    pro1y:            { name: '专业 · 1年 · 5设备',   type: 'pro',      days: 365,   maxDevices: 5  },
+    pro3y:            { name: '专业 · 3年 · 10设备',  type: 'pro',      days: 1095,  maxDevices: 10 },
+    proForever:       { name: '专业 · 永久 · 10设备', type: 'pro',      days: 36500, maxDevices: 10 }
+};
 
-    const presets = {
-        trial: { type: 'trial', days: 7, maxDevices: 1 },
-        personal1y: { type: 'personal', days: 365, maxDevices: 1 },
-        personal3y: { type: 'personal', days: 1095, maxDevices: 1 },
-        pro1y: { type: 'pro', days: 365, maxDevices: 5 },
-        pro3y: { type: 'pro', days: 1095, maxDevices: 10 }
-    };
-    const p = presets[tpl];
+// 自定义模板存取（localStorage）
+function getCustomTemplates() {
+    try { return JSON.parse(localStorage.getItem('hk_custom_templates') || '[]'); } catch(e) { return []; }
+}
+function saveCustomTemplatesList(list) {
+    localStorage.setItem('hk_custom_templates', JSON.stringify(list));
+}
+
+// 渲染自定义模板按钮到主表单
+function renderCustomTplBar() {
+    const bar = document.getElementById('customTplBar');
+    if (!bar) return;
+    const list = getCustomTemplates();
+    bar.innerHTML = list.map((t, i) =>
+        `<button class="tpl-btn tpl-custom" onclick="applyCustomTemplate(${i})" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}<span class="tpl-del" onclick="event.stopPropagation();deleteCustomTemplate(${i})">×</span></button>`
+    ).join('');
+}
+
+// 渲染自定义模板管理列表
+function renderCustomTplManageList() {
+    const listEl = document.getElementById('tplManageList');
+    if (!listEl) return;
+    const list = getCustomTemplates();
+    if (list.length === 0) {
+        listEl.innerHTML = '<div class="empty-tip">暂无自定义模板，点击上方"💾 存为模板"按钮保存当前配置</div>';
+        return;
+    }
+    const typeLabel = { trial: '试用版', personal: '个人版', pro: '专业版' };
+    listEl.innerHTML = list.map((t, i) => {
+        const daysLabel = t.days >= 36500 ? '永久' : (t.days >= 365 ? (t.days/365) + '年' : t.days + '天');
+        const info = `${escapeHtml(t.name)} · ${typeLabel[t.type]||t.type} · ${daysLabel} · ${t.maxDevices}设备`;
+        return `<div class="tpl-manage-item">
+            <span class="tmi-info">${info}</span>
+            <span class="tmi-actions">
+                <button class="tmi-btn apply-btn" onclick="applyCustomTemplate(${i})">应用</button>
+                <button class="tmi-btn del-btn" onclick="deleteCustomTemplate(${i})">删除</button>
+            </span>
+        </div>`;
+    }).join('');
+}
+
+// 切换自定义模板管理面板显示
+function toggleCustomTplManage() {
+    const panel = document.getElementById('tplManagePanel');
+    if (!panel) return;
+    panel.classList.toggle('show');
+    if (panel.classList.contains('show')) renderCustomTplManageList();
+}
+
+// 保存当前主表单配置为自定义模板
+function saveCurrentAsTemplate() {
+    const name = prompt('请输入模板名称（如：老客户专属3年5设备）');
+    if (!name || !name.trim()) return;
+    const type = document.getElementById('genType').value;
+    const days = document.getElementById('genDays').value;
+    const maxDevices = document.getElementById('genMaxDevices').value || 1;
+    if (!days) {
+        showAlert('mainAlert', '请先填写有效天数再保存为模板（永久版填 36500）', 'error');
+        return;
+    }
+    const list = getCustomTemplates();
+    list.push({
+        name: name.trim(),
+        type: type,
+        days: parseInt(days, 10),
+        maxDevices: parseInt(maxDevices, 10)
+    });
+    saveCustomTemplatesList(list);
+    renderCustomTplBar();
+    renderCustomTplManageList();
+    showAlert('mainAlert', '已保存自定义模板：' + name.trim() + '（共 ' + list.length + ' 个）', 'success');
+}
+
+// 应用自定义模板
+function applyCustomTemplate(index) {
+    const list = getCustomTemplates();
+    const t = list[index];
+    if (!t) return;
+    // 清除预设模板高亮
+    document.querySelectorAll('.tpl-bar .tpl-btn:not(.tpl-custom)').forEach(b => b.classList.remove('active'));
+    document.getElementById('genType').value = t.type;
+    document.getElementById('genDays').value = t.days;
+    document.getElementById('genExpiresAt').value = '';
+    document.getElementById('genMaxDevices').value = t.maxDevices;
+    rememberGenConfig();
+    showAlert('mainAlert', '已应用自定义模板：' + t.name, 'info');
+}
+
+// 删除自定义模板
+function deleteCustomTemplate(index) {
+    const list = getCustomTemplates();
+    const t = list[index];
+    if (!t) return;
+    if (!confirm('确认删除自定义模板"' + t.name + '"？')) return;
+    list.splice(index, 1);
+    saveCustomTemplatesList(list);
+    renderCustomTplBar();
+    renderCustomTplManageList();
+    showAlert('mainAlert', '已删除模板：' + t.name, 'info');
+}
+
+// ★ 快捷模板：一键填充常用配置（预设模板）
+function applyTemplate(tpl) {
+    const p = PRESET_TEMPLATES[tpl];
     if (!p) return;
+    // 高亮当前选中预设按钮
+    document.querySelectorAll('.tpl-bar .tpl-btn:not(.tpl-custom):not(.tpl-save):not(.tpl-manage)').forEach(b => {
+        b.classList.toggle('active', b.dataset.tpl === tpl);
+    });
     document.getElementById('genType').value = p.type;
     document.getElementById('genDays').value = p.days;
     document.getElementById('genExpiresAt').value = '';  // 模板使用 days，清空 expiresAt
     document.getElementById('genMaxDevices').value = p.maxDevices;
-    showAlert('mainAlert', '已应用模板：' + ({
-        trial: '试用版 7 天',
-        personal1y: '个人版 1 年',
-        personal3y: '个人版 3 年',
-        pro1y: '专业版 1 年 5 设备',
-        pro3y: '专业版 3 年 10 设备'
-    }[tpl]), 'info');
+    rememberGenConfig();
+    showAlert('mainAlert', '已应用模板：' + p.name, 'info');
 }
+
+// 记忆主表单配置到 localStorage（user/note/count 不记忆，便于连续生成）
+function rememberGenConfig() {
+    const cfg = {
+        type: document.getElementById('genType').value,
+        days: document.getElementById('genDays').value,
+        expiresAt: document.getElementById('genExpiresAt').value,
+        clinicName: document.getElementById('genClinicName').value,
+        maxDevices: document.getElementById('genMaxDevices').value,
+        note: document.getElementById('genNote').value
+    };
+    localStorage.setItem('hk_last_gen_config', JSON.stringify(cfg));
+}
+
+// 恢复上次主表单配置（登录后调用）
+function restoreLastGenConfig() {
+    try {
+        const cfg = JSON.parse(localStorage.getItem('hk_last_gen_config') || '{}');
+        if (!cfg || Object.keys(cfg).length === 0) return;
+        if (cfg.type) document.getElementById('genType').value = cfg.type;
+        if (cfg.days) document.getElementById('genDays').value = cfg.days;
+        if (cfg.expiresAt) document.getElementById('genExpiresAt').value = cfg.expiresAt;
+        if (cfg.clinicName) document.getElementById('genClinicName').value = cfg.clinicName;
+        if (cfg.maxDevices) document.getElementById('genMaxDevices').value = cfg.maxDevices;
+        if (cfg.note) document.getElementById('genNote').value = cfg.note;
+    } catch(e) { /* ignore */ }
+}
+
+// HTML 转义（防 XSS）— 复用文件末尾已定义的 escapeHtml(str)，此处不再重复定义
 
 // 生成激活码
 async function generateCodes() {
@@ -760,6 +943,8 @@ async function generateCodes() {
             document.getElementById('genUser').value = '';
             document.getElementById('genNote').value = '';
             document.getElementById('genCount').value = '1';
+            // ★ 快捷模板优化：记忆当前配置（user/note 已清空，不记忆这两个）
+            rememberGenConfig();
             loadList();
         } else {
             showAlert('mainAlert', data.error || '生成失败', 'error');
@@ -780,6 +965,70 @@ function openBatchGenerateModal() {
 function closeBatchGenModal() {
     document.getElementById('batchGenModal').classList.remove('show');
     document.getElementById('batchGenAlert').className = 'alert';
+}
+
+// ★ 批量生成弹窗：应用预设模板
+function applyBatchTemplate(tpl) {
+    const p = PRESET_TEMPLATES[tpl];
+    if (!p) return;
+    // 高亮当前选中按钮
+    document.querySelectorAll('#batchGenModal .tpl-btn[data-btpl]').forEach(b => {
+        b.classList.toggle('active', b.dataset.btpl === tpl);
+    });
+    document.getElementById('batchGenType').value = p.type;
+    document.getElementById('batchGenDays').value = p.days;
+    document.getElementById('batchGenExpiresAt').value = '';
+    document.getElementById('batchGenMaxDevices').value = p.maxDevices;
+    showAlert('batchGenAlert', '已应用模板：' + p.name, 'info');
+}
+
+// ★ 智能匹配：根据用户名关键字自动推荐版本配置
+// 规则：用户名包含"试用/test"→试用7天；包含"专业/pro/工作室/连锁"→专业版1年5设备；其他→个人版1年
+function autoMatchBatchVersion() {
+    const usersText = document.getElementById('batchGenUsers').value.trim();
+    if (!usersText) {
+        showAlert('batchGenAlert', '请先输入用户名列表，再进行智能匹配', 'error');
+        return;
+    }
+    const users = usersText.split('\n').map(s => s.trim()).filter(s => s);
+    if (users.length === 0) {
+        showAlert('batchGenAlert', '未识别到有效用户名', 'error');
+        return;
+    }
+
+    // 关键字匹配统计
+    let trialCount = 0, proCount = 0, personalCount = 0;
+    const trialKeywords = ['试用', 'test', 'trial', '体验'];
+    const proKeywords = ['专业', 'pro', '工作室', '连锁', '分院', '诊所群', ' multi', '多设备'];
+
+    for (const u of users) {
+        const lower = u.toLowerCase();
+        if (trialKeywords.some(k => lower.includes(k.toLowerCase()))) {
+            trialCount++;
+        } else if (proKeywords.some(k => lower.includes(k.toLowerCase()))) {
+            proCount++;
+        } else {
+            personalCount++;
+        }
+    }
+
+    // 按多数派推荐
+    let recommended, reason;
+    if (trialCount >= proCount && trialCount >= personalCount) {
+        recommended = 'trial7';
+        reason = `检测到 ${trialCount} 个试用类用户名（含"试用/test"等关键字），推荐试用版 7 天`;
+    } else if (proCount >= personalCount) {
+        recommended = 'pro1y';
+        reason = `检测到 ${proCount} 个专业类用户名（含"专业/工作室/连锁"等关键字），推荐专业版 1 年 5 设备`;
+    } else {
+        recommended = 'personal1y';
+        reason = `检测到 ${personalCount} 个普通用户名，推荐个人版 1 年（默认）`;
+    }
+
+    applyBatchTemplate(recommended);
+    showAlert('batchGenAlert',
+        `🤖 智能匹配结果：${reason}\n统计：试用${trialCount} / 专业${proCount} / 个人${personalCount}（共 ${users.length} 个用户）`,
+        'success');
 }
 
 // 从主表单同步配置到批量生成弹窗
