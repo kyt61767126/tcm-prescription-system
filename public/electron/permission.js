@@ -128,21 +128,12 @@
             const edition = this._edition;
             console.log('[DBG] Applying runtime permissions for edition:', edition);
 
-            // 诊所名称字段
+            // 诊所名称字段（所有版本管理员均可修改）
             const clinicNameInput = document.getElementById('clinicName');
             const clinicNameHint = document.getElementById('clinicNameHint');
-            if (clinicNameInput) {
-                if (edition === 'personal' || edition === 'clinic_custom') {
-                    clinicNameInput.readOnly = true;
-                    clinicNameInput.style.backgroundColor = '#f0f0f0';
-                    clinicNameInput.style.cursor = 'not-allowed';
-                    clinicNameInput.title = '当前版本不支持修改诊所名称';
-                } else if (edition === 'cloud') {
-                    if (clinicNameHint) {
-                        clinicNameHint.textContent = '（管理员可修改）';
-                        clinicNameHint.style.color = '#4CAF50';
-                    }
-                }
+            if (clinicNameInput && clinicNameHint) {
+                clinicNameHint.textContent = '（管理员可修改）';
+                clinicNameHint.style.color = '#4CAF50';
             }
 
             // 医师姓名字段（个人定制版只读）
