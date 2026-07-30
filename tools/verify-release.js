@@ -35,6 +35,11 @@ const fs = require('fs');
 const path = require('path');
 const http = require('http');
 const https = require('https');
+const { spawnSync } = require('child_process');
+
+// GitHub Release URL 的 SSL 证书验证在某些 Windows 环境下失败
+// （"unable to verify the first certificate"）
+// 对 GitHub URL 改用 curl.exe --ssl-no-revoke 验证，规避 Node.js SSL 问题
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
@@ -70,8 +75,9 @@ function resolveUrl(rawUrl) {
     return null;
 }
 
-// 发送 HEAD 请求并自动跟随重定向，返回 { statusCode, headers, error, finalUrl }
-function headRequest(url, timeoutMs, redirectsLeft) {
+// 发送请求并自动跟随重定向，返回 { statusCode, headers, error, finalUrl }
+// GitHub Release 下载 URL 不支持 HEAD 请求（返回 403），因此对 GitHub URL 用 GET
+function fetchHead(url, timeoutMs, redirectsLeft) {
     return new Promise((resolve) => {
         let encodedUrl;
         try {
@@ -81,12 +87,16 @@ function headRequest(url, timeoutMs, redirectsLeft) {
             return;
         }
         const lib = encodedUrl.startsWith('https://') ? https : http;
+        // GitHub Release URL 用 GET（HEAD 返回 403），其他 URL 用 HEAD
+        const method = isGitHubReleaseUrl(encodedUrl) ? 'GET' : 'HEAD';
         const req = lib.request(encodedUrl, {
-            method: 'HEAD',
+            method: method,
             timeout: timeoutMs,
             headers: { 'User-Agent': 'verify-release/1.0' }
         }, (res) => {
+            // 收到响应头后立即丢弃 body，避免下载整个文件
             res.resume();
+            res.on('end', () => {});
             // 跟随重定向
             if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location && redirectsLeft > 0) {
                 let nextUrl;
@@ -96,7 +106,7 @@ function headRequest(url, timeoutMs, redirectsLeft) {
                     resolve({ statusCode: res.statusCode, headers: res.headers, error: '重定向 URL 解析失败: ' + e.message, finalUrl: encodedUrl });
                     return;
                 }
-                resolve(headRequest(nextUrl, timeoutMs, redirectsLeft - 1));
+                resolve(fetchHead(nextUrl, timeoutMs, redirectsLeft - 1));
                 return;
             }
             resolve({ statusCode: res.statusCode, headers: res.headers, error: null, finalUrl: encodedUrl });
@@ -116,6 +126,46 @@ function isGitHubReleaseUrl(url) {
     return url.indexOf('://github.com/') !== -1 && url.indexOf('/releases/download/') !== -1;
 }
 
+// 用 curl.exe 验证 GitHub Release URL（规避 Node.js SSL 证书问题）
+// 自动跟随重定向，返回 { statusCode, headers, error, finalUrl }
+function verifyWithCurl(url, timeoutMs) {
+    const result = spawnSync('curl.exe', [
+        '-s',                       // 静默模式
+        '--ssl-no-revoke',          // 跳过证书吊销检查
+        '-L',                       // 自动跟随重定向
+        '-o', 'NUL',                // 丢弃 body
+        '-w', '\n%{http_code}\n%{size_download}',  // 输出状态码和下载大小
+        '--max-time', String(Math.ceil(timeoutMs / 1000)),
+        '-I',                       // HEAD 请求（GitHub Release 支持）
+        url
+    ], { encoding: 'utf8', timeout: timeoutMs + 5000 });
+
+    if (result.status !== 0) {
+        return { statusCode: 0, headers: {}, error: 'curl.exe 退出码 ' + result.status + ': ' + (result.stderr || '').substring(0, 200), finalUrl: url };
+    }
+    const output = (result.stdout || '').trim();
+    const lines = output.split('\n');
+    const httpCode = lines.length >= 2 ? lines[lines.length - 2].trim() : '';
+    const sizeDownload = lines.length >= 1 ? lines[lines.length - 1].trim() : '';
+
+    // 从 HEAD 响应头中提取 Content-Length
+    let contentLength = 0;
+    const headerLines = lines.slice(0, -2);
+    for (const line of headerLines) {
+        const m = line.match(/^content-length:\s*(\d+)/i);
+        if (m) {
+            contentLength = parseInt(m[1], 10);
+        }
+    }
+
+    return {
+        statusCode: parseInt(httpCode, 10) || 0,
+        headers: contentLength ? { 'content-length': String(contentLength) } : {},
+        error: null,
+        finalUrl: url
+    };
+}
+
 async function verifyEntry(appKey, type, entry, versionFilter) {
     // 版本过滤：若指定了版本号，仅验证 releaseTag 匹配的条目
     if (versionFilter && entry.releaseTag !== versionFilter) {
@@ -131,7 +181,14 @@ async function verifyEntry(appKey, type, entry, versionFilter) {
         };
     }
 
-    const result = await headRequest(fullUrl, TIMEOUT_MS, MAX_REDIRECTS);
+    // GitHub Release URL 用 curl.exe 验证（规避 Node.js SSL 证书问题）
+    // Cloudflare Pages URL 用 Node.js https 验证
+    let result;
+    if (isGitHubReleaseUrl(fullUrl)) {
+        result = verifyWithCurl(fullUrl, TIMEOUT_MS);
+    } else {
+        result = await fetchHead(fullUrl, TIMEOUT_MS, MAX_REDIRECTS);
+    }
 
     if (result.error) {
         return {
