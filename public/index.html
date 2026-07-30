@@ -6333,6 +6333,11 @@ if (window.Permission) {
             calculateAmount();
             updatePrescriptionPaper();
             DOM_CACHE.medicineSearchDropdown.style.display = 'none';
+            // 选中即更新使用频率，让简码搜索按使用次数优先排序
+            if (name) {
+                medicineFrequency[name] = (medicineFrequency[name] || 0) + 1;
+                saveMedicineFrequency();
+            }
             const nextInput = document.getElementById(`code-input-${index + 1}`);
             if (nextInput) nextInput.focus();
             showToast(name + ' 已添加');
