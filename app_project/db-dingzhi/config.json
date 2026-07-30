@@ -1,6 +1,6 @@
 {
-    "clinicName":  "本能堂中医诊所",
-    "doctorName":  "李大夫",
+    "clinicName":  "bnt中医诊所",
+    "doctorName":  "bnt",
     "edition":  "clinic_custom",
     "productName":  "惠康中医-定制",
     "versionLabel":  "离线APP定制版",
@@ -23,5 +23,7 @@
                       "name":  "李医生",
                       "role":  "user"
                   }
-              ]
+              ],
+    "configIssuedAt":  "2026-07-30T09:13:13.4709659Z",
+    "configSignature":  "5db2e1bbefeb81cdc6689e4af45f652eb9e64720084f77d3282b13503c4f2748"
 }
