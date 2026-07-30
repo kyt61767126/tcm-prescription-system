@@ -1105,7 +1105,7 @@
                     <div id="offline-sync-info" style="font-size:12px;color:#555;"></div>
                 </div>
                 <div style="margin-bottom:12px;">
-                    <label>诊所名称 <span style="font-size:11px;color:#888;">（注册生成，不可修改）</span>:</label>
+                    <label>诊所名称 <span id="clinicNameHint" style="font-size:11px;color:#888;">（注册生成，不可修改）</span>:</label>
                     <input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;">
                 </div>
                 <div style="margin-bottom:12px;">
@@ -7677,6 +7677,22 @@ if (window.Permission) {
             setUserItem('clinicName', newClinicName);
             // 同时保存到全局存储，供未登录时（登录界面）读取
             localStorage.setItem('global_clinicName', newClinicName);
+            // 云端版：同步诊所名称到服务器
+            if (typeof Permission !== 'undefined' && Permission.isCloud() &&
+                typeof currentUser !== 'undefined' && currentUser && currentUser.clinicId &&
+                typeof Permission.isClinicAdmin === 'function' && Permission.isClinicAdmin(currentUser)) {
+                try {
+                    const authToken = buildAuthHeader(currentUser);
+                    await cloudFetch(`${CLOUD_API_BASE}/users?clinic=update`, {
+                        method: 'POST',
+                        headers: { 'Authorization': authToken, 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ clinicId: currentUser.clinicId, name: newClinicName })
+                    });
+                    console.log('[设置] 诊所名称已同步到云端');
+                } catch (e) {
+                    console.error('[设置] 同步诊所名称到云端失败:', e);
+                }
+            }
             setUserItem('clinicDoctor', document.getElementById('defaultDoctor').value);
             setUserItem('defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             setUserItem('defaultDose', document.getElementById('defaultDose').value || '7');

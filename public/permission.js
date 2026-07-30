@@ -130,12 +130,19 @@
 
             // 诊所名称字段
             const clinicNameInput = document.getElementById('clinicName');
+            const clinicNameHint = document.getElementById('clinicNameHint');
             if (clinicNameInput) {
                 if (edition === 'personal' || edition === 'clinic_custom') {
                     clinicNameInput.readOnly = true;
                     clinicNameInput.style.backgroundColor = '#f0f0f0';
                     clinicNameInput.style.cursor = 'not-allowed';
                     clinicNameInput.title = '当前版本不支持修改诊所名称';
+                } else if (edition === 'cloud') {
+                    // 云端版管理员可修改诊所名称
+                    if (clinicNameHint) {
+                        clinicNameHint.textContent = '（管理员可修改）';
+                        clinicNameHint.style.color = '#4CAF50';
+                    }
                 }
             }
 
