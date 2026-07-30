@@ -1410,21 +1410,25 @@
                     '<div style="font-size:12px;color:rgba(255,255,255,0.85);margin-top:4px;">惠康中医诊所管理系统</div>' +
                 '</div>' +
 
-                // 步骤指引
+                // 步骤指引（优化：4步，增加官网购买引导）
                 '<div style="background:#f5f7ff;border-radius:8px;padding:12px;margin-bottom:16px;">' +
                     '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:6px;">📋 激活步骤</div>' +
                     '<div style="font-size:12px;color:#666;line-height:1.8;">' +
-                        '<div>1️⃣ 复制下方"机器ID"</div>' +
-                        '<div>2️⃣ 联系客服，提供机器ID和诊所名</div>' +
-                        '<div>3️⃣ 输入客服提供的激活码</div>' +
+                        '<div>1️⃣ 点击下方"复制全部信息"，复制设备识别码和诊所名</div>' +
+                        '<div>2️⃣ 前往官网"购买激活码"页面生成订单号，或直接联系客服</div>' +
+                        '<div>3️⃣ 将信息发给客服，付款后获取激活码</div>' +
+                        '<div>4️⃣ 在此页面输入激活码，点击"立即激活"</div>' +
                     '</div>' +
                 '</div>' +
 
-                // 机器ID区（含复制按钮）
+                // 设备信息区（含一键复制全部信息）
                 '<div style="margin-bottom:14px;">' +
                     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">' +
-                        '<span style="font-size:12px;color:#888;font-weight:bold;">🔑 本机机器 ID</span>' +
-                        '<button id="copyMachineIdBtn" style="font-size:11px;padding:4px 10px;border:1px solid #667eea;border-radius:4px;background:#667eea;color:white;cursor:pointer;">复制</button>' +
+                        '<span style="font-size:12px;color:#888;font-weight:bold;">🔑 设备识别码</span>' +
+                        '<div style="display:flex;gap:6px;">' +
+                            '<button id="copyMachineIdBtn" style="font-size:11px;padding:4px 10px;border:1px solid #667eea;border-radius:4px;background:white;color:#667eea;cursor:pointer;">复制ID</button>' +
+                            '<button id="copyAllInfoBtn" style="font-size:11px;padding:4px 10px;border:1px solid #667eea;border-radius:4px;background:#667eea;color:white;cursor:pointer;font-weight:bold;">📋 复制全部信息</button>' +
+                        '</div>' +
                     '</div>' +
                     '<div id="machineIdValue" style="font-size:11px;color:#333;background:#f9f9f9;border:1px solid #eee;border-radius:6px;padding:8px 10px;word-break:break-all;font-family:monospace;letter-spacing:1px;">' + (machineId || '未知') + '</div>' +
                 '</div>' +
@@ -1448,17 +1452,19 @@
                     '<span style="font-size:13px;color:#667eea;vertical-align:middle;">正在激活，请稍候...</span>' +
                 '</div>' +
 
-                // 联系客服区
+                // 官网购买引导 + 联系客服区（合并优化）
                 '<div style="background:#fff8e1;border-radius:8px;padding:10px;margin-bottom:16px;">' +
-                    '<div style="font-size:12px;font-weight:bold;color:#e65100;margin-bottom:6px;">📞 获取激活码（联系客服）</div>' +
-                    '<div style="font-size:12px;color:#555;line-height:1.8;">' +
-                        '<div style="display:flex;align-items:center;justify-content:space-between;">' +
-                            '<span>微信：<strong style="color:#333;">huikang-tcm</strong></span>' +
-                            '<button class="copyContactBtn" data-text="huikang-tcm" style="font-size:11px;padding:2px 8px;border:1px solid #e65100;border-radius:4px;background:white;color:#e65100;cursor:pointer;">复制</button>' +
-                        '</div>' +
-                        '<div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px;">' +
-                            '<span>电话：<strong style="color:#333;">400-xxx-xxxx</strong></span>' +
-                            '<button class="copyContactBtn" data-text="400-xxx-xxxx" style="font-size:11px;padding:2px 8px;border:1px solid #e65100;border-radius:4px;background:white;color:#e65100;cursor:pointer;">复制</button>' +
+                    '<div style="font-size:12px;font-weight:bold;color:#e65100;margin-bottom:6px;">🎫 获取激活码</div>' +
+                    // 官网购买按钮
+                    '<a href="https://tcm-prescription-system.pages.dev/download" target="_blank" style="display:block;text-align:center;padding:10px;margin-bottom:8px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:bold;">🌐 前往官网购买激活码</a>' +
+                    '<div style="font-size:11px;color:#999;text-align:center;margin-bottom:8px;">官网"购买激活码"Tab 可一键生成订单信息</div>' +
+                    // 联系客服
+                    '<div style="border-top:1px dashed #ffe082;padding-top:8px;">' +
+                        '<div style="font-size:12px;color:#555;line-height:1.8;">' +
+                            '<div style="display:flex;align-items:center;justify-content:space-between;">' +
+                                '<span>客服微信：<strong style="color:#333;">hktzy1688</strong></span>' +
+                                '<button class="copyContactBtn" data-text="hktzy1688" style="font-size:11px;padding:2px 8px;border:1px solid #e65100;border-radius:4px;background:white;color:#e65100;cursor:pointer;">复制</button>' +
+                            '</div>' +
                         '</div>' +
                     '</div>' +
                 '</div>' +
@@ -1503,7 +1509,19 @@
             copyMachineIdBtn.addEventListener('click', async function() {
                 const ok = await copyTextToClipboard(machineId);
                 copyMachineIdBtn.textContent = ok ? '✅ 已复制' : '❌ 失败';
-                setTimeout(function() { copyMachineIdBtn.textContent = '复制'; }, 1500);
+                setTimeout(function() { copyMachineIdBtn.textContent = '复制ID'; }, 1500);
+            });
+
+            // ★ 一键复制全部信息（设备识别码+诊所名，方便客户发给客服）
+            const copyAllInfoBtn = card.querySelector('#copyAllInfoBtn');
+            copyAllInfoBtn.addEventListener('click', async function() {
+                const allInfo = '惠康中医激活信息\n' +
+                    '设备识别码：' + (machineId || '未知') + '\n' +
+                    '诊所名：' + (clinicName || '未设置') + '\n' +
+                    '请帮我生成激活码，谢谢！';
+                const ok = await copyTextToClipboard(allInfo);
+                copyAllInfoBtn.textContent = ok ? '✅ 已复制全部信息' : '❌ 失败';
+                setTimeout(function() { copyAllInfoBtn.textContent = '📋 复制全部信息'; }, 2000);
             });
 
             // 联系方式复制按钮
