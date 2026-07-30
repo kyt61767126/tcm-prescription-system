@@ -5,5 +5,6 @@
     "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.07.26-2313/huikang-cloud-setup-1.2.0.exe",
     "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.07.26-2313/huikang-cloud-1.2.0.exe",
     "forceUpdate": false,
-    "minVersion": "1.0.0"
+    "minVersion": "1.0.0",
+    "rolloutPercentage": 100
 }

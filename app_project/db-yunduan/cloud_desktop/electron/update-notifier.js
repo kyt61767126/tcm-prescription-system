@@ -32,6 +32,7 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const http = require('http');
+const crypto = require('crypto');
 
 // ★ 云端更新检查 URL（与 public/updates/{channel}/latest.json 对应）
 const UPDATE_BASE_URL = 'https://tcm-prescription-system.pages.dev/updates';
@@ -43,6 +44,32 @@ const CHECK_INTERVAL_MS = 30 * 60 * 1000;  // 30 分钟内不重复检查
 
 // 下载任务状态（单实例，同时间只允许一个下载）
 let downloadTask = null;  // { url, filePath, partPath, totalSize, downloadedSize, channel, version }
+
+// ============================================================================
+//  灰度发布：基于用户路径哈希决定是否推送更新
+// ============================================================================
+function getRolloutBucket() {
+    try {
+        const userId = app.getPath('userData') || 'unknown';
+        const hash = crypto.createHash('md5').update(userId).digest();
+        return hash[0] % 100;  // 返回 0-99
+    } catch (e) {
+        return 0;  // 出错时总是允许更新
+    }
+}
+
+// ============================================================================
+//  SHA256 完整性校验
+// ============================================================================
+function computeSHA256(filePath) {
+    try {
+        const buffer = fs.readFileSync(filePath);
+        return crypto.createHash('sha256').update(buffer).digest('hex');
+    } catch (e) {
+        console.error('[Update] SHA256计算失败:', e.message);
+        return null;
+    }
+}
 
 // ============================================================================
 //  版本比较工具
@@ -106,6 +133,17 @@ async function checkForUpdates(channel) {
         const minVersion = data.minVersion || '0.0.0';
         const forceUpdate = data.forceUpdate === true ||
                            compareVersions(currentVersion, minVersion) < 0;
+
+        // ★ 灰度发布检查：非强制更新时，按百分比逐步推送
+        const rolloutPercentage = data.rolloutPercentage !== undefined ? data.rolloutPercentage : 100;
+        if (!forceUpdate && rolloutPercentage < 100) {
+            const bucket = getRolloutBucket();
+            if (bucket >= rolloutPercentage) {
+                console.log(`[Update] 灰度发布: 用户不在更新范围 (${bucket} >= ${rolloutPercentage}%)`);
+                return null;
+            }
+            console.log(`[Update] 灰度发布: 用户在更新范围 (${bucket} < ${rolloutPercentage}%)`);
+        }
 
         return {
             ...data,
@@ -328,6 +366,23 @@ async function downloadAndUpdate(updateInfo, dialogTitle) {
             fs.unlinkSync(paths.finalPath);
         }
         fs.renameSync(paths.partPath, paths.finalPath);
+
+        // ★ SHA256 完整性校验：防止下载篡改
+        if (updateInfo.sha256) {
+            const actualHash = computeSHA256(paths.finalPath);
+            if (actualHash !== updateInfo.sha256) {
+                console.error(`[Update] SHA256校验失败: 期望=${updateInfo.sha256}, 实际=${actualHash}`);
+                try { fs.unlinkSync(paths.finalPath); } catch(e) {}
+                if (!progressWin.isDestroyed()) progressWin.close();
+                dialog.showErrorBox(
+                    '更新校验失败',
+                    '下载文件完整性校验失败，文件已删除。\n请稍后重试或联系管理员。'
+                );
+                downloadTask = null;
+                return { completed: false, error: 'sha256_mismatch' };
+            }
+            console.log('[Update] SHA256校验通过');
+        }
 
         // 更新 UI
         try {

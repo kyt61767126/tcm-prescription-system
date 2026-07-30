@@ -356,6 +356,75 @@ function generateVersionTag() {
     return `v${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())}`;
 }
 
+// ★ P2优化：从 git log 自动生成变更日志
+function generateReleaseNotes() {
+    try {
+        // 获取最近的 git tag
+        let lastTag = '';
+        try {
+            lastTag = execSync('git describe --tags --abbrev=0 2>nul', {
+                cwd: PROJECT_ROOT, encoding: 'utf8'
+            }).trim();
+        } catch (e) {
+            // 无 tag 时取最近 20 条
+        }
+
+        // 获取从上一个 tag 到 HEAD 的 commit messages
+        const range = lastTag ? `${lastTag}..HEAD` : 'HEAD~20..HEAD';
+        const log = execSync(`git log --oneline --no-merges ${range}`, {
+            cwd: PROJECT_ROOT, encoding: 'utf8'
+        }).trim();
+
+        if (!log) return '';
+
+        const lines = log.split('\n');
+        const categorized = {
+            '新增': [],
+            '修复': [],
+            '安全': [],
+            '优化': [],
+            '其他': []
+        };
+
+        for (const line of lines) {
+            const msg = line.replace(/^[a-f0-9]+\s+/, '');
+            // 跳过 chore/merge commit
+            if (/^chore|^merge|^Merge/i.test(msg)) continue;
+
+            if (/^feat|^add|新增|添加/i.test(msg)) {
+                categorized['新增'].push(msg);
+            } else if (/^fix|修复|修正|bugfix/i.test(msg)) {
+                categorized['修复'].push(msg);
+            } else if (/^security|安全|漏洞|vulnerability/i.test(msg)) {
+                categorized['安全'].push(msg);
+            } else if (/^refactor|^perf|优化|改进|提升/i.test(msg)) {
+                categorized['优化'].push(msg);
+            } else {
+                categorized['其他'].push(msg);
+            }
+        }
+
+        // 构建格式化日志
+        const parts = [];
+        const labels = { '新增': '✨', '修复': '🐛', '安全': '🔒', '优化': '⚡', '其他': '📋' };
+        for (const [cat, items] of Object.entries(categorized)) {
+            if (items.length === 0) continue;
+            parts.push(`${labels[cat]} ${cat}:`);
+            for (const item of items.slice(0, 10)) {
+                parts.push(`  - ${item}`);
+            }
+        }
+
+        const notes = parts.join('\n');
+        console.log('  [changelog] 自动生成变更日志:');
+        console.log(notes.split('\n').map(l => '    ' + l).join('\n'));
+        return notes || '版本更新';
+    } catch (e) {
+        console.warn('  [WARN] 变更日志生成失败: ' + e.message);
+        return '';
+    }
+}
+
 function formatSize(bytes) {
     return (bytes / 1024 / 1024).toFixed(2) + ' MB';
 }
@@ -609,6 +678,8 @@ function main() {
     // 更新 latest.json（桌面版自动更新用）
     const latestUpdateKeys = Object.keys(latestUpdates);
     if (latestUpdateKeys.length > 0) {
+        // ★ P2优化：自动生成变更日志
+        const autoNotes = generateReleaseNotes();
         for (const key of latestUpdateKeys) {
             const info = latestUpdates[key];
             if (!fs.existsSync(info.config.latestJsonPath)) continue;
@@ -628,6 +699,25 @@ function main() {
                     latest.version = vm[1];
                     latest.releaseDate = now.substring(0, 10);
                 }
+                // ★ P0优化：写入SHA256供客户端校验
+                try {
+                    const exePath = uploaded.file.localPath;
+                    if (exePath && fs.existsSync(exePath)) {
+                        const fileBuffer = fs.readFileSync(exePath);
+                        latest.sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+                        console.log('  [SHA256] ' + key + ': ' + latest.sha256.substring(0, 16) + '...');
+                    }
+                } catch (e) {
+                    console.warn('  [WARN] SHA256计算失败: ' + e.message);
+                }
+            }
+            // ★ P2优化：自动生成变更日志
+            if (autoNotes) {
+                latest.releaseNotes = autoNotes;
+            }
+            // 确保灰度发布字段存在（默认100%）
+            if (latest.rolloutPercentage === undefined) {
+                latest.rolloutPercentage = 100;
             }
             fs.writeFileSync(info.config.latestJsonPath, JSON.stringify(latest, null, 4), 'utf8');
             console.log('  [OK] ' + key + '/latest.json: url=' + (latest.url || '-') + ', portableUrl=' + (latest.portableUrl || '-'));

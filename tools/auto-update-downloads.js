@@ -161,8 +161,25 @@ function updateDownloads(target) {
 }
 
 function pushToGitHub() {
+    // ★ P1优化：APK打包后不自动git push，改为手动发布
+    // 防止未经验证的APK直接推给所有用户
+    // 如需自动推送，执行: node auto-update-downloads.js all --push
+    const args = process.argv.slice(2);
+    const autoPush = args.includes('--push');
+
+    if (!autoPush) {
+        console.log('');
+        console.log('[auto-update] ★ APK文件已更新到 public/downloads/，但未自动推送');
+        console.log('[auto-update] 请验证APK功能后，手动执行发布:');
+        console.log('  1. 测试APK安装包是否正常');
+        console.log('  2. release-all.bat （统一发布EXE+APK+manifest）');
+        console.log('  3. 或手动推送: git add public/downloads/ public/hash-manifest.json && git commit && git push');
+        console.log('');
+        return;
+    }
+
     try {
-        console.log('[auto-update] 提交并推送到 GitHub...');
+        console.log('[auto-update] (--push) 提交并推送到 GitHub...');
 
         // 添加文件
         execSync('git add public/downloads/ public/hash-manifest.json', { cwd: PROJECT_ROOT, stdio: 'ignore' });
@@ -175,7 +192,7 @@ function pushToGitHub() {
         }
 
         // 提交
-        execSync('git commit -m "chore(download): 自动更新APK下载文件"', { cwd: PROJECT_ROOT, stdio: 'ignore' });
+        execSync('git commit -m "chore(download): 更新APK下载文件"', { cwd: PROJECT_ROOT, stdio: 'ignore' });
 
         // 推送
         execSync('git push origin main', { cwd: PROJECT_ROOT, stdio: 'ignore' });
@@ -188,7 +205,8 @@ function pushToGitHub() {
 }
 
 function main() {
-    const target = process.argv[2] || 'all';
+    const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
+    const target = args[0] || 'all';
 
     if (!['dingzhi', 'geren', 'cloud', 'geren-cloud', 'all'].includes(target)) {
         console.error('用法: node auto-update-downloads.js <target>');
