@@ -48,7 +48,7 @@ REM Step C: Stop Gradle daemon from Step A, then rebuild with strict signature m
 echo [Step C] Stopping Gradle daemon and rebuilding (strict signature mode)...
 call gradlew.bat --stop 2>nul
 timeout /t 2 /nobreak >nul
-call build-app.bat
+call build-app.bat --skip-config
 if errorlevel 1 (
     echo [ERROR] Strict rebuild failed
     if not defined NO_PAUSE pause
