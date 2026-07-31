@@ -67,7 +67,10 @@ for %%m in (%MODULES%) do (
     ) else ( echo [SKIP] %%m not found )
 )
 echo   [5/5] Syncing video-recorder-inject.js...
-if exist "..\video-recorder-inject.js" (
+if exist "..\android\app\src\main\assets\video-recorder-inject.js" (
+    copy /Y "..\android\app\src\main\assets\video-recorder-inject.js" "%ANDROID_ASSETS%\video-recorder-inject.js" >nul
+    if errorlevel 1 ( echo [WARN] Failed to sync video-recorder-inject.js ) else ( echo       video-recorder-inject.js synced from android dir )
+) else if exist "..\video-recorder-inject.js" (
     copy /Y "..\video-recorder-inject.js" "%ANDROID_ASSETS%\video-recorder-inject.js" >nul
     if errorlevel 1 ( echo [WARN] Failed to sync video-recorder-inject.js ) else ( echo       video-recorder-inject.js synced )
 ) else ( echo [SKIP] video-recorder-inject.js not found )
