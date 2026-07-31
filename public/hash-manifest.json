@@ -2,10 +2,10 @@
     "dingzhi": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
-            "sha256": "2156e75913304ef305db32dd5b94ea232aa73ec29d30394cdbd67a7a65195277",
+            "sha256": "991ad0eb81d593ea56bee57eae13c5492e99b8fc91d65c814068035d6f8f082f",
             "url": "/downloads/惠康中医-定制.apk",
-            "size": 2170466,
-            "updateTime": "2026-07-31T13:37:16.225Z",
+            "size": 2170839,
+            "updateTime": "2026-07-31T14:02:14.760Z",
             "fileName": "惠康中医-定制.apk"
         },
         "portable": {
@@ -32,10 +32,10 @@
     "geren": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
-            "sha256": "d8ad8820a30ce784b93d96b55e3553323d66e0c1b55b66f5ab1289e21c28f46b",
+            "sha256": "ab0249b440f0e3b9bf7ac8b9213953c9fbffa8b8da65163749e99634229a9633",
             "url": "/downloads/惠康中医-个人.apk",
-            "size": 2169018,
-            "updateTime": "2026-07-31T13:39:05.910Z",
+            "size": 2169316,
+            "updateTime": "2026-07-31T14:03:59.273Z",
             "fileName": "惠康中医-个人.apk"
         },
         "portable": {
