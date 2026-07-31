@@ -2191,6 +2191,10 @@ let currentUser = null;
             }
 
             formulas = safeParseJSON(savedFormulas, []);
+            // 空数组不覆盖默认验方（存储为空时 safeParseJSON 返回 []，需恢复 DEFAULT_FORMULAS）
+            if (formulas.length === 0) {
+                formulas = DEFAULT_FORMULAS.map(f =>({...f, composition: f.composition.map(c =>({...c}))}));
+            }
 
             // 根据用户权限加载处方数据（try/catch + 超时保护，防止 IndexedDB 挂起导致 defaultMedicines 不被赋值）
             try {
