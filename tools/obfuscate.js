@@ -75,8 +75,15 @@ const OBFUSCATOR_CONFIG = {
 };
 
 // 需要混淆的模块文件名
+// ★关键修复：不混淆 auth-core.js（与 login.js 同样原因）
+// 原因：javascript-obfuscator 的 stringArray base64 解码函数内部使用 charAt，
+//       在 Electron 桌面端环境下运行时抛出
+//       "Cannot read properties of undefined (reading 'charAt')" 错误，
+//       导致 auth-core.js 加载失败、AuthCore 未定义，连锁导致登录异常和
+//       用户管理等功能不可用。
+// 安全性影响：auth-core.js 不含核心安全资产（密码哈希值存于 config.json/
+//             localStorage，SHA-256 是公开算法），安全性损失可接受。
 const MODULE_FILES = [
-    'auth-core.js',
     'permission.js',
     'debug-logger.js',
     'print-utils.js',
