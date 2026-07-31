@@ -17,7 +17,7 @@ for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy
 
 REM Step A: First build (default mode with full security)
 echo [Step A] First build (default mode)...
-call build-app.bat --skip-config
+call build-app.bat
 if errorlevel 1 (
     echo [ERROR] First build failed
     if not defined NO_PAUSE pause
@@ -48,7 +48,7 @@ REM Step C: Stop Gradle daemon from Step A, then rebuild with strict signature m
 echo [Step C] Stopping Gradle daemon and rebuilding (strict signature mode)...
 call gradlew.bat --stop 2>nul
 timeout /t 2 /nobreak >nul
-call build-app.bat --skip-config
+call build-app.bat
 if errorlevel 1 (
     echo [ERROR] Strict rebuild failed
     if not defined NO_PAUSE pause

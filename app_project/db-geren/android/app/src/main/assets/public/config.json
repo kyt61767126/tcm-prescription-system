@@ -1,6 +1,6 @@
 {
-    "clinicName":  "赵业飞工作室",
-    "doctorName":  "赵业飞",
+    "clinicName":  "本能堂中医诊所",
+    "doctorName":  "本能堂",
     "edition":  "personal",
     "productName":  "惠康中医-个人",
     "versionLabel":  "离线APP个人版",
@@ -12,6 +12,6 @@
                       "role":  "admin"
                   }
               ],
-    "configIssuedAt":  "2026-07-26T09:18:59.6199595Z",
-    "configSignature":  "05052bb2812e7e7fa9805c9c4d9bea05e5948953d707b978a6a8be5246d9d71e"
+    "configIssuedAt":  "2026-07-31T10:30:50.4909363Z",
+    "configSignature":  "c7d4bf1fd9e6b17238ddcf49f0757c4951d1c683b37e8974e6e918e5d86834f1"
 }
