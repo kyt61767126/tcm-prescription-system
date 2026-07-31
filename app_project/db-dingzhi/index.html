@@ -609,6 +609,8 @@
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
 window.EDITION = 'clinic_custom';
+// ★v2.0 统一架构：声明 APP_MODE（offline/cloud），供 db-adapter.js 自动检测
+window.APP_MODE = 'offline';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
 // ★ 修复 2026-07-28：APP 端启动时主动清除所有登录态（纵深防御），确保每次打开都必须手动登录
 // 使用 location.href 检测 APP（此时 electronAPI 尚未注入，无法用 isAndroidAPP）

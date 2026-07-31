@@ -2,6 +2,8 @@
     "clinicName":  "本能堂中医诊所",
     "doctorName":  "本能堂",
     "edition":  "personal",
+    "appMode":  "offline",
+    "maxUsers":  1,
     "productName":  "惠康中医-个人",
     "versionLabel":  "离线APP个人版",
     "users":  [

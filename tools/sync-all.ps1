@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  sync-all.ps1 - Unified sync script for all shared modules
 #
 #  Purpose:
@@ -119,6 +119,18 @@ $VendorTargets = @(
     'app_project/db-dingzhi/vendor',
     'app_project/db-geren/capacitor/app/src/main/assets/public/vendor',
     'app_project/db-dingzhi/capacitor/app/src/main/assets/public/vendor'
+)
+
+# Group 8: cloud-only modules (cloud-api.js, local-db.js, sync-engine.js)
+# 仅同步到云端版目录，离线版不需要这些文件
+$CloudModuleFiles = @(
+    'cloud-api.js',
+    'local-db.js',
+    'sync-engine.js'
+)
+
+$CloudModuleTargets = @(
+    'app_project/db-yunduan/cloud_desktop'
 )
 
 # ============================================================================
@@ -261,6 +273,11 @@ Write-Host ""
 
 # Group 7: vendor files -> 6 targets
 $result = Sync-Group -GroupName 'vendor (1 file -> 6 dirs)' -Files $VendorFiles -Targets $VendorTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 8: cloud-only modules -> 1 target (cloud_desktop only)
+$result = Sync-Group -GroupName 'cloud modules (3 files -> 1 cloud dir)' -Files $CloudModuleFiles -Targets $CloudModuleTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

@@ -1,5 +1,5 @@
 // ============================================================================
-// db-adapter.js — 数据库统一适配器模块
+// db-adapter.js — 数据库统一适配器模块（v2.0 增强版）
 // 统一封装 IndexedDB / localStorage / Electron文件系统 / 云端API 的 CRUD 操作
 // 消除 8 个 index.html 中的数据库访问重复代码
 // ============================================================================
@@ -8,9 +8,42 @@
 //   2. 向后兼容：保留原有函数签名，旧代码可继续工作
 //   3. 数据结构统一：处方对象字段标准化（id/prescriptionNo/outpatientNo/createdAt/...）
 //   4. 错误降级：任一存储层失败自动降级到下一层，不抛出致命错误
+//   5. ★v2.0 模式感知：自动检测 appMode（offline/cloud），无需手动传 options.cloud
 // ============================================================================
 (function (global) {
     'use strict';
+
+    // ==================== 模式检测（v2.0 新增） ====================
+    // 优先级：window.APP_MODE > config.json > URL 检测 > 默认 offline
+    let _appMode = null;
+    function detectAppMode() {
+        if (_appMode) return _appMode;
+        // 1. 直接设置的 window.APP_MODE
+        if (typeof global.APP_MODE === 'string' && global.APP_MODE) {
+            _appMode = global.APP_MODE;
+            return _appMode;
+        }
+        // 2. 检测云端模块是否已加载（cloud-api.js 定义了 window.CLOUD_API_BASE）
+        if (typeof global.CLOUD_API_BASE !== 'undefined' && global.CLOUD_API_BASE) {
+            _appMode = 'cloud';
+            return _appMode;
+        }
+        // 3. URL 检测（云端域名）
+        if (typeof global.location !== 'undefined' && global.location.hostname) {
+            if (global.location.hostname.includes('pages.dev') ||
+                global.location.hostname.includes('cloud')) {
+                _appMode = 'cloud';
+                return _appMode;
+            }
+        }
+        // 4. 默认离线模式
+        _appMode = 'offline';
+        return _appMode;
+    }
+
+    function isCloudMode() {
+        return detectAppMode() === 'cloud';
+    }
 
     // ==================== 常量 ====================
     const DB_NAME = 'PrescriptionDB';
@@ -19,7 +52,8 @@
     const STORE_SETTINGS = 'settings';
     const LS_KEY_PRESCRIPTIONS = 'all_prescription_list';
     const LS_KEY_DELETED_IDS = 'deleted_prescription_ids';
-    const CLOUD_API_BASE = (typeof CLOUD_API_BASE_OVERRIDE !== 'undefined' && CLOUD_API_BASE_OVERRIDE)
+    const CLOUD_API_BASE = (typeof global.CLOUD_API_BASE !== 'undefined' && global.CLOUD_API_BASE)
+        || (typeof CLOUD_API_BASE_OVERRIDE !== 'undefined' && CLOUD_API_BASE_OVERRIDE)
         || 'https://tcm-prescription-system.pages.dev/api';
 
     let _db = null;
@@ -229,7 +263,14 @@
         return null;
     }
 
+    // ★v2.0 优先使用已加载的 window.cloudFetch（带认证、超时、401处理）
     async function _cloudFetch(path, options) {
+        // 优先使用 cloud-api.js 的 cloudFetch（功能更完整）
+        if (typeof global.cloudFetch === 'function') {
+            const url = path.startsWith('http') ? path : CLOUD_API_BASE + path;
+            return await global.cloudFetch(url, options);
+        }
+        // 降级：自行实现简单版本
         options = options || {};
         options.headers = options.headers || {};
         options.headers['Content-Type'] = 'application/json';
@@ -260,8 +301,10 @@
 
         // 保存单条处方（自动判断云端/离线）
         // options: { cloud: true/false, username, userRole, isAdmin }
+        // ★v2.0: 若未指定 cloud，自动检测 appMode
         async savePrescription(record, options) {
             options = options || {};
+            if (options.cloud === undefined) options.cloud = isCloudMode();
             const now = new Date().toISOString();
             const normalized = {
                 ...record,
@@ -316,8 +359,10 @@
 
         // 获取全部处方（按时间倒序）
         // options: { filterUsername, cloud, includeDeleted }
+        // ★v2.0: 若未指定 cloud，自动检测 appMode
         async getAllPrescriptions(options) {
             options = options || {};
+            if (options.cloud === undefined) options.cloud = isCloudMode();
             let result = [];
 
             // 云端模式
@@ -406,8 +451,10 @@
 
         // 删除处方
         // options: { cloud, permanent, username, isAdmin }
+        // ★v2.0: 若未指定 cloud，自动检测 appMode
         async deletePrescription(id, options) {
             options = options || {};
+            if (options.cloud === undefined) options.cloud = isCloudMode();
             const idStr = String(id);
 
             // 云端模式
@@ -441,8 +488,10 @@
         },
 
         // 批量保存处方
+        // ★v2.0: 若未指定 cloud，自动检测 appMode
         async saveAllPrescriptions(records, options) {
             options = options || {};
+            if (options.cloud === undefined) options.cloud = isCloudMode();
             if (!Array.isArray(records)) records = [records];
 
             // 云端模式
@@ -531,10 +580,12 @@
 
         async diagnose() {
             const status = {
+                appMode: detectAppMode(),  // ★v2.0 新增
                 indexedDB: false,
                 localStorage: false,
                 electron: false,
                 cloud: false,
+                cloudModule: typeof global.cloudFetch === 'function',  // ★v2.0 新增
                 prescriptionCount: 0
             };
             try {
@@ -550,6 +601,9 @@
 
     // ==================== 导出 ====================
     global.DbAdapter = DbAdapter;
+    // ★v2.0 暴露模式检测函数
+    global.DbAdapter.getAppMode = detectAppMode;
+    global.DbAdapter.isCloudMode = isCloudMode;
 
     // 自动初始化（异步，不阻塞）
     if (typeof window !== 'undefined') {
