@@ -128,30 +128,32 @@
             const edition = this._edition;
             console.log('[DBG] Applying runtime permissions for edition:', edition);
 
-            // 诊所名称字段
-            const clinicNameInput = document.getElementById('clinicName');
-            if (clinicNameInput) {
-                if (edition === 'personal' || edition === 'clinic_custom') {
-                    clinicNameInput.readOnly = true;
-                    clinicNameInput.style.backgroundColor = '#f0f0f0';
-                    clinicNameInput.style.cursor = 'not-allowed';
-                    clinicNameInput.title = '当前版本不支持修改诊所名称';
-                }
-            }
+            // 诊所名称字段（2026-07-31 新规范：所有版本允许修改诊所名称）
+            // 旧规则：personal/clinic_custom 设为只读，已废弃
+            // const clinicNameInput = document.getElementById('clinicName');
+            // if (clinicNameInput) {
+            //     if (edition === 'personal' || edition === 'clinic_custom') {
+            //         clinicNameInput.readOnly = true;
+            //         clinicNameInput.style.backgroundColor = '#f0f0f0';
+            //         clinicNameInput.style.cursor = 'not-allowed';
+            //         clinicNameInput.title = '当前版本不支持修改诊所名称';
+            //     }
+            // }
 
-            // 医师姓名字段（个人定制版只读）
-            if (edition === 'personal') {
-                const defaultDoctorInput = document.getElementById('defaultDoctor');
-                const doctorNameInput = document.getElementById('doctorName');
-                [defaultDoctorInput, doctorNameInput].forEach(el => {
-                    if (el) {
-                        el.readOnly = true;
-                        el.style.backgroundColor = '#f0f0f0';
-                        el.style.cursor = 'not-allowed';
-                        el.title = '当前版本不支持修改医师姓名';
-                    }
-                });
-            }
+            // 医师姓名字段（2026-07-31 新规范：所有版本允许修改医师姓名）
+            // 旧规则：personal 设为只读，已废弃
+            // if (edition === 'personal') {
+            //     const defaultDoctorInput = document.getElementById('defaultDoctor');
+            //     const doctorNameInput = document.getElementById('doctorName');
+            //     [defaultDoctorInput, doctorNameInput].forEach(el => {
+            //         if (el) {
+            //             el.readOnly = true;
+            //             el.style.backgroundColor = '#f0f0f0';
+            //             el.style.cursor = 'not-allowed';
+            //             el.title = '当前版本不支持修改医师姓名';
+            //         }
+            //     });
+            // }
 
             // 用户管理按钮（个人定制版隐藏账户管理，但保留修改密码）
             if (edition === 'personal') {
