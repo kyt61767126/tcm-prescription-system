@@ -4557,13 +4557,6 @@ let currentUser = null;
             // 3. 序号 + 1，不足两位前置补 0
             // 4. 拼接完整编号（YYMMDD + 两位序号）
             // 5. 将当日最新序号回写存入 global_max_serial 持久保存
-            // 记录保存前的处方编号（拍照录像文件以此编号保存）
-            // 优先从输入框获取，其次从拍照录像模块获取实际使用的标识符
-            const oldPrescriptionNo = document.getElementById('prescriptionNo').value ||
-                                     (document.getElementById('paperClinicNo')?.textContent || '') ||
-                                     (window.__lastUsedMediaIdentifier || '') ||
-                                     (localStorage.getItem('lastUsedMediaIdentifier') || '') || '';
-
             const newPrescriptionNo = await generatePrescriptionNoForSave();
             
             document.getElementById('visitDate').value = currentDate;
@@ -4654,40 +4647,43 @@ let currentUser = null;
             setTimeout(function() {
                 try { savePrescriptionAsImage(record, newPrescriptionNo); } catch (e) { console.warn('生成处方图片失败:', e); }
                 // 保存处方后，重命名拍照录像文件到当前患者姓名和编号（支持先拍照后录入姓名的流程）
-                // 参考云端APP实现：分两步处理（编号不同先改编号，编号相同再检查姓名）
+                // 关键：old 值必须用文件实际使用的标识符（__lastUsedMediaIdentifier/__lastUsedMediaPatientName），
+                // 而非表单值，否则 Java 端按 oldName_oldNo 匹配会找不到文件
                 try {
-                    if (oldPrescriptionNo && newPrescriptionNo) {
-                        var lastUsedName = window.__lastUsedMediaPatientName || localStorage.getItem('lastUsedMediaPatientName') || '';
-                        var needRename = false;
-                        var oldName = lastUsedName || record.patientName;
-                        var newName = record.patientName;
-                        var oldNo = oldPrescriptionNo;
-                        var newNo = newPrescriptionNo;
+                    var oldName = window.__lastUsedMediaPatientName || localStorage.getItem('lastUsedMediaPatientName') || '';
+                    var oldNo = window.__lastUsedMediaIdentifier || localStorage.getItem('lastUsedMediaIdentifier') || '';
+                    var newName = record.patientName;
+                    var newNo = newPrescriptionNo;
 
-                        if (oldPrescriptionNo !== newPrescriptionNo) {
-                            needRename = true;
-                        } else if (lastUsedName && lastUsedName !== record.patientName) {
-                            needRename = true;
-                        }
+                    // 只要 old 和 new 有任何不同就重命名
+                    var needRename = (oldName && oldNo && (
+                        oldName !== newName || oldNo !== newNo
+                    ));
 
-                        if (needRename && window.electronAPI && window.electronAPI.renameMediaFiles) {
-                            console.log('[重命名] oldName:', oldName, 'newName:', newName, 'oldNo:', oldNo, 'newNo:', newNo);
-                            window.electronAPI.renameMediaFiles(oldName, newName, oldNo, newNo)
-                                .then(function(r) {
-                                    if (r.success && r.renamed > 0) {
-                                        console.log('已重命名 ' + r.renamed + ' 个媒体文件: ' + oldName + '_' + oldNo + ' → ' + newName + '_' + newNo);
-                                    } else if (r.success && r.renamed === 0) {
-                                        console.warn('[重命名警告] 没有找到需要重命名的文件');
-                                    }
-                                    try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) {}
-                                })
-                                .catch(function(e) {
-                                    console.warn('重命名媒体文件失败:', e);
-                                    try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) {}
-                                });
-                        } else {
-                            try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) {}
-                        }
+                    if (needRename && window.electronAPI && window.electronAPI.renameMediaFiles) {
+                        console.log('[重命名] oldName:', oldName, 'newName:', newName, 'oldNo:', oldNo, 'newNo:', newNo);
+                        window.electronAPI.renameMediaFiles(oldName, newName, oldNo, newNo)
+                            .then(function(r) {
+                                if (r.success && r.renamed > 0) {
+                                    console.log('已重命名 ' + r.renamed + ' 个媒体文件: ' + oldName + '_' + oldNo + ' → ' + newName + '_' + newNo);
+                                    // 清除标识符，避免重复重命名
+                                    try {
+                                        window.__lastUsedMediaIdentifier = '';
+                                        window.__lastUsedMediaPatientName = '';
+                                        localStorage.removeItem('lastUsedMediaIdentifier');
+                                        localStorage.removeItem('lastUsedMediaPatientName');
+                                    } catch (e) {}
+                                } else if (r.success && r.renamed === 0) {
+                                    console.warn('[重命名警告] 没有找到需要重命名的文件, oldName=' + oldName + ', oldNo=' + oldNo);
+                                } else if (!r.success) {
+                                    console.error('[重命名失败]', r.error);
+                                }
+                                try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) {}
+                            })
+                            .catch(function(e) {
+                                console.warn('重命名媒体文件失败:', e);
+                                try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) {}
+                            });
                     } else {
                         try { collectAndUpdateMediaFiles(record, newPrescriptionNo); } catch (e) {}
                     }
