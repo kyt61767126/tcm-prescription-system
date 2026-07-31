@@ -10,8 +10,13 @@
 // 示例：node minify-js.js android/app/src/main/assets/public
 // ============================================================================
 
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+const require = createRequire(import.meta.url);
+
 const fs = require('fs');
 const path = require('path');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // terser 动态加载（首次运行会自动安装到全局缓存）
 let terser;
