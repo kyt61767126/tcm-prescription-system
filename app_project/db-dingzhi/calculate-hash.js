@@ -12,9 +12,14 @@
 //   4. 下载页动态读取显示校验值
 // ============================================================================
 
+import { createRequire } from 'module';
+import { fileURLToPath } from 'url';
+const require = createRequire(import.meta.url);
+
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // 项目根目录 (kyt-zy/) — shared/ 在根目录下1层，只需上溯1级
 const PROJECT_ROOT = path.resolve(__dirname, '..');
