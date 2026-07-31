@@ -46,9 +46,8 @@
             }
         }
 
-        // Uint8Array → base64 编码（与离线APP保持一致，避免 btoa 不支持 >127 字节的问题）
+        // Uint8Array → base64 编码（避免 btoa 不支持 >127 字节的问题）
         // btoa 只支持 ASCII 字符（0-127），视频二进制数据包含 >127 的字节会失败
-        // 该方法直接按位计算，性能优于 btoa + String.fromCharCode.apply 组合
         var _base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
         function _uint8ArrayToBase64(bytes) {
             var len = bytes.length;
@@ -198,16 +197,14 @@
             },
             readFileAsBase64: function (filePath) {
                 // 统一走分片读取，避免 Binder 1MB 限制
-                // 最终用 Blob URL 代替 data URL，避免大视频 data URL 超出 WebView 限制
-                // 参考：云端APP（cloud_app）使用 Blob URL 方案，Capacitor WebView 支持 file:// 下创建 Blob URL
+                // 最终用 base64 data URL（Blob URL 在 file:// 协议下不稳定）
+                // 使用自定义 Uint8Array → base64 函数，避免 btoa 不支持 >127 字节的问题
                 return new Promise(function (resolve) {
                     try {
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
                         if (!startR || !startR.success) {
-                            // 回退到原 API（参考云端APP），避免 startReadSession 失败时视频无法播放
-                            console.warn('[离线APP] startReadSession 失败，回退原 API:', startR && startR.error);
-                            var rFallback = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
-                            resolve(rFallback || { success: false, error: 'readFileAsBase64 返回无效' });
+                            console.error('[离线APP] startReadSession 失败:', startR && startR.error);
+                            resolve({ success: false, error: 'startReadSession 失败: ' + (startR && startR.error || '未知') });
                             return;
                         }
                         var sessionId = startR.sessionId;
@@ -251,20 +248,21 @@
                             if (r.eof) {
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
                                 try {
-                                    // 用 Blob URL 代替 data URL，避免大视频超出 WebView 的 data URL 长度限制
-                                    var blob = new Blob(uint8Arrays, { type: mimeType });
-                                    // 清理旧 blob URL 避免内存泄漏
-                                    if (window.__currentBlobUrl) {
-                                        try { URL.revokeObjectURL(window.__currentBlobUrl); } catch (e) {}
+                                    // 合并所有 Uint8Array
+                                    var allBytes = new Uint8Array(totalBytes);
+                                    var offset = 0;
+                                    for (var j = 0; j < uint8Arrays.length; j++) {
+                                        allBytes.set(uint8Arrays[j], offset);
+                                        offset += uint8Arrays[j].length;
                                     }
-                                    var blobUrl = URL.createObjectURL(blob);
-                                    window.__currentBlobUrl = blobUrl;
-                                    console.log('[离线APP] 分片读取完成，blob URL=' + blobUrl + ', 片数=' + uint8Arrays.length + ', 总字节=' + totalBytes);
-                                    // 与云端APP统一：仅返回 data 字段（blob URL）
-                                    resolve({ success: true, data: blobUrl });
+                                    // 用自定义 base64 编码函数（避免 btoa 不支持 >127 字节）
+                                    var fullBase64 = _uint8ArrayToBase64(allBytes);
+                                    var dataUrl = 'data:' + mimeType + ';base64,' + fullBase64;
+                                    console.log('[离线APP] 分片读取完成，data URL 长度=' + dataUrl.length + ', 片数=' + uint8Arrays.length + ', 总字节=' + totalBytes);
+                                    resolve({ success: true, base64: dataUrl, data: dataUrl });
                                 } catch (e) {
-                                    console.error('[离线APP] 创建 blob URL 失败:', e);
-                                    resolve({ success: false, error: '创建 blob URL 失败: ' + String(e) });
+                                    console.error('[离线APP] 转 base64 失败:', e);
+                                    resolve({ success: false, error: '转 base64 失败: ' + String(e) });
                                 }
                                 return;
                             }
@@ -279,11 +277,11 @@
             renameMediaFiles: function (oldPatientName, newPatientName, oldNo, newNo) {
                 return new Promise(function (resolve) {
                     try {
-                        var r = callNative('renameMediaFiles', JSON.stringify({ 
-                            oldPatientName: oldPatientName, 
-                            newPatientName: newPatientName, 
-                            oldNo: oldNo, 
-                            newNo: newNo 
+                        var r = callNative('renameMediaFiles', JSON.stringify({
+                            oldPatientName: oldPatientName,
+                            newPatientName: newPatientName,
+                            oldNo: oldNo,
+                            newNo: newNo
                         }));
                         resolve(r);
                     } catch (e) { resolve({ success: false, error: String(e), renamed: 0 }); }
@@ -306,8 +304,7 @@
         // 如果 injectElectronApiShim 已抢先注入了简单版本的 electronAPI，
         // 用增强版方法覆盖关键方法（readFileAsBase64/savePrescriptionImage/saveVideoFile 等
         // 解决"图片无法加载，视频可以播放"的问题：图片走简单版 readFileAsBase64 超出 data URL 限制
-        // ★ 兼容 injectElectronApiShim 的 __nativeBridgeProxy 标记（之前只检查 __injected，导致 license 丢失）
-        if (oldAPI && (oldAPI.__injected || oldAPI.__nativeBridgeProxy)) {
+        if (oldAPI && oldAPI.__injected) {
             console.log('[离线APP] electronAPI 已存在（injectElectronApiShim 先注入），覆盖增强版方法到旧对象');
             var newAPI = window.electronAPI;
             oldAPI.savePrescriptionImage = newAPI.savePrescriptionImage;
@@ -319,7 +316,7 @@
             oldAPI.renameMediaFiles = newAPI.renameMediaFiles;
             oldAPI.getVideoDirectory = newAPI.getVideoDirectory;
             oldAPI.__videoRecorderEnhanced = true;
-            // 恢复旧对象为 electronAPI（保留 license/activate/printPrescription/encryptData 等方法）
+            // 恢复旧对象为 electronAPI
             window.electronAPI = oldAPI;
         }
 
