@@ -45,15 +45,22 @@ const OBFUSCATOR_CONFIG = {
     controlFlowFlatteningThreshold: 0,
     deadCodeInjection: false,
     deadCodeInjectionThreshold: 0,
-    // ★启用 stringArray + base64 编码（非 RC4）
-    // 原因：历史问题（commit 5bcb0ad）出在 RC4 运行时解码，base64 不依赖密钥，
-    //       在 Electron 桌面端环境下稳定，可安全使用
-    stringArray: true,
-    stringArrayEncoding: ['base64'],
-    stringArrayThreshold: 0.5,
-    // 字符串数组包装：增加间接层级，提升反编译难度
-    stringArrayWrappersCount: 2,
-    stringArrayWrappersChainedCalls: true,
+    // ★禁用 stringArray（2026-07-31 修复用户管理按钮不显示问题）
+    // 原因：javascript-obfuscator 的 stringArray base64 解码函数内部使用 charAt，
+    //       在 Electron 桌面端环境下运行时抛出
+    //       "Cannot read properties of undefined (reading 'charAt')" 错误，
+    //       导致 permission.js 的 shouldShowUserManage 等函数失效，
+    //       管理员登录后"用户管理"按钮不显示。
+    //       历史上 auth-core.js/login.js 因同样原因被移出 MODULE_FILES，
+    //       但 permission.js 仍在列表中，混淆后导致本问题。
+    // 方案：禁用 stringArray，保留 identifierNamesGenerator 等其他混淆配置。
+    //       安全性影响可接受（变量名仍被混淆，代码仍被压缩）。
+    stringArray: false,
+    stringArrayEncoding: [],
+    stringArrayThreshold: 0,
+    // 字符串数组包装：stringArray 禁用后无效，保留默认值
+    stringArrayWrappersCount: 1,
+    stringArrayWrappersChainedCalls: false,
     identifierNamesGenerator: 'mangled',
     transformObjectKeys: false,
     unicodeEscapeSequence: false,
