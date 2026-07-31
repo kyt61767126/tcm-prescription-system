@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -9542,7 +9542,7 @@ IconFile=${scriptPath}`;
                             <div style="font-size:11px;color:#666;">${escapeHtml(p.date)} | ${escapeHtml(p.diagnosis || '无诊断')}</div>
                         </div>
                         <div style="text-align:right;">
-                            <div style="font-weight:bold;color:#8b0000;">¥${escapeHtml(p.totalAmount || 0)}</div>
+                            <div style="font-weight:bold;color:#8b0000;">¥${Number(p.totalAmount || 0).toFixed(2)}</div>
                             <button class="small-btn" onclick="event.stopPropagation();deleteCase(${p.id})">删除</button>
                         </div>
                     </div>
