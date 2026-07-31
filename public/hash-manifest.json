@@ -2,10 +2,10 @@
     "dingzhi": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
-            "sha256": "57c6732a621cf436d63d3790796cce487a889a998fa4f7083f7284b28e9091f2",
+            "sha256": "39bcc50d48d25f8885c69b2e0fd698913fd8473c78507ac65d262ac9d496b09a",
             "url": "/downloads/惠康中医-定制.apk",
-            "size": 2168813,
-            "updateTime": "2026-07-30T00:46:34.855Z",
+            "size": 2170335,
+            "updateTime": "2026-07-31T10:35:00.924Z",
             "fileName": "惠康中医-定制.apk"
         },
         "portable": {
@@ -31,15 +31,12 @@
     },
     "geren": {
         "apk": {
-            "version": "1.0.20260730-1046",
-            "sha256": "a7ab6165d0fc8327aad4624ec440af94eebf739e32076d97e5498bb922dddc2a",
+            "version": "1.0.${BUILD_TIME}",
+            "sha256": "15b412403bc156ce8f895ff360d01963a566bdee54fd6330e83e08fdde02e0d0",
             "url": "/downloads/惠康中医-个人.apk",
-            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.07.30/huikang-geren.apk",
-            "size": 2167627,
-            "updateTime": "2026-07-30T02:51:53.621Z",
-            "fileName": "惠康中医-个人.apk",
-            "releaseFileName": "huikang-geren.apk",
-            "releaseTag": "v2026.07.30"
+            "size": 2168746,
+            "updateTime": "2026-07-31T10:38:44.094Z",
+            "fileName": "惠康中医-个人.apk"
         },
         "portable": {
             "version": "1.0.20260730-1046",
@@ -65,10 +62,10 @@
     "cloud": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
-            "sha256": "745ac536bbaeaa723118d6abb223197f12dc9409f187b25b61967e12a7d49e02",
+            "sha256": "e7a05c27ffbb987da5f89052db9a5e7419dc98db0e95ce89dfc29596ae189410",
             "url": "/downloads/惠康中医-云端.apk",
-            "size": 11246867,
-            "updateTime": "2026-07-29T22:42:54.823Z",
+            "size": 11236780,
+            "updateTime": "2026-07-31T10:05:42.776Z",
             "fileName": "惠康中医-云端.apk"
         },
         "exe": {
@@ -95,10 +92,10 @@
     "geren-cloud": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
-            "sha256": "9d1d155eed2ac0b88aac0aeadde92d40d38ede7396a26df79c70215e7709e561",
+            "sha256": "1ab643b2faa2842bddbab0cd73f97a382acc5680c4d1183e3f3438163d202a63",
             "url": "/downloads/惠康中医-云端个人版.apk",
-            "size": 11222777,
-            "updateTime": "2026-07-29T22:54:14.142Z",
+            "size": 11224075,
+            "updateTime": "2026-07-31T10:10:55.979Z",
             "fileName": "惠康中医-云端个人版.apk"
         }
     }

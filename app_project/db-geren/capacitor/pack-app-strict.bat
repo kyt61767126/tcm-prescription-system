@@ -17,7 +17,7 @@ for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy
 
 REM Step A: First build (default mode with full security)
 echo [Step A] First build (default mode)...
-call build-app.bat
+call build-app.bat --skip-config
 if errorlevel 1 (
     echo [ERROR] First build failed
     if not defined NO_PAUSE pause
