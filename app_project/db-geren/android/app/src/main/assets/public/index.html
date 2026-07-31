@@ -3745,12 +3745,6 @@ if (window.Permission) {
             view.innerHTML = '<div style="color:#fff;font-size:12px;">加载中...</div>';
             var isImg = f.type === 'image' || /\.(jpg|jpeg|png)$/i.test(f.name);
             var isVid = f.type === 'video' || /\.(webm|mp4)$/i.test(f.name);
-            // ★ 优化：离线APP优先使用 http://local-media/ 方案（MainActivity.shouldInterceptRequest 拦截）
-            // 优势：①支持 Range 请求，视频可 seek 跳转；②流式播放，无需 base64 编码，加载快；
-            //       ③不受 Binder 1MB 限制，大视频也能播放；④内存占用低
-            // 历史：readFileAsBase64 方案对大视频加载慢、无法 seek、受 Binder 1MB 限制
-            var isOfflineApp = !!window.AndroidNative;
-            var localMediaUrl = isOfflineApp ? ('http://local-media/' + encodeURIComponent(f.path)) : null;
             if (!window.__mediaDragBound) {
                 window.__mediaDragBound = true;
                 window.__mediaDragState = null;
@@ -3768,11 +3762,7 @@ if (window.Permission) {
                 });
             }
             if (isImg) {
-                // ★ 离线APP优先使用 local-media 方案（无需 base64 编码，加载快），失败降级 readFileAsBase64
-                var imgSrcPromise = localMediaUrl
-                    ? Promise.resolve({ success: true, data: localMediaUrl })
-                    : window.electronAPI.readFileAsBase64(f.path);
-                imgSrcPromise.then(function(result) {
+                window.electronAPI.readFileAsBase64(f.path).then(function(result) {
                     if (result.success && (result.data || result.base64)) {
                         var src = result.data || result.base64;
                         view.innerHTML = '';
@@ -3780,26 +3770,13 @@ if (window.Permission) {
                         img.src = src;
                         img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;transition:transform 0.08s ease-out;cursor:grab;user-select:none;-webkit-user-drag:none;will-change:transform;';
                         img.draggable = false;
-                        // 图片加载失败处理：local-media 方案降级到 readFileAsBase64；base64 方案显示重试按钮
+                        // 图片加载失败处理（Blob URL 失效等场景），提供重试按钮
                         img.onerror = function() {
-                            if (localMediaUrl) {
-                                console.warn('[媒体查看] local-media 图片加载失败，降级到 readFileAsBase64:', f.path);
-                                window.electronAPI.readFileAsBase64(f.path).then(function(r2) {
-                                    if (r2.success && (r2.data || r2.base64)) {
-                                        img.src = r2.data || r2.base64;
-                                    } else {
-                                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">图片加载失败<br/><button onclick="loadMediaSingleFile(' + idx + ')" style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button></div>';
-                                    }
-                                }).catch(function(e) {
-                                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">图片加载异常<br/><button onclick="loadMediaSingleFile(' + idx + ')" style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button></div>';
-                                });
-                            } else {
-                                view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
-                                    '图片解码失败（可能 Blob URL 已失效）<br/>' +
-                                    '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
-                                    'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
-                                    '</div>';
-                            }
+                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">' +
+                                '图片解码失败（可能 Blob URL 已失效）<br/>' +
+                                '<button onclick="loadMediaSingleFile(' + idx + ')" ' +
+                                'style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">🔄 重试</button>' +
+                                '</div>';
                         };
                         view.appendChild(img);
                         var scale = 1, rot = 0, tx = 0, ty = 0;
@@ -3863,7 +3840,8 @@ if (window.Permission) {
                     console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
-                // 视频播放：离线APP优先 local-media（支持Range/seek），降级 readFileAsBase64，再降级系统播放器
+                // 视频播放：与云端APP统一方案，使用 readFileAsBase64 + data URL
+                // 如果文件过大导致 Binder 限制，降级到系统播放器
                 var filePath = f.path;
                 var vidMime = '';
                 if (filePath.match(/\.webm$/i)) vidMime = 'video/webm';
@@ -3871,11 +3849,7 @@ if (window.Permission) {
 
                 view.innerHTML = '<div style="text-align:center;color:#fff;padding:30px 20px;font-size:13px;">🎬 正在加载视频...</div>';
 
-                // ★ 离线APP优先使用 local-media 方案（支持 Range 请求，视频可 seek 跳转，流式播放）
-                var vidSrcPromise = localMediaUrl
-                    ? Promise.resolve({ success: true, data: localMediaUrl })
-                    : window.electronAPI.readFileAsBase64(filePath);
-                vidSrcPromise.then(function(result) {
+                window.electronAPI.readFileAsBase64(filePath).then(function(result) {
                     if (result.success && (result.data || result.base64)) {
                         var src = result.data || result.base64;
                         view.innerHTML = '';
@@ -3885,29 +3859,9 @@ if (window.Permission) {
                         video.playsInline = true;
                         video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
                         video.onerror = function() {
-                            // local-media 方案失败降级到 readFileAsBase64；base64 方案降级到系统播放器
-                            if (localMediaUrl) {
-                                console.warn('[媒体查看] local-media 视频播放失败，降级到 readFileAsBase64:', filePath);
-                                window.electronAPI.readFileAsBase64(filePath).then(function(r2) {
-                                    if (r2.success && (r2.data || r2.base64)) {
-                                        video.src = r2.data || r2.base64;
-                                    } else if (window.electronAPI && window.electronAPI.openFile) {
-                                        window.electronAPI.openFile(filePath, vidMime);
-                                    } else {
-                                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载失败</div>';
-                                    }
-                                }).catch(function(e) {
-                                    if (window.electronAPI && window.electronAPI.openFile) {
-                                        window.electronAPI.openFile(filePath, vidMime);
-                                    } else {
-                                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载异常</div>';
-                                    }
-                                });
-                            } else {
-                                console.error('[媒体查看] 视频播放失败，降级到系统播放器');
-                                if (window.electronAPI && window.electronAPI.openFile) {
-                                    window.electronAPI.openFile(filePath, vidMime);
-                                }
+                            console.error('[媒体查看] 视频播放失败，降级到系统播放器');
+                            if (window.electronAPI && window.electronAPI.openFile) {
+                                window.electronAPI.openFile(filePath, vidMime);
                             }
                         };
                         view.appendChild(video);
