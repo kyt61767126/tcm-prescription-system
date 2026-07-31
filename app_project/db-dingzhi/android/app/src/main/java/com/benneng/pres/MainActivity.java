@@ -2194,9 +2194,11 @@ public class MainActivity extends AppCompatActivity {
                 String[] newPrefixes = {safeNewName + "_" + safeNewNo, safeNewNo + "_" + safeNewName};
                 JSONArray renamedFiles = new JSONArray();
                 int renamed = 0;
+                java.util.List<File> allDirs = getAllMediaDirs();
                 for (int i = 0; i < oldPrefixes.length; i++) {
-                    renamed += renameFilesInDir(getImageDir(), oldPrefixes[i], newPrefixes[i], renamedFiles);
-                    renamed += renameFilesInDir(getVideoDir(), oldPrefixes[i], newPrefixes[i], renamedFiles);
+                    for (File dir : allDirs) {
+                        renamed += renameFilesInDir(dir, oldPrefixes[i], newPrefixes[i], renamedFiles);
+                    }
                 }
                 JSONObject result = new JSONObject();
                 result.put("success", true);
