@@ -4106,16 +4106,10 @@ let currentUser = null;
                     console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
-                // 视频播放：与云端APP统一方案，使用 readFileAsBase64 + data URL
-                // 如果文件过大导致 Binder 限制，降级到系统播放器
-                var filePath = f.path;
-                var vidMime = '';
-                if (filePath.match(/\.webm$/i)) vidMime = 'video/webm';
-                else if (filePath.match(/\.mp4$/i)) vidMime = 'video/mp4';
-
+                // 视频播放：与云端APP统一方案，使用 readFileAsBase64 + data URL，在 WebView 内播放
                 view.innerHTML = '<div style="text-align:center;color:#fff;padding:30px 20px;font-size:13px;">🎬 正在加载视频...</div>';
 
-                window.electronAPI.readFileAsBase64(filePath).then(function(result) {
+                window.electronAPI.readFileAsBase64(f.path).then(function(result) {
                     if (result.success && (result.data || result.base64)) {
                         var src = result.data || result.base64;
                         view.innerHTML = '';
@@ -4124,28 +4118,12 @@ let currentUser = null;
                         video.controls = true;
                         video.playsInline = true;
                         video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
-                        video.onerror = function() {
-                            console.error('[媒体查看] 视频播放失败，降级到系统播放器');
-                            if (window.electronAPI && window.electronAPI.openFile) {
-                                window.electronAPI.openFile(filePath, vidMime);
-                            }
-                        };
                         view.appendChild(video);
                     } else {
-                        console.error('[媒体查看] readFileAsBase64 失败，降级到系统播放器:', result.error);
-                        if (window.electronAPI && window.electronAPI.openFile) {
-                            window.electronAPI.openFile(filePath, vidMime);
-                        } else {
-                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载失败</div>';
-                        }
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载失败</div>';
                     }
-                }).catch(function(err) {
-                    console.error('[媒体查看] 视频加载异常:', err);
-                    if (window.electronAPI && window.electronAPI.openFile) {
-                        window.electronAPI.openFile(filePath, vidMime);
-                    } else {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载异常</div>';
-                    }
+                }).catch(function() {
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载失败</div>';
                 });
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';
