@@ -2858,10 +2858,10 @@ if (window.Permission) {
             document.getElementById('paperClinicNo').textContent = presNo;
             const year = String(new Date().getFullYear()).slice(-2);
             document.getElementById('clinicNo').value = year + String(prescriptionHistory.length).padStart(6, '0');
-            const clinicNameVal = (typeof CONFIG !== 'undefined' && CONFIG.clinicName) ? CONFIG.clinicName : (localStorage.getItem('local_clinicName') || '本能堂中医诊所');
+            const clinicNameVal = localStorage.getItem('local_clinicName') || ((typeof CONFIG !== 'undefined' && CONFIG.clinicName) ? CONFIG.clinicName : '本能堂中医诊所');
             const regFeeVal = localStorage.getItem('local_defaultRegFee') || '0';
             const doseVal = localStorage.getItem('local_defaultDose') || '7';
-            const clinicDoctorVal = (typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : (localStorage.getItem('local_clinicDoctor') || '张大夫');
+            const clinicDoctorVal = localStorage.getItem('local_clinicDoctor') || ((typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : '本能堂');
             document.getElementById('clinicName').value = clinicNameVal;
             document.getElementById('clinicNameDisplay').textContent = clinicNameVal;
             document.getElementById('defaultRegFee').value = regFeeVal;
@@ -4662,10 +4662,13 @@ if (window.Permission) {
         }
 
         function saveSettings() {
-            // 个人版：诊所名称和医师姓名由 CONFIG 控制，不保存到 localStorage
-            if (typeof CONFIG === 'undefined' || !CONFIG.clinicName) {
-                localStorage.setItem('local_clinicName', document.getElementById('clinicName').value);
-                localStorage.setItem('local_clinicDoctor', document.getElementById('defaultDoctor').value);
+            // 个人版：诊所名称和医师姓名可编辑，保存到 localStorage（对齐定制版逻辑）
+            localStorage.setItem('local_clinicName', document.getElementById('clinicName').value);
+            localStorage.setItem('local_clinicDoctor', document.getElementById('defaultDoctor').value);
+            // 同步更新 CONFIG 对象，确保其他引用 CONFIG 的地方获取最新值
+            if (typeof CONFIG !== 'undefined') {
+                CONFIG.clinicName = document.getElementById('clinicName').value;
+                CONFIG.doctorName = document.getElementById('defaultDoctor').value;
             }
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             localStorage.setItem('local_defaultDose', document.getElementById('defaultDose').value || '7');
