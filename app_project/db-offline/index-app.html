@@ -696,6 +696,11 @@ let currentUser = null;
             } catch(e) {}
             // ★ 个人版：单用户，取消下拉菜单，用户名只读显示医师姓名
             if (CONFIG.edition === 'personal') {
+                // 优先从 localStorage 读取最新医师姓名（基础设置修改后保存到这里）
+                const localDoctor = localStorage.getItem('local_clinicDoctor');
+                if (localDoctor) {
+                    CONFIG.doctorName = localDoctor;
+                }
                 const userInput = document.getElementById('loginUsername');
                 const dropdownBtn = document.getElementById('usernameDropdownBtn');
                 const dropdownMenu = document.getElementById('usernameDropdownMenu');
@@ -1776,6 +1781,14 @@ let currentUser = null;
 
         async function loadRememberedUsers() {
             try {
+                // ★ 个人版：单用户，用户名固定显示 CONFIG.doctorName，跳过记住用户名逻辑
+                if (CONFIG.edition === 'personal') {
+                    const userInput = document.getElementById('loginUsername');
+                    if (userInput && CONFIG.doctorName) {
+                        userInput.value = CONFIG.doctorName;
+                    }
+                    return;
+                }
                 // 优先使用 AuthCore（统一存储适配器）
                 if (window.AuthCore && AuthCore.loadRememberedUsers) {
                     try {
