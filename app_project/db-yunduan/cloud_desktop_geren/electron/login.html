@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>惠康中医诊所管理系统 - 登录</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .login-container {
+            width: 230px;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 8px;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.3);
+            overflow: visible;
+            position: relative;
+            backdrop-filter: blur(10px);
+        }
+        .bg-decoration {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400"%3E%3Cdefs%3E%3Cpattern id="grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"%3E%3Cpath d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(102,126,234,0.08)" stroke-width="1"/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill="url(%23grid)" width="320" height="400"/%3E%3C/svg%3E');
+            pointer-events: none;
+            z-index: 0;
+        }
+        .header-section {
+            position: relative;
+            z-index: 1;
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 5px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .system-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            letter-spacing: 1px;
+        }
+        .version-tag {
+            font-size: 9px;
+            font-weight: bold;
+            color: rgba(255,255,255,0.9);
+            background: rgba(255,255,255,0.2);
+            padding: 1px 7px;
+            border-radius: 7px;
+        }
+        .main-content {
+            position: relative;
+            z-index: 1;
+            padding: 14px;
+        }
+        .login-box {
+            background: white;
+            border-radius: 7px;
+            padding: 14px;
+            box-shadow: 0 3px 10px rgba(102, 126, 234, 0.15);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+        .clinic-info {
+            text-align: center;
+            padding: 8px;
+            background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%);
+            border: 1px solid #ffcccc;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+        .clinic-name {
+            font-size: 11px;
+            font-weight: bold;
+            color: #8b0000;
+            word-break: break-all;
+        }
+        .login-field {
+            margin-bottom: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+        .login-field label {
+            font-size: 10px;
+            font-weight: bold;
+            color: #555;
+        }
+        .login-field input {
+            width: 100%;
+            padding: 6px 8px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 11px;
+            background: #fafafa;
+            transition: all 0.2s;
+        }
+        .login-field input:focus {
+            border-color: #667eea;
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+            background: white;
+        }
+        .username-input-wrapper {
+            position: relative;
+        }
+        .username-input-wrapper input {
+            padding-right: 27px;
+        }
+        .username-dropdown-btn {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 24px;
+            padding: 0;
+            border: 2px solid #e0e0e0;
+            border-left: none;
+            border-radius: 0 5px 5px 0;
+            background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%);
+            color: #666;
+            font-size: 7px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            transition: all 0.2s;
+        }
+        .username-dropdown-btn:hover {
+            background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%);
+        }
+        .username-dropdown-menu {
+            position: absolute;
+            z-index: 100;
+            display: none;
+            background: white;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            top: calc(100% + 3px);
+            left: 0;
+            right: 0;
+            box-shadow: 0 5px 14px rgba(102, 126, 234, 0.25);
+            max-height: 100px;
+            overflow-y: auto;
+        }
+        .username-dropdown-menu.show {
+            display: block;
+        }
+        .username-dropdown-menu div {
+            padding: 7px 9px;
+            font-size: 8px;
+            color: #333;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .username-dropdown-menu div:hover {
+            background: #667eea;
+            color: white;
+        }
+        .remember-me {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            margin-bottom: 12px;
+        }
+        .remember-me input[type="checkbox"] {
+            width: 13px;
+            height: 13px;
+            accent-color: #667eea;
+            cursor: pointer;
+        }
+        .remember-me label {
+            font-size: 10px;
+            color: #666;
+            cursor: pointer;
+            font-weight: normal;
+        }
+        .login-buttons {
+            display: flex;
+            gap: 8px;
+        }
+        .login-btn {
+            flex: 1;
+            padding: 7px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            font-size: 11px;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 3px 8px rgba(102, 126, 234, 0.4);
+            transition: all 0.2s;
+        }
+        .login-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+        }
+        .login-btn:active {
+            transform: translateY(0);
+        }
+        .login-btn.cancel {
+            background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%);
+            color: #555;
+            box-shadow: 0 3px 8px rgba(0, 0, 0, 0.1);
+        }
+        .login-btn.cancel:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        .login-error {
+            color: #dc2626;
+            font-size: 9px;
+            text-align: center;
+            margin-top: 8px;
+            padding: 5px;
+            background: #fff5f5;
+            border-radius: 3px;
+            border: 1px solid #fcc;
+            display: none;
+        }
+        .login-footer {
+            text-align: center;
+            margin-top: 8px;
+            font-size: 8px;
+            color: #999;
+        }
+    </style>
+    <script src="auth-core.js"></script>
+</head>
+<body>
+    <div class="login-container">
+        <div class="bg-decoration"></div>
+        <div class="header-section">
+            <span class="system-title">惠康中医诊所管理系统</span>
+            <span class="version-tag">【云版】</span>
+        </div>
+        <div class="main-content">
+            <div class="login-box">
+                <div class="clinic-info">
+                    <div id="clinicName" class="clinic-name">本能堂中医诊所</div>
+                </div>
+                <div class="login-field">
+                    <label>用户名</label>
+                    <div class="username-input-wrapper">
+                        <input type="text" id="loginUsername" placeholder="请输入用户名">
+                        <button id="usernameDropdownBtn" class="username-dropdown-btn" style="display:none;">▼</button>
+                        <div id="usernameDropdownMenu" class="username-dropdown-menu"></div>
+                    </div>
+                </div>
+                <div class="login-field">
+                    <label>密码</label>
+                    <input type="password" id="loginPassword" placeholder="请输入密码">
+                </div>
+                <div class="remember-me">
+                    <input type="checkbox" id="rememberUser">
+                    <label for="rememberUser">记住用户</label>
+                </div>
+                <div class="login-field remember-me" id="rememberPasswordContainer" style="display:none;">
+                    <input type="checkbox" id="rememberPassword">
+                    <label for="rememberPassword">记住密码</label>
+                </div>
+                <div class="login-buttons">
+                    <button class="login-btn" id="loginBtn">确定</button>
+                    <button class="login-btn cancel" id="cancelBtn">取消</button>
+                </div>
+                <div id="loginError" class="login-error"></div>
+                <div class="login-footer">微信号: hktzy1688</div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="permission.js"></script>
+    <script>
+        // 版本权限控制
+        async function initLoginPermissions() {
+            try {
+                if (window.Permission) {
+                    await Permission.init();
+                    Permission.applyLoginPermissions();
+                }
+            } catch(e) { console.warn('Login permission init failed:', e); }
+        }
+
+        const CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
+
+        async function getConfigFromIndexHtml() {
+            try {
+                const result = await window.electronAPI.getIndexHtmlContent();
+                if (!result || !result.success || !result.content) return {};
+                const content = result.content;
+                const config = {};
+                const clinicNameMatch = content.match(/clinicName\s*:\s*['"]([^'"]+)['"]/);
+                if (clinicNameMatch) config.clinicName = clinicNameMatch[1];
+                return config;
+            } catch (e) {
+                console.log('读取index.html失败:', e.message);
+                return {};
+            }
+        }
+
+        async function loadClinicName() {
+            const savedName = localStorage.getItem('global_clinicName') || localStorage.getItem('clinicName');
+            const config = await getConfigFromIndexHtml();
+            const clinicName = savedName || config.clinicName || '本能堂中医诊所';
+            const clinicNameElement = document.getElementById('clinicName');
+            if (clinicNameElement) clinicNameElement.textContent = clinicName;
+        }
+
+        async function initLoginFields() {
+            let usernames = [];
+            try {
+                const localList = localStorage.getItem('cloud_rememberedUsers');
+                if (localList) {
+                    const parsed = JSON.parse(localList);
+                    if (Array.isArray(parsed)) {
+                        // 兼容旧格式（纯字符串）和新格式（{username, name}对象）
+                        usernames = parsed.filter(u => u);
+                    } else if (typeof parsed === 'string') {
+                        usernames = [parsed.trim()];
+                    }
+                }
+            } catch (e) {}
+
+            if (usernames.length === 0) {
+                const single = localStorage.getItem('cloud_rememberedUsername') || localStorage.getItem('rememberedUsername');
+                if (single) {
+                    usernames = [single];
+                    localStorage.setItem('cloud_rememberedUsers', JSON.stringify(usernames));
+                }
+            }
+
+            if (usernames.length > 0) {
+                renderRememberedUsers(usernames);
+                const firstEntry = usernames[0];
+                const firstUsername = typeof firstEntry === 'object' ? (firstEntry.username || '') : String(firstEntry).trim();
+                document.getElementById('loginUsername').value = firstUsername;
+                document.getElementById('rememberUser').checked = true;
+            }
+        }
+
+        function renderRememberedUsers(usernames) {
+            const btn = document.getElementById('usernameDropdownBtn');
+            const menu = document.getElementById('usernameDropdownMenu');
+            if (!btn || !menu) return;
+
+            if (usernames.length === 0) {
+                btn.style.display = 'none';
+                menu.style.display = 'none';
+                return;
+            }
+
+            btn.style.display = 'flex';
+            btn.textContent = '▼(' + usernames.length + ')';
+            menu.innerHTML = '';
+
+            usernames.forEach(entry => {
+                const item = document.createElement('div');
+                // 兼容旧格式（纯字符串）和新格式（{username, name}对象）
+                const displayName = typeof entry === 'object' ? (entry.name || entry.username) : entry;
+                const loginValue = typeof entry === 'object' ? entry.username : entry;
+                item.textContent = displayName;
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    document.getElementById('loginUsername').value = loginValue;
+                    document.getElementById('loginPassword').focus();
+                    menu.classList.remove('show');
+                });
+                menu.appendChild(item);
+            });
+
+            btn.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                menu.classList.toggle('show');
+            };
+        }
+
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('usernameDropdownMenu');
+            const btn = document.getElementById('usernameDropdownBtn');
+            if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.classList.remove('show');
+            }
+        });
+
+        function saveRememberedUser(username, displayName) {
+            const cleanUsername = String(username).trim();
+            if (!cleanUsername) return;
+            const cleanName = displayName ? String(displayName).trim() : cleanUsername;
+
+            let remembered = [];
+            try {
+                const localList = localStorage.getItem('cloud_rememberedUsers');
+                if (localList) {
+                    const parsed = JSON.parse(localList);
+                    if (Array.isArray(parsed)) {
+                        remembered = parsed;
+                    } else if (typeof parsed === 'string') {
+                        remembered = [parsed];
+                    }
+                }
+            } catch (e) {}
+
+            // 兼容旧格式（纯字符串）和新格式（{username, name}对象）
+            remembered = remembered.filter(u => {
+                const uName = typeof u === 'object' ? u.username : u;
+                return String(uName).toLowerCase() !== cleanUsername.toLowerCase();
+            });
+            remembered.unshift({ username: cleanUsername, name: cleanName });
+            if (remembered.length > 5) remembered = remembered.slice(0, 5);
+
+            localStorage.setItem('cloud_rememberedUsername', cleanUsername);
+            localStorage.setItem('rememberedUsername', cleanUsername);
+            localStorage.setItem('cloud_rememberedUsers', JSON.stringify(remembered));
+        }
+
+        async function handleLogin() {
+            const username = document.getElementById('loginUsername').value.trim();
+            const password = document.getElementById('loginPassword').value;
+            const errorDiv = document.getElementById('loginError');
+
+            if (!username) {
+                errorDiv.textContent = '请输入用户名';
+                errorDiv.style.display = 'block';
+                return;
+            }
+            if (!password) {
+                errorDiv.textContent = '请输入密码';
+                errorDiv.style.display = 'block';
+                return;
+            }
+
+            errorDiv.textContent = '正在登录...';
+            errorDiv.style.display = 'block';
+            errorDiv.style.color = '#666';
+
+            try {
+                const response = await fetch(`${CLOUD_API_BASE}/users?login=true`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                if (!data.success || !data.user) {
+                    errorDiv.textContent = data.error || '用户名或密码错误';
+                    errorDiv.style.display = 'block';
+                    errorDiv.style.color = '#dc2626';
+                    return;
+                }
+                const user = data.user;
+                // P0 修复：保存后端返回的 Bearer token，供后续 API 调用使用
+                if (data.token) {
+                    user.token = data.token;
+                }
+                // ★ 离线登录缓存：在线登录成功后缓存凭证
+                if (window.AuthCore && AuthCore.cacheOfflineLogin) {
+                    await AuthCore.cacheOfflineLogin(username, password, user);
+                }
+                localStorage.setItem('cloud_currentUser', JSON.stringify(user));
+                if (window.AuthCore) {
+                    try {
+                        await AuthCore.StorageAdapter.setItem('auth:currentUser', JSON.stringify(user));
+                        await AuthCore.StorageAdapter.setItem('auth:isLoggedIn', 'true');
+                        await AuthCore.StorageAdapter.setItem('auth:loginData', JSON.stringify({loginTime: Date.now(), username: user.username}));
+                    } catch(e) { console.warn('AuthCore存储失败:', e); }
+                }
+                localStorage.setItem('cloud_isLoggedIn', 'true');
+                localStorage.setItem('currentUser', JSON.stringify(user));
+                localStorage.setItem('isLoggedIn', 'true');
+
+                const rememberUser = document.getElementById('rememberUser').checked;
+                if (rememberUser) {
+                    saveRememberedUser(username, user.name);
+                } else {
+                    localStorage.removeItem('cloud_rememberedUsername');
+                    localStorage.removeItem('rememberedUsername');
+                }
+
+                // 记住密码（P0-2: 优先 safeStorage 系统级加密；P1-2: 移除明文回退分支，AuthCore 不可用时拒绝保存）
+                const rememberPassword = document.getElementById('rememberPassword');
+                if (rememberPassword && rememberPassword.checked) {
+                    if (window.AuthCore && AuthCore.encryptPassword) {
+                        // P0-2: encryptPassword 现已为 async（优先 safeStorage，降级 XOR PWDv2）
+                        const encryptedPwd = await AuthCore.encryptPassword(password);
+                        if (encryptedPwd) {
+                            localStorage.setItem('auth:savedPassword', encryptedPwd);
+                        } else {
+                            console.warn('[auth] 密码加密失败，已拒绝保存密码');
+                            localStorage.removeItem('auth:savedPassword');
+                            rememberPassword.checked = false;
+                        }
+                    } else {
+                        // 加密模块未就绪，不保存密码，避免明文持久化导致 XSS 泄露
+                        console.warn('[auth] AuthCore.encryptPassword 不可用，已拒绝保存密码');
+                        localStorage.removeItem('auth:savedPassword');
+                        rememberPassword.checked = false;
+                        // 不阻塞登录，仅提示用户
+                        setTimeout(function() {
+                            alert('加密模块未就绪，本次未记住密码。下次启动后会自动恢复。');
+                        }, 100);
+                    }
+                } else {
+                    localStorage.removeItem('auth:savedPassword');
+                }
+
+                errorDiv.textContent = '登录成功，正在打开...';
+                errorDiv.style.display = 'block';
+                errorDiv.style.color = '#4CAF50';
+
+                if (!window.electronAPI) {
+                    errorDiv.textContent = '错误：桌面环境未初始化，请重启应用';
+                    errorDiv.style.color = '#dc2626';
+                    return;
+                }
+                await window.electronAPI.loginSuccess(user);
+            } catch (err) {
+                console.error('Login error:', err);
+                // ★ 离线登录缓存：网络错误时尝试离线登录
+                const isNetworkError = !navigator.onLine ||
+                    (err.message && (err.message.includes('Failed to fetch') ||
+                                     err.message.includes('NetworkError') ||
+                                     err.message.includes('ERR_')));
+                if (isNetworkError && window.AuthCore && AuthCore.tryOfflineLogin) {
+                    errorDiv.textContent = '网络不可用，正在尝试离线登录...';
+                    errorDiv.style.color = '#f59e0b';
+                    const offlineResult = await AuthCore.tryOfflineLogin(username, password);
+                    if (offlineResult.success) {
+                        const user = offlineResult.user;
+                        localStorage.setItem('cloud_currentUser', JSON.stringify(user));
+                        try {
+                            await AuthCore.StorageAdapter.setItem('auth:currentUser', JSON.stringify(user));
+                            await AuthCore.StorageAdapter.setItem('auth:isLoggedIn', 'true');
+                            await AuthCore.StorageAdapter.setItem('auth:loginData', JSON.stringify({loginTime: Date.now(), username: user.username}));
+                        } catch(e2) { console.warn('AuthCore存储失败:', e2); }
+                        localStorage.setItem('cloud_isLoggedIn', 'true');
+                        localStorage.setItem('currentUser', JSON.stringify(user));
+                        localStorage.setItem('isLoggedIn', 'true');
+                        errorDiv.textContent = '离线登录成功，正在打开...';
+                        errorDiv.style.color = '#4CAF50';
+                        if (window.electronAPI) {
+                            await window.electronAPI.loginSuccess(user);
+                        }
+                        return;
+                    }
+                    errorDiv.textContent = '网络不可用，' + (offlineResult.error || '离线登录失败');
+                    errorDiv.style.color = '#dc2626';
+                } else {
+                    errorDiv.textContent = '登录失败：' + (err.message || '网络错误');
+                    errorDiv.style.color = '#dc2626';
+                }
+                errorDiv.style.display = 'block';
+            }
+        }
+
+        function handleCancel() {
+            if (window.electronAPI) {
+                window.electronAPI.loginCancel();
+            } else {
+                window.close();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            document.getElementById('loginBtn').addEventListener('click', handleLogin);
+            document.getElementById('cancelBtn').addEventListener('click', handleCancel);
+            document.getElementById('loginPassword').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') handleLogin();
+            });
+            document.getElementById('loginUsername').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') document.getElementById('loginPassword').focus();
+            });
+            loadClinicName().catch(e => console.warn('loadClinicName失败:', e));
+            initLoginFields().catch(e => console.warn('initLoginFields失败:', e));
+            initLoginPermissions();
+            // P0-2: 兼容 SAFE:/PWDv2:/PWDv1: 加密格式（均为 AuthCore 加密）
+            let savedPassword = localStorage.getItem('auth:savedPassword');
+            if (savedPassword) {
+                if (window.AuthCore && AuthCore.decryptPassword &&
+                    (savedPassword.startsWith('SAFE:') || savedPassword.startsWith('PWDv1:') || savedPassword.startsWith('PWDv2:'))) {
+                    try {
+                        // P0-2: decryptPassword 现已为 async（safeStorage 优先，降级 XOR）
+                        const decrypted = await AuthCore.decryptPassword(savedPassword);
+                        if (decrypted) {
+                            savedPassword = decrypted;
+                        } else {
+                            // 解密失败（如跨用户/跨机器迁移）：清空保存的密码，让用户重新输入
+                            console.warn('[auth] 保存的密码解密失败，请重新输入');
+                            localStorage.removeItem('auth:savedPassword');
+                            savedPassword = '';
+                        }
+                    } catch (e) {
+                        console.warn('[auth] 解密保存密码异常:', e);
+                        localStorage.removeItem('auth:savedPassword');
+                        savedPassword = '';
+                    }
+                }
+                if (savedPassword) {
+                    document.getElementById('loginPassword').value = savedPassword;
+                    const rememberPassword = document.getElementById('rememberPassword');
+                    if (rememberPassword) rememberPassword.checked = true;
+                }
+            }
+        });
+    </script>
+</body>
+</html>

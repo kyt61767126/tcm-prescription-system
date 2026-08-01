@@ -1,11 +1,15 @@
 ﻿{
-    "generated_at":  "2026-08-01 17:53:29 +08:00",
+    "generated_at":  "2026-08-01 18:09:26 +08:00",
     "description":  "Interface structure fingerprint. SHA256 of HTML body (before first \u003cscript\u003e). Changes to \u003cscript\u003e blocks do NOT affect fingerprint.",
     "files":  {
                   "app_project/db-yunduan/cloud_desktop/index.html":  {
                                                                           "sha256":  "330d52f835ace400a618831229cf27a9c10882b6325637c0be076c6215d92c45",
                                                                           "html_length":  48987
                                                                       },
+                  "app_project/db-yunduan/cloud_desktop_geren/index.html":  {
+                                                                                "sha256":  "330d52f835ace400a618831229cf27a9c10882b6325637c0be076c6215d92c45",
+                                                                                "html_length":  48987
+                                                                            },
                   "public/index.html":  {
                                             "sha256":  "db35d556056180b64235b62bb5d367ed6dbef41ab0d7603b61bb7cceebe0e4b9",
                                             "html_length":  49252
@@ -22,6 +26,10 @@
                                                                                    "sha256":  "233b8ef7af0c5b8ef4c7177da6d3a4f7db32af66c13c7845e26e4b132b673a55",
                                                                                    "html_length":  2005
                                                                                },
+                  "app_project/db-yunduan/cloud_desktop_geren/electron/login.html":  {
+                                                                                         "sha256":  "233b8ef7af0c5b8ef4c7177da6d3a4f7db32af66c13c7845e26e4b132b673a55",
+                                                                                         "html_length":  2005
+                                                                                     },
                   "public/electron/login.html":  {
                                                      "sha256":  "d1b13ee60b249f3c1de3549ee73f354d5a716897e73f9617bed35566922e502b",
                                                      "html_length":  1680

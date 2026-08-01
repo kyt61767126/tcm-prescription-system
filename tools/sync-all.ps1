@@ -51,6 +51,8 @@ $BusinessJsTargets = @(
     'public/electron',
     'app_project/db-yunduan/cloud_desktop',
     'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-yunduan/cloud_desktop_geren',
+    'app_project/db-yunduan/cloud_desktop_geren/electron',
     'app_project/db-geren/desktop',
     'app_project/db-dingzhi/desktop',
     'app_project/db-geren/app/app/src/main/assets/public',
@@ -81,6 +83,7 @@ $LicenseFiles = @(
 # license targets (4 electron/ + 3 root/license/ + 3 nndroidicense/)
 $LicenseTargets = @(
     'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-yunduan/cloud_desktop_geren/electron',
     'app_project/db-geren/desktop/electron',
     'app_project/db-dingzhi/desktop/electron',
     'app_project/db-geren/desktop/license',
@@ -130,7 +133,8 @@ $CloudModuleFiles = @(
 )
 
 $CloudModuleTargets = @(
-    'app_project/db-yunduan/cloud_desktop'
+    'app_project/db-yunduan/cloud_desktop',
+    'app_project/db-yunduan/cloud_desktop_geren'
 )
 
 # ============================================================================

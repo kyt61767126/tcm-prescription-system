@@ -83,7 +83,8 @@ $htmlFiles = @(
     'app_project\db-dingzhi\app\app\src\main\assets\public\index.html',
     'app_project\db-geren\app\app\src\main\assets\public\index.html',
     'public\index.html',
-    'app_project\db-yunduan/cloud_desktop\index.html'
+    'app_project\db-yunduan/cloud_desktop\index.html',
+    'app_project\db-yunduan/cloud_desktop_geren\index.html'
 )
 foreach ($f in $htmlFiles) { Check-Bom -Path $f -ShouldHaveBom $false -Label $f }
 Write-Host ""

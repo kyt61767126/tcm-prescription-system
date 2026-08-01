@@ -23,7 +23,9 @@ $targets = @(
     'app_project\db-geren\desktop\index.html',
     'app_project\db-dingzhi\desktop\index.html',
     'app_project\db-geren\app\app\src\main\assets\public\index.html',
-    'app_project\db-dingzhi\app\app\src\main\assets\public\index.html'
+    'app_project\db-dingzhi\app\app\src\main\assets\public\index.html',
+    'app_project\db-yunduan\cloud_desktop\index.html',
+    'app_project\db-yunduan\cloud_desktop_geren\index.html'
 )
 
 function Get-BodyDOM {

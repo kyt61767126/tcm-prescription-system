@@ -108,6 +108,8 @@ const ALL_DISTRIBUTION_DIRS = [
     'public/electron',
     'app_project/db-yunduan/cloud_desktop',
     'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-yunduan/cloud_desktop_geren',
+    'app_project/db-yunduan/cloud_desktop_geren/electron',
     'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
     'app_project/db-yunduan/cloud_app/app/src/main/assets',
     'app_project/db-dingzhi/desktop',
@@ -135,6 +137,8 @@ const TARGET_DIRS = {
         'public/electron',
         'app_project/db-yunduan/cloud_desktop',
         'app_project/db-yunduan/cloud_desktop/electron',
+        'app_project/db-yunduan/cloud_desktop_geren',
+        'app_project/db-yunduan/cloud_desktop_geren/electron',
         'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
         'app_project/db-yunduan/cloud_app/app/src/main/assets'
     ],

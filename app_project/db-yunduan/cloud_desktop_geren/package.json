@@ -1,0 +1,69 @@
+{
+  "name": "tcm-prescription-cloud-geren",
+  "version": "1.2.0",
+  "description": "惠康中医-云端",
+  "main": "electron/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win",
+    "build:win:portable": "electron-builder --win portable"
+  },
+  "author": "惠康堂",
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/asar": "^4.2.1",
+    "archiver": "^7.0.1",
+    "asarmor": "^3.0.2",
+    "electron": "^35.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "com.tcm.prescription.cloud.geren",
+    "productName": "惠康中医-云端个人版",
+    "directories": {
+      "output": "dist"
+    },
+    "afterPack": "./afterPack.js",
+    "asarUnpack": [
+      "**/node_modules/better-sqlite3/**"
+    ],
+    "files": [
+      "electron/**/*",
+      "index.html",
+      "xlsx.full.min.js",
+      "package.json",
+      "**/node_modules/better-sqlite3/**/*",
+      "**/node_modules/fs-extra/**/*",
+      "auth-core.js",
+      "permission.js",
+      "debug-logger.js",
+      "print-utils.js",
+      "medicine-dict.js",
+      "db-adapter.js",
+      "performance-utils.js",
+      "prescription-core.js",
+      "patient-archive.js",
+      "security-guard.js"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "include": "installer.nsh",
+      "differentialPackage": false
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "fs-extra": "^11.3.5"
+  }
+}
