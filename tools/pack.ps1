@@ -616,9 +616,33 @@ function Build-Desktop {
             Pop-Location
         }
         if (-not (Test-Path "$script:DesktopDir\node_modules\electron\dist\electron.exe")) {
-            Write-Host "  [ERROR] electron 二进制文件下载失败" -ForegroundColor Red
-            # ★ 改为 throw（而非 exit 1），确保外层 try/finally 执行环境变量恢复
-            throw "electron 二进制文件下载失败"
+            # ★ 回退：install.js 依赖 extract-zip 模块解压，该模块在某些 Windows 环境
+            # 下会静默部分解压（仅 locales，无 electron.exe）却返回 exit 0。
+            # 回退方案：从缓存中找到已下载的 zip，用 .NET ZipFile 直接解压。
+            Write-Host "  [WARN] install.js 解压不完整，尝试 .NET 回退解压..." -ForegroundColor Yellow
+            $electronVer = (Get-Content "$script:DesktopDir\node_modules\electron\package.json" -Raw | ConvertFrom-Json).version
+            $cacheZip = Join-Path $env:LOCALAPPDATA "electron\Cache\electron-v$electronVer-win32-x64.zip"
+            if (-not (Test-Path $cacheZip)) {
+                # 兜底：扫描缓存目录下匹配版本的 zip
+                $cacheDir = Join-Path $env:LOCALAPPDATA "electron\Cache"
+                $found = Get-ChildItem $cacheDir -Filter "electron-v$electronVer-*.zip" -ErrorAction SilentlyContinue | Select-Object -First 1
+                if ($found) { $cacheZip = $found.FullName }
+            }
+            if (Test-Path $cacheZip) {
+                Write-Host "  [INFO] 从缓存解压: $cacheZip" -ForegroundColor Cyan
+                $electronDist = "$script:DesktopDir\node_modules\electron\dist"
+                if (Test-Path $electronDist) { Remove-Item "$electronDist\*" -Recurse -Force -ErrorAction SilentlyContinue }
+                Add-Type -AssemblyName System.IO.Compression.FileSystem
+                [System.IO.Compression.ZipFile]::ExtractToDirectory($cacheZip, $electronDist)
+                # 写入 path.txt（install.js 解压成功后也会写，此处补齐）
+                Set-Content -Path "$script:DesktopDir\node_modules\electron\path.txt" -Value "electron.exe" -NoNewline -Encoding ASCII
+                Write-Host "  [OK] .NET 解压完成" -ForegroundColor Green
+            }
+            if (-not (Test-Path "$script:DesktopDir\node_modules\electron\dist\electron.exe")) {
+                Write-Host "  [ERROR] electron 二进制文件下载失败" -ForegroundColor Red
+                # ★ 改为 throw（而非 exit 1），确保外层 try/finally 执行环境变量恢复
+                throw "electron 二进制文件下载失败"
+            }
         }
     }
 
