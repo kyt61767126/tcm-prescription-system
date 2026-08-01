@@ -1370,8 +1370,8 @@ ipcMain.handle('get-current-user', async () => {
 // 读取 index.html 同目录下的 config.json；如不存在，则使用内置默认值
 ipcMain.handle('get-app-config', async () => {
     const defaults = {
-        clinicName: '卢二灼中医诊所',
-        doctorName: '卢二灼',
+        clinicName: '本能堂中医诊所',
+        doctorName: '本能堂',
         edition: 'personal',
         productName: '惠康中医-个人'
     };
