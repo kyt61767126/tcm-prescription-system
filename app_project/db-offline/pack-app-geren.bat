@@ -18,7 +18,7 @@ for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy
 
 echo ============================================
 echo   Huikang-TCM Build - Mobile APP (Capacitor)
-echo   Version: geren (?????)
+echo   Version: geren (Personal)
 echo   Start: %BUILD_START_TIME%
 echo ============================================
 echo.
@@ -33,13 +33,22 @@ for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('
 
 echo.
 if %EXIT_CODE% neq 0 (
-    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Red; Write-Host '  [ERROR] Build failed, exit code: %EXIT_CODE%' -ForegroundColor Red; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Red; Write-Host '========================================' -ForegroundColor Red"
+    echo ========================================
+    echo   [ERROR] Build failed, exit code: %EXIT_CODE%
+    echo   Elapsed: %BUILD_ELAPSED%
+    echo ========================================
 ) else (
-    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] Mobile APP (Personal) build complete!' -ForegroundColor Yellow; Write-Host '  APK: %~dp0??????-????????.apk' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
+    echo ========================================
+    echo   [OK] Mobile APP (Personal) build complete!
+    echo   APK: %~dp0惠康中医-离线标准版.apk
+    echo   Start: %BUILD_START_TIME%
+    echo   End:   %BUILD_END_TIME%
+    echo   Elapsed: %BUILD_ELAPSED%
+    echo ========================================
 )
 echo.
 if not defined NO_PAUSE (
     set "EXIT_KEY="
-    set /p "EXIT_KEY=?? 0 ?????????: "
+    set /p "EXIT_KEY=Press 0 or Enter to exit: "
 )
 exit /b %EXIT_CODE%

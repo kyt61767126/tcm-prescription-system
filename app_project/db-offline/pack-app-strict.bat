@@ -4,7 +4,7 @@ setlocal enableextensions
 cd /d "%~dp0"
 
 REM pack-app-strict.bat - Strict APP build (Capacitor APK + signature hash + repack)
-REM Calls capacitor/pack-app-strict.bat which handles full strict flow
+REM Custom edition: calls app/pack-app-strict.bat which handles full strict flow
 
 REM Record start time
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
@@ -18,9 +18,9 @@ if not exist "%CAP_DIR%\pack-app-strict.bat" (
 
 echo ============================================
 echo   Huikang-TCM Build - Strict APP (Capacitor)
-echo   Version: dingzhi (?????)
+echo   Version: dingzhi (Custom)
 echo   (APK + signature hash + repack)
-echo   ???: %BUILD_START_TIME%
+echo   Start: %BUILD_START_TIME%
 echo ============================================
 echo.
 
@@ -34,13 +34,22 @@ for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('
 
 echo.
 if %EXIT_CODE% neq 0 (
-    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Red; Write-Host '  [????] ????????????: %EXIT_CODE%' -ForegroundColor Red; Write-Host '  ????: %BUILD_ELAPSED%' -ForegroundColor Red; Write-Host '========================================' -ForegroundColor Red"
+    echo ========================================
+    echo   [ERROR] Build failed, exit code: %EXIT_CODE%
+    echo   Elapsed: %BUILD_ELAPSED%
+    echo ========================================
 ) else (
-    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [???] ?????APP???????' -ForegroundColor Yellow; Write-Host '  [λ??] APK ???: %~dp0??????-?????????.apk' -ForegroundColor Yellow; Write-Host '  ???: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  ????: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  ????: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
+    echo ========================================
+    echo   [OK] Strict APP build complete!
+    echo   APK: %~dp0惠康中医-离线机构版.apk
+    echo   Start: %BUILD_START_TIME%
+    echo   End:   %BUILD_END_TIME%
+    echo   Elapsed: %BUILD_ELAPSED%
+    echo ========================================
 )
 echo.
 if not defined NO_PAUSE (
     set "EXIT_KEY="
-    set /p "EXIT_KEY=?? 0 ?????????: "
+    set /p "EXIT_KEY=Press 0 or Enter to exit: "
 )
 exit /b %EXIT_CODE%

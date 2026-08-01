@@ -3,7 +3,7 @@ chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
 
-REM pack-app-strict.bat - Capacitor APP Strict Build
+REM pack-app-strict.bat - Capacitor APP Strict Build (Personal)
 REM Strict mode: clean build + hash verify + signature hash injection + repack
 
 echo ============================================
@@ -60,10 +60,17 @@ echo.
 :done
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
-powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  ????????' -ForegroundColor Yellow; Write-Host '  APK ???: %~dp0..\??????-????????.apk' -ForegroundColor Yellow; Write-Host '  ??: ???????????????÷?????' -ForegroundColor Yellow; Write-Host '  ???: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  ????: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  ????: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
+echo ========================================
+echo   Build Success!
+echo   APK: %~dp0..\惠康中医-离线标准版.apk
+echo   Mode: Strict signature (anti-tamper enabled)
+echo   Start: %BUILD_START_TIME%
+echo   End:   %BUILD_END_TIME%
+echo   Elapsed: %BUILD_ELAPSED%
+echo ========================================
 echo.
 if not defined NO_PAUSE (
     set "EXIT_KEY="
-    set /p "EXIT_KEY=?? 0 ?????????: "
+    set /p "EXIT_KEY=Press 0 or Enter to exit: "
 )
 exit /b 0
