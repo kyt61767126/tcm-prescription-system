@@ -195,6 +195,13 @@
 - **诊断**: 检查 `node_modules/@electron/get/` 目录是否只有 LICENSE；检查缓存目录是否有 `electron-v<版本>-win32-x64.zip`
 - **日期**: 2026-08-02
 
+### [BUILD_ELECTRON-004] node_modules 不完整导致 electron-builder 抛 MODULE_NOT_FOUND
+- **现象**: `electron-builder --prepackaged` 抛 `Cannot find module 'builder-util'`，require stack 指向 `electron-builder/out/cli/cli.js`
+- **根因**: node_modules 整体不完整——`builder-util`、`builder-util-runtime`、`electron-builder`、`@electron/get` 等关键模块的 `package.json` 全部丢失（目录存在但仅有部分文件）。原 pack.ps1 仅检查 `node_modules` 目录是否存在，不完整时不会触发重装，导致后续 electron-builder 报错。很可能是之前打包中断导致 npm ci 未完成，node_modules 残留半成品
+- **解决**: pack.ps1 新增 `Test-CriticalModules` 函数，检查 6 个关键模块的 package.json 是否存在（electron/electron-builder/builder-util/builder-util-runtime/app-builder-lib/@electron/get）。安装前检查完整性，不完整则删除 node_modules 重装；安装后再次验证，仍不完整则清理 cache 强制重装（不带 --prefer-offline）
+- **诊断**: `Test-Path node_modules\builder-util\package.json` 等检查关键模块；缺失则 node_modules 损坏
+- **日期**: 2026-08-02
+
 ---
 
 ## 十二、举一反三清单
@@ -212,6 +219,8 @@
 | 版本号固定时完整性校验需自动重建基线 | BUILD_ELECTRON-001 | 桌面版打包 |
 | electron install.js 失败应软失败走 .NET 回退解压 | BUILD_ELECTRON-002/003 | 桌面版打包 |
 | npm ci --ignore-scripts 后需检查 @electron/get 完整性 | BUILD_ELECTRON-003 | 桌面版打包 |
+| node_modules 存在不等于完整，需检查关键模块 package.json | BUILD_ELECTRON-004 | 桌面版打包 |
+| 打包中断后 node_modules 可能残留半成品，需完整性检查 | BUILD_ELECTRON-004 | 桌面版打包 |
 
 ---
 

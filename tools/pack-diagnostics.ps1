@@ -174,6 +174,13 @@ $ErrorPatterns = @(
         Patterns = @("@electron/get", "Cannot find module '@electron/get'", "electron install", "electron dist 缺失", "extract-zip")
         Solution = "@electron/get 包损坏或 install.js 解压不完整。pack.ps1 已修复：install.js 失败软失败走 .NET 回退解压（从 %LOCALAPPDATA%\electron\Cache 找 zip）。检查缓存是否有 electron-v<版本>-win32-x64.zip。详见 docs/pack-issues-knowledge-base.md"
         Severity = "HIGH"
+    },
+    @{
+        Category = "BUILD_ELECTRON"
+        IssueId = "BUILD_ELECTRON-004"
+        Patterns = @("Cannot find module 'builder-util'", "Cannot find module 'app-builder-lib'", "Cannot find module 'builder-util-runtime'", "electron-builder --prepackaged")
+        Solution = "node_modules 不完整（关键模块 package.json 丢失）。pack.ps1 已修复：Test-CriticalModules 函数检查 6 个关键模块，不完整则删除 node_modules 重装，仍不完整则清理 cache 强制重装。手动修复：删除 node_modules 重新打包。详见 docs/pack-issues-knowledge-base.md"
+        Severity = "HIGH"
     }
 )
 
@@ -234,12 +241,12 @@ if ($matchedIssues.Count -eq 0) {
     exit 0
 }
 
-# 去重（同分类只显示一次）
-$seenCategories = @{}
+# 去重（同 IssueId 只显示一次，同分类多个 IssueId 都显示）
+$seenIssueIds = @{}
 $uniqueIssues = @()
 foreach ($issue in $matchedIssues) {
-    if (-not $seenCategories.ContainsKey($issue.Category)) {
-        $seenCategories[$issue.Category] = $true
+    if (-not $seenIssueIds.ContainsKey($issue.IssueId)) {
+        $seenIssueIds[$issue.IssueId] = $true
         $uniqueIssues += $issue
     }
 }

@@ -193,6 +193,31 @@ function Invoke-External {
     Write-Log "[OK] $Context (exit code: $code)"
 }
 
+# ★ 举一反三修复（2026-08-02）：node_modules 完整性检查
+# 历史问题：npm ci --ignore-scripts 或打包中断后 node_modules 可能不完整
+#   - BUILD_ELECTRON-003: @electron/get 仅有 LICENSE 无 package.json
+#   - builder-util/electron-builder 等 package.json 丢失
+# 原脚本仅检查 node_modules 目录是否存在，不完整时不会重装，导致后续 electron-builder 报 MODULE_NOT_FOUND
+# 修复：安装前后都检查关键模块 package.json 是否存在，缺失则删除重装
+function Test-CriticalModules {
+    param([string]$Dir)
+    $critical = @(
+        "electron\package.json",
+        "electron-builder\package.json",
+        "builder-util\package.json",
+        "builder-util-runtime\package.json",
+        "app-builder-lib\package.json",
+        "@electron\get\package.json"
+    )
+    $missing = @()
+    foreach ($m in $critical) {
+        if (-not (Test-Path "$Dir\node_modules\$m")) {
+            $missing += $m
+        }
+    }
+    return $missing
+}
+
 # ============================================================================
 # Section 2: Encoding Verification
 # ============================================================================
@@ -585,7 +610,19 @@ function Build-Desktop {
 
     # Check node_modules - use npm ci for faster, deterministic install
     Write-Log "[STAGE:deps] start - 安装桌面版 npm 依赖"
-    if (-not (Test-Path "$script:DesktopDir\node_modules")) {
+    # ★ 举一反三修复（2026-08-02）：不仅检查 node_modules 是否存在，还检查关键模块完整性。
+    # 历史问题：打包中断后 node_modules 残留但不完整（package.json 丢失），下次打包跳过安装，
+    # 导致 electron-builder 报 Cannot find module 'builder-util'。
+    $missingModules = Test-CriticalModules $script:DesktopDir
+    $needInstall = (-not (Test-Path "$script:DesktopDir\node_modules")) -or ($missingModules.Count -gt 0)
+    if ($needInstall) {
+        if ($missingModules.Count -gt 0) {
+            Write-Host "  [WARN] 关键模块不完整（缺失 package.json）: $($missingModules -join ', ')" -ForegroundColor Yellow
+            Write-Host "  [INFO] 删除损坏的 node_modules 重新安装..." -ForegroundColor Cyan
+            if (Test-Path "$script:DesktopDir\node_modules") {
+                Remove-Item "$script:DesktopDir\node_modules" -Recurse -Force -ErrorAction SilentlyContinue
+            }
+        }
         $lockFile = "$script:DesktopDir\package-lock.json"
         Write-Host "  安装 npm 依赖中..." -ForegroundColor Yellow
         Push-Location $script:DesktopDir
@@ -602,6 +639,28 @@ function Build-Desktop {
         } finally {
             Pop-Location
         }
+        # ★ 安装后再次验证完整性，若仍不完整则清理 cache 强制重装
+        $missingAfter = Test-CriticalModules $script:DesktopDir
+        if ($missingAfter.Count -gt 0) {
+            Write-Host "  [WARN] 安装后关键模块仍缺失: $($missingAfter -join ', ')" -ForegroundColor Yellow
+            Write-Host "  [INFO] 清理共享 npm cache 强制重新下载..." -ForegroundColor Cyan
+            Remove-Item "$script:DesktopDir\node_modules" -Recurse -Force -ErrorAction SilentlyContinue
+            Push-Location $script:DesktopDir
+            try {
+                if (Test-Path $lockFile) {
+                    Invoke-External { npm ci --no-audit --no-fund --ignore-scripts } "npm ci (no cache)"
+                } else {
+                    Invoke-External { npm install --no-audit --no-fund --ignore-scripts } "npm install (no cache)"
+                }
+            } finally {
+                Pop-Location
+            }
+            $missingRetry = Test-CriticalModules $script:DesktopDir
+            if ($missingRetry.Count -gt 0) {
+                throw "关键模块安装失败（重试后仍缺失）: $($missingRetry -join ', ')"
+            }
+        }
+        Write-Host "  [OK] 关键模块完整性验证通过" -ForegroundColor Green
     }
     # 检查 electron dist（--ignore-scripts 安装时 postinstall 不执行，需手动下载）
     if (-not (Test-Path "$script:DesktopDir\node_modules\electron\dist\electron.exe")) {
