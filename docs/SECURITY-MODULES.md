@@ -88,7 +88,7 @@ cloud_project/
 
 offline_project/
   ├── db-bendi/          # 离线本地版（Electron + Android）
-  ├── db-geren/          # 离线个人版
+  ├── db-geren/          # 离线离线标准版
   ├── db-dingzhi/        # 离线定制版
   └── _shared/           # 共享资源（auth-core.js, license/）
 

@@ -69,7 +69,7 @@ function parseArgs() {
   --user              用户名（必填）
   --expire            到期日期 YYYY-MM-DD（与 --days 二选一）
   --days              有效天数（与 --expire 二选一）
-  --type              授权类型：trial / personal / pro（默认 personal）
+  --type              授权类型：trial / personal / pro（默认 personal，对应：试用版/标准版/机构版）
   --max-prescriptions 处方数量限制（覆盖默认值，0=无限，试用版默认30）
   --features          功能列表，逗号分隔（覆盖默认值，如 "backup,sync"）
   --output, -o        输出文件路径（默认 ./license.dat）
@@ -198,7 +198,7 @@ function main() {
     fs.writeFileSync(outputPath, base64, 'utf8');
 
     // v2: 版本类型中文名
-    const typeNames = { trial: '试用版', personal: '个人版', pro: '专业版' };
+    const typeNames = { trial: '试用版', personal: '标准版', pro: '机构版' };
     const featuresDisplay = features.length > 0 ? features.join(', ') : '（无）';
     const maxDisplay = maxPrescriptions === 0 ? '无限' : maxPrescriptions + ' 张/月';
 

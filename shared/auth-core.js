@@ -781,7 +781,7 @@
         };
     }
 
-    // 离线单用户适配器（个人版）
+    // 离线单用户适配器（标准版）
     function createSingleUserAdapter(getUserFn) {
         return {
             async authenticate(username, password) {
@@ -1842,8 +1842,8 @@
                     }
                 } else if (licenseType === 'licensed' || licenseType === 'personal' || licenseType === 'pro') {
                     // 已激活（正式 license）
-                    const planLabel = licenseType === 'personal' ? '个人版' :
-                                      licenseType === 'pro' ? '专业版' : licenseType;
+                    const planLabel = licenseType === 'personal' ? '标准版' :
+                                      licenseType === 'pro' ? '机构版' : licenseType;
                     let html = '✅ 已激活' + (planLabel ? '（' + planLabel + '）' : '');
                     if (hasDays && remainingDays > 0) {
                         html += '<br>剩余 <b style="color:#4caf50;">' + remainingDays + '</b> 天';

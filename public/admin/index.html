@@ -297,8 +297,8 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     <label>版本类型 *</label>
                     <select id="genType">
                         <option value="trial">试用版（30张/月，7天）</option>
-                        <option value="personal" selected>个人版（无限处方，1年）</option>
-                        <option value="pro">专业版（无限+同步+多设备，1年）</option>
+                        <option value="personal" selected>标准版（无限处方，1年）</option>
+                        <option value="pro">机构版（无限+同步+多设备，1年）</option>
                     </select>
                 </div>
                 <div class="form-group">
@@ -319,7 +319,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </div>
                 <div class="form-group">
                     <label>最大设备数</label>
-                    <input type="number" id="genMaxDevices" value="1" min="1" max="10" title="1=单机激活码；5=可激活5台设备（专业版推荐）">
+                    <input type="number" id="genMaxDevices" value="1" min="1" max="10" title="1=单机激活码；5=可激活5台设备（机构版推荐）">
                 </div>
                 <!-- ★ 售后管理字段：订单号/电话/微信，生成时拼接到备注字段，方便售后查询 -->
                 <div class="form-group">
@@ -362,8 +362,8 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <select id="filterType" onchange="loadList()">
                 <option value="">全部类型</option>
                 <option value="trial">试用版</option>
-                <option value="personal">个人版</option>
-                <option value="pro">专业版</option>
+                <option value="personal">标准版</option>
+                <option value="pro">机构版</option>
             </select>
             <input type="text" id="filterQ" placeholder="搜索激活码/用户名/备注/订单号/电话/微信" onkeyup="if(event.key==='Enter') loadList()">
             <button class="btn btn-sm" onclick="loadList()">搜索</button>
@@ -615,8 +615,8 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <label>版本类型 *</label>
                 <select id="batchGenType">
                     <option value="trial">试用版</option>
-                    <option value="personal" selected>个人版</option>
-                    <option value="pro">专业版</option>
+                    <option value="personal" selected>标准版</option>
+                    <option value="pro">机构版</option>
                 </select>
             </div>
             <div class="form-group">
@@ -816,7 +816,7 @@ function renderCustomTplManageList() {
         listEl.innerHTML = '<div class="empty-tip">暂无自定义模板，点击上方"💾 存为模板"按钮保存当前配置</div>';
         return;
     }
-    const typeLabel = { trial: '试用版', personal: '个人版', pro: '专业版' };
+    const typeLabel = { trial: '试用版', personal: '标准版', pro: '机构版' };
     listEl.innerHTML = list.map((t, i) => {
         const daysLabel = t.days >= 36500 ? '永久' : (t.days >= 365 ? (t.days/365) + '年' : t.days + '天');
         const info = `${escapeHtml(t.name)} · ${typeLabel[t.type]||t.type} · ${daysLabel} · ${t.maxDevices}设备`;
@@ -1025,7 +1025,7 @@ function applyBatchTemplate(tpl) {
 }
 
 // ★ 智能匹配：根据用户名关键字自动推荐版本配置
-// 规则：用户名包含"试用/test"→试用7天；包含"专业/pro/工作室/连锁"→专业版1年5设备；其他→个人版1年
+// 规则：用户名包含"试用/test"→试用7天；包含"专业/pro/工作室/连锁"→机构版1年5设备；其他→标准版1年
 function autoMatchBatchVersion() {
     const usersText = document.getElementById('batchGenUsers').value.trim();
     if (!usersText) {
@@ -1061,10 +1061,10 @@ function autoMatchBatchVersion() {
         reason = `检测到 ${trialCount} 个试用类用户名（含"试用/test"等关键字），推荐试用版 7 天`;
     } else if (proCount >= personalCount) {
         recommended = 'pro1y';
-        reason = `检测到 ${proCount} 个专业类用户名（含"专业/工作室/连锁"等关键字），推荐专业版 1 年 5 设备`;
+        reason = `检测到 ${proCount} 个专业类用户名（含"专业/工作室/连锁"等关键字），推荐机构版 1 年 5 设备`;
     } else {
         recommended = 'personal1y';
-        reason = `检测到 ${personalCount} 个普通用户名，推荐个人版 1 年（默认）`;
+        reason = `检测到 ${personalCount} 个普通用户名，推荐标准版 1 年（默认）`;
     }
 
     applyBatchTemplate(recommended);
@@ -1333,7 +1333,7 @@ function renderList(records) {
         tbody.innerHTML = '<tr><td colspan="11" class="empty">暂无激活码</td></tr>';
         return;
     }
-    const typeNames = { trial: '试用版', personal: '个人版', pro: '专业版' };
+    const typeNames = { trial: '试用版', personal: '标准版', pro: '机构版' };
     const statusNames = { unused: '未使用', used: '已激活', expired: '已过期', disabled: '已禁用' };
 
     tbody.innerHTML = records.map(r => {

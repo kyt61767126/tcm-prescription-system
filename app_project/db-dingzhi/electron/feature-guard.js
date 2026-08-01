@@ -51,9 +51,9 @@ function checkFeature(featureName) {
     const licenseType = getLicenseType();
     let upgradeHint = '';
     if (licenseType === 'trial') {
-        upgradeHint = '当前为试用版，购买个人版或专业版后可使用此功能。';
+        upgradeHint = '当前为试用版，购买标准版或机构版后可使用此功能。';
     } else if (licenseType === 'personal') {
-        upgradeHint = '当前为个人版，升级到专业版后可使用此功能。';
+        upgradeHint = '当前为标准版，升级到机构版后可使用此功能。';
     } else {
         upgradeHint = '当前授权不支持此功能，请联系客服升级。';
     }
