@@ -155,8 +155,10 @@ public class MainActivity extends BridgeActivity {
             showFatalLicenseErrorAndExit(message);
             return false;
         } catch (Exception e) {
-            Log.e(TAG, "[StartupCheck] 原生校验异常，降级到 JS 层校验", e);
-            return true;
+            // ★安全优化：原生校验异常时阻止启动（原为降级到JS层校验，存在安全风险）
+            Log.e(TAG, "[StartupCheck] 原生校验异常（阻止启动）", e);
+            showFatalLicenseErrorAndExit("软件校验异常，请重新安装或联系客服。");
+            return false;
         }
     }
 

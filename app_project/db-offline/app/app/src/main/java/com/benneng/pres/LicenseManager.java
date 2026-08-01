@@ -1837,8 +1837,8 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                     String hash = sha256Hex(bytes);
                     combined.append(hash).append('|');
                 } catch (Exception e) {
-                    Log.w(TAG, "[Integrity] 读取文件失败，跳过: " + assetPath);
-                    return true;
+                    Log.e(TAG, "[Integrity] 读取文件失败: " + assetPath);
+                    return false;
                 }
             }
             String currentHash = sha256Hex(combined.toString().getBytes(StandardCharsets.UTF_8));
@@ -1863,8 +1863,9 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             Log.e(TAG, "[Integrity] 当前: " + currentHash.substring(0, Math.min(16, currentHash.length())) + "...");
             return false;
         } catch (Exception e) {
-            Log.w(TAG, "[Integrity] 完整性校验异常（降级放行）: " + e.getMessage());
-            return true;
+            // ★安全优化：完整性校验异常时阻止启动（原为降级放行，存在安全风险）
+            Log.e(TAG, "[Integrity] 完整性校验异常（阻止启动）: " + e.getMessage());
+            return false;
         }
     }
 

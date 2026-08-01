@@ -682,7 +682,16 @@ app.whenReady().then(async () => {
             return;
         }
     } catch (e) {
-        console.warn('[Integrity] 完整性校验异常（降级放行）:', e.message);
+        // ★安全优化：完整性校验异常时阻止启动（原为降级放行，存在安全风险）
+        console.error('[Integrity] 完整性校验异常（阻止启动）:', e.message);
+        dialog.showMessageBoxSync({
+            type: 'error',
+            title: '完整性校验异常',
+            message: '软件完整性校验异常，无法启动。\n请从官方渠道重新下载安装，或联系客服。',
+            buttons: ['退出']
+        });
+        app.exit(1);
+        return;
     }
 
     // ★ 启动自动更新检查（第4周任务，延迟 5 秒检查避免影响启动）
