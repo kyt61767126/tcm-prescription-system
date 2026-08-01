@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
@@ -22,6 +22,46 @@ if errorlevel 1 (
     exit /b 1
 )
 echo       npm OK
+echo.
+
+echo [1.5/7] Checking node_modules...
+if not exist "node_modules" (
+    echo       node_modules not found, installing dependencies...
+    if exist "package-lock.json" (
+        echo       Running npm ci ^(faster, deterministic^)...
+        call npm ci --no-audit --no-fund --prefer-offline
+        if errorlevel 1 (
+            echo       [WARN] npm ci failed, fallback to npm install --ignore-scripts...
+            call npm install --no-audit --no-fund --prefer-offline --ignore-scripts
+        )
+    ) else (
+        echo       Running npm install...
+        call npm install --no-audit --no-fund --prefer-offline --ignore-scripts
+    )
+    if errorlevel 1 (
+        echo [ERROR] npm install failed
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+    echo       [OK] Dependencies installed
+) else (
+    echo       [OK] node_modules exists
+)
+REM Check electron dist (--ignore-scripts skips postinstall, need manual download)
+if not exist "node_modules\electron\dist\electron.exe" (
+    echo       electron dist missing, downloading binary...
+    set NODE_TLS_REJECT_UNAUTHORIZED=0
+    set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
+    call node node_modules\electron\install.js
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    set ELECTRON_MIRROR=
+    if not exist "node_modules\electron\dist\electron.exe" (
+        echo [ERROR] electron binary download failed
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+    echo       [OK] electron dist downloaded
+)
 echo.
 
 echo [2/7] Closing remaining processes...
@@ -109,11 +149,46 @@ if errorlevel 1 (
 echo [OK] 安全检查通过
 echo.
 
+echo [CHECK] 磁盘空间检查...
+for /f "delims=" %%d in ('powershell -NoProfile -Command "[math]::Round((Get-PSDrive -Name $((Get-Location).Drive.Name)).Free/1GB,2)"') do set "FREE_GB=%%d"
+echo       Disk free: %FREE_GB% GB
+if "%FREE_GB%"=="" set "FREE_GB=0"
+powershell -NoProfile -Command "if([double]'%FREE_GB%' -lt 1.0){ Write-Host '[ERROR] 磁盘空间不足: %FREE_GB%GB, 需要>=1GB'; exit 1 }"
+if errorlevel 1 (
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] 磁盘空间充足
+echo.
+
 set NODE_TLS_REJECT_UNAUTHORIZED=0
+REM P1-Reliability: isolate TEMP directory to project tmp/ to avoid C: drive space/permission issues
+set "PREV_TEMP=%TEMP%"
+set "PREV_TMP=%TMP%"
+if not exist "tmp" mkdir tmp
+set "TEMP=%CD%\tmp"
+set "TMP=%CD%\tmp"
 call npm run build
 set "BUILD_RC=%errorlevel%"
 REM P1-Security hardening: clear temporary TLS disable to avoid polluting dev environment
 set NODE_TLS_REJECT_UNAUTHORIZED=
+REM Restore TEMP regardless of build result
+set "TEMP=%PREV_TEMP%"
+set "TMP=%PREV_TMP%"
+if not "%BUILD_RC%"=="0" (
+    echo.
+    echo [WARN] First build attempt failed, retrying...
+    timeout /t 3 /nobreak >nul
+    set NODE_TLS_REJECT_UNAUTHORIZED=0
+    set "TEMP=%CD%\tmp"
+    set "TMP=%CD%\tmp"
+    call npm run build
+    set "BUILD_RC=%errorlevel%"
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    set "TEMP=%PREV_TEMP%"
+    set "TMP=%PREV_TMP%"
+)
+if exist "tmp" rmdir /s /q "tmp" 2>nul
 if not "%BUILD_RC%"=="0" (
     echo.
     echo [ERROR] Build failed, please check logs above
@@ -121,6 +196,27 @@ if not "%BUILD_RC%"=="0" (
     node "%~dp0..\..\tools\obfuscate.js" restore --target=geren >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
+)
+echo.
+
+echo [VERIFY] 产物完整性验证...
+set "EXE_FILE="
+for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
+if "%EXE_FILE%"=="" (
+    echo [ERROR] No exe file found in %OUTPUT_DIR%
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+for %%A in ("%EXE_FILE%") do (
+    if %%~zA LSS 1000000 (
+        echo [ERROR] exe file too small: %%~zA bytes ^(< 1MB^), build may be incomplete
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+    if %%~zA GTR 200000000 (
+        echo [WARN] exe file unusually large: %%~zA bytes ^(^> 200MB^)
+    )
+    echo [OK] %%~nxA  %%~zA bytes
 )
 echo.
 
@@ -133,16 +229,6 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [OK] Original code restored
-echo.
-
-REM P1-Enhancement: verify artifact exists and is non-empty
-set "EXE_FILE="
-for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
-if not "%EXE_FILE%"=="" (
-    for %%A in ("%EXE_FILE%") do (
-        echo   [OK] %%~nxA  %%~zA bytes
-    )
-)
 echo.
 
 echo [7/7] Build completed

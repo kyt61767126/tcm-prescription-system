@@ -151,6 +151,39 @@ if not exist "app\src\main\assets\video-recorder-inject.js" (
 echo [OK] Environment check passed
 echo.
 
+echo [3.1/10] Pre-build validation (disk space + source files)...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='Stop';" ^
+  "$disk=(Get-PSDrive -Name $((Get-Location).Drive.Name));" ^
+  "$freeGB=[math]::Round($disk.Free/1GB,2);" ^
+  "if($freeGB -lt 0.5){ Write-Host '[ERROR] Disk space不足: '$freeGB'GB free, need >=0.5GB'; exit 1 };" ^
+  "Write-Host '  Disk free:' $freeGB 'GB';" ^
+  "$required=@('..\index.html','..\android\app\src\main\assets\public\index.html','..\android\app\src\main\assets\video-recorder-inject.js','..\config.json','app\signing.properties','app\app-release.jks','app\build.gradle');" ^
+  "$missing=@(); foreach($f in $required){ if(-not(Test-Path $f)){ $missing+=$f } };" ^
+  "if($missing.Count -gt 0){ Write-Host '[ERROR] Missing required files:'; $missing|ForEach-Object{ Write-Host '  - '$_ }; exit 1 };" ^
+  "Write-Host '[OK] All required files present'"
+if errorlevel 1 (
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo.
+
+echo [3.2/10] Verifying keystore integrity...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "$ErrorActionPreference='Stop';" ^
+  "$jks='app\app-release.jks';" ^
+  "$size=(Get-Item $jks).Length;" ^
+  "if($size -lt 1000){ Write-Host '[ERROR] Keystore file too small ('$size' bytes), may be corrupted'; exit 1 };" ^
+  "$bytes=[System.IO.File]::ReadAllBytes($jks);" ^
+  "$header=[System.Text.Encoding]::ASCII.GetString($bytes[0..3]);" ^
+  "if($header -notmatch '0x|....'){ Write-Host '[WARN] Keystore header unusual: '$header };" ^
+  "Write-Host '[OK] Keystore OK ('$size' bytes)'"
+if errorlevel 1 (
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo.
+
 echo [3.5/10] Patching Capacitor Java version (21 to 17)...
 call node "%~dp0..\..\..\tools\patch-java-version.js" "%~dp0..\.."
 if errorlevel 1 (
@@ -273,6 +306,28 @@ for %%A in ("%APK_FILE%") do (
 )
 echo.
 
+echo [7.3/10] Verifying APK signature...
+REM Use apksigner to verify the APK is properly signed
+set "APKSIGNER="
+if exist "%ANDROID_HOME%\build-tools" (
+    for /f "delims=" %%d in ('dir /b /ad "%ANDROID_HOME%\build-tools" ^| sort /r') do (
+        if not defined APKSIGNER if exist "%ANDROID_HOME%\build-tools\%%d\apksigner.bat" set "APKSIGNER=%ANDROID_HOME%\build-tools\%%d\apksigner.bat"
+    )
+)
+if defined APKSIGNER (
+    call "%APKSIGNER%" verify --verbose "%APK_FILE%" 2>&1 | findstr /i "verified WARNING ERROR"
+    if errorlevel 1 (
+        echo [ERROR] APK signature verification failed!
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+    echo [OK] APK signature verified
+) else (
+    echo [WARN] apksigner not found, skipping signature verification
+    echo        Set ANDROID_HOME to enable signature verification
+)
+echo.
+
 echo [7.5/10] Verifying APK contains latest index.html (content hash)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $apk='%CD%\%APK_FILE%'; $zip=[System.IO.Compression.ZipFile]::OpenRead($apk); $entry=$zip.GetEntry('assets/public/index.html'); if(-not $entry){ $zip.Dispose(); Write-Host '[ERROR] assets/public/index.html not found in APK'; exit 1 }; $sr=New-Object System.IO.StreamReader($entry.Open()); $content=$sr.ReadToEnd(); $sr.Close(); $zip.Dispose(); $hash=[System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($content)); $hashStr=($hash|ForEach-Object{$_.ToString('x2')})-join ''; if($content.Length -lt 1000){ Write-Host '[ERROR] index.html in APK is too small ('+$content.Length+' bytes), build may be broken'; exit 1 }; Write-Host '[OK] APK contains index.html ('+$content.Length+' bytes, sha256='+$hashStr.Substring(0,16)+'...)'"
 if errorlevel 1 (
@@ -280,6 +335,28 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
+echo.
+
+echo [7.6/10] Verifying APK contains video-recorder-inject.js...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $apk='%CD%\%APK_FILE%'; $zip=[System.IO.Compression.ZipFile]::OpenRead($apk); $entry=$zip.GetEntry('assets/video-recorder-inject.js'); if(-not $entry){ $zip.Dispose(); Write-Host '[WARN] video-recorder-inject.js not found in APK'; exit 0 }; $sr=New-Object System.IO.StreamReader($entry.Open()); $content=$sr.ReadToEnd(); $sr.Close(); $zip.Dispose(); if(-not($content -match '__nativeBridgeProxy')){ Write-Host '[ERROR] video-recorder-inject.js missing __nativeBridgeProxy fix!'; exit 1 }; if(-not($content -match 'generateFileName')){ Write-Host '[ERROR] video-recorder-inject.js missing generateFileName!'; exit 1 }; Write-Host '[OK] video-recorder-inject.js verified ('$content.Length' bytes)'"
+if errorlevel 1 (
+    echo [ERROR] APK video-recorder-inject.js verification failed!
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo.
+
+echo [7.7/10] APK size sanity check...
+for %%A in ("%APK_FILE%") do set "APK_SIZE=%%~zA"
+if %APK_SIZE% LSS 1000000 (
+    echo [ERROR] APK size too small: %APK_SIZE% bytes ^(< 1MB^), build may be incomplete
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+if %APK_SIZE% GTR 10000000 (
+    echo [WARN] APK size unusually large: %APK_SIZE% bytes ^(^> 10MB^), check for unintended files
+)
+echo [OK] APK size: %APK_SIZE% bytes
 echo.
 
 echo [8/10] Copying APK to output directory...

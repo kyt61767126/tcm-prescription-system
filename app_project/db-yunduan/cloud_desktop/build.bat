@@ -1,4 +1,4 @@
-﻿@echo off
+@echo off
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
@@ -120,6 +120,18 @@ if errorlevel 1 (
 echo [OK] 安全检查通过
 echo.
 
+echo [CHECK] 磁盘空间检查...
+for /f "delims=" %%d in ('powershell -NoProfile -Command "[math]::Round((Get-PSDrive -Name $((Get-Location).Drive.Name)).Free/1GB,2)"') do set "FREE_GB=%%d"
+echo       Disk free: %FREE_GB% GB
+if "%FREE_GB%"=="" set "FREE_GB=0"
+powershell -NoProfile -Command "if([double]'%FREE_GB%' -lt 1.0){ Write-Host '[ERROR] 磁盘空间不足: %FREE_GB%GB, 需要>=1GB'; exit 1 }"
+if errorlevel 1 (
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] 磁盘空间充足
+echo.
+
 echo [5/8] Obfuscating JavaScript code (target=cloud)...
 node "%~dp0..\..\..\tools\obfuscate.js" --target=cloud
 if errorlevel 1 (
@@ -166,7 +178,6 @@ set "BUILD_RC=%errorlevel%"
 set NODE_TLS_REJECT_UNAUTHORIZED=
 set "TEMP=%PREV_TEMP%"
 set "TMP=%PREV_TMP%"
-if exist "tmp" rmdir /s /q "tmp" 2>nul
 if not "%BUILD_RC%"=="0" (
     echo.
     echo [WARNING] electron-builder returned exit code %BUILD_RC%, checking output...
@@ -175,13 +186,28 @@ if not "%BUILD_RC%"=="0" (
     if "!HAS_EXE!"=="1" (
         echo [OK] Build output verified - exe files found despite exit code %BUILD_RC%
     ) else (
-        echo [ERROR] Build failed - no exe files found
-        echo Restoring original JavaScript code...
-        node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
-        if not defined NO_PAUSE pause
-        exit /b 1
+        echo.
+        echo [WARN] First electron-builder attempt failed, retrying...
+        timeout /t 3 /nobreak >nul
+        set "TEMP=%CD%\tmp"
+        set "TMP=%CD%\tmp"
+        node "node_modules\electron-builder\cli.js" --win --prepackaged "%WIN_UNPACKED_PATH%"
+        set "BUILD_RC=%errorlevel%"
+        set "TEMP=%PREV_TEMP%"
+        set "TMP=%PREV_TMP%"
+        set "HAS_EXE=0"
+        for %%f in ("%OUTPUT_DIR%\*.exe") do set "HAS_EXE=1"
+        if not "!HAS_EXE!"=="1" (
+            echo [ERROR] Retry failed - no exe files found
+            echo Restoring original JavaScript code...
+            node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+            if not defined NO_PAUSE pause
+            exit /b 1
+        )
+        echo [OK] Retry succeeded - exe files found
     )
 )
+if exist "tmp" rmdir /s /q "tmp" 2>nul
 echo.
 
 echo [7/8] Restoring original JavaScript code...
@@ -198,11 +224,22 @@ echo [7.5/8] Verifying build output...
 set "EXE_FILE="
 for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
 if "%EXE_FILE%"=="" (
-    echo [WARN] No .exe found in %OUTPUT_DIR%
-) else (
-    for %%A in ("%EXE_FILE%") do (
-        echo   [OK] %%~nxA  %%~zA bytes
+    echo [ERROR] No .exe found in %OUTPUT_DIR%
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+for %%A in ("%EXE_FILE%") do (
+    if %%~zA LSS 1000000 (
+        echo [ERROR] exe file too small: %%~zA bytes ^(< 1MB^), build may be incomplete
+        node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+        if not defined NO_PAUSE pause
+        exit /b 1
     )
+    if %%~zA GTR 200000000 (
+        echo [WARN] exe file unusually large: %%~zA bytes ^(^> 200MB^)
+    )
+    echo   [OK] %%~nxA  %%~zA bytes
 )
 echo.
 
