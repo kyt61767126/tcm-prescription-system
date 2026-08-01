@@ -87,7 +87,7 @@ function findExeFile(dir) {
  */
 function readVersionFromGradle(appDir) {
     try {
-        // Android 工程根目录: appDir/app/app/build.gradle
+        // Android 工程根目录: app/app/build.gradle
         const gradlePath = path.join(appDir, 'app', 'app', 'build.gradle');
         if (!fs.existsSync(gradlePath)) return '';
         const content = fs.readFileSync(gradlePath, 'utf8');
