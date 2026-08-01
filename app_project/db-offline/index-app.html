@@ -670,6 +670,39 @@ let currentUser = null;
             }
         })();
 
+        // ★ 根据 edition 动态更新版本标签和默认用户名
+        (function initVersionTagAndUser() {
+            const tagEl = document.querySelector('.version-tag');
+            let versionLabel = '【离线版】';
+            if (CONFIG.edition === 'personal') {
+                versionLabel = '【离线标准版】';
+            } else if (CONFIG.edition === 'clinic_custom') {
+                versionLabel = '【离线机构版】';
+            }
+            if (tagEl) {
+                tagEl.textContent = versionLabel;
+            }
+            // 更新底部版本标签（.tab-hint 中的【本地】）
+            try {
+                const tabHints = document.querySelectorAll('.tab-hint');
+                tabHints.forEach(hint => {
+                    const spans = hint.querySelectorAll('span');
+                    spans.forEach(s => {
+                        if (s.textContent && s.textContent.includes('本地')) {
+                            s.textContent = versionLabel;
+                        }
+                    });
+                });
+            } catch(e) {}
+            // 个人版：默认填充医师姓名到用户名输入框
+            if (CONFIG.edition === 'personal' && CONFIG.doctorName) {
+                const userInput = document.getElementById('loginUsername');
+                if (userInput && !userInput.value) {
+                    userInput.value = CONFIG.doctorName;
+                }
+            }
+        })();
+
         window.__APP_VERSION__ = '2026-07-29-v1';
 
         const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
@@ -1667,9 +1700,11 @@ let currentUser = null;
                 const changePwdBtn = document.getElementById('changePwdBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
-                const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+                // ★ 个人版：固定显示"改密"，隐藏"用户管理"
+                const isPersonal = (CONFIG.edition === 'personal');
+                const canManage = isPersonal ? false : (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
                 const canChangePwd = (window.Permission && Permission.shouldShowChangePwd) ? Permission.shouldShowChangePwd(currentUser) : true;
-                const canAutoStart = (window.Permission && Permission.shouldShowAutoStart) ? Permission.shouldShowAutoStart(currentUser) : (currentUser.role === 'admin');
+                const canAutoStart = isPersonal ? false : (window.Permission && Permission.shouldShowAutoStart) ? Permission.shouldShowAutoStart(currentUser) : (currentUser.role === 'admin');
 
                 if (userManageBtn) userManageBtn.style.display = canManage ? 'block' : 'none';
                 if (changePwdBtn) changePwdBtn.style.display = canChangePwd ? 'block' : 'none';
@@ -1688,7 +1723,15 @@ let currentUser = null;
             const isApp = !!window.AndroidNative;
             const changePwdText = isApp ? '🔐 改密' : '🔐 修改密码';
 
-            // 管理员显示"账户"，普通用户显示"改密"（APP和桌面一致）
+            // ★ 个人版：固定显示"改密"，不显示"用户管理"
+            if (CONFIG.edition === 'personal') {
+                btn2.innerHTML = changePwdText;
+                btn2.onclick = function() { showChangePwdModal(); };
+                btn2.style.display = '';
+                return;
+            }
+
+            // 机构版：管理员显示"用户"，普通用户显示"改密"
             const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
             if (canManage) {
                 btn2.innerHTML = '👤 用户';
@@ -1756,6 +1799,10 @@ let currentUser = null;
                     document.getElementById('loginUsername').value = localUsername;
                     document.getElementById('rememberUser').checked = true;
                     localStorage.setItem('local_rememberedUsers', JSON.stringify(singleList));
+                }
+                // ★ 个人版：无记住用户名时，默认显示 CONFIG.doctorName（医师姓名）
+                if (!document.getElementById('loginUsername').value && CONFIG.edition === 'personal' && CONFIG.doctorName) {
+                    document.getElementById('loginUsername').value = CONFIG.doctorName;
                 }
             } catch (e) {
                 console.warn('loadRememberedUsers error:', e);
@@ -3128,6 +3175,8 @@ let currentUser = null;
         async function init() {
             injectRecycleBinButton();
             checkLoginStatus();
+            // ★ 初始化记住的用户名（含 CONFIG.doctorName 默认值）
+            initRememberedCredentials();
             // 不在init中调用loadData()，因为用户还没登录
             // loadData()会在handleLogin成功后调用
             const now = new Date();
@@ -4908,11 +4957,16 @@ let currentUser = null;
         }
 
         function showHelp() {
-            alert('惠康中医-离线机构版\n\n' +
-                  '【版本说明】定制版：含用户管理+修改密码\n\n' +
+            const isPersonal = (CONFIG.edition === 'personal');
+            const editionName = isPersonal ? '离线标准版' : '离线机构版';
+            const editionDesc = isPersonal ? '个人版：含修改密码，无用户管理' : '定制版：含用户管理+修改密码';
+            const userMgmtLine = isPersonal ? '' : '✓ 用户管理（管理员）\n';
+            alert('惠康中医-' + editionName + '\n\n' +
+                  '【版本说明】' + editionDesc + '\n\n' +
                   '【功能列表】\n' +
                   '✓ 处方录入与打印\n✓ 药品管理\n✓ 验方设置\n' +
-                  '✓ 病例管理\n✓ 统计分析\n✓ 用户管理（管理员）\n' +
+                  '✓ 病例管理\n✓ 统计分析\n' +
+                  userMgmtLine +
                   '✓ 修改密码\n✓ 离线自动备份\n✓ Excel导出\n\n' +
                   '【快捷键】\n' +
                   'F1 - 基础设置\nF2 - 药品管理\nF3 - 验方设置\n' +

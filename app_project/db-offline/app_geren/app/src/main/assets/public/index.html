@@ -3128,8 +3128,6 @@ let currentUser = null;
         async function init() {
             injectRecycleBinButton();
             checkLoginStatus();
-            // ★ 个人版：页面加载时初始化记住的用户名（含 CONFIG.doctorName 默认值）
-            initRememberedCredentials();
             // 不在init中调用loadData()，因为用户还没登录
             // loadData()会在handleLogin成功后调用
             const now = new Date();
