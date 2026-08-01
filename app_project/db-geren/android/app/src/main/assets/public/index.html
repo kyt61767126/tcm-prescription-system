@@ -652,6 +652,8 @@ if (window.Permission) {
             doctorName: '本能堂',
             edition: 'personal'
         };
+// ★v2.0 统一架构：声明 APP_MODE（offline/cloud），供 db-adapter.js 自动检测
+window.APP_MODE = 'offline';
 
         async function loadConfigFromFile() {
             try {
@@ -3250,6 +3252,11 @@ if (window.Permission) {
             calculateAmount();
             updatePrescriptionPaper();
             DOM_CACHE.medicineSearchDropdown.style.display = 'none';
+            // 选中即更新使用频率，让简码搜索按使用次数优先排序
+            if (name) {
+                medicineFrequency[name] = (medicineFrequency[name] || 0) + 1;
+                saveMedicineFrequency();
+            }
             const nextInput = document.getElementById(`code-input-${index + 1}`);
             if (nextInput) nextInput.focus();
             showToast(name + ' 已添加');
@@ -4251,8 +4258,17 @@ if (window.Permission) {
             showFormulaModal(true);
         }
 
-        function printPrescription(orientation = 'portrait') {
+        async function printPrescription(orientation = 'portrait') {
             // ★安全防护：关键 API 校验，防止绕过登录直接调用
+            // ★修复：currentUser 可能在 init() 异步时序中未被设置，尝试恢复
+            if (!currentUser || !currentUser.username) {
+                if (window.electronAPI && window.electronAPI.getCurrentUser) {
+                    try { currentUser = await window.electronAPI.getCurrentUser(); } catch(e) {}
+                }
+                if (!currentUser) {
+                    try { const s = localStorage.getItem('user_login_data') || localStorage.getItem('local_currentUser'); if (s) { const d = JSON.parse(s); currentUser = d.user || d; } } catch(e) {}
+                }
+            }
             if (!currentUser || !currentUser.username) {
                 console.warn('[安全] 拒绝未登录状态调用 printPrescription');
                 alert('请先登录后再打印');
@@ -4666,13 +4682,15 @@ if (window.Permission) {
         }
 
         function saveSettings() {
-            // 个人版：诊所名称和医师姓名可编辑，保存到 localStorage（对齐定制版逻辑）
-            localStorage.setItem('local_clinicName', document.getElementById('clinicName').value);
-            localStorage.setItem('local_clinicDoctor', document.getElementById('defaultDoctor').value);
-            // 同步更新 CONFIG 对象，确保其他引用 CONFIG 的地方获取最新值
+            // 个人版：诊所名称和医师姓名允许管理员在基础设置中修改，保存到 localStorage 并更新 CONFIG
+            var newClinicName = document.getElementById('clinicName').value.trim();
+            var newDoctorName = document.getElementById('defaultDoctor').value.trim();
+            localStorage.setItem('local_clinicName', newClinicName);
+            localStorage.setItem('local_clinicDoctor', newDoctorName);
+            // 同步更新 CONFIG 对象，确保其他地方读取到最新值
             if (typeof CONFIG !== 'undefined') {
-                CONFIG.clinicName = document.getElementById('clinicName').value;
-                CONFIG.doctorName = document.getElementById('defaultDoctor').value;
+                CONFIG.clinicName = newClinicName;
+                CONFIG.doctorName = newDoctorName;
             }
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             localStorage.setItem('local_defaultDose', document.getElementById('defaultDose').value || '7');

@@ -134,6 +134,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return ipcRenderer.invoke('auth:decryptString', encryptedBase64);
     },
 
+    // ---------- 应用配置 ----------
+    getAppConfig: () => {
+        return ipcRenderer.invoke('get-app-config');
+    },
+    setAutoStart: (enabled) => {
+        return ipcRenderer.invoke('set-auto-start', enabled);
+    },
+
+    // ---------- 自动备份 ----------
+    saveAutoBackup: (jsonStr, fileName) => {
+        return ipcRenderer.invoke('save-auto-backup', jsonStr, fileName);
+    },
+    listAutoBackups: () => {
+        return ipcRenderer.invoke('list-auto-backups');
+    },
+    deleteAutoBackup: (fileName) => {
+        return ipcRenderer.invoke('delete-auto-backup', fileName);
+    },
+
+    // ---------- 兼容方法 ----------
+    getCurrentUser: () => {
+        return ipcRenderer.invoke('get-current-user');
+    },
+    onLoginUser: (callback) => {
+        const handler = (_event, user) => callback(user);
+        ipcRenderer.once('main:login-user', handler);
+    },
+    showMessageBox: (options) => {
+        return ipcRenderer.invoke('show-message-box', options);
+    },
+
     // ★清理：移除 localDB 系列（云端桌面版不需要本地数据库，这是离线版功能）
     // index.html:1524 有防御性检查 `window.electronAPI.localDB ? ... : null`，移除后不会崩溃
 

@@ -1,14 +1,14 @@
 /**
- * 离线APP录像拍照注入脚本
+ * 云端APP录像拍照注入脚本
  *
  * 功能：
  * 1. 注入 window.electronAPI shim（调用 AndroidNative 桥接）
  * 2. 注入 CSS 样式（overlay/modal/toast）
  * 3. 实现录像 overlay（摄像头预览、录制控制、前后摄像头切换）
- * 4. 实现拍照 overlay（舌诊拍照，两步采集：舌面+舌下络脉）
+ * 4. 实现拍照 overlay
  * 5. 保存到本地文件系统（按月份分类 YYYY-MM）
  *
- * 注意：拍照/录像按钮由网页 ActionBar 组件渲染，本脚本仅提供 overlay 和保存功能。
+ * 注意：拍照/录像按钮由 React ActionBar 组件渲染，本脚本仅提供 overlay 和保存功能。
  * ActionBar 通过 window.openPhotoOverlay() / window.openRecordingOverlay() 调用本脚本。
  *
  * 保存路径（图片视频统一目录，方便导出）：
@@ -21,33 +21,49 @@
     window.__videoRecorderInjected = true;
 
     // ========================================================================
+    // 0. 运行环境检测（同时支持离线APP的file://协议和云端APP的https://协议）
+    // ========================================================================
+    // 动态日志前缀：根据协议自动选择，便于日志中区分运行环境
+    var __VR_LOG_PREFIX = window.location.protocol === 'file:' ? '[离线APP]' : '[云端APP]';
+    // Blob URL 策略：https:// 协议下使用 Blob URL（稳定），file:// 协议下使用 base64 data URL（Blob URL 在 file:// 下不稳定）
+    var __USE_BLOB_URL = window.location.protocol !== 'file:';
+
+    // ========================================================================
     // 1. 注入 window.electronAPI shim
     // ========================================================================
     function injectElectronAPIShim() {
+        // 保存旧引用（如果 injectElectronApiShim 已抢先注入简单版本）
+        // 云端APP同步离线APP策略：覆盖关键方法而非跳过，避免简单版导致大文件读取失败
+        var oldAPI = window.electronAPI;
+
         var N = window.AndroidNative;
         if (!N) {
-            console.warn('[离线APP] AndroidNative 桥接未找到');
+            console.warn(__VR_LOG_PREFIX + ' AndroidNative 桥接未找到');
             return false;
         }
-
+        
+        console.log(__VR_LOG_PREFIX + ' AndroidNative 桥接已找到，开始构建 electronAPI shim');
+        
         function P(v) { return Promise.resolve(v); }
         function callNative(name, json) {
             try {
                 var result = N.invoke(name, json || '{}');
+                // 防御 undefined/null 返回（Java 端异常时 JavascriptInterface 返回 undefined）
                 if (typeof result !== 'string' || result.length === 0) {
-                    console.error('[离线APP] NativeBridge.' + name + ' 返回非字符串:', typeof result, result);
+                    console.error(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 返回非字符串:', typeof result, result);
                     return { success: false, error: 'NativeBridge 返回无效（Java端可能抛异常）' };
                 }
-                console.log('[离线APP] NativeBridge.' + name + ' 返回长度:', result.length);
+                console.log(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 返回长度:', result.length);
                 return JSON.parse(result);
             } catch (e) {
-                console.error('[离线APP] NativeBridge.' + name + ' 调用异常:', e);
+                console.error(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 调用异常:', e);
                 return { success: false, error: String(e) };
             }
         }
 
-        // Uint8Array → base64 编码（避免 btoa 不支持 >127 字节的问题）
+        // Uint8Array → base64 编码（与离线APP保持一致，避免 btoa 不支持 >127 字节的问题）
         // btoa 只支持 ASCII 字符（0-127），视频二进制数据包含 >127 的字节会失败
+        // 该方法直接按位计算，性能优于 btoa + String.fromCharCode.apply 组合
         var _base64Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
         function _uint8ArrayToBase64(bytes) {
             var len = bytes.length;
@@ -71,6 +87,8 @@
         }
 
         // 分片上传：解决 Binder 事务 1MB 限制
+        // 大文件 base64 编码后远超 1MB，必须分片传输
+        // 流程：startMediaSession → 多次 appendMediaChunk → commitMediaSession
         // ★ 优化：分片大小从 256KB 提升到 512KB，减少分片次数约 50%，提升整体传输速度
         // 512KB base64 解码后约 384KB，加 JSON 包装仍远低于 1MB Binder 限制，安全可靠
         var CHUNK_SIZE = 512 * 1024; // 512KB 一片（base64 解码后 384KB，加 JSON 包装远低于 1MB）
@@ -107,15 +125,13 @@
                         return;
                     }
                     idx++;
+                    // 用 setTimeout 0 让出主线程，避免长视频上传时阻塞 UI
                     setTimeout(nextChunk, 0);
                 }
                 nextChunk();
             });
         }
-
-        // 保存旧引用（如果 injectElectronApiShim 已抢先注入简单版本）
-        var oldAPI = window.electronAPI;
-
+        
         window.electronAPI = {
             __injected: true,
             isElectron: true,
@@ -132,13 +148,15 @@
             savePrescriptionImage: function (imageData, fileName) {
                 return new Promise(function (resolve) {
                     try {
+                        // 剥离 data:image/...;base64, 前缀
                         var base64 = imageData;
                         var commaIdx = base64.indexOf(',');
                         if (base64.indexOf('data:') === 0 && commaIdx > 0 && commaIdx < 50) {
                             base64 = base64.substring(commaIdx + 1);
                         }
+                        // 大数据（>= 512KB）走分片上传，小数据走原 API
                         if (base64.length >= 512 * 1024) {
-                            console.log('[离线APP] 图片分片上传: ' + base64.length + ' 字节');
+                            console.log(__VR_LOG_PREFIX + ' 图片分片上传: ' + base64.length + ' 字节');
                             chunkedUpload(base64, fileName, 'image').then(resolve);
                         } else {
                             var r = callNative('savePrescriptionImage', JSON.stringify({ imageData: imageData, fileName: fileName }));
@@ -155,7 +173,7 @@
                         // 1. btoa 不支持 >127 字节，视频二进制数据会失败
                         // 2. _uint8ArrayToBase64 直接按位计算，省去 String.fromCharCode.apply + btoa 两步开销
                         var base64Data = _uint8ArrayToBase64(bytes);
-                        console.log('[离线APP] 视频总大小: ' + base64Data.length + ' 字节 base64');
+                        console.log(__VR_LOG_PREFIX + ' 视频总大小: ' + base64Data.length + ' 字节 base64');
                         // ★ 优化：小文件（<512KB 原始，base64 后约 683KB）直接走原生 API，避免分片开销
                         // 加 JSON 包装后约 700KB，远低于 1MB Binder 限制，安全可靠
                         if (bytes.length < 512 * 1024) {
@@ -196,21 +214,22 @@
                 });
             },
             readFileAsBase64: function (filePath) {
-                // 统一走分片读取，避免 Binder 1MB 限制
-                // 最终用 base64 data URL（Blob URL 在 file:// 协议下不稳定）
-                // 使用自定义 Uint8Array → base64 函数，避免 btoa 不支持 >127 字节的问题
+                // 统一走分片读取，避免 Binder 1MB 限制和 isCallerAllowed 误拦截
+                // 最终用 Blob URL 代替 data URL，避免大视频 data URL 超出 WebView 限制
                 return new Promise(function (resolve) {
                     try {
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
                         if (!startR || !startR.success) {
-                            console.error('[离线APP] startReadSession 失败:', startR && startR.error);
-                            resolve({ success: false, error: 'startReadSession 失败: ' + (startR && startR.error || '未知') });
+                            // startReadSession 不支持（旧 APK），回退到原 API
+                            console.warn(__VR_LOG_PREFIX + ' startReadSession 失败，回退原 API:', startR && startR.error);
+                            var rFallback = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
+                            resolve(rFallback);
                             return;
                         }
                         var sessionId = startR.sessionId;
                         var mimeType = startR.mimeType || 'application/octet-stream';
                         var fileSize = startR.fileSize || 0;
-                        console.log('[离线APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
+                        console.log(__VR_LOG_PREFIX + ' 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
                         var uint8Arrays = [];
                         var totalBytes = 0;
                         var chunkRetryCount = 0;
@@ -219,19 +238,21 @@
                         function nextChunk() {
                             var r = callNative('readNextChunk', JSON.stringify({ sessionId: sessionId }));
                             if (!r || !r.success) {
+                                // chunk 重试机制（同步离线APP）：弱网/低配机型读取成功率提升
                                 if (chunkRetryCount < MAX_CHUNK_RETRY) {
                                     chunkRetryCount++;
-                                    console.warn('[离线APP] readNextChunk 失败，重试 ' + chunkRetryCount + '/' + MAX_CHUNK_RETRY + ':', r && r.error);
+                                    console.warn(__VR_LOG_PREFIX + ' readNextChunk 失败，重试 ' + chunkRetryCount + '/' + MAX_CHUNK_RETRY + ':', r && r.error);
                                     setTimeout(nextChunk, 50);
                                     return;
                                 }
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
-                                console.error('[离线APP] readNextChunk 最终失败:', r && r.error);
+                                console.error(__VR_LOG_PREFIX + ' readNextChunk 最终失败:', r && r.error);
                                 resolve(r || { success: false, error: 'readNextChunk 返回无效' });
                                 return;
                             }
                             chunkRetryCount = 0;
                             if (r.chunk) {
+                                // 分片解码 base64 → Uint8Array，避免大字符串 atob 内存翻倍
                                 try {
                                     var binary = atob(r.chunk);
                                     var len = binary.length;
@@ -242,27 +263,42 @@
                                     uint8Arrays.push(bytes);
                                     totalBytes += len;
                                 } catch (e) {
-                                    console.error('[离线APP] base64 解码失败:', e);
+                                    console.error(__VR_LOG_PREFIX + ' base64 解码失败:', e);
                                 }
                             }
                             if (r.eof) {
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
                                 try {
-                                    // 合并所有 Uint8Array
-                                    var allBytes = new Uint8Array(totalBytes);
-                                    var offset = 0;
-                                    for (var j = 0; j < uint8Arrays.length; j++) {
-                                        allBytes.set(uint8Arrays[j], offset);
-                                        offset += uint8Arrays[j].length;
+                                    // 合并所有分片到一个 Uint8Array（base64 编码需要连续内存）
+                                    var merged = new Uint8Array(totalBytes);
+                                    var mergeOffset = 0;
+                                    for (var ai = 0; ai < uint8Arrays.length; ai++) {
+                                        merged.set(uint8Arrays[ai], mergeOffset);
+                                        mergeOffset += uint8Arrays[ai].length;
                                     }
-                                    // 用自定义 base64 编码函数（避免 btoa 不支持 >127 字节）
-                                    var fullBase64 = _uint8ArrayToBase64(allBytes);
-                                    var dataUrl = 'data:' + mimeType + ';base64,' + fullBase64;
-                                    console.log('[离线APP] 分片读取完成，data URL 长度=' + dataUrl.length + ', 片数=' + uint8Arrays.length + ', 总字节=' + totalBytes);
-                                    resolve({ success: true, base64: dataUrl, data: dataUrl });
+
+                                    var url;
+                                    // 清理旧 blob URL 避免内存泄漏
+                                    if (window.__currentBlobUrl) {
+                                        try { URL.revokeObjectURL(window.__currentBlobUrl); } catch (e) {}
+                                        window.__currentBlobUrl = null;
+                                    }
+                                    if (__USE_BLOB_URL) {
+                                        // https:// 协议下使用 Blob URL（稳定，不占 JS 堆内存）
+                                        var blob = new Blob([merged], { type: mimeType });
+                                        url = URL.createObjectURL(blob);
+                                        window.__currentBlobUrl = url;
+                                        console.log(__VR_LOG_PREFIX + ' 分片读取完成，blob URL=' + url + ', 片数=' + uint8Arrays.length + ', 总字节=' + merged.length);
+                                    } else {
+                                        // file:// 协议下 Blob URL 不稳定，使用 base64 data URL
+                                        var base64DataUrl = _uint8ArrayToBase64(merged);
+                                        url = 'data:' + mimeType + ';base64,' + base64DataUrl;
+                                        console.log(__VR_LOG_PREFIX + ' 分片读取完成，data URL 长度=' + url.length + ', 片数=' + uint8Arrays.length + ', 总字节=' + merged.length);
+                                    }
+                                    resolve({ success: true, data: url });
                                 } catch (e) {
-                                    console.error('[离线APP] 转 base64 失败:', e);
-                                    resolve({ success: false, error: '转 base64 失败: ' + String(e) });
+                                    console.error(__VR_LOG_PREFIX + ' 创建视频 URL 失败:', e);
+                                    resolve({ success: false, error: '创建视频 URL 失败: ' + String(e) });
                                 }
                                 return;
                             }
@@ -302,10 +338,10 @@
         };
 
         // 如果 injectElectronApiShim 已抢先注入了简单版本的 electronAPI，
-        // 用增强版方法覆盖关键方法（readFileAsBase64/savePrescriptionImage/saveVideoFile 等
+        // 用增强版方法覆盖关键方法（readFileAsBase64/savePrescriptionImage/saveVideoFile 等）
         // 解决"图片无法加载，视频可以播放"的问题：图片走简单版 readFileAsBase64 超出 data URL 限制
-        if (oldAPI && (oldAPI.__injected || oldAPI.__nativeBridgeProxy)) {
-            console.log('[离线APP] electronAPI 已存在（injectElectronApiShim 先注入），覆盖增强版方法到旧对象');
+        if (oldAPI && oldAPI.__injected) {
+            console.log(__VR_LOG_PREFIX + ' electronAPI 已存在（injectElectronApiShim 先注入），覆盖增强版方法到旧对象');
             var newAPI = window.electronAPI;
             oldAPI.savePrescriptionImage = newAPI.savePrescriptionImage;
             oldAPI.saveVideoFile = newAPI.saveVideoFile;
@@ -320,7 +356,7 @@
             window.electronAPI = oldAPI;
         }
 
-        console.log('[离线APP] electronAPI shim 已成功注入');
+        console.log(__VR_LOG_PREFIX + ' electronAPI shim 已成功注入');
         return true;
     }
 
@@ -560,6 +596,7 @@
                 pad(now.getHours()) + pad(now.getMinutes()) + pad(now.getSeconds());
         }
 
+        // 存储使用的标识符，供处方保存后重命名使用
         window.__lastUsedMediaIdentifier = identifier;
         window.__lastUsedMediaPatientName = cleanName;
         try {
@@ -576,6 +613,7 @@
     // 6. 录像 Overlay
     // ========================================================================
     window.openRecordingOverlay = function () {
+        // 懒加载：首次打开overlay时注入样式（避免启动时阻塞页面渲染）
         injectStyles();
         var existing = document.getElementById('cloudVrOverlay');
         if (existing) existing.remove();
@@ -630,26 +668,41 @@
         var startBtn = document.getElementById('cloudVrStartBtn');
 
         try {
+            console.log('[视频录制] initCamera: isSecureContext=' + window.isSecureContext + ' href=' + window.location.href);
+            console.log('[视频录制] mediaDevices=' + (navigator.mediaDevices ? 'yes' : 'NO') + ' getUserMedia=' + (navigator.mediaDevices && navigator.mediaDevices.getUserMedia ? 'yes' : 'NO'));
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'cloud-vr-status';
 
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusEl.textContent = '摄像头初始化失败：浏览器不支持 getUserMedia';
+                statusEl.className = 'cloud-vr-status error';
+                startBtn.disabled = true;
+                return;
+            }
+
+            // 多级分辨率兜底：从高到低尝试不同约束组合，适配不同手机型号
             var constraintOptions = [
+                // 1. 理想配置：720p + 指定摄像头 + 原始音频
                 {
                     video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode },
                     audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
                 },
+                // 2. 720p + 指定摄像头 + 无音频约束
                 {
                     video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode },
                     audio: false
                 },
+                // 3. 720p 不指定摄像头（某些手机不支持facingMode）
                 {
                     video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS } },
                     audio: false
                 },
+                // 4. 480p 兜底分辨率
                 {
                     video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
                     audio: false
                 },
+                // 5. 最简约束（最大兼容性）
                 { video: true, audio: false }
             ];
 
@@ -670,6 +723,7 @@
             }
 
             if (!mediaStreamResult) {
+                // 权限被拒绝的特殊提示（同步离线APP：录像需麦克风权限）
                 if (lastError && (lastError.name === 'NotAllowedError' || lastError.name === 'SecurityError')) {
                     throw new Error('摄像头权限被拒绝，请在手机设置→应用管理中授予摄像头和麦克风权限');
                 }
@@ -681,6 +735,7 @@
             var videoEl = document.getElementById('cloudVrPreview');
             videoEl.srcObject = mediaStream;
 
+            // 等待视频帧数据就绪，确保预览画面正常显示
             statusEl.textContent = '正在初始化摄像头...';
             startBtn.disabled = true;
 
@@ -750,6 +805,7 @@
             }
         }
 
+        // 根据实际mimeType设置文件扩展名（webm或mp4）
         window.__currentVideoExt = selectedMime.indexOf('mp4') >= 0 ? 'mp4' : 'webm';
 
         try {
@@ -811,6 +867,7 @@
     }
 
     function onRecordingStop(mimeType) {
+        // 验证录制数据非空（录制时间过短可能导致 recordedChunks 为空）
         if (!recordedChunks || recordedChunks.length === 0) {
             setStatus('录制数据为空，请重新录制', 'error');
             var startBtn2 = document.getElementById('cloudVrStartBtn');
@@ -821,6 +878,7 @@
         var blob = new Blob(recordedChunks, { type: mimeType || 'video/webm' });
         var sizeMB = (blob.size / 1024 / 1024).toFixed(2);
 
+        // 二次验证：blob 大小必须大于 1KB，否则可能是无效数据
         if (blob.size < 1024) {
             console.error('[视频录制] 录制数据过小: ' + blob.size + ' bytes');
             setStatus('录制数据异常（' + blob.size + ' 字节），请重新录制', 'error');
@@ -852,6 +910,8 @@
         saveBtn.textContent = '保存中...';
 
         try {
+            // 兼容性修复：使用 FileReader 替代 blob.arrayBuffer()
+            // 旧版 Android WebView 不支持 Blob.arrayBuffer()，会抛异常导致视频无法保存
             var arrayBuffer = await new Promise(function (resolve, reject) {
                 var reader = new FileReader();
                 reader.onload = function () { resolve(reader.result); };
@@ -863,6 +923,7 @@
                 }
             });
 
+            // 验证 arrayBuffer 有效性
             if (!arrayBuffer || arrayBuffer.byteLength === 0) {
                 throw new Error('视频数据为空（arrayBuffer.byteLength = 0）');
             }
@@ -893,6 +954,7 @@
     // 7. 拍照 Overlay
     // ========================================================================
     window.openPhotoOverlay = function () {
+        // 懒加载：首次打开overlay时注入样式（避免启动时阻塞页面渲染）
         injectStyles();
         var existing = document.getElementById('cloudVrOverlay');
         if (existing) existing.remove();
@@ -992,6 +1054,14 @@
             statusEl.textContent = '正在请求摄像头权限...';
             statusEl.className = 'cloud-vr-status';
 
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                statusEl.textContent = '摄像头初始化失败：浏览器不支持 getUserMedia';
+                statusEl.className = 'cloud-vr-status error';
+                captureBtn.disabled = true;
+                return;
+            }
+
+            // 多级分辨率兜底：从高到低尝试不同约束组合，适配不同手机型号
             var constraintOptions = [
                 { video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS }, facingMode: currentFacingMode }, audio: false },
                 { video: { width: { ideal: VIDEO_WIDTH }, height: { ideal: VIDEO_HEIGHT }, frameRate: { ideal: VIDEO_FPS } }, audio: false },
@@ -1037,6 +1107,7 @@
                 var checkFrames = setInterval(function () {
                     if (videoEl.readyState >= 2 && videoEl.videoWidth > 0) {
                         frameCount++;
+                        // 等待至少3帧数据就绪，确保第一帧不是黑屏
                         if (frameCount >= 3) {
                             clearTimeout(timeout);
                             clearInterval(checkFrames);
@@ -1049,6 +1120,7 @@
                     clearTimeout(timeout);
                     clearInterval(checkFrames);
                     videoEl.removeEventListener('playing', onPlaying);
+                    // 视频开始播放后，再等待一小段时间确保帧数据稳定
                     setTimeout(resolve, 300);
                 }, { once: true });
             });
@@ -1083,9 +1155,12 @@
             return;
         }
 
+        // 检查视频流就绪状态：readyState >= 2 (HAVE_CURRENT_DATA) 才能保证 drawImage 不绘制空帧
+        // videoWidth > 0 不代表帧数据已就绪，必须同时检查 readyState
         if (!videoEl.videoWidth || !videoEl.videoHeight || videoEl.readyState < 2) {
             if (retryCount < 5) {
                 setStatus('视频流正在就绪... (' + (retryCount + 1) + '/5)', '');
+                // 等待100ms后重试，让视频帧数据加载到 readyState >= 2
                 setTimeout(function () { capturePhoto(retryCount + 1); }, 100);
             } else {
                 setStatus('视频流未就绪，请重试', 'error');
@@ -1102,9 +1177,11 @@
             return;
         }
 
+        // 先填充背景色（避免透明区域绘制失败时显示为透明/黑）
         ctx.fillStyle = '#000';
         ctx.fillRect(0, 0, canvasEl.width, canvasEl.height);
 
+        // 再次确认 readyState >= 2（在重试等待期间状态可能变化）
         if (videoEl.readyState < 2) {
             if (retryCount < 5) {
                 setStatus('视频帧未就绪，重试中... (' + (retryCount + 1) + '/5)', '');
@@ -1136,6 +1213,8 @@
 
         var dataUrl = canvasEl.toDataURL('image/jpeg', 0.8);
 
+        // 验证捕获的图片非空：JPEG data URL 应远大于几百字节
+        // base64 编码后最小 JPEG 也应有几百字节，过小说明是空白图像
         if (dataUrl.length < 500) {
             if (retryCount < 5) {
                 console.warn('[拍照] 捕获图像过小 (' + dataUrl.length + ' bytes)，重试中');
@@ -1345,44 +1424,45 @@
     }
 
     // ========================================================================
-    // 9. 初始化
-    // ========================================================================
-    function init() {
-        console.log('[离线APP] 录像拍照脚本开始初始化');
+// 9. 初始化（仅注入 shim，样式懒加载，按钮由 React ActionBar 渲染）
+// ========================================================================
+function init() {
+    console.log(__VR_LOG_PREFIX + ' 录像拍照脚本开始初始化');
 
-        var nativeBridge = window.AndroidNative;
-        if (!nativeBridge) {
-            console.warn('[离线APP] AndroidNative 桥接未找到，等待500ms重试');
-            setTimeout(init, 500);
-            return;
-        }
-
-        console.log('[离线APP] AndroidNative 桥接已找到，开始注入 shim');
-
-        var shimSuccess = injectElectronAPIShim();
-        if (!shimSuccess) {
-            console.error('[离线APP] electronAPI shim 注入失败');
-            setTimeout(init, 1000);
-            return;
-        }
-
-        console.log('[离线APP] 录像拍照脚本初始化完成（样式延迟到首次打开overlay时注入）');
+    var nativeBridge = window.AndroidNative;
+    if (!nativeBridge) {
+        console.warn(__VR_LOG_PREFIX + ' AndroidNative 桥接未找到，等待500ms重试');
+        setTimeout(init, 500);
+        return;
     }
 
-    function tryInit() {
-        try {
-            init();
-        } catch (e) {
-            console.error('[离线APP] 录像拍照脚本初始化异常:', e);
-            setTimeout(tryInit, 1000);
-        }
+    console.log(__VR_LOG_PREFIX + ' AndroidNative 桥接已找到，开始注入 shim');
+
+    var shimSuccess = injectElectronAPIShim();
+    if (!shimSuccess) {
+        console.error(__VR_LOG_PREFIX + ' electronAPI shim 注入失败');
+        setTimeout(init, 1000);
+        return;
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', tryInit);
-    } else {
-        tryInit();
-    }
+    // 样式懒加载：移到 openRecordingOverlay / openPhotoOverlay 内首次调用时注入
+    console.log(__VR_LOG_PREFIX + ' 录像拍照脚本初始化完成（样式延迟到首次打开overlay时注入）');
+}
 
-    console.log('[离线APP] 录像拍照注入脚本已加载');
+function tryInit() {
+    try {
+        init();
+    } catch (e) {
+        console.error(__VR_LOG_PREFIX + ' 录像拍照脚本初始化异常:', e);
+        setTimeout(tryInit, 1000);
+    }
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', tryInit);
+} else {
+    tryInit();
+}
+
+console.log(__VR_LOG_PREFIX + ' 录像拍照注入脚本已加载');
 })();
