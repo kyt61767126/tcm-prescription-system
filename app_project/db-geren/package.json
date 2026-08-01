@@ -16,7 +16,7 @@
   },
   "build": {
     "appId": "com.benneng.prescription.personal",
-    "productName": "惠康中医-个人",
+    "productName": "惠康中医-离线标准版",
     "directories": {
       "output": "dist"
     },

@@ -371,7 +371,7 @@ if "%VERSION_STR%"=="" set "VERSION_STR=1.0"
 for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Content '..\config.json' -Encoding UTF8 -Raw | ConvertFrom-Json).productName"`) do (
     set "PRODUCT_NAME=%%p"
 )
-if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-定制"
+if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-离线机构版"
 
 REM Verify source APK size (prevent copying empty file when Gradle fails or write incomplete)
 set "SRC_SIZE=0"

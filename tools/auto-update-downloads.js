@@ -27,26 +27,26 @@ const APP_CONFIG = {
     'dingzhi': {
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi'),
-        outputName: '惠康中医-定制.apk',
+        outputName: '惠康中医-离线机构版.apk',
         configPath: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'config.json')
     },
     'geren': {
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren'),
-        outputName: '惠康中医-个人.apk',
+        outputName: '惠康中医-离线标准版.apk',
         configPath: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'config.json')
     },
     'cloud': {
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app'),
-        outputName: '惠康中医-云端.apk',
+        outputName: '惠康中医-云端机构版.apk',
         configPath: null
     },
     'geren-cloud': {
         // 云端个人版：独立项目 cloud_app_geren（包名 com.tcm.prescription.geren）
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app_geren', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app_geren'),
-        outputName: '惠康中医-云端个人版.apk',
+        outputName: '惠康中医-云端标准版.apk',
         configPath: null
     }
 };

@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">惠康中医-个人</string>
-    <string name="title_activity_main">惠康中医-个人</string>
+    <string name="app_name">惠康中医-离线标准版</string>
+    <string name="title_activity_main">惠康中医-离线标准版</string>
     <string name="package_name">com.benneng.prescription.personal</string>
     <string name="custom_url_scheme">com.benneng.prescription.personal</string>
 </resources>

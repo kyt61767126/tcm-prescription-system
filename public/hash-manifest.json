@@ -3,10 +3,10 @@
         "apk": {
             "version": "1.0.${BUILD_TIME}",
             "sha256": "c9564e847cbb96c6dead95e3c7d446d2932523525339ffbae04cde08af1a2773",
-            "url": "/downloads/惠康中医-定制.apk",
+            "url": "/downloads/惠康中医-离线机构版.apk",
             "size": 2173390,
             "updateTime": "2026-08-01T01:45:20.720Z",
-            "fileName": "惠康中医-定制.apk"
+            "fileName": "惠康中医-离线机构版.apk"
         },
         "portable": {
             "version": "",
@@ -14,7 +14,7 @@
             "url": "",
             "size": 78372653,
             "updateTime": "2026-08-01T01:45:19.562Z",
-            "fileName": "惠康中医-定制 1.0.0.exe"
+            "fileName": "惠康中医-离线机构版 1.0.0.exe"
         },
         "exe": {
             "version": "",
@@ -22,17 +22,17 @@
             "url": "",
             "size": 78587489,
             "updateTime": "2026-08-01T01:45:19.562Z",
-            "fileName": "惠康中医-定制 Setup 1.0.0.exe"
+            "fileName": "惠康中医-离线机构版 Setup 1.0.0.exe"
         }
     },
     "geren": {
         "apk": {
             "version": "",
             "sha256": "379c795f128093b0dcde58ea5ca9478322d33b76a80a0b59f1ea368352913e49",
-            "url": "/downloads/惠康中医-个人.apk",
+            "url": "/downloads/惠康中医-离线标准版.apk",
             "size": 2172251,
             "updateTime": "2026-08-01T01:45:19.562Z",
-            "fileName": "惠康中医-个人.apk"
+            "fileName": "惠康中医-离线标准版.apk"
         },
         "portable": {
             "version": "",
@@ -40,7 +40,7 @@
             "url": "",
             "size": 78411227,
             "updateTime": "2026-08-01T01:45:19.562Z",
-            "fileName": "惠康中医-个人 1.0.0.exe"
+            "fileName": "惠康中医-离线标准版 1.0.0.exe"
         },
         "exe": {
             "version": "",
@@ -48,17 +48,17 @@
             "url": "",
             "size": 78626007,
             "updateTime": "2026-08-01T01:45:19.562Z",
-            "fileName": "惠康中医-个人 Setup 1.0.0.exe"
+            "fileName": "惠康中医-离线标准版 Setup 1.0.0.exe"
         }
     },
     "cloud": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
             "sha256": "e7a05c27ffbb987da5f89052db9a5e7419dc98db0e95ce89dfc29596ae189410",
-            "url": "/downloads/惠康中医-云端.apk",
+            "url": "/downloads/惠康中医-云端机构版.apk",
             "size": 11236780,
             "updateTime": "2026-07-31T10:05:42.776Z",
-            "fileName": "惠康中医-云端.apk"
+            "fileName": "惠康中医-云端机构版.apk"
         },
         "exe": {
             "version": "",
@@ -66,7 +66,7 @@
             "url": "",
             "size": 81243790,
             "updateTime": "2026-08-01T01:45:19.562Z",
-            "fileName": "惠康中医-云端 Setup 1.2.0.exe"
+            "fileName": "惠康中医-云端机构版 Setup 1.2.0.exe"
         },
         "portable": {
             "version": "",
@@ -74,17 +74,17 @@
             "url": "",
             "size": 81029023,
             "updateTime": "2026-08-01T01:45:19.562Z",
-            "fileName": "惠康中医-云端 1.2.0.exe"
+            "fileName": "惠康中医-云端机构版 1.2.0.exe"
         }
     },
     "geren-cloud": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
             "sha256": "1ab643b2faa2842bddbab0cd73f97a382acc5680c4d1183e3f3438163d202a63",
-            "url": "/downloads/惠康中医-云端个人版.apk",
+            "url": "/downloads/惠康中医-云端机构版标准版.apk",
             "size": 11224075,
             "updateTime": "2026-07-31T10:10:55.979Z",
-            "fileName": "惠康中医-云端个人版.apk"
+            "fileName": "惠康中医-云端机构版标准版.apk"
         }
     }
 }
