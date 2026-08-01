@@ -5,7 +5,7 @@
             "sha256": "5a6d63135e27d3bb4a3978153677470c211b6f197cd82cb54ec736dc58b9bdeb",
             "url": "",
             "size": 2171351,
-            "updateTime": "2026-08-01T01:28:47.456Z",
+            "updateTime": "2026-08-01T01:37:57.912Z",
             "fileName": "app-release.apk"
         },
         "portable": {
@@ -13,7 +13,7 @@
             "sha256": "b4db13f8118a5407dced9e8de731a28d8d76cf8d0e562bfabadf5b03efcbd52f",
             "url": "",
             "size": 78372653,
-            "updateTime": "2026-08-01T01:28:47.456Z",
+            "updateTime": "2026-08-01T01:37:57.912Z",
             "fileName": "惠康中医-定制 1.0.0.exe"
         },
         "exe": {
@@ -21,17 +21,17 @@
             "sha256": "faa36f9bcfda14ee460b4888981c4477677b608ce2feff0748d7712160b5a82f",
             "url": "",
             "size": 78587489,
-            "updateTime": "2026-08-01T01:28:47.456Z",
+            "updateTime": "2026-08-01T01:37:57.912Z",
             "fileName": "惠康中医-定制 Setup 1.0.0.exe"
         }
     },
     "geren": {
         "apk": {
             "version": "1.0.${BUILD_TIME}",
-            "sha256": "60d91b05a28565ab73efa20a5454d25d591e1516e827116483121dd167980da4",
+            "sha256": "379c795f128093b0dcde58ea5ca9478322d33b76a80a0b59f1ea368352913e49",
             "url": "/downloads/惠康中医-个人.apk",
-            "size": 2172236,
-            "updateTime": "2026-08-01T01:28:48.719Z",
+            "size": 2172251,
+            "updateTime": "2026-08-01T01:37:59.091Z",
             "fileName": "惠康中医-个人.apk"
         },
         "portable": {
@@ -39,7 +39,7 @@
             "sha256": "3c0f8943a112507159f435edff54a14f2c51d1d6822143976d4281798a8206be",
             "url": "",
             "size": 78411227,
-            "updateTime": "2026-08-01T01:28:47.456Z",
+            "updateTime": "2026-08-01T01:37:57.912Z",
             "fileName": "惠康中医-个人 1.0.0.exe"
         },
         "exe": {
@@ -47,7 +47,7 @@
             "sha256": "e6067cc2021679fc01851397a247e4c0ba276985f298b0b0b2ba7d0961ea4f7b",
             "url": "",
             "size": 78626007,
-            "updateTime": "2026-08-01T01:28:47.456Z",
+            "updateTime": "2026-08-01T01:37:57.912Z",
             "fileName": "惠康中医-个人 Setup 1.0.0.exe"
         }
     },
@@ -65,7 +65,7 @@
             "sha256": "c12b4fe1ed6c4eb7eb27ec4b46055a5f1cc16f855750ff3f4663e24912503a73",
             "url": "",
             "size": 81243790,
-            "updateTime": "2026-08-01T01:28:47.456Z",
+            "updateTime": "2026-08-01T01:37:57.912Z",
             "fileName": "惠康中医-云端 Setup 1.2.0.exe"
         },
         "portable": {
@@ -73,7 +73,7 @@
             "sha256": "0b86b3552e318a52a68e6b669756b0d938e594ad30a471baa819a2fda0b1b80a",
             "url": "",
             "size": 81029023,
-            "updateTime": "2026-08-01T01:28:47.456Z",
+            "updateTime": "2026-08-01T01:37:57.912Z",
             "fileName": "惠康中医-云端 1.2.0.exe"
         }
     },

@@ -21,6 +21,14 @@
     window.__videoRecorderInjected = true;
 
     // ========================================================================
+    // 0. 运行环境检测（同时支持离线APP的file://协议和云端APP的https://协议）
+    // ========================================================================
+    // 动态日志前缀：根据协议自动选择，便于日志中区分运行环境
+    var __VR_LOG_PREFIX = window.location.protocol === 'file:' ? '[离线APP]' : '[云端APP]';
+    // Blob URL 策略：https:// 协议下使用 Blob URL（稳定），file:// 协议下使用 base64 data URL（Blob URL 在 file:// 下不稳定）
+    var __USE_BLOB_URL = window.location.protocol !== 'file:';
+
+    // ========================================================================
     // 1. 注入 window.electronAPI shim
     // ========================================================================
     function injectElectronAPIShim() {
@@ -30,11 +38,11 @@
 
         var N = window.AndroidNative;
         if (!N) {
-            console.warn('[云端APP] AndroidNative 桥接未找到');
+            console.warn(__VR_LOG_PREFIX + ' AndroidNative 桥接未找到');
             return false;
         }
         
-        console.log('[云端APP] AndroidNative 桥接已找到，开始构建 electronAPI shim');
+        console.log(__VR_LOG_PREFIX + ' AndroidNative 桥接已找到，开始构建 electronAPI shim');
         
         function P(v) { return Promise.resolve(v); }
         function callNative(name, json) {
@@ -42,13 +50,13 @@
                 var result = N.invoke(name, json || '{}');
                 // 防御 undefined/null 返回（Java 端异常时 JavascriptInterface 返回 undefined）
                 if (typeof result !== 'string' || result.length === 0) {
-                    console.error('[云端APP] NativeBridge.' + name + ' 返回非字符串:', typeof result, result);
+                    console.error(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 返回非字符串:', typeof result, result);
                     return { success: false, error: 'NativeBridge 返回无效（Java端可能抛异常）' };
                 }
-                console.log('[云端APP] NativeBridge.' + name + ' 返回长度:', result.length);
+                console.log(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 返回长度:', result.length);
                 return JSON.parse(result);
             } catch (e) {
-                console.error('[云端APP] NativeBridge.' + name + ' 调用异常:', e);
+                console.error(__VR_LOG_PREFIX + ' NativeBridge.' + name + ' 调用异常:', e);
                 return { success: false, error: String(e) };
             }
         }
@@ -148,7 +156,7 @@
                         }
                         // 大数据（>= 512KB）走分片上传，小数据走原 API
                         if (base64.length >= 512 * 1024) {
-                            console.log('[云端APP] 图片分片上传: ' + base64.length + ' 字节');
+                            console.log(__VR_LOG_PREFIX + ' 图片分片上传: ' + base64.length + ' 字节');
                             chunkedUpload(base64, fileName, 'image').then(resolve);
                         } else {
                             var r = callNative('savePrescriptionImage', JSON.stringify({ imageData: imageData, fileName: fileName }));
@@ -165,7 +173,7 @@
                         // 1. btoa 不支持 >127 字节，视频二进制数据会失败
                         // 2. _uint8ArrayToBase64 直接按位计算，省去 String.fromCharCode.apply + btoa 两步开销
                         var base64Data = _uint8ArrayToBase64(bytes);
-                        console.log('[云端APP] 视频总大小: ' + base64Data.length + ' 字节 base64');
+                        console.log(__VR_LOG_PREFIX + ' 视频总大小: ' + base64Data.length + ' 字节 base64');
                         // ★ 优化：小文件（<512KB 原始，base64 后约 683KB）直接走原生 API，避免分片开销
                         // 加 JSON 包装后约 700KB，远低于 1MB Binder 限制，安全可靠
                         if (bytes.length < 512 * 1024) {
@@ -213,7 +221,7 @@
                         var startR = callNative('startReadSession', JSON.stringify({ filePath: filePath }));
                         if (!startR || !startR.success) {
                             // startReadSession 不支持（旧 APK），回退到原 API
-                            console.warn('[云端APP] startReadSession 失败，回退原 API:', startR && startR.error);
+                            console.warn(__VR_LOG_PREFIX + ' startReadSession 失败，回退原 API:', startR && startR.error);
                             var rFallback = callNative('readFileAsBase64', JSON.stringify({ filePath: filePath }));
                             resolve(rFallback);
                             return;
@@ -221,7 +229,7 @@
                         var sessionId = startR.sessionId;
                         var mimeType = startR.mimeType || 'application/octet-stream';
                         var fileSize = startR.fileSize || 0;
-                        console.log('[云端APP] 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
+                        console.log(__VR_LOG_PREFIX + ' 分片读取文件: ' + filePath + ', 大小=' + fileSize + ', mime=' + mimeType);
                         var uint8Arrays = [];
                         var totalBytes = 0;
                         var chunkRetryCount = 0;
@@ -233,12 +241,12 @@
                                 // chunk 重试机制（同步离线APP）：弱网/低配机型读取成功率提升
                                 if (chunkRetryCount < MAX_CHUNK_RETRY) {
                                     chunkRetryCount++;
-                                    console.warn('[云端APP] readNextChunk 失败，重试 ' + chunkRetryCount + '/' + MAX_CHUNK_RETRY + ':', r && r.error);
+                                    console.warn(__VR_LOG_PREFIX + ' readNextChunk 失败，重试 ' + chunkRetryCount + '/' + MAX_CHUNK_RETRY + ':', r && r.error);
                                     setTimeout(nextChunk, 50);
                                     return;
                                 }
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
-                                console.error('[云端APP] readNextChunk 最终失败:', r && r.error);
+                                console.error(__VR_LOG_PREFIX + ' readNextChunk 最终失败:', r && r.error);
                                 resolve(r || { success: false, error: 'readNextChunk 返回无效' });
                                 return;
                             }
@@ -255,24 +263,42 @@
                                     uint8Arrays.push(bytes);
                                     totalBytes += len;
                                 } catch (e) {
-                                    console.error('[云端APP] base64 解码失败:', e);
+                                    console.error(__VR_LOG_PREFIX + ' base64 解码失败:', e);
                                 }
                             }
                             if (r.eof) {
                                 callNative('closeReadSession', JSON.stringify({ sessionId: sessionId }));
                                 try {
-                                    var blob = new Blob(uint8Arrays, { type: mimeType });
+                                    // 合并所有分片到一个 Uint8Array（base64 编码需要连续内存）
+                                    var merged = new Uint8Array(totalBytes);
+                                    var mergeOffset = 0;
+                                    for (var ai = 0; ai < uint8Arrays.length; ai++) {
+                                        merged.set(uint8Arrays[ai], mergeOffset);
+                                        mergeOffset += uint8Arrays[ai].length;
+                                    }
+
+                                    var url;
                                     // 清理旧 blob URL 避免内存泄漏
                                     if (window.__currentBlobUrl) {
                                         try { URL.revokeObjectURL(window.__currentBlobUrl); } catch (e) {}
+                                        window.__currentBlobUrl = null;
                                     }
-                                    var blobUrl = URL.createObjectURL(blob);
-                                    window.__currentBlobUrl = blobUrl;
-                                    console.log('[云端APP] 分片读取完成，blob URL=' + blobUrl + ', 片数=' + uint8Arrays.length + ', 总字节=' + blob.size);
-                                    resolve({ success: true, data: blobUrl });
+                                    if (__USE_BLOB_URL) {
+                                        // https:// 协议下使用 Blob URL（稳定，不占 JS 堆内存）
+                                        var blob = new Blob([merged], { type: mimeType });
+                                        url = URL.createObjectURL(blob);
+                                        window.__currentBlobUrl = url;
+                                        console.log(__VR_LOG_PREFIX + ' 分片读取完成，blob URL=' + url + ', 片数=' + uint8Arrays.length + ', 总字节=' + merged.length);
+                                    } else {
+                                        // file:// 协议下 Blob URL 不稳定，使用 base64 data URL
+                                        var base64DataUrl = _uint8ArrayToBase64(merged);
+                                        url = 'data:' + mimeType + ';base64,' + base64DataUrl;
+                                        console.log(__VR_LOG_PREFIX + ' 分片读取完成，data URL 长度=' + url.length + ', 片数=' + uint8Arrays.length + ', 总字节=' + merged.length);
+                                    }
+                                    resolve({ success: true, data: url });
                                 } catch (e) {
-                                    console.error('[云端APP] 创建 blob URL 失败:', e);
-                                    resolve({ success: false, error: '创建 blob URL 失败: ' + String(e) });
+                                    console.error(__VR_LOG_PREFIX + ' 创建视频 URL 失败:', e);
+                                    resolve({ success: false, error: '创建视频 URL 失败: ' + String(e) });
                                 }
                                 return;
                             }
@@ -314,8 +340,8 @@
         // 如果 injectElectronApiShim 已抢先注入了简单版本的 electronAPI，
         // 用增强版方法覆盖关键方法（readFileAsBase64/savePrescriptionImage/saveVideoFile 等）
         // 解决"图片无法加载，视频可以播放"的问题：图片走简单版 readFileAsBase64 超出 data URL 限制
-        if (oldAPI && oldAPI.__injected) {
-            console.log('[云端APP] electronAPI 已存在（injectElectronApiShim 先注入），覆盖增强版方法到旧对象');
+        if (oldAPI && (oldAPI.__injected || oldAPI.__nativeBridgeProxy)) {
+            console.log(__VR_LOG_PREFIX + ' electronAPI 已存在（injectElectronApiShim 先注入），覆盖增强版方法到旧对象');
             var newAPI = window.electronAPI;
             oldAPI.savePrescriptionImage = newAPI.savePrescriptionImage;
             oldAPI.saveVideoFile = newAPI.saveVideoFile;
@@ -330,7 +356,7 @@
             window.electronAPI = oldAPI;
         }
 
-        console.log('[云端APP] electronAPI shim 已成功注入');
+        console.log(__VR_LOG_PREFIX + ' electronAPI shim 已成功注入');
         return true;
     }
 
@@ -1401,33 +1427,33 @@
 // 9. 初始化（仅注入 shim，样式懒加载，按钮由 React ActionBar 渲染）
 // ========================================================================
 function init() {
-    console.log('[云端APP] 录像拍照脚本开始初始化');
+    console.log(__VR_LOG_PREFIX + ' 录像拍照脚本开始初始化');
 
     var nativeBridge = window.AndroidNative;
     if (!nativeBridge) {
-        console.warn('[云端APP] AndroidNative 桥接未找到，等待500ms重试');
+        console.warn(__VR_LOG_PREFIX + ' AndroidNative 桥接未找到，等待500ms重试');
         setTimeout(init, 500);
         return;
     }
 
-    console.log('[云端APP] AndroidNative 桥接已找到，开始注入 shim');
+    console.log(__VR_LOG_PREFIX + ' AndroidNative 桥接已找到，开始注入 shim');
 
     var shimSuccess = injectElectronAPIShim();
     if (!shimSuccess) {
-        console.error('[云端APP] electronAPI shim 注入失败');
+        console.error(__VR_LOG_PREFIX + ' electronAPI shim 注入失败');
         setTimeout(init, 1000);
         return;
     }
 
     // 样式懒加载：移到 openRecordingOverlay / openPhotoOverlay 内首次调用时注入
-    console.log('[云端APP] 录像拍照脚本初始化完成（样式延迟到首次打开overlay时注入）');
+    console.log(__VR_LOG_PREFIX + ' 录像拍照脚本初始化完成（样式延迟到首次打开overlay时注入）');
 }
 
 function tryInit() {
     try {
         init();
     } catch (e) {
-        console.error('[云端APP] 录像拍照脚本初始化异常:', e);
+        console.error(__VR_LOG_PREFIX + ' 录像拍照脚本初始化异常:', e);
         setTimeout(tryInit, 1000);
     }
 }
@@ -1438,5 +1464,5 @@ if (document.readyState === 'loading') {
     tryInit();
 }
 
-console.log('[云端APP] 录像拍照注入脚本已加载');
+console.log(__VR_LOG_PREFIX + ' 录像拍照注入脚本已加载');
 })();
