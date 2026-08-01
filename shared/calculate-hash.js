@@ -130,13 +130,15 @@ function main() {
         const version = readVersionFromGradle(path.join(dir, '..', '..', '..', '..'));
 
         if (!manifest[key]) manifest[key] = {};
+        // 保留现有 url 和 fileName，避免 auto-update-downloads.js 失败时 url 丢失
+        const existingApk = manifest[key].apk || {};
         manifest[key].apk = {
             version: version,
             sha256: sha256,
-            url: '', // 由用户手动填写或从 GitHub Releases 获取
+            url: existingApk.url || '',
             size: size,
             updateTime: now,
-            fileName: path.basename(apkFile)
+            fileName: existingApk.fileName || path.basename(apkFile)
         };
 
         console.log('  [OK] ' + key + ' APK: ' + sha256.substring(0, 16) + '... (' + (size / 1024 / 1024).toFixed(1) + 'MB)');
@@ -152,6 +154,8 @@ function main() {
         }
 
         if (!manifest[key]) manifest[key] = {};
+        const existingExe = manifest[key].exe || {};
+        const existingPortable = manifest[key].portable || {};
 
         if (exeFiles.setup) {
             const sha256 = calculateSHA256(exeFiles.setup);
@@ -159,7 +163,7 @@ function main() {
             manifest[key].exe = {
                 version: '',
                 sha256: sha256,
-                url: '',
+                url: existingExe.url || '',
                 size: size,
                 updateTime: now,
                 fileName: path.basename(exeFiles.setup)
@@ -174,7 +178,7 @@ function main() {
             manifest[key].portable = {
                 version: '',
                 sha256: sha256,
-                url: '',
+                url: existingPortable.url || '',
                 size: size,
                 updateTime: now,
                 fileName: path.basename(exeFiles.portable)
