@@ -1,4 +1,4 @@
-﻿{
+{
     "generated_at":  "2026-08-01 18:09:26 +08:00",
     "description":  "Interface structure fingerprint. SHA256 of HTML body (before first \u003cscript\u003e). Changes to \u003cscript\u003e blocks do NOT affect fingerprint.",
     "files":  {
@@ -14,11 +14,11 @@
                                             "sha256":  "db35d556056180b64235b62bb5d367ed6dbef41ab0d7603b61bb7cceebe0e4b9",
                                             "html_length":  49252
                                         },
-                  "app_project/db-dingzhi/desktop/index.html":  {
+                  "app_project/db-offline/desktop/index.html":  {
                                                                     "sha256":  "c59509a425e698e2ac2e76d8da8dfa3640234bcd8bb30a45af6e2ce31526e29d",
                                                                     "html_length":  22039
                                                                 },
-                  "app_project/db-geren/desktop/index.html":  {
+                  "app_project/db-offline/desktop_geren/index.html":  {
                                                                   "sha256":  "0c08b8d4ffcc6c09c5ee41d7a974d0b7649da852dd4053196c425383fd9357bd",
                                                                   "html_length":  21798
                                                               },
@@ -34,11 +34,11 @@
                                                      "sha256":  "d1b13ee60b249f3c1de3549ee73f354d5a716897e73f9617bed35566922e502b",
                                                      "html_length":  1680
                                                  },
-                  "app_project/db-dingzhi/desktop/electron/login.html":  {
+                  "app_project/db-offline/desktop/electron/login.html":  {
                                                                              "sha256":  "d8b159c49f69604ec13372192295cc74625cf3e68bf960302cc6b5ceb74a9f71",
                                                                              "html_length":  1702
                                                                          },
-                  "app_project/db-geren/desktop/electron/login.html":  {
+                  "app_project/db-offline/desktop_geren/electron/login.html":  {
                                                                            "sha256":  "b98dc981d26478c0f08c10f1441bb8daa1397e76d4a458ba4521121c68be4c14",
                                                                            "html_length":  1784
                                                                        }

@@ -78,10 +78,10 @@ Write-Host ""
 # --- Check 2: index.html files MUST NOT have BOM ---
 Write-Host "[Check 2] index.html files (MUST NOT have BOM - causes white screen)"
 $htmlFiles = @(
-    'app_project\db-dingzhi\desktop\index.html',
-    'app_project\db-geren\desktop\index.html',
-    'app_project\db-dingzhi\app\app\src\main\assets\public\index.html',
-    'app_project\db-geren\app\app\src\main\assets\public\index.html',
+    'app_project\db-offline\desktop\index.html',
+    'app_project\db-offline\desktop_geren\index.html',
+    'app_project\db-offline\app\app\app\src\main\assets\public\index.html',
+    'app_project\db-offline\app_geren\app\app\src\main\assets\public\index.html',
     'public\index.html',
     'app_project\db-yunduan/cloud_desktop\index.html',
     'app_project\db-yunduan/cloud_desktop_geren\index.html'

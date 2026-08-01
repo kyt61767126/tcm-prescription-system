@@ -719,7 +719,7 @@ function Build-Desktop {
     Write-Host "  准备 win-unpacked 目录..." -ForegroundColor Yellow
     $prepareScript = "$script:ProjectRoot\tools\prepare-win-unpacked.js"
     if (Test-Path $prepareScript) {
-        Invoke-External { node $prepareScript $script:VersionDir } "prepare-win-unpacked"
+        Invoke-External { node $prepareScript $script:DesktopDir } "prepare-win-unpacked"
     } else {
         Write-Host "  [WARN] prepare-win-unpacked.js 未找到，使用传统构建模式" -ForegroundColor Yellow
     }
@@ -1311,10 +1311,15 @@ function Invoke-Packaging {
         [bool]$SkipEnc
     )
 
-    # Setup paths
-    $script:VersionDir = "$script:ProjectRoot\app_project\db-$Ver"
-    $script:DesktopDir = "$script:VersionDir\desktop"
-    $script:AndroidDir = "$script:VersionDir\app"
+    # Setup paths - merged db-offline structure (dingzhi/geren share one folder)
+    $script:VersionDir = "$script:ProjectRoot\app_project\db-offline"
+    if ($Ver -eq 'geren') {
+        $script:DesktopDir = "$script:VersionDir\desktop_geren"
+        $script:AndroidDir = "$script:VersionDir\app_geren"
+    } else {
+        $script:DesktopDir = "$script:VersionDir\desktop"
+        $script:AndroidDir = "$script:VersionDir\app"
+    }
     $script:ElectronDir = "$script:DesktopDir\electron"
 
     # Validate paths

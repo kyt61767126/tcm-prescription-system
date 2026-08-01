@@ -1,4 +1,4 @@
-﻿# one-click-pack.ps1 - One-click packaging tool for all 4 versions
+# one-click-pack.ps1 - One-click packaging tool for all 4 versions
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -235,13 +235,13 @@ function Show-StandaloneUsage {
     Write-Host "    pack-app.bat           打包手机APP"
     Write-Host "    pack-app-strict.bat    严格模式APP"
     Write-Host ""
-    Write-Host "  离线定制版 (db-dingzhi):" -ForegroundColor Yellow
+    Write-Host "  离线定制版 (db-offline/desktop):" -ForegroundColor Yellow
     Write-Host "    pack-desktop.bat       打包桌面版"
     Write-Host "    pack-app.bat           打包手机APP"
     Write-Host "    pack-app-strict.bat    严格模式APP"
     Write-Host ""
-    Write-Host "  离线个人版 (db-geren):" -ForegroundColor Yellow
-    Write-Host "    pack-desktop.bat       打包桌面版"
+    Write-Host "  离线个人版 (db-offline/desktop_geren):" -ForegroundColor Yellow
+    Write-Host "    pack-desktop-geren.bat 打包桌面版"
     Write-Host "    pack-app.bat           打包手机APP"
     Write-Host "    pack-app-strict.bat    严格模式APP"
     Write-Host ""

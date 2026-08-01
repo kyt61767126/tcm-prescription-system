@@ -14,13 +14,13 @@ $files = @(
     'app_project/db-yunduan/cloud_desktop/index.html',
     'app_project/db-yunduan/cloud_desktop_geren/index.html',
     'public/index.html',
-    'app_project/db-dingzhi/desktop/index.html',
-    'app_project/db-geren/desktop/index.html',
+    'app_project/db-offline/desktop/index.html',
+    'app_project/db-offline/desktop_geren/index.html',
     'app_project/db-yunduan/cloud_desktop/electron/login.html',
     'app_project/db-yunduan/cloud_desktop_geren/electron/login.html',
     'public/electron/login.html',
-    'app_project/db-dingzhi/desktop/electron/login.html',
-    'app_project/db-geren/desktop/electron/login.html'
+    'app_project/db-offline/desktop/electron/login.html',
+    'app_project/db-offline/desktop_geren/electron/login.html'
 )
 
 $result = [ordered]@{

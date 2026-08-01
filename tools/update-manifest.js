@@ -18,8 +18,8 @@
 //    node tools/update-manifest.js cloud --release-notes="同步云端功能"
 //
 //  channel 取值：
-//    geren    → app_project/db-geren/
-//    dingzhi  → app_project/db-dingzhi/
+//    geren    → app_project/db-offline/desktop_geren/
+//    dingzhi  → app_project/db-offline/desktop/
 //    cloud    → app_project/db-yunduan/cloud_desktop/
 // ============================================================================
 
@@ -30,12 +30,12 @@ const crypto = require('crypto');
 // 端配置映射
 const CHANNEL_CONFIG = {
     geren: {
-        dir: 'app_project/db-geren',
+        dir: 'app_project/db-offline/desktop_geren',
         productName: '惠康中医-个人',
         outputDir: 'dist'
     },
     dingzhi: {
-        dir: 'app_project/db-dingzhi',
+        dir: 'app_project/db-offline/desktop',
         productName: '惠康中医-定制',
         outputDir: 'dist'
     },

@@ -25,16 +25,16 @@ const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 // appDir: 项目根目录（包含 app/ 子目录），用于读取 build.gradle 版本号
 const APP_CONFIG = {
     'dingzhi': {
-        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
-        appDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi'),
+        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
+        appDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline'),
         outputName: '惠康中医-离线机构版.apk',
-        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'desktop', 'config.json')
+        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'config.json')
     },
     'geren': {
-        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
-        appDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren'),
+        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app_geren', 'app', 'build', 'outputs', 'apk', 'release'),
+        appDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline'),
         outputName: '惠康中医-离线标准版.apk',
-        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'desktop', 'config.json')
+        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop_geren', 'config.json')
     },
     'cloud': {
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),

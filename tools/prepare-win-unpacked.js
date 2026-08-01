@@ -6,11 +6,11 @@
 const fs = require('fs');
 const path = require('path');
 
-// Use @electron/asar from the version directory's node_modules, fallback to db-geren
+// Use @electron/asar from the version directory's node_modules, fallback to db-offline/desktop_geren
 let asarModule;
 const tryPaths = [
   path.join(process.cwd(), 'node_modules', '@electron', 'asar'),
-  path.join(__dirname, '..', 'app_project', 'db-geren', 'node_modules', '@electron', 'asar'),
+  path.join(__dirname, '..', 'app_project', 'db-offline', 'desktop_geren', 'node_modules', '@electron', 'asar'),
 ];
 for (const p of tryPaths) {
   try { asarModule = require(p); break; } catch(e) {}

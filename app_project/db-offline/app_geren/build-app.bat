@@ -21,7 +21,7 @@ echo [1/10] Configuring clinic info...
 if /i "%1"=="--skip-config" (
     echo       [SKIP] --skip-config parameter detected
 ) else (
-    powershell -ExecutionPolicy Bypass -File "..\edit-config.ps1"
+    powershell -ExecutionPolicy Bypass -File "..\edit-config.ps1" -DesktopDir desktop_geren -AppDir app_geren
     if errorlevel 1 (
         echo [ERROR] edit-config.ps1 failed, aborting
         if not defined NO_PAUSE pause
@@ -39,8 +39,8 @@ if not exist "%ANDROID_PUBLIC%" (
     exit /b 1
 )
 echo   [1/5] Syncing config.json...
-if exist "..\desktop\config.json" (
-    copy /Y "..\desktop\config.json" "%ANDROID_PUBLIC%\config.json" >nul
+if exist "..\desktop_geren\config.json" (
+    copy /Y "..\desktop_geren\config.json" "%ANDROID_PUBLIC%\config.json" >nul
     if errorlevel 1 ( echo [WARN] Failed to sync config.json ) else ( echo       config.json synced )
 ) else ( echo [SKIP] config.json not found )
 echo   [2/5] Syncing APP index.html from root ^(5-button top menu^)...
@@ -53,16 +53,16 @@ if errorlevel 1 (
 )
 echo       APP index.html synced ^(5-button top menu with 统计^)
 echo   [3/5] Syncing vendor/xlsx.full.min.js...
-if exist "..\desktop\vendor\xlsx.full.min.js" (
+if exist "..\desktop_geren\vendor\xlsx.full.min.js" (
     if not exist "%ANDROID_PUBLIC%\vendor" mkdir "%ANDROID_PUBLIC%\vendor" >nul
-    copy /Y "..\desktop\vendor\xlsx.full.min.js" "%ANDROID_PUBLIC%\vendor\xlsx.full.min.js" >nul
+    copy /Y "..\desktop_geren\vendor\xlsx.full.min.js" "%ANDROID_PUBLIC%\vendor\xlsx.full.min.js" >nul
     if errorlevel 1 ( echo [WARN] Failed to sync xlsx.full.min.js ) else ( echo       xlsx.full.min.js synced )
 ) else ( echo [SKIP] vendor/xlsx.full.min.js not found )
 echo   [4/5] Syncing core JS modules...
 set "MODULES=auth-core.js db-adapter.js debug-logger.js medicine-dict.js patient-archive.js performance-utils.js permission.js prescription-core.js print-utils.js security-guard.js"
 for %%m in (%MODULES%) do (
-    if exist "..\desktop\%%m" (
-        copy /Y "..\desktop\%%m" "%ANDROID_PUBLIC%\%%m" >nul
+    if exist "..\desktop_geren\%%m" (
+        copy /Y "..\desktop_geren\%%m" "%ANDROID_PUBLIC%\%%m" >nul
         if errorlevel 1 ( echo [WARN] Failed to sync %%m ) else ( echo       %%m synced )
     ) else ( echo [SKIP] %%m not found )
 )
@@ -157,7 +157,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$freeGB=[math]::Round($disk.Free/1GB,2);" ^
   "if($freeGB -lt 0.5){ Write-Host '[ERROR] Disk space不足: '$freeGB'GB free, need >=0.5GB'; exit 1 };" ^
   "Write-Host '  Disk free:' $freeGB 'GB';" ^
-  "$required=@('..\desktop\index.html','..\index-app.html','..\desktop\config.json','app\signing.properties','app\app-release.jks','app\build.gradle');" ^
+  "$required=@('..\desktop_geren\index.html','..\index-app.html','..\desktop_geren\config.json','app\signing.properties','app\app-release.jks','app\build.gradle');" ^
   "$missing=@(); foreach($f in $required){ if(-not(Test-Path $f)){ $missing+=$f } };" ^
   "if($missing.Count -gt 0){ Write-Host '[ERROR] Missing required files:'; $missing|ForEach-Object{ Write-Host '  - '$_ }; exit 1 };" ^
   "Write-Host '[OK] All required files present'"
@@ -375,7 +375,7 @@ set "VERSION_STR=%VERSION_STR: =%"
 set "VERSION_STR=%VERSION_STR:"=%"
 if "%VERSION_STR%"=="" set "VERSION_STR=1.0"
 
-for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Content '..\desktop\config.json' -Encoding UTF8 -Raw | ConvertFrom-Json).productName"`) do (
+for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Content '..\desktop_geren\config.json' -Encoding UTF8 -Raw | ConvertFrom-Json).productName"`) do (
     set "PRODUCT_NAME=%%p"
 )
 if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-离线标准版"

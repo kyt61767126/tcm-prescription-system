@@ -1,8 +1,8 @@
-﻿<#
+<#
 .SYNOPSIS
     Edit clinic configuration for offline TCM APP/Desktop builds.
 .DESCRIPTION
-    Standalone config editor for db-dingzhi/db-geren versions.
+    Standalone config editor for db-offline/desktop and db-offline/desktop_geren versions.
     Updates config.json with HMAC-SHA256 signature for security.
     Syncs config.json to Capacitor public/ directory for APP packaging.
 .PARAMETER SkipConfig
@@ -16,7 +16,9 @@
 
 param(
     [switch]$SkipConfig,
-    [string]$Version
+    [string]$Version,
+    [string]$DesktopDir = 'desktop',
+    [string]$AppDir = 'app'
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,17 +27,15 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = $PSScriptRoot
 if (-not $Version) {
-    $version = Split-Path $scriptDir -Leaf
-    $versions = @('db-dingzhi', 'db-geren')
-    if ($versions -contains $version) {
-        $Version = $version -replace 'db-', ''
-    } else {
+    if ($DesktopDir -match 'geren') {
         $Version = 'geren'
+    } else {
+        $Version = 'dingzhi'
     }
 }
 
-$configPath = Join-Path $scriptDir 'desktop\config.json'
-$capPublicDir = Join-Path $scriptDir 'app\app\src\main\assets\public'
+$configPath = Join-Path $scriptDir "$DesktopDir\config.json"
+$capPublicDir = Join-Path $scriptDir "$AppDir\app\src\main\assets\public"
 
 $CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026'
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)

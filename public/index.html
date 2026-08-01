@@ -7381,7 +7381,7 @@ if (window.Permission) {
                     // 生成处方签图片并自动下载（使用云端返回的编号）
                     savePrescriptionAsImage(savedRecord, officialNo);
                     // 保存处方后，把最近拍照录像的文件绑定到当前患者姓名（支持先拍照后录入姓名的流程）
-                    // 对齐离线APP db-dingzhi/index.html 的 renameMediaFiles 4参数调用
+                    // 对齐离线APP db-offline/desktop/index.html 的 renameMediaFiles 4参数调用
                     var oldMediaName = window.__lastUsedMediaPatientName || localStorage.getItem('lastUsedMediaPatientName') || '';
                     var oldMediaNo = window.__lastUsedMediaIdentifier || localStorage.getItem('lastUsedMediaIdentifier') || '';
                     if (oldMediaName && oldMediaNo && window.electronAPI && window.electronAPI.renameMediaFiles &&

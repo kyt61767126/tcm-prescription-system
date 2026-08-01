@@ -112,25 +112,25 @@ const ALL_DISTRIBUTION_DIRS = [
     'app_project/db-yunduan/cloud_desktop_geren/electron',
     'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
     'app_project/db-yunduan/cloud_app/app/src/main/assets',
-    'app_project/db-dingzhi/desktop',
-    'app_project/db-dingzhi/desktop/electron',
-    'app_project/db-geren/desktop',
-    'app_project/db-geren/desktop/electron',
-    'app_project/db-dingzhi/app/app/src/main/assets/public',
-    'app_project/db-geren/app/app/src/main/assets/public'
+    'app_project/db-offline/desktop',
+    'app_project/db-offline/desktop/electron',
+    'app_project/db-offline/desktop_geren',
+    'app_project/db-offline/desktop_geren/electron',
+    'app_project/db-offline/app/app/src/main/assets/public',
+    'app_project/db-offline/app_geren/app/src/main/assets/public'
 ];
 
 // 按 target 分组（用于 --target=dingzhi 等参数，只处理对应版本，大幅加速打包）
 const TARGET_DIRS = {
     dingzhi: [
-        'app_project/db-dingzhi/desktop',
-        'app_project/db-dingzhi/desktop/electron',
-        'app_project/db-dingzhi/app/app/src/main/assets/public'
+        'app_project/db-offline/desktop',
+        'app_project/db-offline/desktop/electron',
+        'app_project/db-offline/app/app/src/main/assets/public'
     ],
     geren: [
-        'app_project/db-geren/desktop',
-        'app_project/db-geren/desktop/electron',
-        'app_project/db-geren/app/app/src/main/assets/public'
+        'app_project/db-offline/desktop_geren',
+        'app_project/db-offline/desktop_geren/electron',
+        'app_project/db-offline/app_geren/app/src/main/assets/public'
     ],
     cloud: [
         'public',

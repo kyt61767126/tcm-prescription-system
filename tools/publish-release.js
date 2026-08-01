@@ -47,14 +47,14 @@ const APP_CONFIG = {
     },
     'dingzhi': {
         apkName: '惠康中医-定制.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'app', 'app', 'build.gradle'),
-        distDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'dist'),
+        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build.gradle'),
+        distDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'dist'),
         latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'dingzhi', 'latest.json'),
     },
     'geren': {
         apkName: '惠康中医-个人.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'app', 'app', 'build.gradle'),
-        distDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'dist'),
+        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app_geren', 'app', 'build.gradle'),
+        distDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop_geren', 'dist'),
         latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'geren', 'latest.json'),
     }
 };
