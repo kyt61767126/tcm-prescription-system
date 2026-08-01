@@ -1,4 +1,4 @@
-# ============================================================================
+﻿# ============================================================================
 #  sync-all.ps1 - Unified sync script for all shared modules
 #
 #  Purpose:
@@ -51,15 +51,16 @@ $BusinessJsTargets = @(
     'public/electron',
     'app_project/db-yunduan/cloud_desktop',
     'app_project/db-yunduan/cloud_desktop/electron',
-    'app_project/db-geren',
+    'app_project/db-geren/desktop',
+    'app_project/db-dingzhi/desktop',
     'app_project/db-geren/app/app/src/main/assets/public',
     'app_project/db-dingzhi/app/app/src/main/assets/public'
 )
 
 # Group 2: permission.js extra targets (3 offline electron/, beyond Group 1)
 $PermissionExtraTargets = @(
-    'app_project/db-geren/electron',
-    'app_project/db-dingzhi/electron'
+    'app_project/db-geren/desktop/electron',
+    'app_project/db-dingzhi/desktop/electron'
 )
 
 # Group 3: calculate-hash.js targets (6 offline directories)
@@ -80,18 +81,18 @@ $LicenseFiles = @(
 # license targets (4 electron/ + 3 root/license/ + 3 nndroidicense/)
 $LicenseTargets = @(
     'app_project/db-yunduan/cloud_desktop/electron',
-    'app_project/db-geren/electron',
-    'app_project/db-dingzhi/electron',
-    'app_project/db-geren/license',
-    'app_project/db-dingzhi/license',
+    'app_project/db-geren/desktop/electron',
+    'app_project/db-dingzhi/desktop/electron',
+    'app_project/db-geren/desktop/license',
+    'app_project/db-dingzhi/desktop/license',
     'app_project/db-geren/app/app/src/main/assets/public/license',
     'app_project/db-dingzhi/app/app/src/main/assets/public/license'
 )
 
 # Group 5: electron/hot-update.js targets (3 offline electron/)
 $HotUpdateTargets = @(
-    'app_project/db-geren/electron',
-    'app_project/db-dingzhi/electron'
+    'app_project/db-geren/desktop/electron',
+    'app_project/db-dingzhi/desktop/electron'
 )
 
 # Group 6: res/xml files (3 XML)
@@ -114,8 +115,8 @@ $VendorFiles = @(
 
 # vendor targets (2 root/vendor/ + 2 app/vendor/)
 $VendorTargets = @(
-    'app_project/db-geren/vendor',
-    'app_project/db-dingzhi/vendor',
+    'app_project/db-geren/desktop/vendor',
+    'app_project/db-dingzhi/desktop/vendor',
     'app_project/db-geren/app/app/src/main/assets/public/vendor',
     'app_project/db-dingzhi/app/app/src/main/assets/public/vendor'
 )

@@ -34,8 +34,8 @@ const APK_PATHS = {
 // 桌面版 exe 搜索路径 (key 与 APK_PATHS 一致, dingzhi/geren 同时含 APK+EXE)
 const EXE_PATHS = {
     'cloud': path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'dist'),
-    'dingzhi': path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'dist'),
-    'geren': path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'dist'),
+    'dingzhi': path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'desktop', 'dist'),
+    'geren': path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'desktop', 'dist'),
 };
 
 /**

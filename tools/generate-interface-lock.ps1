@@ -13,12 +13,12 @@ Set-Location $root
 $files = @(
     'app_project/db-yunduan/cloud_desktop/index.html',
     'public/index.html',
-    'app_project/db-dingzhi/index.html',
-    'app_project/db-geren/index.html',
+    'app_project/db-dingzhi/desktop/index.html',
+    'app_project/db-geren/desktop/index.html',
     'app_project/db-yunduan/cloud_desktop/electron/login.html',
     'public/electron/login.html',
-    'app_project/db-dingzhi/electron/login.html',
-    'app_project/db-geren/electron/login.html'
+    'app_project/db-dingzhi/desktop/electron/login.html',
+    'app_project/db-geren/desktop/electron/login.html'
 )
 
 $result = [ordered]@{

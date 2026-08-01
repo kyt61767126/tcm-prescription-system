@@ -28,13 +28,13 @@ const APP_CONFIG = {
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi'),
         outputName: '惠康中医-离线机构版.apk',
-        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'config.json')
+        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'desktop', 'config.json')
     },
     'geren': {
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren'),
         outputName: '惠康中医-离线标准版.apk',
-        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'config.json')
+        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'desktop', 'config.json')
     },
     'cloud': {
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),

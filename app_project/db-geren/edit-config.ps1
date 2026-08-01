@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Edit clinic configuration for offline TCM APP/Desktop builds.
 .DESCRIPTION
@@ -34,7 +34,7 @@ if (-not $Version) {
     }
 }
 
-$configPath = Join-Path $scriptDir 'config.json'
+$configPath = Join-Path $scriptDir 'desktop\config.json'
 $capPublicDir = Join-Path $scriptDir 'app\app\src\main\assets\public'
 
 $CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026'

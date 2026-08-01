@@ -77,7 +77,7 @@ echo [3/8] Configuring clinic info...
 if /i "%1"=="--skip-config" (
     echo       [SKIP] --skip-config parameter detected
 ) else (
-    powershell -ExecutionPolicy Bypass -File "edit-config.ps1"
+    powershell -ExecutionPolicy Bypass -File "..\edit-config.ps1"
 )
 echo.
 
@@ -116,15 +116,15 @@ echo [OK] Old artifacts cleaned
 echo.
 
 echo [BUMP] Auto bumping patch version (integrity baseline rebuild)...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
 echo.
 
 echo [5/8] Obfuscating JavaScript code (target=dingzhi, may take 1-2 minutes)...
-node "%~dp0..\..\tools\obfuscate.js" --target=dingzhi
+node "%~dp0..\..\..\tools\obfuscate.js" --target=dingzhi
 if errorlevel 1 (
     echo [ERROR] Obfuscation failed
     echo Restoring original files...
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -141,10 +141,10 @@ echo.
 echo [CHECK] ============================================
 echo [CHECK] 打包前安全完整性验证
 echo [CHECK] ============================================
-node "%~dp0..\..\tools\pre-build-check.js" "%CD%"
+node "%~dp0..\..\..\tools\pre-build-check.js" "%CD%"
 if errorlevel 1 (
     echo [FAIL] 安全检查未通过，终止打包！请修复 package.json 的 files 列表
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     exit /b 1
 )
 echo [OK] 安全检查通过
@@ -156,7 +156,7 @@ echo       Disk free: %FREE_GB% GB
 if "%FREE_GB%"=="" set "FREE_GB=0"
 powershell -NoProfile -Command "if([double]'%FREE_GB%' -lt 1.0){ Write-Host '[ERROR] 磁盘空间不足: %FREE_GB%GB, 需要>=1GB'; exit 1 }"
 if errorlevel 1 (
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -194,7 +194,7 @@ if not "%BUILD_RC%"=="0" (
     echo.
     echo [ERROR] Build failed, please check logs above
     echo Restoring original JavaScript code...
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -205,14 +205,14 @@ set "EXE_FILE="
 for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
 if "%EXE_FILE%"=="" (
     echo [ERROR] No exe file found in %OUTPUT_DIR%
-    node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
 for %%A in ("%EXE_FILE%") do (
     if %%~zA LSS 1000000 (
         echo [ERROR] exe file too small: %%~zA bytes ^(< 1MB^), build may be incomplete
-        node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+        node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
         if not defined NO_PAUSE pause
         exit /b 1
     )
@@ -224,10 +224,10 @@ for %%A in ("%EXE_FILE%") do (
 echo.
 
 echo Restoring original JavaScript code...
-node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi
+node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi
 if errorlevel 1 (
     echo [ERROR] Restore failed! Source code may remain obfuscated.
-    echo Please manually run: node "%~dp0..\..\tools\obfuscate.js" restore --target=dingzhi
+    echo Please manually run: node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi
     if not defined NO_PAUSE pause
     exit /b 1
 )

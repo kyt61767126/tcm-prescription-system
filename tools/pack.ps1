@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -259,7 +259,7 @@ function Invoke-EncodingCheck {
 
     # Check index.html: MUST NOT have BOM
     $htmlFiles = @(
-        "$script:VersionDir\index.html",
+        "$script:DesktopDir\index.html",
         "$script:AndroidDir\app\src\main\assets\public\index.html"
     ) | Where-Object { Test-Path $_ }
 
@@ -288,8 +288,8 @@ function Invoke-EncodingCheck {
 function Edit-ClinicConfig {
     Write-Step "配置修改" "Modifying clinic configuration..."
 
-    $configPath = "$script:VersionDir\config.json"
-    $htmlPath = "$script:VersionDir\index.html"
+    $configPath = "$script:DesktopDir\config.json"
+    $htmlPath = "$script:DesktopDir\index.html"
 
     if (-not (Test-Path $configPath)) {
         Write-Log "[WARN] config.json not found, skipping config" "WARN"
@@ -476,22 +476,22 @@ function Sync-FilesToApp {
     }
 
     # Sync config.json
-    Copy-FileWithLog "$script:VersionDir\config.json" "$publicDir\config.json"
+    Copy-FileWithLog "$script:DesktopDir\config.json" "$publicDir\config.json"
 
     # Sync index.html (CRITICAL: no BOM)
-    Copy-FileWithLog "$script:VersionDir\index.html" "$publicDir\index.html"
+    Copy-FileWithLog "$script:DesktopDir\index.html" "$publicDir\index.html"
     # Strip BOM if present (belt-and-suspenders)
     Repair-FileBom -Path "$publicDir\index.html" -ShouldHaveBom $false | Out-Null
 
     # Sync all .js modules in version root (pattern-based, auto-discovers new files)
     # Exclude: main.js (electron entry point, not for Android)
     $excludeJs = @('main.js')
-    Get-ChildItem -Path $script:VersionDir -Filter "*.js" -File | Where-Object { $_.Name -notin $excludeJs } | ForEach-Object {
+    Get-ChildItem -Path $script:DesktopDir -Filter "*.js" -File | Where-Object { $_.Name -notin $excludeJs } | ForEach-Object {
         Copy-FileWithLog $_.FullName "$publicDir\$($_.Name)"
     }
 
     # Sync vendor/ directory
-    $vendorSrc = "$script:VersionDir\vendor"
+    $vendorSrc = "$script:DesktopDir\vendor"
     if (Test-Path $vendorSrc) {
         $vendorDst = "$publicDir\vendor"
         if (-not (Test-Path $vendorDst)) {
@@ -584,10 +584,10 @@ function Build-Desktop {
     Start-Sleep -Milliseconds 500  # reduced from 1s
 
     # Check node_modules - use npm ci for faster, deterministic install
-    if (-not (Test-Path "$script:VersionDir\node_modules")) {
-        $lockFile = "$script:VersionDir\package-lock.json"
+    if (-not (Test-Path "$script:DesktopDir\node_modules")) {
+        $lockFile = "$script:DesktopDir\package-lock.json"
         Write-Host "  安装 npm 依赖中..." -ForegroundColor Yellow
-        Push-Location $script:VersionDir
+        Push-Location $script:DesktopDir
         try {
             if (Test-Path $lockFile) {
                 # npm ci is 2-3x faster than npm install when lock file exists
@@ -604,9 +604,9 @@ function Build-Desktop {
         }
     }
     # 检查 electron dist（--ignore-scripts 安装时 postinstall 不执行，需手动下载）
-    if (-not (Test-Path "$script:VersionDir\node_modules\electron\dist\electron.exe")) {
+    if (-not (Test-Path "$script:DesktopDir\node_modules\electron\dist\electron.exe")) {
         Write-Host "  electron dist 缺失，下载二进制文件中..." -ForegroundColor Yellow
-        Push-Location $script:VersionDir
+        Push-Location $script:DesktopDir
         try {
             $env:NODE_TLS_REJECT_UNAUTHORIZED = '0'
             $env:ELECTRON_MIRROR = 'https://registry.npmmirror.com/-/binary/electron/'
@@ -616,7 +616,7 @@ function Build-Desktop {
             Remove-Item Env:\ELECTRON_MIRROR -ErrorAction SilentlyContinue
             Pop-Location
         }
-        if (-not (Test-Path "$script:VersionDir\node_modules\electron\dist\electron.exe")) {
+        if (-not (Test-Path "$script:DesktopDir\node_modules\electron\dist\electron.exe")) {
             Write-Host "  [ERROR] electron 二进制文件下载失败" -ForegroundColor Red
             # ★ 改为 throw（而非 exit 1），确保外层 try/finally 执行环境变量恢复
             throw "electron 二进制文件下载失败"
@@ -658,8 +658,8 @@ function Build-Desktop {
     #   3. 证书齐全 → 加载 CSC_KEY_PASSWORD
     $certPath = "$script:ProjectRoot\tools\certs\惠康中医-codesign.pfx"
     $certPwdFile = "$script:ProjectRoot\tools\certs\cert-password.txt"
-    $pkgPath = "$script:VersionDir\package.json"
-    $certBackupPath = "$script:VersionDir\package.json.certbak"
+    $pkgPath = "$script:DesktopDir\package.json"
+    $certBackupPath = "$script:DesktopDir\package.json.certbak"
 
     # 读取 package.json 检查是否配置了 certificateFile
     $pkgContent = Get-Content $pkgPath -Raw -Encoding UTF8
@@ -726,7 +726,7 @@ function Build-Desktop {
 
     # Build with electron-builder --prepackaged
     Write-Host "  运行 electron-builder (--prepackaged)..." -ForegroundColor Yellow
-    Push-Location $script:VersionDir
+    Push-Location $script:DesktopDir
     try {
         $env:ELECTRON_BUILDER_BINARIES_MIRROR = "https://registry.npmmirror.com/-/binary/electron-builder-binaries/"
         # ELECTRON_BUILDER_CACHE 已在脚本开头设置为项目级共享目录
@@ -734,7 +734,7 @@ function Build-Desktop {
         # ★ 修复 NSIS "Error writing temporary file" 错误
         # 原因：TRAE 沙箱可能阻止 NSIS 编译器(makensis.exe)写入系统 %TEMP% 目录
         # 方案：将 TEMP/TMP 重定向到项目本地的 tmp 目录
-        $localTemp = "$script:VersionDir\tmp"
+        $localTemp = "$script:DesktopDir\tmp"
         if (-not (Test-Path $localTemp)) { New-Item -ItemType Directory -Path $localTemp -Force | Out-Null }
         $prevTemp = $env:TEMP
         $prevTmp = $env:TMP
@@ -743,13 +743,13 @@ function Build-Desktop {
         try {
             # Read actual win-unpacked path (may differ if dir was locked and renamed)
             $unpackPath = "dist/win-unpacked"
-            $pathFile = "$script:VersionDir\dist\win-unpacked-path.txt"
+            $pathFile = "$script:DesktopDir\dist\win-unpacked-path.txt"
             if (Test-Path $pathFile) {
                 $actualPath = Get-Content $pathFile -Raw -Encoding UTF8 | ForEach-Object { $_.Trim() }
                 if ($actualPath -and (Test-Path $actualPath)) {
                     $unpackPath = $actualPath
                     # Convert to relative path for electron-builder
-                    $unpackPath = $unpackPath.Replace("$script:VersionDir\", "").Replace($script:VersionDir, "")
+                    $unpackPath = $unpackPath.Replace("$script:DesktopDir\", "").Replace($script:DesktopDir, "")
                     $unpackPath = $unpackPath.Replace("\", "/")
                     Write-Host "  [INFO] Using win-unpacked: $unpackPath" -ForegroundColor Cyan
                 }
@@ -787,7 +787,7 @@ function Build-Desktop {
     }
 
     # P1-易用：验证产物存在并显示大小
-    $distDir = "$script:VersionDir\dist"
+    $distDir = "$script:DesktopDir\dist"
     if (Test-Path $distDir) {
         $exeFiles = Get-ChildItem -Path $distDir -Filter "*.exe" -ErrorAction SilentlyContinue
         if ($exeFiles) {
@@ -962,7 +962,7 @@ function Build-App {
     $apkPath = Get-ChildItem -Path "$script:AndroidDir\app\build\outputs\apk\release" -Filter "*.apk" -ErrorAction SilentlyContinue | Select-Object -First 1
     if ($apkPath) {
         # Read productName from config.json (reference: cloud_app uses "惠康中医-云端")
-        $configPath = "$script:VersionDir\config.json"
+        $configPath = "$script:DesktopDir\config.json"
         $productName = switch ($Version) {
             'geren'   { '惠康中医-个人' }
             'dingzhi' { '惠康中医-定制' }
@@ -1313,8 +1313,9 @@ function Invoke-Packaging {
 
     # Setup paths
     $script:VersionDir = "$script:ProjectRoot\app_project\db-$Ver"
-    $script:AndroidDir = "$script:VersionDir\android"
-    $script:ElectronDir = "$script:VersionDir\electron"
+    $script:DesktopDir = "$script:VersionDir\desktop"
+    $script:AndroidDir = "$script:VersionDir\app"
+    $script:ElectronDir = "$script:DesktopDir\electron"
 
     # Validate paths
     if (-not (Test-Path $script:VersionDir)) {

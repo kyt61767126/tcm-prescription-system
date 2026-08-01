@@ -20,12 +20,10 @@ $baselineDir = Join-Path $projectRoot '.interface-baseline'
 
 # 待校验的 index.html
 $targets = @(
-    'app_project\db-geren\index.html',
-    'app_project\db-dingzhi\index.html',
-    'app_project\db-geren\android\app\src\main\assets\public\index.html',
-    'app_project\db-dingzhi\android\app\src\main\assets\public\index.html',
-    'app_project\db-geren\capacitor\app\src\main\assets\public\index.html',
-    'app_project\db-dingzhi\capacitor\app\src\main\assets\public\index.html'
+    'app_project\db-geren\desktop\index.html',
+    'app_project\db-dingzhi\desktop\index.html',
+    'app_project\db-geren\app\app\src\main\assets\public\index.html',
+    'app_project\db-dingzhi\app\app\src\main\assets\public\index.html'
 )
 
 function Get-BodyDOM {
