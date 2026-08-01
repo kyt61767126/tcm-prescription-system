@@ -591,11 +591,10 @@ function Build-Desktop {
         try {
             if (Test-Path $lockFile) {
                 # npm ci is 2-3x faster than npm install when lock file exists
-                Invoke-External { npm ci --no-audit --no-fund --prefer-offline } "npm ci"
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Host "  [WARN] npm ci failed, fallback to npm install --ignore-scripts..." -ForegroundColor Yellow
-                    Invoke-External { npm install --no-audit --no-fund --prefer-offline --ignore-scripts } "npm install --ignore-scripts"
-                }
+                # --ignore-scripts: 跳过 asarmor 的 postinstall（node-gyp 原生编译，需要 VS C++ 工具链）。
+                # afterPack.js 仅使用 createBloatPatch（纯 JS），不依赖原生加密模块；
+                # electron 二进制由下方独立逻辑下载，故跳过 lifecycle scripts 安全。
+                Invoke-External { npm ci --no-audit --no-fund --prefer-offline --ignore-scripts } "npm ci"
             } else {
                 Invoke-External { npm install --no-audit --no-fund --prefer-offline --ignore-scripts } "npm install"
             }
@@ -964,7 +963,7 @@ function Build-App {
         # Read productName from config.json (reference: cloud_app uses "惠康中医-云端")
         $configPath = "$script:DesktopDir\config.json"
         $productName = switch ($Version) {
-            'geren'   { '惠康中医-个人' }
+            'geren'   { '惠康中医-LB' }
             'dingzhi' { '惠康中医-定制' }
             default   { '惠康中医' }
         }
