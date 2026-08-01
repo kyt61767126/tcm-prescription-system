@@ -18,7 +18,7 @@ for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy
 
 echo ============================================
 echo   Huikang-TCM Build - Mobile APP (Capacitor)
-echo   Version: geren (ä¸ªäººç‰ˆ)
+echo   Version: geren (¸öÈË°æ)
 echo   Start: %BUILD_START_TIME%
 echo ============================================
 echo.
@@ -35,11 +35,11 @@ echo.
 if %EXIT_CODE% neq 0 (
     powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Red; Write-Host '  [ERROR] Build failed, exit code: %EXIT_CODE%' -ForegroundColor Red; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Red; Write-Host '========================================' -ForegroundColor Red"
 ) else (
-    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] Mobile APP (Personal) build complete!' -ForegroundColor Yellow; Write-Host '  APK: %~dp0æƒ åº·ä¸­åŒ»-ç¦»çº¿æ ‡å‡†ç‰ˆ.apk' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
+    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] Mobile APP (Personal) build complete!' -ForegroundColor Yellow; Write-Host '  APK: %~dp0»Ý¿µÖÐÒ½-ÀëÏß±ê×¼°æ.apk' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
 )
 echo.
 if not defined NO_PAUSE (
     set "EXIT_KEY="
-    set /p "EXIT_KEY=æŒ‰ 0 æˆ–å›žè½¦é”®é€€å‡º: "
+    set /p "EXIT_KEY=°´ 0 »ò»Ø³µ¼üÍË³ö: "
 )
 exit /b %EXIT_CODE%
