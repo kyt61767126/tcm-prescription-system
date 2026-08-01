@@ -60,10 +60,10 @@ echo.
 :done
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
-powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  æ‰“åŒ…æˆåŠŸï¼' -ForegroundColor Yellow; Write-Host '  APK æ–‡ä»¶: %~dp0..\æƒ åº·ä¸­åŒ»-ä¸ªäºº.apk' -ForegroundColor Yellow; Write-Host '  æ¨¡å¼: ç­¾åä¸¥æ ¼æ¨¡å¼ï¼ˆå·²å¯ç”¨é˜²ç¯¡æ”¹ï¼‰' -ForegroundColor Yellow; Write-Host '  å¼€å§‹: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  ç»“æŸ: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  æ€»è€—æ—¶: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
+powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  ´ò°ü³É¹¦£¡' -ForegroundColor Yellow; Write-Host '  APK ÎÄ¼ş: %~dp0..\»İ¿µÖĞÒ½-ÀëÏß±ê×¼°æ.apk' -ForegroundColor Yellow; Write-Host '  Ä£Ê½: Ç©ÃûÑÏ¸ñÄ£Ê½£¨ÒÑÆôÓÃ·À´Û¸Ä£©' -ForegroundColor Yellow; Write-Host '  ¿ªÊ¼: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  ½áÊø: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  ×ÜºÄÊ±: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
 echo.
 if not defined NO_PAUSE (
     set "EXIT_KEY="
-    set /p "EXIT_KEY=æŒ‰ 0 æˆ–å›è½¦é”®é€€å‡º: "
+    set /p "EXIT_KEY=°´ 0 »ò»Ø³µ¼üÍË³ö: "
 )
 exit /b 0

@@ -241,9 +241,9 @@ function Show-StandaloneUsage {
     Write-Host "    pack-app-strict.bat    严格模式APP"
     Write-Host ""
     Write-Host "  离线个人版 (db-offline/desktop_geren):" -ForegroundColor Yellow
-    Write-Host "    pack-desktop-geren.bat 打包桌面版"
-    Write-Host "    pack-app.bat           打包手机APP"
-    Write-Host "    pack-app-strict.bat    严格模式APP"
+    Write-Host "    pack-desktop-geren.bat     打包桌面版"
+    Write-Host "    pack-app-geren.bat         打包手机APP"
+    Write-Host "    pack-app-strict-geren.bat  严格模式APP"
     Write-Host ""
     Write-Host "  提示: 直接双击对应目录下的 bat 文件即可" -ForegroundColor DarkGray
     Write-Host "========================================" -ForegroundColor Cyan

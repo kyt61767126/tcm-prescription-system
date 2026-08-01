@@ -3,13 +3,13 @@ chcp 65001 >nul
 setlocal enableextensions
 cd /d "%~dp0"
 
-REM pack-app-strict.bat - Strict APP build (Capacitor APK + signature hash + repack)
-REM Calls capacitor/pack-app-strict.bat which handles full strict flow
+REM pack-app-strict-geren.bat - Strict APP build (Capacitor APK + signature hash + repack)
+REM Personal edition: calls app_geren/pack-app-strict.bat which handles full strict flow
 
 REM Record start time
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
-set "CAP_DIR=%~dp0app"
+set "CAP_DIR=%~dp0app_geren"
 if not exist "%CAP_DIR%\pack-app-strict.bat" (
     echo [ERROR] Capacitor APP strict build script not found: %CAP_DIR%\pack-app-strict.bat
     if not defined NO_PAUSE pause
@@ -18,7 +18,7 @@ if not exist "%CAP_DIR%\pack-app-strict.bat" (
 
 echo ============================================
 echo   Huikang-TCM Build - Strict APP (Capacitor)
-echo   Version: dingzhi (定制版)
+echo   Version: geren (个人版)
 echo   (APK + signature hash + repack)
 echo   开始: %BUILD_START_TIME%
 echo ============================================
@@ -36,7 +36,7 @@ echo.
 if %EXIT_CODE% neq 0 (
     powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Red; Write-Host '  [错误] 打包失败，退出码: %EXIT_CODE%' -ForegroundColor Red; Write-Host '  总耗时: %BUILD_ELAPSED%' -ForegroundColor Red; Write-Host '========================================' -ForegroundColor Red"
 ) else (
-    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [成功] 严格模式APP打包完成！' -ForegroundColor Yellow; Write-Host '  [位置] APK 文件: %~dp0惠康中医-离线机构版.apk' -ForegroundColor Yellow; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  总耗时: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
+    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [成功] 严格模式APP打包完成！' -ForegroundColor Yellow; Write-Host '  [位置] APK 文件: %~dp0惠康中医-离线标准版.apk' -ForegroundColor Yellow; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  总耗时: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
 )
 echo.
 if not defined NO_PAUSE (
