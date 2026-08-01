@@ -25,10 +25,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 
-// APK 文件搜索路径 (Capacitor 架构)
+// APK 文件搜索路径 (Android 工程根目录: app/)
 const APK_PATHS = {
-    'dingzhi': path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
-    'geren': path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+    'dingzhi': path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
+    'geren': path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
 };
 
 // 桌面版 exe 搜索路径 (key 与 APK_PATHS 一致, dingzhi/geren 同时含 APK+EXE)
@@ -87,11 +87,9 @@ function findExeFile(dir) {
  */
 function readVersionFromGradle(appDir) {
     try {
-        // Support both capacitor/ and android/ directory structures
-        const capPath = path.join(appDir, 'capacitor', 'app', 'build.gradle');
-        const androidPath = path.join(appDir, 'android', 'app', 'build.gradle');
-        const gradlePath = fs.existsSync(capPath) ? capPath : (fs.existsSync(androidPath) ? androidPath : '');
-        if (!gradlePath) return '';
+        // Android 工程根目录: appDir/app/app/build.gradle
+        const gradlePath = path.join(appDir, 'app', 'app', 'build.gradle');
+        if (!fs.existsSync(gradlePath)) return '';
         const content = fs.readFileSync(gradlePath, 'utf8');
         const match = content.match(/versionCode\s+(\d+)/);
         const nameMatch = content.match(/versionName\s+"([^"]+)"/);

@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Edit clinic configuration for offline TCM APP/Desktop builds.
 .DESCRIPTION
@@ -35,7 +35,7 @@ if (-not $Version) {
 }
 
 $configPath = Join-Path $scriptDir 'config.json'
-$capPublicDir = Join-Path $scriptDir 'capacitor\app\src\main\assets\public'
+$capPublicDir = Join-Path $scriptDir 'app\app\src\main\assets\public'
 
 $CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026'
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
