@@ -606,11 +606,24 @@ function Build-Desktop {
     # 检查 electron dist（--ignore-scripts 安装时 postinstall 不执行，需手动下载）
     if (-not (Test-Path "$script:DesktopDir\node_modules\electron\dist\electron.exe")) {
         Write-Host "  electron dist 缺失，下载二进制文件中..." -ForegroundColor Yellow
+        # ★ 举一反三修复（2026-08-02）：@electron/get 包可能在 npm ci --ignore-scripts 后损坏
+        # （目录仅 LICENSE 无 package.json/dist），导致 install.js 的 require('@electron/get')
+        # 抛 MODULE_NOT_FOUND。install.js 失败改为软失败，让流程继续走下方 .NET 回退解压。
+        $electronGetOk = (Test-Path "$script:DesktopDir\node_modules\@electron\get\package.json") -and `
+                         (Test-Path "$script:DesktopDir\node_modules\@electron\get\dist")
         Push-Location $script:DesktopDir
         try {
             $env:NODE_TLS_REJECT_UNAUTHORIZED = '0'
             $env:ELECTRON_MIRROR = 'https://registry.npmmirror.com/-/binary/electron/'
-            Invoke-External { node "node_modules\electron\install.js" } "electron install"
+            if (-not $electronGetOk) {
+                Write-Host "  [WARN] @electron/get 包不完整，跳过 install.js，直接走 .NET 回退解压" -ForegroundColor Yellow
+            } else {
+                try {
+                    Invoke-External { node "node_modules\electron\install.js" } "electron install"
+                } catch {
+                    Write-Host "  [WARN] install.js 失败: $_ 将尝试 .NET 回退解压" -ForegroundColor Yellow
+                }
+            }
         } finally {
             Remove-Item Env:\NODE_TLS_REJECT_UNAUTHORIZED -ErrorAction SilentlyContinue
             Remove-Item Env:\ELECTRON_MIRROR -ErrorAction SilentlyContinue

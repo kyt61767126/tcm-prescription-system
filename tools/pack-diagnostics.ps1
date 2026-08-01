@@ -167,6 +167,13 @@ $ErrorPatterns = @(
         Patterns = @("integrity", "baseline", "基线", "篡改", "完整性校验")
         Solution = "完整性校验问题。桌面版 version 固定，哈希不匹配会自动重建基线（正常）。异常 catch 块已改为阻止启动。详见 docs/pack-issues-knowledge-base.md"
         Severity = "LOW"
+    },
+    @{
+        Category = "BUILD_ELECTRON"
+        IssueId = "BUILD_ELECTRON-003"
+        Patterns = @("@electron/get", "Cannot find module '@electron/get'", "electron install", "electron dist 缺失", "extract-zip")
+        Solution = "@electron/get 包损坏或 install.js 解压不完整。pack.ps1 已修复：install.js 失败软失败走 .NET 回退解压（从 %LOCALAPPDATA%\electron\Cache 找 zip）。检查缓存是否有 electron-v<版本>-win32-x64.zip。详见 docs/pack-issues-knowledge-base.md"
+        Severity = "HIGH"
     }
 )
 

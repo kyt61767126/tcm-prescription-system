@@ -181,6 +181,20 @@
 - **对比**: APK versionName 是动态的 `1.0.${BUILD_TIME}`，每次打包变化，基线自动重建
 - **日期**: 2026-08-02
 
+### [BUILD_ELECTRON-002] extract-zip 解压不完整（install.js 返回 exit 0 但无 electron.exe）
+- **现象**: `node node_modules/electron/install.js` 执行成功（exit 0），但 `node_modules/electron/dist/electron.exe` 不存在，只有 locales 等部分文件
+- **根因**: electron 的 install.js 依赖 `extract-zip` 模块解压下载的 zip，该模块在 Windows 环境下可能静默部分解压（仅 locales，无 electron.exe）却返回成功
+- **解决**: pack.ps1 已有 .NET 回退解压逻辑（`[System.IO.Compression.ZipFile]::ExtractToDirectory`），从 `%LOCALAPPDATA%\electron\Cache` 找到已下载的 zip 直接解压，并写入 path.txt
+- **缓存路径**: `C:\Users\<user>\AppData\Local\electron\Cache\electron-v<版本>-win32-x64.zip`
+- **日期**: 2026-08-02（commit 27e4f8dc）
+
+### [BUILD_ELECTRON-003] @electron/get 包损坏导致 install.js 抛 MODULE_NOT_FOUND
+- **现象**: `node node_modules/electron/install.js` 直接抛错 `Cannot find module '@electron/get'`，exit 1，连下载都没开始
+- **根因**: `npm ci --ignore-scripts` 后 `@electron/get` 包损坏——目录下仅有 LICENSE 文件，无 package.json 和 dist/ 代码。install.js 第3行 `require('@electron/get')` 立即抛 MODULE_NOT_FOUND。原 pack.ps1 中 Invoke-External 在 exit 1 时 throw，导致下方 .NET 回退逻辑无法执行
+- **解决**: pack.ps1 修复为：①调用 install.js 前检查 `@electron/get` 完整性（package.json + dist 同时存在）；②不完整则跳过 install.js；③install.js 失败改为软失败（try/catch 不 throw），让流程继续走 .NET 回退解压。只要 `%LOCALAPPDATA%\electron\Cache` 有对应版本 zip 即可成功
+- **诊断**: 检查 `node_modules/@electron/get/` 目录是否只有 LICENSE；检查缓存目录是否有 `electron-v<版本>-win32-x64.zip`
+- **日期**: 2026-08-02
+
 ---
 
 ## 十二、举一反三清单
@@ -196,6 +210,8 @@
 | 必须三层防护防旧代码 | BUILD_VERIFY-001 | 所有 APP 打包 |
 | ESM 项目中 require 需 createRequire | BUILD_DEPS-001 | shared/ 脚本 |
 | 版本号固定时完整性校验需自动重建基线 | BUILD_ELECTRON-001 | 桌面版打包 |
+| electron install.js 失败应软失败走 .NET 回退解压 | BUILD_ELECTRON-002/003 | 桌面版打包 |
+| npm ci --ignore-scripts 后需检查 @electron/get 完整性 | BUILD_ELECTRON-003 | 桌面版打包 |
 
 ---
 
