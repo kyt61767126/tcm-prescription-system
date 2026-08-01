@@ -1294,6 +1294,11 @@ let currentUser = null;
                 if (overlay) {
                     overlay.style.display = 'flex';
                     loadRememberedUsers();
+                    // ★ 个人版：退出登录后同步 loginUsername 为最新的 CONFIG.doctorName
+                    if (CONFIG.edition === 'personal' && CONFIG.doctorName) {
+                        const userInput = document.getElementById('loginUsername');
+                        if (userInput) userInput.value = CONFIG.doctorName;
+                    }
                 }
             }
         };
@@ -3183,6 +3188,16 @@ let currentUser = null;
         async function init() {
             injectRecycleBinButton();
             checkLoginStatus();
+            // ★ 个人版：优先从 localStorage 同步 CONFIG.doctorName（基础设置修改后保持同步）
+            const localDoctor = localStorage.getItem('local_clinicDoctor');
+            if (localDoctor) {
+                CONFIG.doctorName = localDoctor;
+                // 同步登入窗口用户名显示
+                const userInput = document.getElementById('loginUsername');
+                if (userInput && !userInput.value) {
+                    userInput.value = localDoctor;
+                }
+            }
             // ★ 初始化记住的用户名（含 CONFIG.doctorName 默认值）
             initRememberedCredentials();
             // 不在init中调用loadData()，因为用户还没登录
@@ -4929,6 +4944,17 @@ let currentUser = null;
             localStorage.setItem('local_clinicDoctor', document.getElementById('defaultDoctor').value);
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             localStorage.setItem('local_defaultDose', document.getElementById('defaultDose').value || '7');
+            
+            // ★ 个人版：同步更新 CONFIG.doctorName 和登入窗口用户名显示
+            const newDoctorName = document.getElementById('defaultDoctor').value;
+            if (CONFIG.edition === 'personal' && newDoctorName && newDoctorName !== CONFIG.doctorName) {
+                CONFIG.doctorName = newDoctorName;
+                // 同步登入窗口的用户名显示（未登录时 loginUsername 显示新医师姓名）
+                const loginUsernameInput = document.getElementById('loginUsername');
+                if (loginUsernameInput && !currentUser) {
+                    loginUsernameInput.value = newDoctorName;
+                }
+            }
             
             const autoStartEnabled = document.getElementById('autoStart').checked;
             localStorage.setItem('local_autoStartEnabled', autoStartEnabled ? 'true' : 'false');
