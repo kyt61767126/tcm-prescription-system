@@ -120,7 +120,7 @@
         loginUserInfo = getFirstUserFromStorage() || getFirstUserFromConfig(config) || DEFAULT_USERS[0];
 
         // ★用户名输入框显示中文医师姓名（config.doctorName），不显示 admin/管理员
-        const doctorName = config.doctorName || (loginUserInfo && loginUserInfo.name && loginUserInfo.name !== '管理员' ? loginUserInfo.name : '医师');
+        const doctorName = config.doctorName || (loginUserInfo && loginUserInfo.name && loginUserInfo.name !== '管理员' ? loginUserInfo.name : '本能堂');
         input.value = doctorName;
 
         localStorage.removeItem(KEY_REMEMBER_USER);
