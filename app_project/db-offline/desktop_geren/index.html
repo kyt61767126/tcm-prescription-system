@@ -1318,6 +1318,15 @@ if (window.Permission) {
                 }
                 const overlay = document.getElementById('loginOverlay');
                 if (overlay) overlay.style.display = 'flex';
+                // ★ 个人版：退出登录后同步 loginUsername 为最新的医师姓名（基础设置修改后保持同步）
+                if (typeof CONFIG !== 'undefined' && CONFIG.edition === 'personal') {
+                    const localDoctor = localStorage.getItem('local_clinicDoctor');
+                    if (localDoctor) CONFIG.doctorName = localDoctor;
+                    if (CONFIG.doctorName) {
+                        const userInput = document.getElementById('loginUsername');
+                        if (userInput) userInput.value = CONFIG.doctorName;
+                    }
+                }
             }
         };
 
@@ -1588,6 +1597,17 @@ if (window.Permission) {
         // 个人版：单用户模式，仅同步 AuthCore 状态，无需渲染用户下拉
         async function loadRememberedUsers() {
             try {
+                // ★ 个人版：优先从 localStorage 读取最新医师姓名，同步 CONFIG.doctorName 和 loginUsername 显示
+                const localDoctor = localStorage.getItem('local_clinicDoctor');
+                if (localDoctor && typeof CONFIG !== 'undefined') {
+                    CONFIG.doctorName = localDoctor;
+                }
+                if (typeof CONFIG !== 'undefined' && CONFIG.edition === 'personal' && CONFIG.doctorName) {
+                    const userInput = document.getElementById('loginUsername');
+                    if (userInput) {
+                        userInput.value = CONFIG.doctorName;
+                    }
+                }
                 if (window.AuthCore && AuthCore.loadRememberedUsers) {
                     try { await AuthCore.loadRememberedUsers(); } catch(e) {}
                 }
@@ -2838,6 +2858,11 @@ if (window.Permission) {
 
         function populateUserList() {
             // 个人版：用户名固定显示医师姓名（来自 CONFIG）
+            // ★ 优先从 localStorage 读取最新医师姓名（基础设置修改后保存到这里）
+            const localDoctor = localStorage.getItem('local_clinicDoctor');
+            if (localDoctor && typeof CONFIG !== 'undefined') {
+                CONFIG.doctorName = localDoctor;
+            }
             const input = document.getElementById('loginUsername');
             if (!input) return;
             input.value = (typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : '张大夫';
@@ -4705,6 +4730,13 @@ if (window.Permission) {
             
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
+            // ★ 个人版：同步登入窗口的用户名显示（基础设置修改医师姓名后立即生效）
+            if (typeof CONFIG !== 'undefined' && CONFIG.edition === 'personal') {
+                const loginUsernameInput = document.getElementById('loginUsername');
+                if (loginUsernameInput && newDoctorName) {
+                    loginUsernameInput.value = newDoctorName;
+                }
+            }
             // 同步诊疗费
             const regFeeVal = document.getElementById('defaultRegFee').value || '0';
             const regFeeInput = document.getElementById('registrationFee');
