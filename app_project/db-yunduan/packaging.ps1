@@ -1,4 +1,4 @@
-# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-offline/desktop_geren、db-offline/desktop）
 param(
     [switch]$AutoDesktop,
