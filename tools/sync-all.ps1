@@ -45,16 +45,15 @@ $BusinessJsFiles = @(
     'security-guard.js'
 )
 
-# 10 directories for business JS (cloud + offline root + capacitor assets)
+# 10 directories for business JS (cloud + offline root + app assets)
 $BusinessJsTargets = @(
     'public',
     'public/electron',
     'app_project/db-yunduan/cloud_desktop',
     'app_project/db-yunduan/cloud_desktop/electron',
     'app_project/db-geren',
-    'app_project/db-geren/capacitor/app/src/main/assets/public',
-    'app_project/db-dingzhi',
-    'app_project/db-dingzhi/capacitor/app/src/main/assets/public'
+    'app_project/db-geren/app/app/src/main/assets/public',
+    'app_project/db-dingzhi/app/app/src/main/assets/public'
 )
 
 # Group 2: permission.js extra targets (3 offline electron/, beyond Group 1)
@@ -66,9 +65,9 @@ $PermissionExtraTargets = @(
 # Group 3: calculate-hash.js targets (6 offline directories)
 $CalculateHashTargets = @(
     'app_project/db-geren',
-    'app_project/db-geren/capacitor/app/src/main/assets/public',
+    'app_project/db-geren/app/app/src/main/assets/public',
     'app_project/db-dingzhi',
-    'app_project/db-dingzhi/capacitor/app/src/main/assets/public'
+    'app_project/db-dingzhi/app/app/src/main/assets/public'
 )
 
 # Group 4: license files (3 files)
@@ -85,8 +84,8 @@ $LicenseTargets = @(
     'app_project/db-dingzhi/electron',
     'app_project/db-geren/license',
     'app_project/db-dingzhi/license',
-    'app_project/db-geren/capacitor/app/src/main/assets/public/license',
-    'app_project/db-dingzhi/capacitor/app/src/main/assets/public/license'
+    'app_project/db-geren/app/app/src/main/assets/public/license',
+    'app_project/db-dingzhi/app/app/src/main/assets/public/license'
 )
 
 # Group 5: electron/hot-update.js targets (3 offline electron/)
@@ -102,10 +101,10 @@ $ResXmlFiles = @(
     'res/xml/file_paths.xml'
 )
 
-# res/xml targets (3 capacitor/res/xml/)
+# res/xml targets (2 app/res/xml/)
 $ResXmlTargets = @(
-    'app_project/db-geren/capacitor/app/src/main/res/xml',
-    'app_project/db-dingzhi/capacitor/app/src/main/res/xml'
+    'app_project/db-geren/app/app/src/main/res/xml',
+    'app_project/db-dingzhi/app/app/src/main/res/xml'
 )
 
 # Group 7: vendor files
@@ -113,12 +112,12 @@ $VendorFiles = @(
     'vendor/xlsx.full.min.js'
 )
 
-# vendor targets (3 root/vendor/ + 3 capacitor/vendor/)
+# vendor targets (2 root/vendor/ + 2 app/vendor/)
 $VendorTargets = @(
     'app_project/db-geren/vendor',
     'app_project/db-dingzhi/vendor',
-    'app_project/db-geren/capacitor/app/src/main/assets/public/vendor',
-    'app_project/db-dingzhi/capacitor/app/src/main/assets/public/vendor'
+    'app_project/db-geren/app/app/src/main/assets/public/vendor',
+    'app_project/db-dingzhi/app/app/src/main/assets/public/vendor'
 )
 
 # Group 8: cloud-only modules (cloud-api.js, local-db.js, sync-engine.js)
@@ -266,13 +265,13 @@ $result = Sync-Group -GroupName 'hot-update.js -> 3 offline electron/' -Files @(
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
-# Group 6: res/xml files -> 3 capacitor/res/xml/
-$result = Sync-Group -GroupName 'res/xml (3 files -> 3 capacitor/res/xml/)' -Files $ResXmlFiles -Targets $ResXmlTargets -VerifyOnly $VerifyOnly
+# Group 6: res/xml files -> 2 app/res/xml/
+$result = Sync-Group -GroupName 'res/xml (3 files -> 2 app/res/xml/)' -Files $ResXmlFiles -Targets $ResXmlTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
-# Group 7: vendor files -> 6 targets
-$result = Sync-Group -GroupName 'vendor (1 file -> 6 dirs)' -Files $VendorFiles -Targets $VendorTargets -VerifyOnly $VerifyOnly
+# Group 7: vendor files -> 4 targets
+$result = Sync-Group -GroupName 'vendor (1 file -> 4 dirs)' -Files $VendorFiles -Targets $VendorTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

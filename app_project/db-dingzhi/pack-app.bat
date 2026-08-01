@@ -6,7 +6,7 @@ cd /d "%~dp0"
 REM pack-app.bat - APP build entry (Capacitor Android APK)
 REM Calls capacitor/build-app.bat which handles full 10-step flow including APK copy to parent dir
 
-set "CAP_DIR=%~dp0capacitor"
+set "CAP_DIR=%~dp0app"
 if not exist "%CAP_DIR%\build-app.bat" (
     echo [ERROR] Capacitor APP build script not found: %CAP_DIR%\build-app.bat
     if not defined NO_PAUSE pause

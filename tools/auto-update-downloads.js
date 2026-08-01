@@ -22,16 +22,16 @@ const DOWNLOADS_DIR = path.join(PROJECT_ROOT, 'public', 'downloads');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 
 // 各APP的APK搜索路径和产品名称
-// appDir: 项目根目录（包含 capacitor/ 或 android/ 或 app/ 子目录），用于读取 build.gradle 版本号
+// appDir: 项目根目录（包含 app/ 子目录），用于读取 build.gradle 版本号
 const APP_CONFIG = {
     'dingzhi': {
-        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi'),
         outputName: '惠康中医-离线机构版.apk',
         configPath: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'config.json')
     },
     'geren': {
-        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'capacitor', 'app', 'build', 'outputs', 'apk', 'release'),
+        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren'),
         outputName: '惠康中医-离线标准版.apk',
         configPath: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'config.json')
@@ -71,12 +71,9 @@ function findApkFile(dir) {
 
 function readVersionFromGradle(appDir) {
     try {
-        // Support capacitor/, android/, and direct app/ directory structures
-        const capPath = path.join(appDir, 'capacitor', 'app', 'build.gradle');
-        const androidPath = path.join(appDir, 'android', 'app', 'build.gradle');
-        const directPath = path.join(appDir, 'app', 'build.gradle');
-        const gradlePath = fs.existsSync(capPath) ? capPath : (fs.existsSync(androidPath) ? androidPath : (fs.existsSync(directPath) ? directPath : ''));
-        if (!gradlePath) return '';
+        // Android 工程根目录: appDir/app/app/build.gradle
+        const gradlePath = path.join(appDir, 'app', 'app', 'build.gradle');
+        if (!fs.existsSync(gradlePath)) return '';
         const content = fs.readFileSync(gradlePath, 'utf8');
         const nameMatch = content.match(/versionName\s+"([^"]+)"/);
         if (nameMatch) return nameMatch[1];

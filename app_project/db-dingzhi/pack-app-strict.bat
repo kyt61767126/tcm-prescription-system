@@ -9,7 +9,7 @@ REM Calls capacitor/pack-app-strict.bat which handles full strict flow
 REM Record start time
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
-set "CAP_DIR=%~dp0capacitor"
+set "CAP_DIR=%~dp0app"
 if not exist "%CAP_DIR%\pack-app-strict.bat" (
     echo [ERROR] Capacitor APP strict build script not found: %CAP_DIR%\pack-app-strict.bat
     if not defined NO_PAUSE pause

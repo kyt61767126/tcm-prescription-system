@@ -38,12 +38,12 @@ const APP_CONFIG = {
     },
     'dingzhi': {
         apkName: '惠康中医-定制.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'capacitor', 'app', 'build.gradle'),
+        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-dingzhi', 'dist'),
     },
     'geren': {
         apkName: '惠康中医-个人.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'capacitor', 'app', 'build.gradle'),
+        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-geren', 'dist'),
     }
 };

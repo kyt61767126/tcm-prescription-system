@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -1279,7 +1279,7 @@ function Build-AppStrict {
     Write-Host "  [步骤 C] 重新打包手机 APP (严格模式)..." -ForegroundColor Cyan
     # ★ 关键修复：Step C 前停止 Step A 遗留的 Gradle daemon，避免 R8 OOM
     Write-Host "  [INFO] 停止 Step A 遗留的 Gradle daemon..." -ForegroundColor Yellow
-    $capDir = "$versionDir\capacitor"
+    $capDir = "$versionDir\app"
     if (Test-Path "$capDir\gradlew.bat") {
         Push-Location $capDir
         try { & .\gradlew.bat --stop 2>&1 | Out-Null } catch {}

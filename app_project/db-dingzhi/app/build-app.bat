@@ -43,11 +43,11 @@ if exist "..\config.json" (
     copy /Y "..\config.json" "%ANDROID_PUBLIC%\config.json" >nul
     if errorlevel 1 ( echo [WARN] Failed to sync config.json ) else ( echo       config.json synced )
 ) else ( echo [SKIP] config.json not found )
-echo   [2/5] Syncing APP index.html from android dir ^(5-button top menu^)...
-copy /Y "..\android\app\src\main\assets\public\index.html" "%ANDROID_PUBLIC%\index.html" >nul
+echo   [2/5] Syncing APP index.html from root ^(5-button top menu^)...
+copy /Y "..\index-app.html" "%ANDROID_PUBLIC%\index.html" >nul
 if errorlevel 1 (
     echo [ERROR] Failed to sync APP index.html
-    echo   Source: ..\android\app\src\main\assets\public\index.html
+    echo   Source: ..\index-app.html
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -66,10 +66,9 @@ for %%m in (%MODULES%) do (
         if errorlevel 1 ( echo [WARN] Failed to sync %%m ) else ( echo       %%m synced )
     ) else ( echo [SKIP] %%m not found )
 )
-echo   [5/5] Syncing video-recorder-inject.js...
-if exist "..\android\app\src\main\assets\video-recorder-inject.js" (
-    copy /Y "..\android\app\src\main\assets\video-recorder-inject.js" "%ANDROID_ASSETS%\video-recorder-inject.js" >nul
-    if errorlevel 1 ( echo [WARN] Failed to sync video-recorder-inject.js ) else ( echo       video-recorder-inject.js synced from android dir )
+echo   [5/5] Verifying video-recorder-inject.js...
+if exist "%ANDROID_ASSETS%\video-recorder-inject.js" (
+    echo       video-recorder-inject.js present in assets
 ) else if exist "..\video-recorder-inject.js" (
     copy /Y "..\video-recorder-inject.js" "%ANDROID_ASSETS%\video-recorder-inject.js" >nul
     if errorlevel 1 ( echo [WARN] Failed to sync video-recorder-inject.js ) else ( echo       video-recorder-inject.js synced )
@@ -158,7 +157,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$freeGB=[math]::Round($disk.Free/1GB,2);" ^
   "if($freeGB -lt 0.5){ Write-Host '[ERROR] Disk space不足: '$freeGB'GB free, need >=0.5GB'; exit 1 };" ^
   "Write-Host '  Disk free:' $freeGB 'GB';" ^
-  "$required=@('..\index.html','..\android\app\src\main\assets\public\index.html','..\android\app\src\main\assets\video-recorder-inject.js','..\config.json','app\signing.properties','app\app-release.jks','app\build.gradle');" ^
+  "$required=@('..\index.html','..\index-app.html','..\config.json','app\signing.properties','app\app-release.jks','app\build.gradle');" ^
   "$missing=@(); foreach($f in $required){ if(-not(Test-Path $f)){ $missing+=$f } };" ^
   "if($missing.Count -gt 0){ Write-Host '[ERROR] Missing required files:'; $missing|ForEach-Object{ Write-Host '  - '$_ }; exit 1 };" ^
   "Write-Host '[OK] All required files present'"
