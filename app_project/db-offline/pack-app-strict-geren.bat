@@ -41,7 +41,7 @@ if %EXIT_CODE% neq 0 (
 ) else (
     echo ========================================
     echo   [OK] Strict APP build complete!
-    echo   APK: %~dp0»Ý¿µÖÐÒ½-ÀëÏß±ê×¼°æ.apk
+    echo   APK: %~dp0æƒ åº·ä¸­åŒ»-ç¦»çº¿æ ‡å‡†ç‰ˆ.apk
     echo   Start: %BUILD_START_TIME%
     echo   End:   %BUILD_END_TIME%
     echo   Elapsed: %BUILD_ELAPSED%

@@ -40,7 +40,7 @@ if %EXIT_CODE% neq 0 (
 ) else (
     echo ========================================
     echo   [OK] Mobile APP (Custom) build complete!
-    echo   APK: %~dp0»Ý¿µÖÐÒ½-ÀëÏß»ú¹¹°æ.apk
+    echo   APK: %~dp0æƒ åº·ä¸­åŒ»-ç¦»çº¿æœºæž„ç‰ˆ.apk
     echo   Start: %BUILD_START_TIME%
     echo   End:   %BUILD_END_TIME%
     echo   Elapsed: %BUILD_ELAPSED%

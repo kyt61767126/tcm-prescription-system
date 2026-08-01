@@ -62,7 +62,7 @@ for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy
 for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
 echo ========================================
 echo   Build Success!
-echo   APK: %~dp0..\»Ý¿µÖÐÒ½-ÀëÏß»ú¹¹°æ.apk
+echo   APK: %~dp0..\æƒ åº·ä¸­åŒ»-ç¦»çº¿æœºæž„ç‰ˆ.apk
 echo   Mode: Strict signature (anti-tamper enabled)
 echo   Start: %BUILD_START_TIME%
 echo   End:   %BUILD_END_TIME%
