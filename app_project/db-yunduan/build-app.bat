@@ -144,7 +144,7 @@ if errorlevel 1 (
 )
 echo.
 
-echo [4.5/6] Obfuscating JavaScript (cloud target - includes cloud_app assets)...
+echo [4.5/6] [STAGE:obfuscate] Obfuscating JavaScript (cloud target - includes cloud_app assets)...
 REM P1: restore JS code after build
 REM P1: Obfuscate JS to prevent reverse engineering of APK assets
 call node "%~dp0..\..\tools\obfuscate.js" --target=cloud
@@ -218,7 +218,7 @@ for %%A in ("%APK_FILE%") do (
     echo File Size: %%~zA bytes
 )
 
-echo [6.2/6] Verifying APK contains latest auth-core.js...
+echo [6.2/6] [STAGE:verify] Verifying APK contains latest auth-core.js...
 REM P3: Cloud APP loads from URL, no index.html in APK. Verify auth-core.js instead.
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; try { $zip=[System.IO.Compression.ZipFile]::OpenRead('%APK_FILE%'); $entry=$zip.GetEntry('assets/public/auth-core.js'); if($entry){ $sz=$entry.Length; if($sz -lt 1000){ Write-Host '[ERROR] APK auth-core.js too small:' $sz 'bytes'; exit 1 }; Write-Host '[OK] APK auth-core.js:' $sz 'bytes (cloud APP loads index.html from URL)' } else { Write-Host '[ERROR] auth-core.js not found in APK'; exit 1 }; $zip.Dispose() } catch { Write-Host '[ERROR] APK verify failed:' $_.Exception.Message; exit 1 }"
 if errorlevel 1 (

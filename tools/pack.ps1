@@ -584,6 +584,7 @@ function Build-Desktop {
     Start-Sleep -Milliseconds 500  # reduced from 1s
 
     # Check node_modules - use npm ci for faster, deterministic install
+    Write-Log "[STAGE:deps] start - 安装桌面版 npm 依赖"
     if (-not (Test-Path "$script:DesktopDir\node_modules")) {
         $lockFile = "$script:DesktopDir\package-lock.json"
         Write-Host "  安装 npm 依赖中..." -ForegroundColor Yellow
@@ -649,6 +650,7 @@ function Build-Desktop {
     # Obfuscate JS
     # ★ 稳定性修复：混淆步骤本身也可能失败（部分文件已生成 .bak），失败时必须 restore 清理
     # 修复前问题：若 obfuscate.js 中途失败，已生成的 .bak 残留开发环境，下次打包会触发误还原
+    Write-Log "[STAGE:obfuscate] start - JS 代码混淆（安全加固）"
     Write-Host "  混淆 JavaScript 中..." -ForegroundColor Yellow
     $obfuscateOk = $false
     Push-Location $script:ProjectRoot
@@ -748,6 +750,7 @@ function Build-Desktop {
     }
 
     # Build with electron-builder --prepackaged
+    Write-Log "[STAGE:build] start - electron-builder 打包（含 asarmor 防解包）"
     Write-Host "  运行 electron-builder (--prepackaged)..." -ForegroundColor Yellow
     Push-Location $script:DesktopDir
     try {
@@ -903,6 +906,7 @@ function Build-App {
 
     # P1: 混淆 JS 代码（含 Android assets/public，防 APK 内 JS 被直接读取）
     # ★ 稳定性修复：混淆失败时必须 restore 清理 .bak 残留（与 Build-Desktop 对齐）
+    Write-Log "[STAGE:obfuscate] start - JS 代码混淆（安全加固，含 Android assets）"
     Write-Host "  混淆 JavaScript 中（含 Android assets）..." -ForegroundColor Yellow
     $obfuscateOk = $false
     Push-Location $script:ProjectRoot
@@ -934,6 +938,7 @@ function Build-App {
         # ★ Java 预编译检查（在 versionCode 递增前执行，避免编译错误导致版本号无效递增）
         # 原因：@Override 方法在父类不存在等编译错误，若在 versionCode 递增后才发现，
         #       需要回滚版本号，增加复杂度。预编译检查可提前发现，减少回滚成本。
+        Write-Log "[STAGE:precompile] start - Java 预编译检查"
         Write-Host "  Java 预编译检查中（提前发现编译错误）..." -ForegroundColor Cyan
         Push-Location $script:AndroidDir
         try {
@@ -959,6 +964,7 @@ function Build-App {
             #   - 默认（全量）：--rerun-tasks 强制重新执行所有任务，确保修改全部生效（最稳）
             #   - 增量模式：跳过 --rerun-tasks，Gradle 通过输入哈希判断是否重新编译（快 2-3 倍）
             #   适用场景：仅修改少量 Java/资源文件的开发调试；正式发布必须用全量模式
+            Write-Log "[STAGE:build] start - gradlew assembleRelease 编译 APK"
             if ($env:TCM_GRADLE_SKIP_CLEAN -eq '1') {
                 Write-Host "  [增量构建] 跳过 --rerun-tasks TCM_GRADLE_SKIP_CLEAN=1" -ForegroundColor Cyan
                 Invoke-External { & ".\gradlew.bat" assembleRelease --parallel } "gradlew assembleRelease incremental"
@@ -1014,6 +1020,7 @@ function Build-App {
         }
 
         # Build final APK name: 产品名称_版本号.apk
+        Write-Log "[STAGE:verify] start - APK 产物校验与复制"
         $finalApkName = "$productName.apk"
         $destPath = "$script:VersionDir\$finalApkName"
 

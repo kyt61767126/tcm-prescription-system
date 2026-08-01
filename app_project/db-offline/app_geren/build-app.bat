@@ -230,7 +230,7 @@ REM P0-3: Save old value to .build_vcode_prev for rollback on build failure (ali
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$f='app\build.gradle'; $c=[System.IO.File]::ReadAllText($f); if($c -match 'versionCode\s+(\d+)'){ $old=[int]$matches[1]; $new=$old+1; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $new\"; [System.IO.File]::WriteAllText($f,$nc,(New-Object System.Text.UTF8Encoding($false))); Set-Content -Path '%~dp0.build_vcode_prev' -Value $old -Encoding ASCII -NoNewline; Write-Host ('  [OK] versionCode: '+$old+' -> '+$new+' (prev saved)') } else { Write-Host '  [WARN] versionCode not found in build.gradle' }"
 echo.
 
-echo [5.6/10] Obfuscating JavaScript (target=geren)...
+echo [5.6/10] [STAGE:obfuscate] Obfuscating JavaScript (target=geren)...
 call node "%~dp0..\..\..\tools\obfuscate.js" --target=geren
 if errorlevel 1 (
     echo [ERROR] JS obfuscation failed
@@ -335,7 +335,7 @@ if defined APKSIGNER (
 )
 echo.
 
-echo [7.5/10] Verifying APK contains latest index.html (content hash)...
+echo [7.5/10] [STAGE:verify] Verifying APK contains latest index.html (content hash)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; $apk='%CD%\%APK_FILE%'; $zip=[System.IO.Compression.ZipFile]::OpenRead($apk); $entry=$zip.GetEntry('assets/public/index.html'); if(-not $entry){ $zip.Dispose(); Write-Host '[ERROR] assets/public/index.html not found in APK'; exit 1 }; $sr=New-Object System.IO.StreamReader($entry.Open()); $content=$sr.ReadToEnd(); $sr.Close(); $zip.Dispose(); $hash=[System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($content)); $hashStr=($hash|ForEach-Object{$_.ToString('x2')})-join ''; if($content.Length -lt 1000){ Write-Host '[ERROR] index.html in APK is too small ('+$content.Length+' bytes), build may be broken'; exit 1 }; Write-Host '[OK] APK contains index.html ('+$content.Length+' bytes, sha256='+$hashStr.Substring(0,16)+'...)'"
 if errorlevel 1 (
     echo [ERROR] APK content verification failed! APK may not contain latest code.
@@ -378,7 +378,7 @@ if "%VERSION_STR%"=="" set "VERSION_STR=1.0"
 for /f "usebackq delims=" %%p in (`powershell -NoProfile -Command "(Get-Content '..\desktop_geren\config.json' -Encoding UTF8 -Raw | ConvertFrom-Json).productName"`) do (
     set "PRODUCT_NAME=%%p"
 )
-if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-离线标准版"
+if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-LB"
 
 REM Verify source APK size (prevent copying empty file when Gradle fails or write incomplete)
 set "SRC_SIZE=0"
