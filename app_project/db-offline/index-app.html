@@ -694,12 +694,25 @@ let currentUser = null;
                     });
                 });
             } catch(e) {}
-            // 个人版：默认填充医师姓名到用户名输入框
-            if (CONFIG.edition === 'personal' && CONFIG.doctorName) {
+            // ★ 个人版：单用户，取消下拉菜单，用户名只读显示医师姓名
+            if (CONFIG.edition === 'personal') {
                 const userInput = document.getElementById('loginUsername');
-                if (userInput && !userInput.value) {
-                    userInput.value = CONFIG.doctorName;
+                const dropdownBtn = document.getElementById('usernameDropdownBtn');
+                const dropdownMenu = document.getElementById('usernameDropdownMenu');
+                const rememberUserField = document.querySelector('.login-field.remember-me');
+                if (userInput) {
+                    userInput.setAttribute('readonly', 'readonly');
+                    userInput.style.background = '#f0f0f0';
+                    userInput.style.color = '#555';
+                    userInput.style.cursor = 'default';
+                    if (CONFIG.doctorName) {
+                        userInput.value = CONFIG.doctorName;
+                    }
                 }
+                if (dropdownBtn) dropdownBtn.style.display = 'none';
+                if (dropdownMenu) dropdownMenu.style.display = 'none';
+                // 个人版隐藏"记住用户"复选框（单用户无需记住）
+                if (rememberUserField) rememberUserField.style.display = 'none';
             }
         })();
 
