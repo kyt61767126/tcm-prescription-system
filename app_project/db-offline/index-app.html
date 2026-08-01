@@ -1177,12 +1177,18 @@ let currentUser = null;
                 }
                 
                 const users = getUsers();
+                // ★ 个人版：允许用 CONFIG.doctorName（本能堂）登录，实际匹配第一个用户
+                const isPersonal = (CONFIG.edition === 'personal');
+                let loginUsername = username;
+                if (isPersonal && CONFIG.doctorName && username === CONFIG.doctorName) {
+                    loginUsername = users[0] ? users[0].username : 'admin';
+                }
                 // 使用 AuthCore.verifyPassword 支持 PBKDF2 + 旧 SHA-256 + 明文兼容
                 let user = null;
                 for (const u of users) {
-                    if (u.username !== username) continue;
+                    if (u.username !== loginUsername) continue;
                     if (window.AuthCore && AuthCore.verifyPassword) {
-                        if (await AuthCore.verifyPassword(password, u.password || '', username)) { user = u; break; }
+                        if (await AuthCore.verifyPassword(password, u.password || '', loginUsername)) { user = u; break; }
                     } else {
                         const hashedPwd = await hashPassword(password);
                         if (u.password === hashedPwd) { user = u; break; }
@@ -1193,10 +1199,10 @@ let currentUser = null;
                     // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
                     try {
                         if (window.AuthCore && AuthCore.upgradePasswordIfNeeded) {
-                            const upgraded = await AuthCore.upgradePasswordIfNeeded(password, user.password, username);
+                            const upgraded = await AuthCore.upgradePasswordIfNeeded(password, user.password, loginUsername);
                             if (upgraded) {
                                 const allUsers = getUsers();
-                                const idx = allUsers.findIndex(u => u.username === username);
+                                const idx = allUsers.findIndex(u => u.username === loginUsername);
                                 if (idx >= 0) {
                                     allUsers[idx].password = upgraded;
                                     saveUsers(allUsers);
@@ -1215,7 +1221,9 @@ let currentUser = null;
                     
                     const rememberUser = document.getElementById('rememberUser')?.checked;
                     if (rememberUser) {
-                        saveRememberedUser(username);
+                        // ★ 个人版：记住的用户名显示为 CONFIG.doctorName（本能堂），而非 admin
+                        const displayName = isPersonal ? (CONFIG.doctorName || username) : username;
+                        saveRememberedUser(displayName);
                     } else {
                         localStorage.removeItem('local_rememberedUsername');
                     }
