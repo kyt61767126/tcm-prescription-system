@@ -40,9 +40,11 @@ if ($Version -eq 'cloud') {
     $useRecurse = $false
     $apkFilter = '惠康中医-云端个人版.apk'
 } else {
-    $projectDir = Join-Path $rootDir "app_project\db-$Version"
+    # db-offline merged structure: APK in db-offline/ root, Java in app[_geren]/app/src/main/java/
+    $projectDir = Join-Path $rootDir "app_project\db-offline"
     $guardFileName = 'LicenseManager.java'
-    $guardSearchPath = Join-Path $projectDir "android\app\src\main\java\com\benneng\pres"
+    $javaSubDir = if ($Version -eq 'geren') { 'app_geren' } else { 'app' }
+    $guardSearchPath = Join-Path $projectDir "$javaSubDir\app\src\main\java\com\benneng\pres"
     $placeholder = 'EXPECTED_APK_SIGNATURE_SHA256'
     $useRecurse = $false
 }
