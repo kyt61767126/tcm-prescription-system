@@ -1205,7 +1205,7 @@
             <div class="modal-body">
                 <div id="medicineScopeTip" style="margin-bottom:8px;padding:6px 10px;border-radius:4px;font-size:12px;background:#f0f4ff;color:#333;border-left:3px solid #008000;"></div>
                 <div class="medicine-action-bar" style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;">
-                    <input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;">
+                    <input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" onkeyup="debounce(renderMedicineList,200)()" inputmode="search" enterkeyhint="search">
                     <button class="action-btn" onclick="showAddMedicineForm()">新增药品</button>
                     <button class="action-btn" onclick="exportMedicines()">导出药品</button>
                     <button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button>
@@ -1500,6 +1500,9 @@ if (window.Permission) {
         let currentUser = null;
         let searchDebounceTimer = null;
         let hideSearchTimer = null;
+        let searchDropdownDebounceTimer = null;  // ★药物候选框专用防抖定时器（50ms，与onblur的200ms隐藏定时器协调）
+        let patientSearchDebounceTimer = null;   // ★患者搜索防抖定时器（150ms，避免遍历全部历史+拼音查询）
+        let prescriptionPaperDebounceTimer = null;  // ★处方预览防抖定时器（100ms，减少14次getElementById+innerHTML重建）
 
         // CLOUD_API_BASE, getAllowedMode, offlineCapable 已提取至 cloud-api.js / local-db.js
 
@@ -4297,6 +4300,18 @@ if (window.Permission) {
             doseCountInput: null,
             doseCountInput3: null,
             loginOverlay: null,
+            // ★P1-3 扩展：处方预览相关元素缓存，避免每次按键14次getElementById
+            visitDate: null,
+            medicalHistory: null,
+            diagnosis: null,
+            paperName: null,
+            paperGender: null,
+            paperAge: null,
+            paperDate: null,
+            paperMedicalHistory: null,
+            paperDiagnosis: null,
+            paperDoctor: null,
+            prescriptionLines: null,
 
             init: function() {
                 if (!this.prescriptionBody) this.prescriptionBody = document.getElementById('prescriptionBody');
@@ -4311,10 +4326,29 @@ if (window.Permission) {
                 if (!this.doseCountInput) this.doseCountInput = document.getElementById('doseCountInput');
                 if (!this.doseCountInput3) this.doseCountInput3 = document.getElementById('doseCountInput3');
                 if (!this.loginOverlay) this.loginOverlay = document.getElementById('loginOverlay');
+                if (!this.visitDate) this.visitDate = document.getElementById('visitDate');
+                if (!this.medicalHistory) this.medicalHistory = document.getElementById('medicalHistory');
+                if (!this.diagnosis) this.diagnosis = document.getElementById('diagnosis');
+                if (!this.paperName) this.paperName = document.getElementById('paperName');
+                if (!this.paperGender) this.paperGender = document.getElementById('paperGender');
+                if (!this.paperAge) this.paperAge = document.getElementById('paperAge');
+                if (!this.paperDate) this.paperDate = document.getElementById('paperDate');
+                if (!this.paperMedicalHistory) this.paperMedicalHistory = document.getElementById('paperMedicalHistory');
+                if (!this.paperDiagnosis) this.paperDiagnosis = document.getElementById('paperDiagnosis');
+                if (!this.paperDoctor) this.paperDoctor = document.getElementById('paperDoctor');
+                if (!this.prescriptionLines) this.prescriptionLines = document.getElementById('prescriptionLines');
             }
         };
         
+        let _lastMedicinesRef = null;       // ★P1-4 懒重建：上次构建时的 medicines 引用
+        let _lastMedicinesLength = -1;      // ★P1-4 懒重建：上次构建时的 medicines 长度
+
         function buildMedicineMap() {
+            // ★P1-4 脏标记懒重建：medicines 引用和长度未变时跳过重建（避免21+处重复调用的500+次Map.set开销）
+            // 安全性：medicineMap/medicineCodeIndex 存的是 med 对象引用，属性变更会自动反映，无需重建
+            if (medicines === _lastMedicinesRef && medicines.length === _lastMedicinesLength && medicineMap.size > 0) {
+                return;
+            }
             medicineMap.clear();
             medicineCodeIndex.clear();
             medicines.forEach(med => {
@@ -4329,6 +4363,8 @@ if (window.Permission) {
                     list.push(med);
                 }
             });
+            _lastMedicinesRef = medicines;
+            _lastMedicinesLength = medicines.length;
         }
         
         function getMedicineByName(name) {
@@ -4344,8 +4380,14 @@ if (window.Permission) {
             }
         }
         
+        let medicineFreqSaveTimer = null;  // ★P1-6 防抖定时器
         function saveMedicineFrequency() {
-            localStorage.setItem('cloud_medicineFrequency', JSON.stringify(medicineFrequency));
+            // ★P1-6 防抖优化：100ms内连续调用只写一次 localStorage，避免频繁选药时的 I/O 阻塞
+            // 安全性：medicineFrequency 是对象引用，setTimeout 执行时读取的是最新内容
+            if (medicineFreqSaveTimer) clearTimeout(medicineFreqSaveTimer);
+            medicineFreqSaveTimer = setTimeout(() => {
+                localStorage.setItem('cloud_medicineFrequency', JSON.stringify(medicineFrequency));
+            }, 100);
         }
         
         function updateMedicineFrequency(items) {
@@ -5799,7 +5841,12 @@ if (window.Permission) {
                 const nextInput = document.getElementById(`code-input-${index + 1}`);
                 if (nextInput) nextInput.focus();
             } else {
-                showSearchDropdown(event.target, event.target.value, column);
+                // ★防抖优化：50ms内连续按键只执行一次搜索，减少500+药材的遍历+排序+DOM重建开销
+                // 50ms < onblur的200ms隐藏定时器，showSearchDropdown内部会清除hideSearchTimer，无竞态
+                if (searchDropdownDebounceTimer) clearTimeout(searchDropdownDebounceTimer);
+                searchDropdownDebounceTimer = setTimeout(() => {
+                    showSearchDropdown(event.target, event.target.value, column);
+                }, 50);
             }
         }
 
@@ -6100,27 +6147,32 @@ if (window.Permission) {
         }
 
         function updatePrescriptionPaper() {
-            const get = document.getElementById.bind(document);
-            get('paperName').textContent = get('patientName').value;
-            get('paperGender').textContent = get('patientGender').value;
-            get('paperAge').textContent = get('patientAge').value;
-            get('paperDate').textContent = get('visitDate').value;
-            get('paperMedicalHistory').textContent = get('medicalHistory').value;
-            get('paperDiagnosis').textContent = get('diagnosis').value;
-            get('paperDoctor').textContent = get('doctorName').value;
-            const linesDiv = get('prescriptionLines');
-            const items = prescriptionItems.filter(item => item.name);
+            // ★P1-3 防抖优化：100ms内连续按键只执行一次预览更新，减少14次getElementById+innerHTML重建
+            if (prescriptionPaperDebounceTimer) clearTimeout(prescriptionPaperDebounceTimer);
+            prescriptionPaperDebounceTimer = setTimeout(() => {
+                DOM_CACHE.init();
+                const c = DOM_CACHE;
+                if (!c.paperName) return;  // DOM未就绪
+                c.paperName.textContent = c.patientName.value;
+                c.paperGender.textContent = c.patientGender.value;
+                c.paperAge.textContent = c.patientAge.value;
+                c.paperDate.textContent = c.visitDate ? c.visitDate.value : '';
+                c.paperMedicalHistory.textContent = c.medicalHistory ? c.medicalHistory.value : '';
+                c.paperDiagnosis.textContent = c.diagnosis ? c.diagnosis.value : '';
+                c.paperDoctor.textContent = c.doctorName.value;
+                const items = prescriptionItems.filter(item => item.name);
 
-            let html = '<div class="prescription-grid-inner">';
-            items.forEach(item => {
-                html += `
-                    <div class="prescription-line">
-                        <span>${escapeHtml(item.name)}${escapeHtml(item.dosage)}${escapeHtml(item.unit)}</span>
-                    </div>
-                `;
-            });
-            html += '</div>';
-            linesDiv.innerHTML = html;
+                let html = '<div class="prescription-grid-inner">';
+                items.forEach(item => {
+                    html += `
+                        <div class="prescription-line">
+                            <span>${escapeHtml(item.name)}${escapeHtml(item.dosage)}${escapeHtml(item.unit)}</span>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                c.prescriptionLines.innerHTML = html;
+            }, 100);
         }
 
         function getPinyinCode(chineseName) {
@@ -6212,25 +6264,24 @@ if (window.Permission) {
         }
         
         // 智能匹配性别：50-90年代取名常用字（各100字）+ 补充字
+        // ★P1-5 优化：性别字符表提升为模块顶层 Set，避免每次 onkeyup 重新声明400+字符字符串，String.includes(char) 改为 Set.has(char)（O(1)）
+        const FEMALE_CHARS_SET = new Set('英兰芬莲桂秀翠凤珍喜娣桃花香荣珠宝杏云月巧春秋荷环爱灵欢妙甜燕霞红艳菊萍娟娜玲琴美彩仙惠莉梅娥卿虹姿苗菱苇蔓卉柔纯暖馨婷丽芳敏静雪琳莹倩怡琪萱婉菲曼蕾瑶娴雯露汐欣妍芮芷茵晴霏冉伊若晗璐茜珊莎玥凝黛果');
+        const MALE_CHARS_SET = new Set('国建军民卫平强勇刚峰保安铁柱山福祥寿兵东石田友财旺群启庆发全伟明辉振德忠昌波涛江光良盛林海阳根弘昭崇厚学怀星炎武利达荣顺杰浩宇哲文博毅俊凯斌锋龙鹏晨旭松柏雷霖轩辰航嘉承峻岩恒硕彦朔腾越卓钧策戈骁峥烁钦蛋');
+
         function smartMatchGender(name) {
             if (!name) return;
             const genderSelect = document.getElementById('patientGender');
             if (!genderSelect) return;
             if (genderSelect.dataset.manual === 'true') return;
-            
-            // 女性100字 + 果
-            const femaleChars = '英兰芬莲桂秀翠凤珍喜娣桃花香荣珠宝杏云月巧春秋荷环爱灵欢妙甜燕霞红艳菊萍娟娜玲琴美彩仙惠莉梅娥卿虹姿苗菱苇蔓卉柔纯暖馨婷丽芳敏静雪琳莹倩怡琪萱婉菲曼蕾瑶娴雯露汐欣妍芮芷茵晴霏冉伊若晗璐茜珊莎玥凝黛果';
-            // 男性100字 + 蛋
-            const maleChars = '国建军民卫平强勇刚峰保安铁柱山福祥寿兵东石田友财旺群启庆发全伟明辉振德忠昌波涛江光良盛林海阳根弘昭崇厚学怀星炎武利达荣顺杰浩宇哲文博毅俊凯斌锋龙鹏晨旭松柏雷霖轩辰航嘉承峻岩恒硕彦朔腾越卓钧策戈骁峥烁钦蛋';
-            
+
             let femaleScore = 0;
             let maleScore = 0;
-            
+
             for (let char of name) {
-                if (femaleChars.includes(char)) femaleScore++;
-                if (maleChars.includes(char)) maleScore++;
+                if (FEMALE_CHARS_SET.has(char)) femaleScore++;
+                if (MALE_CHARS_SET.has(char)) maleScore++;
             }
-            
+
             // 女性得分 >= 男性得分，则选女；否则选男
             if (femaleScore >= maleScore && femaleScore > 0) {
                 genderSelect.value = '女';
@@ -6257,20 +6308,26 @@ if (window.Permission) {
         function searchPatientsQuick(event) {
             const input = event.target.value.toLowerCase();
             if (!input) {
+                // 输入为空时立即重置，不防抖
+                if (patientSearchDebounceTimer) { clearTimeout(patientSearchDebounceTimer); patientSearchDebounceTimer = null; }
                 document.getElementById('historyList').innerHTML = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div>';
                 showPatientNameDropdown([]);
                 return;
             }
-            const matched = filterPrescriptionsByPermission(prescriptionHistory).filter(p => {
-                if (!p.patientName) return false;
-                const name = p.patientName.toLowerCase();
-                if (name.includes(input)) return true;
-                const pinyinCode = getPinyinCode(p.patientName).toLowerCase();
-                return pinyinCode.startsWith(input) || pinyinCode.includes(input);
-            });
-            renderHistoryList(matched);
-            // 显示姓名匹配下拉框
-            showPatientNameDropdown(matched.slice(0, 5));
+            // ★防抖优化：150ms内连续按键只执行一次搜索，避免遍历全部历史+400+项百家姓拼音查询
+            if (patientSearchDebounceTimer) clearTimeout(patientSearchDebounceTimer);
+            patientSearchDebounceTimer = setTimeout(() => {
+                const matched = filterPrescriptionsByPermission(prescriptionHistory).filter(p => {
+                    if (!p.patientName) return false;
+                    const name = p.patientName.toLowerCase();
+                    if (name.includes(input)) return true;
+                    const pinyinCode = getPinyinCode(p.patientName).toLowerCase();
+                    return pinyinCode.startsWith(input) || pinyinCode.includes(input);
+                });
+                renderHistoryList(matched);
+                // 显示姓名匹配下拉框
+                showPatientNameDropdown(matched.slice(0, 5));
+            }, 150);
         }
 
         function showPatientNameDropdown(patients) {
