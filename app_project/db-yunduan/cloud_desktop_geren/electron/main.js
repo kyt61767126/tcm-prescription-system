@@ -1814,15 +1814,28 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
             }, 300);
 
             // 在隐藏窗口中加载处方 HTML 并生成 PDF
+            // ★ 使用 did-finish-load（比 dom-ready 晚，确保所有资源加载完成）
+            //   并增加 800ms 延迟 + 强制布局刷新，避免 printToPDF 生成空白 PDF
             pdfGenWin.loadURL(pdfDataUrl);
-            pdfGenWin.webContents.once('dom-ready', () => {
+            pdfGenWin.webContents.once('did-finish-load', () => {
                 setTimeout(() => {
-                    pdfGenWin.webContents.printToPDF({
-                        landscape: isLandscape,
-                        pageSize: 'A5',
-                        printBackground: true,
-                        margins: { top: 0, bottom: 0, left: 0, right: 0 }
+                    // ★ 强制布局刷新：读取 offsetHeight 触发 reflow，确保 CSS 完全应用
+                    pdfGenWin.webContents.executeJavaScript(
+                        'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
+                    ).then(() => {
+                        // 字体加载完成后再等 200ms
+                        return new Promise(r => setTimeout(r, 200));
+                    }).then(() => {
+                        return pdfGenWin.webContents.printToPDF({
+                            landscape: isLandscape,
+                            pageSize: 'A5',
+                            printBackground: true,
+                            margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 }
+                        });
                     }).then(data => {
+                        if (!data || data.length < 100) {
+                            throw new Error('PDF 数据为空或过小（' + (data ? data.length : 0) + ' 字节）');
+                        }
                         pdfPath = path.join(app.getPath('temp'), `print-preview-${Date.now()}.pdf`);
                         return fs.writeFile(pdfPath, data);
                     }).then(() => {
@@ -1847,7 +1860,7 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                             ).catch(() => {});
                         }
                     });
-                }, 300);
+                }, 800);
             });
 
             // 错误处理
