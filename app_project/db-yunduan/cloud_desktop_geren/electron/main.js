@@ -1736,8 +1736,8 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
             printWin.loadURL(dataUrl);
 
             // ★ dom-ready 后注入按钮事件监听器
-            // 打印按钮直接在渲染进程调用 window.print()（已验证可弹出系统打印对话框）
-            // 不再通过主进程轮询+webContents.print()（该方式在data URL下不工作）
+            // 打印按钮设置 __printRequested 标记，由主进程轮询后生成 PDF 并打开系统 PDF 阅读器
+            // 系统 PDF 阅读器自带完整的打印预览（缩放/翻页/打印），所见即所得
             printWin.webContents.once('dom-ready', () => {
                 printWin.webContents.executeJavaScript(`
                     (function() {
@@ -1747,20 +1747,8 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                             printBtn.addEventListener('click', function() {
                                 if (this.disabled) return;
                                 this.disabled = true;
-                                this.textContent = '打印中...';
-                                // window.print() 在 Electron 渲染进程中弹出系统打印对话框
-                                // 对话框关闭后继续执行
-                                try {
-                                    window.print();
-                                } catch(e) {
-                                    alert('打印失败: ' + e.message);
-                                }
-                                // 对话框关闭后恢复按钮
-                                var self = this;
-                                setTimeout(function() {
-                                    self.disabled = false;
-                                    self.textContent = '打印';
-                                }, 500);
+                                this.textContent = '生成PDF中...';
+                                window.__printRequested = true;
                             });
                         }
                         if (cancelBtn) {
@@ -1772,16 +1760,52 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                 `).catch(e => console.error('[print] 注入按钮事件失败:', e));
             });
 
-            // ★ 轮询预览窗口的取消请求（仅处理取消，打印由渲染进程直接完成）
+            // ★ 轮询预览窗口的打印/取消请求
+            // 打印请求：主进程生成 PDF → 用系统 PDF 阅读器打开（自带打印预览）
+            // 取消请求：直接关闭
             pollTimer = setInterval(() => {
                 if (printWin.isDestroyed()) {
                     if (pollTimer) clearInterval(pollTimer);
                     return;
                 }
                 printWin.webContents.executeJavaScript(
-                    'window.__cancelRequested || false'
-                ).then(result => {
-                    if (result === 'true') {
+                    '(window.__printRequested || false) + "|" + (window.__cancelRequested || false)'
+                ).then(async result => {
+                    const parts = (result || '').split('|');
+                    if (parts[0] === 'true') {
+                        // 清除标记
+                        printWin.webContents.executeJavaScript('window.__printRequested = false').catch(() => {});
+                        // 生成 PDF 并用系统 PDF 阅读器打开
+                        try {
+                            // 强制布局刷新
+                            await printWin.webContents.executeJavaScript(
+                                'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
+                            );
+                            await new Promise(r => setTimeout(r, 300));
+                            const pdfData = await printWin.webContents.printToPDF({
+                                landscape: isLandscape,
+                                pageSize: 'A5',
+                                printBackground: true,
+                                margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 }
+                            });
+                            if (!pdfData || pdfData.length < 100) {
+                                throw new Error('PDF数据为空或过小');
+                            }
+                            const pdfPath = path.join(app.getPath('temp'), `print-preview-${Date.now()}.pdf`);
+                            await fs.writeFile(pdfPath, pdfData);
+                            // 关闭预览窗口，用系统 PDF 阅读器打开（自带完整打印预览）
+                            safeResolve(true);
+                            shell.openPath(pdfPath);
+                        } catch (e) {
+                            console.error('[print] PDF生成失败:', e);
+                            if (!printWin.isDestroyed()) {
+                                printWin.webContents.executeJavaScript(
+                                    'var b=document.getElementById("__printBtn");if(b){b.disabled=false;b.textContent="打印";}alert("PDF生成失败：'+e.message+'");'
+                                ).catch(() => {});
+                            }
+                        }
+                    }
+                    if (parts[1] === 'true') {
                         safeResolve(false);
                     }
                 }).catch(() => {});
