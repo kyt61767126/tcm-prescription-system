@@ -155,7 +155,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // ---------- 兼容方法 ----------
     getCurrentUser: () => {
-        return ipcRenderer.invoke('get-current-user');
+        return ipcRenderer.invoke('get-logged-in-user');
     },
     onLoginUser: (callback) => {
         const handler = (_event, user) => callback(user);
