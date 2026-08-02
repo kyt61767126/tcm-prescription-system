@@ -1643,79 +1643,30 @@ ipcMain.handle('show-message-box', async (event, options) => {
     }
 });
 
-// ★ 打印处方（带预览界面，所见即所得）
-// 方案：预览窗口直接加载处方 HTML + 工具栏覆盖层（无 iframe/PDF，避免 CSP 限制）
-// 通信：轮询 window.__printRequested（已验证可靠，不依赖 CSP/IPC/preload）
+// ★ 打印处方（直接打印）
+// 方案：隐藏窗口加载处方 HTML → 渲染进程调用 window.print() → 弹系统打印对话框 → 关闭
+// 最快最简单，无预览窗口、无 PDF 中间步骤
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
-        const parentWin = BrowserWindow.fromWebContents(event.sender);
         const isLandscape = orientation === 'landscape';
-        const previewWidth = isLandscape ? 1024 : 760;
-        const previewHeight = isLandscape ? 760 : 1024;
 
+        // 隐藏窗口（用户不可见）
         const printWin = new BrowserWindow({
-            show: true,
-            width: previewWidth,
-            height: previewHeight,
-            minWidth: 600,
-            minHeight: 500,
-            autoHideMenuBar: true,
-            modal: !!parentWin && !parentWin.isDestroyed(),
-            parent: parentWin && !parentWin.isDestroyed() ? parentWin : undefined,
-            title: `打印预览（${isLandscape ? '横向' : '纵向'} · A5）`,
+            show: false,
             webPreferences: {
                 contextIsolation: true,
                 nodeIntegration: false
             }
         });
-        // ★ 彻底移除菜单栏（autoHideMenuBar 按 Alt 仍会显示，setMenu(null) 永久移除）
         printWin.setMenu(null);
 
-        // ★ 工具栏覆盖层 + 灰色背景（模拟打印效果，处方纸张居中显示）
-        const toolbarInject = `
-            <style>
-                body { background: #525659 !important; }
-                .prescription-paper {
-                    margin: 60px auto 20px auto !important;
-                    background: #fff !important;
-                    box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
-                }
-                #__previewToolbar {
-                    position: fixed; top: 0; left: 0; right: 0; height: 50px;
-                    background: #2c3e50; color: #fff;
-                    padding: 0 16px; z-index: 9999;
-                    display: flex; justify-content: space-between; align-items: center;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-                    box-sizing: border-box;
-                }
-                #__previewToolbar .title { font-size: 14px; font-weight: 600; }
-                #__previewToolbar .actions { display: flex; gap: 8px; }
-                #__previewToolbar button {
-                    padding: 6px 18px; border: none; border-radius: 4px;
-                    cursor: pointer; font-size: 13px; font-weight: 500;
-                    transition: background 0.2s; font-family: inherit;
-                }
-                #__printBtn { background: #27ae60; color: #fff; }
-                #__printBtn:hover { background: #229954; }
-                #__printBtn:disabled { background: #95a5a6; cursor: not-allowed; }
-                #__cancelBtn { background: #e74c3c; color: #fff; }
-                #__cancelBtn:hover { background: #c0392b; }
-            </style>
-            <div id="__previewToolbar">
-                <span class="title">打印预览（${isLandscape ? '横向' : '纵向'} · A5） · 确认后点击"打印"</span>
-                <div class="actions">
-                    <button id="__cancelBtn" type="button">取消</button>
-                    <button id="__printBtn" type="button">打印</button>
-                </div>
-            </div>
-        `;
-
-        // 将工具栏注入到 HTML 的 <body> 标签后
+        // 注入打印样式（A5 横向/纵向 + 零边距）
         let enrichedHtml = html;
-        if (/<body[^>]*>/i.test(enrichedHtml)) {
-            enrichedHtml = enrichedHtml.replace(/<body[^>]*>/i, m => m + toolbarInject);
+        const printStyle = `<style>@media print { @page { size: A5 ${isLandscape ? 'landscape' : 'portrait'}; margin: 0; } body { margin: 0; } }</style>`;
+        if (/<\/head>/i.test(enrichedHtml)) {
+            enrichedHtml = enrichedHtml.replace(/<\/head>/i, printStyle + '</head>');
         } else {
-            enrichedHtml = enrichedHtml.replace('</html>', toolbarInject + '</html>');
+            enrichedHtml = printStyle + enrichedHtml;
         }
 
         const base64Html = Buffer.from(enrichedHtml, 'utf8').toString('base64');
@@ -1723,110 +1674,48 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
 
         return new Promise((resolve) => {
             let settled = false;
-            let pollTimer = null;
 
             const safeResolve = (val) => {
                 if (settled) return;
                 settled = true;
-                if (pollTimer) clearInterval(pollTimer);
                 if (!printWin.isDestroyed()) printWin.close();
                 resolve(val);
             };
 
             printWin.loadURL(dataUrl);
 
-            // ★ dom-ready 后注入按钮事件监听器
-            // 打印按钮设置 __printRequested 标记，由主进程轮询后生成 PDF 并打开系统 PDF 阅读器
-            // 系统 PDF 阅读器自带完整的打印预览（缩放/翻页/打印），所见即所得
-            printWin.webContents.once('dom-ready', () => {
-                printWin.webContents.executeJavaScript(`
-                    (function() {
-                        var printBtn = document.getElementById('__printBtn');
-                        var cancelBtn = document.getElementById('__cancelBtn');
-                        if (printBtn) {
-                            printBtn.addEventListener('click', function() {
-                                if (this.disabled) return;
-                                this.disabled = true;
-                                this.textContent = '生成PDF中...';
-                                window.__printRequested = true;
-                            });
-                        }
-                        if (cancelBtn) {
-                            cancelBtn.addEventListener('click', function() {
-                                window.__cancelRequested = true;
-                            });
-                        }
-                    })();
-                `).catch(e => console.error('[print] 注入按钮事件失败:', e));
-            });
-
-            // ★ 轮询预览窗口的打印/取消请求
-            // 打印请求：主进程生成 PDF → 用系统 PDF 阅读器打开（自带打印预览）
-            // 取消请求：直接关闭
-            pollTimer = setInterval(() => {
-                if (printWin.isDestroyed()) {
-                    if (pollTimer) clearInterval(pollTimer);
-                    return;
-                }
-                printWin.webContents.executeJavaScript(
-                    '(window.__printRequested || false) + "|" + (window.__cancelRequested || false)'
-                ).then(async result => {
-                    const parts = (result || '').split('|');
-                    if (parts[0] === 'true') {
-                        // 清除标记
-                        printWin.webContents.executeJavaScript('window.__printRequested = false').catch(() => {});
-                        // 生成 PDF 并用系统 PDF 阅读器打开
-                        try {
-                            // 强制布局刷新
-                            await printWin.webContents.executeJavaScript(
-                                'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
-                            );
-                            await new Promise(r => setTimeout(r, 300));
-                            const pdfData = await printWin.webContents.printToPDF({
-                                landscape: isLandscape,
-                                pageSize: 'A5',
-                                printBackground: true,
-                                margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 }
-                            });
-                            if (!pdfData || pdfData.length < 100) {
-                                throw new Error('PDF数据为空或过小');
-                            }
-                            const pdfPath = path.join(app.getPath('temp'), `print-preview-${Date.now()}.pdf`);
-                            await fs.writeFile(pdfPath, pdfData);
-                            // 关闭预览窗口，用系统 PDF 阅读器打开（自带完整打印预览）
-                            safeResolve(true);
-                            shell.openPath(pdfPath);
-                        } catch (e) {
-                            console.error('[print] PDF生成失败:', e);
-                            if (!printWin.isDestroyed()) {
-                                printWin.webContents.executeJavaScript(
-                                    'var b=document.getElementById("__printBtn");if(b){b.disabled=false;b.textContent="打印";}alert("PDF生成失败：'+e.message+'");'
-                                ).catch(() => {});
-                            }
-                        }
-                    }
-                    if (parts[1] === 'true') {
+            // 页面加载完成后，等待布局和字体就绪，再调用 window.print()
+            printWin.webContents.once('did-finish-load', () => {
+                setTimeout(async () => {
+                    try {
+                        // 强制布局刷新 + 等待字体加载
+                        await printWin.webContents.executeJavaScript(
+                            'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
+                        );
+                        await new Promise(r => setTimeout(r, 200));
+                        // 渲染进程同步调用 window.print()，弹出系统打印对话框
+                        // 对话框关闭后 window.print() 返回，executeJavaScript 的 Promise resolve
+                        await printWin.webContents.executeJavaScript('window.print();');
+                        safeResolve(true);
+                    } catch (e) {
+                        console.error('[print] 打印失败:', e);
                         safeResolve(false);
                     }
-                }).catch(() => {});
-            }, 300);
+                }, 500);
+            });
 
-            // 错误处理
             printWin.webContents.once('did-fail-load', (_e, errorCode, errorDesc) => {
-                console.error('[print] 预览页面加载失败:', errorCode, errorDesc);
+                console.error('[print] 页面加载失败:', errorCode, errorDesc);
                 safeResolve(false);
             });
 
-            // 窗口被用户直接关闭
-            printWin.on('closed', () => safeResolve(true));
-
-            // 超时保护：5分钟未操作自动关闭
+            // 超时保护：2分钟
             setTimeout(() => {
                 if (!settled) {
-                    console.warn('[print] 5分钟超时未打印，自动关闭');
+                    console.warn('[print] 2分钟超时，自动关闭');
                     safeResolve(false);
                 }
-            }, 5 * 60 * 1000);
+            }, 2 * 60 * 1000);
         });
     } catch (e) {
         console.error('打印失败:', e);
