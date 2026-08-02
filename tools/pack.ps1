@@ -1066,7 +1066,7 @@ function Build-App {
         $configPath = "$script:DesktopDir\config.json"
         $productName = switch ($Version) {
             'geren'   { '惠康中医-LB' }
-            'dingzhi' { '惠康中医-定制' }
+            'dingzhi' { '惠康中医-LJ' }
             default   { '惠康中医' }
         }
         if (Test-Path $configPath) {

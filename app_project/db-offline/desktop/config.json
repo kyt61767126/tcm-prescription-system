@@ -4,7 +4,7 @@
     "edition":  "clinic_custom",
     "appMode":  "offline",
     "maxUsers":  10,
-    "productName":  "惠康中医-离线机构版",
+    "productName":  "惠康中医-LJ",
     "versionLabel":  "离线机构版",
     "users":  [
                   {

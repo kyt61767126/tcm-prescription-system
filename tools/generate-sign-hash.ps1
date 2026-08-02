@@ -31,22 +31,29 @@ if ($Version -eq 'cloud') {
     $guardSearchPath = Join-Path $projectDir "cloud_app\app\src\main\java\com\tcm\prescription"
     $placeholder = 'EXPECTED_SIGN_HASH'
     $useRecurse = $false
-    $apkFilter = '惠康中医-云端.apk'
+    $apkFilter = '惠康中医-YJ.apk'
 } elseif ($Version -eq 'geren-cloud') {
     $projectDir = Join-Path $rootDir "app_project\db-yunduan"
     $guardFileName = 'SecurityGuard.java'
     $guardSearchPath = Join-Path $projectDir "cloud_app_geren\app\src\main\java\com\tcm\prescription"
     $placeholder = 'EXPECTED_SIGN_HASH'
     $useRecurse = $false
-    $apkFilter = '惠康中医-云端个人版.apk'
-} else {
-    # db-offline merged structure: APK in db-offline/ root, Java in app[_geren]/app/src/main/java/
+    $apkFilter = '惠康中医-YB.apk'
+} elseif ($Version -eq 'dingzhi') {
+    # db-offline merged structure: APK in db-offline/ root, Java in app/app/src/main/java/
     $projectDir = Join-Path $rootDir "app_project\db-offline"
     $guardFileName = 'LicenseManager.java'
-    $javaSubDir = if ($Version -eq 'geren') { 'app_geren' } else { 'app' }
-    $guardSearchPath = Join-Path $projectDir "$javaSubDir\app\src\main\java\com\benneng\pres"
+    $guardSearchPath = Join-Path $projectDir "app\app\src\main\java\com\benneng\pres"
     $placeholder = 'EXPECTED_APK_SIGNATURE_SHA256'
     $useRecurse = $false
+    $apkFilter = '惠康中医-LJ.apk'
+} elseif ($Version -eq 'geren') {
+    $projectDir = Join-Path $rootDir "app_project\db-offline"
+    $guardFileName = 'LicenseManager.java'
+    $guardSearchPath = Join-Path $projectDir "app_geren\app\src\main\java\com\benneng\pres"
+    $placeholder = 'EXPECTED_APK_SIGNATURE_SHA256'
+    $useRecurse = $false
+    $apkFilter = '惠康中医-LB.apk'
 }
 
 Write-Host ""

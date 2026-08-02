@@ -1377,7 +1377,7 @@ ipcMain.handle('get-app-config', async () => {
         clinicName: '本能堂中医诊所',
         doctorName: '张大夫',
         edition: 'clinic_custom',
-        productName: '惠康中医-定制'
+        productName: '惠康中医-LJ'
     };
     try {
         const configPath = path.join(__dirname, '..', 'config.json');

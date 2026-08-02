@@ -41,7 +41,7 @@ if %EXIT_CODE% neq 0 (
 ) else (
     echo ========================================
     echo   [OK] Strict APP build complete!
-    echo   APK: %~dp0惠康中医-离线机构版.apk
+    echo   APK: %~dp0惠康中医-LJ.apk
     echo   Start: %BUILD_START_TIME%
     echo   End:   %BUILD_END_TIME%
     echo   Elapsed: %BUILD_ELAPSED%
