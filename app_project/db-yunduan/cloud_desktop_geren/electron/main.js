@@ -1643,20 +1643,22 @@ ipcMain.handle('show-message-box', async (event, options) => {
     }
 });
 
-// ★ 打印处方（带预览界面，所见即所得）
-// 用户点击"纵向打印"/"横向打印"后，弹出预览窗口显示 A5 纸张实际打印效果
-// 用户确认后点击"打印"按钮，触发系统打印对话框（含页面设置）
-// 通信方案：dom-ready 后用 executeJavaScript 注入事件监听器，
-//           按钮点击调用 window.print()（Electron 渲染进程原生 API，触发系统打印对话框）
-//           主进程监听 'closed' 事件获知窗口关闭
+// ★ 打印处方（带 PDF 预览，所见即所得）
+// 流程：
+//   1. 预览窗口加载工具栏 + "正在生成预览..."提示
+//   2. 隐藏窗口加载处方 HTML，调用 printToPDF 生成 PDF
+//   3. PDF 写入临时文件，预览窗口的 iframe 用 file:// URL 加载 PDF
+//   4. 用户看到真正的 PDF 打印预览（带缩放、翻页）
+//   5. 点击"打印"按钮 → 主进程轮询检测到请求 → 在隐藏窗口上调用 webContents.print()
+// 通信方案：轮询 window.__printRequested（不依赖 CSP/IPC/preload，兼容 data URL 环境）
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
         const parentWin = BrowserWindow.fromWebContents(event.sender);
         const isLandscape = orientation === 'landscape';
-        // ★ 预览窗口尺寸按打印方向调整，让用户所见即所得
-        // A5 纸张：纵向 148×210mm，横向 210×148mm（比例约 1:1.414）
         const previewWidth = isLandscape ? 1024 : 760;
         const previewHeight = isLandscape ? 760 : 1024;
+
+        // 预览窗口（显示工具栏 + PDF iframe）
         const printWin = new BrowserWindow({
             show: true,
             width: previewWidth,
@@ -1672,68 +1674,93 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
             }
         });
 
-        // ★ 注入预览工具栏（顶部悬浮）
-        // 按钮不写内联 onclick（避免 CSP 限制），改用 dom-ready 后 executeJavaScript 注入监听器
-        const toolbarInject = `
-            <style>
-                body { margin: 0; padding: 0; }
-                #__previewToolbar {
-                    position: fixed; top: 0; left: 0; right: 0;
-                    background: #2c3e50; color: #fff;
-                    padding: 10px 16px; z-index: 9999;
-                    display: flex; justify-content: space-between; align-items: center;
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                    box-sizing: border-box;
-                }
-                #__previewToolbar .title { font-size: 14px; font-weight: 600; }
-                #__previewToolbar .actions { display: flex; gap: 8px; }
-                #__previewToolbar button {
-                    padding: 6px 18px; border: none; border-radius: 4px;
-                    cursor: pointer; font-size: 13px; font-weight: 500;
-                    transition: background 0.2s; font-family: inherit;
-                }
-                #__printBtn { background: #27ae60; color: #fff; }
-                #__printBtn:hover { background: #229954; }
-                #__cancelBtn { background: #e74c3c; color: #fff; }
-                #__cancelBtn:hover { background: #c0392b; }
-                .prescription-paper { margin-top: 50px; }
-            </style>
-            <div id="__previewToolbar">
-                <span class="title">打印预览（${isLandscape ? '横向' : '纵向'} · A5） · 确认后点击"打印"</span>
-                <div class="actions">
-                    <button id="__cancelBtn" type="button">取消</button>
-                    <button id="__printBtn" type="button">打印</button>
-                </div>
-            </div>
-        `;
+        // 隐藏窗口（用于生成 PDF 和实际打印）
+        const pdfGenWin = new BrowserWindow({
+            show: false,
+            webPreferences: {
+                contextIsolation: true,
+                nodeIntegration: false
+            }
+        });
 
-        // 将工具栏注入到 HTML 的 <body> 标签后
-        let enrichedHtml = html;
-        if (/<body[^>]*>/i.test(enrichedHtml)) {
-            enrichedHtml = enrichedHtml.replace(/<body[^>]*>/i, m => m + toolbarInject);
-        } else {
-            enrichedHtml = enrichedHtml.replace('</html>', toolbarInject + '</html>');
-        }
+        // 预览页面 HTML（工具栏 + 加载提示 + PDF iframe 占位）
+        const previewHtml = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>打印预览</title>
+<style>
+  body { margin: 0; padding: 0; background: #525659; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; }
+  #__previewToolbar {
+    position: fixed; top: 0; left: 0; right: 0; height: 50px;
+    background: #2c3e50; color: #fff;
+    padding: 0 16px; z-index: 9999;
+    display: flex; justify-content: space-between; align-items: center;
+    box-sizing: border-box;
+  }
+  #__previewToolbar .title { font-size: 14px; font-weight: 600; }
+  #__previewToolbar .actions { display: flex; gap: 8px; }
+  #__previewToolbar button {
+    padding: 6px 18px; border: none; border-radius: 4px;
+    cursor: pointer; font-size: 13px; font-weight: 500;
+    transition: background 0.2s; font-family: inherit;
+  }
+  #__printBtn { background: #27ae60; color: #fff; }
+  #__printBtn:hover { background: #229954; }
+  #__printBtn:disabled { background: #95a5a6; cursor: not-allowed; }
+  #__cancelBtn { background: #e74c3c; color: #fff; }
+  #__cancelBtn:hover { background: #c0392b; }
+  #loadingHint {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    color: #fff; font-size: 16px;
+  }
+  #__pdfFrame {
+    position: fixed; top: 50px; left: 0; width: 100%; height: calc(100% - 50px);
+    border: 0; background: #525659;
+  }
+</style>
+</head>
+<body>
+<div id="__previewToolbar">
+  <span class="title">打印预览（${isLandscape ? '横向' : '纵向'} · A5） · 确认后点击"打印"</span>
+  <div class="actions">
+    <button id="__cancelBtn" type="button">取消</button>
+    <button id="__printBtn" type="button" disabled>打印</button>
+  </div>
+</div>
+<div id="loadingHint">正在生成预览，请稍候...</div>
+<iframe id="__pdfFrame" style="display:none;"></iframe>
+</body>
+</html>`;
 
-        const base64Html = Buffer.from(enrichedHtml, 'utf8').toString('base64');
-        const dataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
+        const base64PreviewHtml = Buffer.from(previewHtml, 'utf8').toString('base64');
+        const previewDataUrl = 'data:text/html;charset=utf-8;base64,' + base64PreviewHtml;
+
+        // 处方 HTML（用于生成 PDF）
+        const base64Html = Buffer.from(html, 'utf8').toString('base64');
+        const pdfDataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
 
         return new Promise((resolve) => {
             let settled = false;
+            let pdfPath = null;
+            let pollTimer = null;
 
             const safeResolve = (val) => {
                 if (settled) return;
                 settled = true;
+                if (pollTimer) clearInterval(pollTimer);
+                if (pdfPath) {
+                    fs.unlink(pdfPath).catch(() => {});
+                }
+                if (!pdfGenWin.isDestroyed()) pdfGenWin.close();
                 if (!printWin.isDestroyed()) printWin.close();
                 resolve(val);
             };
 
-            printWin.loadURL(dataUrl);
+            // 加载预览页面
+            printWin.loadURL(previewDataUrl);
 
-            // ★ dom-ready 后用 executeJavaScript 注入按钮事件监听器
-            // window.print() 是浏览器原生 API，在 Electron 渲染进程中会触发系统打印对话框
-            // 打印对话框关闭后（无论打印还是取消），1.5秒后自动关闭预览窗口
+            // dom-ready 后注入按钮事件
             printWin.webContents.once('dom-ready', () => {
                 printWin.webContents.executeJavaScript(`
                     (function() {
@@ -1741,33 +1768,95 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                         var cancelBtn = document.getElementById('__cancelBtn');
                         if (printBtn) {
                             printBtn.addEventListener('click', function() {
-                                try {
-                                    window.print();
-                                    // 打印对话框关闭后延时自动关闭预览窗口
-                                    setTimeout(function() { window.close(); }, 1500);
-                                } catch(e) {
-                                    alert('打印失败: ' + e.message);
-                                }
+                                if (this.disabled) return;
+                                window.__printRequested = true;
+                                this.disabled = true;
+                                this.textContent = '打印中...';
                             });
                         }
                         if (cancelBtn) {
                             cancelBtn.addEventListener('click', function() {
-                                window.close();
+                                window.__cancelRequested = true;
                             });
                         }
                     })();
-                `).catch((e) => {
-                    console.error('[print] 注入按钮事件失败:', e);
-                });
+                `).catch(e => console.error('[print] 注入按钮事件失败:', e));
             });
 
-            // ★ 错误处理：data URL 加载失败时立即返回
+            // 轮询预览窗口的打印/取消请求（不依赖 CSP/IPC/preload）
+            pollTimer = setInterval(() => {
+                if (printWin.isDestroyed()) {
+                    if (pollTimer) clearInterval(pollTimer);
+                    return;
+                }
+                printWin.webContents.executeJavaScript(
+                    '(window.__printRequested || false) + "|" + (window.__cancelRequested || false)'
+                ).then(result => {
+                    const parts = (result || '').split('|');
+                    if (parts[0] === 'true') {
+                        printWin.webContents.executeJavaScript('window.__printRequested = false');
+                        // 在 pdfGenWin 上调用打印（隐藏窗口，不影响预览）
+                        if (!pdfGenWin.isDestroyed()) {
+                            pdfGenWin.webContents.print({ silent: false, printBackground: true }, () => {
+                                // 打印完成，恢复按钮状态
+                                if (!printWin.isDestroyed()) {
+                                    printWin.webContents.executeJavaScript(
+                                        'var b=document.getElementById("__printBtn");if(b){b.disabled=false;b.textContent="打印";}'
+                                    ).catch(() => {});
+                                }
+                            });
+                        }
+                    }
+                    if (parts[1] === 'true') {
+                        safeResolve(false);
+                    }
+                }).catch(() => {});
+            }, 300);
+
+            // 在隐藏窗口中加载处方 HTML 并生成 PDF
+            pdfGenWin.loadURL(pdfDataUrl);
+            pdfGenWin.webContents.once('dom-ready', () => {
+                setTimeout(() => {
+                    pdfGenWin.webContents.printToPDF({
+                        landscape: isLandscape,
+                        pageSize: 'A5',
+                        printBackground: true,
+                        margins: { top: 0, bottom: 0, left: 0, right: 0 }
+                    }).then(data => {
+                        pdfPath = path.join(app.getPath('temp'), `print-preview-${Date.now()}.pdf`);
+                        return fs.writeFile(pdfPath, data);
+                    }).then(() => {
+                        const fileUrl = 'file:///' + pdfPath.replace(/\\/g, '/');
+                        return printWin.webContents.executeJavaScript(`
+                            var loadingHint = document.getElementById('loadingHint');
+                            if (loadingHint) loadingHint.style.display = 'none';
+                            var pdfFrame = document.getElementById('__pdfFrame');
+                            if (pdfFrame) {
+                                pdfFrame.src = '${fileUrl}';
+                                pdfFrame.style.display = 'block';
+                            }
+                            var printBtn = document.getElementById('__printBtn');
+                            if (printBtn) printBtn.disabled = false;
+                        `);
+                    }).catch(e => {
+                        console.error('[print] 生成 PDF 失败:', e);
+                        // 回退提示
+                        if (!printWin.isDestroyed()) {
+                            printWin.webContents.executeJavaScript(
+                                'var l=document.getElementById("loadingHint");if(l)l.textContent="预览生成失败，请直接点击打印按钮";var p=document.getElementById("__printBtn");if(p)p.disabled=false;'
+                            ).catch(() => {});
+                        }
+                    });
+                }, 300);
+            });
+
+            // 错误处理
             printWin.webContents.once('did-fail-load', (_e, errorCode, errorDesc) => {
-                console.error('[print] did-fail-load:', errorCode, errorDesc);
+                console.error('[print] 预览页面加载失败:', errorCode, errorDesc);
                 safeResolve(false);
             });
 
-            // 窗口被用户直接关闭（点X 或 取消按钮 或 打印后自动关闭）
+            // 窗口被用户直接关闭
             printWin.on('closed', () => safeResolve(true));
 
             // 超时保护：5分钟未操作自动关闭
