@@ -138,6 +138,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAppConfig: () => {
         return ipcRenderer.invoke('get-app-config');
     },
+    updateClinicInfo: (data) => {
+        return ipcRenderer.invoke('update-clinic-info', data);
+    },
     setAutoStart: (enabled) => {
         return ipcRenderer.invoke('set-auto-start', enabled);
     },

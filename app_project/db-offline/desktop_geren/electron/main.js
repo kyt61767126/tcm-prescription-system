@@ -1382,7 +1382,7 @@ ipcMain.handle('get-app-config', async () => {
         clinicName: '本能堂中医诊所',
         doctorName: '本能堂',
         edition: 'personal',
-        productName: '惠康中医-个人'
+        productName: '惠康中医-LB'
     };
     try {
         const configPath = path.join(__dirname, '..', 'config.json');
@@ -1394,6 +1394,31 @@ ipcMain.handle('get-app-config', async () => {
         console.error('读取 config.json 失败:', e);
     }
     return { success: true, config: defaults };
+});
+
+// ★ 基础设置修改诊所/医师姓名后回写 config.json（带 HMAC-SHA256 签名重算）
+// 根因：file:// 协议下 login.html 与 index.html 的 localStorage 不共享，
+// saveSettings 只存 localStorage 会导致登录窗口读不到最新医师姓名。
+// 修复：通过 IPC 回写 config.json，login.js 读 config.json 即可获取最新值。
+const CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026';
+ipcMain.handle('update-clinic-info', async (event, { clinicName, doctorName }) => {
+    try {
+        const configPath = path.join(__dirname, '..', 'config.json');
+        const cfg = await fse.readJson(configPath);
+        if (clinicName !== undefined && clinicName !== null) cfg.clinicName = clinicName;
+        if (doctorName !== undefined && doctorName !== null) cfg.doctorName = doctorName;
+        cfg.configIssuedAt = new Date().toISOString();
+        const signContent = [cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '', cfg.configIssuedAt].join('|');
+        const hmac = crypto.createHmac('sha256', CONFIG_SIGN_KEY);
+        hmac.update(signContent);
+        cfg.configSignature = hmac.digest('hex');
+        await fse.writeJson(configPath, cfg, { spaces: 2 });
+        console.log('[update-clinic-info] config.json 已更新, doctorName=' + cfg.doctorName);
+        return { success: true };
+    } catch (e) {
+        console.error('[update-clinic-info] 更新 config.json 失败:', e);
+        return { success: false, error: e.message };
+    }
 });
 
 // 打包配置页：读取 config.json

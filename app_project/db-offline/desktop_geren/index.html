@@ -4717,6 +4717,16 @@ if (window.Permission) {
                 CONFIG.clinicName = newClinicName;
                 CONFIG.doctorName = newDoctorName;
             }
+            // ★ 通过 IPC 回写 config.json（带签名重算），确保登录窗口能读到最新医师姓名
+            // 根因：file:// 协议下 login.html 与 index.html 的 localStorage 不共享
+            if (IS_ELECTRON && window.electronAPI && window.electronAPI.updateClinicInfo) {
+                window.electronAPI.updateClinicInfo({
+                    clinicName: newClinicName,
+                    doctorName: newDoctorName
+                }).then(function(r) {
+                    if (!r || !r.success) console.warn('[saveSettings] 回写 config.json 失败:', r && r.error);
+                }).catch(function(e) { console.warn('[saveSettings] 回写 config.json 异常:', e); });
+            }
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             localStorage.setItem('local_defaultDose', document.getElementById('defaultDose').value || '7');
             
