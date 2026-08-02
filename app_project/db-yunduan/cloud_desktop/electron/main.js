@@ -373,56 +373,6 @@ function createMainWindow() {
             await mainWindow.webContents.executeJavaScript(fixCode);
             console.log('[FIX] 原生同步 dialog 注入完成');
         } catch(e) { console.warn('[FIX] 原生同步 dialog 注入失败:', e.message); }
-
-        // ★ 修复药物简码候选框不显示（双重根因）：
-        //   根因1: Electron 中文输入法(IME)组字时 keyup 事件被抑制，onkeyup→handleSearchKey→showSearchDropdown 从未触发
-        //   根因2: 云端桌面版缺少 __medicinesFirewall 药物数据防火墙（离线版有），loadData 未完成时 medicines 和 defaultMedicines 同时为空，filtered 为空 → display=none
-        //   修复: 注入 input 事件监听器（解决IME）+ 注入药物数据防火墙（解决数据为空），与离线版逻辑一致
-        try {
-            const searchFix = `(function() {
-                if (window.__searchFixInjected) return;
-                window.__searchFixInjected = true;
-
-                // 1. 药物数据防火墙 - 确保 medicines 永不为空（移植自离线版 __medicinesFirewall）
-                //    loadData 依赖网络请求，未完成或失败时 medicines/defaultMedicines 同时为空，候选框 filtered 为空 → 不显示
-                var __fwTriggered = false;
-                var __fwRetry = 0;
-                function __medicinesFirewall() {
-                    try {
-                        if (typeof medicines === 'undefined' || !medicines || medicines.length === 0) {
-                            if (typeof defaultMedicines !== 'undefined' && defaultMedicines && defaultMedicines.length > 0) {
-                                medicines = defaultMedicines;
-                                if (typeof buildMedicineMap === 'function') buildMedicineMap();
-                                console.log('[药物防火墙] 已从 defaultMedicines 恢复药物数据:', medicines.length);
-                            } else if (typeof loadData === 'function' && !__fwTriggered) {
-                                __fwTriggered = true;
-                                loadData().catch(function(e) { console.warn('[药物防火墙] loadData 重试失败:', e); });
-                            }
-                            if (medicines.length === 0 && __fwRetry < 30) {
-                                __fwRetry++;
-                                setTimeout(__medicinesFirewall, 100);
-                            }
-                        }
-                    } catch(e) { console.error('[药物防火墙] 异常:', e); }
-                }
-                setTimeout(__medicinesFirewall, 100);
-
-                // 2. IME 兼容：input 事件在中文输入法组字结束后始终触发（keyup 被 IME 抑制）
-                document.addEventListener('input', function(e) {
-                    var t = e.target;
-                    if (!t || !t.id) return;
-                    if ((t.id.indexOf('code-input-') === 0 || t.id.indexOf('name-input-') === 0) && !e.isComposing) {
-                        var col = t.id.indexOf('code-input-') === 0 ? 'code' : 'name';
-                        if (typeof showSearchDropdown === 'function') {
-                            showSearchDropdown(t, t.value, col);
-                        }
-                    }
-                }, true);
-                console.log('[FIX] 药物简码候选框补丁已注入（IME兼容 + 药物数据防火墙）');
-            })();`;
-            await mainWindow.webContents.executeJavaScript(searchFix);
-            console.log('[FIX] 候选框补丁注入完成');
-        } catch(e) { console.warn('[FIX] 候选框补丁注入失败:', e.message); }
     });
 
     mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));

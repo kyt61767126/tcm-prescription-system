@@ -194,30 +194,6 @@ function createMainWindow() {
 
     mainWindow.loadFile(indexPath);
 
-    // ★ 修复药物简码候选框不显示：Electron 中文输入法(IME)组字时 keyup 事件被抑制，
-    //   导致 onkeyup→handleSearchKey→showSearchDropdown 从未触发，候选框不显示。
-    //   方案：注入 input 事件监听器（IME 组字结束后始终触发），带 isComposing 检查。
-    mainWindow.webContents.on('dom-ready', async () => {
-        try {
-            const searchFix = `(function() {
-                if (window.__searchFixInjected) return;
-                window.__searchFixInjected = true;
-                document.addEventListener('input', function(e) {
-                    var t = e.target;
-                    if (!t || !t.id) return;
-                    if ((t.id.indexOf('code-input-') === 0 || t.id.indexOf('name-input-') === 0) && !e.isComposing) {
-                        var col = t.id.indexOf('code-input-') === 0 ? 'code' : 'name';
-                        if (typeof showSearchDropdown === 'function') {
-                            showSearchDropdown(t, t.value, col);
-                        }
-                    }
-                }, true);
-                console.log('[FIX] 药物简码候选框 IME 兼容补丁已注入');
-            })();`;
-            await mainWindow.webContents.executeJavaScript(searchFix);
-        } catch(e) { console.warn('[FIX] 候选框补丁注入失败:', e.message); }
-    });
-
     // ★ 安全：拦截 window.open 防止钓鱼攻击，仅允许本应用内部页面
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         if (url.startsWith('file://') || url.startsWith('http://localhost') || url.startsWith('https://tcm-prescription-system.pages.dev')) {
