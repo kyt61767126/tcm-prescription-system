@@ -4312,6 +4312,13 @@ if (window.Permission) {
             paperDiagnosis: null,
             paperDoctor: null,
             prescriptionLines: null,
+            // ★P2-1 扩展：loadHistory/savePrescription/clearPrescription 常用元素缓存，减少重复 getElementById
+            clinicNo: null,
+            patientAddress: null,
+            patientPhone: null,
+            paperClinicNo: null,
+            doseCountInput2: null,
+            paperDoseCount: null,
 
             init: function() {
                 if (!this.prescriptionBody) this.prescriptionBody = document.getElementById('prescriptionBody');
@@ -4337,6 +4344,13 @@ if (window.Permission) {
                 if (!this.paperDiagnosis) this.paperDiagnosis = document.getElementById('paperDiagnosis');
                 if (!this.paperDoctor) this.paperDoctor = document.getElementById('paperDoctor');
                 if (!this.prescriptionLines) this.prescriptionLines = document.getElementById('prescriptionLines');
+                // ★P2-1 扩展
+                if (!this.clinicNo) this.clinicNo = document.getElementById('clinicNo');
+                if (!this.patientAddress) this.patientAddress = document.getElementById('patientAddress');
+                if (!this.patientPhone) this.patientPhone = document.getElementById('patientPhone');
+                if (!this.paperClinicNo) this.paperClinicNo = document.getElementById('paperClinicNo');
+                if (!this.doseCountInput2) this.doseCountInput2 = document.getElementById('doseCountInput2');
+                if (!this.paperDoseCount) this.paperDoseCount = document.getElementById('paperDoseCount');
             }
         };
         
@@ -6743,27 +6757,27 @@ if (window.Permission) {
         function loadHistory(id) {
             const record = prescriptionHistory.find(p => p.id === id);
             if (!record) return;
-            document.getElementById('patientName').value = record.patientName;
-            document.getElementById('patientGender').value = record.patientGender || '男';
-            document.getElementById('patientAge').value = record.patientAge;
-            document.getElementById('patientPhone').value = record.patientPhone;
-            document.getElementById('patientAddress').value = record.patientAddress;
+            // ★P2-2 优化：使用 DOM_CACHE 替换 14 次 getElementById
+            DOM_CACHE.init();
+            const c = DOM_CACHE;
+            if (c.patientName) c.patientName.value = record.patientName;
+            if (c.patientGender) c.patientGender.value = record.patientGender || '男';
+            if (c.patientAge) c.patientAge.value = record.patientAge;
+            if (c.patientPhone) c.patientPhone.value = record.patientPhone;
+            if (c.patientAddress) c.patientAddress.value = record.patientAddress;
             // 门诊输入框（prescriptionNo）保持当前编号，不被历史处方覆盖
             // 历史处方编号写入 paperClinicNo，保存时可通过 fallback 获取
-            document.getElementById('paperClinicNo').textContent = record.prescriptionNo || record.clinicNo || '';
-            document.getElementById('medicalHistory').value = record.medicalHistory;
-            document.getElementById('diagnosis').value = record.diagnosis;
+            if (c.paperClinicNo) c.paperClinicNo.textContent = record.prescriptionNo || record.clinicNo || '';
+            if (c.medicalHistory) c.medicalHistory.value = record.medicalHistory;
+            if (c.diagnosis) c.diagnosis.value = record.diagnosis;
             const doseCount = record.doseCount || parseInt(localStorage.getItem('cloud_defaultDose')) || 7;
-            const doseInput = document.getElementById('doseCountInput') || document.getElementById('doseCountInput3');
+            const doseInput = c.doseCountInput || c.doseCountInput3;
             if (doseInput) doseInput.value = doseCount;
-            const doseInput2 = document.getElementById('doseCountInput2');
-            if (doseInput2) doseInput2.value = doseCount;
-            document.getElementById('paperDoseCount').textContent = doseCount;
+            if (c.doseCountInput2) c.doseCountInput2.value = doseCount;
+            if (c.paperDoseCount) c.paperDoseCount.textContent = doseCount;
             const regFeeVal = record.registrationFee || 0;
-            const regFeeEl = document.getElementById('registrationFee');
-            if (regFeeEl) regFeeEl.value = regFeeVal;
-            const regFeeEl2 = document.getElementById('registrationFee2');
-            if (regFeeEl2) regFeeEl2.value = regFeeVal;
+            if (c.registrationFee) c.registrationFee.value = regFeeVal;
+            if (c.registrationFee2) c.registrationFee2.value = regFeeVal;
             // 加载药物数据，确保所有字段都有值
             prescriptionItems = (record.items || []).map(item => ({
                 code: item.code || '',
@@ -6774,16 +6788,13 @@ if (window.Permission) {
                 total: item.total || 0
             }));
             while (prescriptionItems.length < 15) addEmptyRow();
-            DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
             // 恢复历史处方的日期和医师名到输入框
-            const _visitDateEl = document.getElementById('visitDate');
-            if (_visitDateEl) _visitDateEl.value = record.date || '';
-            const _doctorNameEl = document.getElementById('doctorName');
-            if (_doctorNameEl) _doctorNameEl.value = record.doctorName || '';
+            if (c.visitDate) c.visitDate.value = record.date || '';
+            if (c.doctorName) c.doctorName.value = record.doctorName || '';
             updatePrescriptionPaper();
-            document.getElementById('paperDate').textContent = record.date || '';
+            if (c.paperDate) c.paperDate.textContent = record.date || '';
         }
 
         function loadLastHistory() {
@@ -6804,34 +6815,34 @@ if (window.Permission) {
         }
 
         function clearPrescription() {
-            const safeSet = (id, val) => {
-                try { const el = document.getElementById(id); if (el) el.value = val; } catch(e) {}
-            };
-            const safeText = (id, val) => {
-                try { const el = document.getElementById(id); if (el) el.textContent = val; } catch(e) {}
-            };
-            safeSet('patientName', '');
-            safeSet('patientAge', '');
-            safeSet('patientPhone', '');
-            safeSet('patientAddress', '');
-            safeSet('clinicNo', '');
-            safeSet('medicalHistory', '');
-            safeSet('diagnosis', '');
+            // ★P2-3 优化：使用 DOM_CACHE 替换重复 getElementById（保留 safeSet/safeText 的容错）
+            try { DOM_CACHE.init(); } catch(e) { console.warn('DOM_CACHE初始化失败:', e); }
+            const c = DOM_CACHE;
+            const safeSetVal = (el, val) => { try { if (el) el.value = val; } catch(e) {} };
+            const safeSetText = (el, val) => { try { if (el) el.textContent = val; } catch(e) {} };
+            safeSetVal(c.patientName, '');
+            safeSetVal(c.patientAge, '');
+            safeSetVal(c.patientPhone, '');
+            safeSetVal(c.patientAddress, '');
+            safeSetVal(c.clinicNo, '');
+            safeSetVal(c.medicalHistory, '');
+            safeSetVal(c.diagnosis, '');
             prescriptionItems = [];
             for (let i = 0; i < 15; i++) addEmptyRow();
             try {
-                DOM_CACHE.prescriptionBody = null;
-                DOM_CACHE.medicineSearchDropdown = null;
-                DOM_CACHE.init();
+                // 重置可能被 modal 重建的元素缓存
+                c.prescriptionBody = null;
+                c.medicineSearchDropdown = null;
+                c.init();
             } catch(e) { console.warn('DOM_CACHE重置失败:', e); }
             renderPrescriptionTable();
             try { calculateAmount(); } catch(e) { console.warn('calculateAmount失败:', e); }
             try { updatePrescriptionPaper(); } catch(e) { console.warn('updatePrescriptionPaper失败:', e); }
             try {
                 const no = generatePrescriptionNo();
-                safeSet('prescriptionNo', no);
-                safeText('paperClinicNo', no);
-                safeText('paperDate', new Date().toISOString().split('T')[0]);
+                safeSetVal(c.prescriptionNo, no);
+                safeSetText(c.paperClinicNo, no);
+                safeSetText(c.paperDate, new Date().toISOString().split('T')[0]);
             } catch(e) { console.warn('更新编号失败:', e); }
         }
 
@@ -6935,197 +6946,224 @@ if (window.Permission) {
             }
         }
 
-        async function savePrescription() {
+        // ★P2-4 防重复点击：保存中状态标记，避免异步保存期间用户连续点击导致重复提交
+        let _savePrescriptionInProgress = false;
+
+        async function savePrescription(event) {
             // 检查用户是否登录
             if (!currentUser) {
                 alert('请先登录后再保存处方！');
-                document.getElementById('loginOverlay').style.display = 'flex';
+                if (DOM_CACHE.loginOverlay) DOM_CACHE.loginOverlay.style.display = 'flex';
                 return;
             }
-            
+
             // 检查用户是否有保存处方的权限
             if (currentUser.allowSavePrescription === false) {
                 alert('您没有保存处方的权限，请联系管理员！');
                 return;
             }
-            
-            const name = document.getElementById('patientName').value;
-            if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
-            const currentDate = new Date().toISOString().split('T')[0];
-            document.getElementById('visitDate').value = currentDate;
-            document.getElementById('paperDate').textContent = currentDate;
-            const doseInput = document.getElementById('doseCountInput') || document.getElementById('doseCountInput3');
-            const doseCount = parseInt(doseInput ? doseInput.value : 7) || 7;
-            
-            // 显示保存中的提示
-            showToast('正在保存...');
-            
-            const grandTotalEl = document.getElementById('grandTotal') || document.getElementById('grandTotal2');
-            
-            // 前端不生成编号，只提交基本数据
-            const now = new Date();
-            // 使用当前药物库的最新单价重新计算金额（支持修改历史处方时按最新价格结算）
-            const updatedItems = prescriptionItems.filter(item => item.name).map(item => {
-                const latestMedicine = getMedicineByName(item.name);
-                const latestPrice = latestMedicine ? parseFloat(latestMedicine.price) || 0 : (parseFloat(item.price) || 0);
-                const calculatedTotal = latestPrice * (parseFloat(item.dosage) || 0);
-                return {
-                    ...item,
-                    price: latestPrice,
-                    total: calculatedTotal
-                };
+
+            // ★P2-4 防重复点击：保存中则直接返回，并禁用触发按钮
+            if (_savePrescriptionInProgress) {
+                console.warn('[savePrescription] 保存中，忽略重复点击');
+                return;
+            }
+            _savePrescriptionInProgress = true;
+            // 禁用触发按钮（兼容桌面顶部保存按钮 + 移动端底部保存按钮）
+            const triggerBtn = event?.currentTarget || (typeof event === 'object' && event?.target);
+            const btnsToDisable = triggerBtn ? [triggerBtn] : [];
+            // 同时禁用移动端另一个保存按钮，避免切换端时连续点击
+            document.querySelectorAll('[onclick*="savePrescription"]').forEach(b => {
+                if (!btnsToDisable.includes(b)) btnsToDisable.push(b);
             });
-            
-            // 重新计算总金额
-            const updatedMedicineTotal = updatedItems.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
-            const updatedTotalAmount = updatedMedicineTotal * doseCount + (parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0);
-            
-            const registrationFee = parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0;
-            const record = {
-                id: Date.now(),
-                date: document.getElementById('visitDate').value,
-                patientName: name,
-                patientGender: document.getElementById('patientGender').value,
-                patientAge: document.getElementById('patientAge').value,
-                patientPhone: document.getElementById('patientPhone').value,
-                patientAddress: document.getElementById('patientAddress').value,
-                doctorName: document.getElementById('doctorName').value,
-                medicalHistory: document.getElementById('medicalHistory').value,
-                diagnosis: document.getElementById('diagnosis').value,
-                items: updatedItems,
-                doseCount: doseCount,
-                totalAmount: updatedTotalAmount,
-                registrationFee: registrationFee,
-                createdBy: currentUser ? currentUser.username : 'unknown',
-                createdAt: now.toISOString(),
-                updatedAt: now.toISOString()
-            };
-            
-            // 记录保存前的处方编号（拍照录像文件以此编号保存）
-            // 优先从输入框获取，其次从统计显示获取，最后从拍照录像模块获取实际使用的标识符（包括localStorage备份）
-            const oldPrescriptionNo = document.getElementById('prescriptionNo').value || 
-                                     (document.getElementById('paperClinicNo')?.textContent || '') ||
-                                     (window.__lastUsedMediaIdentifier || '') ||
-                                     (localStorage.getItem('lastUsedMediaIdentifier') || '') || '';
+            btnsToDisable.forEach(b => { try { b.disabled = true; b.style.opacity = '0.6'; } catch(e) {} });
 
-            // 统一写入云端数据库，由云端生成编号
-            const response = await savePrescriptionsToCloud([record]);
-            
-            if (response && response.success) {
-                // 直接使用云端返回的已保存处方（带正确的编号）
-                const savedPrescription = response.savedPrescription;
-                const savedRecord = savedPrescription || record;
-                
-                // 更新显示的编号为云端返回的编号
-                const officialNo = savedRecord.prescriptionNo || savedRecord.outpatientNo || '';
-                
-                // 更新本地缓存的历史记录（确保新处方总是被添加）
-                if (savedPrescription) {
-                    // 避免重复添加
-                    const exists = prescriptionHistory.some(p => p.id === savedPrescription.id);
-                    if (!exists) {
-                        prescriptionHistory.unshift(savedPrescription);
-                    }
-                } else {
-                    // 如果云端没有返回保存的处方，使用本地记录
-                    const exists = prescriptionHistory.some(p => p.id === record.id);
-                    if (!exists) {
-                        prescriptionHistory.unshift(record);
-                    }
-                }
-                
-                if (prescriptionHistory.length > 100000) {
-                    prescriptionHistory = prescriptionHistory.slice(0, 100000);
-                }
-                
-                // 更新界面上的编号显示为云端返回的下一个编号
-                const nextNo = response.nextPrescriptionNo || '';
-                if (nextNo) {
-                    document.getElementById('prescriptionNo').value = nextNo;
-                    document.getElementById('paperClinicNo').textContent = nextNo;
-                }
-                
-                // 更新统计编号
-                updateClinicNoDisplay();
+            try {
+                // ★P2-3 优化：使用 DOM_CACHE 替换 14+ 次 getElementById
+                DOM_CACHE.init();
+                const c = DOM_CACHE;
 
-                // 刷新历史处方栏
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
-                
-                // 清空姓名输入框，准备输入新处方
-                // 临时移除onkeyup事件，避免触发searchPatientsQuick清空历史列表
-                const patientNameInput = document.getElementById('patientName');
-                patientNameInput.removeAttribute('onkeyup');
-                patientNameInput.value = '';
-                patientNameInput.setAttribute('onkeyup', 'searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)');
-                // 隐藏姓名下拉框
-                hidePatientNameDropdown();
-                // 重新渲染历史列表（清空输入框会触发onkeyup事件清空历史，需要重新渲染）
-                renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
-                
-                // 更新药物使用频率
-                updateMedicineFrequency(record.items);
-                
-                // 保存成功提示（立即显示）
-                showToast('处方保存成功！');
-                
-                // 延迟执行耗时操作，避免阻塞 Toast 动画
-                setTimeout(() => {
-                    // 生成处方签图片并自动下载（使用云端返回的编号）
-                    savePrescriptionAsImage(savedRecord, officialNo);
-                    // 云端分配的编号可能与拍照时使用的编号不同，重命名已保存的处方文件
-                    if (oldPrescriptionNo && officialNo && oldPrescriptionNo !== officialNo) {
-                        console.log('[重命名检查] oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo, 'patientName:', record.patientName);
-                        if (window.electronAPI && window.electronAPI.renameMediaFiles) {
-                            window.electronAPI.renameMediaFiles(record.patientName, record.patientName, oldPrescriptionNo, officialNo)
-                                .then(r => {
-                                    console.log('[重命名结果] success:', r.success, 'renamed:', r.renamed);
-                                    if (r.success && r.renamed > 0) {
-                                        console.log('已重命名 ' + r.renamed + ' 个处方文件: ' + oldPrescriptionNo + ' → ' + officialNo);
-                                    } else if (r.success && r.renamed === 0) {
-                                        console.warn('[重命名警告] 没有找到需要重命名的文件，请检查文件名格式');
-                                    }
-                                    collectAndUpdateMediaFiles(savedRecord, officialNo);
-                                })
-                                .catch(e => {
-                                    console.error('重命名处方文件失败:', e);
-                                    collectAndUpdateMediaFiles(savedRecord, officialNo);
-                                });
-                        } else {
-                            console.warn('[重命名警告] electronAPI.renameMediaFiles 不可用');
-                            collectAndUpdateMediaFiles(savedRecord, officialNo);
+                const name = c.patientName ? c.patientName.value : '';
+                if (!name) {alert('请输入患者姓名！'); if (c.patientName) c.patientName.focus(); return;}
+                const currentDate = new Date().toISOString().split('T')[0];
+                if (c.visitDate) c.visitDate.value = currentDate;
+                if (c.paperDate) c.paperDate.textContent = currentDate;
+                const doseInput = c.doseCountInput || c.doseCountInput3;
+                const doseCount = parseInt(doseInput ? doseInput.value : 7) || 7;
+
+                // 显示保存中的提示
+                showToast('正在保存...');
+
+                // 前端不生成编号，只提交基本数据
+                const now = new Date();
+                // 使用当前药物库的最新单价重新计算金额（支持修改历史处方时按最新价格结算）
+                const updatedItems = prescriptionItems.filter(item => item.name).map(item => {
+                    const latestMedicine = getMedicineByName(item.name);
+                    const latestPrice = latestMedicine ? parseFloat(latestMedicine.price) || 0 : (parseFloat(item.price) || 0);
+                    const calculatedTotal = latestPrice * (parseFloat(item.dosage) || 0);
+                    return {
+                        ...item,
+                        price: latestPrice,
+                        total: calculatedTotal
+                    };
+                });
+
+                // 重新计算总金额
+                const updatedMedicineTotal = updatedItems.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
+                const regFeeVal = parseFloat((c.registrationFee2 && c.registrationFee2.value) || (c.registrationFee && c.registrationFee.value) || '0') || 0;
+                const updatedTotalAmount = updatedMedicineTotal * doseCount + regFeeVal;
+
+                const record = {
+                    id: Date.now(),
+                    date: c.visitDate ? c.visitDate.value : currentDate,
+                    patientName: name,
+                    patientGender: c.patientGender ? c.patientGender.value : '',
+                    patientAge: c.patientAge ? c.patientAge.value : '',
+                    patientPhone: c.patientPhone ? c.patientPhone.value : '',
+                    patientAddress: c.patientAddress ? c.patientAddress.value : '',
+                    doctorName: c.doctorName ? c.doctorName.value : '',
+                    medicalHistory: c.medicalHistory ? c.medicalHistory.value : '',
+                    diagnosis: c.diagnosis ? c.diagnosis.value : '',
+                    items: updatedItems,
+                    doseCount: doseCount,
+                    totalAmount: updatedTotalAmount,
+                    registrationFee: regFeeVal,
+                    createdBy: currentUser ? currentUser.username : 'unknown',
+                    createdAt: now.toISOString(),
+                    updatedAt: now.toISOString()
+                };
+
+                // 记录保存前的处方编号（拍照录像文件以此编号保存）
+                // 优先从输入框获取，其次从统计显示获取，最后从拍照录像模块获取实际使用的标识符（包括localStorage备份）
+                const oldPrescriptionNo = (c.prescriptionNo ? c.prescriptionNo.value : '') ||
+                                         (c.paperClinicNo ? c.paperClinicNo.textContent : '') ||
+                                         (window.__lastUsedMediaIdentifier || '') ||
+                                         (localStorage.getItem('lastUsedMediaIdentifier') || '') || '';
+
+                // 统一写入云端数据库，由云端生成编号
+                const response = await savePrescriptionsToCloud([record]);
+
+                if (response && response.success) {
+                    // 直接使用云端返回的已保存处方（带正确的编号）
+                    const savedPrescription = response.savedPrescription;
+                    const savedRecord = savedPrescription || record;
+
+                    // 更新显示的编号为云端返回的编号
+                    const officialNo = savedRecord.prescriptionNo || savedRecord.outpatientNo || '';
+
+                    // 更新本地缓存的历史记录（确保新处方总是被添加）
+                    if (savedPrescription) {
+                        // 避免重复添加
+                        const exists = prescriptionHistory.some(p => p.id === savedPrescription.id);
+                        if (!exists) {
+                            prescriptionHistory.unshift(savedPrescription);
                         }
                     } else {
-                        console.log('[重命名跳过] 条件不满足 - oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo);
-                        collectAndUpdateMediaFiles(savedRecord, officialNo);
+                        // 如果云端没有返回保存的处方，使用本地记录
+                        const exists = prescriptionHistory.some(p => p.id === record.id);
+                        if (!exists) {
+                            prescriptionHistory.unshift(record);
+                        }
                     }
-                    // 即使编号没变，如果拍照时用的是 unknown 或与当前处方姓名不同，也要重命名为实际姓名
-                    if (oldPrescriptionNo && officialNo && oldPrescriptionNo === officialNo) {
-                        const lastUsedName = window.__lastUsedMediaPatientName || localStorage.getItem('lastUsedMediaPatientName') || '';
-                        if (lastUsedName && lastUsedName !== record.patientName) {
+
+                    if (prescriptionHistory.length > 100000) {
+                        prescriptionHistory = prescriptionHistory.slice(0, 100000);
+                    }
+
+                    // 更新界面上的编号显示为云端返回的下一个编号
+                    const nextNo = response.nextPrescriptionNo || '';
+                    if (nextNo) {
+                        if (c.prescriptionNo) c.prescriptionNo.value = nextNo;
+                        if (c.paperClinicNo) c.paperClinicNo.textContent = nextNo;
+                    }
+
+                    // 更新统计编号
+                    updateClinicNoDisplay();
+
+                    // 刷新历史处方栏
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
+
+                    // 清空姓名输入框，准备输入新处方
+                    // 临时移除onkeyup事件，避免触发searchPatientsQuick清空历史列表
+                    if (c.patientName) {
+                        c.patientName.removeAttribute('onkeyup');
+                        c.patientName.value = '';
+                        c.patientName.setAttribute('onkeyup', 'searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)');
+                    }
+                    // 隐藏姓名下拉框
+                    hidePatientNameDropdown();
+                    // 重新渲染历史列表（清空输入框会触发onkeyup事件清空历史，需要重新渲染）
+                    renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
+
+                    // 更新药物使用频率
+                    updateMedicineFrequency(record.items);
+
+                    // 保存成功提示（立即显示）
+                    showToast('处方保存成功！');
+
+                    // 延迟执行耗时操作，避免阻塞 Toast 动画
+                    setTimeout(() => {
+                        // 生成处方签图片并自动下载（使用云端返回的编号）
+                        savePrescriptionAsImage(savedRecord, officialNo);
+                        // 云端分配的编号可能与拍照时使用的编号不同，重命名已保存的处方文件
+                        if (oldPrescriptionNo && officialNo && oldPrescriptionNo !== officialNo) {
+                            console.log('[重命名检查] oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo, 'patientName:', record.patientName);
                             if (window.electronAPI && window.electronAPI.renameMediaFiles) {
-                                window.electronAPI.renameMediaFiles(lastUsedName, record.patientName, officialNo, officialNo)
+                                window.electronAPI.renameMediaFiles(record.patientName, record.patientName, oldPrescriptionNo, officialNo)
                                     .then(r => {
+                                        console.log('[重命名结果] success:', r.success, 'renamed:', r.renamed);
                                         if (r.success && r.renamed > 0) {
-                                            console.log('已绑定 ' + r.renamed + ' 个媒体文件到患者: ' + record.patientName);
+                                            console.log('已重命名 ' + r.renamed + ' 个处方文件: ' + oldPrescriptionNo + ' → ' + officialNo);
+                                        } else if (r.success && r.renamed === 0) {
+                                            console.warn('[重命名警告] 没有找到需要重命名的文件，请检查文件名格式');
                                         }
                                         collectAndUpdateMediaFiles(savedRecord, officialNo);
                                     })
                                     .catch(e => {
-                                        console.warn('绑定媒体文件失败:', e);
+                                        console.error('重命名处方文件失败:', e);
                                         collectAndUpdateMediaFiles(savedRecord, officialNo);
                                     });
                             } else {
+                                console.warn('[重命名警告] electronAPI.renameMediaFiles 不可用');
                                 collectAndUpdateMediaFiles(savedRecord, officialNo);
                             }
                         } else {
+                            console.log('[重命名跳过] 条件不满足 - oldPrescriptionNo:', oldPrescriptionNo, 'officialNo:', officialNo);
                             collectAndUpdateMediaFiles(savedRecord, officialNo);
                         }
-                    }
-                    // 保存后清空表单，方便下一次使用（跳过确认弹窗）
-                    clearPrescription(true);
-                }, 100);
-            } else {
-                alert('处方保存失败，请检查网络连接后重试。');
+                        // 即使编号没变，如果拍照时用的是 unknown 或与当前处方姓名不同，也要重命名为实际姓名
+                        if (oldPrescriptionNo && officialNo && oldPrescriptionNo === officialNo) {
+                            const lastUsedName = window.__lastUsedMediaPatientName || localStorage.getItem('lastUsedMediaPatientName') || '';
+                            if (lastUsedName && lastUsedName !== record.patientName) {
+                                if (window.electronAPI && window.electronAPI.renameMediaFiles) {
+                                    window.electronAPI.renameMediaFiles(lastUsedName, record.patientName, officialNo, officialNo)
+                                        .then(r => {
+                                            if (r.success && r.renamed > 0) {
+                                                console.log('已绑定 ' + r.renamed + ' 个媒体文件到患者: ' + record.patientName);
+                                            }
+                                            collectAndUpdateMediaFiles(savedRecord, officialNo);
+                                        })
+                                        .catch(e => {
+                                            console.warn('绑定媒体文件失败:', e);
+                                            collectAndUpdateMediaFiles(savedRecord, officialNo);
+                                        });
+                                } else {
+                                    collectAndUpdateMediaFiles(savedRecord, officialNo);
+                                }
+                            } else {
+                                collectAndUpdateMediaFiles(savedRecord, officialNo);
+                            }
+                        }
+                        // 保存后清空表单，方便下一次使用（跳过确认弹窗）
+                        clearPrescription(true);
+                    }, 100);
+                } else {
+                    alert('处方保存失败，请检查网络连接后重试。');
+                }
+            } finally {
+                // ★P2-4 防重复点击：无论成功失败，恢复按钮可点击状态
+                _savePrescriptionInProgress = false;
+                btnsToDisable.forEach(b => { try { b.disabled = false; b.style.opacity = ''; } catch(e) {} });
             }
         }
 
