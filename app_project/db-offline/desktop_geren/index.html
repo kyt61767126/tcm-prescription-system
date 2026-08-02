@@ -4741,6 +4741,7 @@ if (window.Permission) {
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
             // ★ 个人版：同步登入窗口的用户名显示（基础设置修改医师姓名后立即生效）
+            // 配合 main.js update-clinic-info IPC 回写 config.json，实现 login.html 和 index.html loginOverlay 双端同步
             if (typeof CONFIG !== 'undefined' && CONFIG.edition === 'personal') {
                 const loginUsernameInput = document.getElementById('loginUsername');
                 if (loginUsernameInput && newDoctorName) {

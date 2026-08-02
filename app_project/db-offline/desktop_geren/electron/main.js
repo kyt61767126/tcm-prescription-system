@@ -1377,6 +1377,17 @@ ipcMain.handle('get-current-user', async () => {
 });
 
 // 读取 index.html 同目录下的 config.json；如不存在，则使用内置默认值
+// ★ 修复 2026-08-02：打包后 asar 内 config.json 只读，update-clinic-info 写入失败导致医师姓名不同步
+// 修复方案：使用 licenseManager.getWritableDir() 返回可写路径（portable=exe同目录，NSIS=userData）
+//         与 license-manager.js verifyConfigIntegrity 读取路径保持一致
+function getConfigPath() {
+    try {
+        return path.join(licenseManager.getWritableDir(), 'config.json');
+    } catch (e) {
+        return path.join(app.getPath('userData'), 'config.json');
+    }
+}
+
 ipcMain.handle('get-app-config', async () => {
     const defaults = {
         clinicName: '本能堂中医诊所',
@@ -1385,9 +1396,16 @@ ipcMain.handle('get-app-config', async () => {
         productName: '惠康中医-LB'
     };
     try {
-        const configPath = path.join(__dirname, '..', 'config.json');
-        if (await fse.pathExists(configPath)) {
-            const cfg = await fse.readJson(configPath);
+        // ★ 优先读取可写路径的 config.json（update-clinic-info 写入的位置）
+        const writableConfigPath = getConfigPath();
+        if (await fse.pathExists(writableConfigPath)) {
+            const cfg = await fse.readJson(writableConfigPath);
+            return { success: true, config: { ...defaults, ...cfg } };
+        }
+        // 回退到 asar 内的 config.json（首次启动，尚未写入可写路径）
+        const asarConfigPath = path.join(__dirname, '..', 'config.json');
+        if (await fse.pathExists(asarConfigPath)) {
+            const cfg = await fse.readJson(asarConfigPath);
             return { success: true, config: { ...defaults, ...cfg } };
         }
     } catch (e) {
@@ -1397,23 +1415,37 @@ ipcMain.handle('get-app-config', async () => {
 });
 
 // ★ 基础设置修改诊所/医师姓名后回写 config.json（带 HMAC-SHA256 签名重算）
-// 根因：file:// 协议下 login.html 与 index.html 的 localStorage 不共享，
-// saveSettings 只存 localStorage 会导致登录窗口读不到最新医师姓名。
-// 修复：通过 IPC 回写 config.json，login.js 读 config.json 即可获取最新值。
-const CONFIG_SIGN_KEY = 'bnzc_config_sign_key_v1_2026';
+// 根因1：file:// 协议下 login.html 与 index.html 的 localStorage 不共享，
+//        saveSettings 只存 localStorage 会导致登录窗口读不到最新医师姓名。
+// 根因2：打包后 asar 内 config.json 只读，原 path.join(__dirname, '..', 'config.json') 写入失败！
+// 修复1：使用 getConfigPath() 返回可写路径（exe同目录或 userData），确保写入成功
+// 修复2：使用 licenseManager.getEffectiveConfigSignKey() 派生密钥，与 verifyConfigIntegrity 一致
+// 修复3：首次启动可写路径无 config.json 时，从 asar 内复制初始版本
 ipcMain.handle('update-clinic-info', async (event, { clinicName, doctorName }) => {
     try {
-        const configPath = path.join(__dirname, '..', 'config.json');
+        const configPath = getConfigPath();
+        // ★ 可写路径无 config.json 时，从 asar 内复制初始版本（保留 users 等字段）
+        if (!await fse.pathExists(configPath)) {
+            const asarConfigPath = path.join(__dirname, '..', 'config.json');
+            if (await fse.pathExists(asarConfigPath)) {
+                const initialCfg = await fse.readJson(asarConfigPath);
+                await fse.writeJson(configPath, initialCfg, { spaces: 2 });
+                console.log('[update-clinic-info] 从 asar 复制初始 config.json 到:', configPath);
+            }
+        }
         const cfg = await fse.readJson(configPath);
         if (clinicName !== undefined && clinicName !== null) cfg.clinicName = clinicName;
         if (doctorName !== undefined && doctorName !== null) cfg.doctorName = doctorName;
         cfg.configIssuedAt = new Date().toISOString();
         const signContent = [cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '', cfg.configIssuedAt].join('|');
-        const hmac = crypto.createHmac('sha256', CONFIG_SIGN_KEY);
+        // ★ 使用 licenseManager.getEffectiveConfigSignKey() 派生密钥（与 verifyConfigIntegrity 一致）
+        // 若 license 含 masterKey，用派生密钥；否则 fallback 到硬编码密钥（向后兼容）
+        const configSignKey = licenseManager.getEffectiveConfigSignKey();
+        const hmac = crypto.createHmac('sha256', configSignKey);
         hmac.update(signContent);
         cfg.configSignature = hmac.digest('hex');
         await fse.writeJson(configPath, cfg, { spaces: 2 });
-        console.log('[update-clinic-info] config.json 已更新, doctorName=' + cfg.doctorName);
+        console.log('[update-clinic-info] config.json 已更新, doctorName=' + cfg.doctorName + ', path=' + configPath);
         return { success: true };
     } catch (e) {
         console.error('[update-clinic-info] 更新 config.json 失败:', e);

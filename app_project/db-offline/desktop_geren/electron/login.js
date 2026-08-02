@@ -120,9 +120,9 @@
         loginUserInfo = getFirstUserFromStorage() || getFirstUserFromConfig(config) || DEFAULT_USERS[0];
 
         // ★用户名输入框显示中文医师姓名（config.doctorName），不显示 admin/管理员
-        // 优先从 localStorage 读取最新值（saveSettings 更新了 local_clinicDoctor）
-        const localDoctor = localStorage.getItem('local_clinicDoctor');
-        const doctorName = localDoctor || config.doctorName || (loginUserInfo && loginUserInfo.name && loginUserInfo.name !== '管理员' ? loginUserInfo.name : '本能堂');
+        // config.json 是权威源（saveSettings 已通过 update-clinic-info IPC 回写）
+        // 不读 localStorage：file:// 同 origin 下 login.html 会读到 index.html 存的旧值，覆盖 config.json
+        const doctorName = config.doctorName || (loginUserInfo && loginUserInfo.name && loginUserInfo.name !== '管理员' ? loginUserInfo.name : '本能堂');
         input.value = doctorName;
 
         localStorage.removeItem(KEY_REMEMBER_USER);
