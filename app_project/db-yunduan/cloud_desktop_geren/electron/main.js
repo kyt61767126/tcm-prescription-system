@@ -1659,6 +1659,7 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
             height: previewHeight,
             minWidth: 600,
             minHeight: 500,
+            autoHideMenuBar: true,
             modal: !!parentWin && !parentWin.isDestroyed(),
             parent: parentWin && !parentWin.isDestroyed() ? parentWin : undefined,
             title: `打印预览（${isLandscape ? '横向' : '纵向'} · A5）`,
@@ -1667,6 +1668,8 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                 nodeIntegration: false
             }
         });
+        // ★ 彻底移除菜单栏（autoHideMenuBar 按 Alt 仍会显示，setMenu(null) 永久移除）
+        printWin.setMenu(null);
 
         // ★ 工具栏覆盖层 + 灰色背景（模拟打印效果，处方纸张居中显示）
         const toolbarInject = `
