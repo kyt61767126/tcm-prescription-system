@@ -1736,6 +1736,8 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
             printWin.loadURL(dataUrl);
 
             // ★ dom-ready 后注入按钮事件监听器
+            // 打印按钮直接在渲染进程调用 window.print()（已验证可弹出系统打印对话框）
+            // 不再通过主进程轮询+webContents.print()（该方式在data URL下不工作）
             printWin.webContents.once('dom-ready', () => {
                 printWin.webContents.executeJavaScript(`
                     (function() {
@@ -1744,9 +1746,21 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                         if (printBtn) {
                             printBtn.addEventListener('click', function() {
                                 if (this.disabled) return;
-                                window.__printRequested = true;
                                 this.disabled = true;
                                 this.textContent = '打印中...';
+                                // window.print() 在 Electron 渲染进程中弹出系统打印对话框
+                                // 对话框关闭后继续执行
+                                try {
+                                    window.print();
+                                } catch(e) {
+                                    alert('打印失败: ' + e.message);
+                                }
+                                // 对话框关闭后恢复按钮
+                                var self = this;
+                                setTimeout(function() {
+                                    self.disabled = false;
+                                    self.textContent = '打印';
+                                }, 500);
                             });
                         }
                         if (cancelBtn) {
@@ -1758,29 +1772,16 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                 `).catch(e => console.error('[print] 注入按钮事件失败:', e));
             });
 
-            // ★ 轮询预览窗口的打印/取消请求
+            // ★ 轮询预览窗口的取消请求（仅处理取消，打印由渲染进程直接完成）
             pollTimer = setInterval(() => {
                 if (printWin.isDestroyed()) {
                     if (pollTimer) clearInterval(pollTimer);
                     return;
                 }
                 printWin.webContents.executeJavaScript(
-                    '(window.__printRequested || false) + "|" + (window.__cancelRequested || false)'
+                    'window.__cancelRequested || false'
                 ).then(result => {
-                    const parts = (result || '').split('|');
-                    if (parts[0] === 'true') {
-                        printWin.webContents.executeJavaScript('window.__printRequested = false');
-                        // 在预览窗口自身调用打印（弹系统打印对话框）
-                        printWin.webContents.print({ silent: false, printBackground: true }, () => {
-                            // 打印对话框关闭后恢复按钮
-                            if (!printWin.isDestroyed()) {
-                                printWin.webContents.executeJavaScript(
-                                    'var b=document.getElementById("__printBtn");if(b){b.disabled=false;b.textContent="打印";}'
-                                ).catch(() => {});
-                            }
-                        });
-                    }
-                    if (parts[1] === 'true') {
+                    if (result === 'true') {
                         safeResolve(false);
                     }
                 }).catch(() => {});
