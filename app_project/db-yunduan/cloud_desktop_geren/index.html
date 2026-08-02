@@ -120,7 +120,7 @@
         .price-item span { color: #8b0000; font-size: 13px; }
         .action-buttons { display: flex; gap: 5px; }
         .action-btn { padding: 4px 10px; background: #e0e0e0; border: 2px solid #808080; cursor: pointer; font-weight: bold; font-size: 11px; }
-        .action-btn:active { background: #d0d0d0; }
+        .action-btn:active { background: #d0d0d0; transform: scale(0.95); }
         .action-btn.primary { background: #008000; color: white; border-color: #006000; }
         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 2000; }
         .modal-content { background: #e0e0e0; border: 3px solid #808080; width: 80%; max-width: 900px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
@@ -974,15 +974,15 @@
                     <span class="patient-label">姓名</span>
                     <input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" onkeydown="handleEnterToNext(event, 'patientAge')" autocomplete="off">
                     <span class="patient-label">年龄</span>
-                    <input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" onkeydown="handleEnterToNext(event, 'patientPhone')">
+                    <input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" onkeydown="handleEnterToNext(event, 'patientPhone')" inputmode="numeric" pattern="[0-9]*">
                     <span class="patient-label">电话</span>
-                    <input type="text" id="patientPhone" class="patient-input small" onkeydown="handleEnterToNext(event, 'patientAddress')">
+                    <input type="text" id="patientPhone" class="patient-input small" onkeydown="handleEnterToNext(event, 'patientAddress')" inputmode="numeric" pattern="[0-9]*" autocomplete="off">
                 </div>
                 <div class="patient-row">
                     <span class="patient-label">统计</span>
                     <input type="text" id="clinicNo" class="patient-input xx-small" readonly>
                     <span class="patient-label">住址</span>
-                    <input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;" onkeydown="handleEnterToNext(event, 'medicine_0')">
+                    <input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;" onkeydown="handleEnterToNext(event, 'medicine_0')" autocomplete="off">
                 </div>
             </div>
             <div class="symptom-section">
@@ -1125,8 +1125,8 @@
     <!-- 移动端快捷操作栏 -->
     <div class="mobile-action-bar" id="mobileActionBar">
         <div class="action-buttons">
-            <button class="action-btn" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button>
-            <button class="action-btn" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button>
+            <button class="action-btn" id="videoRecordBtn" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')" disabled style="opacity:0.6;">🎥 录像</button>
+            <button class="action-btn" id="photoCaptureBtn2" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')" disabled style="opacity:0.6;">📷 拍照</button>
             <button class="action-btn" onclick="clearPrescription()">🗑️ 清空</button>
             <button class="action-btn primary" id="mobileActionBtn1" onclick="savePrescription()">💾 保存</button>
             <button class="action-btn" id="mobileActionBtn2" onclick="printPrescription('portrait')">🖨️ 打印</button>
@@ -3140,6 +3140,17 @@ if (window.Permission) {
                     }
                 }
             } catch(e) { console.warn('applyMobileNavByRole失败:', e); }
+        }
+
+        // ★P5-3 启用移动端录像/拍照按钮（由 video-recorder.js init 完成后调用）
+        // 初始 disabled 避免模块未加载时点击弹 alert，模块加载完成后启用
+        function enableMediaButtons() {
+            try {
+                const videoBtn = document.getElementById('videoRecordBtn');
+                const photoBtn = document.getElementById('photoCaptureBtn2');
+                if (videoBtn) { videoBtn.disabled = false; videoBtn.style.opacity = ''; }
+                if (photoBtn) { photoBtn.disabled = false; photoBtn.style.opacity = ''; }
+            } catch(e) { console.warn('enableMediaButtons失败:', e); }
         }
 
         function migrateOldData() {
