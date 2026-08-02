@@ -1643,28 +1643,84 @@ ipcMain.handle('show-message-box', async (event, options) => {
     }
 });
 
-// ★ 打印处方（解决 Electron iframe print() 不工作的问题）
+// ★ 打印处方（带预览界面，所见即所得）
+// 用户点击"纵向打印"/"横向打印"后，弹出预览窗口显示 A5 纸张实际打印效果
+// 用户确认后点击"打印"按钮，触发系统打印对话框（含页面设置）
+// 通信方案：渲染进程按钮 onclick="console.log('__PREVIEW_PRINT__')"，
+//           主进程监听 webContents.on('console-message') 接收通知，无需修改 preload
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
         const parentWin = BrowserWindow.fromWebContents(event.sender);
+        const isLandscape = orientation === 'landscape';
+        // ★ 预览窗口尺寸按打印方向调整，让用户所见即所得
+        // A5 纸张：纵向 148×210mm，横向 210×148mm（比例约 1:1.414）
+        const previewWidth = isLandscape ? 1024 : 760;
+        const previewHeight = isLandscape ? 760 : 1024;
         const printWin = new BrowserWindow({
             show: true,
-            width: 800,
-            height: 600,
+            width: previewWidth,
+            height: previewHeight,
+            minWidth: 600,
+            minHeight: 500,
             modal: !!parentWin && !parentWin.isDestroyed(),
             parent: parentWin && !parentWin.isDestroyed() ? parentWin : undefined,
+            title: `打印预览（${isLandscape ? '横向' : '纵向'} · A5）`,
             webPreferences: {
                 contextIsolation: true,
                 nodeIntegration: false
             }
         });
-        // ★ 用 base64 编码替代 encodeURIComponent，避免 URL 长度截断和特殊字符问题
-        const base64Html = Buffer.from(html, 'utf8').toString('base64');
+
+        // ★ 注入预览工具栏（顶部悬浮）
+        // 按钮通过 console.log 通知主进程（console-message 事件作为通信通道，无需修改 preload）
+        const toolbarInject = `
+            <style>
+                body { margin: 0; padding: 0; }
+                #__previewToolbar {
+                    position: fixed; top: 0; left: 0; right: 0;
+                    background: #2c3e50; color: #fff;
+                    padding: 10px 16px; z-index: 9999;
+                    display: flex; justify-content: space-between; align-items: center;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+                    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+                    box-sizing: border-box;
+                }
+                #__previewToolbar .title { font-size: 14px; font-weight: 600; }
+                #__previewToolbar .actions { display: flex; gap: 8px; }
+                #__previewToolbar button {
+                    padding: 6px 18px; border: none; border-radius: 4px;
+                    cursor: pointer; font-size: 13px; font-weight: 500;
+                    transition: background 0.2s; font-family: inherit;
+                }
+                #__printBtn { background: #27ae60; color: #fff; }
+                #__printBtn:hover { background: #229954; }
+                #__cancelBtn { background: #e74c3c; color: #fff; }
+                #__cancelBtn:hover { background: #c0392b; }
+                .prescription-paper { margin-top: 50px; }
+            </style>
+            <div id="__previewToolbar">
+                <span class="title">打印预览（${isLandscape ? '横向' : '纵向'} · A5） · 确认后点击"打印"</span>
+                <div class="actions">
+                    <button id="__cancelBtn" onclick="console.log('__PREVIEW_CANCEL__')">取消</button>
+                    <button id="__printBtn" onclick="console.log('__PREVIEW_PRINT__')">打印</button>
+                </div>
+            </div>
+        `;
+
+        // 将工具栏注入到 HTML 的 <body> 标签后
+        let enrichedHtml = html;
+        if (/<body[^>]*>/i.test(enrichedHtml)) {
+            enrichedHtml = enrichedHtml.replace(/<body[^>]*>/i, m => m + toolbarInject);
+        } else {
+            enrichedHtml = enrichedHtml.replace('</html>', toolbarInject + '</html>');
+        }
+
+        const base64Html = Buffer.from(enrichedHtml, 'utf8').toString('base64');
         const dataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
 
         return new Promise((resolve) => {
-            let printed = false;  // 防止重复打印
-            let settled = false;  // 防止重复 resolve
+            let printed = false;
+            let settled = false;
 
             const safeResolve = (val) => {
                 if (settled) return;
@@ -1673,29 +1729,34 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                 resolve(val);
             };
 
-            printWin.loadURL(dataUrl);
-
-            // ★ 监听 dom-ready（比 did-finish-load 更早更可靠）
-            printWin.webContents.once('dom-ready', () => {
-                // 给浏览器一点时间完成布局，否则可能打印空白页
-                setTimeout(() => {
+            // ★ 监听渲染进程的 console.log，作为按钮点击通知通道
+            // 兼容不同 Electron 版本的参数顺序：(event, level, message, line, sourceId)
+            printWin.webContents.on('console-message', (...args) => {
+                let msg = '';
+                for (const arg of args) {
+                    if (typeof arg === 'string' && arg.indexOf('__PREVIEW_') === 0) {
+                        msg = arg;
+                        break;
+                    }
+                    if (arg && typeof arg === 'object' && typeof arg.message === 'string') {
+                        if (arg.message.indexOf('__PREVIEW_') === 0) {
+                            msg = arg.message;
+                            break;
+                        }
+                    }
+                }
+                if (msg === '__PREVIEW_PRINT__') {
                     if (printed || printWin.isDestroyed()) return;
                     printed = true;
                     printWin.webContents.print({ silent: false, printBackground: true }, (success) => {
                         safeResolve(success);
                     });
-                }, 200);
+                } else if (msg === '__PREVIEW_CANCEL__') {
+                    safeResolve(false);
+                }
             });
 
-            // ★ 兜底：若 dom-ready 不触发，did-finish-load 作为备份
-            printWin.webContents.once('did-finish-load', () => {
-                if (printed || printWin.isDestroyed()) return;
-                console.warn('[print] dom-ready 未触发，由 did-finish-load 兜底打印');
-                printed = true;
-                printWin.webContents.print({ silent: false, printBackground: true }, (success) => {
-                    safeResolve(success);
-                });
-            });
+            printWin.loadURL(dataUrl);
 
             // ★ 错误处理：data URL 加载失败时立即返回
             printWin.webContents.once('did-fail-load', (_e, errorCode, errorDesc) => {
@@ -1703,13 +1764,16 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                 safeResolve(false);
             });
 
-            // 超时保护：30秒后自动关闭
+            // 窗口被用户直接关闭（点X）
+            printWin.on('closed', () => safeResolve(false));
+
+            // 超时保护：5分钟未操作自动关闭
             setTimeout(() => {
                 if (!settled) {
-                    console.error('[print] 30秒超时未触发打印，强制关闭');
+                    console.warn('[print] 5分钟超时未打印，自动关闭');
                     safeResolve(false);
                 }
-            }, 30000);
+            }, 5 * 60 * 1000);
         });
     } catch (e) {
         console.error('打印失败:', e);
