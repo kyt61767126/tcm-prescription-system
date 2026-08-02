@@ -1,6 +1,6 @@
 {
   "name": "tcm-prescription-cloud",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "惠康中医-云端",
   "main": "electron/main.js",
   "scripts": {
@@ -44,7 +44,10 @@
       "performance-utils.js",
       "prescription-core.js",
       "patient-archive.js",
-      "security-guard.js"
+      "security-guard.js",
+      "cloud-api.js",
+      "local-db.js",
+      "sync-engine.js"
     ],
     "win": {
       "target": [
