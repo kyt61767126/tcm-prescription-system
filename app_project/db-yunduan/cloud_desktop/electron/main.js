@@ -373,6 +373,31 @@ function createMainWindow() {
             await mainWindow.webContents.executeJavaScript(fixCode);
             console.log('[FIX] 原生同步 dialog 注入完成');
         } catch(e) { console.warn('[FIX] 原生同步 dialog 注入失败:', e.message); }
+
+        // ★ 修复药物简码候选框不显示：Electron 中文输入法(IME)组字时 keyup 事件被抑制，
+        //   导致 onkeyup→handleSearchKey→showSearchDropdown 从未触发，候选框不显示。
+        //   云端APP(Android WebView)的 keyup 正常，所以不受影响。
+        //   方案：注入 input 事件监听器（input 事件在 IME 组字结束后始终触发），
+        //         带 isComposing 检查避免组字中途误触发。不修改 index.html，符合界面保护规则。
+        try {
+            const searchFix = `(function() {
+                if (window.__searchFixInjected) return;
+                window.__searchFixInjected = true;
+                document.addEventListener('input', function(e) {
+                    var t = e.target;
+                    if (!t || !t.id) return;
+                    if ((t.id.indexOf('code-input-') === 0 || t.id.indexOf('name-input-') === 0) && !e.isComposing) {
+                        var col = t.id.indexOf('code-input-') === 0 ? 'code' : 'name';
+                        if (typeof showSearchDropdown === 'function') {
+                            showSearchDropdown(t, t.value, col);
+                        }
+                    }
+                }, true);
+                console.log('[FIX] 药物简码候选框 IME 兼容补丁已注入');
+            })();`;
+            await mainWindow.webContents.executeJavaScript(searchFix);
+            console.log('[FIX] 候选框 IME 兼容补丁注入完成');
+        } catch(e) { console.warn('[FIX] 候选框补丁注入失败:', e.message); }
     });
 
     mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
