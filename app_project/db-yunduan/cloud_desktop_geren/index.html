@@ -3117,6 +3117,29 @@ if (window.Permission) {
             if (prescriptionHistory.length > 0) {
                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
             }
+            // ★P3-4 移动端导航栏按角色动态显示（新规范 2026-07-31）
+            // 普通医生（role=doctor）隐藏"设置"导航项，仅管理员（clinic_admin/platform_admin）可见
+            applyMobileNavByRole();
+        }
+
+        // ★P3-4 移动端导航栏按角色动态显示
+        // 规范：管理员显示全部导航项；普通医生隐藏"设置"项（药品管理/系统设置等敏感操作）
+        function applyMobileNavByRole() {
+            try {
+                const settingsNav = document.querySelector('.mobile-nav-item[onclick*="settingsModal"]');
+                if (!settingsNav) return;
+                if (isAdmin()) {
+                    // 管理员：显示设置项
+                    settingsNav.style.display = '';
+                } else {
+                    // 普通医生：隐藏设置项
+                    settingsNav.style.display = 'none';
+                    // 如果当前正停留在设置 tab，切回处方 tab
+                    if (settingsNav.classList.contains('active')) {
+                        switchMobileTab('prescription');
+                    }
+                }
+            } catch(e) { console.warn('applyMobileNavByRole失败:', e); }
         }
 
         function migrateOldData() {
@@ -5996,16 +6019,25 @@ if (window.Permission) {
 
             if (filtered.length > 0) {
                 selectedSearchIndex = 0;
+                // ★P3-3 高亮匹配字符：在简码列搜索时，高亮 safeCode 中与 query 匹配的前缀
+                const highlightPrefix = (column === 'code') ? sanitizedQuery : '';
                 dropdown.innerHTML = filtered.map((m,i) => {
                     const safeName = (m.name || '').replace(/[<>\"\'&]/g, '');
                     const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
                     const safePrice = parseFloat(m.price) || 0;
                     const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
                     const priorityMark = m.priority_use ? '<span style="color:#e65100;font-weight:bold;" title="优先使用">★</span> ' : '';
+                    // ★P3-3 高亮：将简码中匹配 query 前缀的部分用绿色加粗显示
+                    let codeDisplay = safeCode;
+                    if (highlightPrefix && safeCode.toLowerCase().startsWith(highlightPrefix)) {
+                        const matchedPart = safeCode.substring(0, highlightPrefix.length);
+                        const restPart = safeCode.substring(highlightPrefix.length);
+                        codeDisplay = '<span style="color:#008000;font-weight:bold;">' + matchedPart + '</span>' + restPart;
+                    }
                     return `
                         <div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}" ${m.priority_use ? 'style="background:#fff8e1;"' : ''}
                             onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">
-                            ${priorityMark}${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}
+                            ${priorityMark}${safeName} [${codeDisplay}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}
                         </div>
                     `;
                 }).join('');
@@ -6335,8 +6367,9 @@ if (window.Permission) {
                     if (!p.patientName) return false;
                     const name = p.patientName.toLowerCase();
                     if (name.includes(input)) return true;
-                    const pinyinCode = getPinyinCode(p.patientName).toLowerCase();
-                    return pinyinCode.startsWith(input) || pinyinCode.includes(input);
+                    // ★P3-1 拼音预计算缓存：避免每次搜索都调用 getPinyinCode（400+项百家姓遍历）
+                    if (!p._pinyinCode) p._pinyinCode = getPinyinCode(p.patientName).toLowerCase();
+                    return p._pinyinCode.startsWith(input) || p._pinyinCode.includes(input);
                 });
                 renderHistoryList(matched);
                 // 显示姓名匹配下拉框
@@ -6814,7 +6847,14 @@ if (window.Permission) {
             renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, historyDisplayCount));
         }
 
-        function clearPrescription() {
+        function clearPrescription(skipConfirm) {
+            // ★P3-2 二次确认：检测表单有内容时弹窗确认，防止误点丢失数据（savePrescription 内部调用传 true 跳过）
+            if (!skipConfirm) {
+                const hasContent = (DOM_CACHE.patientName && DOM_CACHE.patientName.value.trim()) ||
+                                   (DOM_CACHE.diagnosis && DOM_CACHE.diagnosis.value.trim()) ||
+                                   prescriptionItems.some(item => item.name);
+                if (hasContent && !confirm('确定清空当前处方？未保存的数据将丢失')) return;
+            }
             // ★P2-3 优化：使用 DOM_CACHE 替换重复 getElementById（保留 safeSet/safeText 的容错）
             try { DOM_CACHE.init(); } catch(e) { console.warn('DOM_CACHE初始化失败:', e); }
             const c = DOM_CACHE;
