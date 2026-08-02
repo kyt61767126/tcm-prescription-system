@@ -314,6 +314,21 @@ function createMainWindow() {
     // ★ P1-A6：DevTools 反调试（仅打包环境生效）
     installDevToolsGuard(mainWindow.webContents);
 
+    // ★ P4-D 打印快捷键：Ctrl+P 纵向打印 / Ctrl+Shift+P 横向打印
+    // 拦截浏览器默认打印对话框，改用应用自定义的 printPrescription
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (!input || !event) return;
+        const key = (input.key || '').toLowerCase();
+        const ctrl = input.control || input.meta;
+        if (ctrl && key === 'p') {
+            event.preventDefault();
+            const orientation = input.shift ? 'landscape' : 'portrait';
+            mainWindow.webContents.executeJavaScript(
+                `if (typeof printPrescription === 'function') printPrescription('${orientation}');`
+            ).catch(() => {});
+        }
+    });
+
     mainWindow.webContents.on('dom-ready', async () => {
         // ★修复登录界面闪现（2026-07-19）：
         // 原因：index.html 中 loginOverlay 默认 style="display:flex;visibility:visible;"
