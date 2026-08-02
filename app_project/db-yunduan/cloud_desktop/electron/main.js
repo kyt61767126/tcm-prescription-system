@@ -1646,8 +1646,9 @@ ipcMain.handle('show-message-box', async (event, options) => {
 // ★ 打印处方（带预览界面，所见即所得）
 // 用户点击"纵向打印"/"横向打印"后，弹出预览窗口显示 A5 纸张实际打印效果
 // 用户确认后点击"打印"按钮，触发系统打印对话框（含页面设置）
-// 通信方案：渲染进程按钮 onclick="console.log('__PREVIEW_PRINT__')"，
-//           主进程监听 webContents.on('console-message') 接收通知，无需修改 preload
+// 通信方案：dom-ready 后用 executeJavaScript 注入事件监听器，
+//           按钮点击调用 window.print()（Electron 渲染进程原生 API，触发系统打印对话框）
+//           主进程监听 'closed' 事件获知窗口关闭
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
         const parentWin = BrowserWindow.fromWebContents(event.sender);
@@ -1672,7 +1673,7 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
         });
 
         // ★ 注入预览工具栏（顶部悬浮）
-        // 按钮通过 console.log 通知主进程（console-message 事件作为通信通道，无需修改 preload）
+        // 按钮不写内联 onclick（避免 CSP 限制），改用 dom-ready 后 executeJavaScript 注入监听器
         const toolbarInject = `
             <style>
                 body { margin: 0; padding: 0; }
@@ -1701,8 +1702,8 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
             <div id="__previewToolbar">
                 <span class="title">打印预览（${isLandscape ? '横向' : '纵向'} · A5） · 确认后点击"打印"</span>
                 <div class="actions">
-                    <button id="__cancelBtn" onclick="console.log('__PREVIEW_CANCEL__')">取消</button>
-                    <button id="__printBtn" onclick="console.log('__PREVIEW_PRINT__')">打印</button>
+                    <button id="__cancelBtn" type="button">取消</button>
+                    <button id="__printBtn" type="button">打印</button>
                 </div>
             </div>
         `;
@@ -1719,7 +1720,6 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
         const dataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
 
         return new Promise((resolve) => {
-            let printed = false;
             let settled = false;
 
             const safeResolve = (val) => {
@@ -1729,34 +1729,37 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                 resolve(val);
             };
 
-            // ★ 监听渲染进程的 console.log，作为按钮点击通知通道
-            // 兼容不同 Electron 版本的参数顺序：(event, level, message, line, sourceId)
-            printWin.webContents.on('console-message', (...args) => {
-                let msg = '';
-                for (const arg of args) {
-                    if (typeof arg === 'string' && arg.indexOf('__PREVIEW_') === 0) {
-                        msg = arg;
-                        break;
-                    }
-                    if (arg && typeof arg === 'object' && typeof arg.message === 'string') {
-                        if (arg.message.indexOf('__PREVIEW_') === 0) {
-                            msg = arg.message;
-                            break;
-                        }
-                    }
-                }
-                if (msg === '__PREVIEW_PRINT__') {
-                    if (printed || printWin.isDestroyed()) return;
-                    printed = true;
-                    printWin.webContents.print({ silent: false, printBackground: true }, (success) => {
-                        safeResolve(success);
-                    });
-                } else if (msg === '__PREVIEW_CANCEL__') {
-                    safeResolve(false);
-                }
-            });
-
             printWin.loadURL(dataUrl);
+
+            // ★ dom-ready 后用 executeJavaScript 注入按钮事件监听器
+            // window.print() 是浏览器原生 API，在 Electron 渲染进程中会触发系统打印对话框
+            // 打印对话框关闭后（无论打印还是取消），1.5秒后自动关闭预览窗口
+            printWin.webContents.once('dom-ready', () => {
+                printWin.webContents.executeJavaScript(`
+                    (function() {
+                        var printBtn = document.getElementById('__printBtn');
+                        var cancelBtn = document.getElementById('__cancelBtn');
+                        if (printBtn) {
+                            printBtn.addEventListener('click', function() {
+                                try {
+                                    window.print();
+                                    // 打印对话框关闭后延时自动关闭预览窗口
+                                    setTimeout(function() { window.close(); }, 1500);
+                                } catch(e) {
+                                    alert('打印失败: ' + e.message);
+                                }
+                            });
+                        }
+                        if (cancelBtn) {
+                            cancelBtn.addEventListener('click', function() {
+                                window.close();
+                            });
+                        }
+                    })();
+                `).catch((e) => {
+                    console.error('[print] 注入按钮事件失败:', e);
+                });
+            });
 
             // ★ 错误处理：data URL 加载失败时立即返回
             printWin.webContents.once('did-fail-load', (_e, errorCode, errorDesc) => {
@@ -1764,8 +1767,8 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                 safeResolve(false);
             });
 
-            // 窗口被用户直接关闭（点X）
-            printWin.on('closed', () => safeResolve(false));
+            // 窗口被用户直接关闭（点X 或 取消按钮 或 打印后自动关闭）
+            printWin.on('closed', () => safeResolve(true));
 
             // 超时保护：5分钟未操作自动关闭
             setTimeout(() => {
