@@ -67,7 +67,7 @@ echo.
 echo [2/7] Closing remaining processes...
 REM P0-Optimization: precisely match project-related processes to avoid killing other Electron apps (e.g. VSCode, Slack)
 taskkill /F /IM "app-personal.exe" >nul 2>&1
-taskkill /F /IM "惠康中医-离线标准版.exe" >nul 2>&1
+taskkill /F /IM "惠康中医-LB.exe" >nul 2>&1
 REM P0-Optimization: replace deprecated wmic (deprecated in Windows 11) with PowerShell Get-Process (precise path-based match)
 powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-offline\desktop_geren\dist*' -or $_.Path -like '*db-offline\desktop_geren\build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 echo [OK] Processes cleaned

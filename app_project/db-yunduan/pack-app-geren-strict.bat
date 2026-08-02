@@ -6,7 +6,7 @@ cd /d "%~dp0"
 REM pack-app-geren-strict.bat - Cloud Personal Edition Strict Mode APP Build
 REM Flow: Step A (build APK) -> Step B (extract signature hash) -> Step C (rebuild strict)
 REM Package: com.tcm.prescription (db-yunduan/cloud_app_geren project)
-REM Output:  惠康中医-云端个人版.apk
+REM Output:  惠康中医-YB.apk
 
 set "GEN_HASH_PS1=%~dp0..\..\tools\generate-sign-hash.ps1"
 set "PACK_APP_BAT=%~dp0pack-app-geren.bat"
@@ -141,7 +141,7 @@ echo.
 if %EXIT_CODE% neq 0 (
     powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Red; Write-Host '  [ERROR] Cloud Personal Strict APP build failed!' -ForegroundColor Red; Write-Host '  Exit code: %EXIT_CODE%' -ForegroundColor Red; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Red; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Red; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Red; Write-Host '========================================' -ForegroundColor Red"
 ) else (
-    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] Cloud Personal Strict APP build complete!' -ForegroundColor Yellow; Write-Host '  APK: 惠康中医-云端个人版.apk' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
+    powershell -NoProfile -Command "Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] Cloud Personal Strict APP build complete!' -ForegroundColor Yellow; Write-Host '  APK: 惠康中医-YB.apk' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
 )
 echo.
 if not defined NO_PAUSE (

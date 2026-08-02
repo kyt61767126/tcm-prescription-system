@@ -17,7 +17,7 @@ for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy
 set "APP_DIR=%~dp0cloud_app_geren"
 set "GRADLEW=%APP_DIR%\gradlew.bat"
 set "APK_SRC=%APP_DIR%\app\build\outputs\apk\release\app-release.apk"
-set "APK_DST=%~dp0惠康中医-云端个人版.apk"
+set "APK_DST=%~dp0惠康中医-YB.apk"
 
 echo ============================================
 echo   Huikang-TCM Cloud Personal - APP Build

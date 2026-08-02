@@ -4247,6 +4247,7 @@ if (window.Permission) {
         }
 
         let medicines = [];
+        let defaultMedicines = [];
 
 
         // 药库版本检查 - v2.0
@@ -4756,7 +4757,7 @@ if (window.Permission) {
                 console.log('currentUser 为空，不渲染历史列表');
             }
             
-            const defaultMedicines = [
+            defaultMedicines = [
                 {name:'阿胶',code:'AJ',price:3.3,unit:'g',dosage:9},
                 {name:'矮地茶',code:'ADZ',price:0.048,unit:'g',dosage:15},
                 {name:'艾叶',code:'AY',price:0.018,unit:'g',dosage:10},
@@ -5848,34 +5849,58 @@ if (window.Permission) {
         }
 
         function showSearchDropdown(element, query, column) {
+            // 立即设置位置（与离线版一致，避免debounce延迟导致位置变化）
+            const dropdown = DOM_CACHE.medicineSearchDropdown;
+            if (!dropdown) return;
+            if (hideSearchTimer) { clearTimeout(hideSearchTimer); hideSearchTimer = null; }
+            const rect = element.getBoundingClientRect();
+            dropdown.style.left = rect.left + 'px';
+            dropdown.style.top = (rect.bottom + 2) + 'px';
+            dropdown.style.width = (rect.width) + 'px';
+
             if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
             searchDebounceTimer = setTimeout(() => {
-                if (hideSearchTimer) { clearTimeout(hideSearchTimer); hideSearchTimer = null; }
-                const dropdown = DOM_CACHE.medicineSearchDropdown;
-                const rect = element.getBoundingClientRect();
-                dropdown.style.left = rect.left + 'px';
-                dropdown.style.top = (rect.bottom + 2) + 'px';
-                dropdown.style.width = (rect.width) + 'px';
-
                 if (!query.trim()) {
                     dropdown.style.display = 'none';
                     return;
                 }
-                
+
+                // 兜底：如果 medicines 为空，尝试从 localStorage 加载
+                if (medicines.length === 0) {
+                    try {
+                        const saved = localStorage.getItem('cloud_medicines');
+                        if (saved) {
+                            const parsed = JSON.parse(saved);
+                            if (Array.isArray(parsed) && parsed.length > 0) {
+                                medicines = parsed;
+                                buildMedicineMap();
+                            }
+                        }
+                    } catch (e) {}
+                }
+
                 let filtered = [];
                 const sanitizedQuery = query.replace(/[<>\"\'&]/g, '').toLowerCase();
                 const maxResults = 50;
+                const existingNames = new Set(prescriptionItems.map(item => item.name));
 
                 if (column === 'code') {
                     if (medicineCodeIndex.size > 0) {
                         for (const [code, meds] of medicineCodeIndex) {
                             if (code.startsWith(sanitizedQuery)) {
-                                filtered.push(...meds);
+                                for (const m of meds) {
+                                    if (!existingNames.has(m.name)) {
+                                        filtered.push(m);
+                                        if (filtered.length >= maxResults) break;
+                                    }
+                                }
                                 if (filtered.length >= maxResults) break;
                             }
                         }
                     } else {
-                        for (const m of medicines) {
+                        const meds = medicines.length > 0 ? medicines : defaultMedicines;
+                        for (const m of meds) {
+                            if (!m || existingNames.has(m.name)) continue;
                             if (m.code && m.code.toLowerCase().startsWith(sanitizedQuery)) {
                                 filtered.push(m);
                                 if (filtered.length >= maxResults) break;
@@ -5883,16 +5908,15 @@ if (window.Permission) {
                         }
                     }
                 } else {
-                    for (const m of medicines) {
+                    const meds = medicines.length > 0 ? medicines : defaultMedicines;
+                    for (const m of meds) {
+                        if (!m || existingNames.has(m.name)) continue;
                         if (m.name && m.name.includes(sanitizedQuery)) {
                             filtered.push(m);
                             if (filtered.length >= maxResults) break;
                         }
                     }
                 }
-                
-                const existingNames = new Set(prescriptionItems.map(item => item.name));
-                filtered = filtered.filter(m => !existingNames.has(m.name));
 
                 filtered.sort((a, b) => {
                     const aPriority = a.priority_use ? 1 : 0;
