@@ -1643,14 +1643,9 @@ ipcMain.handle('show-message-box', async (event, options) => {
     }
 });
 
-// ★ 打印处方（带 PDF 预览，所见即所得）
-// 流程：
-//   1. 预览窗口加载工具栏 + "正在生成预览..."提示
-//   2. 隐藏窗口加载处方 HTML，调用 printToPDF 生成 PDF
-//   3. PDF 写入临时文件，预览窗口的 iframe 用 file:// URL 加载 PDF
-//   4. 用户看到真正的 PDF 打印预览（带缩放、翻页）
-//   5. 点击"打印"按钮 → 主进程轮询检测到请求 → 在隐藏窗口上调用 webContents.print()
-// 通信方案：轮询 window.__printRequested（不依赖 CSP/IPC/preload，兼容 data URL 环境）
+// ★ 打印处方（带预览界面，所见即所得）
+// 方案：预览窗口直接加载处方 HTML + 工具栏覆盖层（无 iframe/PDF，避免 CSP 限制）
+// 通信：轮询 window.__printRequested（已验证可靠，不依赖 CSP/IPC/preload）
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
         const parentWin = BrowserWindow.fromWebContents(event.sender);
@@ -1658,7 +1653,6 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
         const previewWidth = isLandscape ? 1024 : 760;
         const previewHeight = isLandscape ? 760 : 1024;
 
-        // 预览窗口（显示工具栏 + PDF iframe）
         const printWin = new BrowserWindow({
             show: true,
             width: previewWidth,
@@ -1674,93 +1668,71 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
             }
         });
 
-        // 隐藏窗口（用于生成 PDF 和实际打印）
-        const pdfGenWin = new BrowserWindow({
-            show: false,
-            webPreferences: {
-                contextIsolation: true,
-                nodeIntegration: false
-            }
-        });
+        // ★ 工具栏覆盖层 + 灰色背景（模拟打印效果，处方纸张居中显示）
+        const toolbarInject = `
+            <style>
+                body { background: #525659 !important; }
+                .prescription-paper {
+                    margin: 60px auto 20px auto !important;
+                    background: #fff !important;
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
+                }
+                #__previewToolbar {
+                    position: fixed; top: 0; left: 0; right: 0; height: 50px;
+                    background: #2c3e50; color: #fff;
+                    padding: 0 16px; z-index: 9999;
+                    display: flex; justify-content: space-between; align-items: center;
+                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+                    box-sizing: border-box;
+                }
+                #__previewToolbar .title { font-size: 14px; font-weight: 600; }
+                #__previewToolbar .actions { display: flex; gap: 8px; }
+                #__previewToolbar button {
+                    padding: 6px 18px; border: none; border-radius: 4px;
+                    cursor: pointer; font-size: 13px; font-weight: 500;
+                    transition: background 0.2s; font-family: inherit;
+                }
+                #__printBtn { background: #27ae60; color: #fff; }
+                #__printBtn:hover { background: #229954; }
+                #__printBtn:disabled { background: #95a5a6; cursor: not-allowed; }
+                #__cancelBtn { background: #e74c3c; color: #fff; }
+                #__cancelBtn:hover { background: #c0392b; }
+            </style>
+            <div id="__previewToolbar">
+                <span class="title">打印预览（${isLandscape ? '横向' : '纵向'} · A5） · 确认后点击"打印"</span>
+                <div class="actions">
+                    <button id="__cancelBtn" type="button">取消</button>
+                    <button id="__printBtn" type="button">打印</button>
+                </div>
+            </div>
+        `;
 
-        // 预览页面 HTML（工具栏 + 加载提示 + PDF iframe 占位）
-        const previewHtml = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>打印预览</title>
-<style>
-  body { margin: 0; padding: 0; background: #525659; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; }
-  #__previewToolbar {
-    position: fixed; top: 0; left: 0; right: 0; height: 50px;
-    background: #2c3e50; color: #fff;
-    padding: 0 16px; z-index: 9999;
-    display: flex; justify-content: space-between; align-items: center;
-    box-sizing: border-box;
-  }
-  #__previewToolbar .title { font-size: 14px; font-weight: 600; }
-  #__previewToolbar .actions { display: flex; gap: 8px; }
-  #__previewToolbar button {
-    padding: 6px 18px; border: none; border-radius: 4px;
-    cursor: pointer; font-size: 13px; font-weight: 500;
-    transition: background 0.2s; font-family: inherit;
-  }
-  #__printBtn { background: #27ae60; color: #fff; }
-  #__printBtn:hover { background: #229954; }
-  #__printBtn:disabled { background: #95a5a6; cursor: not-allowed; }
-  #__cancelBtn { background: #e74c3c; color: #fff; }
-  #__cancelBtn:hover { background: #c0392b; }
-  #loadingHint {
-    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-    color: #fff; font-size: 16px;
-  }
-  #__pdfFrame {
-    position: fixed; top: 50px; left: 0; width: 100%; height: calc(100% - 50px);
-    border: 0; background: #525659;
-  }
-</style>
-</head>
-<body>
-<div id="__previewToolbar">
-  <span class="title">打印预览（${isLandscape ? '横向' : '纵向'} · A5） · 确认后点击"打印"</span>
-  <div class="actions">
-    <button id="__cancelBtn" type="button">取消</button>
-    <button id="__printBtn" type="button" disabled>打印</button>
-  </div>
-</div>
-<div id="loadingHint">正在生成预览，请稍候...</div>
-<iframe id="__pdfFrame" style="display:none;"></iframe>
-</body>
-</html>`;
+        // 将工具栏注入到 HTML 的 <body> 标签后
+        let enrichedHtml = html;
+        if (/<body[^>]*>/i.test(enrichedHtml)) {
+            enrichedHtml = enrichedHtml.replace(/<body[^>]*>/i, m => m + toolbarInject);
+        } else {
+            enrichedHtml = enrichedHtml.replace('</html>', toolbarInject + '</html>');
+        }
 
-        const base64PreviewHtml = Buffer.from(previewHtml, 'utf8').toString('base64');
-        const previewDataUrl = 'data:text/html;charset=utf-8;base64,' + base64PreviewHtml;
-
-        // 处方 HTML（用于生成 PDF）
-        const base64Html = Buffer.from(html, 'utf8').toString('base64');
-        const pdfDataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
+        const base64Html = Buffer.from(enrichedHtml, 'utf8').toString('base64');
+        const dataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
 
         return new Promise((resolve) => {
             let settled = false;
-            let pdfPath = null;
             let pollTimer = null;
 
             const safeResolve = (val) => {
                 if (settled) return;
                 settled = true;
                 if (pollTimer) clearInterval(pollTimer);
-                if (pdfPath) {
-                    fs.unlink(pdfPath).catch(() => {});
-                }
-                if (!pdfGenWin.isDestroyed()) pdfGenWin.close();
                 if (!printWin.isDestroyed()) printWin.close();
                 resolve(val);
             };
 
-            // 加载预览页面
-            printWin.loadURL(previewDataUrl);
+            printWin.loadURL(dataUrl);
 
-            // dom-ready 后注入按钮事件
+            // ★ dom-ready 后注入按钮事件监听器
             printWin.webContents.once('dom-ready', () => {
                 printWin.webContents.executeJavaScript(`
                     (function() {
@@ -1783,7 +1755,7 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                 `).catch(e => console.error('[print] 注入按钮事件失败:', e));
             });
 
-            // 轮询预览窗口的打印/取消请求（不依赖 CSP/IPC/preload）
+            // ★ 轮询预览窗口的打印/取消请求
             pollTimer = setInterval(() => {
                 if (printWin.isDestroyed()) {
                     if (pollTimer) clearInterval(pollTimer);
@@ -1795,73 +1767,21 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                     const parts = (result || '').split('|');
                     if (parts[0] === 'true') {
                         printWin.webContents.executeJavaScript('window.__printRequested = false');
-                        // 在 pdfGenWin 上调用打印（隐藏窗口，不影响预览）
-                        if (!pdfGenWin.isDestroyed()) {
-                            pdfGenWin.webContents.print({ silent: false, printBackground: true }, () => {
-                                // 打印完成，恢复按钮状态
-                                if (!printWin.isDestroyed()) {
-                                    printWin.webContents.executeJavaScript(
-                                        'var b=document.getElementById("__printBtn");if(b){b.disabled=false;b.textContent="打印";}'
-                                    ).catch(() => {});
-                                }
-                            });
-                        }
+                        // 在预览窗口自身调用打印（弹系统打印对话框）
+                        printWin.webContents.print({ silent: false, printBackground: true }, () => {
+                            // 打印对话框关闭后恢复按钮
+                            if (!printWin.isDestroyed()) {
+                                printWin.webContents.executeJavaScript(
+                                    'var b=document.getElementById("__printBtn");if(b){b.disabled=false;b.textContent="打印";}'
+                                ).catch(() => {});
+                            }
+                        });
                     }
                     if (parts[1] === 'true') {
                         safeResolve(false);
                     }
                 }).catch(() => {});
             }, 300);
-
-            // 在隐藏窗口中加载处方 HTML 并生成 PDF
-            // ★ 使用 did-finish-load（比 dom-ready 晚，确保所有资源加载完成）
-            //   并增加 800ms 延迟 + 强制布局刷新，避免 printToPDF 生成空白 PDF
-            pdfGenWin.loadURL(pdfDataUrl);
-            pdfGenWin.webContents.once('did-finish-load', () => {
-                setTimeout(() => {
-                    // ★ 强制布局刷新：读取 offsetHeight 触发 reflow，确保 CSS 完全应用
-                    pdfGenWin.webContents.executeJavaScript(
-                        'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
-                    ).then(() => {
-                        // 字体加载完成后再等 200ms
-                        return new Promise(r => setTimeout(r, 200));
-                    }).then(() => {
-                        return pdfGenWin.webContents.printToPDF({
-                            landscape: isLandscape,
-                            pageSize: 'A5',
-                            printBackground: true,
-                            margins: { marginType: 'custom', top: 0, bottom: 0, left: 0, right: 0 }
-                        });
-                    }).then(data => {
-                        if (!data || data.length < 100) {
-                            throw new Error('PDF 数据为空或过小（' + (data ? data.length : 0) + ' 字节）');
-                        }
-                        pdfPath = path.join(app.getPath('temp'), `print-preview-${Date.now()}.pdf`);
-                        return fs.writeFile(pdfPath, data);
-                    }).then(() => {
-                        const fileUrl = 'file:///' + pdfPath.replace(/\\/g, '/');
-                        return printWin.webContents.executeJavaScript(`
-                            var loadingHint = document.getElementById('loadingHint');
-                            if (loadingHint) loadingHint.style.display = 'none';
-                            var pdfFrame = document.getElementById('__pdfFrame');
-                            if (pdfFrame) {
-                                pdfFrame.src = '${fileUrl}';
-                                pdfFrame.style.display = 'block';
-                            }
-                            var printBtn = document.getElementById('__printBtn');
-                            if (printBtn) printBtn.disabled = false;
-                        `);
-                    }).catch(e => {
-                        console.error('[print] 生成 PDF 失败:', e);
-                        // 回退提示
-                        if (!printWin.isDestroyed()) {
-                            printWin.webContents.executeJavaScript(
-                                'var l=document.getElementById("loadingHint");if(l)l.textContent="预览生成失败，请直接点击打印按钮";var p=document.getElementById("__printBtn");if(p)p.disabled=false;'
-                            ).catch(() => {});
-                        }
-                    });
-                }, 800);
-            });
 
             // 错误处理
             printWin.webContents.once('did-fail-load', (_e, errorCode, errorDesc) => {
