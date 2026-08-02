@@ -186,20 +186,8 @@
                 rememberPwdContainer.style.display = this.hasRememberPassword() ? 'flex' : 'none';
             }
 
-            // 个人定制版：自动填充单一账号（显示医师姓名，不显示 username）
-            if (edition === 'personal') {
-                const usernameInput = document.getElementById('loginUsername');
-                if (usernameInput && this._config) {
-                    // ★个人版：显示医师姓名（doctorName），不显示 username（"admin"）
-                    const displayName = this._config.doctorName
-                        || (this._config.users && this._config.users.length > 0 && this._config.users[0].name
-                            ? this._config.users[0].name
-                            : '医师');
-                    usernameInput.value = displayName;
-                    usernameInput.readOnly = true;
-                    usernameInput.style.backgroundColor = '#f0f0f0';
-                }
-            }
+            // 云端标准版（personal）：用户名由平台管理员注册产生，首次登入手动输入，不自动填充
+            // 旧逻辑（自动填充 doctorName 并设只读）已删除，因为云端单用户用户名 ≠ 医师姓名
         }
     };
 
