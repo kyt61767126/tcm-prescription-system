@@ -937,12 +937,12 @@
         <div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div>
         <div class="tab-item" onclick="showModal('analyticsModal')">【数据统计】</div>
         <div class="tab-item" id="userManageBtn" onclick="showUserManageModal()">【用户管理】</div>
-        <div class="tab-item" id="changePwdBtn" onclick="showModal('changePwdModal')" style="display:none;">【修改密码】</div>
+        <div class="tab-item" id="changePwdBtn" onclick="showChangePwdModal()" style="display:none;">【修改密码】</div>
         <div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div>
         <div class="tab-item" id="platformManageBtn" onclick="showPlatformManageModal()" style="display:none;background:#fff3cd;color:#856404;border-color:#ffc107;">【平台管理】</div>
         <div class="tab-item" id="platformRxBtn" onclick="showPlatformPrescriptionModal()" style="display:none;background:#e3f2fd;color:#1565c0;border-color:#42a5f5;">【处方监管】</div>
         <div class="tab-item" onclick="showHelp()">【系统帮助】</div>
-        <div class="tab-item" style="background:#ffdddd;color:#8b0000;" id="logoutBtn">【退出登录】</div>
+        <div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div>
         <div class="tab-hint">
             当前用户: <span style="color:#008000;font-weight:bold;" id="userDisplayName"></span><span id="modeStatusWrapper"> | <span style="font-weight:bold;" id="modeStatus">【在线】</span></span>
         </div>
@@ -1097,7 +1097,7 @@
         <div class="mobile-nav-items">
             <div class="mobile-nav-item active" onclick="switchMobileTab('prescription')">
                 <span class="mobile-nav-icon">📝</span>
-                <span>处方</span>
+                <span>门诊</span>
             </div>
             <div class="mobile-nav-item" onclick="switchMobileTab('history')">
                 <span class="mobile-nav-icon">📋</span>
@@ -1115,7 +1115,7 @@
                 <span class="mobile-nav-icon">⚙️</span>
                 <span>设置</span>
             </div>
-            <div class="mobile-nav-item" id="mobileLogoutBtn" style="color:var(--danger-color);">
+            <div class="mobile-nav-item" onclick="handleLogout()" style="color:var(--danger-color);">
                 <span class="mobile-nav-icon">🚪</span>
                 <span>退出</span>
             </div>
@@ -1125,11 +1125,11 @@
     <!-- 移动端快捷操作栏 -->
     <div class="mobile-action-bar" id="mobileActionBar">
         <div class="action-buttons">
-            <button class="action-btn" id="videoRecordBtn" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')" disabled style="opacity:0.6;">🎥 录像</button>
-            <button class="action-btn" id="photoCaptureBtn2" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')" disabled style="opacity:0.6;">📷 拍照</button>
-            <button class="action-btn" onclick="clearPrescription()">🗑️ 清空</button>
-            <button class="action-btn primary" id="mobileActionBtn1" onclick="savePrescription()">💾 保存</button>
-            <button class="action-btn" id="mobileActionBtn2" onclick="printPrescription('portrait')">🖨️ 打印</button>
+            <button class="action-btn" style="flex:1;" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button>
+            <button class="action-btn" style="flex:1;" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button>
+            <button class="action-btn primary" style="flex:1;" onclick="savePrescription()">💾 保存</button>
+            <button class="action-btn" style="flex:1;" onclick="clearPrescription()">🗑️ 清空</button>
+            <button class="action-btn" style="flex:1;" id="mobileActionBtn2" onclick="showChangePwdModal()">🔐 改密</button>
         </div>
     </div>
 
@@ -4246,33 +4246,20 @@ if (window.Permission) {
 
         // 根据用户角色更新手机端底部按钮
         function updateMobileActionButtons() {
-            const btn1 = document.getElementById('mobileActionBtn1');
             const btn2 = document.getElementById('mobileActionBtn2');
+            if (!btn2 || !currentUser) return;
 
-            if (!btn1 || !btn2) return;
+            const isApp = !!window.AndroidNative || !!window.Capacitor;
+            const changePwdText = isApp ? '🔐 改密' : '🔐 修改密码';
 
-            // APP 端（Capacitor）：保持底部按钮为"保存/打印"（HTML 默认），其他功能（数据统计/用户管理/改密/处方监管/平台管理）通过顶部菜单访问
-            // 原设计：登录后覆盖 btn1/btn2 为"数据统计/用户管理/改密"等，导致打印按钮失效
-            // 修复：APP 端不再覆盖 btn1/btn2，保留 HTML 默认的 onclick=savePrescription() / printPrescription()
-            if (window.Capacitor) {
-                btn1.style.display = '';
-                btn2.style.display = '';
-                return;
-            }
-
-            if (currentUser && isClinicAdmin(currentUser)) {
-                // 网页端管理员：统计分析、账户管理
-                btn1.innerHTML = '📊 数据统计';
-                btn1.onclick = function() { showModal('analyticsModal'); };
+            // 管理员显示"用户"，普通用户显示"改密"（APP和桌面一致）
+            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+            if (canManage) {
                 btn2.innerHTML = '👤 用户';
                 btn2.onclick = function() { showUserManageModal(); };
-                btn2.style.display = '';
             } else {
-                btn1.innerHTML = '📊 数据统计';
-                btn1.onclick = function() { showModal('analyticsModal'); };
-                btn2.innerHTML = '🔐 修改密码';
-                btn2.onclick = function() { showModal('changePwdModal'); };
-                btn2.style.display = '';
+                btn2.innerHTML = changePwdText;
+                btn2.onclick = function() { showChangePwdModal(); };
             }
         }
 
@@ -10143,18 +10130,6 @@ IconFile=${scriptPath}`;
 
     document.addEventListener('DOMContentLoaded', () => {
         init();
-
-        // 绑定退出按钮点击事件
-        const logoutBtn = document.getElementById('logoutBtn');
-        if (logoutBtn) {
-            logoutBtn.addEventListener('click', doLogout);
-        }
-
-        // 绑定移动端退出按钮
-        const mobileLogoutBtn = document.getElementById('mobileLogoutBtn');
-        if (mobileLogoutBtn) {
-            mobileLogoutBtn.addEventListener('click', doLogout);
-        }
 
         // 监听网络状态变化，实时更新"在线/离线"显示
         window.addEventListener('online', () => {
