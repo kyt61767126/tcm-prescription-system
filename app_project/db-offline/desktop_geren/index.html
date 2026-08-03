@@ -989,13 +989,25 @@ if (window.Permission) {
             }
         }
 
-        // 移动端标签切换（同步云端 cloud_desktop，PC端也显示 mobileActionBar 以保证拍照/录像按钮可见）
+        // 移动端标签切换
         function switchMobileTab(tabName) {
+            const isMobile = window.innerWidth <= 768;
             const leftPanel = document.querySelector('.left-panel');
             const centerPanel = document.querySelector('.center-panel');
             const rightPanel = document.querySelector('.right-panel');
             const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
             const mobileActionBar = document.getElementById('mobileActionBar');
+
+            // 桌面版：只切换激活状态，不改变面板显示
+            if (!isMobile) {
+                mobileNavItems.forEach(item =>item.classList.remove('active'));
+                mobileNavItems.forEach(item =>{
+                    if (item.getAttribute('onclick')?.includes(tabName)) {
+                        item.classList.add('active');
+                    }
+                });
+                return;
+            }
 
             // 移除所有激活状态
             mobileNavItems.forEach(item =>item.classList.remove('active'));
@@ -1258,6 +1270,13 @@ if (window.Permission) {
                     refreshUserInterface();
                     // 登录后切换到处方页，确保移动端底部操作栏显示
                     try { switchMobileTab('prescription'); } catch(e) { console.warn('switchMobileTab failed:', e); }
+
+                    // ★ PC端也显示底部录像/拍照按钮（mobileActionBar 默认 display:none 仅移动端显示）
+                    // 参考云端桌面版，登录后确保底部操作栏可见
+                    try {
+                        const __mab = document.getElementById('mobileActionBar');
+                        if (__mab) __mab.style.display = 'block';
+                    } catch(e) { console.warn('显示mobileActionBar失败:', e); }
 
                     // 通知主进程放大窗口
                     if (window.electronAPI && window.electronAPI.loginSuccess) {
