@@ -226,9 +226,11 @@
         };
 
         const refreshBtn = header.querySelector('.history-refresh-btn');
-        if (refreshBtn) {
-            header.insertBefore(photoBtn, refreshBtn);
-            header.insertBefore(videoBtn, refreshBtn);
+        if (refreshBtn && refreshBtn.parentNode) {
+            // ★修复：使用 refreshBtn.parentNode 而非 header，兼容 refreshBtn 嵌套在子 div 中的结构
+            // 旧代码 header.insertBefore(photoBtn, refreshBtn) 当 refreshBtn 不是 header 直接子元素时抛 NotFoundError
+            refreshBtn.parentNode.insertBefore(videoBtn, refreshBtn);
+            refreshBtn.parentNode.insertBefore(photoBtn, refreshBtn);
         } else {
             header.appendChild(photoBtn);
             header.appendChild(videoBtn);
