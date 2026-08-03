@@ -247,7 +247,7 @@ echo.
 echo       更新下载页（geren-cloud）...
 node "%~dp0..\..\tools\auto-update-downloads.js" geren-cloud
 if errorlevel 1 (
-    echo       [警告] 下载页自动更新(geren-cloud)出现问题，继续执行
+    echo       [警告] 下载页自动更新（geren-cloud）出现问题，继续执行
 ) else (
     echo       [OK] 下载页已更新 - geren-cloud
 )
