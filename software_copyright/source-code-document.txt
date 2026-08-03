@@ -1,0 +1,3305 @@
+﻿================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 1
+================================================================================
+    1: /********** File: index.html **********/
+    2: <!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-离线机构版</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    3:         input[type="number"]::-webkit-inner-spin-button,
+    4:         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+    5:         input[type="number"] { -moz-appearance: textfield; }
+    6:         
+    7:         :root {
+    8:             --primary-bg: #e0e0e0;
+    9:             --secondary-bg: #c0c0c0;
+   10:             --border-color: #808080;
+   11:             --accent-color: #008000;
+   12:             --danger-color: #8b0000;
+   13:             --highlight: #000080;
+   14:             --shadow: 3px 3px 10px rgba(0,0,0,0.3);
+   15:             --touch-min-height: 44px;
+   16:             --mobile-font-size: 16px;
+   17:         }
+   18:         
+   19:         @page { size: A5; margin: 0; }
+   20:         @media print {
+   21:             body { background: white; margin: 0; padding: 0; }
+   22:             .top-tabs, .left-panel, .right-panel, .bottom-bar, .tab-left-item, .action-buttons-section, .section-hint, .patient-section, .symptom-section, .diagnosis-section, .action-buttons-section, .mobile-nav, .mobile-action-bar { display: none !important; }
+   23:             .main-container { display: block !important; height: auto !important; width: 100% !important; overflow: visible !important; }
+   24:             .center-panel { background: white !important; padding: 0 !important; margin: 0 auto !important; width: 148mm !important; max-width: 190mm !important; display: block !important; min-width: auto !important; }
+   25:             .prescription-paper { width: 148mm !important; height: 210mm !important; padding: 15mm !important; margin: 0 auto !important; box-shadow: none !important; page-break-after: always !important; transform: none !important; }
+   26:             @page { size: A4; margin: 10mm; }
+   27:             .no-print, .history-header, .modal, .login-overlay { display: none !important; }
+   28:             .prescription-paper { page-break-inside: avoid; max-width: 190mm !important; border: 1px solid #000 !important; }
+   29:             table { page-break-inside: auto; }
+   30:             tr { page-break-inside: avoid; }
+   31:             thead { display: table-header-group; }
+   32:         }
+   33:         body { 
+   34:             font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', 'SimSun', sans-serif; 
+   35:             background: #f0f0f0; 
+   36:             font-size: 13px; 
+   37:             overflow-x: hidden; 
+   38:             overflow-y: auto; 
+   39:             -webkit-font-smoothing: antialiased;
+   40:             -moz-osx-font-smoothing: grayscale;
+   41:             touch-action: manipulation;
+   42:         }
+   43:         .top-tabs { background: #c0c0c0; border-bottom: 2px solid #808080; display: flex; padding: 3px 5px 0 5px; flex-wrap: wrap; align-items: center; }
+   44:         .tab-item { background: #e0e0e0; padding: 4px 15px; cursor: pointer; border: 1px solid #808080; border-bottom: none; margin-right: 2px; border-radius: 3px 3px 0 0; font-weight: bold; font-size: 12px; white-space: nowrap; }
+   45:         .tab-item:hover { background: #d0d0d0; }
+   46:         .tab-hint { font-size: 10px; color: #555; padding-left: 10px; line-height: 26px; flex: 1; }
+   47:         .tab-hint kbd { background: #444; color: white; padding: 1px 4px; border-radius: 2px; font-size: 10px; }
+   48:         .main-container { display: none; height: calc(100vh - 38px); width: 100vw; overflow: hidden; }
+   49:         .left-panel { width: 40%; min-width: 340px; max-width: 440px; background: #e0e0e0; border-right: 2px solid #808080; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+   50:         .top-tabs-left { background: #e0e0e0; display: flex; border-bottom: 2px solid #808080; }
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 2
+================================================================================
+   51:         .tab-left-item { background: #d0d0d0; padding: 3px 12px; cursor: pointer; border: 1px solid #808080; border-bottom: none; margin-right: 2px; font-size: 11px; }
+   52:         .tab-left-item.active { background: white; }
+   53:         .patient-section { background: white; padding: 5px; border-bottom: 2px solid #808080; flex-shrink: 0; }
+   54:         .patient-row { display: flex; margin-bottom: 6px; align-items: center; gap: 5px; }
+   55:         .patient-label { width: 55px; text-align: right; padding-right: 8px; font-size: 11px; flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; }
+   56:         .patient-input { flex: 1; padding: 4px 6px; border: 1px solid #808080; font-size: 12px; min-width: 30px; height: 22px; box-sizing: border-box; }
+   57:         .patient-input.small { flex: 0 0 100px; }
+   58:         .patient-input.x-small { flex: 0 0 50px; }
+   59:         .patient-input.xx-small { flex: 0 0 85px; }
+   60:         .patient-input.xxx-small { flex: 0 0 83px; }
+   61:         .patient-input.name-input { flex: 0 0 85px; }
+   62:         .symptom-section { background: white; padding: 4px 8px; border-bottom: 2px solid #808080; flex-shrink: 0; }
+   63:         .history-tabs { display: flex; margin-bottom: 2px; }
+   64:         .history-tab { background: #d0d0d0; padding: 2px 10px; cursor: pointer; border: 1px solid #808080; border-bottom: none; margin-right: 2px; font-size: 10px; }
+   65:         .history-tab.active { background: white; }
+   66:         .symptom-textarea { width: 100%; height: 30px; border: 1px solid #808080; padding: 2px; resize: none; font-size: 10px; }
+   67:         .diagnosis-section { background: white; padding: 2px 4px; border-bottom: 2px solid #808080; flex-shrink: 0; }
+   68:         .action-buttons-section { background: white; padding: 4px 8px; border-bottom: 2px solid #808080; flex-shrink: 0; }
+   69:         .small-btn { padding: 2px 8px; background: #e0e0e0; border: 1px solid #808080; cursor: pointer; font-size: 10px; }
+   70:         .medicine-section { flex: 1; background: white; overflow: hidden; display: flex; flex-direction: column; min-height: 180px; }
+   71:         .section-hint { background: #e0e0e0; padding: 3px 8px; font-size: 10px; border-top: 1px solid #808080; flex-shrink: 0; }
+   72:         .medicine-table-container { flex: 1; overflow: auto; }
+   73:         .medicine-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+   74:         .medicine-table th { background: #e0e0e0; border: 1px solid #808080; padding: 3px; font-weight: normal; font-size: 10px; }
+   75:         .medicine-table td { border: 1px solid #d0d0d0; padding: 1px; }
+   76:         .medicine-table input { width: 100%; border: none; padding: 2px; text-align: center; font-size: 11px; }
+   77:         .medicine-table input:focus { background: #e8f5e9; }
+   78:         .medicine-search-dropdown { position: fixed; background: white; border: 1px solid #808080; max-height: 180px; overflow-y: auto; display: none; z-index: 1000; box-shadow: 2px 2px 5px rgba(0,0,0,0.2); min-width: 150px; }
+   79:         .search-item { padding: 5px 10px; cursor: pointer; font-size: 11px; }
+   80:         .search-item:hover, .search-item.selected { background: #000080; color: white; }
+   81:         .center-panel { flex: 1; background: #b0b0b0; padding: 10px; overflow: auto; display: flex; justify-content: center; align-items: flex-start; min-width: 350px; }
+   82:         .prescription-paper { background: white; width: 148mm; height: 210mm; padding: 15mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', serif; box-sizing: border-box; position: relative; overflow: hidden; }
+   83:         .clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
+   84:         .prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
+   85:         .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 12px; }
+   86:         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 100px; }
+   87:         .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+   88:         .prescription-line { padding: 3px 0; font-size: 13px; text-align: center; justify-content: center; align-items: center; }
+   89:         .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #8b0000; }
+   90:         .dose-count { text-align: right; font-size: 13px; color: #000080; }
+   91:         .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 12px; }
+   92:         .usage-text { margin-bottom: 10px; }
+   93:         .signature-row { display: flex; justify-content: space-between; }
+   94:         .right-panel { width: 32%; min-width: 220px; max-width: 340px; background: white; border-left: 2px solid #808080; display: flex; flex-direction: column; height: 100%; }
+   95:         .history-header { background: #000080; color: white; padding: 6px 8px; font-weight: bold; font-size: 12px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
+   96:         .history-refresh-btn { background: none; border: none; color: white; cursor: pointer; font-size: 13px; padding: 0 4px; line-height: 1; }
+   97:         .history-refresh-btn:hover { opacity: 0.7; }
+   98:         .history-list { flex: 1; overflow-y: auto; }
+   99:         .history-item { padding: 6px 8px; border-bottom: 1px solid #d0d0d0; cursor: pointer; font-size: 11px; }
+  100:         .history-item:hover { background: #e8f5e9; }
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 3
+================================================================================
+  101:         .history-name { font-weight: bold; }
+  102:         .history-date { font-size: 10px; color: #666; }
+  103:         .bottom-bar { position: fixed; bottom: 0; left: 0; right: 0; background: #c0c0c0; border-top: 2px solid #808080; padding: 5px 10px; display: flex; justify-content: space-between; align-items: center; z-index: 100; }
+  104:         .price-summary { display: flex; gap: 10px; flex-wrap: wrap; }
+  105:         .price-item { font-weight: bold; font-size: 11px; }
+  106:         .price-item span { color: #8b0000; font-size: 13px; }
+  107:         .action-buttons { display: flex; gap: 5px; }
+  108:         .action-btn { padding: 4px 10px; background: #e0e0e0; border: 2px solid #808080; cursor: pointer; font-weight: bold; font-size: 11px; }
+  109:         .action-btn:active { background: #d0d0d0; }
+  110:         .action-btn.primary { background: #008000; color: white; border-color: #006000; }
+  111:         .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 2000; }
+  112:         .modal-content { background: #e0e0e0; border: 3px solid #808080; width: 80%; max-width: 700px; max-height: 80vh; overflow: hidden; display: flex; flex-direction: column; }
+  113:         .modal-header { background: #000080; color: white; padding: 8px 15px; display: flex; justify-content: space-between; align-items: center; }
+  114:         .modal-body { flex: 1; overflow: auto; padding: 15px; background: white; }
+  115:         .modal-footer { padding: 10px 15px; background: #e0e0e0; display: flex; justify-content: flex-end; gap: 10px; border-top: 2px solid #808080; }
+  116:         .close-btn { font-size: 24px; cursor: pointer; line-height: 1; }
+  117:         .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; visibility: visible; justify-content: center; align-items: center; z-index: 9999; }
+  118:         .login-container { width: 240px; background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); overflow: hidden; position: relative; }
+  119:         .bg-decoration { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400"%3E%3Cdefs%3E%3Cpattern id="grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"%3E%3Cpath d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(102,126,234,0.08)" stroke-width="1"/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill="url(%23grid)" width="320" height="400"/%3E%3C/svg%3E'); pointer-events: none; z-index: 0; }
+  120:         .header-section { position: relative; z-index: 1; padding: 20px 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+  121:         .system-title { font-size: 18px; font-weight: bold; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 2px; }
+  122:         .version-tag { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; }
+  123:         .main-content { position: relative; z-index: 1; padding: 24px 18px; }
+  124:         .login-box { background: white; border-radius: 10px; padding: 20px 15px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.2); }
+  125:         .login-field { margin-bottom: 18px; display: flex; flex-direction: row; align-items: center; gap: 6px; }
+  126:         .login-field label { width: 36px; font-size: 12px; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; }
+  127:         .login-field input, .login-field select { width: 100%; padding: 10px 9px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; background: #fafafa; transition: all 0.2s; }
+  128:         .login-field input:focus, .login-field select:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); background: white; }
+  129:         .username-input-wrapper { position: relative; flex: 1; }
+  130:         .username-input-wrapper input { width: 100%; padding-right: 30px; box-sizing: border-box; }
+  131:         .username-dropdown-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 27px; padding: 0; border: 2px solid #e0e0e0; border-left: none; border-radius: 0 8px 8px 0; background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; transition: all 0.2s; }
+  132:         .username-dropdown-btn:hover { background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%); }
+  133:         .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 2px solid #667eea; border-radius: 8px; top: calc(100% + 4px); left: 0; right: 0; box-shadow: 0 8px 20px rgba(102, 126, 234, 0.25); max-height: 150px; overflow-y: auto; }
+  134:         .username-dropdown-menu.show { display: block; }
+  135:         .username-dropdown-menu div { padding: 10px 11px; font-size: 12px; color: #333; cursor: pointer; transition: background 0.2s; }
+  136:         .username-dropdown-menu div:hover { background: #667eea; color: white; }
+  137:         .login-field.remember-me { flex-direction: row; align-items: center; justify-content: center; gap: 6px; margin-bottom: 20px; padding-left: 0; width: 100%; }
+  138:         .login-field.remember-me input[type="checkbox"] { flex: none; width: 16px; height: 16px; accent-color: #667eea; cursor: pointer; margin: 0; }
+  139:         .login-field.remember-me label { flex: none; width: auto; font-size: 12px; font-weight: normal; color: #666; cursor: pointer; }
+  140:         .login-buttons { display: flex; gap: 9px; }
+  141:         .login-btn { flex: 1; padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); transition: all 0.2s; }
+  142:         .login-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5); }
+  143:         .login-btn.cancel { background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%); color: #555; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
+  144:         .login-btn.cancel:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15); }
+  145:         .login-footer { text-align: center; margin-top: 12px; font-size: 10px; color: #999; }
+  146:         .login-error { color: #dc2626; font-size: 11px; text-align: center; margin-top: 12px; padding: 8px; background: #fff5f5; border-radius: 4px; border: 1px solid #fcc; display: none; }
+  147:         .clinic-info { text-align: center; padding: 12px; background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%); border: 1px solid #ffcccc; border-radius: 6px; margin-bottom: 20px; }
+  148:         .clinic-info-name { font-size: 14px; font-weight: bold; color: #8b0000; }
+  149:         .login-links a:hover { text-decoration: underline; }
+  150:         .user-modal-content { width: 400px; }
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 4
+================================================================================
+  151:         .form-group { margin: 15px 0; text-align: left; }
+  152:         .form-group label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 12px; color: #333; }
+  153:         .form-group input { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+  154:         .form-group input:focus { border-color: #667eea; outline: none; }
+  155:         .user-list { max-height: 260px; overflow-y: auto; margin: 15px 0; padding-right: 5px; }
+  156:         .user-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 10px; border: 1px solid #e0e0e0; border-radius: 8px; background: #fff; }
+  157:         .user-item:last-child { margin-bottom: 0; }
+  158:         .user-item-info { font-size: 14px; }
+  159:         .user-item-name { font-weight: bold; color: #333; font-size: 15px; }
+  160:         .user-item-role { font-size: 12px; color: #888; margin-top: 3px; }
+  161:         .user-item-actions { display: flex; gap: 6px; }
+  162:         .user-item-btn { padding: 5px 12px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; transition: opacity 0.2s; }
+  163:         .user-item-btn:hover { opacity: 0.85; }
+  164:         .btn-danger { background: #ff4444; color: white; }
+  165:         .btn-warning { background: #ff9800; color: white; }
+  166:         .btn-primary { background: #667eea; color: white; }
+  167:         .add-user-section { margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee; }
+  168:         .add-user-title { font-weight: bold; font-size: 14px; color: #333; margin-bottom: 10px; }
+  169:         .add-user-input { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 13px; box-sizing: border-box; margin-bottom: 8px; }
+  170:         .add-user-input:focus { border-color: #667eea; outline: none; }
+  171:         .add-user-select { width: 100%; padding: 10px; border: 2px solid #ddd; border-radius: 8px; font-size: 13px; box-sizing: border-box; background: #fff; }
+  172:         .btn-add-user { background: #4CAF50; color: white; padding: 8px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  173:         .btn-add-user:hover { background: #45a049; }
+  174:         .btn-close-modal { background: #f5f5f5; color: #333; padding: 8px 20px; border: 1px solid #ddd; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  175:         .btn-close-modal:hover { background: #e8e8e8; }
+  176:         
+  177:         /* 移动端底部导航 */
+  178:         .mobile-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; background: var(--secondary-bg); border-top: 2px solid var(--border-color); z-index: 200; }
+  179:         .mobile-nav-items { display: flex; justify-content: space-around; }
+  180:         .mobile-nav-item { flex: 1; padding: 8px 2px; text-align: center; cursor: pointer; font-size: 11px; border-right: 1px solid var(--border-color); min-height: 50px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  181:         .mobile-nav-item:last-child { border-right: none; }
+  182:         .mobile-nav-item.active { background: var(--highlight); color: white; }
+  183:         .mobile-nav-icon { font-size: 18px; display: block; }
+  184:         
+  185:         /* 移动端快捷操作栏 */
+  186:         .mobile-action-bar { display: none; position: fixed; bottom: 52px; left: 0; right: 0; background: rgba(255,255,255,0.95); border-top: 1px solid var(--border-color); padding: 8px 5px; z-index: 150; }
+  187:         .mobile-action-bar .action-buttons { display: flex; justify-content: space-around; gap: 5px; }
+  188:         .mobile-action-bar .action-btn, .mobile-action-bar .btn { flex: 1; margin: 0 3px; min-height: 40px; font-size: 13px; padding: 6px 4px; white-space: nowrap; }
+  189:         
+  190:         /* 响应式设计 - 手机端优化 */
+  191:         @media screen and (max-width: 768px) {
+  192:             body { font-size: var(--mobile-font-size); overflow-x: hidden; overflow-y: auto; min-height: 100vh; }
+  193:             
+  194:             /* 隐藏桌面端元素 */
+  195:             .top-tabs { display: none; }
+  196:             .right-panel { display: none; }
+  197:             .bottom-bar { display: none; }
+  198: 
+  199:             /* 历史栏在移动端显示时全屏（switchMobileTab('history')会设置display:flex） */
+  200:             .right-panel[style*="display: flex"],
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 5
+================================================================================
+  201:             .right-panel[style*="display:flex"] {
+  202:                 width: 100% !important;
+  203:                 min-width: 100% !important;
+  204:                 max-width: 100% !important;
+  205:                 height: calc(100vh - 110px) !important;
+  206:                 border-left: none;
+  207:                 border-top: 2px solid #808080;
+  208:                 position: fixed;
+  209:                 top: 0;
+  210:                 left: 0;
+  211:                 right: 0;
+  212:                 bottom: 60px;
+  213:                 z-index: 50;
+  214:                 background: white;
+  215:             }
+  216:             .right-panel[style*="display: flex"] .history-list {
+  217:                 flex: 1;
+  218:                 overflow-y: auto;
+  219:                 -webkit-overflow-scrolling: touch;
+  220:             }
+  221:             
+  222:             /* 显示移动端导航 */
+  223:             .mobile-nav { display: block; }
+  224:             .mobile-action-bar { display: block; }
+  225:             
+  226:             /* 主容器调整 */
+  227:             .main-container {
+  228:                 min-height: calc(100vh - 60px);
+  229:                 height: auto !important;
+  230:                 flex-direction: column;
+  231:                 padding-bottom: 110px;
+  232:                 overflow-x: hidden;
+  233:                 overflow-y: auto;
+  234:             }
+  235:             
+  236:             /* 左侧面板全宽 */
+  237:             .left-panel {
+  238:                 width: 100%;
+  239:                 min-width: 100%;
+  240:                 max-width: 100%;
+  241:                 border-right: none;
+  242:                 height: auto !important;
+  243:                 min-height: auto;
+  244:                 overflow-x: hidden;
+  245:                 overflow-y: visible;
+  246:             }
+  247:             
+  248:             /* 中间面板调整 */
+  249:             .center-panel {
+  250:                 width: 100%;
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 6
+================================================================================
+  251:                 min-width: 100%;
+  252:                 padding: 5px;
+  253:                 display: none;
+  254:                 overflow-y: auto;
+  255:             }
+  256:             .center-panel.active { display: flex; }
+  257:             
+  258:             /* 处方纸缩放 */
+  259:             .prescription-paper {
+  260:                 width: 100%;
+  261:                 height: auto;
+  262:                 min-height: auto;
+  263:                 padding: 16px;
+  264:                 transform: none;
+  265:                 box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  266:             }
+  267:             
+  268:             .clinic-name { font-size: 15px; margin-bottom: 4px; }
+  269:             .prescription-title { font-size: 18px; margin-bottom: 8px; letter-spacing: 4px; }
+  270:             .prescription-info { font-size: 11px; gap: 3px 6px; margin-bottom: 6px; padding-bottom: 4px; }
+  271:             .prescription-grid { min-height: 60px; padding: 3px 0; }
+  272:             .prescription-grid-inner { gap: 1px 3px; }
+  273:             .prescription-line { padding: 1px 0; font-size: 11px; }
+  274:             .rp-mark { font-size: 16px; }
+  275:             .dose-count { font-size: 11px; }
+  276:             .prescription-footer { margin-top: 6px; padding-top: 4px; font-size: 10px; }
+  277:             .usage-text { margin-bottom: 4px; font-size: 10px; }
+  278:             .signature-row { font-size: 10px; }
+  279:             
+  280:             /* 患者信息区紧凑化 */
+  281:             .patient-section, .symptom-section, .diagnosis-section, .action-buttons-section {
+  282:                 padding: 4px 6px;
+  283:                 border-bottom: 1px solid var(--border-color);
+  284:             }
+  285:             
+  286:             .patient-row {
+  287:                 flex-wrap: nowrap;
+  288:                 margin-bottom: 4px;
+  289:                 gap: 3px;
+  290:             }
+  291: 
+  292:             .patient-label {
+  293:                 width: 45px;
+  294:                 font-size: 12px;
+  295:                 padding-right: 4px;
+  296:             }
+  297: 
+  298:             .patient-input {
+  299:                 min-height: 32px;
+  300:                 font-size: 14px;
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 7
+================================================================================
+  301:                 padding: 4px 6px;
+  302:             }
+  303: 
+  304:             .patient-input.x-small { flex: 0 0 55px; }
+  305:             .patient-input.xx-small { flex: 0 0 85px; }
+  306:             .patient-input.xxx-small { flex: 0 0 110px; }
+  307:             .patient-input.name-input { flex: 0 0 85px; }
+  308:             
+  309:             /* 症状文本域 */
+  310:             .symptom-textarea {
+  311:                 height: 50px;
+  312:                 font-size: 14px;
+  313:                 min-height: 32px;
+  314:             }
+  315:             
+  316:             /* 操作按钮区紧凑化 */
+  317:             .action-buttons-section {
+  318:                 padding: 3px 6px;
+  319:             }
+  320:             .action-buttons-section .small-btn {
+  321:                 min-height: 32px;
+  322:                 font-size: 11px;
+  323:                 padding: 3px 8px;
+  324:             }
+  325:             
+  326:             /* 增大触摸目标（仅按钮类） */
+  327:             .action-btn, .small-btn, .tab-left-item, .history-tab {
+  328:                 min-height: 36px;
+  329:                 font-size: 13px;
+  330:                 padding: 6px 12px;
+  331:             }
+  332:             
+  333:             /* 药品表格横向滚动 */
+  334:             .medicine-section {
+  335:                 min-height: 300px;
+  336:                 flex: none;
+  337:             }
+  338:             
+  339:             .medicine-table-container {
+  340:                 overflow-x: auto;
+  341:                 overflow-y: auto;
+  342:                 -webkit-overflow-scrolling: touch;
+  343:                 max-height: 500px;
+  344:             }
+  345:             
+  346:             .medicine-table {
+  347:                 min-width: 100%;
+  348:                 font-size: 12px;
+  349:             }
+  350:             
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 8
+================================================================================
+  351:             .medicine-table th, .medicine-table td {
+  352:                 padding: 0 1px;
+  353:                 font-size: 10px;
+  354:                 height: 16px;
+  355:                 line-height: 16px;
+  356:             }
+  357:             
+  358:             .medicine-table th[style*="width:25px"],
+  359:             .medicine-table td:first-child { width: 28px; min-width: 28px; }
+  360:             .medicine-table th:nth-child(2),
+  361:             .medicine-table td:nth-child(2) { width: 50px; min-width: 50px; }
+  362:             .medicine-table th:nth-child(3),
+  363:             .medicine-table td:nth-child(3) { min-width: 80px; }
+  364:             .medicine-table th:nth-child(4),
+  365:             .medicine-table td:nth-child(4) { width: 45px; min-width: 45px; }
+  366:             .medicine-table th:nth-child(5),
+  367:             .medicine-table td:nth-child(5) { width: 35px; min-width: 35px; }
+  368:             .medicine-table th:nth-child(6),
+  369:             .medicine-table td:nth-child(6) { width: 45px; min-width: 45px; }
+  370:             .medicine-table th:nth-child(7),
+  371:             .medicine-table td:nth-child(7) { width: 50px; min-width: 50px; }
+  372:             .medicine-table th:nth-child(8),
+  373:             .medicine-table td:nth-child(8) { width: 32px; min-width: 32px; }
+  374:             
+  375:             .medicine-table input {
+  376:                 font-size: 10px;
+  377:                 padding: 0;
+  378:                 min-height: 16px;
+  379:                 height: 16px;
+  380:                 line-height: 16px;
+  381:             }
+  382:             
+  383:             /* 历史记录项增大 */
+  384:             .history-item {
+  385:                 padding: 12px;
+  386:                 font-size: 14px;
+  387:             }
+  388:             
+  389:             /* 模态框全屏 */
+  390:             .modal-content {
+  391:                 width: 95%;
+  392:                 max-width: none;
+  393:                 max-height: 90vh;
+  394:             }
+  395: 
+  396:             /* 统计分析图表 - 手机端缩小显示，确保屏幕内完整显示 */
+  397:             #visitTrendChart, #diseaseChart, #medicineChart { height: 130px; }
+  398: 
+  399:             /* 患者信息输入栏 - 单行紧凑布局 */
+  400:             .patient-row {
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 9
+================================================================================
+  401:                 flex-wrap: nowrap;
+  402:                 gap: 3px;
+  403:                 margin-bottom: 5px;
+  404:             }
+  405:             .patient-label {
+  406:                 width: auto;
+  407:                 font-size: 12px;
+  408:                 padding-right: 2px;
+  409:                 flex-shrink: 0;
+  410:             }
+  411:             .patient-input {
+  412:                 min-height: 34px;
+  413:                 font-size: 14px;
+  414:                 padding: 4px 6px;
+  415:                 min-width: 0;
+  416:             }
+  417:             .patient-input.small { flex: 1 1 160px; }
+  418:             .patient-input.x-small { flex: 0 0 55px; }
+  419:             .patient-input.xx-small { flex: 0 0 85px; }
+  420:             .patient-input.xxx-small { flex: 0 0 80px; }
+  421:             .patient-input.name-input { flex: 0 0 85px; }
+  422:             #patientAddress { flex: 1 1 225px !important; }
+  423: 
+  424:             /* 诊断行内联样式覆盖（确保单行不换行） */
+  425:             .diagnosis-section .patient-row input#diagnosis {
+  426:                 flex: 1 1 183px;
+  427:                 min-width: 30px !important;
+  428:             }
+  429:             .diagnosis-section .patient-row input#doseCountInput3 {
+  430:                 flex: 0 0 42px;
+  431:                 width: 42px !important;
+  432:             }
+  433:             .diagnosis-section .patient-row input#doctorName {
+  434:                 flex: 0 0 60px;
+  435:                 width: 60px !important;
+  436:                 min-width: 40px !important;
+  437:             }
+  438: 
+  439:             /* 搜索下拉优化 */
+  440:             .medicine-search-dropdown {
+  441:                 max-height: 250px;
+  442:                 font-size: 16px;
+  443:             }
+  444:             
+  445:             .search-item {
+  446:                 padding: 12px 15px;
+  447:                 font-size: 16px;
+  448:             }
+  449:         }
+  450:         
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 10
+================================================================================
+  451:         /* 平板端优化 */
+  452:         @media screen and (max-width: 1024px) and (min-width: 769px) {
+  453:             .left-panel { width: 45%; min-width: 280px; }
+  454:             .right-panel { width: 30%; min-width: 180px; }
+  455:             .center-panel { min-width: 250px; }
+  456:         }
+  457:         
+  458:         /* 小屏手机登录框放大 */
+  459:         @media screen and (max-width: 480px) {
+  460:             .login-container { width: 90%; max-width: 360px; }
+  461:             .header-section { padding: 24px 20px; }
+  462:             .system-title { font-size: 20px; letter-spacing: 2px; }
+  463:             .version-tag { font-size: 13px; }
+  464:             .main-content { padding: 28px 20px; }
+  465:             .login-box { padding: 24px; }
+  466:             .login-field { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 22px; }
+  467:             .login-field label { width: 40px; font-size: 14px; text-align: right; flex-shrink: 0; }
+  468:             .login-field input, .login-field select { width: 100%; padding: 12px 14px; font-size: 14px; border-radius: 8px; }
+  469:             .username-input-wrapper { flex: 1; }
+  470:             .username-input-wrapper input { width: 100%; padding-right: 34px; box-sizing: border-box; }
+  471:             .login-buttons { gap: 15px; }
+  472:             .login-btn { padding: 12px; font-size: 14px; border-radius: 8px; }
+  473:             .login-footer { font-size: 12px; margin-top: 15px; }
+  474:             .login-error { font-size: 12px; padding: 10px; border-radius: 6px; }
+  475:         }
+  476:         
+  477:         /* 小屏手机优化 */
+  478:         @media screen and (max-width: 480px) {
+  479:             .prescription-paper {
+  480:                 transform: none;
+  481:                 padding: 12px;
+  482:             }
+  483:             
+  484:             .clinic-name { font-size: 14px; margin-bottom: 3px; letter-spacing: 1px; }
+  485:             .prescription-title { font-size: 16px; margin-bottom: 6px; letter-spacing: 3px; }
+  486:             .prescription-info { font-size: 10px; gap: 2px 4px; margin-bottom: 4px; padding-bottom: 3px; }
+  487:             .prescription-grid { min-height: 50px; padding: 2px 0; }
+  488:             .prescription-grid-inner { gap: 1px 2px; }
+  489:             .prescription-line { padding: 1px 0; font-size: 10px; }
+  490:             .rp-mark { font-size: 14px; }
+  491:             .dose-count { font-size: 10px; }
+  492:             .prescription-footer { margin-top: 4px; padding-top: 3px; font-size: 9px; }
+  493:             .usage-text { margin-bottom: 3px; font-size: 9px; }
+  494:             .signature-row { font-size: 9px; flex-wrap: wrap; gap: 2px; }
+  495:             
+  496:             .mobile-nav-item {
+  497:                 font-size: 10px;
+  498:                 padding: 6px 2px;
+  499:             }
+  500:             
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 11
+================================================================================
+  501:             .mobile-nav-icon {
+  502:                 font-size: 16px;
+  503:             }
+  504: 
+  505:             /* 患者信息栏继承768px的grid布局，仅微调 */
+  506:             .patient-input {
+  507:                 min-height: 34px;
+  508:                 font-size: 14px;
+  509:             }
+  510: 
+  511:             .patient-label {
+  512:                 font-size: 12px;
+  513:             }
+  514: 
+  515:             /* 药品表格进一步紧凑 */
+  516:             .medicine-table-container {
+  517:                 max-height: 400px;
+  518:             }
+  519:             
+  520:             .medicine-table th, .medicine-table td {
+  521:                 padding: 0;
+  522:                 font-size: 9px;
+  523:                 height: 14px;
+  524:                 line-height: 14px;
+  525:             }
+  526:             
+  527:             .medicine-table input {
+  528:                 font-size: 9px;
+  529:                 padding: 0;
+  530:                 min-height: 14px;
+  531:                 height: 14px;
+  532:                 line-height: 14px;
+  533:             }
+  534:         }
+  535:         
+  536:         /* 大屏显示器优化 */
+  537:         @media screen and (min-width: 1400px) {
+  538:             .left-panel { width: 35%; max-width: 500px; }
+  539:             .right-panel { width: 25%; max-width: 380px; }
+  540:             .center-panel { padding: 20px; }
+  541:             .prescription-paper { padding: 20mm; }
+  542:         }
+  543:         /* ===== 兜底适配：不同品牌型号手机 ===== */
+  544:         html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+  545:         body { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+  546: 
+  547:         @media screen and (max-width: 768px) {
+  548:             .action-btn, .login-btn, .history-tab, .mobile-nav-btn,
+  549:             .medicine-table input, .search-item, .modal-header button,
+  550:             .user-item, .form-group input, button { min-height: 36px; }
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 12
+================================================================================
+  551:             .action-btn { padding: 6px 10px; }
+  552:             .medicine-table { font-size: 12px; }
+  553:             .medicine-table th { font-size: 11px; padding: 4px; }
+  554:             .medicine-table input { font-size: 12px; padding: 4px; }
+  555:             .prescription-line { font-size: 12px; }
+  556:             .prescription-info { font-size: 12px; }
+  557:         }
+  558: 
+  559:         @media screen and (max-width: 360px) {
+  560:             .login-container { width: 95%; max-width: 280px; min-height: 360px; }
+  561:             .header-section { padding: 15px 12px; }
+  562:             .system-title { font-size: 16px; }
+  563:             .version-tag { font-size: 11px; }
+  564:             .login-box { padding: 15px 12px; }
+  565:             .login-field { flex-direction: row; align-items: center; gap: 6px; margin-bottom: 12px; }
+  566:             .login-field label { width: 38px; font-size: 12px; text-align: right; flex-shrink: 0; }
+  567:             .login-field input, .login-field select { width: 100%; padding: 8px 10px; font-size: 13px; }
+  568:             .login-buttons { gap: 12px; margin-top: 15px; }
+  569:             .login-btn { padding: 8px 18px; min-width: 70px; font-size: 13px; }
+  570:             .login-footer { font-size: 10px; }
+  571:             .patient-input { min-height: 30px; font-size: 12px; padding: 3px 4px; }
+  572:             .patient-input.x-small { flex: 0 0 45px; }
+  573:             .patient-input.xx-small { flex: 0 0 70px; }
+  574:             .patient-input.xxx-small { flex: 0 0 85px; }
+  575:             .patient-input.name-input { flex: 0 0 70px; }
+  576:             .patient-label { width: 35px; font-size: 11px; padding-right: 2px; }
+  577:             .action-btn { padding: 4px 6px; font-size: 10px; min-height: 32px; }
+  578:             .medicine-table { font-size: 11px; }
+  579:             .medicine-table input { font-size: 11px; }
+  580:             .mobile-action-bar .action-btn { min-height: 36px; font-size: 11px; padding: 4px 2px; }
+  581:         }
+  582: 
+  583:         @media screen and (min-width: 481px) and (max-width: 768px) {
+  584:             .patient-input { min-height: 36px; font-size: 14px; }
+  585:             .action-btn { min-height: 40px; font-size: 12px; }
+  586:         }
+  587: 
+  588:         @media screen and (max-width: 768px) and (orientation: landscape) {
+  589:             .login-container { width: 60%; max-width: 400px; min-height: 280px; }
+  590:             .header-section { padding: 10px 15px; }
+  591:             .main-content { padding: 10px 15px; min-height: calc(100% - 60px); }
+  592:             .login-field { margin-bottom: 10px; }
+  593:         }
+  594: 
+  595:         @media screen and (max-width: 768px) {
+  596:             .login-overlay {
+  597:                 padding-top: env(safe-area-inset-top);
+  598:                 padding-bottom: env(safe-area-inset-bottom);
+  599:                 padding-left: env(safe-area-inset-left);
+  600:                 padding-right: env(safe-area-inset-right);
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 13
+================================================================================
+  601:             }
+  602:             .modal-content {
+  603:                 margin-top: env(safe-area-inset-top);
+  604:                 margin-bottom: env(safe-area-inset-bottom);
+  605:             }
+  606:         }
+  607:         </style><!-- xlsx 库按需加载：首次使用 Excel 导入时由 loadXlsxLibrary() 动态加载 vendor/xlsx.full.min.js；未放置时 Excel 导入功能不可用，其他功能不受影响 -->
+  608: </head><body><div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【定制】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">hkt中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')document.getElementById('loginPassword').focus()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser"><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div><div id="changePwdModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>修改密码</span><span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span></div><div class="modal-body"><div class="form-group"><label>原密码</label><input type="password" id="oldPwd" placeholder="请输入原密码"></div><div class="form-group"><label>新密码</label><input type="password" id="newPwd" placeholder="请输入新密码"></div><div class="form-group"><label>确认新密码</label><input type="password" id="confirmNewPwd" placeholder="请再次输入新密码"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('changePwdModal')">取消</button><button class="action-btn primary" onclick="handleChangePassword()">修改</button></div></div></div><div id="userManageModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>用户管理</span><span class="close-btn" onclick="closeModal('userManageModal')">&times;</span></div><div class="modal-body"><div id="userList" class="user-list"></div><div class="form-group" style="margin-top:15px;"><label>添加新用户</label><input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音"><input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;"><input type="text" id="newUserName" placeholder="医师姓名，如：张医生" style="margin-top:5px;"><select id="newUserRole" style="margin-top:5px;width:100%;padding:5px;"><option value="user">普通用户</option><option value="admin">管理员</option></select></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('userManageModal')">关闭</button><button class="action-btn primary" onclick="handleAddUser()">添加用户</button></div></div></div><div class="top-tabs"><div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div><div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div><div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div><div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div><div class="tab-item" onclick="showModal('analyticsModal')">【数据统计】</div><div class="tab-item" id="userManageBtn" onclick="showUserManageModal()" style="display:none;">【用户管理】</div><div class="tab-item" id="changePwdBtn" style="display:none;" onclick="showChangePwdModal()">【修改密码】</div><div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div><div class="tab-item" onclick="showHelp()">【系统帮助】</div><div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div><div class="tab-hint">当前用户:<span style="color:#008000;font-weight:bold;" id="userDisplayName"></span>|<span style="color:#008000;font-weight:bold;">【离线机构版】</span></div></div><div class="main-container"><div class="left-panel"><div class="top-tabs-left"><div class="tab-left-item active" style="flex:1;text-align:center;">填资料</div><button class="action-btn" onclick="saveAsFormula()" style="flex:1;padding:2px 8px;font-size:12px;">存验方</button><button class="action-btn" onclick="printPrescription('portrait')" style="flex:1;padding:2px 8px;font-size:12px;">纵向打印</button><button class="action-btn" onclick="printPrescription('landscape')" style="flex:1;padding:2px 8px;font-size:12px;">横向打印</button><button class="action-btn" onclick="clearPrescription()" style="flex:1;padding:2px 8px;font-size:12px;background:#f44336;color:white;">清空</button><button class="action-btn primary" onclick="savePrescription()" style="flex:1;padding:2px 8px;font-size:12px;font-weight:bold;">保存</button></div><div class="patient-section"><div class="patient-row"><span class="patient-label">门诊</span><input type="text" id="prescriptionNo" class="patient-input name-input" readonly><span class="patient-label">性别</span><select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()"><option value="男">男</option><option value="女">女</option></select><span class="patient-label">日期</span><input type="text" id="visitDate" class="patient-input small" readonly></div><div class="patient-row"><span class="patient-label">姓名</span><input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off"><span class="patient-label">年龄</span><input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()"><span class="patient-label">电话</span><input type="text" id="patientPhone" class="patient-input small"></div><div class="patient-row"><span class="patient-label">统计</span><input type="text" id="clinicNo" class="patient-input xx-small" readonly><span class="patient-label">住址</span><input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;"></div></div><div class="symptom-section"><div class="history-tabs"><div class="history-tab active">病史症状</div><div class="history-tab">修改病史</div></div><textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea></div><div class="diagnosis-section"><div class="patient-row"><span class="patient-label">诊断</span><input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()"><span class="patient-label">剂数</span><input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')"><span style="font-size:13px;margin-right:8px;">剂</span><span class="patient-label">医师</span><input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;"></div></div><div class="action-buttons-section"><div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;"><span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span><span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span></div></div><div class="medicine-section"><div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">提示: 在简码栏输入简码，在药名栏输入药名</div><div class="medicine-table-container"><table class="medicine-table" id="prescriptionTable"><thead><tr><th style="width:25px;">#</th><th style="width:45px;">简码</th><th style="width:90px;">药物</th><th style="width:40px;">数量</th><th style="width:30px;">单位</th><th style="width:40px;">单价</th><th style="width:45px;">合计</th><th style="width:30px;">删</th></tr></thead><tbody id="prescriptionBody"></tbody></table></div><div class="medicine-search-dropdown" id="medicineSearchDropdown"></div></div></div><div class="center-panel"><div class="prescription-paper" id="prescriptionPaper"><div class="clinic-name" id="clinicNameDisplay">hkt中医诊所</div><div class="prescription-title">处 方 笺</div><div class="prescription-info"><div>姓名:<span id="paperName"></span></div><div>性别:<span id="paperGender"></span></div><div>年龄:<span id="paperAge"></span>岁</div><div>科别: 中医内科</div><div>门诊号:<span id="paperClinicNo"></span></div><div>日期:<span id="paperDate"></span></div></div><div style="margin-bottom:8px; line-height:1.5;"><span>病史症状:<span id="paperMedicalHistory"></span></span><div style="border-bottom:1px solid #000; margin-top:8px;"></div></div><div style="margin-bottom:3px;"><span>诊断:<span id="paperDiagnosis"></span></span><div style="border-bottom:1px solid #000; margin-top:2px;"></div></div><div class="prescription-grid" style="margin-top:3px;"><div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;"><div class="rp-mark">RP</div><div></div><div class="dose-count"><span id="paperDoseCount">7</span>剂</div></div><div id="prescriptionLines"></div></div><div class="prescription-footer" style="margin-top:3px;"><div class="usage-text">用法: 水煎服，日一剂，早晚分服</div><div class="signature-row"><span>医师:<span id="paperDoctor"></span>（签字）</span><span>配方: ________ 复核: ________</span></div></div></div></div><div class="right-panel"><div class="history-header"><span>处方历史</span><div style="display:flex;gap:16px;align-items:center;padding-right:4px;"><button class="history-refresh-btn" onclick="refreshHistory()" title="刷新历史处方" style="font-size:16px;padding:8px 10px;min-width:40px;min-height:36px;">🔄</button><button onclick="showRecycleBin()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="回收站">🗑️</button></div></div><div class="history-list" id="historyList"><div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div></div></div></div><div class="bottom-bar"></div><!-- 移动端底部导航 --><div class="mobile-nav" id="mobileNav"><div class="mobile-nav-items"><div class="mobile-nav-item active" onclick="switchMobileTab('prescription')"><span class="mobile-nav-icon">📝</span><span>门诊</span></div><div class="mobile-nav-item" onclick="switchMobileTab('history')"><span class="mobile-nav-icon">📋</span><span>历史</span></div><div class="mobile-nav-item" onclick="switchMobileTab('preview')"><span class="mobile-nav-icon">📄</span><span>预览</span></div><div class="mobile-nav-item" onclick="showModal('medicineModal')"><span class="mobile-nav-icon">💊</span><span>药品</span></div><div class="mobile-nav-item" onclick="showModal('settingsModal')"><span class="mobile-nav-icon">⚙️</span><span>设置</span></div><div class="mobile-nav-item" onclick="handleLogout()" style="color:var(--danger-color);"><span class="mobile-nav-icon">🚪</span><span>退出</span></div></div></div><!-- 移动端快捷操作栏 --><div class="mobile-action-bar" id="mobileActionBar"><div class="action-buttons"><button class="action-btn" style="flex:1;" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button><button class="action-btn" style="flex:1;" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button><button class="action-btn primary" style="flex:1;" onclick="savePrescription()">💾 保存</button><button class="action-btn" style="flex:1;" onclick="clearPrescription()">🗑️ 清空</button><button class="action-btn" style="flex:1;" id="mobileActionBtn2" onclick="showChangePwdModal()">🔐 改密</button></div></div><div class="modal" id="settingsModal"><div class="modal-content"><div class="modal-header"><h3>F1 基础设置</h3><span class="close-btn" onclick="closeModal('settingsModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;"><label>诊所名称:</label><input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>医师姓名:</label><input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>诊疗费:</label><input type="number" id="defaultRegFee" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>默认剂数:</label><input type="number" id="defaultDose" style="width:100%;padding:6px;margin-top:4px;"></div><div id="autoStartSection" style="margin-bottom:12px;display:none;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoStart" style="width:18px;height:18px;">开机自动启动（仅管理员）</label><div style="font-size:11px;color:#666;margin-top:4px;">勾选后，系统将在电脑开机时自动启动</div></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="clinicPrescriptionModal"><div class="modal-content" style="max-width:900px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📋 处方查阅</h3><span class="close-btn" onclick="closeModal('clinicPrescriptionModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;"><input type="text" id="filterText" placeholder="搜索姓名/门诊号/诊断" oninput="filterClinicPrescriptions()" style="flex:1;min-width:150px;padding:6px;"><select id="filterDoctor" onchange="filterClinicPrescriptions()" style="padding:6px;"><option value="">全部医师</option></select><button class="action-btn" onclick="loadClinicPrescriptionList()">🔄 刷新</button></div><div id="clinicPrescriptionStats" style="margin-bottom:10px;font-size:12px;color:#666;"></div><div id="clinicPrescriptionList" style="overflow:auto;max-height:400px;border:1px solid #ddd;border-radius:4px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('clinicPrescriptionModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 数据统计</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js"></script><script src="permission.js"></script><script src="debug-logger.js"></script><script src="print-utils.js"></script><script src="medicine-dict.js"></script><!-- ★ 已移除 db-adapter.js 引用：避免与 index.html 的 openDB(DB_VERSION=3) 版本冲突导致IndexedDB操作失败 --><!-- <script src="db-adapter.js"></script> --><script src="performance-utils.js"></script><script src="prescription-core.js"></script><script src="patient-archive.js"></script>
+  609: <script src="security-guard.js"></script>
+  610: <!-- ★ 双重保障：通过 <script> 标签加载 video-recorder.js，防止 main.js injectVideoRecorder 注入失败 -->
+  611: <!-- IIFE 有 window.__videoRecorderInjected 防重复检查，不会与 main.js 注入冲突 -->
+  612: <script src="electron/video-recorder.js"></script>
+  613: <script>
+  614: // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
+  615: window.EDITION = 'clinic_custom';
+  616: // ★v2.0 统一架构：声明 APP_MODE（offline/cloud），供 db-adapter.js 自动检测
+  617: window.APP_MODE = 'offline';
+  618: // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
+  619: // ★ 修复 2026-07-28：APP 端启动时主动清除所有登录态（纵深防御），确保每次打开都必须手动登录
+  620: // 使用 location.href 检测 APP（此时 electronAPI 尚未注入，无法用 isAndroidAPP）
+  621: try {
+  622:     var __isAPP = location.href.indexOf('android_asset') >= 0;
+  623:     if (__isAPP) {
+  624:         // APP 端：清除所有登录态，不隐藏登录界面
+  625:         localStorage.removeItem('isLoggedIn');
+  626:         localStorage.removeItem('currentUser');
+  627:         localStorage.removeItem('user_login_data');
+  628:         localStorage.removeItem('auth:isLoggedIn');
+  629:         localStorage.removeItem('auth:currentUser');
+  630:         localStorage.removeItem('auth:loginData');
+  631:         localStorage.removeItem('cloud_isLoggedIn');
+  632:         localStorage.removeItem('cloud_currentUser');
+  633:     } else if (localStorage.getItem('isLoggedIn') === 'true') {
+  634:         var __lo = document.getElementById('loginOverlay');
+  635:         if (__lo) __lo.style.display = 'none';
+  636:     }
+  637: } catch(e) {}
+  638: if (window.Permission) {
+  639:     Permission.init().then(function() {
+  640:         if (document.readyState === 'loading') {
+  641:             document.addEventListener('DOMContentLoaded', function() { Permission.applyRuntimePermissions(); });
+  642:         } else {
+  643:             Permission.applyRuntimePermissions();
+  644:         }
+  645:     }).catch(function(e) { console.warn('Permission init failed:', e); });
+  646: }
+  647: </script><script>window.addEventListener('error', function(e) {
+  648:     console.error('[全局错误]', e.message, e.error);
+  649: });
+  650: window.addEventListener('unhandledrejection', function(e) {
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 14
+================================================================================
+  651:     console.error('[未处理Promise]', e.reason);
+  652: });
+  653: let currentUser = null;
+  654: 
+  655:         const CONFIG = {
+  656:             clinicName: 'hkt中医诊所',
+  657:             doctorName: 'hkt',
+  658:             edition: 'clinic_custom'
+  659:         };
+  660: 
+  661:         // 同步加载 config.json（file://协议下同步XHR可靠，确保init前CONFIG已更新）
+  662:         (function() {
+  663:             try {
+  664:                 var xhr = new XMLHttpRequest();
+  665:                 xhr.open('GET', 'config.json', false);
+  666:                 xhr.send();
+  667:                 if (xhr.status === 200 || xhr.status === 0) {
+  668:                     var cfg = JSON.parse(xhr.responseText);
+  669:                     if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
+  670:                     if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
+  671:                     if (cfg.edition) CONFIG.edition = cfg.edition;
+  672:                     if (cfg.users) CONFIG.users = cfg.users;
+  673:                     if (cfg.configIssuedAt) CONFIG.configIssuedAt = cfg.configIssuedAt;
+  674:                 }
+  675:             } catch(e) {
+  676:                 console.warn('[CONFIG] 加载 config.json 失败:', e.message);
+  677:             }
+  678:         })();
+  679: 
+  680:         window.__APP_VERSION__ = '2026-07-29-v1';
+  681: 
+  682:         const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
+  683: 
+  684:         function debounce(fn, delay) {
+  685:             let timer = null;
+  686:             return function(...args) {
+  687:                 if (timer) clearTimeout(timer);
+  688:                 timer = setTimeout(() => { timer = null; fn.apply(this, args); }, delay);
+  689:             };
+  690:         }
+  691: 
+  692:         const Storage = {
+  693:             get: (key) => localStorage.getItem(key),
+  694:             getJSON: (key, fallback) => {
+  695:                 try { const s = localStorage.getItem(key); return s ? JSON.parse(s) : fallback; }
+  696:                 catch (e) { console.error(`解析 ${key} 失败:`, e); return fallback; }
+  697:             },
+  698:             set: (key, val) => localStorage.setItem(key, val),
+  699:             setJSON: (key, val) => localStorage.setItem(key, JSON.stringify(val)),
+  700:             remove: (key) => localStorage.removeItem(key)
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 15
+================================================================================
+  701:         };
+  702: 
+  703:         function loadAllPrescriptions() {
+  704:             return Storage.getJSON('all_prescription_list', []);
+  705:         }
+  706: 
+  707:         const DB_NAME = 'PrescriptionDB';
+  708:         const DB_VERSION = 3;
+  709:         let db = null;
+  710: 
+  711:         function openDB() {
+  712:             return new Promise((resolve, reject) => {
+  713:                 if (db) {
+  714:                     resolve(db);
+  715:                     return;
+  716:                 }
+  717:                 let timeoutId = null;
+  718:                 let settled = false;
+  719:                 const request = indexedDB.open(DB_NAME, DB_VERSION);
+  720:                 request.onupgradeneeded = function(event) {
+  721:                     const database = event.target.result;
+  722:                     if (!database.objectStoreNames.contains('prescriptions')) {
+  723:                         database.createObjectStore('prescriptions', { keyPath: 'id' });
+  724:                     }
+  725:                     if (!database.objectStoreNames.contains('settings')) {
+  726:                         database.createObjectStore('settings', { keyPath: 'key' });
+  727:                     }
+  728:                     // P0-5：新增处方回收站 store（软删除恢复用）
+  729:                     if (!database.objectStoreNames.contains('prescriptions_trash')) {
+  730:                         database.createObjectStore('prescriptions_trash', { keyPath: 'id' });
+  731:                     }
+  732:                 };
+  733:                 request.onsuccess = function(event) {
+  734:                     if (settled) return;
+  735:                     settled = true;
+  736:                     if (timeoutId) clearTimeout(timeoutId);
+  737:                     db = event.target.result;
+  738:                     resolve(db);
+  739:                 };
+  740:                 request.onerror = function(event) {
+  741:                     if (settled) return;
+  742:                     settled = true;
+  743:                     if (timeoutId) clearTimeout(timeoutId);
+  744:                     console.error('[IndexedDB] 数据库打开失败:', event.target.error);
+  745:                     reject(event.target.error);
+  746:                 };
+  747:                 request.onblocked = function(event) {
+  748:                     console.warn('[IndexedDB] 数据库打开被阻塞:', event);
+  749:                 };
+  750:                 // 超时保护：3秒内未打开成功则失败，避免永久挂起
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 16
+================================================================================
+  751:                 timeoutId = setTimeout(() => {
+  752:                     if (settled) return;
+  753:                     settled = true;
+  754:                     console.warn('[IndexedDB] 打开超时（3s），降级使用 localStorage');
+  755:                     reject(new Error('IndexedDB open timeout'));
+  756:                 }, 3000);
+  757:             });
+  758:         }
+  759: 
+  760:         async function saveToIndexedDB(storeName, data) {
+  761:             try {
+  762:                 const database = await openDB();
+  763:                 return new Promise((resolve, reject) => {
+  764:                     const transaction = database.transaction([storeName], 'readwrite');
+  765:                     const store = transaction.objectStore(storeName);
+  766:                     const request = store.put(data);
+  767:                     request.onsuccess = () => {
+  768:                         resolve();
+  769:                     };
+  770:                     request.onerror = (e) => {
+  771:                         console.error('[IndexedDB保存] 保存失败:', e);
+  772:                         reject(request.error);
+  773:                     };
+  774:                     // ★修复事务挂起：abort 时必须 reject，否则 Promise 永远挂起
+  775:                     transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
+  776:                 });
+  777:             } catch (e) {
+  778:                 console.error('保存到 IndexedDB 失败:', e);
+  779:             }
+  780:         }
+  781: 
+  782:         async function getFromIndexedDB(storeName, key) {
+  783:             try {
+  784:                 const database = await openDB();
+  785:                 return new Promise((resolve, reject) => {
+  786:                     const transaction = database.transaction([storeName], 'readonly');
+  787:                     const store = transaction.objectStore(storeName);
+  788:                     const request = store.get(key);
+  789:                     request.onsuccess = () => resolve(request.result);
+  790:                     request.onerror = () => reject(request.error);
+  791:                     // ★修复事务挂起：abort 时必须 reject
+  792:                     transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
+  793:                 });
+  794:             } catch (e) {
+  795:                 console.error('从 IndexedDB 读取失败:', e);
+  796:                 return null;
+  797:             }
+  798:         }
+  799: 
+  800:         // P7: 处方增量存储（按 id 单条存取，替代全量重写）
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 17
+================================================================================
+  801:         async function savePrescriptionToDB(record) {
+  802:             try {
+  803:                 const database = await openDB();
+  804:                 return new Promise((resolve, reject) => {
+  805:                     const transaction = database.transaction(['prescriptions'], 'readwrite');
+  806:                     const store = transaction.objectStore('prescriptions');
+  807:                     const request = store.put(record);
+  808:                     request.onsuccess = () => resolve();
+  809:                     request.onerror = (e) => {
+  810:                         console.error('[IndexedDB] 单条处方保存失败:', e);
+  811:                         reject(request.error);
+  812:                     };
+  813:                     // ★修复事务挂起：abort 时必须 reject
+  814:                     transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
+  815:                 });
+  816:             } catch (e) {
+  817:                 console.error('保存单条处方到 IndexedDB 失败:', e);
+  818:             }
+  819:         }
+  820: 
+  821:         async function deletePrescriptionFromDB(id) {
+  822:             try {
+  823:                 const database = await openDB();
+  824:                 return new Promise((resolve, reject) => {
+  825:                     const transaction = database.transaction(['prescriptions'], 'readwrite');
+  826:                     const store = transaction.objectStore('prescriptions');
+  827:                     const request = store.delete(id);
+  828:                     request.onsuccess = () => resolve();
+  829:                     request.onerror = () => reject(request.error);
+  830:                     // ★修复事务挂起：abort 时必须 reject
+  831:                     transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
+  832:                 });
+  833:             } catch (e) {
+  834:                 console.error('从 IndexedDB 删除单条处方失败:', e);
+  835:             }
+  836:         }
+  837: 
+  838:         async function getAllPrescriptionsFromDB() {
+  839:             try {
+  840:                 const database = await openDB();
+  841:                 return await new Promise((resolve, reject) => {
+  842:                     // ★修复历史处方消失：移除 5s 事务级超时
+  843:                     // 原因：5s 超时后 resolve([]) 会让上层 getAllUserPrescriptions 误以为 IndexedDB 没有数据，
+  844:                     //       降级到 localStorage（但 localStorage 没有处方数据），最终返回空数组，
+  845:                     //       导致退出登入后再次登入历史处方消失。
+  846:                     //       loadData 已有 15s 超时作为兜底，不需要事务级超时。
+  847:                     let settled = false;
+  848:                     let transaction = null;
+  849:                     try {
+  850:                         transaction = database.transaction(['prescriptions'], 'readonly');
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 18
+================================================================================
+  851:                     } catch(e) {
+  852:                         console.error('[IndexedDB] 创建事务失败:', e);
+  853:                         resolve([]);
+  854:                         return;
+  855:                     }
+  856:                     const store = transaction.objectStore('prescriptions');
+  857:                     const request = store.getAll();
+  858:                     request.onsuccess = () => {
+  859:                         if (settled) return;
+  860:                         settled = true;
+  861:                         resolve(request.result || []);
+  862:                     };
+  863:                     request.onerror = () => {
+  864:                         if (settled) return;
+  865:                         settled = true;
+  866:                         reject(request.error);
+  867:                     };
+  868:                     // ★保留 onabort 处理：abort 时必须 resolve（避免 Promise 永远挂起）
+  869:                     transaction.onabort = () => {
+  870:                         if (settled) return;
+  871:                         settled = true;
+  872:                         console.warn('[IndexedDB] getAll 事务被中止');
+  873:                         resolve([]);
+  874:                     };
+  875:                 });
+  876:             } catch (e) {
+  877:                 console.error('从 IndexedDB 读取所有处方失败:', e);
+  878:                 return [];
+  879:             }
+  880:         }
+  881: 
+  882:         async function clearPrescriptionsDB() {
+  883:             try {
+  884:                 const database = await openDB();
+  885:                 return new Promise((resolve, reject) => {
+  886:                     const transaction = database.transaction(['prescriptions'], 'readwrite');
+  887:                     const store = transaction.objectStore('prescriptions');
+  888:                     const request = store.clear();
+  889:                     request.onsuccess = () => resolve();
+  890:                     request.onerror = () => reject(request.error);
+  891:                     // ★修复事务挂起：abort 时必须 reject
+  892:                     transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
+  893:                 });
+  894:             } catch (e) {
+  895:                 console.error('清空 prescriptions store 失败:', e);
+  896:             }
+  897:         }
+  898: 
+  899:         // P7 辅助：批量保存处方到 IndexedDB（用于数据迁移和导入）
+  900:         async function saveAllPrescriptionsToDB(records) {
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 19
+================================================================================
+  901:             try {
+  902:                 const database = await openDB();
+  903:                 return new Promise((resolve, reject) => {
+  904:                     const transaction = database.transaction(['prescriptions'], 'readwrite');
+  905:                     const store = transaction.objectStore('prescriptions');
+  906:                     records.forEach(r => store.put(r));
+  907:                     transaction.oncomplete = () => resolve();
+  908:                     transaction.onerror = () => reject(transaction.error);
+  909:                     // ★修复事务挂起：abort 时必须 reject，否则 Promise 永远挂起
+  910:                     transaction.onabort = () => reject(transaction.error || new Error('事务被中止'));
+  911:                 });
+  912:             } catch (e) {
+  913:                 console.error('批量保存处方到 IndexedDB 失败:', e);
+  914:             }
+  915:         }
+  916: 
+  917:         // Android 返回键处理：关闭弹窗/历史面板/中心面板，否则退出 APP
+  918:         function handleAndroidBack() {
+  919:             try {
+  920:                 const loginOverlay = document.getElementById('loginOverlay');
+  921:                 if (loginOverlay && loginOverlay.style.display !== 'none') {
+  922:                     return false;
+  923:                 }
+  924:                 const openModals = document.querySelectorAll('.modal[style*="display: block"], .modal[style*="display:block"]');
+  925:                 if (openModals.length > 0) {
+  926:                     openModals.forEach(m => m.style.display = 'none');
+  927:                     return true;
+  928:                 }
+  929:                 const rightPanel = document.querySelector('.right-panel');
+  930:                 if (rightPanel) {
+  931:                     const computedStyle = window.getComputedStyle(rightPanel);
+  932:                     const isHistoryOpen = rightPanel.style.display === 'flex' ||
+  933:                                          (rightPanel.style.display === '' && computedStyle.display === 'flex');
+  934:                     if (isHistoryOpen) {
+  935:                         switchMobileTab('prescription');
+  936:                         return true;
+  937:                     }
+  938:                 }
+  939:                 const centerPanel = document.querySelector('.center-panel');
+  940:                 if (centerPanel && centerPanel.classList.contains('active')) {
+  941:                     switchMobileTab('prescription');
+  942:                     return true;
+  943:                 }
+  944:                 return false;
+  945:             } catch (e) {
+  946:                 console.error('handleAndroidBack error:', e);
+  947:                 return false;
+  948:             }
+  949:         }
+  950: 
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 20
+================================================================================
+  951:         // 移动端标签切换
+  952:         function switchMobileTab(tabName) {
+  953:             const leftPanel = document.querySelector('.left-panel');
+  954:             const centerPanel = document.querySelector('.center-panel');
+  955:             const rightPanel = document.querySelector('.right-panel');
+  956:             const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
+  957:             const mobileActionBar = document.getElementById('mobileActionBar');
+  958:             
+  959:             // 移除所有激活状态
+  960:             mobileNavItems.forEach(item =>item.classList.remove('active'));
+  961:             
+  962:             // 隐藏所有面板
+  963:             leftPanel.style.display = 'none';
+  964:             centerPanel.classList.remove('active');
+  965:             rightPanel.style.display = 'none';
+  966:             
+  967:             // 隐藏快捷操作栏（CSS会处理默认显示）
+  968:             if (mobileActionBar) {
+  969:                 mobileActionBar.style.display = 'none';
+  970:             }
+  971:             
+  972:             // 根据标签名显示对应面板
+  973:             switch(tabName) {
+  974:                 case 'prescription':
+  975:                     leftPanel.style.display = 'flex';
+  976:                     leftPanel.style.flexDirection = 'column';
+  977:                     if (mobileActionBar) {
+  978:                         mobileActionBar.style.display = 'block';
+  979:                     }
+  980:                     break;
+  981:                 case 'history':
+  982:                     // 检查是否有历史病历，没有则不显示
+  983:                     if (!prescriptionHistory || prescriptionHistory.length === 0) {
+  984:                         showToast('暂无历史病历');
+  985:                         // 保持当前标签激活状态，不切换
+  986:                         return;
+  987:                     }
+  988:                     rightPanel.style.display = 'flex';
+  989:                     rightPanel.style.flexDirection = 'column';
+  990:                     injectRecycleBinButton();
+  991:                     break;
+  992:                 case 'preview':
+  993:                     centerPanel.classList.add('active');
+  994:                     break;
+  995:             }
+  996:             
+  997:             // 设置当前标签为激活状态
+  998:             mobileNavItems.forEach(item =>{
+  999:                 if (item.getAttribute('onclick')?.includes(tabName)) {
+ 1000:                     item.classList.add('active');
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 21
+================================================================================
+ 1001:                 }
+ 1002:             });
+ 1003:         }
+ 1004: 
+ 1005:         function getDefaultUsers() {
+ 1006:             // 优先使用 config.json 中的用户配置
+ 1007:             if (CONFIG.users && CONFIG.users.length > 0) {
+ 1008:                 return CONFIG.users.map(u => ({
+ 1009:                     username: u.username,
+ 1010:                     password: u.password,
+ 1011:                     name: u.name,
+ 1012:                     role: u.role || 'user'
+ 1013:                 }));
+ 1014:             }
+ 1015:             return [
+ 1016:                 {username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin'},
+ 1017:                 {username: 'doctor1', password: '6861055dc561644683c0e517c4e2eb68cfb5ba234ccc4c6da7fc78071771b1b1', name: '张医生', role: 'user'},
+ 1018:                 {username: 'doctor2', password: '6861055dc561644683c0e517c4e2eb68cfb5ba234ccc4c6da7fc78071771b1b1', name: '李医生', role: 'user'}
+ 1019:             ];
+ 1020:         }
+ 1021: 
+ 1022:         async function getUserItem(key) {
+ 1023:             const storageKey = currentUser ? 'local_web_user_' + currentUser.username + '_' + key : 'local_web_unauthenticated_' + key;
+ 1024:             
+ 1025:             if (IS_ELECTRON) {
+ 1026:                 const result = await window.electronAPI.getUserData(storageKey);
+ 1027:                 if (result.success && result.data !== null) {
+ 1028:                     return JSON.stringify(result.data);
+ 1029:                 }
+ 1030:                 return localStorage.getItem(storageKey);
+ 1031:             }
+ 1032:             return localStorage.getItem(storageKey);
+ 1033:         }
+ 1034: 
+ 1035:         async function setUserItem(key, value) {
+ 1036:             const storageKey = currentUser ? 'local_web_user_' + currentUser.username + '_' + key : 'local_web_unauthenticated_' + key;
+ 1037:             
+ 1038:             if (IS_ELECTRON) {
+ 1039:                 const data = typeof value === 'string' ? JSON.parse(value) : value;
+ 1040:                 await window.electronAPI.saveUserData(storageKey, data);
+ 1041:             }
+ 1042:             localStorage.setItem(storageKey, value);
+ 1043:         }
+ 1044: 
+ 1045:         function removeUserItem(key) {
+ 1046:             const storageKey = currentUser ? 'local_web_user_' + currentUser.username + '_' + key : 'local_web_unauthenticated_' + key;
+ 1047:             localStorage.removeItem(storageKey);
+ 1048:         }
+ 1049: 
+ 1050:         async function saveMedicinesToDisk() {
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 22
+================================================================================
+ 1051:             if (IS_ELECTRON) {
+ 1052:                 await window.electronAPI.saveUserData('local_medicines', medicines);
+ 1053:             }
+ 1054:         }
+ 1055: 
+ 1056:         const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
+ 1057:         // simpleEncrypt/simpleDecrypt 必须为同步函数（saveUsers/getUsers 同步调用）
+ 1058:         // 不能调用 AuthCore.encryptUsers/decryptUsers（async 函数会返回 Promise，导致 localStorage 存入 '[object Promise]'，用户数据丢失）
+ 1059:         function simpleEncrypt(text) {
+ 1060:             if (!text) return '';
+ 1061:             const key = PASSWORD_SALT;
+ 1062:             let result = '';
+ 1063:             for (let i = 0; i < text.length; i++) {
+ 1064:                 result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+ 1065:             }
+ 1066:             return 'XORv1:' + btoa(unescape(encodeURIComponent(result)));
+ 1067:         }
+ 1068:         function simpleDecrypt(stored) {
+ 1069:             if (!stored || typeof stored !== 'string') return stored;
+ 1070:             // 兼容损坏数据（如历史 '[object Promise]'）：直接返回原值让上层 fallback 到默认用户
+ 1071:             if (!stored.startsWith('XORv1:')) return stored;
+ 1072:             try {
+ 1073:                 const text = decodeURIComponent(escape(atob(stored.substring(6))));
+ 1074:                 const key = PASSWORD_SALT;
+ 1075:                 let result = '';
+ 1076:                 for (let i = 0; i < text.length; i++) {
+ 1077:                     result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+ 1078:                 }
+ 1079:                 return result;
+ 1080:             } catch(e) { return stored; }
+ 1081:         }
+ 1082:         async function hashPassword(password) {
+ 1083:             if (window.AuthCore) return AuthCore.hashPassword(password);
+ 1084:             if (!password) return '';
+ 1085:             try {
+ 1086:                 const encoder = new TextEncoder();
+ 1087:                 const data = encoder.encode(PASSWORD_SALT + password);
+ 1088:                 const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+ 1089:                 return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+ 1090:             } catch (e) {
+ 1091:                 console.error('密码哈希化失败，使用明文:', e);
+ 1092:                 return password;
+ 1093:             }
+ 1094:         }
+ 1095:         function isPasswordHashed(pwd) {
+ 1096:             return typeof pwd === 'string' && pwd.length === 64 && /^[a-f0-9]{64}$/.test(pwd);
+ 1097:         }
+ 1098:         async function computeBackupHmac(jsonStr) {
+ 1099:             try {
+ 1100:                 const encoder = new TextEncoder();
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 23
+================================================================================
+ 1101:                 const keyData = encoder.encode(PASSWORD_SALT);
+ 1102:                 const key = await crypto.subtle.importKey(
+ 1103:                     'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+ 1104:                 );
+ 1105:                 const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(jsonStr));
+ 1106:                 return Array.from(new Uint8Array(signature)).map(b => b.toString(16).padStart(2, '0')).join('');
+ 1107:             } catch (e) {
+ 1108:                 console.error('HMAC 计算失败:', e);
+ 1109:                 return '';
+ 1110:             }
+ 1111:         }
+ 1112:         function getUsers() {
+ 1113:             const saved = localStorage.getItem('local_systemUsers');
+ 1114:             if (saved) {
+ 1115:                 try {
+ 1116:                     const decrypted = simpleDecrypt(saved);
+ 1117:                     return JSON.parse(decrypted);
+ 1118:                 } catch (e) {
+ 1119:                     try { return JSON.parse(saved); } catch(e2) { console.error('解析用户列表失败:', e); }
+ 1120:                 }
+ 1121:             }
+ 1122:             return getDefaultUsers();
+ 1123:         }
+ 1124:         // 启动时自动迁移明文密码为哈希
+ 1125:         (async function ensurePasswordsHashed() {
+ 1126:             const users = getUsers();
+ 1127:             let needsMigration = false;
+ 1128:             for (const u of users) {
+ 1129:                 if (u.password && !isPasswordHashed(u.password)) {
+ 1130:                     u.password = await hashPassword(u.password);
+ 1131:                     needsMigration = true;
+ 1132:                 }
+ 1133:             }
+ 1134:             if (needsMigration) saveUsers(users);
+ 1135:         })().catch(e => console.error('密码迁移失败:', e));
+ 1136: 
+ 1137:         function saveUsers(users) {
+ 1138:             localStorage.setItem('local_systemUsers', simpleEncrypt(JSON.stringify(users)));
+ 1139:         }
+ 1140: 
+ 1141:         async function handleLogin() {
+ 1142:             try {
+ 1143:                 const username = document.getElementById('loginUsername').value.trim();
+ 1144:                 const password = document.getElementById('loginPassword').value;
+ 1145:                 const errorDiv = document.getElementById('loginError');
+ 1146:                 
+ 1147:                 if (!username || !password) {
+ 1148:                     errorDiv.textContent = '请输入用户名和密码';
+ 1149:                     errorDiv.style.display = 'block';
+ 1150:                     return;
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 24
+================================================================================
+ 1151:                 }
+ 1152:                 
+ 1153:                 const users = getUsers();
+ 1154:                 // 使用 AuthCore.verifyPassword 支持 PBKDF2 + 旧 SHA-256 + 明文兼容
+ 1155:                 let user = null;
+ 1156:                 for (const u of users) {
+ 1157:                     if (u.username !== username) continue;
+ 1158:                     if (window.AuthCore && AuthCore.verifyPassword) {
+ 1159:                         if (await AuthCore.verifyPassword(password, u.password || '', username)) { user = u; break; }
+ 1160:                     } else {
+ 1161:                         const hashedPwd = await hashPassword(password);
+ 1162:                         if (u.password === hashedPwd) { user = u; break; }
+ 1163:                     }
+ 1164:                 }
+ 1165:                 
+ 1166:                 if (user) {
+ 1167:                     // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
+ 1168:                     try {
+ 1169:                         if (window.AuthCore && AuthCore.upgradePasswordIfNeeded) {
+ 1170:                             const upgraded = await AuthCore.upgradePasswordIfNeeded(password, user.password, username);
+ 1171:                             if (upgraded) {
+ 1172:                                 const allUsers = getUsers();
+ 1173:                                 const idx = allUsers.findIndex(u => u.username === username);
+ 1174:                                 if (idx >= 0) {
+ 1175:                                     allUsers[idx].password = upgraded;
+ 1176:                                     saveUsers(allUsers);
+ 1177:                                 }
+ 1178:                             }
+ 1179:                         }
+ 1180:                     } catch (e) { console.warn('密码升级失败:', e); }
+ 1181:                     
+ 1182:                     currentUser = user;
+ 1183:                     // 使用统一的 user_login_data 存储登录信息
+ 1184:                     const loginData = {
+ 1185:                         user: user,
+ 1186:                         loginTime: Date.now()
+ 1187:                     };
+ 1188:                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
+ 1189:                     
+ 1190:                     const rememberUser = document.getElementById('rememberUser')?.checked;
+ 1191:                     if (rememberUser) {
+ 1192:                         saveRememberedUser(username);
+ 1193:                     } else {
+ 1194:                         localStorage.removeItem('local_rememberedUsername');
+ 1195:                     }
+ 1196:                     
+ 1197:                     document.getElementById('loginOverlay').style.display = 'none';
+ 1198:                     document.querySelector('.main-container').style.display = 'flex';
+ 1199:                     updateUserDisplay();
+ 1200:                     errorDiv.style.display = 'none';
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 25
+================================================================================
+ 1201: 
+ 1202:                     // 登录后自动设置医师姓名为登录用户的姓名
+ 1203:                     const doctorNameInput = document.getElementById('doctorName');
+ 1204:                     if (doctorNameInput) {
+ 1205:                         doctorNameInput.value = user.name || '';
+ 1206:                     }
+ 1207:                     const defaultDoctorInput = document.getElementById('defaultDoctor');
+ 1208:                     if (defaultDoctorInput) {
+ 1209:                         defaultDoctorInput.value = user.name || '';
+ 1210:                     }
+ 1211: 
+ 1212:                     await loadData();
+ 1213:                     refreshUserInterface();
+ 1214:                     if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
+ 1215: 
+ 1216:                     // ★ PC端也显示底部录像/拍照按钮（mobileActionBar 默认 display:none 仅移动端显示）
+ 1217:                     // 参考云端桌面版，登录后确保底部操作栏可见
+ 1218:                     try {
+ 1219:                         const __mab = document.getElementById('mobileActionBar');
+ 1220:                         if (__mab) __mab.style.display = 'block';
+ 1221:                     } catch(e) { console.warn('显示mobileActionBar失败:', e); }
+ 1222: 
+ 1223:                     // 通知主进程放大窗口
+ 1224:                     if (window.electronAPI && window.electronAPI.loginSuccess) {
+ 1225:                         try {
+ 1226:                             await window.electronAPI.loginSuccess(user);
+ 1227:                         } catch (e) {
+ 1228:                             console.error('通知主进程登录成功失败:', e);
+ 1229:                         }
+ 1230:                     }
+ 1231:                 } else {
+ 1232:                     errorDiv.textContent = '用户名或密码错误';
+ 1233:                     errorDiv.style.display = 'block';
+ 1234:                 }
+ 1235:             } catch (e) {
+ 1236:                 console.error('登录失败:', e);
+ 1237:                 const errorDiv = document.getElementById('loginError');
+ 1238:                 errorDiv.textContent = '登录失败: ' + (e.message || '未知错误');
+ 1239:                 errorDiv.style.display = 'block';
+ 1240:             }
+ 1241:         }
+ 1242: 
+ 1243:         window.handleLogout = async function() {
+ 1244:             // ★ 修复 2026-07-28：无论 APP/桌面/网页端，退出时都先清除 localStorage 登录态
+ 1245:             // 防止 APP 退出后重新打开时 localStorage 残留 isLoggedIn 导致自动登录
+ 1246:             try {
+ 1247:                 localStorage.removeItem('currentUser');
+ 1248:                 localStorage.removeItem('isLoggedIn');
+ 1249:                 localStorage.removeItem('user_login_data');
+ 1250:                 localStorage.removeItem('auth:isLoggedIn');
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 26
+================================================================================
+ 1251:                 localStorage.removeItem('auth:currentUser');
+ 1252:                 localStorage.removeItem('auth:loginData');
+ 1253:             } catch(e) {}
+ 1254: 
+ 1255:             if (window.electronAPI && window.electronAPI.quitApp) {
+ 1256:                 await window.electronAPI.quitApp();
+ 1257:             } else {
+ 1258:                 currentUser = null;
+ 1259:                 // ★修复"重新登入后历史处方不显示"：退出时必须清空 prescriptionHistory 和 UI，
+ 1260:                 // 防止 loadData 失败时 catch 块保留上一用户数据被 filterPrescriptionsByPermission 过滤为空
+ 1261:                 prescriptionHistory = [];
+ 1262:                 if (typeof __historyFullList !== 'undefined') __historyFullList = [];
+ 1263:                 if (typeof renderHistoryList === 'function') {
+ 1264:                     try { renderHistoryList([]); } catch(e) { console.warn('退出时清空历史列表失败:', e); }
+ 1265:                 }
+ 1266:                 const overlay = document.getElementById('loginOverlay');
+ 1267:                 if (overlay) {
+ 1268:                     overlay.style.display = 'flex';
+ 1269:                     loadRememberedUsers();
+ 1270:                 }
+ 1271:             }
+ 1272:         };
+ 1273: 
+ 1274:         window.exitApp = function() {
+ 1275:             if (window.AndroidNative && window.AndroidNative.quitApp) {
+ 1276:                 window.AndroidNative.quitApp();
+ 1277:             } else if (window.electronAPI && window.electronAPI.quitApp) {
+ 1278:                 window.electronAPI.quitApp();
+ 1279:             } else {
+ 1280:                 window.close();
+ 1281:             }
+ 1282:         };
+ 1283: 
+ 1284:         async function refreshUserInterface() {
+ 1285:             const presNo = await generatePrescriptionNo();
+ 1286:             document.getElementById('prescriptionNo').value = presNo;
+ 1287:             document.getElementById('paperClinicNo').textContent = presNo;
+ 1288:             // 确保医师姓名默认显示当前登录医师姓名
+ 1289:             const doctorNameEl = document.getElementById('doctorName');
+ 1290:             if (doctorNameEl && currentUser && currentUser.name && !doctorNameEl.value) {
+ 1291:                 doctorNameEl.value = currentUser.name;
+ 1292:             }
+ 1293:             // 统计输入框：按登入用户累计历史处方计数（管理员统计全部、普通用户统计自己的）
+ 1294:             const year = String(new Date().getFullYear()).slice(-2);
+ 1295:             document.getElementById('clinicNo').value = year + String(prescriptionHistory.length).padStart(6, '0');
+ 1296:             // 无论 prescriptionHistory 是否为空，都渲染历史列表，避免登录后历史区域空白
+ 1297:             try {
+ 1298:                 renderHistoryList(filterPrescriptionsByPermission(prescriptionHistory).slice(0, 15));
+ 1299:             } catch(e) { console.warn('renderHistoryList 失败:', e); }
+ 1300:             if (prescriptionItems.length === 0) {
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 27
+================================================================================
+ 1301:                 for (let i = 0; i< 15; i++) addEmptyRow();
+ 1302:             }
+ 1303:             DOM_CACHE.init();
+ 1304:             // 只在表格为空时才重新渲染，避免清空用户正在输入的简码
+ 1305:             const tbody = DOM_CACHE.prescriptionBody;
+ 1306:             if (!tbody || !tbody.children || tbody.children.length === 0) {
+ 1307:                 renderPrescriptionTable();
+ 1308:             }
+ 1309:             calculateAmount();
+ 1310:             updatePrescriptionPaper();
+ 1311:         }
+ 1312: 
+ 1313:         function showChangePwdModal() {
+ 1314:             document.getElementById('oldPwd').value = '';
+ 1315:             document.getElementById('newPwd').value = '';
+ 1316:             document.getElementById('confirmNewPwd').value = '';
+ 1317:             document.getElementById('changePwdModal').style.display = 'flex';
+ 1318:         }
+ 1319: 
+ 1320:         async function handleChangePassword() {
+ 1321:             try {
+ 1322:                 const oldPwd = document.getElementById('oldPwd').value;
+ 1323:                 const newPwd = document.getElementById('newPwd').value;
+ 1324:                 const confirmNewPwd = document.getElementById('confirmNewPwd').value;
+ 1325: 
+ 1326:                 if (!oldPwd || !newPwd || !confirmNewPwd) {
+ 1327:                     alert('请填写所有字段');
+ 1328:                     return;
+ 1329:                 }
+ 1330: 
+ 1331:                 if (newPwd !== confirmNewPwd) {
+ 1332:                     alert('新密码两次输入不一致');
+ 1333:                     return;
+ 1334:                 }
+ 1335: 
+ 1336:                 const users = getUsers();
+ 1337:                 const userIndex = users.findIndex(u =>u.username === currentUser.username);
+ 1338: 
+ 1339:                 if (userIndex === -1) {
+ 1340:                     alert('用户不存在');
+ 1341:                     return;
+ 1342:                 }
+ 1343: 
+ 1344:                 // 使用与 login.js 完全一致的密码校验逻辑（hashPassword 直接比较 + 明文兼容）
+ 1345:                 // 不依赖 AuthCore.verifyPassword（混淆后行为可能与源码不一致）
+ 1346:                 const storedPwd = users[userIndex].password || '';
+ 1347:                 const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
+ 1348:                 let verified = false;
+ 1349:                 try {
+ 1350:                     if (isHash) {
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 28
+================================================================================
+ 1351:                         verified = (storedPwd === await hashPassword(oldPwd));
+ 1352:                     } else {
+ 1353:                         verified = (storedPwd === oldPwd);
+ 1354:                     }
+ 1355:                 } catch(e) { console.warn('密码校验异常:', e); }
+ 1356:                 if (!verified) {
+ 1357:                     // 校验失败：可能是用户忘记之前修改的密码，提供重置为 admin 的选项
+ 1358:                     const reset = confirm('原密码错误！\n\n是否重置密码为默认值 admin？\n（重置后可用 admin 登录，再修改为新密码）');
+ 1359:                     if (reset) {
+ 1360:                         const defaultUsers = getDefaultUsers();
+ 1361:                         saveUsers(defaultUsers);
+ 1362:                         // 同步更新 currentUser，避免后续操作找不到用户
+ 1363:                         const matchedUser = defaultUsers.find(u => u.username === (currentUser?.username || 'admin')) || defaultUsers[0];
+ 1364:                         currentUser = matchedUser;
+ 1365:                         localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
+ 1366:                         alert('密码已重置为 admin！\n\n请点击"修改密码"重新设置新密码。');
+ 1367:                         closeModal('changePwdModal');
+ 1368:                         // 修复历史处方消失：重置密码后重新加载处方数据
+ 1369:                         try {
+ 1370:                             await loadData();
+ 1371:                             refreshUserInterface();
+ 1372:                         } catch(e) { console.warn('重置密码后刷新数据失败:', e); }
+ 1373:                     }
+ 1374:                     return;
+ 1375:                 }
+ 1376: 
+ 1377:                 users[userIndex].password = await hashPassword(newPwd);
+ 1378:                 saveUsers(users);
+ 1379:                 currentUser = users[userIndex];
+ 1380:                 localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
+ 1381: 
+ 1382:                 alert('密码修改成功！');
+ 1383:                 closeModal('changePwdModal');
+ 1384:                 // 修复历史处方消失：修改密码后重新加载处方数据
+ 1385:                 // 之前 prescriptionHistory 可能为空（loadData 超时或后台重编号竞态），导致历史处方消失
+ 1386:                 try {
+ 1387:                     await loadData();
+ 1388:                     refreshUserInterface();
+ 1389:                 } catch(e) { console.warn('修改密码后刷新数据失败:', e); }
+ 1390:             } catch (e) {
+ 1391:                 console.error('修改密码失败:', e);
+ 1392:                 alert('修改密码失败: ' + (e.message || '未知错误'));
+ 1393:             }
+ 1394:         }
+ 1395: 
+ 1396:         function showUserManageModal() {
+ 1397:             if (!currentUser) return;
+ 1398:             const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+ 1399:             if (!canManage) {
+ 1400:                 alert('只有管理员可以管理用户');
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 29
+================================================================================
+ 1401:                 return;
+ 1402:             }
+ 1403: 
+ 1404:             renderUserList();
+ 1405:             document.getElementById('newUserUsername').value = '';
+ 1406:             document.getElementById('newUserPassword').value = '';
+ 1407:             document.getElementById('newUserName').value = '';
+ 1408:             document.getElementById('userManageModal').style.display = 'flex';
+ 1409:         }
+ 1410: 
+ 1411:         function renderUserList() {
+ 1412:             const users = getUsers();
+ 1413:             const listDiv = document.getElementById('userList');
+ 1414:             
+ 1415:             let html = '';
+ 1416:             users.forEach(user =>{
+ 1417:                 html += `<div class="user-item"><div class="user-item-info"><div class="user-item-name">${escapeHtml(user.name)} (${escapeHtml(user.username)})</div><div class="user-item-role">${user.role === 'admin' ? '管理员' : '普通用户'}</div></div><div class="user-item-actions"><button class="user-item-btn btn-primary" onclick="handleViewUserPrescriptions('${escapeJs(user.username)}')">查看处方</button><button class="user-item-btn btn-primary" onclick="handleEditUser('${escapeJs(user.username)}')">编辑</button>${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + escapeJs(user.username) + '\')">删除</button>' : ''}</div></div>`;
+ 1418:             });
+ 1419:             
+ 1420:             listDiv.innerHTML = html || '暂无用户';
+ 1421:         }
+ 1422: 
+ 1423:         function handleEditUser(username) {
+ 1424:             const users = getUsers();
+ 1425:             const user = users.find(u => u.username === username);
+ 1426:             if (!user) return;
+ 1427: 
+ 1428:             const existing = document.getElementById('editUserModal');
+ 1429:             if (existing) existing.remove();
+ 1430: 
+ 1431:             // 离线版本无云端功能，移除"使用模式"字段
+ 1432:             const modal = document.createElement('div');
+ 1433:             modal.id = 'editUserModal';
+ 1434:             modal.className = 'modal';
+ 1435:             modal.style.display = 'flex';
+ 1436:             modal.innerHTML = '<div class="modal-content user-modal-content">' +
+ 1437:                 '<div class="modal-header"><span>编辑用户</span>' +
+ 1438:                 '<span class="close-btn" onclick="document.getElementById(\'editUserModal\').remove(); document.getElementById(\'userManageModal\').style.display=\'flex\';">&times;</span></div>' +
+ 1439:                 '<div class="modal-body">' +
+ 1440:                 '<div class="form-group"><label>登录用户（英文或拼音）</label>' +
+ 1441:                 '<input type="text" id="editUserUsername" value="' + escapeHtml(user.username) + '" placeholder="登录账号"></div>' +
+ 1442:                 '<div class="form-group" style="margin-top:10px;"><label>医师姓名</label>' +
+ 1443:                 '<input type="text" id="editUserName" value="' + escapeHtml(user.name) + '" placeholder="医师姓名"></div>' +
+ 1444:                 '<div class="form-group" style="margin-top:10px;"><label>新密码（留空则不修改）</label>' +
+ 1445:                 '<input type="password" id="editUserPassword" placeholder="留空则不修改"></div>' +
+ 1446:                 '<div class="form-group" style="margin-top:10px;"><label>角色</label>' +
+ 1447:                 '<select id="editUserRole" style="width:100%;padding:5px;">' +
+ 1448:                 '<option value="user"' + (user.role === 'user' ? ' selected' : '') + '>普通用户</option>' +
+ 1449:                 '<option value="admin"' + (user.role === 'admin' ? ' selected' : '') + '>管理员</option>' +
+ 1450:                 '</select></div>' +
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 30
+================================================================================
+ 1451:                 '</div>' +
+ 1452:                 '<div class="modal-footer">' +
+ 1453:                 '<button class="action-btn" onclick="document.getElementById(\'editUserModal\').remove(); document.getElementById(\'userManageModal\').style.display=\'flex\';">取消</button>' +
+ 1454:                 '<button class="action-btn primary" onclick="confirmEditUser(\'' + escapeJs(username) + '\')">保存</button>' +
+ 1455:                 '</div></div>';
+ 1456:             // 先隐藏用户管理弹窗，避免两个弹窗同时显示导致输入卡顿
+ 1457:             document.getElementById('userManageModal').style.display = 'none';
+ 1458:             document.body.appendChild(modal);
+ 1459:         }
+ 1460: 
+ 1461:         async function confirmEditUser(originalUsername) {
+ 1462:             try {
+ 1463:                 const newUsername = document.getElementById('editUserUsername').value.trim();
+ 1464:                 const newName = document.getElementById('editUserName').value.trim();
+ 1465:                 const newPassword = document.getElementById('editUserPassword').value;
+ 1466:                 const newRole = document.getElementById('editUserRole').value;
+ 1467: 
+ 1468:                 if (!newUsername) { alert('用户名不能为空'); return; }
+ 1469:                 if (!newName) { alert('名称不能为空'); return; }
+ 1470:                 if (/[\u4e00-\u9fa5]/.test(newUsername)) {
+ 1471:                     alert('登录账号不能使用中文，请使用英文或拼音！\n示例：zhaoyisheng 或 doctor3');
+ 1472:                     return;
+ 1473:                 }
+ 1474:                 // 参考云端APP：医师姓名必须为中文（至少2个汉字）
+ 1475:                 if (!/^[\u4e00-\u9fa5]{2,}$/.test(newName)) {
+ 1476:                     alert('医师姓名必须为中文（至少2个汉字），请输入医师真实姓名');
+ 1477:                     return;
+ 1478:                 }
+ 1479: 
+ 1480:                 const users = getUsers();
+ 1481:                 if (newUsername !== originalUsername) {
+ 1482:                     const exists = users.find(u => u.username === newUsername);
+ 1483:                     if (exists) { alert('用户名已存在'); return; }
+ 1484:                 }
+ 1485:                 const nameExists = users.find(u => u.name === newName && u.username !== originalUsername);
+ 1486:                 if (nameExists) {
+ 1487:                     alert('医师姓名已存在，请使用不同的姓名！');
+ 1488:                     return;
+ 1489:                 }
+ 1490: 
+ 1491:                 const userIndex = users.findIndex(u => u.username === originalUsername);
+ 1492:                 if (userIndex === -1) { alert('用户不存在'); return; }
+ 1493: 
+ 1494:                 users[userIndex].username = newUsername;
+ 1495:                 users[userIndex].name = newName;
+ 1496:                 users[userIndex].role = newRole;
+ 1497:                 if (newPassword.trim()) {
+ 1498:                     users[userIndex].password = await hashPassword(newPassword.trim());
+ 1499:                 } else if (!isPasswordHashed(users[userIndex].password)) {
+ 1500:                     users[userIndex].password = await hashPassword(users[userIndex].password);
+
+
+================================================================================
+  (Following is the last 30 pages of source code)
+================================================================================
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 31
+================================================================================
+15900:         if (!Array.isArray(list)) return list;
+15901:         return list.sort((a, b) => {
+15902:             const timeA = new Date(a.createdAt || a.date || a.id || 0).getTime();
+15903:             const timeB = new Date(b.createdAt || b.date || b.id || 0).getTime();
+15904:             return timeB - timeA;
+15905:         });
+15906:     }
+15907: 
+15908:     // 处方按编号倒序排序（与云端 API prescriptions.js 排序一致）
+15909:     function sortPrescriptionsByNoDesc(list) {
+15910:         if (!Array.isArray(list)) return list;
+15911:         return list.sort((a, b) => {
+15912:             const noA = a.outpatientNo || a.prescriptionNo || '';
+15913:             const noB = b.outpatientNo || b.prescriptionNo || '';
+15914:             return noB.localeCompare(noA);
+15915:         });
+15916:     }
+15917: 
+15918:     // ==================== 药品对象工具 ====================
+15919: 
+15920:     // 创建空药品对象（与各端 createEmptyMedicine 一致）
+15921:     function createEmptyMedicine() {
+15922:         return { code: '', name: '', dosage: '', unit: 'g', price: '', total: '' };
+15923:     }
+15924: 
+15925:     // 计算单味药合计金额
+15926:     function calculateItemTotal(price, dosage) {
+15927:         const p = parseFloat(price) || 0;
+15928:         const d = parseFloat(dosage) || 0;
+15929:         return p * d;
+15930:     }
+15931: 
+15932:     // ==================== 处方金额计算 ====================
+15933: 
+15934:     // 计算处方药品总金额（所有药品合计之和）
+15935:     function calculateMedicineTotal(items) {
+15936:         if (!Array.isArray(items)) return 0;
+15937:         return items.reduce((sum, item) => {
+15938:             if (!item || !item.name) return sum;
+15939:             return sum + (parseFloat(item.total) || calculateItemTotal(item.price, item.dosage));
+15940:         }, 0);
+15941:     }
+15942: 
+15943:     // 计算处方总金额（药品总额 × 剂数 + 诊费）
+15944:     function calculatePrescriptionTotal(items, doseCount, registrationFee) {
+15945:         const medicineTotal = calculateMedicineTotal(items);
+15946:         const dose = parseInt(doseCount) || 1;
+15947:         const fee = parseFloat(registrationFee) || 0;
+15948:         return medicineTotal * dose + fee;
+15949:     }
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 32
+================================================================================
+15950: 
+15951:     // 计算每剂金额
+15952:     function calculatePerDosePrice(items) {
+15953:         return calculateMedicineTotal(items);
+15954:     }
+15955: 
+15956:     // ==================== 处方校验 ====================
+15957: 
+15958:     // 校验处方必填字段
+15959:     // 返回 { valid: boolean, error: string }
+15960:     function validatePrescription(record) {
+15961:         if (!record) return { valid: false, error: '处方数据为空' };
+15962:         if (!record.patientName) return { valid: false, error: '请输入患者姓名' };
+15963:         if (!record.items || !Array.isArray(record.items) || record.items.length === 0) {
+15964:             return { valid: false, error: '请至少添加一味药品' };
+15965:         }
+15966:         const hasValidItem = record.items.some(item => item && item.name);
+15967:         if (!hasValidItem) return { valid: false, error: '请至少添加一味药品' };
+15968:         if (!record.doseCount || parseInt(record.doseCount) <= 0) {
+15969:             return { valid: false, error: '剂数必须大于0' };
+15970:         }
+15971:         return { valid: true };
+15972:     }
+15973: 
+15974:     // ==================== 处方记录构建 ====================
+15975: 
+15976:     // 构建标准化处方记录（字段统一）
+15977:     // formData: { id, date, patientName, patientGender, patientAge, patientPhone,
+15978:     //             patientAddress, doctorName, medicalHistory, diagnosis, items,
+15979:     //             doseCount, totalAmount, registrationFee, createdBy, createdAt }
+15980:     function buildPrescriptionRecord(formData) {
+15981:         const now = new Date().toISOString();
+15982:         const items = (formData.items || []).filter(item => item && item.name).map(item => ({
+15983:             code: item.code || '',
+15984:             name: item.name || '',
+15985:             dosage: item.dosage || '',
+15986:             unit: item.unit || 'g',
+15987:             price: parseFloat(item.price) || 0,
+15988:             total: parseFloat(item.total) || calculateItemTotal(item.price, item.dosage)
+15989:         }));
+15990: 
+15991:         const doseCount = parseInt(formData.doseCount) || 7;
+15992:         const registrationFee = parseFloat(formData.registrationFee) || 0;
+15993:         const medicineTotal = calculateMedicineTotal(items);
+15994:         const totalAmount = medicineTotal * doseCount + registrationFee;
+15995: 
+15996:         return {
+15997:             id: formData.id || Date.now(),
+15998:             date: formData.date || new Date().toISOString().split('T')[0],
+15999:             patientName: formData.patientName || '',
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 33
+================================================================================
+16000:             patientGender: formData.patientGender || '',
+16001:             patientAge: formData.patientAge || '',
+16002:             patientPhone: formData.patientPhone || '',
+16003:             patientAddress: formData.patientAddress || '',
+16004:             doctorName: formData.doctorName || '',
+16005:             medicalHistory: formData.medicalHistory || '',
+16006:             diagnosis: formData.diagnosis || '',
+16007:             items: items,
+16008:             doseCount: doseCount,
+16009:             medicineTotal: medicineTotal,
+16010:             perDosePrice: medicineTotal,
+16011:             registrationFee: registrationFee,
+16012:             totalAmount: totalAmount,
+16013:             createdBy: formData.createdBy || 'unknown',
+16014:             createdAt: formData.createdAt || now,
+16015:             updatedAt: now
+16016:         };
+16017:     }
+16018: 
+16019:     // ==================== 药品使用频率统计 ====================
+16020: 
+16021:     // 加载药品使用频率（从 localStorage）
+16022:     function loadMedicineFrequency(storageKey) {
+16023:         const key = storageKey || 'local_medicineFrequency';
+16024:         try {
+16025:             const saved = global.localStorage ? global.localStorage.getItem(key) : null;
+16026:             return saved ? JSON.parse(saved) : {};
+16027:         } catch (e) {
+16028:             return {};
+16029:         }
+16030:     }
+16031: 
+16032:     // 保存药品使用频率（到 localStorage）
+16033:     function saveMedicineFrequency(frequency, storageKey) {
+16034:         const key = storageKey || 'local_medicineFrequency';
+16035:         try {
+16036:             if (global.localStorage) {
+16037:                 global.localStorage.setItem(key, JSON.stringify(frequency));
+16038:             }
+16039:         } catch (e) {
+16040:             console.warn('[PrescriptionCore] 保存药品频率失败:', e);
+16041:         }
+16042:     }
+16043: 
+16044:     // 更新药品使用频率（传入 items 数组，返回更新后的频率对象）
+16045:     function updateMedicineFrequency(items, frequency, storageKey) {
+16046:         const freq = frequency || {};
+16047:         (items || []).forEach(item => {
+16048:             if (item && item.name) {
+16049:                 freq[item.name] = (freq[item.name] || 0) + 1;
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 34
+================================================================================
+16050:             }
+16051:         });
+16052:         if (storageKey !== false) saveMedicineFrequency(freq, storageKey);
+16053:         return freq;
+16054:     }
+16055: 
+16056:     // ==================== 处方编号生成 ====================
+16057: 
+16058:     // 生成离线版处方编号（YYMMDD + 2位序号）
+16059:     // date: Date 对象，seq: 序号
+16060:     function generateOfflinePrescriptionNo(date, seq) {
+16061:         const d = date || new Date();
+16062:         const yy = String(d.getFullYear()).slice(2);
+16063:         const mm = String(d.getMonth() + 1).padStart(2, '0');
+16064:         const dd = String(d.getDate()).padStart(2, '0');
+16065:         const seqStr = String(seq || 1).padStart(2, '0');
+16066:         return yy + mm + dd + seqStr;
+16067:     }
+16068: 
+16069:     // 生成统计编号（年2位 + 序号6位）
+16070:     function generateStatisticsNo(date, total) {
+16071:         const d = date || new Date();
+16072:         const yy = String(d.getFullYear()).slice(2);
+16073:         const count = parseInt(total) || 0;
+16074:         return yy + String(count + 1).padStart(6, '0');
+16075:     }
+16076: 
+16077:     // ==================== 处方摘要生成 ====================
+16078: 
+16079:     // 生成处方摘要文本（用于历史列表显示）
+16080:     function generatePrescriptionSummary(record) {
+16081:         if (!record) return '';
+16082:         const date = record.date || '';
+16083:         const name = record.patientName || '';
+16084:         const diagnosis = record.diagnosis || '';
+16085:         const fee = formatPrice(record.totalAmount);
+16086:         return date + ' - ' + name + ' | ' + diagnosis + (fee ? ' | 诊费:' + fee + '元' : '');
+16087:     }
+16088: 
+16089:     // ==================== 导出 ====================
+16090:     const PrescriptionCore = {
+16091:         formatPrice,
+16092:         escapeHtml,
+16093:         sortPrescriptionsByTimeDesc,
+16094:         sortPrescriptionsByNoDesc,
+16095:         createEmptyMedicine,
+16096:         calculateItemTotal,
+16097:         calculateMedicineTotal,
+16098:         calculatePrescriptionTotal,
+16099:         calculatePerDosePrice,
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 35
+================================================================================
+16100:         validatePrescription,
+16101:         buildPrescriptionRecord,
+16102:         loadMedicineFrequency,
+16103:         saveMedicineFrequency,
+16104:         updateMedicineFrequency,
+16105:         generateOfflinePrescriptionNo,
+16106:         generateStatisticsNo,
+16107:         generatePrescriptionSummary
+16108:     };
+16109: 
+16110:     global.PrescriptionCore = PrescriptionCore;
+16111: 
+16112: })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+16113: /********** File: electron/hot-update.js **********/
+16114: /**
+16115:  * hot-update.js - 桌面版热更新模块（Electron主进程）
+16116:  *
+16117:  * 功能：
+16118:  *   1. 启动时检查云端版本号（异步）
+16119:  *   2. 有新版本时下载 package.zip 并解压到 userData/hot-update/
+16120:  *   3. BrowserWindow 优先加载热更新目录的 index.html
+16121:  *
+16122:  * 用法（在 main.js 中）：
+16123:  *   const hotUpdate = require('./hot-update');
+16124:  *   const hotUpdatePath = hotUpdate.getHotUpdateIndexPath(app, versionName);
+16125:  *   hotUpdate.checkAndDownloadUpdate(app, versionName);
+16126:  *   // 加载逻辑
+16127:  *   if (hotUpdatePath) {
+16128:  *       mainWindow.loadFile(hotUpdatePath);
+16129:  *   } else {
+16130:  *       mainWindow.loadFile(path.join(__dirname, 'index.html'));
+16131:  *   }
+16132:  */
+16133: 
+16134: const { app } = require('electron');
+16135: const fs = require('fs');
+16136: const path = require('path');
+16137: const https = require('https');
+16138: const os = require('os');
+16139: const { execSync } = require('child_process');
+16140: 
+16141: const CLOUD_HOST = 'tcm-prescription-system.pages.dev';
+16142: 
+16143: /**
+16144:  * 获取热更新目录
+16145:  */
+16146: function getHotUpdateDir(appObj) {
+16147:     return path.join(appObj.getPath('userData'), 'hot-update');
+16148: }
+16149: 
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 36
+================================================================================
+16150: /**
+16151:  * 获取热更新 index.html 路径
+16152:  * @return {string|null} 如果存在返回路径，否则 null
+16153:  */
+16154: function getHotUpdateIndexPath(appObj) {
+16155:     const indexPath = path.join(getHotUpdateDir(appObj), 'index.html');
+16156:     if (fs.existsSync(indexPath)) {
+16157:         return indexPath;
+16158:     }
+16159:     return null;
+16160: }
+16161: 
+16162: /**
+16163:  * 获取本地版本号
+16164:  */
+16165: function getLocalVersion(appObj) {
+16166:     try {
+16167:         const versionFile = path.join(getHotUpdateDir(appObj), '.version');
+16168:         if (fs.existsSync(versionFile)) {
+16169:             return fs.readFileSync(versionFile, 'utf8').trim();
+16170:         }
+16171:     } catch (e) { /* ignore */ }
+16172:     return '';
+16173: }
+16174: 
+16175: /**
+16176:  * 保存本地版本号
+16177:  */
+16178: function saveLocalVersion(appObj, version) {
+16179:     try {
+16180:         const versionFile = path.join(getHotUpdateDir(appObj), '.version');
+16181:         fs.mkdirSync(path.dirname(versionFile), { recursive: true });
+16182:         fs.writeFileSync(versionFile, version, 'utf8');
+16183:     } catch (e) {
+16184:         console.error('[HotUpdate] 保存版本号失败:', e);
+16185:     }
+16186: }
+16187: 
+16188: /**
+16189:  * 获取云端最新版本号
+16190:  */
+16191: function fetchLatestVersion(versionName) {
+16192:     return new Promise((resolve) => {
+16193:         const url = `https://${CLOUD_HOST}/hot-update/${versionName}/latest.json`;
+16194:         const req = https.get(url, { timeout: 5000 }, (res) => {
+16195:             if (res.statusCode !== 200) {
+16196:                 console.log('[HotUpdate] 获取版本号 HTTP', res.statusCode);
+16197:                 resolve(null);
+16198:                 return;
+16199:             }
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 37
+================================================================================
+16200:             let data = '';
+16201:             res.on('data', (chunk) => { data += chunk; });
+16202:             res.on('end', () => {
+16203:                 try {
+16204:                     const json = JSON.parse(data);
+16205:                     resolve(json.version || null);
+16206:                 } catch (e) {
+16207:                     console.error('[HotUpdate] 解析版本号失败:', e);
+16208:                     resolve(null);
+16209:                 }
+16210:             });
+16211:         });
+16212:         req.on('error', (e) => {
+16213:             console.log('[HotUpdate] 获取版本号失败:', e.message);
+16214:             resolve(null);
+16215:         });
+16216:         req.on('timeout', () => {
+16217:             req.destroy();
+16218:             resolve(null);
+16219:         });
+16220:     });
+16221: }
+16222: 
+16223: /**
+16224:  * 下载文件
+16225:  */
+16226: function downloadFile(url, destPath) {
+16227:     return new Promise((resolve, reject) => {
+16228:         const file = fs.createWriteStream(destPath);
+16229:         const req = https.get(url, { timeout: 30000 }, (res) => {
+16230:             if (res.statusCode !== 200) {
+16231:                 fs.unlinkSync(destPath);
+16232:                 reject(new Error(`HTTP ${res.statusCode}`));
+16233:                 return;
+16234:             }
+16235:             res.pipe(file);
+16236:             file.on('finish', () => {
+16237:                 file.close();
+16238:                 resolve();
+16239:             });
+16240:         });
+16241:         req.on('error', (e) => {
+16242:             try { fs.unlinkSync(destPath); } catch (_) {}
+16243:             reject(e);
+16244:         });
+16245:         req.on('timeout', () => {
+16246:             req.destroy();
+16247:             try { fs.unlinkSync(destPath); } catch (_) {}
+16248:             reject(new Error('下载超时'));
+16249:         });
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 38
+================================================================================
+16250:     });
+16251: }
+16252: 
+16253: /**
+16254:  * 解压 ZIP 文件（使用 PowerShell Expand-Archive）
+16255:  */
+16256: function extractZip(zipPath, targetDir) {
+16257:     try {
+16258:         fs.mkdirSync(targetDir, { recursive: true });
+16259:         // 使用 PowerShell 解压（Windows 内置）
+16260:         const cmd = `powershell -NoProfile -Command "Expand-Archive -Path '${zipPath}' -DestinationPath '${targetDir}' -Force"`;
+16261:         execSync(cmd, { stdio: 'ignore' });
+16262:         return true;
+16263:     } catch (e) {
+16264:         console.error('[HotUpdate] 解压失败:', e);
+16265:         return false;
+16266:     }
+16267: }
+16268: 
+16269: /**
+16270:  * 递归删除目录
+16271:  */
+16272: function deleteRecursive(dirPath) {
+16273:     if (fs.existsSync(dirPath)) {
+16274:         fs.rmSync(dirPath, { recursive: true, force: true });
+16275:     }
+16276: }
+16277: 
+16278: /**
+16279:  * 异步检查并下载更新
+16280:  */
+16281: async function checkAndDownloadUpdate(appObj, versionName) {
+16282:     try {
+16283:         console.log('[HotUpdate] 开始检查热更新...');
+16284: 
+16285:         // 1. 获取云端版本号
+16286:         const latestVersion = await fetchLatestVersion(versionName);
+16287:         if (!latestVersion) {
+16288:             console.log('[HotUpdate] 无法获取云端版本号，跳过');
+16289:             return;
+16290:         }
+16291: 
+16292:         // 2. 获取本地版本号
+16293:         const localVersion = getLocalVersion(appObj);
+16294: 
+16295:         // 3. 比较版本号
+16296:         if (latestVersion === localVersion) {
+16297:             console.log('[HotUpdate] 已是最新版本:', localVersion);
+16298:             return;
+16299:         }
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 39
+================================================================================
+16300: 
+16301:         // 4. 下载更新包
+16302:         console.log(`[HotUpdate] 发现新版本: ${latestVersion} (当前: ${localVersion})`);
+16303:         const downloadUrl = `https://${CLOUD_HOST}/hot-update/${versionName}/package.zip`;
+16304:         const tempZip = path.join(os.tmpdir(), `hot-update-${versionName}.zip`);
+16305: 
+16306:         await downloadFile(downloadUrl, tempZip);
+16307:         console.log('[HotUpdate] 下载完成');
+16308: 
+16309:         // 5. 解压到临时目录
+16310:         const tempDir = path.join(os.tmpdir(), `hot-update-extract-${Date.now()}`);
+16311:         if (!extractZip(tempZip, tempDir)) {
+16312:             console.error('[HotUpdate] 解压失败');
+16313:             try { fs.unlinkSync(tempZip); } catch (_) {}
+16314:             return;
+16315:         }
+16316:         try { fs.unlinkSync(tempZip); } catch (_) {}
+16317: 
+16318:         // 6. 替换热更新目录
+16319:         const hotUpdateDir = getHotUpdateDir(appObj);
+16320:         deleteRecursive(hotUpdateDir);
+16321:         fs.mkdirSync(hotUpdateDir, { recursive: true });
+16322: 
+16323:         // 复制文件
+16324:         const files = fs.readdirSync(tempDir);
+16325:         for (const file of files) {
+16326:             const src = path.join(tempDir, file);
+16327:             const dst = path.join(hotUpdateDir, file);
+16328:             if (fs.statSync(src).isDirectory()) {
+16329:                 fs.cpSync(src, dst, { recursive: true });
+16330:             } else {
+16331:                 fs.copyFileSync(src, dst);
+16332:             }
+16333:         }
+16334:         deleteRecursive(tempDir);
+16335: 
+16336:         // 7. 保存版本号
+16337:         saveLocalVersion(appObj, latestVersion);
+16338: 
+16339:         console.log(`[HotUpdate] 热更新完成: ${latestVersion}，下次启动生效`);
+16340: 
+16341:     } catch (e) {
+16342:         console.error('[HotUpdate] 热更新检查失败:', e);
+16343:     }
+16344: }
+16345: 
+16346: module.exports = {
+16347:     getHotUpdateDir,
+16348:     getHotUpdateIndexPath,
+16349:     checkAndDownloadUpdate
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 40
+================================================================================
+16350: };
+16351: /********** File: permission.js **********/
+16352: // ============================================================================
+16353: // permission.js — 版本权限控制模块
+16354: // 根据 config.json 的 edition 字段控制字段读写权限
+16355: // ============================================================================
+16356: (function (global) {
+16357:     'use strict';
+16358: 
+16359:     const Permission = {
+16360:         _edition: null,
+16361:         _config: null,
+16362:         _initialized: false,
+16363: 
+16364:         async init() {
+16365:             if (this._initialized) return;
+16366:             this._initialized = true;
+16367: 
+16368:             // 从 localStorage 或 electronAPI 读取配置
+16369:             try {
+16370:                 if (global.electronAPI && global.electronAPI.getAppConfig) {
+16371:                     const result = await global.electronAPI.getAppConfig();
+16372:                     // Electron IPC 返回 { success, config } 格式
+16373:                     this._config = (result && result.config) ? result.config : (result || {});
+16374:                 } else if (typeof CONFIG !== 'undefined' && CONFIG) {
+16375:                     // 离线版内嵌的 CONFIG 对象
+16376:                     this._config = CONFIG;
+16377:                 } else {
+16378:                     const stored = localStorage.getItem('app_config');
+16379:                     this._config = stored ? JSON.parse(stored) : {};
+16380:                 }
+16381:             } catch (e) {
+16382:                 console.warn('读取版本配置失败:', e);
+16383:                 this._config = {};
+16384:             }
+16385: 
+16386:             this._edition = this._config.edition || (global.EDITION) || 'cloud';
+16387:             console.log('[DBG] Permission initialized, edition:', this._edition);
+16388:         },
+16389: 
+16390:         get edition() { return this._edition; },
+16391:         get config() { return this._config; },
+16392: 
+16393:         // 版本判断
+16394:         isCloud() { return this._edition === 'cloud'; },
+16395:         isOffline() { return this._edition === 'offline'; },
+16396:         isPersonal() { return this._edition === 'personal'; },
+16397:         isClinicCustom() { return this._edition === 'clinic_custom'; },
+16398: 
+16399:         // 权限判断
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 41
+================================================================================
+16400:         canEditClinicName() {
+16401:             return this.isCloud() || this.isOffline();
+16402:         },
+16403:         canEditDoctorName() {
+16404:             return !this.isPersonal();
+16405:         },
+16406:         canManageUsers() {
+16407:             return !this.isPersonal();
+16408:         },
+16409:         canSync() {
+16410:             return this.isCloud();
+16411:         },
+16412:         hasMultiUser() {
+16413:             return !this.isPersonal();
+16414:         },
+16415:         hasRememberPassword() {
+16416:             return this.isPersonal();
+16417:         },
+16418:         hasUsernameDropdown() {
+16419:             return !this.isPersonal();
+16420:         },
+16421: 
+16422:         // ===== 基于角色的权限判断（统一入口） =====
+16423:         // 所有角色判断都通过 AuthCore 的 isAdmin/isClinicAdmin/isPlatformAdmin
+16424:         // 确保离线版 admin 和云端版 clinic_admin 行为一致
+16425: 
+16426:         // 是否可以管理用户（需要管理员角色 + 非个人版）
+16427:         canManageUsersByRole(user) {
+16428:             if (this.isPersonal()) return false;
+16429:             if (!user) return false;
+16430:             if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+16431:                 return global.AuthCore.isClinicAdmin(user);
+16432:             }
+16433:             // 回退：直接角色比较
+16434:             return user.role === 'admin' || user.role === 'clinic_admin';
+16435:         },
+16436: 
+16437:         // 是否可以修改密码（个人版所有用户均可；非个人版仅普通用户可修改密码，管理员使用账户管理）
+16438:         canChangePassword(user) {
+16439:             if (this.isPersonal()) return true; // 个人版允许改密
+16440:             if (!user) return false;
+16441:             // 非个人版：管理员不显示修改密码（由账户管理覆盖），普通用户显示修改密码
+16442:             if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+16443:                 return !global.AuthCore.isClinicAdmin(user);
+16444:             }
+16445:             return user.role !== 'admin' && user.role !== 'clinic_admin';
+16446:         },
+16447: 
+16448:         // 是否显示账户管理按钮
+16449:         shouldShowUserManage(user) {
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 42
+================================================================================
+16450:             return this.canManageUsersByRole(user);
+16451:         },
+16452: 
+16453:         // 是否显示修改密码按钮
+16454:         shouldShowChangePwd(user) {
+16455:             return this.canChangePassword(user);
+16456:         },
+16457: 
+16458:         // 是否显示开机自启选项
+16459:         shouldShowAutoStart(user) {
+16460:             if (this.isPersonal()) return false;
+16461:             if (!user) return false;
+16462:             if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+16463:                 return global.AuthCore.isClinicAdmin(user);
+16464:             }
+16465:             return user.role === 'admin' || user.role === 'clinic_admin';
+16466:         },
+16467: 
+16468:         // 是否可以查看所有处方（管理员可查看全部，普通用户只能查看自己的）
+16469:         canViewAllPrescriptions(user) {
+16470:             if (!user) return false;
+16471:             if (global.AuthCore && global.AuthCore.isClinicAdmin) {
+16472:                 return global.AuthCore.isClinicAdmin(user);
+16473:             }
+16474:             return user.role === 'admin' || user.role === 'clinic_admin';
+16475:         },
+16476: 
+16477:         // 应用运行页权限控制
+16478:         applyRuntimePermissions() {
+16479:             const edition = this._edition;
+16480:             console.log('[DBG] Applying runtime permissions for edition:', edition);
+16481: 
+16482:             // 诊所名称字段（2026-07-31 新规范：所有版本允许修改诊所名称）
+16483:             // 旧规则：personal/clinic_custom 设为只读，已废弃
+16484:             // const clinicNameInput = document.getElementById('clinicName');
+16485:             // if (clinicNameInput) {
+16486:             //     if (edition === 'personal' || edition === 'clinic_custom') {
+16487:             //         clinicNameInput.readOnly = true;
+16488:             //         clinicNameInput.style.backgroundColor = '#f0f0f0';
+16489:             //         clinicNameInput.style.cursor = 'not-allowed';
+16490:             //         clinicNameInput.title = '当前版本不支持修改诊所名称';
+16491:             //     }
+16492:             // }
+16493: 
+16494:             // 医师姓名字段（2026-07-31 新规范：所有版本允许修改医师姓名）
+16495:             // 旧规则：personal 设为只读，已废弃
+16496:             // if (edition === 'personal') {
+16497:             //     const defaultDoctorInput = document.getElementById('defaultDoctor');
+16498:             //     const doctorNameInput = document.getElementById('doctorName');
+16499:             //     [defaultDoctorInput, doctorNameInput].forEach(el => {
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 43
+================================================================================
+16500:             //         if (el) {
+16501:             //             el.readOnly = true;
+16502:             //             el.style.backgroundColor = '#f0f0f0';
+16503:             //             el.style.cursor = 'not-allowed';
+16504:             //             el.title = '当前版本不支持修改医师姓名';
+16505:             //         }
+16506:             //     });
+16507:             // }
+16508: 
+16509:             // 用户管理按钮（个人定制版隐藏账户管理，但保留修改密码）
+16510:             if (edition === 'personal') {
+16511:                 const userManageBtn = document.getElementById('userManageBtn');
+16512:                 if (userManageBtn) userManageBtn.style.display = 'none';
+16513:                 // 个人版保留修改密码功能，不再隐藏 changePwdBtn
+16514:             }
+16515: 
+16516:             // 同步入口屏蔽（非云端版）
+16517:             if (edition !== 'cloud') {
+16518:                 document.querySelectorAll('[onclick*="sync"], #syncBtn, #cloudSyncBtn, #syncStatus').forEach(el => {
+16519:                     el.style.display = 'none';
+16520:                 });
+16521:             }
+16522:         },
+16523: 
+16524:         // 应用登录页权限控制
+16525:         applyLoginPermissions() {
+16526:             const edition = this._edition;
+16527: 
+16528:             // 账号下拉框
+16529:             const dropdownBtn = document.getElementById('usernameDropdownBtn');
+16530:             if (dropdownBtn) {
+16531:                 dropdownBtn.style.display = this.hasUsernameDropdown() ? '' : 'none';
+16532:             }
+16533: 
+16534:             // 记住密码容器
+16535:             const rememberPwdContainer = document.getElementById('rememberPasswordContainer');
+16536:             if (rememberPwdContainer) {
+16537:                 rememberPwdContainer.style.display = this.hasRememberPassword() ? 'flex' : 'none';
+16538:             }
+16539: 
+16540:             // 云端标准版（personal）：用户名由平台管理员注册产生，首次登入手动输入，不自动填充
+16541:             // 旧逻辑（自动填充 doctorName 并设只读）已删除，因为云端单用户用户名 ≠ 医师姓名
+16542:         }
+16543:     };
+16544: 
+16545:     global.Permission = Permission;
+16546: 
+16547: })(typeof window !== 'undefined' ? window : this);
+16548: /********** File: security-guard.js **********/
+16549: // ============================================================================
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 44
+================================================================================
+16550: // security-guard.js — 轻量级安全防护模块
+16551: //
+16552: // 功能：
+16553: //   1. 反调试检测（debugger 检测，轻量级，不影响正常使用）
+16554: //   2. 完整性校验（exe/APK 自校验，防止被篡改后重新打包）
+16555: //
+16556: // 设计原则：
+16557: //   - 轻量级：不阻塞主线程，不影响正常使用
+16558: //   - 透明：仅在检测到异常时记录日志，不强制退出
+16559: //   - 兼容：同时支持 Electron 桌面版和 Android APP
+16560: //   - ★ P1 修复：移除 localStorage.securityGuardDisabled 关闭开关（防止攻击者一键关闭防护）
+16561: //     仅在 URL 含 ?debug 且本地文件协议下允许关闭（开发调试用）
+16562: //
+16563: // 详见《public/云端版开发规范.md》第七节 7.5 安全防护规范
+16564: // ============================================================================
+16565: (function (global) {
+16566:     'use strict';
+16567: 
+16568:     const SecurityGuard = {
+16569:         _enabled: true,
+16570:         _debuggerDetected: false,
+16571:         _integrityChecked: false,
+16572: 
+16573:         init() {
+16574:             // ★ P1 修复：移除 localStorage.securityGuardDisabled 关闭开关
+16575:             // 原因：任何能注入 JS 的攻击者均可通过 localStorage 一键关闭所有反调试防护
+16576:             // 现仅允许通过 URL ?debug 且本地文件协议下关闭（开发调试用，生产环境无法触发）
+16577:             try {
+16578:                 var isLocalFile = location.protocol === 'file:' || location.protocol === 'capacitor:';
+16579:                 var hasDebugParam = location.search.indexOf('debug') !== -1;
+16580:                 if (isLocalFile && hasDebugParam) {
+16581:                     this._enabled = false;
+16582:                     return;
+16583:                 }
+16584:             } catch (e) { /* 忽略，默认启用 */ }
+16585: 
+16586:             if (!this._enabled) return;
+16587: 
+16588:             // 启动反调试检测
+16589:             this._startAntiDebug();
+16590: 
+16591:             // 启动完整性校验（延迟到 DOM ready 后）
+16592:             if (document.readyState === 'complete' || document.readyState === 'interactive') {
+16593:                 setTimeout(() => this._checkIntegrity(), 500);
+16594:             } else {
+16595:                 document.addEventListener('DOMContentLoaded', () => {
+16596:                     setTimeout(() => this._checkIntegrity(), 500);
+16597:                 });
+16598:             }
+16599:         },
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 45
+================================================================================
+16600: 
+16601:         // ==================== 反调试检测（轻量级） ====================
+16602:         // 策略：简单的 debugger 语句 + 时间差检测
+16603:         // 检测到调试器时仅记录日志，不强制退出，避免影响正常使用
+16604:         _startAntiDebug() {
+16605:             const self = this;
+16606: 
+16607:             // 方法 1：时间差检测（每 5 秒检测一次）
+16608:             // 当调试器暂停执行时，时间差会显著变大
+16609:             setInterval(() => {
+16610:                 if (!self._enabled || self._debuggerDetected) return;
+16611: 
+16612:                 const start = Date.now();
+16613:                 // debugger 语句在调试器打开时会暂停执行
+16614:                 // 使用 constructor 间接调用，避免静态分析直接检测 debugger 关键字
+16615:                 try {
+16616:                     (function () { /* constructor */ }).constructor('debugger').call();
+16617:                 } catch (e) { /* 某些环境会抛错，忽略 */ }
+16618:                 const elapsed = Date.now() - start;
+16619: 
+16620:                 // 正常情况下 elapsed < 10ms，调试器打开时会显著变大
+16621:                 if (elapsed > 100) {
+16622:                     self._debuggerDetected = true;
+16623:                     console.warn('[SecurityGuard] 检测到调试器附加（时间差: ' + elapsed + 'ms）');
+16624:                     // 不强制退出，仅记录日志
+16625:                     // 防止误判导致软件无法使用
+16626:                 }
+16627:             }, 5000);
+16628: 
+16629:             // 方法 2：检测 DevTools 是否打开（仅 Chromium 内核）
+16630:             // 通过 window 尺寸差判断，简单且不影响性能
+16631:             setInterval(() => {
+16632:                 if (!self._enabled || self._debuggerDetected) return;
+16633: 
+16634:                 try {
+16635:                     const threshold = 160;
+16636:                     const widthDiff = window.outerWidth - window.innerWidth;
+16637:                     const heightDiff = window.outerHeight - window.innerHeight;
+16638:                     // DevTools 打开时会有显著尺寸差（>threshold）
+16639:                     if (widthDiff > threshold || heightDiff > threshold) {
+16640:                         self._debuggerDetected = true;
+16641:                         console.warn('[SecurityGuard] 检测到 DevTools 可能已打开');
+16642:                     }
+16643:                 } catch (e) { /* 忽略 */ }
+16644:             }, 10000);
+16645:         },
+16646: 
+16647:         // ==================== 完整性校验 ====================
+16648:         // 策略：校验关键 DOM 元素是否存在，防止 HTML 被篡改
+16649:         // 不做 hash 校验（计算开销大，且每次版本更新 hash 都会变）
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 46
+================================================================================
+16650:         _checkIntegrity() {
+16651:             if (!this._enabled || this._integrityChecked) return;
+16652: 
+16653:             try {
+16654:                 // 校验关键 DOM 元素是否存在
+16655:                 const criticalElements = [
+16656:                     'prescriptionPaper',   // 处方签纸
+16657:                     'prescriptionBody',    // 药物表体
+16658:                     'historyList',         // 历史列表
+16659:                     'clinicNameDisplay'    // 诊所名显示
+16660:                 ];
+16661: 
+16662:                 const missing = criticalElements.filter(id => !document.getElementById(id));
+16663: 
+16664:                 if (missing.length > 0) {
+16665:                     console.warn('[SecurityGuard] 完整性校验失败，缺失关键元素:', missing);
+16666:                     // 仅记录日志，不强制退出
+16667:                 }
+16668: 
+16669:                 // 校验关键全局函数是否存在（防止 JS 被篡改后丢失关键函数）
+16670:                 const criticalFunctions = [
+16671:                     'savePrescription',
+16672:                     'loadData',
+16673:                     'handleLogin'
+16674:                 ];
+16675: 
+16676:                 const missingFunctions = criticalFunctions.filter(fn => typeof global[fn] !== 'function');
+16677: 
+16678:                 if (missingFunctions.length > 0) {
+16679:                     console.warn('[SecurityGuard] 完整性校验失败，缺失关键函数:', missingFunctions);
+16680:                 }
+16681: 
+16682:                 // 校验 Electron 环境下关键 API 是否存在
+16683:                 if (global.electronAPI && global.electronAPI.isElectron) {
+16684:                     const criticalAPIs = ['getCurrentUser', 'saveUserData', 'getUserData'];
+16685:                     const missingAPIs = criticalAPIs.filter(api => typeof global.electronAPI[api] !== 'function');
+16686: 
+16687:                     if (missingAPIs.length > 0) {
+16688:                         console.warn('[SecurityGuard] Electron API 校验失败，缺失:', missingAPIs);
+16689:                     }
+16690:                 }
+16691: 
+16692:                 this._integrityChecked = true;
+16693:             } catch (e) {
+16694:                 console.warn('[SecurityGuard] 完整性校验异常:', e);
+16695:             }
+16696:         },
+16697: 
+16698:         // ==================== 对外接口 ====================
+16699:         isDebuggerDetected() {
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 47
+================================================================================
+16700:             return this._debuggerDetected;
+16701:         },
+16702: 
+16703:         isEnabled() {
+16704:             return this._enabled;
+16705:         }
+16706:     };
+16707: 
+16708:     // 自动初始化（异步，不阻塞页面加载）
+16709:     if (typeof window !== 'undefined') {
+16710:         try {
+16711:             SecurityGuard.init();
+16712:         } catch (e) {
+16713:             console.warn('[SecurityGuard] 初始化失败:', e);
+16714:         }
+16715:     }
+16716: 
+16717:     global.SecurityGuard = SecurityGuard;
+16718: 
+16719: })(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));
+16720: /********** File: medicine-dict.js **********/
+16721: // ============================================================================
+16722: // medicine-dict.js — 中药字典工具模块
+16723: // 提供药品搜索、拼音简码匹配、字典加载等公共方法
+16724: // ============================================================================
+16725: (function (global) {
+16726:     'use strict';
+16727: 
+16728:     const MedicineDict = {
+16729:         _medicines: null,
+16730:         _pinyinIndex: null,
+16731: 
+16732:         // 初始化药材库
+16733:         init(medicines) {
+16734:             this._medicines = medicines || [];
+16735:             this._buildIndex();
+16736:         },
+16737: 
+16738:         // 构建搜索索引
+16739:         _buildIndex() {
+16740:             if (!this._medicines) return;
+16741:             this._pinyinIndex = this._medicines.map(m => ({
+16742:                 name: (m.name || '').toLowerCase(),
+16743:                 code: (m.code || '').toLowerCase(),
+16744:                 pinyin: (m.pinyin || '').toLowerCase(),
+16745:                 original: m
+16746:             }));
+16747:         },
+16748: 
+16749:         // 搜索药品（支持名称、简码、拼音）
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 48
+================================================================================
+16750:         search(keyword, limit) {
+16751:             if (!this._pinyinIndex || !keyword) return [];
+16752:             limit = limit || 20;
+16753:             const kw = keyword.toLowerCase().trim();
+16754:             const exact = [];
+16755:             const prefix = [];
+16756:             const contains = [];
+16757: 
+16758:             for (const item of this._pinyinIndex) {
+16759:                 if (item.name === kw || item.code === kw) {
+16760:                     exact.push(item.original);
+16761:                 } else if (item.name.startsWith(kw) || item.code.startsWith(kw)) {
+16762:                     prefix.push(item.original);
+16763:                 } else if (item.name.includes(kw) || item.code.includes(kw) || item.pinyin.includes(kw)) {
+16764:                     contains.push(item.original);
+16765:                 }
+16766:                 if (exact.length + prefix.length + contains.length >= limit * 2) break;
+16767:             }
+16768: 
+16769:             return [...exact, ...prefix, ...contains].slice(0, limit);
+16770:         },
+16771: 
+16772:         // 简码匹配（输入简码自动找到药名）
+16773:         findByCode(code) {
+16774:             if (!this._pinyinIndex || !code) return null;
+16775:             const lc = code.toLowerCase().trim();
+16776:             const match = this._pinyinIndex.find(m => m.code === lc);
+16777:             return match ? match.original : null;
+16778:         },
+16779: 
+16780:         // 名称匹配
+16781:         findByName(name) {
+16782:             if (!this._pinyinIndex || !name) return null;
+16783:             const lc = name.toLowerCase().trim();
+16784:             const match = this._pinyinIndex.find(m => m.name === lc);
+16785:             return match ? match.original : null;
+16786:         },
+16787: 
+16788:         // 格式化药材显示文本
+16789:         formatMedicine(m) {
+16790:             if (!m) return '';
+16791:             const parts = [m.name];
+16792:             if (m.unit) parts.push(`(${m.unit})`);
+16793:             if (m.price) parts.push(`¥${m.price}`);
+16794:             return parts.join(' ');
+16795:         },
+16796: 
+16797:         // 计算药材总价
+16798:         calculateTotal(medicines) {
+16799:             if (!medicines || !medicines.length) return 0;
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 49
+================================================================================
+16800:             return medicines.reduce((sum, m) => {
+16801:                 const qty = parseFloat(m.quantity) || 0;
+16802:                 const price = parseFloat(m.price) || 0;
+16803:                 return sum + (qty * price);
+16804:             }, 0);
+16805:         },
+16806: 
+16807:         // 生成药材编号（自动递增）
+16808:         generateId() {
+16809:             return 'med_' + Date.now() + '_' + Math.floor(Math.random() * 1000);
+16810:         },
+16811: 
+16812:         // 验证药材数据完整性
+16813:         validate(medicine) {
+16814:             const errors = [];
+16815:             if (!medicine.name || !medicine.name.trim()) errors.push('药名不能为空');
+16816:             if (!medicine.unit) errors.push('单位不能为空');
+16817:             if (medicine.price !== undefined && isNaN(parseFloat(medicine.price))) {
+16818:                 errors.push('单价必须是数字');
+16819:             }
+16820:             return errors;
+16821:         },
+16822: 
+16823:         // 从 localStorage 加载药材库
+16824:         loadFromStorage(key) {
+16825:             key = key || 'medicine_library';
+16826:             try {
+16827:                 const data = localStorage.getItem(key);
+16828:                 const medicines = data ? JSON.parse(data) : [];
+16829:                 this.init(medicines);
+16830:                 return medicines;
+16831:             } catch (e) {
+16832:                 console.warn('[DBG] 加载药材库失败:', e);
+16833:                 this.init([]);
+16834:                 return [];
+16835:             }
+16836:         },
+16837: 
+16838:         // 保存药材库到 localStorage
+16839:         saveToStorage(medicines, key) {
+16840:             key = key || 'medicine_library';
+16841:             try {
+16842:                 localStorage.setItem(key, JSON.stringify(medicines));
+16843:                 this.init(medicines);
+16844:                 return true;
+16845:             } catch (e) {
+16846:                 console.error('[DBG] 保存药材库失败:', e);
+16847:                 return false;
+16848:             }
+16849:         },
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 50
+================================================================================
+16850: 
+16851:         // 获取所有药材
+16852:         getAll() {
+16853:             return this._medicines || [];
+16854:         },
+16855: 
+16856:         // 按分类筛选
+16857:         filterByCategory(category) {
+16858:             if (!this._medicines) return [];
+16859:             if (!category) return this._medicines;
+16860:             return this._medicines.filter(m => m.category === category);
+16861:         }
+16862:     };
+16863: 
+16864:     global.MedicineDict = MedicineDict;
+16865: 
+16866: })(typeof window !== 'undefined' ? window : this);
+16867: /********** File: print-utils.js **********/
+16868: // ============================================================================
+16869: // print-utils.js — 打印工具模块
+16870: // 提供处方打印模板生成、A4适配、Excel导出等公共方法
+16871: // ============================================================================
+16872: (function (global) {
+16873:     'use strict';
+16874: 
+16875:     const PrintUtils = {
+16876:         // 打印页面尺寸常量
+16877:         PAGE_SIZES: {
+16878:             A4: { width: '210mm', height: '297mm', margin: '10mm' },
+16879:             A5_PORTRAIT: { width: '148mm', height: '210mm', margin: '0' },
+16880:             A5_LANDSCAPE: { width: '210mm', height: '148mm', margin: '0' }
+16881:         },
+16882: 
+16883:         // 生成处方打印HTML
+16884:         generatePrescriptionPrintHTML(content, orientation) {
+16885:             const isLandscape = orientation === 'landscape';
+16886:             const pageSize = isLandscape ? 'A5 landscape' : 'A5 portrait';
+16887:             const paperWidth = isLandscape ? '210mm' : '148mm';
+16888:             const paperHeight = isLandscape ? '148mm' : '210mm';
+16889: 
+16890:             return `<!DOCTYPE html><html><head><title>打印处方</title><style>
+16891: @page { size: ${pageSize}; margin: 0; }
+16892: body { font-family: SimSun, serif; padding: 0; margin: 0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; }
+16893: .prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 15mm; margin: 0 auto; box-sizing: border-box; }
+16894: .clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
+16895: .prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
+16896: .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 12px; }
+16897: .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 180px; margin-top: 8px; }
+16898: .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
+16899: .prescription-line { padding: 3px 0; font-size: 13px; text-align: center; }
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 51
+================================================================================
+16900: .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #8b0000; }
+16901: .dose-count { text-align: right; font-size: 13px; color: #000080; }
+16902: .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 12px; }
+16903: .usage-text { margin-bottom: 10px; }
+16904: .signature-row { display: flex; justify-content: space-between; }
+16905: </style></head><body><div class="prescription-paper">${content}</div></body></html>`;
+16906:         },
+16907: 
+16908:         // 打印处方
+16909:         printPrescription(orientation) {
+16910:             orientation = orientation || 'portrait';
+16911:             const printContent = document.getElementById('prescriptionPaper').innerHTML;
+16912:             const html = this.generatePrescriptionPrintHTML(printContent, orientation);
+16913: 
+16914:             // 安卓原生打印
+16915:             if (global.AndroidNative) {
+16916:                 if (global.AndroidNative.printHtml) {
+16917:                     // 离线APP：直接调用 printHtml
+16918:                     global.AndroidNative.printHtml(html);
+16919:                     return;
+16920:                 } else if (global.AndroidNative.invoke) {
+16921:                     // 云端APP：通过 invoke 调用 printPrescription
+16922:                     try {
+16923:                         global.AndroidNative.invoke('printPrescription', JSON.stringify({
+16924:                             html: html,
+16925:                             orientation: orientation
+16926:                         }));
+16927:                         return;
+16928:                     } catch(e) {
+16929:                         console.error('AndroidNative打印失败:', e);
+16930:                     }
+16931:                 }
+16932:             }
+16933: 
+16934:             // Electron桌面端：通过IPC调用打印
+16935:             if (global.electronAPI && global.electronAPI.printPrescription) {
+16936:                 global.electronAPI.printPrescription(html, orientation);
+16937:                 return;
+16938:             }
+16939: 
+16940:             // 网页端：iframe打印
+16941:             let printFrame = document.getElementById('printFrame');
+16942:             if (!printFrame) {
+16943:                 printFrame = document.createElement('iframe');
+16944:                 printFrame.id = 'printFrame';
+16945:                 printFrame.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;';
+16946:                 document.body.appendChild(printFrame);
+16947:             }
+16948:             const doc = printFrame.contentWindow.document;
+16949:             doc.open();
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 52
+================================================================================
+16950:             doc.write(html);
+16951:             doc.close();
+16952:             printFrame.contentWindow.focus();
+16953:             printFrame.contentWindow.print();
+16954:         },
+16955: 
+16956:         // 生成药材清单打印HTML
+16957:         generateMedicineListHTML(medicines, clinicName) {
+16958:             const rows = medicines.map((m, i) =>
+16959:                 `<tr><td>${i + 1}</td><td>${m.name || ''}</td><td>${m.code || ''}</td><td>${m.unit || ''}</td><td>${m.price || ''}</td></tr>`
+16960:             ).join('');
+16961:             return `<!DOCTYPE html><html><head><title>药材清单</title><style>
+16962: @page { size: A4; margin: 10mm; }
+16963: body { font-family: SimSun, serif; }
+16964: h2 { text-align: center; }
+16965: table { width: 100%; border-collapse: collapse; }
+16966: td, th { border: 1px solid #000; padding: 4px 8px; font-size: 12px; text-align: center; }
+16967: th { background: #f0f0f0; }
+16968: </style></head><body>
+16969: <h2>${clinicName || ''} — 药材清单</h2>
+16970: <table><thead><tr><th>#</th><th>药名</th><th>简码</th><th>单位</th><th>单价</th></tr></thead>
+16971: <tbody>${rows}</tbody></table>
+16972: </body></html>`;
+16973:         },
+16974: 
+16975:         // 导出CSV
+16976:         exportCSV(filename, rows) {
+16977:             const csv = rows.map(row =>
+16978:                 row.map(cell => {
+16979:                     const val = String(cell || '');
+16980:                     return val.includes(',') || val.includes('"') ? '"' + val.replace(/"/g, '""') + '"' : val;
+16981:                 }).join(',')
+16982:             ).join('\n');
+16983:             const bom = '\uFEFF';
+16984:             const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
+16985:             this.downloadBlob(blob, filename);
+16986:         },
+16987: 
+16988:         // 下载Blob
+16989:         downloadBlob(blob, filename) {
+16990:             const url = URL.createObjectURL(blob);
+16991:             const a = document.createElement('a');
+16992:             a.href = url;
+16993:             a.download = filename;
+16994:             document.body.appendChild(a);
+16995:             a.click();
+16996:             document.body.removeChild(a);
+16997:             URL.revokeObjectURL(url);
+16998:         }
+16999:     };
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 53
+================================================================================
+17000: 
+17001:     global.PrintUtils = PrintUtils;
+17002: 
+17003: })(typeof window !== 'undefined' ? window : this);
+17004: /********** File: electron/preload.js **********/
+17005: // ============================================================================
+17006: //  preload.js - 在 contextIsolation 模式下向渲染进程暴露安全 API
+17007: //  所有方法均通过 contextBridge 暴露，渲染进程无法直接访问 ipcRenderer/require
+17008: //
+17009: //  ★ 本文件为定制版 electron/preload.js，基于原本地版增加：
+17010: //    - saveVideoFile：视频文件保存（ArrayBuffer → 文件）
+17011: //    - getVideoDirectory：获取视频保存目录
+17012: //    - openVideoDirectory：在文件管理器中打开视频目录
+17013: // ============================================================================
+17014: const { contextBridge, ipcRenderer } = require('electron');
+17015: 
+17016: contextBridge.exposeInMainWorld('electronAPI', {
+17017:     isElectron: true,
+17018: 
+17019:     // ---------- 打印处方（新增） ----------
+17020:     printPrescription: (html, orientation) =>
+17021:         ipcRenderer.invoke('print-prescription', html, orientation),
+17022: 
+17023:     // 处方图片保存
+17024:     savePrescriptionImage: (imageData, fileName) =>
+17025:         ipcRenderer.invoke('save-prescription-image', imageData, fileName),
+17026: 
+17027:     // ---------- 视频录制（新增） ----------
+17028:     saveVideoFile: (arrayBuffer, fileName) =>
+17029:         ipcRenderer.invoke('save-video-file', arrayBuffer, fileName),
+17030: 
+17031:     getVideoDirectory: () =>
+17032:         ipcRenderer.invoke('get-video-directory'),
+17033: 
+17034:     openVideoDirectory: () =>
+17035:         ipcRenderer.invoke('open-video-directory'),
+17036: 
+17037:     // ---------- 处方文件查看（新增） ----------
+17038:     findMediaFiles: (patientName, prescriptionNo, createdAt) =>
+17039:         ipcRenderer.invoke('find-media-files', patientName, prescriptionNo, createdAt),
+17040: 
+17041:     openFile: (filePath, mimeType) =>
+17042:         ipcRenderer.invoke('open-file', filePath, mimeType || ''),
+17043: 
+17044:     readFileAsBase64: (filePath) =>
+17045:         ipcRenderer.invoke('read-file-as-base64', filePath),
+17046: 
+17047:     renameMediaFiles: (oldPatientName, newPatientName, oldNo, newNo) =>
+17048:         ipcRenderer.invoke('rename-media-files', oldPatientName, newPatientName, oldNo, newNo),
+17049: 
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 54
+================================================================================
+17050:     deleteFile: (filePath) =>
+17051:         ipcRenderer.invoke('delete-file', filePath),
+17052: 
+17053:     // 用户数据持久化
+17054:     saveUserData: (key, data) => ipcRenderer.invoke('save-user-data', key, data),
+17055:     getUserData: (key) => ipcRenderer.invoke('get-user-data', key),
+17056: 
+17057:     // 安全存储（safeStorage）- P0-2: 基于 Windows DPAPI 的系统级加密
+17058:     // 用于替代 auth-core.js 中旧的硬编码盐 XOR 加密（PWDv1/PWDv2）
+17059:     safeStorageAvailable: () => ipcRenderer.invoke('auth:safeStorageAvailable'),
+17060:     encryptString: (plaintext) => ipcRenderer.invoke('auth:encryptString', plaintext),
+17061:     decryptString: (encryptedBase64) => ipcRenderer.invoke('auth:decryptString', encryptedBase64),
+17062: 
+17063:     // 登录态
+17064:     loginSuccess: (userData) => ipcRenderer.invoke('login-success', userData),
+17065:     getCurrentUser: () => ipcRenderer.invoke('get-current-user'),
+17066: 
+17067:     // 应用配置（取代旧的 get-index-html-content 正则解析）
+17068:     getAppConfig: () => ipcRenderer.invoke('get-app-config'),
+17069:     setAutoStart: (enabled) => ipcRenderer.invoke('set-auto-start', enabled),
+17070: 
+17071:     // 退出
+17072:     quitApp: () => ipcRenderer.invoke('quit-app'),
+17073:     logout: () => ipcRenderer.invoke('logout'),
+17074: 
+17075:     // 备份文件保存（绕过 Electron 下载机制，直接写文件）
+17076:     saveBackupFile: (jsonStr, fileName) => ipcRenderer.invoke('save-backup-file', jsonStr, fileName),
+17077: 
+17078:     // P1-1 自动备份策略：保存/列出/删除（userData/backups/ 目录）
+17079:     saveAutoBackup: (jsonStr, fileName) => ipcRenderer.invoke('save-auto-backup', jsonStr, fileName),
+17080:     listAutoBackups: () => ipcRenderer.invoke('list-auto-backups'),
+17081:     deleteAutoBackup: (fileName) => ipcRenderer.invoke('delete-auto-backup', fileName),
+17082: 
+17083:     // 主进程推送给渲染进程：登录用户信息（主窗口 dom-ready 时一次性发送）
+17084:     onLoginUser: (callback) => {
+17085:         const handler = (_event, user) => callback(user);
+17086:         ipcRenderer.once('main:login-user', handler);
+17087:     },
+17088: 
+17089:     showMessageBox: (options) => ipcRenderer.invoke('show-message-box', options),
+17090: 
+17091:     // ★ 同步对话框（替代原生 alert/confirm）
+17092:     // 原因：Electron 35 中原生 alert() 关闭后鼠标光标不显示（已知 bug）
+17093:     // 方案：使用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，行为与原生 alert/confirm 一致）
+17094:     // 业务代码同步调用 alert/confirm 不受影响（dom-ready 时已重写 window.alert/confirm 调用这些方法）
+17095:     alertSync: (message) => ipcRenderer.sendSync('dialog:alert-sync', String(message || '')),
+17096:     confirmSync: (message) => ipcRenderer.sendSync('dialog:confirm-sync', String(message || '')) === 1,
+17097: 
+17098:     // ★ 异步 prompt 对话框（替代原生 window.prompt）
+17099:     // 原因：Electron BrowserWindow 中 window.prompt() 默认返回 null（不弹框），
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 55
+================================================================================
+17100:     //      导致 handleEditUser / editMedicine 等函数静默失败（点击"编辑"无反应）
+17101:     // 方案：创建独立 BrowserWindow（modal）作为 prompt 对话框，返回 Promise<string|null>
+17102:     // 兼容：业务代码需用 `await prompt(...)`，同步调用会得到 Promise 对象
+17103:     prompt: (message, defaultValue) => ipcRenderer.invoke('dialog:prompt', String(message || ''), String(defaultValue || '')),
+17104: 
+17105:     // ★ License 授权管理
+17106:     license: {
+17107:         getStatus: () => ipcRenderer.invoke('license:get-status'),
+17108:         activate: (base64Content) => ipcRenderer.invoke('license:activate', base64Content),
+17109:         // ★ 新增：离线激活文件选择对话框（返回 { success, filePath, base64Content }）
+17110:         selectOfflineFile: () => ipcRenderer.invoke('license:select-offline-file'),
+17111:         // v2 新增：处方数量限制
+17112:         canPrescribe: () => ipcRenderer.invoke('license:can-prescribe'),
+17113:         incrementPrescription: () => ipcRenderer.invoke('license:increment-prescription'),
+17114:         decrementPrescription: () => ipcRenderer.invoke('license:decrement-prescription'),
+17115:         getPrescriptionStatus: () => ipcRenderer.invoke('license:get-prescription-status'),
+17116:         // v2 新增：功能权限校验
+17117:         checkFeature: (featureName) => ipcRenderer.invoke('license:check-feature', featureName),
+17118:         getFeatureStatus: () => ipcRenderer.invoke('license:get-feature-status'),
+17119:         // ★ 试用期配置（测试用，0=立即过期，默认 7）
+17120:         setTrialDays: (days) => ipcRenderer.invoke('license:set-trial-days', days),
+17121:         getTrialDays: () => ipcRenderer.invoke('license:get-trial-days')
+17122:     },
+17123: 
+17124:     // ★ 激活码激活窗口（云端激活系统，第3周任务）
+17125:     activate: {
+17126:         show: () => ipcRenderer.invoke('license:show-activate'),
+17127:         // ★ 一体化到期提示 + 拉起激活窗口（main process 中 dialog.showMessageBoxSync + showActivateWindow）
+17128:         showExpireAlert: (message) => ipcRenderer.invoke('license:show-expire-alert', message),
+17129:         // ★ v3 新增：clinicName 参数透传给云端做绑定校验
+17130:         submit: (code, user, clinicName) => ipcRenderer.invoke('license:submit-activate', code, user, clinicName),
+17131:         close: () => ipcRenderer.invoke('license:close-activate'),
+17132:         restart: () => ipcRenderer.invoke('license:restart'),
+17133:         getMachineId: () => ipcRenderer.invoke('license:get-machine-id')
+17134:     }
+17135: });
+17136: /********** File: electron/feature-guard.js **********/
+17137: // ============================================================================
+17138: //  feature-guard.js — 功能权限校验（v2 版本管理）
+17139: //  功能：根据 license type/features 校验用户是否有权使用某功能
+17140: //  使用场景：数据备份/云端同步/多设备登录等专业版功能
+17141: //  调用：渲染进程通过 IPC 调用 checkFeature()/getAvailableFeatures()
+17142: // ============================================================================
+17143: 
+17144: const licenseManager = require('./license-manager');
+17145: 
+17146: // ★ 功能名称常量（避免硬编码字符串出错）
+17147: const FEATURES = {
+17148:     BACKUP: 'backup',                    // 数据备份
+17149:     SYNC: 'sync',                        // 云端同步
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 56
+================================================================================
+17150:     MULTI_DEVICE: 'multi-device',        // 多设备登录
+17151:     PRIORITY_SUPPORT: 'priority-support' // 优先技术支持
+17152: };
+17153: 
+17154: // ★ 功能中文名称映射（供 UI 显示）
+17155: const FEATURE_NAMES_CN = {
+17156:     'backup': '数据备份',
+17157:     'sync': '云端同步',
+17158:     'multi-device': '多设备登录',
+17159:     'priority-support': '优先技术支持'
+17160: };
+17161: 
+17162: // ============================================================================
+17163: //  核心逻辑
+17164: // ============================================================================
+17165: 
+17166: // 检查是否有某功能权限
+17167: function hasFeature(featureName) {
+17168:     return licenseManager.hasFeature(featureName);
+17169: }
+17170: 
+17171: // 获取当前 license 类型
+17172: function getLicenseType() {
+17173:     return licenseManager.getLicenseType();
+17174: }
+17175: 
+17176: // 校验功能权限，返回 { allowed: boolean, message: string }
+17177: function checkFeature(featureName) {
+17178:     if (hasFeature(featureName)) {
+17179:         return {
+17180:             allowed: true,
+17181:             message: '功能可用',
+17182:             feature: featureName,
+17183:             featureName: FEATURE_NAMES_CN[featureName] || featureName
+17184:         };
+17185:     }
+17186:     const cnName = FEATURE_NAMES_CN[featureName] || featureName;
+17187:     const licenseType = getLicenseType();
+17188:     let upgradeHint = '';
+17189:     if (licenseType === 'trial') {
+17190:         upgradeHint = '当前为试用版，购买标准版或机构版后可使用此功能。';
+17191:     } else if (licenseType === 'personal') {
+17192:         upgradeHint = '当前为标准版，升级到机构版后可使用此功能。';
+17193:     } else {
+17194:         upgradeHint = '当前授权不支持此功能，请联系客服升级。';
+17195:     }
+17196:     return {
+17197:         allowed: false,
+17198:         message: '[' + cnName + '] 功能不可用。\n' + upgradeHint,
+17199:         feature: featureName,
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 57
+================================================================================
+17200:         featureName: cnName,
+17201:         licenseType: licenseType
+17202:     };
+17203: }
+17204: 
+17205: // 获取当前 license 可用的所有功能列表
+17206: function getAvailableFeatures() {
+17207:     const license = licenseManager.readLicense();
+17208:     if (!license) {
+17209:         // 试用模式
+17210:         return [];
+17211:     }
+17212:     const normalized = licenseManager.normalizeLicense(license);
+17213:     return Array.isArray(normalized.features) ? normalized.features : [];
+17214: }
+17215: 
+17216: // 获取所有功能及其可用状态（供 UI 显示功能矩阵）
+17217: function getFeatureStatus() {
+17218:     const available = getAvailableFeatures();
+17219:     const allFeatures = Object.values(FEATURES);
+17220:     return allFeatures.map(f => ({
+17221:         feature: f,
+17222:         name: FEATURE_NAMES_CN[f] || f,
+17223:         available: available.indexOf(f) !== -1
+17224:     }));
+17225: }
+17226: 
+17227: // 便捷方法：检查备份权限
+17228: function checkBackup() {
+17229:     return checkFeature(FEATURES.BACKUP);
+17230: }
+17231: 
+17232: // 便捷方法：检查同步权限
+17233: function checkSync() {
+17234:     return checkFeature(FEATURES.SYNC);
+17235: }
+17236: 
+17237: // 便捷方法：检查多设备权限
+17238: function checkMultiDevice() {
+17239:     return checkFeature(FEATURES.MULTI_DEVICE);
+17240: }
+17241: 
+17242: module.exports = {
+17243:     FEATURES,
+17244:     FEATURE_NAMES_CN,
+17245:     hasFeature,
+17246:     getLicenseType,
+17247:     checkFeature,
+17248:     getAvailableFeatures,
+17249:     getFeatureStatus,
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 58
+================================================================================
+17250:     checkBackup,
+17251:     checkSync,
+17252:     checkMultiDevice
+17253: };
+17254: /********** File: debug-logger.js **********/
+17255: // ============================================================================
+17256: // debug-logger.js — 统一调试日志模块
+17257: // 格式: [DBG][版本][设备][模块] 操作 行为数据
+17258: // ============================================================================
+17259: (function (global) {
+17260:     'use strict';
+17261: 
+17262:     const DBG = {
+17263:         _enabled: false,
+17264:         _version: 'unknown',
+17265:         _device: 'unknown',
+17266: 
+17267:         init() {
+17268:             // 检测是否启用调试模式
+17269:             this._enabled = (
+17270:                 location.search.includes('debug') ||
+17271:                 localStorage.getItem('debug') === '1' ||
+17272:                 (global.electronAPI && global.electronAPI.isDebugMode)
+17273:             );
+17274: 
+17275:             // 检测设备类型
+17276:             const ua = navigator.userAgent || '';
+17277:             if (/Android/i.test(ua)) {
+17278:                 this._device = 'Android';
+17279:             } else if (/Win/i.test(ua)) {
+17280:                 this._device = 'Windows';
+17281:             } else if (/Mac/i.test(ua)) {
+17282:                 this._device = 'macOS';
+17283:             } else if (/Linux/i.test(ua)) {
+17284:                 this._device = 'Linux';
+17285:             } else {
+17286:                 this._device = 'Unknown';
+17287:             }
+17288: 
+17289:             // 获取版本信息
+17290:             if (global.Permission && Permission._edition) {
+17291:                 this._version = Permission._edition;
+17292:             } else if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) {
+17293:                 this._version = CONFIG.edition;
+17294:             } else if (global.EDITION) {
+17295:                 this._version = global.EDITION;
+17296:             }
+17297:         },
+17298: 
+17299:         _format(module, action) {
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 59
+================================================================================
+17300:             return `[DBG][${this._version}][${this._device}][${module}] ${action}`;
+17301:         },
+17302: 
+17303:         log(module, action, data) {
+17304:             if (!this._enabled) return;
+17305:             this.init();
+17306:             console.log(this._format(module, action), data || '');
+17307:         },
+17308: 
+17309:         warn(module, action, data) {
+17310:             this.init();
+17311:             console.warn(this._format(module, action), data || '');
+17312:         },
+17313: 
+17314:         error(module, action, data) {
+17315:             this.init();
+17316:             console.error(this._format(module, action), data || '');
+17317:         },
+17318: 
+17319:         // 便捷方法：自动捕获函数名
+17320:         wrap(module, fn, action) {
+17321:             const self = this;
+17322:             return function (...args) {
+17323:                 self.log(module, action || fn.name || 'anonymous', { args: args.length });
+17324:                 try {
+17325:                     const result = fn.apply(this, args);
+17326:                     if (result && typeof result.then === 'function') {
+17327:                         return result.then(r => {
+17328:                             self.log(module, (action || fn.name) + '.done', { success: true });
+17329:                             return r;
+17330:                         }).catch(e => {
+17331:                             self.error(module, (action || fn.name) + '.error', e.message);
+17332:                             throw e;
+17333:                         });
+17334:                     }
+17335:                     self.log(module, (action || fn.name) + '.done', { success: true });
+17336:                     return result;
+17337:                 } catch (e) {
+17338:                     self.error(module, (action || fn.name) + '.error', e.message);
+17339:                     throw e;
+17340:                 }
+17341:             };
+17342:         }
+17343:     };
+17344: 
+17345:     // 自动初始化
+17346:     DBG.init();
+17347: 
+17348:     global.DBG = DBG;
+17349: 
+
+================================================================================
+  惠康中医诊所管理系统 V1.0.0
+  Source Code  Page 60
+================================================================================
+17350: })(typeof window !== 'undefined' ? window : this);
+17351: /********** File: afterPack.js **********/
+17352: /**
+17353:  * asarmor ASAR 防解压保护插件（离线版增强）
+17354:  *
+17355:  * 保护策略：
+17356:  * 1. asarmor: 防止 ASAR 解包
+17357:  *    - createBloatPatch(100): 创建 100GB 虚拟文件条目
+17358:  *
+17359:  * 注意：JS 代码混淆由 tools/obfuscate.js 在打包前完成（轻量级配置），
+17360:  *      此处不再重复混淆。之前使用 RC4+stringArray+controlFlowFlattening
+17361:  *      激进混淆导致桌面版 main.js 在 Electron 主进程中 require/crypto
+17362:  *      调用失败，程序静默崩溃无法打开。
+17363:  *
+17364:  * 文档：https://github.com/sleeyax/asarmor
+17365:  */
+17366: 
+17367: const asarmor = require('asarmor');
+17368: const { join } = require('path');
+17369: const fs = require('fs');
+17370: 
+17371: const BLOAT_GB = parseInt(process.env.ASARMOR_BLOAT_GB || '100', 10);
+17372: 
+17373: exports.default = async ({ appOutDir, packager }) => {
+17374:   const resourcesDir = packager.getResourcesDir(appOutDir);
+17375: 
+17376:   try {
+17377:     const asarPath = join(resourcesDir, 'app.asar');
+17378:     console.log('[asarmor] Applying patches to ' + asarPath);
+17379:     console.log('[asarmor] Bloat size: ' + BLOAT_GB + ' GB (only affects extraction, not archive size)');
+17380: 
+17381:     const archive = await asarmor.open(asarPath);
+17382:     const bloatPatch = asarmor.createBloatPatch(BLOAT_GB);
+17383:     archive.patch(bloatPatch);
+17384:     await archive.write(asarPath);
+17385: 
+17386:     console.log('[asarmor] ASAR protection applied successfully (patch + bloat)');
+17387:   } catch (err) {
+17388:     console.error('[asarmor] Error applying patches:', err.message);
+17389:   }
+17390: };
+17391: /********** File: electron/prompt-preload.js **********/
+17392: // prompt-preload.js - Preload script for prompt modal window
+17393: // Exposes submit/cancel IPC methods to the prompt modal renderer
+17394: const { contextBridge, ipcRenderer } = require('electron');
+17395: 
+17396: contextBridge.exposeInMainWorld('promptAPI', {
+17397:     submit: function(value) { ipcRenderer.send('prompt:submit', value); },
+17398:     cancel: function() { ipcRenderer.send('prompt:cancel'); }
+17399: });
+
