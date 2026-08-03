@@ -1,14 +1,14 @@
 @echo off
 chcp 65001 >nul
-REM P0: Auto-fix .ps1 BOM encoding before packaging
+REM P0: 打包前自动修复 .ps1 文件 BOM 编码
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\fix-ps1-bom.ps1" >nul 2>&1
-title TCM Prescription System - Cloud APP Packager
+title 惠康中医云端APP打包工具
 
-REM Record start time for elapsed calculation
+REM 记录开始时间（用于耗时统计）
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
 echo ============================================
-echo   TCM Prescription System - Cloud APP Packager
+echo   惠康中医云端APP打包工具
 echo   开始: %BUILD_START_TIME%
 echo ============================================
 echo.
@@ -19,11 +19,11 @@ set "APK_OUTPUT_DIR=%ANDROID_DIR%\app\build\outputs\apk\release"
 
 cd /d "%ANDROID_DIR%"
 
-echo [1/6] Checking environment...
-REM P1-16: Check JDK/JAVA_HOME, required by Gradle build
+echo [1/10] 检查环境（JDK/Gradle/签名/capacitor）...
+REM JDK/JAVA_HOME 检查（Gradle 构建必需）
 if defined JAVA_HOME (
     if not exist "%JAVA_HOME%\bin\java.exe" (
-        echo [ERROR] JAVA_HOME points to invalid path: %JAVA_HOME%
+        echo       [错误] JAVA_HOME 指向无效路径: %JAVA_HOME%
         if not defined NO_PAUSE pause
         exit /b 1
     )
@@ -31,172 +31,154 @@ if defined JAVA_HOME (
 ) else (
     java -version >nul 2>&1
     if errorlevel 1 (
-        echo [ERROR] Java not found. Please install JDK 17+ and set JAVA_HOME, or add java to PATH
+        echo       [错误] 未找到 Java，请安装 JDK 17+ 并设置 JAVA_HOME，或将 java 加入 PATH
         if not defined NO_PAUSE pause
         exit /b 1
     )
-    echo       java OK ^(JAVA_HOME not set, using PATH^)
+    echo       [OK] java 可用^(JAVA_HOME 未设置，使用 PATH^)
 )
 if not exist "gradlew.bat" (
-    echo [ERROR] gradlew.bat not found
-    echo   Path: %ANDROID_DIR%\gradlew.bat
+    echo       [错误] 未找到 gradlew.bat
+    echo       路径: %ANDROID_DIR%\gradlew.bat
     if not defined NO_PAUSE pause
     exit /b 1
 )
 if not exist "app\signing.properties" (
-    echo [ERROR] signing.properties not found
-    echo   Path: %ANDROID_DIR%\app\signing.properties
+    echo       [错误] 未找到 signing.properties
+    echo       路径: %ANDROID_DIR%\app\signing.properties
     if not defined NO_PAUSE pause
     exit /b 1
 )
 if not exist "app\app-release.jks" (
-    echo [ERROR] app-release.jks not found
-    echo   Path: %ANDROID_DIR%\app\app-release.jks
+    echo       [错误] 未找到 app-release.jks
+    echo       路径: %ANDROID_DIR%\app\app-release.jks
     if not defined NO_PAUSE pause
     exit /b 1
 )
 if not exist "app\src\main\assets\capacitor.config.json" (
-    echo [ERROR] Capacitor config not found
-    echo   Path: %ANDROID_DIR%\app\src\main\assets\capacitor.config.json
+    echo       [错误] 未找到 Capacitor config
+    echo       路径: %ANDROID_DIR%\app\src\main\assets\capacitor.config.json
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo [OK] Environment check passed
+echo       [OK] 环境检查通过
 echo.
 
-echo [1.5/6] Patching Capacitor Java version (21 to 17)...
+echo [2/10] 修补 Capacitor Java 版本（21 → 17）+ 同步共享文件...
 call node "%~dp0..\..\tools\patch-java-version.js" "%~dp0..\.."
 if errorlevel 1 (
-    echo [WARN] Java version patch had issues, continuing anyway
+    echo       [警告] Java 版本修补出现问题，继续执行
 ) else (
-    echo [OK] Java version patched
+    echo       [OK] Java 版本已修补
 )
-echo.
-
-echo [2/6] Syncing shared files...
 set "SHARED_DIR=%~dp0..\..\shared"
 set "ASSETS_PUBLIC=%ANDROID_DIR%\app\src\main\assets\public"
 if exist "%SHARED_DIR%\auth-core.js" (
     copy /Y "%SHARED_DIR%\auth-core.js" "%ASSETS_PUBLIC%\auth-core.js" >nul
-    echo [OK] auth-core.js synced
+    echo       [OK] auth-core.js 已同步
 ) else (
-    echo [WARN] shared\auth-core.js not found
+    echo       [警告] shared\auth-core.js 未找到
 )
 if exist "%SHARED_DIR%\permission.js" (
     copy /Y "%SHARED_DIR%\permission.js" "%ASSETS_PUBLIC%\permission.js" >nul
-    echo [OK] permission.js synced
+    echo       [OK] permission.js 已同步
 ) else (
-    echo [WARN] shared\permission.js not found
+    echo       [警告] shared\permission.js 未找到
 )
 echo.
 
-REM P1: Cloud APP loads index.html from URL, no sync hash check needed
-
-echo [2.5/6] Current configuration...
-findstr "url" "app\src\main\assets\capacitor.config.json"
-findstr "versionName" "app\build.gradle"
-echo.
-
-echo [2.6/6] Syncing APP version from index.html to MainActivity...
-REM Read __APP_VERSION__ from cloud_desktop/index.html, inject into MainActivity.EXPECTED_APP_VERSION
-REM Avoid cache clearing on every launch caused by MainActivity/index.html version mismatch
+echo [3/10] 同步 APP 版本号 + 自增 versionCode...
+REM 从 cloud_desktop/index.html 读取 __APP_VERSION__，注入到 MainActivity.EXPECTED_APP_VERSION
+REM 避免 MainActivity/index.html 版本不匹配导致每次启动都清缓存
 REM sync-app-version.ps1 自动同步 cloud_app 和 cloud_app_geren 两个 APP
 set "CLOUD_DIR_TMP=%~dp0"
 set "CLOUD_DIR_TMP=%CLOUD_DIR_TMP:~0,-1%"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0sync-app-version.ps1" "%CLOUD_DIR_TMP%"
+
+REM 自增 versionCode，确保每次构建单调递增
+REM 避免 Android 因 versionCode 重复而拒绝升级安装
+REM P1-12: 自增前保存旧值到临时文件；构建失败时回滚，避免跳号
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$g='%ANDROID_DIR%\app\build.gradle'; $c=Get-Content $g -Raw -Encoding UTF8; if($c -match 'versionCode\s+(\d+)'){ $old=[int]$matches[1]; $new=$old+1; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $new\"; [System.IO.File]::WriteAllText($g,$nc,(New-Object System.Text.UTF8Encoding $false)); Set-Content -Path '%~dp0.build_vcode_prev' -Value $old -Encoding ASCII -NoNewline; Write-Host ('  [OK] versionCode: '+$old+' -> '+$new+' (旧值已保存)') } else { Write-Host '  [警告] build.gradle 中未找到 versionCode' }"
 echo.
 
-echo [2.7/6] Auto-incrementing versionCode...
-REM Auto-increment versionCode in build.gradle to ensure monotonic increase per build
-REM Avoid Android rejecting upgrade install due to duplicate versionCode
-REM P1-12: Save old value to temp file before increment; rollback on build failure to avoid skipping numbers
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$g='%ANDROID_DIR%\app\build.gradle'; $c=Get-Content $g -Raw -Encoding UTF8; if($c -match 'versionCode\s+(\d+)'){ $old=[int]$matches[1]; $new=$old+1; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $new\"; [System.IO.File]::WriteAllText($g,$nc,(New-Object System.Text.UTF8Encoding $false)); Set-Content -Path '%~dp0.build_vcode_prev' -Value $old -Encoding ASCII -NoNewline; Write-Host ('  [OK] versionCode: '+$old+' -> '+$new+' (prev saved)') } else { Write-Host '  [WARN] versionCode not found in build.gradle' }"
-echo.
-
-echo [3/6] Stopping residual Gradle processes...
-REM P1-15: Only kill java processes with gradle window title (keep daemon alive for faster rebuild)
-REM Do NOT call gradlew --stop (kills daemon, forces cold JVM start on next build)
+echo [4/10] 停止残留 Gradle 进程 + 清理构建缓存...
+REM P1-15: 仅 kill 标题为 gradle 的 java 进程（保留 daemon 加速下次构建）
+REM 不调用 gradlew --stop（会杀掉 daemon，下次构建需冷启动 JVM）
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
-echo [OK] Cleanup completed
-echo.
 
-echo [4/6] Cleaning build cache (force full clean)...
 REM P2-3: 废弃 TCM_GRADLE_SKIP_CLEAN，强制执行 gradlew clean（与离线版 build-app.bat 一致）
-REM Historical lesson (2026-07-22): javac cache must be cleaned to ensure MainActivity.java changes take effect
-REM Historical lesson (2026-07-23): assets/merged_assets cache must be cleaned to ensure index.html changes take effect
+REM 历史教训(2026-07-22): javac 缓存必须清理才能确保 MainActivity.java 修改生效
+REM 历史教训(2026-07-23): assets/merged_assets 缓存必须清理才能确保 index.html 修改生效
 if exist "app\build\intermediates\javac" (
     rmdir /S /Q "app\build\intermediates\javac" 2>nul
-    echo       [OK] cleaned javac cache
+    echo       [OK] 已清理 javac 缓存
 )
 if exist "app\build\intermediates\assets" (
     rmdir /S /Q "app\build\intermediates\assets" 2>nul
-    echo       [OK] cleaned assets cache
+    echo       [OK] 已清理 assets 缓存
 )
 if exist "app\build\intermediates\merged_assets" (
     rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
-    echo       [OK] cleaned merged_assets cache
+    echo       [OK] 已清理 merged_assets 缓存
 )
 call gradlew.bat clean
 if errorlevel 1 (
-    echo [WARN] Clean failed, continuing with incremental build
+    echo       [警告] clean 失败，继续增量构建
 ) else (
-    echo [OK] Old cache cleared
+    echo       [OK] 旧缓存已清理
 )
 echo.
 
-echo [4.5/6] [STAGE:obfuscate] Obfuscating JavaScript (cloud target - includes cloud_app assets)...
-REM P1: restore JS code after build
-REM P1: Obfuscate JS to prevent reverse engineering of APK assets
+echo [5/10] 代码混淆（cloud target - 含 cloud_app assets）...
+REM 代码混淆防止 APK assets 被反编译
 call node "%~dp0..\..\tools\obfuscate.js" --target=cloud
 if errorlevel 1 (
-    echo [ERROR] JS obfuscation failed
+    echo       [错误] JS 代码混淆失败
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo [OK] JS obfuscation complete
+echo       [OK] JS 代码混淆完成
 echo.
 
-echo [4.6/6] Java pre-compile check...
-REM Pre-compile check: catch Java errors early before full APK build
+echo [6/10] Java 预编译检查（提前发现编译错误）...
 call gradlew.bat compileReleaseJavaWithJavac --quiet
 if errorlevel 1 (
-    echo [ERROR] Java pre-compile check failed
-    echo [WARN] Restoring JavaScript due to pre-compile failure...
+    echo       [错误] Java 预编译检查失败
+    echo       [警告] 因预编译失败，正在恢复 JavaScript...
     call node "%~dp0..\..\tools\obfuscate.js" restore --target=cloud
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo [OK] Java pre-compile check passed
+echo       [OK] Java 预编译检查通过
 echo.
 
-echo [5/6] Building signed APK...
+echo [7/10] 编译签名 APK...
 echo.
 call gradlew.bat assembleRelease
 if errorlevel 1 (
     echo.
-    echo [ERROR] Build failed! Rolling back versionCode...
-    powershell -NoProfile -ExecutionPolicy Bypass -Command "$g='%ANDROID_DIR%\app\build.gradle'; $prevFile='%~dp0.build_vcode_prev'; if(Test-Path $prevFile){ $prev=Get-Content $prevFile -Raw; $c=Get-Content $g -Raw -Encoding UTF8; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $prev\"; [System.IO.File]::WriteAllText($g,$nc,(New-Object System.Text.UTF8Encoding $false)); Remove-Item $prevFile -Force; Write-Host ('  [OK] versionCode rolled back to '+$prev) } else { Write-Host '  [WARN] No prev versionCode to rollback' }"
-    echo [WARN] Restoring JavaScript due to build failure...
+    echo       [错误] 构建失败！正在回滚 versionCode...
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "$g='%ANDROID_DIR%\app\build.gradle'; $prevFile='%~dp0.build_vcode_prev'; if(Test-Path $prevFile){ $prev=Get-Content $prevFile -Raw; $c=Get-Content $g -Raw -Encoding UTF8; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $prev\"; [System.IO.File]::WriteAllText($g,$nc,(New-Object System.Text.UTF8Encoding $false)); Remove-Item $prevFile -Force; Write-Host ('  [OK] versionCode 已回滚至 '+$prev) } else { Write-Host '  [警告] 无旧 versionCode 可回滚' }"
+    echo       [警告] 因构建失败，正在恢复 JavaScript...
     call node "%~dp0..\..\tools\obfuscate.js" restore --target=cloud
-    echo [ERROR] Build failed! Please check error messages
+    echo       [错误] 构建失败！请查看上方错误信息
     if not defined NO_PAUSE pause
     exit /b 1
 )
-REM P1-12: Clean up versionCode rollback temp file after successful build
+REM P1-12: 构建成功后清理 versionCode 回滚临时文件
 if exist "%~dp0.build_vcode_prev" del "%~dp0.build_vcode_prev"
 echo.
 
-echo [5.5/6] Restoring JavaScript (cloud target)...
-REM P1: restore JS code after build
+echo [8/10] 恢复原始 JavaScript 代码 + 验证 APK 产物...
+REM 恢复 JS 代码
 call node "%~dp0..\..\tools\obfuscate.js" restore --target=cloud
 if errorlevel 1 (
-    echo [WARN] JS restore failed - may need manual restore: node tools\obfuscate.js restore --target=cloud
+    echo       [警告] JS 恢复失败 - 可能需要手动恢复: node tools\obfuscate.js restore --target=cloud
 ) else (
-    echo [OK] JS restored to original state
+    echo       [OK] JS 已恢复到原始状态
 )
 echo.
-
-echo [6/6] Build successful, copying APK...
+echo       定位 APK 文件...
 set "APK_FILE="
 if exist "%APK_OUTPUT_DIR%\app-release.apk" (
     set "APK_FILE=%APK_OUTPUT_DIR%\app-release.apk"
@@ -205,30 +187,29 @@ if exist "%APK_OUTPUT_DIR%\app-release.apk" (
         set "APK_FILE=%%f"
     )
 )
-
 if "%APK_FILE%"=="" (
-    echo [ERROR] APK file not found
-    echo   Search dir: %APK_OUTPUT_DIR%
+    echo       [错误] 未找到 APK 文件
+    echo       搜索目录: %APK_OUTPUT_DIR%
     if not defined NO_PAUSE pause
     exit /b 1
 )
-
 for %%A in ("%APK_FILE%") do (
-    echo APK File: %%~nxA
-    echo File Size: %%~zA bytes
-)
-
-echo [6.2/6] [STAGE:verify] Verifying APK contains latest auth-core.js...
-REM P3: Cloud APP loads from URL, no index.html in APK. Verify auth-core.js instead.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; try { $zip=[System.IO.Compression.ZipFile]::OpenRead('%APK_FILE%'); $entry=$zip.GetEntry('assets/public/auth-core.js'); if($entry){ $sz=$entry.Length; if($sz -lt 1000){ Write-Host '[ERROR] APK auth-core.js too small:' $sz 'bytes'; exit 1 }; Write-Host '[OK] APK auth-core.js:' $sz 'bytes (cloud APP loads index.html from URL)' } else { Write-Host '[ERROR] auth-core.js not found in APK'; exit 1 }; $zip.Dispose() } catch { Write-Host '[ERROR] APK verify failed:' $_.Exception.Message; exit 1 }"
-if errorlevel 1 (
-    echo [ERROR] APK content verification failed! APK may not contain latest code.
-    if not defined NO_PAUSE pause
-    exit /b 1
+    echo       APK 文件: %%~nxA
+    echo       文件大小: %%~zA 字节
 )
 echo.
 
-echo [6.5/6] Reading product name and version...
+echo [9/10] 验证 APK 内容 + 复制到输出目录...
+echo       验证 APK 包含最新 auth-core.js...
+REM P3: 云端 APP 从 URL 加载，APK 内无 index.html。改为验证 auth-core.js
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Add-Type -AssemblyName System.IO.Compression.FileSystem; try { $zip=[System.IO.Compression.ZipFile]::OpenRead('%APK_FILE%'); $entry=$zip.GetEntry('assets/public/auth-core.js'); if($entry){ $sz=$entry.Length; if($sz -lt 1000){ Write-Host '[错误] APK auth-core.js 过小:' $sz '字节'; exit 1 }; Write-Host '[OK] APK auth-core.js:' $sz '字节 (云端 APP 从 URL 加载 index.html)' } else { Write-Host '[错误] APK 中未找到 auth-core.js'; exit 1 }; $zip.Dispose() } catch { Write-Host '[错误] APK 验证失败:' $_.Exception.Message; exit 1 }"
+if errorlevel 1 (
+    echo       [错误] APK 内容验证失败！APK 可能未包含最新代码
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+
+echo       读取产品名称和版本号...
 set "PRODUCT_NAME="
 for /f "delims=" %%p in ('powershell -NoProfile -Command "(Get-Content '..\cloud_desktop\package.json' -Encoding UTF8 -Raw | ConvertFrom-Json).build.productName"') do (
     set "PRODUCT_NAME=%%p"
@@ -247,36 +228,35 @@ set "FINAL_APK=%~dp0%PRODUCT_NAME%.apk"
 
 copy /Y "%APK_FILE%" "%FINAL_APK%" >nul
 if errorlevel 1 (
-    echo [WARN] Copy failed, please manually get APK from:
-    echo   %APK_OUTPUT_DIR%
+    echo       [警告] 复制失败，请手动从以下目录获取 APK:
+    echo       %APK_OUTPUT_DIR%
 ) else (
-    echo [OK] Copied to: %FINAL_APK%
+    echo       [OK] 已复制到: %FINAL_APK%
 )
-
-echo.
-echo ============================================
-echo   Packing completed!
-echo   APK Path: %FINAL_APK%
-echo   This APK is signed and ready for installation
-echo ============================================
 echo.
 
-echo [7/6] Auto-updating download page...
+echo [10/10] 自动更新下载页 & 完成...
+echo       更新下载页（cloud）...
 node "%~dp0..\..\tools\auto-update-downloads.js" cloud
 if errorlevel 1 (
-    echo [WARN] Download page auto-update had issues, continuing anyway
+    echo       [警告] 下载页自动更新出现问题，继续执行
 ) else (
-    echo [OK] Download page updated successfully - cloud
+    echo       [OK] 下载页已更新 - cloud
 )
 echo.
-
-echo [7.5/6] Auto-updating download page (geren-cloud)...
+echo       更新下载页（geren-cloud）...
 node "%~dp0..\..\tools\auto-update-downloads.js" geren-cloud
 if errorlevel 1 (
-    echo [WARN] Download page auto-update geren-cloud had issues, continuing anyway
+    echo       [警告] 下载页自动更新(geren-cloud)出现问题，继续执行
 ) else (
-    echo [OK] Download page updated successfully geren-cloud
+    echo       [OK] 下载页已更新 - geren-cloud
 )
+echo.
+echo ============================================
+echo   打包完成！
+echo   APK 路径: %FINAL_APK%
+echo   此 APK 已签名，可直接安装
+echo ============================================
 echo.
 
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"

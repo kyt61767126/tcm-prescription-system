@@ -2,86 +2,87 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
-title Huikang TCM Personal - Offline Desktop Build
+title 惠康中医离线桌面版打包工具（标准版）
 
-REM Record start time (for elapsed stats) - use PowerShell instead of wmic (deprecated in Windows 11)
+REM 记录开始时间（用于耗时统计），用 PowerShell 替代废弃的 wmic（Win11 已弃用）
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "BUILD_START_STAMP=%%t"
 
 echo ============================================
-echo  Huikang TCM Personal - Offline Desktop
-echo  Start: %BUILD_START_TIME%
+echo  惠康中医离线桌面版打包工具（标准版）
+echo  开始: %BUILD_START_TIME%
 echo ============================================
 echo.
 
-echo [1/7] Checking environment...
+echo [1/9] 检查环境（npm）...
 where npm >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] npm not found, please install Node.js first
+    echo       [错误] 未找到 npm，请先安装 Node.js
+    echo       下载地址: https://nodejs.org/
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo       npm OK
+echo       [OK] npm 已安装
 echo.
 
-echo [1.5/7] Checking node_modules...
+echo [2/9] 检查依赖（node_modules + Electron 二进制）...
 if not exist "node_modules" (
-    echo       node_modules not found, installing dependencies...
+    echo       node_modules 不存在，正在安装依赖...
     if exist "package-lock.json" (
-        echo       Running npm ci ^(faster, deterministic^)...
+        echo       执行 npm ci（更快、确定性安装）...
         call npm ci --no-audit --no-fund --prefer-offline
         if errorlevel 1 (
-            echo       [WARN] npm ci failed, fallback to npm install --ignore-scripts...
+            echo       [警告] npm ci 失败，回退到 npm install --ignore-scripts...
             call npm install --no-audit --no-fund --prefer-offline --ignore-scripts
         )
     ) else (
-        echo       Running npm install...
+        echo       执行 npm install...
         call npm install --no-audit --no-fund --prefer-offline --ignore-scripts
     )
     if errorlevel 1 (
-        echo [ERROR] npm install failed
+        echo       [错误] 依赖安装失败
         if not defined NO_PAUSE pause
         exit /b 1
     )
-    echo       [OK] Dependencies installed
+    echo       [OK] 依赖安装完成
 ) else (
-    echo       [OK] node_modules exists
+    echo       [OK] node_modules 已存在
 )
-REM Check electron dist (--ignore-scripts skips postinstall, need manual download)
+REM Electron 二进制检查（--ignore-scripts 跳过 postinstall，需手动下载）
 if not exist "node_modules\electron\dist\electron.exe" (
-    echo       electron dist missing, downloading binary...
+    echo       Electron 二进制缺失，正在下载...
     set NODE_TLS_REJECT_UNAUTHORIZED=0
     set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
     call node node_modules\electron\install.js
     set NODE_TLS_REJECT_UNAUTHORIZED=
     set ELECTRON_MIRROR=
     if not exist "node_modules\electron\dist\electron.exe" (
-        echo [ERROR] electron binary download failed
+        echo       [错误] Electron 二进制下载失败
         if not defined NO_PAUSE pause
         exit /b 1
     )
-    echo       [OK] electron dist downloaded
+    echo       [OK] Electron 二进制下载完成
 )
 echo.
 
-echo [2/7] Closing remaining processes...
-REM P0-Optimization: precisely match project-related processes to avoid killing other Electron apps (e.g. VSCode, Slack)
+echo [3/9] 关闭残留进程...
+REM 精确匹配项目相关进程，避免误杀其他 Electron 应用（如 VSCode、Slack）
 taskkill /F /IM "app-personal.exe" >nul 2>&1
 taskkill /F /IM "惠康中医-LB.exe" >nul 2>&1
-REM P0-Optimization: replace deprecated wmic (deprecated in Windows 11) with PowerShell Get-Process (precise path-based match)
+REM 用 PowerShell Get-Process 替代废弃的 wmic（Win11 已弃用），基于路径精确匹配
 powershell -NoProfile -Command "Get-Process | Where-Object { try { $_.Path -like '*db-offline\desktop_geren\dist*' -or $_.Path -like '*db-offline\desktop_geren\build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
-echo [OK] Processes cleaned
+echo       [OK] 残留进程已清理
 echo.
 
-echo [3/7] Configuring clinic info...
+echo [4/9] 配置诊所信息...
 if /i "%1"=="--skip-config" (
-    echo       [SKIP] --skip-config parameter detected
+    echo       [SKIP] 检测到 --skip-config 参数，跳过配置
 ) else (
     powershell -ExecutionPolicy Bypass -File "..\edit-config.ps1" -DesktopDir desktop_geren -AppDir app_geren
 )
 echo.
 
-echo [4/7] Cleaning old build artifacts...
+echo [5/9] 清理旧打包产物 + 版本号自增...
 set "OUTPUT_DIR=dist"
 
 set old_count=0
@@ -95,65 +96,45 @@ for /f "delims=" %%D in ('dir /b /ad "dist_old_*" 2^>nul ^| sort /r') do (
 if exist "%OUTPUT_DIR%" (
     rmdir /s /q "%OUTPUT_DIR%" 2>nul
     if exist "%OUTPUT_DIR%" (
-        echo [WARNING] Direct delete failed, trying PowerShell force delete...
-        powershell -ExecutionPolicy Bypass -Command "try { [System.IO.Directory]::Delete('%CD%\%OUTPUT_DIR%', $true) } catch { Write-Host '[WARNING] PowerShell delete also failed' }" 2>nul
+        echo       [警告] 直接删除失败，尝试 PowerShell 强制删除...
+        powershell -ExecutionPolicy Bypass -Command "try { [System.IO.Directory]::Delete('%CD%\%OUTPUT_DIR%', $true) } catch { Write-Host '[警告] PowerShell 删除也失败' }" 2>nul
     )
     if exist "%OUTPUT_DIR%" (
-        REM P0-Optimization: replace deprecated wmic with PowerShell Get-Date for timestamp
+        REM 用 PowerShell Get-Date 替代废弃的 wmic 获取时间戳
         for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "DSTAMP=%%t"
-        echo [WARNING] Could not delete %OUTPUT_DIR%, renaming to dist_old_!DSTAMP!...
+        echo       [警告] 无法删除 %OUTPUT_DIR%，重命名为 dist_old_!DSTAMP!...
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
         if exist "%OUTPUT_DIR%" (
-            echo [ERROR] Cannot clean or rename %OUTPUT_DIR% directory
-            echo         Please manually close any program using %OUTPUT_DIR%\ and retry
-            echo         Or manually delete/rename the %OUTPUT_DIR% folder
+            echo       [错误] 无法清理或重命名 %OUTPUT_DIR% 目录
+            echo       请手动关闭使用 %OUTPUT_DIR%\ 的程序后重试
+            echo       或手动删除/重命名 %OUTPUT_DIR% 文件夹
             if not defined NO_PAUSE pause
             exit /b 1
         )
     )
 )
-echo [OK] Old artifacts cleaned
+echo       [OK] 旧产物已清理
 echo.
-
-echo [BUMP] Auto bumping patch version (integrity baseline rebuild)...
+echo       版本号自增（触发完整性基线重建）...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
 echo.
 
-echo [5/7] Obfuscating JavaScript code (target=geren, may take 1-2 minutes)...
-node "%~dp0..\..\..\tools\obfuscate.js" --target=geren
-if errorlevel 1 (
-    echo [ERROR] Obfuscation failed
-    echo Restoring original files...
-    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=geren >nul 2>&1
-    if not defined NO_PAUSE pause
-    exit /b 1
-)
-echo [OK] Obfuscation completed
-echo.
-
-echo [6/7] Running build...
-set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
-set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
-REM better-sqlite3 prebuild-install downloads prebuilt packages from GitHub Releases, sometimes SSL cert verification fails
-REM Temporarily disable TLS cert verification (build only) to ensure prebuild-install downloads packages matching electron ABI
-REM Code signing disabled (pfx and cert-password.txt removed; package.json has no certificateFile)
-echo.
-echo [CHECK] ============================================
-echo [CHECK] 打包前安全完整性验证
-echo [CHECK] ============================================
+echo [6/9] 打包前安全完整性验证...
+echo ============================================
+echo   安全完整性验证
+echo ============================================
 node "%~dp0..\..\..\tools\pre-build-check.js" "%CD%"
 if errorlevel 1 (
-    echo [FAIL] 安全检查未通过，终止打包！请修复 package.json 的 files 列表
+    echo [失败] 安全检查未通过，终止打包！请修复 package.json 的 files 列表
     exit /b 1
 )
 echo [OK] 安全检查通过
 echo.
-
-echo [CHECK] 磁盘空间检查...
+echo       磁盘空间检查...
 for /f "delims=" %%d in ('powershell -NoProfile -Command "[math]::Round((Get-PSDrive -Name $((Get-Location).Drive.Name)).Free/1GB,2)"') do set "FREE_GB=%%d"
-echo       Disk free: %FREE_GB% GB
+echo       剩余空间: %FREE_GB% GB
 if "%FREE_GB%"=="" set "FREE_GB=0"
-powershell -NoProfile -Command "if([double]'%FREE_GB%' -lt 1.0){ Write-Host '[ERROR] 磁盘空间不足: %FREE_GB%GB, 需要>=1GB'; exit 1 }"
+powershell -NoProfile -Command "if([double]'%FREE_GB%' -lt 1.0){ Write-Host '[错误] 磁盘空间不足: %FREE_GB%GB, 需要 >=1GB'; exit 1 }"
 if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
@@ -161,23 +142,40 @@ if errorlevel 1 (
 echo [OK] 磁盘空间充足
 echo.
 
-set NODE_TLS_REJECT_UNAUTHORIZED=0
-REM P1-Reliability: isolate TEMP directory to project tmp/ to avoid C: drive space/permission issues
+echo [7/9] 代码混淆（target=geren，可能耗时 1-2 分钟）...
+node "%~dp0..\..\..\tools\obfuscate.js" --target=geren
+if errorlevel 1 (
+    echo [错误] 代码混淆失败
+    echo 正在恢复原始文件...
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=geren >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] 代码混淆完成
+echo.
+
+echo [8/9] 执行打包（npm run build + 失败重试）...
+set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
+set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
+REM better-sqlite3 prebuild-install 从 GitHub Releases 下载预编译包，有时 SSL 证书验证失败
+REM 临时禁用 TLS 证书验证（仅构建期间），确保 prebuild-install 下载匹配 electron ABI 的包
+REM 代码签名已禁用（pfx 已删除，package.json 无 certificateFile）
+
+REM 将 TEMP 目录隔离到项目 tmp/，避免 C: 盘空间/权限问题
 set "PREV_TEMP=%TEMP%"
 set "PREV_TMP=%TMP%"
 if not exist "tmp" mkdir tmp
 set "TEMP=%CD%\tmp"
 set "TMP=%CD%\tmp"
+
+set NODE_TLS_REJECT_UNAUTHORIZED=0
 call npm run build
 set "BUILD_RC=%errorlevel%"
-REM P1-Security hardening: clear temporary TLS disable to avoid polluting dev environment
+REM 安全加固：清除临时 TLS 禁用，避免污染开发环境
 set NODE_TLS_REJECT_UNAUTHORIZED=
-REM Restore TEMP regardless of build result
-set "TEMP=%PREV_TEMP%"
-set "TMP=%PREV_TMP%"
 if not "%BUILD_RC%"=="0" (
     echo.
-    echo [WARN] First build attempt failed, retrying...
+    echo       [警告] 首次构建失败，3 秒后重试...
     timeout /t 3 /nobreak >nul
     set NODE_TLS_REJECT_UNAUTHORIZED=0
     set "TEMP=%CD%\tmp"
@@ -185,60 +183,60 @@ if not "%BUILD_RC%"=="0" (
     call npm run build
     set "BUILD_RC=%errorlevel%"
     set NODE_TLS_REJECT_UNAUTHORIZED=
-    set "TEMP=%PREV_TEMP%"
-    set "TMP=%PREV_TMP%"
 )
+
+REM 无论构建结果如何都恢复 TEMP
+set "TEMP=%PREV_TEMP%"
+set "TMP=%PREV_TMP%"
 if exist "tmp" rmdir /s /q "tmp" 2>nul
+
 if not "%BUILD_RC%"=="0" (
     echo.
-    echo [ERROR] Build failed, please check logs above
-    echo Restoring original JavaScript code...
+    echo [错误] 构建失败，请查看上方日志
+    echo 正在恢复原始 JavaScript 代码...
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=geren >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
 echo.
 
-echo [VERIFY] 产物完整性验证...
+echo [9/9] 验证产物 & 完成...
+echo       产物完整性验证...
 set "EXE_FILE="
 for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
 if "%EXE_FILE%"=="" (
-    echo [ERROR] No exe file found in %OUTPUT_DIR%
+    echo [错误] 在 %OUTPUT_DIR% 中未找到 .exe 文件
     if not defined NO_PAUSE pause
     exit /b 1
 )
 for %%A in ("%EXE_FILE%") do (
     if %%~zA LSS 1000000 (
-        echo [ERROR] exe file too small: %%~zA bytes ^(< 1MB^), build may be incomplete
+        echo [错误] exe 文件过小: %%~zA 字节 ^(< 1MB^)，构建可能不完整
         if not defined NO_PAUSE pause
         exit /b 1
     )
     if %%~zA GTR 200000000 (
-        echo [WARN] exe file unusually large: %%~zA bytes ^(^> 200MB^)
+        echo [警告] exe 文件异常大: %%~zA 字节 ^(^> 200MB^)
     )
-    echo [OK] %%~nxA  %%~zA bytes
+    echo   [OK] %%~nxA  %%~zA 字节
 )
 echo.
-
-echo Restoring original JavaScript code...
+echo       正在恢复原始 JavaScript 代码...
 node "%~dp0..\..\..\tools\obfuscate.js" restore --target=geren
 if errorlevel 1 (
-    echo [ERROR] Restore failed! Source code may remain obfuscated.
-    echo Please manually run: node "%~dp0..\..\..\tools\obfuscate.js" restore --target=geren
+    echo [错误] 恢复原始代码失败！源代码可能仍处于混淆状态。
+    echo 请手动执行: node "%~dp0..\..\..\tools\obfuscate.js" restore --target=geren
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo [OK] Original code restored
+echo       [OK] 原始代码已恢复
 echo.
-
-echo [7/7] Build completed
-echo Output dir: %CD%\%OUTPUT_DIR%
+echo 输出目录: %CD%\%OUTPUT_DIR%
 echo ============================================
 if exist "dist_old_*" (
-    echo [NOTE] Old build artifacts saved as dist_old_* directories
-    echo        These will be auto-cleaned in future builds (keeping latest 2)
+    echo [提示] 旧打包产物已保存为 dist_old_* 目录
+    echo       未来构建时将自动清理（仅保留最近 2 个）
 )
-REM P1-Enhancement: show build elapsed time
 for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
 powershell -NoProfile -Command "Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  打包完成!' -ForegroundColor Yellow; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  总耗时: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
