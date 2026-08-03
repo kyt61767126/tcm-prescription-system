@@ -1,19 +1,19 @@
 {
-    "clinicName": "本能堂工作室",
-    "doctorName": "卢二灼",
-    "edition": "personal",
-    "appMode": "offline",
-    "maxUsers": 1,
-    "productName": "惠康中医-LB",
-    "versionLabel": "离线标准版",
-    "users": [
-        {
-            "username": "admin",
-            "password": "2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b",
-            "name": "管理员",
-            "role": "admin"
-        }
-    ],
-    "configIssuedAt": "2026-08-02T00:31:24.901Z",
-    "configSignature": "e342a6a9ac51af7192619b6b376e691e80d414cffa04193067d9de319cfd8c95"
+    "clinicName":  "本能堂工作室",
+    "doctorName":  "本能堂",
+    "edition":  "personal",
+    "appMode":  "offline",
+    "maxUsers":  1,
+    "productName":  "惠康中医-LB",
+    "versionLabel":  "离线标准版",
+    "users":  [
+                  {
+                      "username":  "admin",
+                      "password":  "2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b",
+                      "name":  "管理员",
+                      "role":  "admin"
+                  }
+              ],
+    "configIssuedAt":  "2026-08-03T00:45:41.4372860Z",
+    "configSignature":  "5df64b9da23ff126a919d0a2c9d8fbde9211feb0b9b9016740dea8b0b397a458"
 }
