@@ -1453,6 +1453,17 @@ if (window.Permission) {
             }
         }
 
+        // ★P5-3 启用移动端录像/拍照按钮（由 video-recorder.js init 完成后调用）
+        // 初始 disabled 避免模块未加载时点击弹 alert，模块加载完成后启用（同步云端 cloud_desktop）
+        function enableMediaButtons() {
+            try {
+                const videoBtn = document.getElementById('videoRecordBtn');
+                const photoBtn = document.getElementById('photoCaptureBtn2');
+                if (videoBtn) { videoBtn.disabled = false; videoBtn.style.opacity = ''; }
+                if (photoBtn) { photoBtn.disabled = false; photoBtn.style.opacity = ''; }
+            } catch(e) { console.warn('enableMediaButtons失败:', e); }
+        }
+
         function updateUserDisplay() {
             if (currentUser) {
                 // ★ 2026-08-03 同步：优先显示 localStorage 中保存的医师姓名，其次是 CONFIG.doctorName，最后是 currentUser.name

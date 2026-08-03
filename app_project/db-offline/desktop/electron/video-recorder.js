@@ -1095,6 +1095,13 @@
                 }
             }, 1000);
         }
+        // ★P5-3 暴露到 window，启用移动端底部录像/拍照按钮（同步云端 cloud_desktop）
+        // 移动端底部按钮初始 disabled，此处暴露后由 index.html 的 enableMediaButtons 启用
+        window.openRecordingOverlay = openRecordingOverlay;
+        window.openPhotoOverlay = openPhotoOverlay;
+        try {
+            if (typeof window.enableMediaButtons === 'function') window.enableMediaButtons();
+        } catch(e) { console.warn('[video-recorder] enableMediaButtons 调用失败:', e); }
     }
 
     if (document.readyState === 'loading') {
