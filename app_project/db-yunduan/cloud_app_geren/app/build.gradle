@@ -13,9 +13,7 @@ if (signingPropertiesFile.exists()) {
     signingProperties.load(new FileInputStream(signingPropertiesFile))
 }
 
-// 构建时间戳（北京时间），用于 versionName 标识每次打包版本
-// 注意：使用脚本级变量而非方法定义，避免 task doFirst 闭包 delegate 解析失败
-def BUILD_TIME = new Date().format('yyyyMMdd-HHmm', TimeZone.getTimeZone('Asia/Shanghai'))
+// 软著申请版本号统一为 V1.0.0（versionName 固定，不再使用构建时间戳）
 
 android {
     namespace = "com.tcm.prescription"
@@ -42,7 +40,7 @@ android {
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 81
-        versionName "1.0.${BUILD_TIME}"
+        versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.map'
