@@ -694,7 +694,7 @@ let currentUser = null;
                     });
                 });
             } catch(e) {}
-            // ★ 个人版：单用户，取消下拉菜单，用户名只读显示医师姓名
+            // ★ 标准版：单用户，取消下拉菜单，用户名只读显示医师姓名
             if (CONFIG.edition === 'personal') {
                 // 优先从 localStorage 读取最新医师姓名（基础设置修改后保存到这里）
                 const localDoctor = localStorage.getItem('local_clinicDoctor');
@@ -716,7 +716,7 @@ let currentUser = null;
                 }
                 if (dropdownBtn) dropdownBtn.style.display = 'none';
                 if (dropdownMenu) dropdownMenu.style.display = 'none';
-                // 个人版隐藏"记住用户"复选框（单用户无需记住）
+                // 标准版隐藏"记住用户"复选框（单用户无需记住）
                 if (rememberUserField) rememberUserField.style.display = 'none';
             }
         })();
@@ -1195,7 +1195,7 @@ let currentUser = null;
                 }
                 
                 const users = getUsers();
-                // ★ 个人版：允许用 CONFIG.doctorName（本能堂）登录，实际匹配第一个用户
+                // ★ 标准版：允许用 CONFIG.doctorName（本能堂）登录，实际匹配第一个用户
                 const isPersonal = (CONFIG.edition === 'personal');
                 let loginUsername = username;
                 if (isPersonal && CONFIG.doctorName && username === CONFIG.doctorName) {
@@ -1239,7 +1239,7 @@ let currentUser = null;
                     
                     const rememberUser = document.getElementById('rememberUser')?.checked;
                     if (rememberUser) {
-                        // ★ 个人版：记住的用户名显示为 CONFIG.doctorName（本能堂），而非 admin
+                        // ★ 标准版：记住的用户名显示为 CONFIG.doctorName（本能堂），而非 admin
                         const displayName = isPersonal ? (CONFIG.doctorName || username) : username;
                         saveRememberedUser(displayName);
                     } else {
@@ -1312,7 +1312,7 @@ let currentUser = null;
                 if (overlay) {
                     overlay.style.display = 'flex';
                     loadRememberedUsers();
-                    // ★ 个人版：退出登录后同步 loginUsername 为最新的 CONFIG.doctorName
+                    // ★ 标准版：退出登录后同步 loginUsername 为最新的 CONFIG.doctorName
                     if (CONFIG.edition === 'personal' && CONFIG.doctorName) {
                         const userInput = document.getElementById('loginUsername');
                         if (userInput) userInput.value = CONFIG.doctorName;
@@ -1731,7 +1731,7 @@ let currentUser = null;
                 const changePwdBtn = document.getElementById('changePwdBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
-                // ★ 个人版：固定显示"改密"，隐藏"用户管理"
+                // ★ 标准版：固定显示"改密"，隐藏"用户管理"
                 const isPersonal = (CONFIG.edition === 'personal');
                 const canManage = isPersonal ? false : (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
                 const canChangePwd = (window.Permission && Permission.shouldShowChangePwd) ? Permission.shouldShowChangePwd(currentUser) : true;
@@ -1754,7 +1754,7 @@ let currentUser = null;
             const isApp = !!window.AndroidNative;
             const changePwdText = isApp ? '🔐 改密' : '🔐 修改密码';
 
-            // ★ 个人版：固定显示"改密"，不显示"用户管理"
+            // ★ 标准版：固定显示"改密"，不显示"用户管理"
             if (CONFIG.edition === 'personal') {
                 btn2.innerHTML = changePwdText;
                 btn2.onclick = function() { showChangePwdModal(); };
@@ -1781,7 +1781,7 @@ let currentUser = null;
 
         async function loadRememberedUsers() {
             try {
-                // ★ 个人版：单用户，用户名固定显示 CONFIG.doctorName，跳过记住用户名逻辑
+                // ★ 标准版：单用户，用户名固定显示 CONFIG.doctorName，跳过记住用户名逻辑
                 if (CONFIG.edition === 'personal') {
                     const userInput = document.getElementById('loginUsername');
                     if (userInput && CONFIG.doctorName) {
@@ -1839,7 +1839,7 @@ let currentUser = null;
                     document.getElementById('rememberUser').checked = true;
                     localStorage.setItem('local_rememberedUsers', JSON.stringify(singleList));
                 }
-                // ★ 个人版：无记住用户名时，默认显示 CONFIG.doctorName（医师姓名）
+                // ★ 标准版：无记住用户名时，默认显示 CONFIG.doctorName（医师姓名）
                 if (!document.getElementById('loginUsername').value && CONFIG.edition === 'personal' && CONFIG.doctorName) {
                     document.getElementById('loginUsername').value = CONFIG.doctorName;
                 }
@@ -3214,7 +3214,7 @@ let currentUser = null;
         async function init() {
             injectRecycleBinButton();
             checkLoginStatus();
-            // ★ 个人版：优先从 localStorage 同步 CONFIG.doctorName（基础设置修改后保持同步）
+            // ★ 标准版：优先从 localStorage 同步 CONFIG.doctorName（基础设置修改后保持同步）
             const localDoctor = localStorage.getItem('local_clinicDoctor');
             if (localDoctor) {
                 CONFIG.doctorName = localDoctor;
@@ -4633,7 +4633,7 @@ let currentUser = null;
                 try {
                     const prescribeStatus = await window.electronAPI.license.canPrescribe();
                     if (!prescribeStatus.allowed) {
-                        alert('本月处方数量已达上限（' + prescribeStatus.max + ' 张）。\n当前已开：' + prescribeStatus.current + ' 张\n\n请升级到个人版或专业版后继续使用。');
+                        alert('本月处方数量已达上限（' + prescribeStatus.max + ' 张）。\n当前已开：' + prescribeStatus.current + ' 张\n\n请升级到标准版或专业版后继续使用。');
                         return;
                     }
                 } catch (e) {
@@ -4971,7 +4971,7 @@ let currentUser = null;
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             localStorage.setItem('local_defaultDose', document.getElementById('defaultDose').value || '7');
             
-            // ★ 个人版：同步更新 CONFIG.doctorName 和登入窗口用户名显示
+            // ★ 标准版：同步更新 CONFIG.doctorName 和登入窗口用户名显示
             const newDoctorName = document.getElementById('defaultDoctor').value;
             if (CONFIG.edition === 'personal' && newDoctorName && newDoctorName !== CONFIG.doctorName) {
                 CONFIG.doctorName = newDoctorName;
@@ -5019,7 +5019,7 @@ let currentUser = null;
         function showHelp() {
             const isPersonal = (CONFIG.edition === 'personal');
             const editionName = isPersonal ? '离线标准版' : '离线机构版';
-            const editionDesc = isPersonal ? '个人版：含修改密码，无用户管理' : '定制版：含用户管理+修改密码';
+            const editionDesc = isPersonal ? '标准版：含修改密码，无用户管理' : '机构版：含用户管理+修改密码';
             const userMgmtLine = isPersonal ? '' : '✓ 用户管理（管理员）\n';
             alert('惠康中医-' + editionName + '\n\n' +
                   '【版本说明】' + editionDesc + '\n\n' +

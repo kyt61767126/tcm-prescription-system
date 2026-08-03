@@ -1,5 +1,5 @@
 // ============================================================================
-//  login.js - 登录窗口逻辑（个人版：单用户登录，用户名固定显示医师姓名）
+//  login.js - 登录窗口逻辑（标准版：单用户登录，用户名固定显示医师姓名）
 //  不依赖 nodeIntegration，通过 electronAPI 调用主进程
 // ============================================================================
 (function () {
@@ -177,7 +177,7 @@
             }
 
             // 仅写入必要字段，不写入密码
-            // ★个人版：name 固定使用 config.doctorName（医师姓名），不使用 users[0].name（"管理员"）
+            // ★标准版：name 固定使用 config.doctorName（医师姓名），不使用 users[0].name（"管理员"）
             const cfg = await getAppConfig();
             const displayName = cfg.doctorName || loginUserInfo.name || loginUserInfo.username;
             const userData = { username: loginUserInfo.username, name: displayName, role: loginUserInfo.role || 'user' };

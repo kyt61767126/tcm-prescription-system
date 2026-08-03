@@ -64,7 +64,7 @@ public class MainActivity extends BridgeActivity {
     // ============ 常量配置 ============
     // S3: 云端域名常量化，统一管理避免硬编码散落多处
     private static final String CLOUD_HOST = "tcm-prescription-system.pages.dev";
-    // ★ 个人版云端APP：通过URL参数 edition=personal 区分版本，网页端据此隐藏管理员功能
+    // ★ 标准版云端APP：通过URL参数 edition=personal 区分版本，网页端据此隐藏管理员功能
     private static final String CLOUD_URL = "https://" + CLOUD_HOST + "/?edition=personal";
     private static final String TAG = "TCM_Prescription";
     // P3: 原生层期望的网页版本号，与 index.html 中 window.__APP_VERSION__ 保持同步

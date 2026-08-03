@@ -781,7 +781,7 @@
         };
     }
 
-    // 离线单用户适配器（个人版）
+    // 离线单用户适配器（标准版）
     function createSingleUserAdapter(getUserFn) {
         return {
             async authenticate(username, password) {
