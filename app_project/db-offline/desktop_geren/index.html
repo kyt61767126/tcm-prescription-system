@@ -1455,8 +1455,11 @@ if (window.Permission) {
 
         function updateUserDisplay() {
             if (currentUser) {
-                // ★个人版：固定显示医师姓名（CONFIG.doctorName），不显示 users[0].name（"管理员"）
-                const displayName = (typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : (currentUser.name || currentUser.username);
+                // ★ 2026-08-03 同步：优先显示 localStorage 中保存的医师姓名，其次是 CONFIG.doctorName，最后是 currentUser.name
+                const displayName = localStorage.getItem('local_clinicDoctor') 
+                    || (typeof CONFIG !== 'undefined' && CONFIG.doctorName) 
+                    || currentUser.name 
+                    || currentUser.username;
                 document.getElementById('userDisplayName').textContent = displayName;
                 const userManageBtn = document.getElementById('userManageBtn');
                 const changePwdBtn = document.getElementById('changePwdBtn');
@@ -2904,6 +2907,11 @@ if (window.Permission) {
             document.getElementById('paperDoseCount').textContent = doseVal;
             document.getElementById('doctorName').value = clinicDoctorVal;
             document.getElementById('defaultDoctor').value = clinicDoctorVal;
+            // ★ 2026-08-03 同步：初始化时也更新当前用户显示为医师姓名
+            const initDisplayName = document.getElementById('userDisplayName');
+            if (initDisplayName && currentUser) {
+                initDisplayName.textContent = clinicDoctorVal || currentUser.name;
+            }
             document.getElementById('autoStart').checked = localStorage.getItem('local_autoStartEnabled') === 'true';
             // 同步初始化 medicines（避免 loadData 异步加载前用户输入简码无数据）
             if (medicines.length === 0) {
@@ -4766,6 +4774,11 @@ if (window.Permission) {
             
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
+            // ★ 2026-08-03 同步：保存医师姓名后，立即更新当前用户显示
+            const updatedDisplayName = document.getElementById('userDisplayName');
+            if (updatedDisplayName) {
+                updatedDisplayName.textContent = newDoctorName || (currentUser ? currentUser.name : '');
+            }
             // ★ 个人版：同步登入窗口的用户名显示（基础设置修改医师姓名后立即生效）
             // 配合 main.js update-clinic-info IPC 回写 config.json，实现 login.html 和 index.html loginOverlay 双端同步
             if (typeof CONFIG !== 'undefined' && CONFIG.edition === 'personal') {

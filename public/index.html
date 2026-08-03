@@ -4551,7 +4551,11 @@ if (window.Permission) {
 
         function updateUserDisplay() {
             if (currentUser) {
-                document.getElementById('userDisplayName').textContent = currentUser.name;
+                // ★ 2026-08-03 同步：优先显示 localStorage 中保存的医师姓名，与基础设置保持一致
+                const displayName = localStorage.getItem('local_clinicDoctor') 
+                    || currentUser.name 
+                    || '';
+                document.getElementById('userDisplayName').textContent = displayName;
                 // 更新在线/离线状态显示
                 updateModeStatus();
                 // 普通用户隐藏云端状态显示（modeStatusWrapper 包含 " | " 分隔符和状态文本）
@@ -5989,6 +5993,11 @@ if (window.Permission) {
             document.getElementById('defaultDose').value = config.defaultDose;
             document.getElementById('doctorName').value = config.clinicDoctor;
             document.getElementById('defaultDoctor').value = config.clinicDoctor;
+            // ★ 2026-08-03 同步：初始化时也更新当前用户显示为医师姓名
+            const initDisplayName = document.getElementById('userDisplayName');
+            if (initDisplayName && currentUser) {
+                initDisplayName.textContent = config.clinicDoctor || currentUser.name;
+            }
             document.getElementById('autoStart').checked = config.autoStartEnabled;
             
             const regFeeEl = document.getElementById('registrationFee');
@@ -7713,6 +7722,12 @@ if (window.Permission) {
 
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = newClinicName;
+            // ★ 2026-08-03 同步：保存医师姓名后，立即更新当前用户显示
+            const updatedDisplayName = document.getElementById('userDisplayName');
+            if (updatedDisplayName) {
+                const newDoctorName = document.getElementById('defaultDoctor').value.trim();
+                updatedDisplayName.textContent = newDoctorName || (currentUser ? currentUser.name : '');
+            }
             // 同步登录界面的诊所名称
             const loginClinicNameSave = document.getElementById('loginClinicName');
             if (loginClinicNameSave) loginClinicNameSave.textContent = newClinicName;

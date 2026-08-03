@@ -1665,7 +1665,9 @@ let currentUser = null;
 
         function updateUserDisplay() {
             if (currentUser) {
-                document.getElementById('userDisplayName').textContent = currentUser.name;
+                // ★ 2026-08-03 同步：当前用户显示医师姓名（localStorage优先），与基础设置保持一致
+                const displayName = localStorage.getItem('local_clinicDoctor') || currentUser.name;
+                document.getElementById('userDisplayName').textContent = displayName;
                 const userManageBtn = document.getElementById('userManageBtn');
                 const changePwdBtn = document.getElementById('changePwdBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
@@ -3170,6 +3172,11 @@ let currentUser = null;
             document.getElementById('paperDoseCount').textContent = doseVal;
             document.getElementById('doctorName').value = clinicDoctorVal;
             document.getElementById('defaultDoctor').value = clinicDoctorVal;
+            // ★ 2026-08-03 同步：初始化时也更新当前用户显示为医师姓名
+            const initDisplayName = document.getElementById('userDisplayName');
+            if (initDisplayName && currentUser) {
+                initDisplayName.textContent = clinicDoctorVal || currentUser.name;
+            }
             document.getElementById('autoStart').checked = localStorage.getItem('local_autoStartEnabled') === 'true';
             // 同步初始化 medicines（避免 loadData 异步加载前用户输入简码无数据）
             if (medicines.length === 0) {
@@ -4936,6 +4943,9 @@ let currentUser = null;
             
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
+            // ★ 2026-08-03 同步：保存医师姓名后，立即更新当前用户显示
+            const newDoctorName = document.getElementById('defaultDoctor').value;
+            document.getElementById('userDisplayName').textContent = newDoctorName || (currentUser ? currentUser.name : '');
             // 同步诊疗费
             const regFeeVal = document.getElementById('defaultRegFee').value || '0';
             const regFeeInput = document.getElementById('registrationFee');
