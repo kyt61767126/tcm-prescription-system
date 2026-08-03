@@ -472,6 +472,16 @@ function installDevToolsGuard(webContents) {
             if (ctrl && shift && (key === 'i' || key === 'j')) { event.preventDefault(); return; }
             if (ctrl && shift && key === 'r') { event.preventDefault(); return; }
             if (ctrl && !shift && key === 'u') { event.preventDefault(); return; }
+            // ★ P4-D 打印快捷键：Ctrl+P 纵向打印 / Ctrl+Shift+P 横向打印
+            // 拦截浏览器默认打印对话框，改用应用自定义的 printPrescription
+            if (ctrl && key === 'p') {
+                event.preventDefault();
+                const orientation = shift ? 'landscape' : 'portrait';
+                webContents.executeJavaScript(
+                    `if (typeof printPrescription === 'function') printPrescription('${orientation}');`
+                ).catch(() => {});
+                return;
+            }
         });
     } catch (e) {
         console.warn('[Security] installDevToolsGuard 异常:', e.message);
@@ -1551,33 +1561,39 @@ ipcMain.handle('show-message-box', async (event, options) => {
     }
 });
 
-// ★ 打印处方（解决 Electron iframe print() 不工作的问题）
-// ★ 修复 2026-07-27：data: URL + encodeURIComponent 在 Electron 28+ 中存在两个问题：
-//   1) did-finish-load 事件对 data: URL 经常不触发，导致 print() 永不调用，30秒后超时关闭
-//   2) 处方 HTML 含大量内联样式，encodeURIComponent 后 URL 可能过长被截断
-//   修复方案：改用 base64 编码的 data URL（更短更可靠），监听 dom-ready 替代 did-finish-load，
-//            并处理 did-fail-load 错误，关联父窗口（modal）
+// ★ 打印处方（直接打印）
+// 方案：隐藏窗口加载处方 HTML → 渲染进程调用 window.print() → 弹系统打印对话框 → 关闭
+// 最快最简单，无预览窗口、无 PDF 中间步骤
+// ★ 2026-08-02 同步云端 cloud_desktop 方案：隐藏窗口+字体等待+2分钟超时
+//   旧方案（显示窗口+webContents.print+30秒超时）已废弃，用户体验差且超时过短
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
-        const parentWin = BrowserWindow.fromWebContents(event.sender);
+        const isLandscape = orientation === 'landscape';
+
+        // 隐藏窗口（用户不可见）
         const printWin = new BrowserWindow({
-            show: true,
-            width: 800,
-            height: 600,
-            modal: !!parentWin && !parentWin.isDestroyed(),
-            parent: parentWin && !parentWin.isDestroyed() ? parentWin : undefined,
+            show: false,
             webPreferences: {
                 contextIsolation: true,
                 nodeIntegration: false
             }
         });
-        // ★ 用 base64 编码替代 encodeURIComponent，避免 URL 长度截断和特殊字符问题
-        const base64Html = Buffer.from(html, 'utf8').toString('base64');
+        printWin.setMenu(null);
+
+        // 注入打印样式（A5 横向/纵向 + 零边距）
+        let enrichedHtml = html;
+        const printStyle = `<style>@media print { @page { size: A5 ${isLandscape ? 'landscape' : 'portrait'}; margin: 0; } body { margin: 0; } }</style>`;
+        if (/<\/head>/i.test(enrichedHtml)) {
+            enrichedHtml = enrichedHtml.replace(/<\/head>/i, printStyle + '</head>');
+        } else {
+            enrichedHtml = printStyle + enrichedHtml;
+        }
+
+        const base64Html = Buffer.from(enrichedHtml, 'utf8').toString('base64');
         const dataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
 
         return new Promise((resolve) => {
-            let printed = false;  // 防止重复打印
-            let settled = false;  // 防止重复 resolve
+            let settled = false;
 
             const safeResolve = (val) => {
                 if (settled) return;
@@ -1588,41 +1604,38 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
 
             printWin.loadURL(dataUrl);
 
-            // ★ 监听 dom-ready（比 did-finish-load 更早更可靠）
-            printWin.webContents.once('dom-ready', () => {
-                // 给浏览器一点时间完成布局，否则可能打印空白页
-                setTimeout(() => {
-                    if (printed || printWin.isDestroyed()) return;
-                    printed = true;
-                    printWin.webContents.print({ silent: false, printBackground: true }, (success) => {
-                        safeResolve(success);
-                    });
-                }, 200);
-            });
-
-            // ★ 兜底：若 dom-ready 不触发，did-finish-load 作为备份
+            // 页面加载完成后，等待布局和字体就绪，再调用 window.print()
             printWin.webContents.once('did-finish-load', () => {
-                if (printed || printWin.isDestroyed()) return;
-                console.warn('[print] dom-ready 未触发，由 did-finish-load 兜底打印');
-                printed = true;
-                printWin.webContents.print({ silent: false, printBackground: true }, (success) => {
-                    safeResolve(success);
-                });
+                setTimeout(async () => {
+                    try {
+                        // 强制布局刷新 + 等待字体加载
+                        await printWin.webContents.executeJavaScript(
+                            'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
+                        );
+                        await new Promise(r => setTimeout(r, 200));
+                        // 渲染进程同步调用 window.print()，弹出系统打印对话框
+                        // 对话框关闭后 window.print() 返回，executeJavaScript 的 Promise resolve
+                        await printWin.webContents.executeJavaScript('window.print();');
+                        safeResolve(true);
+                    } catch (e) {
+                        console.error('[print] 打印失败:', e);
+                        safeResolve(false);
+                    }
+                }, 500);
             });
 
-            // ★ 错误处理：data URL 加载失败时立即返回
             printWin.webContents.once('did-fail-load', (_e, errorCode, errorDesc) => {
-                console.error('[print] did-fail-load:', errorCode, errorDesc);
+                console.error('[print] 页面加载失败:', errorCode, errorDesc);
                 safeResolve(false);
             });
 
-            // 超时保护：30秒后自动关闭
+            // 超时保护：2分钟
             setTimeout(() => {
                 if (!settled) {
-                    console.error('[print] 30秒超时未触发打印，强制关闭');
+                    console.warn('[print] 2分钟超时，自动关闭');
                     safeResolve(false);
                 }
-            }, 30000);
+            }, 2 * 60 * 1000);
         });
     } catch (e) {
         console.error('打印失败:', e);
