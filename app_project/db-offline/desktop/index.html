@@ -1701,6 +1701,10 @@ let currentUser = null;
                 if (changePwdBtn) changePwdBtn.style.display = canChangePwd ? 'block' : 'none';
                 if (autoStartSection) autoStartSection.style.display = canAutoStart ? 'block' : 'none';
 
+                // 处方查阅：管理员可见
+                const clinicPrescriptionBtn = document.getElementById('clinicPrescriptionBtn');
+                if (clinicPrescriptionBtn) clinicPrescriptionBtn.style.display = canManage ? 'block' : 'none';
+
                 // 更新移动端底部按钮
                 updateMobileActionButtons();
             }
