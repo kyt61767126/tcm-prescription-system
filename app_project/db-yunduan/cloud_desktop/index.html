@@ -711,7 +711,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【云端】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【云端机构版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -1512,7 +1512,7 @@ if (window.Permission) {
 
         // LocalDB 已提取至 local-db.js（window.LocalDB）
 
-        // ============ 离线处方编号生成（与本地版规则一致：YYMMDD + 两位序号） ============
+        // ============ 离线处方编号生成（与离线版规则一致：YYMMDD + 两位序号） ============
         // 扫描本地 SQLite 中该用户当日已存处方的最大序号，+1 生成新编号
         async function generateOfflinePrescriptionNo(username) {
             const now = new Date();
@@ -8101,7 +8101,16 @@ IconFile=${scriptPath}`;
         }
 
         function showHelp() {
-            alert('惠康中医-云端机构版\\n\\n快捷键：\\nF1 - 基础设置\\nF2 - 药品管理\\nF3 - 验方设置\\nF5 - 存为验方\\nF7 - 重输方药\\nF8 - 打印处方\\nF9 - 保存录入\\nAlt+1 - 辨证选方\\nAlt+9 - 复诊直调');
+            alert('惠康中医-云端机构版\\n\\n' +
+                  '【版本说明】机构版：含用户管理+修改密码+云端同步\\n\\n' +
+                  '【功能列表】\\n' +
+                  '✓ 处方录入与打印\\n✓ 药品管理\\n✓ 验方设置\\n' +
+                  '✓ 病例管理\\n✓ 数据统计\\n✓ 用户管理（管理员）\\n' +
+                  '✓ 修改密码\\n✓ 云端数据同步\\n✓ Excel导出\\n\\n' +
+                  '【快捷键】\\n' +
+                  'F1 - 基础设置\\nF2 - 药品管理\\nF3 - 验方设置\\n' +
+                  'F5 - 存为验方\\nF7 - 重输方药\\nF8 - 打印处方\\n' +
+                  'F9 - 保存录入\\nAlt+1 - 辨证选方\\nAlt+9 - 复诊直调');
         }
 
         async function exportData() {
