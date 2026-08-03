@@ -989,26 +989,14 @@ if (window.Permission) {
             }
         }
 
-        // 移动端标签切换
+        // 移动端标签切换（同步云端 cloud_desktop，PC端也显示 mobileActionBar 以保证拍照/录像按钮可见）
         function switchMobileTab(tabName) {
-            const isMobile = window.innerWidth <= 768;
             const leftPanel = document.querySelector('.left-panel');
             const centerPanel = document.querySelector('.center-panel');
             const rightPanel = document.querySelector('.right-panel');
             const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
             const mobileActionBar = document.getElementById('mobileActionBar');
-            
-            // 桌面版：只切换激活状态，不改变面板显示
-            if (!isMobile) {
-                mobileNavItems.forEach(item =>item.classList.remove('active'));
-                mobileNavItems.forEach(item =>{
-                    if (item.getAttribute('onclick')?.includes(tabName)) {
-                        item.classList.add('active');
-                    }
-                });
-                return;
-            }
-            
+
             // 移除所有激活状态
             mobileNavItems.forEach(item =>item.classList.remove('active'));
             
