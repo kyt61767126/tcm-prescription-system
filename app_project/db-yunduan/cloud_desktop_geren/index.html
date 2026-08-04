@@ -6882,6 +6882,11 @@ if (window.Permission) {
             safeSetVal(c.clinicNo, '');
             safeSetVal(c.medicalHistory, '');
             safeSetVal(c.diagnosis, '');
+            // 清空诊疗费输入框（与离线版一致，清空后显示为空白）
+            const clearRegFeeEl2 = document.getElementById('registrationFee2');
+            if (clearRegFeeEl2) clearRegFeeEl2.value = '';
+            const clearRegFeeEl1 = document.getElementById('registrationFee');
+            if (clearRegFeeEl1) clearRegFeeEl1.value = '';
             prescriptionItems = [];
             for (let i = 0; i < 15; i++) addEmptyRow();
             try {

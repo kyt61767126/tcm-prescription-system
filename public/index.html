@@ -7131,6 +7131,9 @@ if (window.Permission) {
             safeSet('clinicNo', '');
             safeSet('medicalHistory', '');
             safeSet('diagnosis', '');
+            // 清空诊疗费输入框（与离线版一致，清空后显示为空白）
+            safeSet('registrationFee2', '');
+            safeSet('registrationFee', '');
             prescriptionItems = [];
             for (let i = 0; i < 15; i++) addEmptyRow();
             try {
