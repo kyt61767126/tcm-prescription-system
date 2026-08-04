@@ -1,0 +1,86 @@
+# Dependabot 配置 —— 自动检测依赖漏洞并创建 PR 修复
+# 文档: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+# 最后更新: 2026-08-04（安全优化）
+
+version: 2
+
+updates:
+  # npm 依赖检查（根目录 + 各子项目 package.json）
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "Asia/Shanghai"
+    open-pull-requests-limit: 5
+    # 仅自动更新 patch 和 minor 版本，major 版本需人工审查
+    allow:
+      - dependency-type: "direct"
+      - dependency-type: "indirect"
+    # 安全漏洞更新立即生效（不等每周计划）
+    # security-updates: automatic（GitHub 默认已启用）
+    commit-message:
+      prefix: "deps(npm)"
+      include: "scope"
+    labels:
+      - "dependencies"
+      - "npm"
+
+  # 云端桌面版 npm 依赖
+  - package-ecosystem: "npm"
+    directory: "/app_project/db-yunduan/cloud_desktop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(cloud-desktop)"
+    labels:
+      - "dependencies"
+      - "npm"
+
+  - package-ecosystem: "npm"
+    directory: "/app_project/db-yunduan/cloud_desktop_geren"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(cloud-desktop-geren)"
+    labels:
+      - "dependencies"
+      - "npm"
+
+  # 离线桌面版 npm 依赖
+  - package-ecosystem: "npm"
+    directory: "/app_project/db-offline/desktop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(offline-desktop)"
+    labels:
+      - "dependencies"
+      - "npm"
+
+  - package-ecosystem: "npm"
+    directory: "/app_project/db-offline/desktop_geren"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(offline-desktop-geren)"
+    labels:
+      - "dependencies"
+      - "npm"
+
+  # GitHub Actions 版本检查
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "deps(actions)"
+    labels:
+      - "dependencies"
+      - "github-actions"

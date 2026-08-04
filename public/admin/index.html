@@ -693,18 +693,32 @@ function showAlert(elementId, message, type) {
     setTimeout(() => { el.className = 'alert'; }, 4000);
 }
 
+// ★ 安全增强：登录防重复提交标志
+let isLoggingIn = false;
+
 // 登录
 async function doLogin() {
+    // ★ 防重复提交：正在登录中则忽略
+    if (isLoggingIn) return;
     const username = document.getElementById('loginUser').value.trim();
     const password = document.getElementById('loginPass').value;
     if (!username || !password) {
         showAlert('loginAlert', '请输入账号和密码', 'error');
         return;
     }
+    // ★ 防重复提交：禁用按钮 + loading 文本
+    isLoggingIn = true;
+    const loginBtn = document.querySelector('#loginSection .btn-block');
+    const originalText = loginBtn.textContent;
+    loginBtn.disabled = true;
+    loginBtn.textContent = '登录中...';
     try {
         const res = await fetch(API_BASE + '/users?login=true', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'  // ★ CSRF 防护：标识 AJAX 请求
+            },
             body: JSON.stringify({ username, password })
         });
         const data = await res.json();
@@ -720,22 +734,105 @@ async function doLogin() {
             localStorage.setItem('cloud_user', username);
             localStorage.setItem('license_admin_token', token);
             localStorage.setItem('license_admin_user', username);
+            // ★ 记录登录时间，用于会话超时检测
+            sessionStorage.setItem('admin_login_time', String(Date.now()));
             showMain();
+            startSessionTimeoutCheck();  // ★ 启动会话超时检测
         } else {
             showAlert('loginAlert', data.error || '登录失败', 'error');
         }
     } catch (e) {
         showAlert('loginAlert', '网络错误：' + e.message, 'error');
+    } finally {
+        // ★ 恢复按钮状态
+        isLoggingIn = false;
+        loginBtn.disabled = false;
+        loginBtn.textContent = originalText;
     }
 }
 
+// ★ 安全增强：会话超时检测（前端定时检查 token 是否即将过期，自动登出）
+let sessionCheckTimer = null;
+const SESSION_WARNING_BEFORE_MS = 5 * 60 * 1000;  // 过期前 5 分钟提示
+const SESSION_CHECK_INTERVAL_MS = 60 * 1000;  // 每 60 秒检查一次
+
+function startSessionTimeoutCheck() {
+    if (sessionCheckTimer) clearInterval(sessionCheckTimer);
+    sessionCheckTimer = setInterval(checkSessionTimeout, SESSION_CHECK_INTERVAL_MS);
+    checkSessionTimeout();  // 立即检查一次
+}
+
+function stopSessionTimeoutCheck() {
+    if (sessionCheckTimer) {
+        clearInterval(sessionCheckTimer);
+        sessionCheckTimer = null;
+    }
+}
+
+function checkSessionTimeout() {
+    if (!token) {
+        stopSessionTimeoutCheck();
+        return;
+    }
+    try {
+        // 解析 token 的过期时间（token 是 base64 编码的 JSON）
+        const binary = atob(token);
+        const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
+        const json = new TextDecoder().decode(bytes);
+        const payload = JSON.parse(json);
+        if (!payload.e) return;
+        const expireAt = payload.e;
+        const now = Date.now();
+        const remaining = expireAt - now;
+        if (remaining <= 0) {
+            // Token 已过期
+            showAlert('mainAlert', '登录会话已过期，请重新登录', 'error');
+            setTimeout(doLogout, 1500);
+        } else if (remaining <= SESSION_WARNING_BEFORE_MS) {
+            // 即将过期（5分钟内）
+            const minutes = Math.floor(remaining / 60000);
+            showAlert('mainAlert', '会话即将在 ' + minutes + ' 分钟后过期，请及时保存数据', 'info');
+        }
+    } catch (e) {
+        // Token 解析失败，忽略（可能格式不标准）
+    }
+}
+
+// ★ 安全增强：页面可见性检测（从后台切回前台时重新验证会话）
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden && token) {
+        // 页面重新可见时检查会话
+        checkSessionTimeout();
+    }
+});
+
+// ★ 安全增强：为所有 API 请求自动添加 X-Requested-With 头（防 CSRF）
+const originalFetch = window.fetch;
+window.fetch = function(input, init) {
+    if (!init) init = {};
+    if (!init.headers) init.headers = {};
+    // 如果 headers 是 Headers 对象，转换为普通对象
+    if (init.headers instanceof Headers) {
+        const h = {};
+        init.headers.forEach((v, k) => { h[k] = v; });
+        init.headers = h;
+    }
+    // 添加 X-Requested-With（如果尚未设置）
+    if (!init.headers['X-Requested-With'] && !init.headers['x-requested-with']) {
+        init.headers['X-Requested-With'] = 'XMLHttpRequest';
+    }
+    return originalFetch.call(this, input, init);
+};
+
 function doLogout() {
+    stopSessionTimeoutCheck();  // ★ 停止会话超时检测
     token = '';
     currentUser = '';
     localStorage.removeItem('cloud_token');
     localStorage.removeItem('cloud_user');
     localStorage.removeItem('license_admin_token');
     localStorage.removeItem('license_admin_user');
+    sessionStorage.removeItem('admin_login_time');
     location.reload();
 }
 
@@ -1982,6 +2079,7 @@ document.getElementById('loginUser').addEventListener('keyup', e => {
 // 自动登录
 if (token && currentUser) {
     showMain();
+    startSessionTimeoutCheck();  // ★ 自动登录也启动会话超时检测
 }
 </script>
 </body>

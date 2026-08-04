@@ -94,6 +94,63 @@ async function checkIpRateLimit(kv, request) {
     }
 }
 
+// ★ 2026-08-04 安全增强：密码强度校验
+const WEAK_PASSWORDS = new Set([
+    'password', '123456', '12345678', 'admin', 'admin123',
+    'qwerty', 'abc123', '111111', '000000', '123456789',
+    'password1', 'iloveyou', '1234567890', 'admin1234',
+    'a123456', 'aa123456', 'aaa123456', 'abc12345'
+]);
+
+function validatePasswordStrength(password) {
+    if (!password || typeof password !== 'string') {
+        return { valid: false, error: '密码不能为空' };
+    }
+    if (password.length < 8) {
+        return { valid: false, error: '密码长度至少 8 位' };
+    }
+    if (password.length > 128) {
+        return { valid: false, error: '密码长度不能超过 128 位' };
+    }
+    // 必须包含字母和数字
+    const hasLetter = /[a-zA-Z]/.test(password);
+    const hasDigit = /[0-9]/.test(password);
+    if (!hasLetter || !hasDigit) {
+        return { valid: false, error: '密码必须包含字母和数字' };
+    }
+    // 不允许常见弱密码
+    if (WEAK_PASSWORDS.has(password.toLowerCase())) {
+        return { valid: false, error: '密码过于简单，请使用更复杂的密码' };
+    }
+    return { valid: true };
+}
+
+// ★ 2026-08-04 安全增强：异常登录检测（新 IP 提示）
+async function checkAnomalousLogin(kv, username, request) {
+    try {
+        const ip = request.headers.get('CF-Connecting-IP') ||
+                   request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() ||
+                   'unknown';
+        if (ip === 'unknown') return { isNewIP: false };
+
+        const key = 'user_ips:' + username;
+        const knownIPs = (await kv.get(key, 'json')) || [];
+
+        if (knownIPs.includes(ip)) {
+            return { isNewIP: false };
+        }
+
+        // 新 IP，记录到常用列表（最多保留 10 个）
+        knownIPs.push(ip);
+        if (knownIPs.length > 10) knownIPs.splice(0, knownIPs.length - 10);
+        await kv.put(key, JSON.stringify(knownIPs), { expirationTtl: 90 * 24 * 60 * 60 });
+
+        return { isNewIP: true, ip };
+    } catch (e) {
+        return { isNewIP: false };
+    }
+}
+
 // P1-2 安全增强：操作审计日志
 async function writeAuditLog(kv, clinicId, username, role, action, target, request, extra = {}) {
     try {
@@ -415,6 +472,15 @@ export async function onRequest(context) {
             // P1-1：登录成功，清除失败计数
             await clearLoginFailures(kv, username);
 
+            // ★ 2026-08-04 安全增强：异常登录检测（新 IP 记录安全日志）
+            const anomalousCheck = await checkAnomalousLogin(kv, user.username, context.request);
+            if (anomalousCheck.isNewIP) {
+                await writeAuditLog(kv, clinicId, user.username, user.role, 'login_new_ip', 'security', context.request, {
+                    newIP: anomalousCheck.ip,
+                    warning: '从新 IP 登录'
+                });
+            }
+
             const token = await signToken({
                 username: user.username,
                 role: user.role,
@@ -445,6 +511,12 @@ export async function onRequest(context) {
             const { username, oldPassword, newPassword } = body;
             if (!username || !oldPassword || !newPassword) {
                 return json({ success: false, error: '参数不完整' }, 400, context.request);
+            }
+
+            // ★ 2026-08-04 安全增强：密码强度校验
+            const pwdCheck = validatePasswordStrength(newPassword);
+            if (!pwdCheck.valid) {
+                return json({ success: false, error: pwdCheck.error }, 400, context.request);
             }
 
             const currentUser = await parseAuthHeader(context.request, context.env);
@@ -541,6 +613,12 @@ export async function onRequest(context) {
             }
             if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
                 return json({ success: false, error: '管理员登录账号不能使用中文' }, 400);
+            }
+
+            // ★ 2026-08-04 安全增强：管理员密码强度校验
+            const pwdCheck = validatePasswordStrength(adminPassword);
+            if (!pwdCheck.valid) {
+                return json({ success: false, error: '管理员密码：' + pwdCheck.error }, 400);
             }
             // 命名规则强制校验：必须为 admin_{诊所简码} 格式（如 admin_hkt）
             // 规则：以 admin_ 开头，后缀为 2-12 位小写字母/数字（诊所简码）
@@ -917,6 +995,11 @@ export async function onRequest(context) {
                 }
                 if (/[\u4e00-\u9fa5]/.test(u.username)) {
                     return json({ success: false, error: `登录账号不能使用中文: ${u.username}` }, 400, context.request);
+                }
+                // ★ 2026-08-04 安全增强：导入用户密码强度校验
+                const importPwdCheck = validatePasswordStrength(u.password);
+                if (!importPwdCheck.valid) {
+                    return json({ success: false, error: `用户 ${u.username} 密码：${importPwdCheck.error}` }, 400, context.request);
                 }
                 // clinic_admin 不能导入 platform_admin
                 if (!isPlatformAdmin(currentUser) && u.role === ROLE_PLATFORM_ADMIN) {

@@ -1,0 +1,66 @@
+# CodeQL 代码安全扫描
+# 自动检测 JavaScript/TypeScript 代码中的安全漏洞（SQL注入、XSS、路径遍历等）
+# 文档: https://docs.github.com/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/setting-up-code-scanning-for-a-repository
+
+name: "CodeQL Security Scan"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'public/**/*.js'
+      - 'app_project/**/*.js'
+      - 'shared/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'functions/**'
+      - 'public/**/*.js'
+      - 'app_project/**/*.js'
+      - 'shared/**'
+  schedule:
+    # 每周一北京时间 09:00 定时扫描
+    - cron: '0 1 * * 1'
+  workflow_dispatch:
+
+jobs:
+  analyze:
+    name: Analyze (JavaScript/TypeScript)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ['javascript']
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # 使用默认的安全查询套件 + extended（含更多安全规则）
+          queries: security-extended,security-and-quality
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{matrix.language}}"
+
+      - name: Summary
+        run: |
+          echo "### CodeQL 安全扫描完成" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "扫描语言：JavaScript/TypeScript" >> $GITHUB_STEP_SUMMARY
+          echo "查询套件：security-extended, security-and-quality" >> $GITHUB_STEP_SUMMARY
+          echo "结果查看：https://github.com/${{ github.repository }}/security/code-scanning" >> $GITHUB_STEP_SUMMARY
