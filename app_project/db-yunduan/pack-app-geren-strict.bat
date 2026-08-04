@@ -60,7 +60,7 @@ REM ==========================================================
 echo [Step 0] Java 预编译检查中（提前发现编译错误）...
 echo.
 pushd "%APP_DIR%"
-call gradlew.bat compileReleaseJavaWithJavac --quiet --no-daemon 2>&1
+call gradlew.bat javaPreCompileRelease compileReleaseJavaWithJavac --quiet 2>&1
 set "PRECOMPILE_RC=%errorlevel%"
 popd
 if %PRECOMPILE_RC% neq 0 (

@@ -1,4 +1,4 @@
-﻿# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
+# packaging.ps1 - Cloud project unified packaging tool（含防盗防破解）
 # 菜单结构严格对齐离线版 tools/pack.ps1（db-offline/desktop_geren、db-offline/desktop）
 param(
     [switch]$AutoDesktop,
@@ -683,7 +683,7 @@ function Build-App {
         $prevEAP = $ErrorActionPreference
         $ErrorActionPreference = 'Continue'
         $preCompileOutput = New-Object System.Collections.ArrayList
-        & ".\gradlew.bat" compileReleaseJavaWithJavac --quiet 2>&1 | ForEach-Object {
+        & ".\gradlew.bat" javaPreCompileRelease compileReleaseJavaWithJavac --quiet 2>&1 | ForEach-Object {
             $line = if ($_ -is [System.Management.Automation.ErrorRecord]) { $_.Exception.Message } else { "$_" }
             Write-Host $line -ForegroundColor $(if ($_ -is [System.Management.Automation.ErrorRecord]) { 'Yellow' } else { 'White' })
             $preCompileOutput.Add($line) | Out-Null

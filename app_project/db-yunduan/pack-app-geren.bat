@@ -77,7 +77,7 @@ if exist "app\build\intermediates\merged_assets" (
     rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
     echo   [OK] 已清理 merged_assets 缓存
 )
-call "%GRADLEW%" clean --no-daemon 2>nul
+call "%GRADLEW%" clean 2>nul
 if errorlevel 1 (
     echo   [警告] Gradle clean 失败，继续增量构建
 ) else (
@@ -86,10 +86,10 @@ if errorlevel 1 (
 cd /d "%~dp0%"
 echo.
 
-REM Java 预编译检查（使用 --no-daemon 与 APK 构建保持一致）
+REM Java 预编译检查（使用 daemon 与 APK 构建保持一致）
 echo [3/6] Java 预编译检查...
 cd /d "%APP_DIR%"
-call "%GRADLEW%" compileReleaseJavaWithJavac --quiet --no-daemon
+call "%GRADLEW%" javaPreCompileRelease compileReleaseJavaWithJavac --quiet
 set "PRECOMPILE_RC=%errorlevel%"
 cd /d "%~dp0%"
 if %PRECOMPILE_RC% neq 0 (
@@ -104,7 +104,7 @@ echo.
 REM 构建 APK
 echo [4/6] 构建 APK - 标准版 com.tcm.prescription.geren...
 cd /d "%APP_DIR%"
-call "%GRADLEW%" assembleRelease --no-daemon
+call "%GRADLEW%" assembleRelease
 set "EXIT_CODE=%errorlevel%"
 cd /d "%~dp0%"
 
