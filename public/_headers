@@ -1,6 +1,5 @@
 # Cloudflare Pages 安全头配置
 # 文档: https://developers.cloudflare.com/pages/configuration/headers/
-# 最后更新: 2026-08-04（安全优化：新增 CSP/HSTS/X-Permitted-Cross-Domain-Policies）
 
 /*
   # 防止点击劫持（Clickjacking）
@@ -13,32 +12,13 @@
   Permissions-Policy: geolocation=(), microphone=(self), camera=(self), payment=(), usb=()
   # 防止 XSS Auditor（旧版浏览器）
   X-XSS-Protection: 1; mode=block
-  # ★新增：HSTS 强制 HTTPS（1年，含子域名，预加载列表）
-  Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
-  # ★新增：禁止 Adobe PDF/Flash 跨域读取（防止跨域数据泄露）
-  X-Permitted-Cross-Domain-Policies: none
-  # ★新增：内容安全策略（CSP）—— 限制资源加载来源，防止 XSS 数据外泄
-  # 说明：因历史页面含内联 script/style/事件，保留 'unsafe-inline'；已禁止 object/embed/外部脚本
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'; manifest-src 'self'; media-src 'self' blob:; worker-src 'self' blob:;
 
-# API 接口：添加缓存控制 + 额外安全头
+# API 接口：添加缓存控制
 /api/*
   # 防止缓存敏感 API 响应
   Cache-Control: no-store, no-cache, must-revalidate
-  # 防止点击劫持（API 响应绝不可被嵌入框架）
+  # 防止点击劫持
   X-Frame-Options: DENY
-  # API 响应禁止 MIME 嗅探
-  X-Content-Type-Options: nosniff
-  # API CSP：仅允许自身，禁止任何内联/外部资源
-  Content-Security-Policy: default-src 'none'; frame-ancestors 'none'
-
-# 管理后台：更严格的安全头
-/admin/*
-  X-Frame-Options: DENY
-  X-Content-Type-Options: nosniff
-  Referrer-Policy: no-referrer
-  # 管理后台 CSP：禁止外部资源（管理后台不需要外部 CDN）
-  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
 
 # 静态资源：长缓存
 /*.js
