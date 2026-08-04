@@ -36,14 +36,19 @@
     </debug-overrides>
 
     <!--
-        可选：云端激活 API 证书钉扎（防激活码被中间人截获）
-        启用方式：取消注释并填入实际公钥哈希
-        获取方式：
+        ★ P1-1 证书钉扎决策（2026-08-04）：不启用硬钉扎
+        原因：
+          1. Cloudflare Pages 边缘证书每 ~3 个月轮换一次，硬钉扎 SPKI 会导致 APP 在证书轮换后无法联网
+          2. 用户要求"打包防护时候稳定性"，硬钉扎违反此约束
+          3. 现有防护（HTTPS only + 拒绝用户 CA + 仅信任系统 CA）已可阻止 99% 的 MITM 攻击
+             （Charles/Fiddler 等抓包工具需要在用户证书库安装自签名 CA，已被拒绝）
+          4. 如未来使用独立域名 + 自有证书（非 Cloudflare 托管），可重新评估启用钉扎
+        可选启用方式（需承担轮换风险）：
           echo | openssl s_client -connect tcm-prescription-system.pages.dev:443 \
             | openssl x509 -pubkey -noout \
             | openssl pkey -pubin -outform der \
             | openssl dgst -sha256 -binary | base64
-
+          取消下方注释并填入实际公钥哈希 + 备份公钥哈希
     <domain-config>
         <domain includeSubdomains="true">tcm-prescription-system.pages.dev</domain>
         <pin-set expiration="2027-12-31">

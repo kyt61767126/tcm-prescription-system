@@ -72,7 +72,7 @@
         // 所有角色判断都通过 AuthCore 的 isAdmin/isClinicAdmin/isPlatformAdmin
         // 确保离线版 admin 和云端版 clinic_admin 行为一致
 
-        // 是否可以管理用户（需要管理员角色 + 非标准版）
+        // 是否可以管理用户（需要管理员角色 + 非个人版）
         canManageUsersByRole(user) {
             if (this.isPersonal()) return false;
             if (!user) return false;
@@ -83,11 +83,11 @@
             return user.role === 'admin' || user.role === 'clinic_admin';
         },
 
-        // 是否可以修改密码（标准版所有用户均可；非标准版仅普通用户可修改密码，管理员使用账户管理）
+        // 是否可以修改密码（个人版所有用户均可；非个人版仅普通用户可修改密码，管理员使用账户管理）
         canChangePassword(user) {
-            if (this.isPersonal()) return true; // 标准版允许改密
+            if (this.isPersonal()) return true; // 个人版允许改密
             if (!user) return false;
-            // 非标准版：管理员不显示修改密码（由账户管理覆盖），普通用户显示修改密码
+            // 非个人版：管理员不显示修改密码（由账户管理覆盖），普通用户显示修改密码
             if (global.AuthCore && global.AuthCore.isClinicAdmin) {
                 return !global.AuthCore.isClinicAdmin(user);
             }
@@ -155,11 +155,11 @@
             //     });
             // }
 
-            // 用户管理按钮（标准版隐藏账户管理，但保留修改密码）
+            // 用户管理按钮（个人定制版隐藏账户管理，但保留修改密码）
             if (edition === 'personal') {
                 const userManageBtn = document.getElementById('userManageBtn');
                 if (userManageBtn) userManageBtn.style.display = 'none';
-                // 标准版保留修改密码功能，不再隐藏 changePwdBtn
+                // 个人版保留修改密码功能，不再隐藏 changePwdBtn
             }
 
             // 同步入口屏蔽（非云端版）
