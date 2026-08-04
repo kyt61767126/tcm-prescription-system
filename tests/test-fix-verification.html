@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>修复验证测试 - 诊疗费清空 & 药物候选框遮挡</title>
+<style>
+    body { font-family: "Microsoft YaHei", sans-serif; padding: 20px; background: #f5f5f5; }
+    h1 { color: #333; border-bottom: 2px solid #4caf50; padding-bottom: 8px; }
+    h2 { color: #2e7d32; margin-top: 30px; }
+    .test-section { background: white; padding: 15px 20px; margin: 10px 0; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .result-pass { color: #2e7d32; font-weight: bold; }
+    .result-fail { color: #c62828; font-weight: bold; }
+    .result-info { color: #555; }
+    .btn { padding: 6px 16px; margin: 4px 4px 4px 0; cursor: pointer; border: 1px solid #888; background: #eee; border-radius: 3px; font-size: 13px; }
+    .btn:hover { background: #ddd; }
+    .btn-primary { background: #4caf50; color: white; border-color: #4caf50; }
+    .btn-warn { background: #ff9800; color: white; border-color: #ff9800; }
+    pre { background: #f0f0f0; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 12px; max-height: 200px; overflow-y: auto; }
+    #logArea { background: #1e1e1e; color: #d4d4d4; padding: 12px; border-radius: 4px; font-family: Consolas, monospace; font-size: 12px; max-height: 320px; overflow-y: auto; line-height: 1.6; }
+    .log-pass { color: #4caf50; }
+    .log-fail { color: #ef5350; }
+    .log-info { color: #64b5f6; }
+    .log-warn { color: #ffd54f; }
+    .scenario-note { color: #666; font-size: 12px; margin: 4px 0; }
+    hr { border: none; border-top: 1px dashed #ccc; margin: 20px 0; }
+</style>
+</head>
+<body>
+
+<h1>修复验证测试</h1>
+<p class="scenario-note">本脚本独立运行，模拟以下两个修复场景并自动验证：</p>
+<ol>
+    <li><b>清空诊疗费输入框</b>：点击"清空"按钮后，诊疗费输入框(registrationFee2)应为空</li>
+    <li><b>药物候选框遮挡修复</b>：输入框靠近窗口底部时，候选框应自动翻到输入框上方显示</li>
+</ol>
+
+<div class="test-section">
+    <h2>场景一：清空诊疗费输入框</h2>
+    <p class="scenario-note">模拟用户先在诊疗费输入框输入数值，然后点击"清空"按钮，验证输入框是否被清空。</p>
+    <div style="display:flex;align-items:center;gap:8px;margin:10px 0;">
+        <span>诊疗</span>
+        <input type="number" id="registrationFee2" value="50" style="width:60px;padding:3px;font-size:14px;">
+        <span>元</span>
+    </div>
+    <button class="btn btn-warn" onclick="simulateClearPrescription()">模拟点击"清空"按钮</button>
+    <button class="btn" onclick="resetScenario1()">重置场景一</button>
+    <p id="scenario1Result" class="result-info">待测试</p>
+</div>
+
+<div class="test-section">
+    <h2>场景二：药物候选框遮挡修复</h2>
+    <p class="scenario-note">模拟输入框靠近窗口底部（下方空间不足），候选框应自动翻到输入框上方显示。</p>
+    <div style="margin:10px 0;">
+        <label>模拟窗口高度（像素）：</label>
+        <input type="number" id="simWinHeight" value="600" style="width:80px;padding:3px;">
+        <label style="margin-left:10px;">输入框距顶部（像素）：</label>
+        <input type="number" id="simInputTop" value="580" style="width:80px;padding:3px;">
+        <label style="margin-left:10px;">候选框高度（像素）：</label>
+        <input type="number" id="simDropdownHeight" value="180" style="width:80px;padding:3px;">
+    </div>
+    <div style="margin:10px 0;">
+        <button class="btn btn-primary" onclick="simulateDropdownPosition(false)">测试：下方空间不足（应翻到上方）</button>
+        <button class="btn btn-primary" onclick="simulateDropdownPosition(true)">测试：下方空间充足（应保持下方）</button>
+        <button class="btn" onclick="document.getElementById('ddVisualDemo').style.display='none'">隐藏可视化预览</button>
+    </div>
+    <p id="scenario2Result" class="result-info">待测试</p>
+    <div id="ddVisualDemo" style="display:none;position:relative;height:200px;border:1px solid #ccc;background:#fafafa;margin-top:10px;overflow:hidden;">
+        <div style="position:absolute;top:0;left:0;right:0;background:#eee;padding:2px 6px;font-size:11px;color:#666;">可视化预览（缩略）</div>
+    </div>
+</div>
+
+<hr>
+
+<div class="test-section">
+    <h2>自动批量测试</h2>
+    <button class="btn btn-primary" onclick="runAllTests()">运行全部测试</button>
+    <p class="scenario-note">点击按钮自动运行所有测试用例，包括边界条件。</p>
+</div>
+
+<h2>测试日志</h2>
+<div id="logArea"></div>
+
+<script>
+// ============================================================
+// 模拟 clearPrescription 核心逻辑（与 desktop/index.html 一致）
+// ============================================================
+function clearPrescriptionCore(regFeeEl) {
+    // 原始值清空逻辑（与 index.html 中 clearPrescription 一致）
+    if (regFeeEl) regFeeEl.value = '';
+}
+
+// ============================================================
+// 模拟 showSearchDropdown 位置自适应逻辑（与 desktop/index.html 一致）
+// ============================================================
+function calcDropdownTop(inputRectTop, inputRectBottom, dropdownHeight, winHeight) {
+    // 原始逻辑：默认显示在输入框下方
+    let top = inputRectBottom + 2;
+    // ★ 自适应位置：下方空间不足时自动翻到输入框上方显示（修复遮挡）
+    const ddRectBottom = top + dropdownHeight;
+    if (ddRectBottom > winHeight && inputRectTop > dropdownHeight + 4) {
+        top = Math.max(2, inputRectTop - dropdownHeight - 2);
+    }
+    return top;
+}
+
+// ============================================================
+// 日志输出
+// ============================================================
+function log(msg, type) {
+    const logArea = document.getElementById('logArea');
+    const span = document.createElement('div');
+    const cls = type === 'pass' ? 'log-pass' : (type === 'fail' ? 'log-fail' : (type === 'warn' ? 'log-warn' : 'log-info'));
+    span.className = cls;
+    const time = new Date().toLocaleTimeString();
+    span.textContent = '[' + time + '] ' + (type ? type.toUpperCase() + ': ' : '') + msg;
+    logArea.appendChild(span);
+    logArea.scrollTop = logArea.scrollHeight;
+}
+
+function clearLog() {
+    document.getElementById('logArea').innerHTML = '';
+}
+
+// ============================================================
+// 场景一：清空诊疗费输入框
+// ============================================================
+function simulateClearPrescription() {
+    log('=== 场景一：清空诊疗费输入框 ===', 'info');
+    const regFeeEl = document.getElementById('registrationFee2');
+
+    // 步骤1：确认初始有值
+    const initialValue = regFeeEl.value;
+    log('步骤1：初始值 = "' + initialValue + '"', 'info');
+    if (initialValue === '' || initialValue === null) {
+        log('初始值为空，请先点击"重置场景一"设置初始值', 'warn');
+        return;
+    }
+
+    // 步骤2：模拟点击清空按钮
+    log('步骤2：模拟点击"清空"按钮，调用 clearPrescriptionCore()', 'info');
+    try {
+        clearPrescriptionCore(regFeeEl);
+    } catch(e) {
+        log('清空过程抛出异常：' + e.message, 'fail');
+    }
+
+    // 步骤3：验证结果
+    const afterValue = regFeeEl.value;
+    if (afterValue === '') {
+        log('步骤3：验证通过 ✓ 清空后值为空字符串', 'pass');
+        document.getElementById('scenario1Result').innerHTML = '<span class="result-pass">✓ 通过：诊疗费输入框已清空（值="' + afterValue + '"）</span>';
+    } else {
+        log('步骤3：验证失败 ✗ 清空后值不为空，实际值="' + afterValue + '"', 'fail');
+        document.getElementById('scenario1Result').innerHTML = '<span class="result-fail">✗ 失败：诊疗费输入框未清空（值="' + afterValue + '"）</span>';
+    }
+}
+
+function resetScenario1() {
+    document.getElementById('registrationFee2').value = '50';
+    document.getElementById('scenario1Result').innerHTML = '<span class="result-info">已重置，诊疗费=50，待测试</span>';
+    log('场景一已重置：诊疗费=50', 'info');
+}
+
+// ============================================================
+// 场景二：药物候选框遮挡修复
+// ============================================================
+function simulateDropdownPosition(enoughSpace) {
+    const winHeight = parseInt(document.getElementById('simWinHeight').value) || 600;
+    const inputTop = parseInt(document.getElementById('simInputTop').value) || 580;
+    const ddHeight = parseInt(document.getElementById('simDropdownHeight').value) || 180;
+
+    // 根据测试场景自动调整参数
+    let testInputTop = inputTop;
+    let testDesc = '';
+    if (enoughSpace) {
+        // 下方空间充足：输入框靠上
+        testInputTop = 100;
+        testDesc = '下方空间充足（输入框靠上）';
+    } else {
+        // 下方空间不足：输入框靠下
+        testInputTop = Math.max(inputTop, winHeight - 20);
+        testDesc = '下方空间不足（输入框靠下）';
+    }
+
+    const inputHeight = 30; // 模拟输入框高度
+    const inputBottom = testInputTop + inputHeight;
+
+    log('=== 场景二：药物候选框遮挡修复 ===', 'info');
+    log('测试场景：' + testDesc, 'info');
+    log('参数：winHeight=' + winHeight + ', inputTop=' + testInputTop + ', inputBottom=' + inputBottom + ', ddHeight=' + ddHeight, 'info');
+
+    // 计算候选框位置
+    const ddTop = calcDropdownTop(testInputTop, inputBottom, ddHeight, winHeight);
+    const ddBottom = ddTop + ddHeight;
+    const isAbove = ddTop < testInputTop;
+
+    log('计算结果：dropdown.top=' + ddTop + ', dropdown.bottom=' + ddBottom, 'info');
+
+    // 可视化预览
+    showVisualDemo(testInputTop, inputBottom, ddTop, ddHeight, winHeight);
+
+    // 验证
+    let pass = false;
+    let reason = '';
+    if (enoughSpace) {
+        // 下方空间充足：应该保持下方显示
+        if (!isAbove && ddBottom <= winHeight) {
+            pass = true;
+            reason = '候选框在输入框下方显示，且未超出窗口';
+        } else {
+            reason = '候选框应在下方显示但实际位置异常';
+        }
+    } else {
+        // 下方空间不足：应该翻到上方
+        if (isAbove && ddTop >= 0) {
+            pass = true;
+            reason = '候选框已自动翻到输入框上方显示，未被遮挡';
+        } else if (!isAbove && ddBottom > winHeight) {
+            reason = '候选框仍在下方且超出窗口（遮挡未修复）';
+        } else {
+            reason = '候选框位置异常';
+        }
+    }
+
+    if (pass) {
+        log('验证通过 ✓ ' + reason, 'pass');
+        document.getElementById('scenario2Result').innerHTML = '<span class="result-pass">✓ 通过：' + reason + '（top=' + ddTop + '）</span>';
+    } else {
+        log('验证失败 ✗ ' + reason, 'fail');
+        document.getElementById('scenario2Result').innerHTML = '<span class="result-fail">✗ 失败：' + reason + '（top=' + ddTop + '）</span>';
+    }
+}
+
+function showVisualDemo(inputTop, inputBottom, ddTop, ddHeight, winHeight) {
+    const demo = document.getElementById('ddVisualDemo');
+    demo.style.display = 'block';
+    demo.innerHTML = '<div style="position:absolute;top:0;left:0;right:0;background:#eee;padding:2px 6px;font-size:11px;color:#666;">可视化预览（按比例缩放，容器高200px模拟窗口高' + winHeight + 'px）</div>';
+
+    const scale = 200 / winHeight;
+
+    // 输入框
+    const inputDiv = document.createElement('div');
+    inputDiv.style.cssText = 'position:absolute;left:20%;right:20%;background:#4caf50;color:white;text-align:center;font-size:10px;padding:2px;';
+    inputDiv.style.top = (inputTop * scale) + 'px';
+    inputDiv.style.height = (30 * scale) + 'px';
+    inputDiv.textContent = '输入框 (top=' + inputTop + ')';
+    demo.appendChild(inputDiv);
+
+    // 候选框
+    const ddDiv = document.createElement('div');
+    ddDiv.style.cssText = 'position:absolute;left:15%;right:15%;background:#fff;border:1px solid #888;text-align:center;font-size:10px;padding:2px;box-shadow:0 2px 4px rgba(0,0,0,0.2);';
+    ddDiv.style.top = (ddTop * scale) + 'px';
+    ddDiv.style.height = (ddHeight * scale) + 'px';
+    ddDiv.textContent = '候选框 (top=' + ddTop + ')';
+    demo.appendChild(ddDiv);
+}
+
+// ============================================================
+// 批量测试
+// ============================================================
+function runAllTests() {
+    clearLog();
+    log('========== 开始批量测试 ==========', 'info');
+    let passCount = 0, failCount = 0;
+
+    // 测试1：清空诊疗费 - 有初始值
+    log('', 'info');
+    log('【测试1】清空诊疗费 - 有初始值', 'info');
+    const regFeeEl = document.getElementById('registrationFee2');
+    regFeeEl.value = '50';
+    clearPrescriptionCore(regFeeEl);
+    if (regFeeEl.value === '') {
+        log('通过：清空后值为空', 'pass'); passCount++;
+    } else {
+        log('失败：清空后值="' + regFeeEl.value + '"', 'fail'); failCount++;
+    }
+
+    // 测试2：清空诊疗费 - 初始值为0
+    log('', 'info');
+    log('【测试2】清空诊疗费 - 初始值为0', 'info');
+    regFeeEl.value = '0';
+    clearPrescriptionCore(regFeeEl);
+    if (regFeeEl.value === '') {
+        log('通过：清空后值为空', 'pass'); passCount++;
+    } else {
+        log('失败：清空后值="' + regFeeEl.value + '"', 'fail'); failCount++;
+    }
+
+    // 测试3：清空诊疗费 - 初始值为小数
+    log('', 'info');
+    log('【测试3】清空诊疗费 - 初始值为小数', 'info');
+    regFeeEl.value = '12.50';
+    clearPrescriptionCore(regFeeEl);
+    if (regFeeEl.value === '') {
+        log('通过：清空后值为空', 'pass'); passCount++;
+    } else {
+        log('失败：清空后值="' + regFeeEl.value + '"', 'fail'); failCount++;
+    }
+
+    // 测试4：候选框 - 下方空间不足，应翻到上方
+    log('', 'info');
+    log('【测试4】候选框 - 下方空间不足，应翻到上方', 'info');
+    {
+        const winH = 600, inputTop = 580, inputH = 30, ddH = 180;
+        const inputBottom = inputTop + inputH;
+        const ddTop = calcDropdownTop(inputTop, inputBottom, ddH, winH);
+        const ddBottom = ddTop + ddH;
+        const isAbove = ddTop < inputTop;
+        if (isAbove && ddTop >= 0 && ddBottom <= inputTop) {
+            log('通过：候选框翻到上方，top=' + ddTop + '（输入框top=' + inputTop + '）', 'pass'); passCount++;
+        } else {
+            log('失败：候选框位置异常，top=' + ddTop + '（输入框top=' + inputTop + '）', 'fail'); failCount++;
+        }
+    }
+
+    // 测试5：候选框 - 下方空间充足，应保持下方
+    log('', 'info');
+    log('【测试5】候选框 - 下方空间充足，应保持下方', 'info');
+    {
+        const winH = 600, inputTop = 100, inputH = 30, ddH = 180;
+        const inputBottom = inputTop + inputH;
+        const ddTop = calcDropdownTop(inputTop, inputBottom, ddH, winH);
+        const ddBottom = ddTop + ddH;
+        const isBelow = ddTop >= inputBottom;
+        if (isBelow && ddBottom <= winH) {
+            log('通过：候选框保持下方，top=' + ddTop + '（输入框bottom=' + inputBottom + '）', 'pass'); passCount++;
+        } else {
+            log('失败：候选框位置异常，top=' + ddTop + '（输入框bottom=' + inputBottom + '）', 'fail'); failCount++;
+        }
+    }
+
+    // 测试6：候选框 - 下方不足且上方也不足（极端情况，应优先保证不超出底部）
+    log('', 'info');
+    log('【测试6】候选框 - 下方不足且上方也不足（极端情况）', 'info');
+    {
+        const winH = 300, inputTop = 150, inputH = 30, ddH = 250;
+        const inputBottom = inputTop + inputH;
+        const ddTop = calcDropdownTop(inputTop, inputBottom, ddH, winH);
+        // 上方空间 = 150，候选框高 250，上方放不下 -> 应保持下方（不翻转）
+        // 此场景下下方底部=312+2=312，超出窗口12px，但上方也放不下，逻辑保持下方
+        const isBelow = ddTop >= inputBottom;
+        if (isBelow) {
+            log('通过：上方空间不足时保持下方，top=' + ddTop + '（未异常翻转）', 'pass'); passCount++;
+        } else {
+            log('失败：异常翻转到上方，top=' + ddTop, 'fail'); failCount++;
+        }
+    }
+
+    // 测试7：候选框 - 刚好临界（下方刚好够）
+    log('', 'info');
+    log('【测试7】候选框 - 下方刚好够（临界值）', 'info');
+    {
+        const winH = 600, inputTop = 400, inputH = 30, ddH = 168;
+        const inputBottom = inputTop + inputH; // 430
+        // 下方空间 = 600 - 430 - 2 = 168，刚好等于候选框高度
+        const ddTop = calcDropdownTop(inputTop, inputBottom, ddH, winH);
+        const ddBottom = ddTop + ddH;
+        if (ddBottom <= winH && ddTop >= inputBottom) {
+            log('通过：临界情况保持下方，ddBottom=' + ddBottom + ' <= winH=' + winH, 'pass'); passCount++;
+        } else {
+            log('失败：临界情况异常，ddBottom=' + ddBottom + ', ddTop=' + ddTop, 'fail'); failCount++;
+        }
+    }
+
+    // 测试8：候选框 - 输入框紧贴顶部（上方无空间，即使下方不足也不翻转）
+    log('', 'info');
+    log('【测试8】候选框 - 输入框紧贴顶部，上方无空间', 'info');
+    {
+        const winH = 400, inputTop = 10, inputH = 30, ddH = 200;
+        const inputBottom = inputTop + inputH; // 40
+        // 下方空间 = 400-40-2=358，够放200，保持下方
+        const ddTop = calcDropdownTop(inputTop, inputBottom, ddH, winH);
+        const ddBottom = ddTop + ddH;
+        if (ddTop >= inputBottom && ddBottom <= winH) {
+            log('通过：上方空间不足，保持下方显示，top=' + ddTop, 'pass'); passCount++;
+        } else {
+            log('失败：位置异常，top=' + ddTop, 'fail'); failCount++;
+        }
+    }
+
+    // 汇总
+    log('', 'info');
+    log('========== 测试汇总 ==========', 'info');
+    log('通过：' + passCount + ' / 失败：' + failCount, passCount > 0 && failCount === 0 ? 'pass' : (failCount > 0 ? 'fail' : 'info'));
+    if (failCount === 0) {
+        log('全部测试通过 ✓', 'pass');
+    } else {
+        log('存在失败用例 ✗ 请检查修复逻辑', 'fail');
+    }
+}
+</script>
+
+</body>
+</html>

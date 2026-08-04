@@ -48,17 +48,13 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
      * 在 MainActivity.onCreate 中调用
      */
     public static void checkAndExit(Activity activity) {
-        // 1. Root 检测
+        // 1. Root 检测（仅记录日志，不阻塞运行，避免 busybox/su 路径误报闪退）
         if (ENABLE_ROOT_CHECK && isRooted(activity)) {
-            Log.w(TAG, "安全检测：检测到 Root 设备，退出 APP");
-            toastAndExit(activity, "检测到 Root 设备，为保护数据安全，APP 无法运行");
-            return;
+            Log.w(TAG, "安全检测：检测到 Root 设备特征（仅记录日志，不阻塞运行）");
         }
-        // 2. 调试器检测
+        // 2. 调试器检测（仅记录日志，不阻塞运行，避免国产手机 ro.debuggable=1 误报闪退）
         if (ENABLE_DEBUGGER_CHECK && isDebuggerAttached()) {
-            Log.w(TAG, "安全检测：检测到调试器，退出 APP");
-            toastAndExit(activity, "检测到调试器附加，APP 无法运行");
-            return;
+            Log.w(TAG, "安全检测：检测到调试器特征（仅记录日志，不阻塞运行）");
         }
         // 3. APK 签名校验
         if (ENABLE_SIGNATURE_CHECK && !EXPECTED_SIGN_HASH.isEmpty()) {

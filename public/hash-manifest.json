@@ -1,106 +1,106 @@
 {
     "dingzhi": {
         "apk": {
-            "version": "1.0.${BUILD_TIME}",
-            "sha256": "f6891b4382dcab86289a5c1634a6b48b97c543bcf89091ea8cf558f661f86fb7",
+            "version": "1.0.0",
+            "sha256": "42a01335e99905fafce3e43ef14f1e4c3f46613006a12dacc3640094b1aa058c",
             "url": "/downloads/惠康中医-LJ.apk",
-            "size": 2195204,
-            "updateTime": "2026-08-03T00:23:21.983Z",
+            "size": 2197239,
+            "updateTime": "2026-08-04T02:14:57.056Z",
             "fileName": "惠康中医-LJ.apk"
         },
         "portable": {
             "version": "",
-            "sha256": "1f5daf54c10f7d9e556c5f8721fb2a6437e4d7861691bed678b44bc5056f784f",
+            "sha256": "e34a512b242e23ceb4423f1be964c98d1d64d6dae378ddbd57f64fc386dd428f",
             "url": "",
-            "size": 78371262,
-            "updateTime": "2026-08-03T00:23:20.457Z",
+            "size": 78375043,
+            "updateTime": "2026-08-04T02:14:55.897Z",
             "fileName": "惠康中医-LJ 1.0.0.exe"
         },
         "exe": {
             "version": "",
-            "sha256": "cd4045c8f7e75b87a5a1208ad36e16fad148de55a7019b1eac5b8b2a3091edf8",
+            "sha256": "f0a0bdc29b8de6bd93f08f6e319346cf4b53eff9d87914de679f1e48d06d6aff",
             "url": "",
-            "size": 78586064,
-            "updateTime": "2026-08-03T00:23:20.457Z",
+            "size": 78589839,
+            "updateTime": "2026-08-04T02:14:55.897Z",
             "fileName": "惠康中医-LJ Setup 1.0.0.exe"
         }
     },
     "geren": {
         "apk": {
             "version": "",
-            "sha256": "1b37611e544a874ac46b1be1de457b84d5499ade2ba864e73c1451c496d531a4",
+            "sha256": "6ef856f6ea1a048408c23bda7bec4103638ecf2271d7a41650e60da768a226c1",
             "url": "/downloads/惠康中医-LB.apk",
-            "size": 2195286,
-            "updateTime": "2026-08-03T00:23:20.457Z",
+            "size": 2197138,
+            "updateTime": "2026-08-04T02:14:55.897Z",
             "fileName": "惠康中医-LB.apk"
         },
         "portable": {
             "version": "",
-            "sha256": "15099514060972f97a62e9e7e63b4210da3cfe8933056ee2f7707f7adc57ebb7",
+            "sha256": "5d7e80731052907c4caddf175e398b27703fe66732d2f40c92a524ee384b010b",
             "url": "",
-            "size": 78415329,
-            "updateTime": "2026-08-03T00:23:20.457Z",
+            "size": 78414983,
+            "updateTime": "2026-08-04T02:14:55.897Z",
             "fileName": "惠康中医-LB 1.0.0.exe"
         },
         "exe": {
             "version": "",
-            "sha256": "c76ef3ea3f941e95817e84432af18e2d2ba86fba45a8c5ade0a5ab1e80400c8e",
+            "sha256": "9c0096d1d65520caca4949ae6ac4bc065fc8bb6ea4c0fc85fc6ec7f32642c067",
             "url": "",
-            "size": 78630096,
-            "updateTime": "2026-08-03T00:23:20.457Z",
+            "size": 78629811,
+            "updateTime": "2026-08-04T02:14:55.897Z",
             "fileName": "惠康中医-LB Setup 1.0.0.exe"
         }
     },
     "cloud": {
         "apk": {
             "version": "",
-            "sha256": "38d40e0d934f05cdf369b5691afeb10cdf9c1c550286cba97945ebef99194641",
+            "sha256": "c3eb203aa56a893bc34aab261ce7597da5157ad65e97617f0cf824da1c2f7c1c",
             "url": "/downloads/惠康中医-YJ.apk",
-            "size": 11237268,
-            "updateTime": "2026-08-04T00:19:36.738Z",
+            "size": 11237274,
+            "updateTime": "2026-08-04T11:20:28.096Z",
             "fileName": "惠康中医-YJ.apk"
         },
         "exe": {
             "version": "",
-            "sha256": "a4049668937676bcbfe1f645c36066f65e494c7625fb3043a2a47f3a9a4d9bb1",
+            "sha256": "f417a4f5f229486af03d51deaa05715b48bb490cbf03596e14992e5f5132ade2",
             "url": "",
-            "size": 81247835,
-            "updateTime": "2026-08-03T00:23:20.457Z",
+            "size": 81248099,
+            "updateTime": "2026-08-04T02:14:55.897Z",
             "fileName": "惠康中医-YJ Setup 1.2.2.exe"
         },
         "portable": {
             "version": "",
-            "sha256": "5a45e20129671a33d93a8be71a278f93a7da7b609634cb8e693a3c950ed05b85",
+            "sha256": "09dd9f7c10b02845c6c464d50b9a918b6a0c6a8c760b0462720a0d24da271537",
             "url": "",
-            "size": 81033051,
-            "updateTime": "2026-08-03T00:23:20.457Z",
+            "size": 81033256,
+            "updateTime": "2026-08-04T02:14:55.897Z",
             "fileName": "惠康中医-YJ 1.2.2.exe"
         }
     },
     "geren-cloud": {
         "apk": {
             "version": "",
-            "sha256": "9a6deb8d89680e14b7ee30d3d6e2f7415b85e77d6b4b2be7d1033df5f4196f77",
+            "sha256": "9f1b0c283d89a47c7dd82771298fc8a7c6a26a53859fa8b10626ddbd07400fb8",
             "url": "/downloads/惠康中医-YB.apk",
-            "size": 11224161,
-            "updateTime": "2026-08-04T00:19:36.850Z",
+            "size": 11224110,
+            "updateTime": "2026-08-04T11:21:35.284Z",
             "fileName": "惠康中医-YB.apk"
         },
         "exe": {
             "version": "",
-            "sha256": "67bb03455f022368eea03b0626654da63df3f4f07b220e82b33bf35b99c5bb9d",
+            "sha256": "3e1a2a36ee91bea0bd012e5c61cc5a776623dbf2b32651e1240623e3118e38e9",
             "url": "",
-            "size": 80496437,
-            "updateTime": "2026-08-03T00:23:20.457Z",
-            "fileName": "惠康中医-YB Setup 1.2.7.exe"
+            "size": 80497056,
+            "updateTime": "2026-08-04T02:14:55.897Z",
+            "fileName": "惠康中医-YB Setup 1.2.8.exe"
         },
         "portable": {
             "version": "",
-            "sha256": "c3f38abcf242a1a6cd71e193522469c561e26d2d885747dafb55b252ea353974",
+            "sha256": "631a2c1061858f574db477887fd458aad441dc7b7bd56ccea465bf380c8f491c",
             "url": "",
-            "size": 80281668,
-            "updateTime": "2026-08-03T00:23:20.457Z",
-            "fileName": "惠康中医-YB 1.2.7.exe"
+            "size": 80282266,
+            "updateTime": "2026-08-04T02:14:55.897Z",
+            "fileName": "惠康中医-YB 1.2.8.exe"
         }
     }
 }

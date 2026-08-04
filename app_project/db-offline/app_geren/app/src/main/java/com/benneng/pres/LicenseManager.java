@@ -1951,17 +1951,13 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                    " license.dat exists=" + licenseFile.exists() +
                    " size=" + (licenseFile.exists() ? licenseFile.length() : 0));
         try {
-            // ★ 安全检测 1：Root 检测（防 root 设备篡改 license）
+            // ★ 安全检测 1：Root 检测（仅记录日志，不阻塞运行，避免 busybox/su 路径误报闪退）
             if (isRooted()) {
-                return failValidation(
-                        "检测到 Root 设备，软件无法运行。\n如需正常使用，请在非 Root 设备上安装。",
-                        "rooted");
+                Log.w(TAG, "检测到 Root 设备特征（仅记录日志，不阻塞运行）");
             }
-            // ★ 安全检测 2：调试器检测（防 hook/调试绕过 license）
+            // ★ 安全检测 2：调试器检测（仅记录日志，不阻塞运行，避免国产手机 ro.debuggable=1 误报闪退）
             if (isDebuggerAttached()) {
-                return failValidation(
-                        "检测到调试器已连接，软件无法运行。\n请关闭调试模式后重启应用。",
-                        "debugger");
+                Log.w(TAG, "检测到调试器特征（仅记录日志，不阻塞运行）");
             }
             // ★ 安全检测 3：APK 签名校验（防反编译重打包）
             if (!verifyApkSignature()) {
