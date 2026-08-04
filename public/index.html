@@ -1467,10 +1467,12 @@ if (window.Permission) {
         window.__APP_VERSION__ = '2026-07-30-v1';
 
         // ★ P2优化：在登录页版本标签中显示当前版本号（不改DOM结构，仅更新文本）
+        // 版本标签统一格式：离线/云端 + 标准版/机构版，版本号与软著申请一致（V1.0.0）
         (function() {
             var tag = document.querySelector('.version-tag');
-            if (tag) tag.textContent = '【云端】v' + (window.__APP_VERSION__ || '');
-            console.log('%c惠康中医云端版 v' + window.__APP_VERSION__, 'color:#667eea;font-size:14px;font-weight:bold');
+            var editionLabel = (window.EDITION === 'personal') ? '【云端标准版】' : '【云端机构版】';
+            if (tag) tag.textContent = editionLabel + ' V1.0.0';
+            console.log('%c惠康中医云端版 V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
         })();
 
         // ============ 离线本地数据库（Capacitor SQLite） ============
@@ -8352,7 +8354,8 @@ IconFile=${scriptPath}`;
         }
 
         function showHelp() {
-            alert('惠康中医-云端机构版\\n\\n快捷键：\\nF1 - 基础设置\\nF2 - 药品管理\\nF3 - 验方设置\\nF5 - 存为验方\\nF7 - 重输方药\\nF8 - 打印处方\\nF9 - 保存录入\\nAlt+1 - 辨证选方\\nAlt+9 - 复诊直调');
+            var editionName = (window.EDITION === 'personal') ? '云端标准版' : '云端机构版';
+            alert('惠康中医-' + editionName + ' V1.0.0\\n\\n快捷键：\\nF1 - 基础设置\\nF2 - 药品管理\\nF3 - 验方设置\\nF5 - 存为验方\\nF7 - 重输方药\\nF8 - 打印处方\\nF9 - 保存录入\\nAlt+1 - 辨证选方\\nAlt+9 - 复诊直调');
         }
 
         async function exportData() {
@@ -8390,8 +8393,8 @@ IconFile=${scriptPath}`;
             try {
                 const data = {
                     exportInfo: {
-                        version: window.__APP_VERSION__ || 'v2.0.0',
-                        versionCode: window.__APP_VERSION__ || 'v2.0.0',
+                        version: 'V1.0.0',
+                        versionCode: 'V1.0.0',
                         versionType: '网页版',
                         exportTime: now.toLocaleString('zh-CN'),
                         exportTimeUTC: now.toISOString(),
@@ -8491,7 +8494,7 @@ IconFile=${scriptPath}`;
             try {
                 const data = {
                     exportInfo: {
-                        version: window.__APP_VERSION__ || 'v2.0.0',
+                        version: 'V1.0.0',
                         versionType: '网页版',
                         exportTime: now.toLocaleString('zh-CN'),
                         exportTimeUTC: now.toISOString(),

@@ -673,11 +673,11 @@ let currentUser = null;
         // ★ 根据 edition 动态更新版本标签和默认用户名
         (function initVersionTagAndUser() {
             const tagEl = document.querySelector('.version-tag');
-            let versionLabel = '【离线版】';
+            let versionLabel = '【离线版】 V1.0.0';
             if (CONFIG.edition === 'personal') {
-                versionLabel = '【离线标准版】';
+                versionLabel = '【离线标准版】 V1.0.0';
             } else if (CONFIG.edition === 'clinic_custom') {
-                versionLabel = '【离线机构版】';
+                versionLabel = '【离线机构版】 V1.0.0';
             }
             if (tagEl) {
                 tagEl.textContent = versionLabel;
@@ -5021,7 +5021,7 @@ let currentUser = null;
             const editionName = isPersonal ? '离线标准版' : '离线机构版';
             const editionDesc = isPersonal ? '标准版：含修改密码，无用户管理' : '机构版：含用户管理+修改密码';
             const userMgmtLine = isPersonal ? '' : '✓ 用户管理（管理员）\n';
-            alert('惠康中医-' + editionName + '\n\n' +
+            alert('惠康中医-' + editionName + ' V1.0.0\n\n' +
                   '【版本说明】' + editionDesc + '\n\n' +
                   '【功能列表】\n' +
                   '✓ 处方录入与打印\n✓ 药品管理\n✓ 验方设置\n' +
@@ -5316,8 +5316,8 @@ let currentUser = null;
             
             const data = {
                 exportInfo: {
-                    version: '惠康中医-本地 - 新版',
-                    versionCode: 'v2.0.0',
+                    version: '惠康中医-离线版',
+                    versionCode: 'V1.0.0',
                     versionType: '本地',
                     exportTime: now.toLocaleString('zh-CN'),
                     exportTimeUTC: now.toISOString(),

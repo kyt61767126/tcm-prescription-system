@@ -1494,6 +1494,13 @@ if (window.Permission) {
             }
         })();
 
+        // 版本标签统一显示 V1.0.0（与软著申请版本号一致）
+        (function() {
+            var tag = document.querySelector('.version-tag');
+            if (tag) tag.textContent = '【云端机构版】 V1.0.0';
+            console.log('%c惠康中医云端机构版 V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
+        })();
+
         // ★v2.0 统一架构：声明 APP_MODE（offline/cloud），供 db-adapter.js 自动检测
         window.APP_MODE = 'cloud';
 
@@ -8101,7 +8108,7 @@ IconFile=${scriptPath}`;
         }
 
         function showHelp() {
-            alert('惠康中医-云端机构版\\n\\n' +
+            alert('惠康中医-云端机构版 V1.0.0\\n\\n' +
                   '【版本说明】机构版：含用户管理+修改密码+云端同步\\n\\n' +
                   '【功能列表】\\n' +
                   '✓ 处方录入与打印\\n✓ 药品管理\\n✓ 验方设置\\n' +
@@ -8148,8 +8155,8 @@ IconFile=${scriptPath}`;
             try {
                 const data = {
                     exportInfo: {
-                        version: window.__APP_VERSION__ || 'v2.0.0',
-                        versionCode: window.__APP_VERSION__ || 'v2.0.0',
+                        version: 'V1.0.0',
+                        versionCode: 'V1.0.0',
                         versionType: '网页版',
                         exportTime: now.toLocaleString('zh-CN'),
                         exportTimeUTC: now.toISOString(),
@@ -8249,7 +8256,7 @@ IconFile=${scriptPath}`;
             try {
                 const data = {
                     exportInfo: {
-                        version: window.__APP_VERSION__ || 'v2.0.0',
+                        version: 'V1.0.0',
                         versionType: '网页版',
                         exportTime: now.toLocaleString('zh-CN'),
                         exportTimeUTC: now.toISOString(),
