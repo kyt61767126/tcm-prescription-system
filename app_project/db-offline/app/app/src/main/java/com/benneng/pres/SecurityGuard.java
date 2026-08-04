@@ -63,17 +63,13 @@ public class SecurityGuard {
                 return;
             }
         }
-        // 4. Frida Hook 框架检测（防动态注入绕过安全检测）
+        // 4. Frida Hook 框架检测（仅记录日志，不阻塞运行，避免 gmain 等通用线程名误报闪退）
         if (ENABLE_FRIDA_CHECK && isFridaInjected()) {
-            Log.w(TAG, "安全检测：检测到 Frida 注入，退出 APP");
-            toastAndExit(activity, "检测到 Frida 注入框架，APP 无法运行");
-            return;
+            Log.w(TAG, "安全检测：检测到 Frida 注入特征（仅记录日志，不阻塞运行）");
         }
-        // 5. Xposed Hook 框架检测（防方法 hook 绕过逻辑）
+        // 5. Xposed Hook 框架检测（仅记录日志，不阻塞运行，避免误报闪退）
         if (ENABLE_XPOSED_CHECK && isXposedInjected()) {
-            Log.w(TAG, "安全检测：检测到 Xposed 注入，退出 APP");
-            toastAndExit(activity, "检测到 Xposed 注入框架，APP 无法运行");
-            return;
+            Log.w(TAG, "安全检测：检测到 Xposed 注入特征（仅记录日志，不阻塞运行）");
         }
         // 6. 模拟器检测（仅记录日志，不阻塞运行，避免误判合法用户）
         if (ENABLE_EMULATOR_CHECK && isEmulator()) {
@@ -129,9 +125,8 @@ public class SecurityGuard {
                         String threadName = reader.readLine();
                         if (threadName != null) {
                             String lower = threadName.toLowerCase();
-                            if (lower.contains("gum-js-loop") || lower.contains("gmain") ||
-                                lower.contains("pool-frida") || lower.contains("frida") ||
-                                lower.contains("linjector")) {
+                            if (lower.contains("gum-js-loop") || lower.contains("pool-frida") ||
+                                lower.contains("frida") || lower.contains("linjector")) {
                                 Log.w(TAG, "Frida 检测：发现 frida 线程: " + threadName);
                                 return true;
                             }

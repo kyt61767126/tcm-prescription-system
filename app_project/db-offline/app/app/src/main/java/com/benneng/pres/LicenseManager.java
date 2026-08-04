@@ -1964,17 +1964,13 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                         "APK 签名校验失败，软件可能被篡改。\n请从官方渠道重新下载安装。",
                         "signature_mismatch");
             }
-            // ★ P1-A4 新增：安全检测 4 - Frida Hook 框架检测（防动态注入绕过 license）
+            // ★ P1-A4 新增：安全检测 4 - Frida Hook 框架检测（仅记录日志，不阻塞运行，避免误报闪退）
             if (isFridaInjected()) {
-                return failValidation(
-                        "检测到 Frida 注入框架，软件无法运行。\n请关闭相关工具后重启。",
-                        "frida_injected");
+                Log.w(TAG, "检测到 Frida 注入特征（仅记录日志，不阻塞运行）");
             }
-            // ★ P1-A4 新增：安全检测 5 - Xposed Hook 框架检测（防方法 hook 绕过 license）
+            // ★ P1-A4 新增：安全检测 5 - Xposed Hook 框架检测（仅记录日志，不阻塞运行，避免误报闪退）
             if (isXposedInjected()) {
-                return failValidation(
-                        "检测到 Xposed 注入框架，软件无法运行。\n请关闭相关工具后重启。",
-                        "xposed_injected");
+                Log.w(TAG, "检测到 Xposed 注入特征（仅记录日志，不阻塞运行）");
             }
 
             // ★ P3-B 新增：模拟器检测（仅记录日志，不阻塞运行）
