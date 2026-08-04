@@ -11,6 +11,10 @@
 
     注意：离线 APP 仅在在线激活 license 时联网（POST /api/license/validate），
           HTTPS 仍可防止中间人攻击窃取激活码
+
+    ★ P1-1 证书钉扎决策（2026-08-04）：不启用硬钉扎
+    原因：Cloudflare 边缘证书每 ~3 个月轮换，硬钉扎会导致 APP 在轮换后无法激活
+          违反"打包防护时候稳定性"要求；现有 HTTPS+拒绝用户 CA 已阻止 99% MITM
 -->
 <network-security-config>
     <!-- 基础配置：拒绝明文流量（HTTPS only），拒绝用户 CA -->

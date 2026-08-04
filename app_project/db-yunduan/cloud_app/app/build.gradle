@@ -30,16 +30,17 @@ android {
             // P1-9: 显式启用 APK v1/v2 签名方案（AGP 当前版本 API）
             // v1: JAR 签名（兼容 Android 7.0 以下）
             // v2: APK Signature Scheme v2（Android 7.0+，防篡改更强）
-            // 注：v3/v4 签名方案在当前 AGP 版本不支持，使用默认 null 即可
+            // P0 安全增强：v3 签名方案已启用（AGP 8.13.0+ 支持，Android 9+ 防篡改更强）
             enableV1Signing true
             enableV2Signing true
+            enableV3Signing true   // ★ P0 安全增强：启用 APK v3 签名方案（Android 9+，支持密钥轮换，防篡改更强）
         }
     }
     defaultConfig {
         applicationId "com.tcm.prescription"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 106
+        versionCode 109
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

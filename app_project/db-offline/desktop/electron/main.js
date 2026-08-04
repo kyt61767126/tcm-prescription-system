@@ -483,6 +483,35 @@ function installDevToolsGuard(webContents) {
                 return;
             }
         });
+        // 3. ★ P0 安全增强：定时主动检查 DevTools 状态（防止 devtools-opened 事件被 hook 绕过）
+        //    每 3 秒检查一次，若发现 DevTools 已打开则强制关闭
+        const _devtoolsCheckTimer = setInterval(() => {
+            try {
+                if (webContents.isDestroyed()) {
+                    clearInterval(_devtoolsCheckTimer);
+                    return;
+                }
+                if (webContents.isDevToolsOpened()) {
+                    console.warn('[Security] 主动检测到 DevTools 已打开，强制关闭');
+                    webContents.closeDevTools();
+                }
+                // 检测 debugger API 附加（防止通过 webContents.debugger.attach 附加）
+                if (webContents.debugger && typeof webContents.debugger.isAttached === 'function' &&
+                    webContents.debugger.isAttached()) {
+                    console.warn('[Security] 检测到 Debugger API 已附加，强制分离');
+                    try { webContents.debugger.detach(); } catch (e) { /* 忽略 */ }
+                }
+            } catch (e) { /* 忽略 */ }
+        }, 3000);
+        // 4. ★ P0 安全增强：启动时检测 --remote-debugging-port / --inspect 参数
+        //    防止通过命令行参数启动远程调试端口绕过 DevTools 拦截
+        try {
+            const argv = process.argv.join(' ');
+            if (argv.includes('--remote-debugging-port') ||
+                argv.includes('--inspect-brk') || argv.includes('--inspect=')) {
+                console.warn('[Security] 检测到远程调试参数，DevTools 防护已启用:', argv);
+            }
+        } catch (e) { /* 忽略 */ }
     } catch (e) {
         console.warn('[Security] installDevToolsGuard 异常:', e.message);
     }

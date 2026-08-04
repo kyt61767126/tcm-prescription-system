@@ -88,28 +88,35 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
     }
 
     /**
-     * Frida 注入检测：
-     * 1. 检测默认端口 27042 是否可连接（Frida server 默认监听）
-     * 2. 扫描 /proc/self/maps 中是否含 frida-gadget / frida-agent 字符串
+     * Frida 注入检测（P0 安全增强）：
+     * 1. 检测多个默认端口 27042/27043/27044/27045 是否可连接（Frida server 默认监听）
+     * 2. 扫描 /proc/self/maps 中是否含 frida-gadget/frida-agent/frida-server/libfrida 特征
+     * 3. 扫描 /proc/self/task 中线程名是否含 gum-js-loop/gmain/pool-frida（Frida 运行时线程）
+     * 4. 检测 /data/local/tmp/ 下是否有 frida-server 文件
      */
     public static boolean isFridaInjected() {
         if (!ENABLE_FRIDA_CHECK) return false;
-        // 检测 1：尝试连接默认端口（5ms 超时，不影响启动速度）
-        try (Socket socket = new Socket()) {
-            socket.connect(new java.net.InetSocketAddress("127.0.0.1", 27042), 5);
-            if (socket.isConnected()) {
-                Log.w(TAG, "Frida 检测：端口 27042 可连接，疑似 Frida server");
-                return true;
+        // 检测 1：尝试连接多个默认端口（5ms 超时，不影响启动速度）
+        int[] fridaPorts = {27042, 27043, 27044, 27045, 27046};
+        for (int port : fridaPorts) {
+            try (Socket socket = new Socket()) {
+                socket.connect(new java.net.InetSocketAddress("127.0.0.1", port), 5);
+                if (socket.isConnected()) {
+                    Log.w(TAG, "Frida 检测：端口 " + port + " 可连接，疑似 Frida server");
+                    return true;
+                }
+            } catch (Exception e) {
+                // 端口未开放，正常
             }
-        } catch (Exception e) {
-            // 端口未开放，正常
         }
-        // 检测 2：扫描 /proc/self/maps
+        // 检测 2：扫描 /proc/self/maps（扩大特征库，含 libfrida 前缀）
         try (BufferedReader reader = new BufferedReader(new FileReader("/proc/self/maps"))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                if (line.contains("frida-gadget") || line.contains("frida-agent") ||
-                    line.contains("frida-server")) {
+                String lower = line.toLowerCase();
+                if (lower.contains("frida-gadget") || lower.contains("frida-agent") ||
+                    lower.contains("frida-server") || lower.contains("libfrida") ||
+                    lower.contains("frida-gum")) {
                     Log.w(TAG, "Frida 检测：/proc/self/maps 含 frida 特征: " + line.trim());
                     return true;
                 }
@@ -117,18 +124,58 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
         } catch (Exception e) {
             // 读取失败，忽略
         }
+        // 检测 3：扫描线程名（Frida 运行时会产生 gum-js-loop/gmain/pool-frida 等线程）
+        try {
+            java.io.File taskDir = new java.io.File("/proc/self/task");
+            if (taskDir.exists() && taskDir.isDirectory()) {
+                for (String tid : taskDir.list()) {
+                    try (BufferedReader reader = new BufferedReader(
+                            new FileReader("/proc/self/task/" + tid + "/comm"))) {
+                        String threadName = reader.readLine();
+                        if (threadName != null) {
+                            String lower = threadName.toLowerCase();
+                            if (lower.contains("gum-js-loop") || lower.contains("gmain") ||
+                                lower.contains("pool-frida") || lower.contains("frida") ||
+                                lower.contains("linjector")) {
+                                Log.w(TAG, "Frida 检测：发现 frida 线程: " + threadName);
+                                return true;
+                            }
+                        }
+                    } catch (Exception e) {
+                        // 单个线程读取失败，继续
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // 忽略
+        }
+        // 检测 4：检查 /data/local/tmp/ 下的 frida-server 文件
+        String[] fridaFiles = {
+            "/data/local/tmp/frida-server",
+            "/data/local/tmp/frida",
+            "/data/local/tmp/re.frida.server"
+        };
+        for (String path : fridaFiles) {
+            if (new java.io.File(path).exists()) {
+                Log.w(TAG, "Frida 检测：发现 frida 文件 " + path);
+                return true;
+            }
+        }
         return false;
     }
 
     /**
-     * Xposed 注入检测：
-     * 1. 检查 de.robv.android.xposed.XposedBridge 类是否已加载
+     * Xposed 注入检测（P0 安全增强）：
+     * 1. 检查 de.robv.android.xposed.XposedBridge 类是否已加载（经典 Xposed）
      * 2. 检查堆栈中是否含 Xposed 相关帧
+     * 3. 检查 LSPosed 相关类（org.lsposed.manager / org.lsposed.lspd）
+     * 4. 检查 EdXposed 相关类（org.meowcat.edxposed.manager / org.meowcat.edxposed）
+     * 5. 检查 /system/xposed.prop / /data/adb/lspd 等 Xposed 配置文件
      */
     public static boolean isXposedInjected() {
         if (!ENABLE_XPOSED_CHECK) return false;
+        // 检测 1：尝试加载经典 XposedBridge 类
         try {
-            // 检测 1：尝试加载 XposedBridge 类
             Class.forName("de.robv.android.xposed.XposedBridge");
             Log.w(TAG, "Xposed 检测：de.robv.android.xposed.XposedBridge 类已加载");
             return true;
@@ -139,20 +186,66 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
         try {
             StackTraceElement[] stack = Thread.currentThread().getStackTrace();
             for (StackTraceElement elem : stack) {
-                if (elem.getClassName().startsWith("de.robv.android.xposed") ||
-                    elem.getClassName().contains("xposed")) {
-                    Log.w(TAG, "Xposed 检测：堆栈含 Xposed 帧: " + elem.getClassName());
+                String cls = elem.getClassName().toLowerCase();
+                if (cls.startsWith("de.robv.android.xposed") || cls.contains("xposed") ||
+                    cls.contains("lspd") || cls.contains("edxposed")) {
+                    Log.w(TAG, "Xposed 检测：堆栈含 Xposed/LSPosed/EdXposed 帧: " + elem.getClassName());
                     return true;
                 }
             }
         } catch (Exception e) {
             // 忽略
         }
+        // 检测 3：检查 LSPosed 相关类
+        String[] lsposedClasses = {
+            "org.lsposed.manager.App",
+            "org.lsposed.lspd.core.Main",
+            "org.lsposed.lspd.yahfa.hooker.YahfaHooker",
+            "de.robv.android.xposed.XposedBridge"
+        };
+        for (String className : lsposedClasses) {
+            try {
+                Class.forName(className);
+                Log.w(TAG, "Xposed 检测：LSPosed 类已加载: " + className);
+                return true;
+            } catch (ClassNotFoundException e) {
+                // 未加载，继续
+            }
+        }
+        // 检测 4：检查 EdXposed 相关类
+        String[] edxposedClasses = {
+            "org.meowcat.edxposed.manager.App",
+            "org.meowcat.edxposed.server.Server"
+        };
+        for (String className : edxposedClasses) {
+            try {
+                Class.forName(className);
+                Log.w(TAG, "Xposed 检测：EdXposed 类已加载: " + className);
+                return true;
+            } catch (ClassNotFoundException e) {
+                // 未加载，继续
+            }
+        }
+        // 检测 5：检查 Xposed/LSPosed 配置文件
+        String[] xposedFiles = {
+            "/system/xposed.prop",
+            "/data/adb/lspd",
+            "/data/adb/lspd_config",
+            "/data/adb/modules/riru_lsposed",
+            "/data/adb/modules/zygisk_lsposed",
+            "/system/framework/XposedBridge.jar"
+        };
+        for (String path : xposedFiles) {
+            if (new java.io.File(path).exists()) {
+                Log.w(TAG, "Xposed 检测：发现 Xposed/LSPosed 文件 " + path);
+                return true;
+            }
+        }
         return false;
     }
 
     /**
-     * 模拟器检测：检查 Build 系列属性中的模拟器特征
+     * 模拟器检测（P0 安全增强）：检查 Build 属性 + QEMU 文件 + 系统属性
      * 仅记录日志，不阻塞运行（避免误判合法用户）
      */
     public static boolean isEmulator() {
@@ -161,7 +254,8 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
                 String fp = Build.FINGERPRINT.toLowerCase();
                 if (fp.contains("generic") || fp.contains("sdk") ||
                     fp.contains("google_sdk") || fp.contains("goldfish") ||
-                    fp.contains("vbox") || fp.contains("ttvm")) {
+                    fp.contains("vbox") || fp.contains("ttvm") ||
+                    fp.contains("generic_x86") || fp.contains("generic_arm64")) {
                     Log.w(TAG, "模拟器检测：Build.FINGERPRINT 含模拟器特征: " + Build.FINGERPRINT);
                     return true;
                 }
@@ -169,31 +263,67 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
             if (Build.MODEL != null) {
                 String model = Build.MODEL.toLowerCase();
                 if (model.contains("google_sdk") || model.contains("emulator") ||
-                    model.contains("android sdk built for x86") || model.contains("sdk gphone")) {
+                    model.contains("android sdk built for x86") || model.contains("sdk gphone") ||
+                    model.contains("pixel") && model.contains("emulator")) {
                     Log.w(TAG, "模拟器检测：Build.MODEL 含模拟器特征: " + Build.MODEL);
                     return true;
                 }
             }
             if (Build.HARDWARE != null) {
                 String hw = Build.HARDWARE.toLowerCase();
-                if (hw.contains("goldfish") || hw.contains("ranchu") || hw.contains("vbox")) {
+                if (hw.contains("goldfish") || hw.contains("ranchu") || hw.contains("vbox") ||
+                    hw.contains("x86") || hw.contains("android_x86")) {
                     Log.w(TAG, "模拟器检测：Build.HARDWARE 含模拟器特征: " + Build.HARDWARE);
                     return true;
                 }
             }
             if (Build.PRODUCT != null) {
                 String prod = Build.PRODUCT.toLowerCase();
-                if (prod.contains("sdk") || prod.contains("google_sdk") || prod.contains("vbox")) {
+                if (prod.contains("sdk") || prod.contains("google_sdk") || prod.contains("vbox") ||
+                    prod.contains("sdk_x86") || prod.contains("sdk_gphone")) {
                     Log.w(TAG, "模拟器检测：Build.PRODUCT 含模拟器特征: " + Build.PRODUCT);
                     return true;
                 }
             }
             if (Build.MANUFACTURER != null) {
                 String mfr = Build.MANUFACTURER.toLowerCase();
-                if (mfr.contains("genymotion") || mfr.contains("unknown")) {
+                if (mfr.contains("genymotion") || mfr.contains("unknown") ||
+                    mfr.contains("android-x86") || mfr.contains("bluestacks")) {
                     Log.w(TAG, "模拟器检测：Build.MANUFACTURER 含模拟器特征: " + Build.MANUFACTURER);
                     return true;
                 }
+            }
+            if (Build.BRAND != null) {
+                String brand = Build.BRAND.toLowerCase();
+                if (brand.contains("generic") || brand.contains("generic_x86") ||
+                    brand.contains("generic_arm64")) {
+                    Log.w(TAG, "模拟器检测：Build.BRAND 含模拟器特征: " + Build.BRAND);
+                    return true;
+                }
+            }
+            // 新增检测 1：QEMU 相关文件（模拟器特有）
+            String[] qemuFiles = {
+                "/dev/qemu_pipe", "/dev/socket/qemud",
+                "/dev/socket/baseband_genyd", "/dev/socket/genyd",
+                "/system/bin/qemu-props", "/system/bin/qemud"
+            };
+            for (String path : qemuFiles) {
+                if (new java.io.File(path).exists()) {
+                    Log.w(TAG, "模拟器检测：发现 QEMU 文件 " + path);
+                    return true;
+                }
+            }
+            // 新增检测 2：系统属性 ro.kernel.qemu（模拟器为 1）
+            String roKernelQemu = getSystemProperty("ro.kernel.qemu", "0");
+            if ("1".equals(roKernelQemu)) {
+                Log.w(TAG, "模拟器检测：ro.kernel.qemu=1");
+                return true;
+            }
+            // 新增检测 3：Genymotion 特有属性
+            String genymotion = getSystemProperty("ro.product.manufacturer", "");
+            if ("genymotion".equalsIgnoreCase(genymotion)) {
+                Log.w(TAG, "模拟器检测：ro.product.manufacturer=genymotion");
+                return true;
             }
         } catch (Exception e) {
             // 检测异常时不阻塞
@@ -202,15 +332,16 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
     }
 
     /**
-     * Root 检测：检查 su 路径、Build.TAGS、Magisk 等常见 root 应用
+     * Root 检测（P0 安全增强）：检查 su 路径、Build.TAGS、Magisk、SuHide、busybox 等
      */
     public static boolean isRooted(Context context) {
         if (!ENABLE_ROOT_CHECK) return false;
         try {
-            // 1. 检查 su 命令是否可执行
+            // 1. 检查 su 命令是否可执行（扩展路径列表）
             String[] suPaths = {"/system/bin/su", "/system/xbin/su", "/sbin/su",
                     "/system/sd/xbin/su", "/system/bin/failsafe/su", "/data/local/xbin/su",
-                    "/data/local/bin/su", "/data/local/su"};
+                    "/data/local/bin/su", "/data/local/su",
+                    "/su/bin/su", "/system/bin/.ext/.su", "/system/usr/we-need-root/su-backup"};
             for (String path : suPaths) {
                 if (new java.io.File(path).exists()) {
                     Log.w(TAG, "Root 检测：发现 su 路径 " + path);
@@ -222,9 +353,17 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
                 Log.w(TAG, "Root 检测：Build.TAGS 包含 test-keys");
                 return true;
             }
-            // 3. 检查 Magisk 等常见 root 应用包名
-            String[] rootApps = {"com.topjohnwu.magisk", "eu.chainfire.supersu",
-                    "com.koushikdutta.superuser", "com.thirdparty.superuser"};
+            // 3. 检查 Magisk 等常见 root 应用包名（扩展列表，含隐藏版 Magisk）
+            String[] rootApps = {
+                "com.topjohnwu.magisk", "com.topjohnwu.magisk.test",
+                "eu.chainfire.supersu", "com.koushikdutta.superuser",
+                "com.thirdparty.superuser", "com.noshufou.android.su",
+                "com.thirdparty.superuser.eu.chainfire.supersu",
+                "com.yellowes.su", "com.kingo.root", "com.smedialink.oneclickroot",
+                "com.zhiqupk.root.global", "com.alephzain.framaroot",
+                "com.koushikdutta.rommanager", "com.koushikdutta.superuser",
+                "com.dimonvideo.luckypatcher", "com.chelpus.lackypatch"
+            };
             java.util.List<PackageInfo> pkgs = context.getPackageManager().getInstalledPackages(0);
             for (PackageInfo pi : pkgs) {
                 for (String pkg : rootApps) {
@@ -233,6 +372,42 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
                         return true;
                     }
                 }
+            }
+            // 4. 检查 Magisk 数据库与配置文件（Magisk Hide/DenyList 仍会留下痕迹）
+            String[] magiskFiles = {
+                "/data/adb/magisk.db", "/data/adb/magisk",
+                "/data/adb/modules", "/data/adb/magisk/busybox",
+                "/sbin/.magisk", "/data/adb/magisk/zygisk"
+            };
+            for (String path : magiskFiles) {
+                if (new java.io.File(path).exists()) {
+                    Log.w(TAG, "Root 检测：发现 Magisk 文件 " + path);
+                    return true;
+                }
+            }
+            // 5. 检查 SuHide 相关文件
+            String[] suhideFiles = {
+                "/system/xbin/suhide", "/system/bin/suhide",
+                "/data/local/suhide", "/system/app/Superuser.apk"
+            };
+            for (String path : suhideFiles) {
+                if (new java.io.File(path).exists()) {
+                    Log.w(TAG, "Root 检测：发现 SuHide/Superuser 文件 " + path);
+                    return true;
+                }
+            }
+            // 6. 检查 busybox（root 设备通常安装 busybox）
+            String[] busyboxPaths = {
+                "/system/bin/busybox", "/system/xbin/busybox",
+                "/data/local/busybox", "/sbin/busybox"
+            };
+            int busyboxCount = 0;
+            for (String path : busyboxPaths) {
+                if (new java.io.File(path).exists()) busyboxCount++;
+            }
+            if (busyboxCount >= 2) {
+                Log.w(TAG, "Root 检测：发现多处 busybox（" + busyboxCount + "），疑似 root");
+                return true;
             }
         } catch (Exception e) {
             Log.w(TAG, "Root 检测异常（视为未 root）: " + e.getMessage());

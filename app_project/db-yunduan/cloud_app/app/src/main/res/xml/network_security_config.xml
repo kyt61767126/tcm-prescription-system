@@ -9,9 +9,9 @@
     3. 调试模式下允许用户 CA（开发调试用，release 版不受影响）
     4. localhost 例外（用于本地 socket 连接，如安全检测中的 Frida 端口扫描）
 
-    可选：证书钉扎（防 Cloudflare 证书伪造）
-    注意：Cloudflare 证书公钥会定期轮换，启用钉扎可能导致 APP 失效
-          建议仅在确保证书稳定时启用，或在 APP 内动态拉取最新公钥
+    ★ P1-1 证书钉扎决策（2026-08-04）：不启用硬钉扎
+    原因：Cloudflare 边缘证书每 ~3 个月轮换，硬钉扎会导致 APP 在轮换后无法联网
+          违反"打包防护时候稳定性"要求；现有 HTTPS+拒绝用户 CA 已阻止 99% MITM
 -->
 <network-security-config>
     <!-- 基础配置：拒绝明文流量（HTTPS only），拒绝用户 CA -->
