@@ -3581,6 +3581,14 @@ let currentUser = null;
                                 onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}</div>`;
                     }).join('');
                     dropdown.style.display = 'block';
+                    // ★ 自适应位置：下方空间不足时自动翻到输入框上方显示（修复遮挡）
+                    try {
+                        const ddRect = dropdown.getBoundingClientRect();
+                        const inputRect = element.getBoundingClientRect();
+                        if (ddRect.bottom > window.innerHeight && inputRect.top > ddRect.height + 4) {
+                            dropdown.style.top = Math.max(2, inputRect.top - ddRect.height - 2) + 'px';
+                        }
+                    } catch(e) {}
                 } else {
                     dropdown.style.display = 'none';
                 }
