@@ -56,6 +56,6 @@
     }
   },
   "dependencies": {
-    "fs-extra": "^11.3.5"
+    "fs-extra": "^11.4.0"
   }
 }
