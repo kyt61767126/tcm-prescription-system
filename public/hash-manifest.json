@@ -80,10 +80,10 @@
     "geren-cloud": {
         "apk": {
             "version": "",
-            "sha256": "9f1b0c283d89a47c7dd82771298fc8a7c6a26a53859fa8b10626ddbd07400fb8",
+            "sha256": "e4415e10d6ea9d18ccd716ae4260e11d38f0b51e9b4ae35f0ed7ac26d7acf9e1",
             "url": "/downloads/惠康中医-YB.apk",
-            "size": 11224110,
-            "updateTime": "2026-08-04T11:21:35.284Z",
+            "size": 11224108,
+            "updateTime": "2026-08-04T11:26:34.465Z",
             "fileName": "惠康中医-YB.apk"
         },
         "exe": {
