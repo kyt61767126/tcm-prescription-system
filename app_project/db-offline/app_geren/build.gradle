@@ -46,6 +46,14 @@ subprojects {
             sourceCompatibility = JavaVersion.VERSION_17
             targetCompatibility = JavaVersion.VERSION_17
         }
+        // Fix: AGP 8.13.0 + Gradle 8.14.3 annotationProcessor input validation
+        // Ensure javaPreCompileRelease runs before compileReleaseJavaWithJavac
+        // to generate annotationProcessors.json (capacitor-community-sqlite uses Room annotationProcessor)
+        def compileTask = project.tasks.findByName('compileReleaseJavaWithJavac')
+        def preTask = project.tasks.findByName('javaPreCompileRelease')
+        if (compileTask != null && preTask != null) {
+            compileTask.dependsOn preTask
+        }
     }
     // Also set during configuration phase as backup
     tasks.withType(JavaCompile) {

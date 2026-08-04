@@ -230,7 +230,7 @@ if errorlevel 1 (
 )
 echo       [OK] JS 代码混淆完成
 echo       [STAGE:precompile] Java 预编译检查中（提前发现编译错误）...
-call gradlew.bat compileReleaseJavaWithJavac --quiet
+call gradlew.bat javaPreCompileRelease compileReleaseJavaWithJavac --quiet
 if errorlevel 1 (
     echo       [错误] Java 预编译检查失败，终止打包
     echo       [警告] 因预编译失败，正在恢复 JavaScript...
