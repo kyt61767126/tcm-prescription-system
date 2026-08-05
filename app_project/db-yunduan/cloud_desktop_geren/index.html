@@ -107,6 +107,8 @@
         .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 14px; color: #000; }
         .usage-text { margin-bottom: 10px; font-size: 14px; color: #000; font-weight: bold; }
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
+        .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
+        .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
         .right-panel { width: 32%; min-width: 220px; max-width: 340px; background: white; border-left: 2px solid #808080; display: flex; flex-direction: column; height: 100%; }
         .history-header { background: #000080; color: white; padding: 6px 8px; font-weight: bold; font-size: 12px; flex-shrink: 0; }
         .history-list { flex: 1; overflow-y: auto; }
@@ -1067,9 +1069,13 @@
                 </div>
                 <div class="prescription-footer" style="margin-top:3px;">
                     <div class="usage-text">用法: 水煎服，日一剂，早晚分服</div>
-                    <div class="signature-row">
-                        <span>医师: <span id="paperDoctor"></span>（签字）</span>
-                        <span>配方: ________ 复核: ________</span>
+                    <div class="signature-grid">
+                        <div class="signature-item">医师: <span id="paperDoctor"></span>（签字）</div>
+                        <div class="signature-item">审核: ________</div>
+                        <div class="signature-item">调配: ________</div>
+                        <div class="signature-item">核对: ________</div>
+                        <div class="signature-item">发药: ________</div>
+                        <div class="signature-item">金额: ________ 元</div>
                     </div>
                 </div>
             </div>
@@ -6951,6 +6957,8 @@ if (window.Permission) {
         .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 14px; color: #000; }
         .usage-text { margin-bottom: 10px; font-size: 14px; color: #000; font-weight: bold; }
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
+        .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
+        .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
     </style>
 </head>
 <body>

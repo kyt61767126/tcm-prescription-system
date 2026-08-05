@@ -35,6 +35,8 @@ body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; display: f
 .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 14px; color: #000; }
 .usage-text { margin-bottom: 10px; font-size: 14px; color: #000; font-weight: bold; }
 .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
+.signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
+.signature-item { font-size: 14px; color: #000; padding: 2px 0; }
 </style></head><body><div class="prescription-paper">${content}</div></body></html>`;
         },
 
