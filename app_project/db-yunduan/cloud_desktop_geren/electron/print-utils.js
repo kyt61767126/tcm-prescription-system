@@ -22,19 +22,19 @@
 
             return `<!DOCTYPE html><html><head><title>打印处方</title><style>
 @page { size: ${pageSize}; margin: 0; }
-body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-.prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 15mm; margin: 0 auto; box-sizing: border-box; }
-.clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #2c5530; margin-bottom: 10px; letter-spacing: 2px; }
-.prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #8b0000; margin-bottom: 12px; letter-spacing: 4px; }
-.prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; }
+body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
+.prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 20mm 15mm; margin: 0 auto; box-sizing: border-box; }
+.clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+.prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
+.prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; color: #000; }
 .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
 .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
-.prescription-line { padding: 5px 0; font-size: 16px; text-align: center; font-weight: 500; }
-.rp-mark { font-size: 26px; font-weight: bold; font-style: italic; color: #8b0000; }
-.dose-count { text-align: right; font-size: 15px; color: #000080; font-weight: bold; }
-.prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 14px; }
-.usage-text { margin-bottom: 10px; font-size: 14px; }
-.signature-row { display: flex; justify-content: space-between; font-size: 14px; }
+.prescription-line { padding: 5px 0; font-size: 15px; text-align: center; font-weight: 500; color: #000; }
+.rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
+.dose-count { text-align: right; font-size: 15px; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
+.prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 14px; color: #000; }
+.usage-text { margin-bottom: 10px; font-size: 14px; color: #000; font-weight: bold; }
+.signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
 </style></head><body><div class="prescription-paper">${content}</div></body></html>`;
         },
 
