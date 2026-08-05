@@ -26,7 +26,13 @@ body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; display: f
 .prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 20mm 15mm; margin: 0 auto; box-sizing: border-box; }
 .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
 .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
-.prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 14px; color: #000; }
+.prescription-info { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 14px; color: #000; }
+.prescription-info > div { white-space: nowrap; text-align: center; min-width: 0; }
+.prescription-info > div:nth-child(1) { grid-column: 1 / 3; }
+.prescription-info > div:nth-child(2) { grid-column: 3 / 5; }
+.prescription-info > div:nth-child(3) { grid-column: 5 / 7; }
+.prescription-info > div:nth-child(4) { grid-column: 1 / 4; }
+.prescription-info > div:nth-child(5) { grid-column: 4 / 7; }
 .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
 .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
 .prescription-line { padding: 5px 0; font-size: 15px; text-align: center; font-weight: 500; color: #000; }
