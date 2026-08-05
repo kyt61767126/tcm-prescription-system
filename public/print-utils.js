@@ -42,7 +42,7 @@ body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; display: f
 .prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 14px; color: #000; }
 .usage-text { margin-bottom: 6px; font-size: 14px; color: #000; font-weight: bold; white-space: nowrap; border: none; text-decoration: none; }
 .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
-.signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
+.signature-grid { display: grid; grid-template-columns: 4fr 3fr 3fr; gap: 6px 10px; margin-top: 8px; }
 .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
 .signature-item:nth-child(1) { text-align: left; }
 .signature-item:nth-child(2) { text-align: center; }

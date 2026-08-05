@@ -97,7 +97,7 @@
         .prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 14px; color: #000; }
         .usage-text { margin-bottom: 6px; font-size: 14px; color: #000; font-weight: bold; white-space: nowrap; border: none; text-decoration: none; }
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
-        .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
+        .signature-grid { display: grid; grid-template-columns: 4fr 3fr 3fr; gap: 6px 10px; margin-top: 8px; }
         .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
         .right-panel { width: 32%; min-width: 220px; max-width: 340px; background: white; border-left: 2px solid #808080; display: flex; flex-direction: column; height: 100%; }
         .history-header { background: #000080; color: white; padding: 6px 8px; font-weight: bold; font-size: 12px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
@@ -4625,7 +4625,7 @@ let currentUser = null;
         .prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 14px; color: #000; }
         .usage-text { margin-bottom: 6px; font-size: 14px; color: #000; font-weight: bold; white-space: nowrap; border: none; text-decoration: none; }
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
-        .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
+        .signature-grid { display: grid; grid-template-columns: 4fr 3fr 3fr; gap: 6px 10px; margin-top: 8px; }
         .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
         .signature-item:nth-child(1) { text-align: left; }
         .signature-item:nth-child(2) { text-align: center; }
@@ -4942,10 +4942,10 @@ let currentUser = null;
             
             // 医师签名和配方复核
             ctx.fillText('医师: ' + (record.doctorName || ''), 40, lastY + 60);
-            ctx.fillText('金额:', 320, lastY + 60);
+            ctx.fillText('金额:', 415, lastY + 60);
             ctx.fillText('审核:', 600, lastY + 60);
             ctx.fillText('调配:', 40, lastY + 90);
-            ctx.fillText('核对:', 320, lastY + 90);
+            ctx.fillText('核对:', 415, lastY + 90);
             ctx.fillText('发药:', 600, lastY + 90);
             
             // 生成图片数据
