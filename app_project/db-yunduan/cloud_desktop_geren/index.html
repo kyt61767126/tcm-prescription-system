@@ -6938,19 +6938,19 @@ if (window.Permission) {
     <title>打印处方</title>
     <style>
         @page { size: ${pageSize}; margin: 0; }
-        body { font-family: SimSun, serif; padding: 0; margin: 0; }
+        body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
         .prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 15mm; margin: 0 auto; box-sizing: border-box; }
-        .clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
-        .prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
-        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 12px; }
-        .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 180px; margin-top: 8px; }
+        .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #2c5530; margin-bottom: 10px; letter-spacing: 2px; }
+        .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #8b0000; margin-bottom: 12px; letter-spacing: 4px; }
+        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; }
+        .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
         .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
-        .prescription-line { padding: 3px 0; font-size: 13px; text-align: center; }
-        .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #8b0000; }
-        .dose-count { text-align: right; font-size: 13px; color: #000080; }
-        .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 12px; }
-        .usage-text { margin-bottom: 10px; }
-        .signature-row { display: flex; justify-content: space-between; }
+        .prescription-line { padding: 5px 0; font-size: 16px; text-align: center; font-weight: 500; }
+        .rp-mark { font-size: 26px; font-weight: bold; font-style: italic; color: #8b0000; }
+        .dose-count { text-align: right; font-size: 15px; color: #000080; font-weight: bold; }
+        .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 14px; }
+        .usage-text { margin-bottom: 10px; font-size: 14px; }
+        .signature-row { display: flex; justify-content: space-between; font-size: 14px; }
     </style>
 </head>
 <body>
