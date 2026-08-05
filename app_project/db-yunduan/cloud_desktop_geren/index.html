@@ -98,7 +98,8 @@
         .prescription-paper { background: white; width: 148mm; height: 210mm; padding: 20mm 15mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', '宋体', serif; box-sizing: border-box; position: relative; overflow: hidden; line-height: 1.8; }
         .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
-        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; color: #000; }
+        .prescription-info { display: grid; grid-template-columns: 0.8fr 1.2fr 1fr; gap: 4px 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; color: #000; }
+        .prescription-info > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; }
         .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
         .prescription-line { padding: 5px 0; font-size: 15px; text-align: center; justify-content: center; align-items: center; font-weight: 500; color: #000; }
@@ -1070,7 +1071,7 @@
                 </div>
                 <div class="prescription-footer" style="margin-top:3px;">
                     <div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌食生冷辛辣</div>
-                    <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+                    <div class="signature-grid" style="grid-template-columns: 0.8fr 1.6fr 0.8fr;">
                         <div class="signature-item">医师: <span id="paperDoctor"></span></div>
                         <div class="signature-item"><span class="sign-line"></span></div>
                         <div class="signature-item">金额: ________ 元</div>
@@ -6952,7 +6953,8 @@ if (window.Permission) {
         .prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 20mm 15mm; margin: 0 auto; box-sizing: border-box; }
         .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
-        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; color: #000; }
+        .prescription-info { display: grid; grid-template-columns: 0.8fr 1.2fr 1fr; gap: 4px 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; color: #000; }
+        .prescription-info > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
         .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
         .prescription-line { padding: 5px 0; font-size: 15px; text-align: center; font-weight: 500; color: #000; }
