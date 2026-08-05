@@ -46,7 +46,7 @@ body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; display: f
 .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
 .signature-item:nth-child(1) { text-align: left; }
 .signature-item:nth-child(2) { text-align: center; }
-.signature-item:nth-child(3) { text-align: right; }
+.signature-item:nth-child(3) { text-align: right; padding-right: 50%; box-sizing: border-box; }
 </style></head><body><div class="prescription-paper">${content}</div></body></html>`;
         },
 
