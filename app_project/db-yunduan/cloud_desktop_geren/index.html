@@ -1048,7 +1048,6 @@
                     <div>姓名: <span id="paperName"></span></div>
                     <div>性别: <span id="paperGender"></span></div>
                     <div>年龄: <span id="paperAge"></span>岁</div>
-                    <div>科别: 中医科</div>
                     <div>门诊号: <span id="paperClinicNo"></span></div>
                     <div>日期: <span id="paperDate"></span></div>
                 </div>
@@ -1070,12 +1069,12 @@
                 </div>
                 <div class="prescription-footer" style="margin-top:3px;">
                     <div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌生冷辛辣</div>
-                    <div class="signature-grid" style="grid-template-columns: 1fr 1fr;">
+                    <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr;">
                         <div class="signature-item">医师: <span id="paperDoctor"></span></div>
-                        <div class="signature-item">金额: ______ 元</div>
-                    </div>
-                    <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr; margin-top:4px;">
+                        <div class="signature-item">金额: 元</div>
                         <div class="signature-item">审核:</div>
+                    </div>
+                    <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:4px;">
                         <div class="signature-item">调配:</div>
                         <div class="signature-item">核对:</div>
                         <div class="signature-item">发药:</div>
@@ -7321,7 +7320,6 @@ if (window.Permission) {
             ctx.fillText('姓名: ' + (record.patientName || ''), 40, 170);
             ctx.fillText('性别: ' + (record.patientGender || ''), 260, 170);
             ctx.fillText('年龄: ' + (record.patientAge || '') + '岁', 420, 170);
-            ctx.fillText('科别: 中医科', 560, 170);
             
             // 患者信息第二行
             ctx.fillText('门诊号: ' + (currentPrescriptionNo || record.prescriptionNo || ''), 40, 200);
@@ -7402,9 +7400,12 @@ if (window.Permission) {
             ctx.fillText('用法：水煎服，每日 1 剂，早晚分温服，忌生冷辛辣', 40, lastY + 30);
             
             // 医师签名和配方复核
-            ctx.fillText('医师: ' + (record.doctorName || '') + '（签字）', 40, lastY + 60);
-            ctx.textAlign = 'right';
-            ctx.fillText('配方:    复核:', width - 40, lastY + 60);
+            ctx.fillText('医师: ' + (record.doctorName || ''), 40, lastY + 60);
+            ctx.fillText('金额: 元', 320, lastY + 60);
+            ctx.fillText('审核:', 600, lastY + 60);
+            ctx.fillText('调配:', 40, lastY + 90);
+            ctx.fillText('核对:', 320, lastY + 90);
+            ctx.fillText('发药:', 600, lastY + 90);
             
             // 保存图片到本地（按月创建文件夹）
             saveImageLocally(canvas, record, currentPrescriptionNo);
