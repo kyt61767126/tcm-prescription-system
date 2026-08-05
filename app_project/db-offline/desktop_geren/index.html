@@ -4384,6 +4384,9 @@ if (window.Permission) {
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
         .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
         .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
+        .signature-item:nth-child(1) { text-align: left; }
+        .signature-item:nth-child(2) { text-align: center; }
+        .signature-item:nth-child(3) { text-align: right; }
     </style></head><body><div class="prescription-paper">${printContent}</div></body></html>`;
             if (window.AndroidNative && window.AndroidNative.printHtml) {
                 window.AndroidNative.printHtml(html);
