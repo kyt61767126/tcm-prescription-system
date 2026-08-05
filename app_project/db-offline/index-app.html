@@ -3511,7 +3511,6 @@ let currentUser = null;
         }
 
         function showSearchDropdown(element, query, column) {
-            // 立即设置位置（与云端APP一致，避免debounce延迟导致键盘弹出后位置变化）
             const dropdown = DOM_CACHE.medicineSearchDropdown;
             if (hideSearchTimer) { clearTimeout(hideSearchTimer); hideSearchTimer = null; }
             const rect = element.getBoundingClientRect();
@@ -3519,80 +3518,87 @@ let currentUser = null;
             dropdown.style.top = (rect.bottom + 2) + 'px';
             dropdown.style.width = (rect.width) + 'px';
 
-            if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-            searchDebounceTimer = setTimeout(() => {
-                if (!query.trim()) {
-                    dropdown.style.display = 'none';
-                    return;
-                }
-                
-                let filtered = [];
-                const sanitizedQuery = query.replace(/[<>\"\'&]/g, '').toLowerCase();
-                const maxResults = 50;
+            if (!query.trim()) {
+                dropdown.style.display = 'none';
+                return;
+            }
 
-                if (column === 'code') {
-                    if (medicineCodeIndex.size > 0) {
-                        for (const [code, meds] of medicineCodeIndex) {
-                            if (code.startsWith(sanitizedQuery)) {
-                                filtered.push(...meds);
-                                if (filtered.length >= maxResults) break;
-                            }
-                        }
-                    } else {
-                        for (const m of medicines) {
-                            if (m.code && m.code.toLowerCase().startsWith(sanitizedQuery)) {
-                                filtered.push(m);
-                                if (filtered.length >= maxResults) break;
-                            }
+            let filtered = [];
+            const sanitizedQuery = query.replace(/[<>\"\'&]/g, '').toLowerCase();
+            const maxResults = 50;
+
+            if (column === 'code') {
+                if (medicineCodeIndex.size > 0) {
+                    for (const [code, meds] of medicineCodeIndex) {
+                        if (code.startsWith(sanitizedQuery)) {
+                            filtered.push(...meds);
+                            if (filtered.length >= maxResults) break;
                         }
                     }
                 } else {
                     for (const m of medicines) {
-                        if (m.name && m.name.includes(sanitizedQuery)) {
+                        if (m.code && m.code.toLowerCase().startsWith(sanitizedQuery)) {
                             filtered.push(m);
                             if (filtered.length >= maxResults) break;
                         }
                     }
                 }
-                
-                const existingNames = new Set(prescriptionItems.map(item => item.name));
-                filtered = filtered.filter(m => !existingNames.has(m.name));
-
-                filtered.sort((a, b) => {
-                    const aFreq = medicineFrequency[a.name] || 0;
-                    const bFreq = medicineFrequency[b.name] || 0;
-                    if (aFreq !== bFreq) return bFreq - aFreq;
-                    const aNameLen = (a.name || '').length;
-                    const bNameLen = (b.name || '').length;
-                    if (aNameLen !== bNameLen) return aNameLen - bNameLen;
-                    return (a.code || '').length - (b.code || '').length;
-                });
-
-                filtered = filtered.slice(0, 20);
-
-                if (filtered.length >0) {
-                    selectedSearchIndex = 0;
-                    dropdown.innerHTML = filtered.map((m,i) =>{
-                        const safeName = (m.name || '').replace(/[<>\"\'&]/g, '');
-                        const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
-                        const safePrice = parseFloat(m.price) || 0;
-                        const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
-                        return `<div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}"
-                                onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}</div>`;
-                    }).join('');
-                    dropdown.style.display = 'block';
-                    // ★ 自适应位置：下方空间不足时自动翻到输入框上方显示（修复遮挡）
-                    try {
-                        const ddRect = dropdown.getBoundingClientRect();
-                        const inputRect = element.getBoundingClientRect();
-                        if (ddRect.bottom > window.innerHeight && inputRect.top > ddRect.height + 4) {
-                            dropdown.style.top = Math.max(2, inputRect.top - ddRect.height - 2) + 'px';
-                        }
-                    } catch(e) {}
-                } else {
-                    dropdown.style.display = 'none';
+            } else {
+                for (const m of medicines) {
+                    if (m.name && m.name.includes(sanitizedQuery)) {
+                        filtered.push(m);
+                        if (filtered.length >= maxResults) break;
+                    }
                 }
-            }, 150);
+            }
+
+            const existingNames = new Set(prescriptionItems.map(item => item.name));
+            filtered = filtered.filter(m => !existingNames.has(m.name));
+
+            filtered.sort((a, b) => {
+                const aPriority = a.priority_use ? 1 : 0;
+                const bPriority = b.priority_use ? 1 : 0;
+                if (aPriority !== bPriority) return bPriority - aPriority;
+                const aFreq = medicineFrequency[a.name] || 0;
+                const bFreq = medicineFrequency[b.name] || 0;
+                if (aFreq !== bFreq) return bFreq - aFreq;
+                const aNameLen = (a.name || '').length;
+                const bNameLen = (b.name || '').length;
+                if (aNameLen !== bNameLen) return aNameLen - bNameLen;
+                const aCodeLen = (a.code || '').length;
+                const bCodeLen = (b.code || '').length;
+                return aCodeLen - bCodeLen;
+            });
+
+            filtered = filtered.slice(0, 20);
+
+            if (filtered.length > 0) {
+                selectedSearchIndex = 0;
+                dropdown.innerHTML = filtered.map((m,i) => {
+                    const safeName = (m.name || '').replace(/[<>\"\'&]/g, '');
+                    const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
+                    const safePrice = parseFloat(m.price) || 0;
+                    const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
+                    const priorityMark = m.priority_use ? '<span style="color:#e65100;font-weight:bold;" title="优先使用">★</span> ' : '';
+                    return `
+                        <div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}" ${m.priority_use ? 'style="background:#fff8e1;"' : ''}
+                            onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">
+                            ${priorityMark}${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}
+                        </div>
+                    `;
+                }).join('');
+                dropdown.style.display = 'block';
+                // ★ 自适应位置：下方空间不足时自动翻到输入框上方显示（修复遮挡）
+                try {
+                    const ddRect = dropdown.getBoundingClientRect();
+                    const inputRect = element.getBoundingClientRect();
+                    if (ddRect.bottom > window.innerHeight && inputRect.top > ddRect.height + 4) {
+                        dropdown.style.top = Math.max(2, inputRect.top - ddRect.height - 2) + 'px';
+                    }
+                } catch(e) {}
+            } else {
+                dropdown.style.display = 'none';
+            }
         }
 
         function tryHideSearch() {
