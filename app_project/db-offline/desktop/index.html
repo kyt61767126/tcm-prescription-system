@@ -78,18 +78,18 @@
         .search-item { padding: 5px 10px; cursor: pointer; font-size: 11px; }
         .search-item:hover, .search-item.selected { background: #000080; color: white; }
         .center-panel { flex: 1; background: #b0b0b0; padding: 10px; overflow: auto; display: flex; justify-content: center; align-items: flex-start; min-width: 350px; }
-        .prescription-paper { background: white; width: 148mm; height: 210mm; padding: 15mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', serif; box-sizing: border-box; position: relative; overflow: hidden; }
-        .clinic-name { text-align: center; font-size: 18px; font-weight: bold; color: #2c5530; margin-bottom: 10px; }
-        .prescription-title { text-align: center; font-size: 18px; font-weight: bold; color: #8b0000; margin-bottom: 12px; }
-        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 12px; }
-        .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 100px; }
+        .prescription-paper { background: white; width: 148mm; height: 210mm; padding: 15mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', '宋体', serif; box-sizing: border-box; position: relative; overflow: hidden; line-height: 1.8; }
+        .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #2c5530; margin-bottom: 10px; letter-spacing: 2px; }
+        .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #8b0000; margin-bottom: 12px; letter-spacing: 4px; }
+        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; }
+        .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; }
         .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
-        .prescription-line { padding: 3px 0; font-size: 13px; text-align: center; justify-content: center; align-items: center; }
-        .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #8b0000; }
-        .dose-count { text-align: right; font-size: 13px; color: #000080; }
-        .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 12px; }
-        .usage-text { margin-bottom: 10px; }
-        .signature-row { display: flex; justify-content: space-between; }
+        .prescription-line { padding: 5px 0; font-size: 16px; text-align: center; justify-content: center; align-items: center; font-weight: 500; }
+        .rp-mark { font-size: 26px; font-weight: bold; font-style: italic; color: #8b0000; }
+        .dose-count { text-align: right; font-size: 15px; color: #000080; font-weight: bold; }
+        .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 14px; }
+        .usage-text { margin-bottom: 10px; font-size: 14px; }
+        .signature-row { display: flex; justify-content: space-between; font-size: 14px; }
         .right-panel { width: 32%; min-width: 220px; max-width: 340px; background: white; border-left: 2px solid #808080; display: flex; flex-direction: column; height: 100%; }
         .history-header { background: #000080; color: white; padding: 6px 8px; font-weight: bold; font-size: 12px; flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; }
         .history-refresh-btn { background: none; border: none; color: white; cursor: pointer; font-size: 13px; padding: 0 4px; line-height: 1; }
@@ -264,17 +264,17 @@
                 box-shadow: 0 2px 8px rgba(0,0,0,0.15);
             }
             
-            .clinic-name { font-size: 15px; margin-bottom: 4px; }
+            .clinic-name { font-size: 18px; margin-bottom: 4px; letter-spacing: 2px; }
             .prescription-title { font-size: 18px; margin-bottom: 8px; letter-spacing: 4px; }
-            .prescription-info { font-size: 11px; gap: 3px 6px; margin-bottom: 6px; padding-bottom: 4px; }
-            .prescription-grid { min-height: 60px; padding: 3px 0; }
+            .prescription-info { font-size: 12px; gap: 3px 6px; margin-bottom: 6px; padding-bottom: 4px; }
+            .prescription-grid { min-height: 80px; padding: 3px 0; }
             .prescription-grid-inner { gap: 1px 3px; }
-            .prescription-line { padding: 1px 0; font-size: 11px; }
-            .rp-mark { font-size: 16px; }
-            .dose-count { font-size: 11px; }
-            .prescription-footer { margin-top: 6px; padding-top: 4px; font-size: 10px; }
-            .usage-text { margin-bottom: 4px; font-size: 10px; }
-            .signature-row { font-size: 10px; }
+            .prescription-line { padding: 2px 0; font-size: 13px; }
+            .rp-mark { font-size: 20px; }
+            .dose-count { font-size: 13px; }
+            .prescription-footer { margin-top: 6px; padding-top: 4px; font-size: 12px; }
+            .usage-text { margin-bottom: 4px; font-size: 12px; }
+            .signature-row { font-size: 12px; }
             
             /* 患者信息区紧凑化 */
             .patient-section, .symptom-section, .diagnosis-section, .action-buttons-section {
@@ -480,17 +480,17 @@
                 padding: 12px;
             }
             
-            .clinic-name { font-size: 14px; margin-bottom: 3px; letter-spacing: 1px; }
+            .clinic-name { font-size: 16px; margin-bottom: 3px; letter-spacing: 1px; }
             .prescription-title { font-size: 16px; margin-bottom: 6px; letter-spacing: 3px; }
-            .prescription-info { font-size: 10px; gap: 2px 4px; margin-bottom: 4px; padding-bottom: 3px; }
-            .prescription-grid { min-height: 50px; padding: 2px 0; }
+            .prescription-info { font-size: 11px; gap: 2px 4px; margin-bottom: 4px; padding-bottom: 3px; }
+            .prescription-grid { min-height: 60px; padding: 2px 0; }
             .prescription-grid-inner { gap: 1px 2px; }
-            .prescription-line { padding: 1px 0; font-size: 10px; }
-            .rp-mark { font-size: 14px; }
-            .dose-count { font-size: 10px; }
-            .prescription-footer { margin-top: 4px; padding-top: 3px; font-size: 9px; }
-            .usage-text { margin-bottom: 3px; font-size: 9px; }
-            .signature-row { font-size: 9px; flex-wrap: wrap; gap: 2px; }
+            .prescription-line { padding: 1px 0; font-size: 11px; }
+            .rp-mark { font-size: 17px; }
+            .dose-count { font-size: 11px; }
+            .prescription-footer { margin-top: 4px; padding-top: 3px; font-size: 10px; }
+            .usage-text { margin-bottom: 3px; font-size: 10px; }
+            .signature-row { font-size: 10px; flex-wrap: wrap; gap: 2px; }
             
             .mobile-nav-item {
                 font-size: 10px;
