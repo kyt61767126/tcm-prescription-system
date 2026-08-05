@@ -26,14 +26,14 @@ body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; display: f
 .prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 20mm 15mm; margin: 0 auto; box-sizing: border-box; }
 .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
 .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
-.prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; color: #000; }
+.prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 14px; color: #000; }
 .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
 .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
 .prescription-line { padding: 5px 0; font-size: 15px; text-align: center; font-weight: 500; color: #000; }
 .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
 .dose-count { text-align: right; font-size: 15px; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
-.prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 14px; color: #000; }
-.usage-text { margin-bottom: 10px; font-size: 14px; color: #000; font-weight: bold; }
+.prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 14px; color: #000; }
+.usage-text { margin-bottom: 6px; font-size: 14px; color: #000; font-weight: bold; white-space: nowrap; border: none; text-decoration: none; }
 .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
 .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
 .signature-item { font-size: 14px; color: #000; padding: 2px 0; }

@@ -98,15 +98,15 @@
         .prescription-paper { background: white; width: 148mm; height: 210mm; padding: 20mm 15mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', '宋体', serif; box-sizing: border-box; position: relative; overflow: hidden; line-height: 1.8; }
         .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
-        .prescription-info { display: grid; grid-template-columns: 0.8fr 1.2fr 1fr; gap: 4px 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; color: #000; }
-        .prescription-info > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 14px; color: #000; }
+        .prescription-info > div { white-space: nowrap; text-align: center; min-width: 0; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; }
         .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
         .prescription-line { padding: 5px 0; font-size: 15px; text-align: center; justify-content: center; align-items: center; font-weight: 500; color: #000; }
         .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
         .dose-count { text-align: right; font-size: 15px; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
-        .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 14px; color: #000; }
-        .usage-text { margin-bottom: 10px; font-size: 14px; color: #000; font-weight: bold; }
+        .prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 14px; color: #000; }
+        .usage-text { margin-bottom: 6px; font-size: 14px; color: #000; font-weight: bold; white-space: nowrap; border: none; text-decoration: none; }
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
         .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
         .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
@@ -275,14 +275,14 @@
             
             .clinic-name { font-size: 18px; margin-bottom: 4px; letter-spacing: 2px; }
             .prescription-title { font-size: 18px; margin-bottom: 8px; letter-spacing: 4px; }
-            .prescription-info { font-size: 12px; gap: 3px 6px; margin-bottom: 6px; padding-bottom: 4px; }
+            .prescription-info { font-size: 12px; gap: 1px 2px; margin-bottom: 6px; padding-bottom: 3px; }
             .prescription-grid { min-height: 80px; padding: 3px 0; }
             .prescription-grid-inner { gap: 1px 3px; }
             .prescription-line { padding: 2px 0; font-size: 13px; }
             .rp-mark { font-size: 20px; }
             .dose-count { font-size: 13px; }
-            .prescription-footer { margin-top: 6px; padding-top: 4px; font-size: 12px; }
-            .usage-text { margin-bottom: 4px; font-size: 12px; }
+            .prescription-footer { margin-top: 6px; padding-top: 3px; font-size: 12px; }
+            .usage-text { margin-bottom: 4px; font-size: 12px; white-space: nowrap; border: none; text-decoration: none; }
             .signature-row { font-size: 12px; }
             
             /* 患者信息区紧凑化 */
@@ -524,14 +524,14 @@
             
             .clinic-name { font-size: 16px; margin-bottom: 3px; letter-spacing: 1px; }
             .prescription-title { font-size: 16px; margin-bottom: 6px; letter-spacing: 3px; }
-            .prescription-info { font-size: 11px; gap: 2px 4px; margin-bottom: 4px; padding-bottom: 3px; }
+            .prescription-info { font-size: 11px; gap: 1px 2px; margin-bottom: 4px; padding-bottom: 2px; }
             .prescription-grid { min-height: 60px; padding: 2px 0; }
             .prescription-grid-inner { gap: 1px 2px; }
             .prescription-line { padding: 1px 0; font-size: 11px; }
             .rp-mark { font-size: 17px; }
             .dose-count { font-size: 11px; }
-            .prescription-footer { margin-top: 4px; padding-top: 3px; font-size: 10px; }
-            .usage-text { margin-bottom: 3px; font-size: 10px; }
+            .prescription-footer { margin-top: 4px; padding-top: 2px; font-size: 10px; }
+            .usage-text { margin-bottom: 3px; font-size: 10px; white-space: nowrap; border: none; text-decoration: none; }
             .signature-row { font-size: 10px; flex-wrap: wrap; gap: 2px; }
             
             .mobile-nav-item {
@@ -1070,7 +1070,7 @@
                     <div id="prescriptionLines"></div>
                 </div>
                 <div class="prescription-footer" style="margin-top:3px;">
-                    <div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌食生冷辛辣</div>
+                    <div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌生冷辛辣</div>
                     <div class="signature-grid" style="grid-template-columns: 0.8fr 1.6fr 0.8fr;">
                         <div class="signature-item">医师: <span id="paperDoctor"></span></div>
                         <div class="signature-item"><span class="sign-line"></span></div>
@@ -6953,15 +6953,15 @@ if (window.Permission) {
         .prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 20mm 15mm; margin: 0 auto; box-sizing: border-box; }
         .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
-        .prescription-info { display: grid; grid-template-columns: 0.8fr 1.2fr 1fr; gap: 4px 6px; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 6px; font-size: 14px; color: #000; }
-        .prescription-info > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+        .prescription-info { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 14px; color: #000; }
+        .prescription-info > div { white-space: nowrap; text-align: center; min-width: 0; }
         .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
         .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
         .prescription-line { padding: 5px 0; font-size: 15px; text-align: center; font-weight: 500; color: #000; }
         .rp-mark { font-size: 22px; font-weight: bold; font-style: italic; color: #000; font-family: 'Times New Roman', serif; }
         .dose-count { text-align: right; font-size: 15px; color: #000; font-weight: bold; font-family: 'Times New Roman', serif; }
-        .prescription-footer { margin-top: 12px; padding-top: 6px; border-top: 1px solid #000; font-size: 14px; color: #000; }
-        .usage-text { margin-bottom: 10px; font-size: 14px; color: #000; font-weight: bold; }
+        .prescription-footer { margin-top: 8px; padding-top: 4px; border-top: none; font-size: 14px; color: #000; }
+        .usage-text { margin-bottom: 6px; font-size: 14px; color: #000; font-weight: bold; white-space: nowrap; border: none; text-decoration: none; }
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
         .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
         .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
@@ -7402,7 +7402,7 @@ if (window.Permission) {
             // 用法用量
             ctx.font = '20px SimSun, serif';
             ctx.lineWidth = 1;
-            ctx.fillText('用法：水煎服，每日 1 剂，早晚分温服，忌食生冷辛辣', 40, lastY + 30);
+            ctx.fillText('用法：水煎服，每日 1 剂，早晚分温服，忌生冷辛辣', 40, lastY + 30);
             
             // 医师签名和配方复核
             ctx.fillText('医师: ' + (record.doctorName || '') + '（签字）', 40, lastY + 60);
