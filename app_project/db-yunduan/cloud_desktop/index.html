@@ -109,8 +109,7 @@
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
         .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
         .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
-        .signature-item.signature-doctor { grid-column: 1 / -1; display: flex; align-items: baseline; }
-        .signature-item.signature-doctor .sign-line { flex: 1; border-bottom: 1px solid #000; margin-left: 8px; min-width: 60px; height: 1em; }
+        .signature-item .sign-line { display: block; border-bottom: 1px solid #000; width: 100%; height: 1em; margin-top: 4px; }
         .right-panel { width: 32%; min-width: 220px; max-width: 340px; background: white; border-left: 2px solid #808080; display: flex; flex-direction: column; height: 100%; }
         .history-header { background: #000080; color: white; padding: 6px 8px; font-weight: bold; font-size: 12px; flex-shrink: 0; }
         .history-list { flex: 1; overflow-y: auto; }
@@ -1049,7 +1048,7 @@
                     <div>姓名: <span id="paperName"></span></div>
                     <div>性别: <span id="paperGender"></span></div>
                     <div>年龄: <span id="paperAge"></span>岁</div>
-                    <div>科别: 中医内科</div>
+                    <div>科别: 中医科</div>
                     <div>门诊号: <span id="paperClinicNo"></span></div>
                     <div>日期: <span id="paperDate"></span></div>
                 </div>
@@ -1071,13 +1070,16 @@
                 </div>
                 <div class="prescription-footer" style="margin-top:3px;">
                     <div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌食生冷辛辣</div>
-                    <div class="signature-grid">
-                        <div class="signature-item signature-doctor">医师: <span id="paperDoctor"></span><span class="sign-line"></span></div>
+                    <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr;">
+                        <div class="signature-item">医师: <span id="paperDoctor"></span></div>
+                        <div class="signature-item"><span class="sign-line"></span></div>
+                        <div class="signature-item">金额: ________ 元</div>
+                    </div>
+                    <div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr 1fr; margin-top:4px;">
                         <div class="signature-item">审核: ________</div>
                         <div class="signature-item">调配: ________</div>
                         <div class="signature-item">核对: ________</div>
                         <div class="signature-item">发药: ________</div>
-                        <div class="signature-item">金额: ________ 元</div>
                     </div>
                 </div>
             </div>
@@ -6961,8 +6963,7 @@ if (window.Permission) {
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
         .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
         .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
-        .signature-item.signature-doctor { grid-column: 1 / -1; display: flex; align-items: baseline; }
-        .signature-item.signature-doctor .sign-line { flex: 1; border-bottom: 1px solid #000; margin-left: 8px; min-width: 60px; height: 1em; }
+        .signature-item .sign-line { display: block; border-bottom: 1px solid #000; width: 100%; height: 1em; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -7321,7 +7322,7 @@ if (window.Permission) {
             ctx.fillText('姓名: ' + (record.patientName || ''), 40, 170);
             ctx.fillText('性别: ' + (record.patientGender || ''), 260, 170);
             ctx.fillText('年龄: ' + (record.patientAge || '') + '岁', 420, 170);
-            ctx.fillText('科别: 中医内科', 560, 170);
+            ctx.fillText('科别: 中医科', 560, 170);
             
             // 患者信息第二行
             ctx.fillText('门诊号: ' + (currentPrescriptionNo || record.prescriptionNo || ''), 40, 200);
