@@ -5684,7 +5684,7 @@ if (window.Permission) {
         function finishInitUI(hasValidUser) {
             const now = new Date();
             currentPrescriptionDate = now.toDateString();
-            document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
+            document.getElementById('visitDate').value = now.getFullYear() + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + String(now.getDate()).padStart(2, '0');
             
             // 处方编号先留空，保存时由云端生成
             document.getElementById('prescriptionNo').value = '';
@@ -6862,10 +6862,10 @@ if (window.Permission) {
             renderPrescriptionTable();
             calculateAmount();
             // 恢复历史处方的日期和医师名到输入框
-            if (c.visitDate) c.visitDate.value = record.date || '';
+            if (c.visitDate) c.visitDate.value = (record.date || '').replace(/-/g, '/');
             if (c.doctorName) c.doctorName.value = record.doctorName || '';
             updatePrescriptionPaper();
-            if (c.paperDate) c.paperDate.textContent = record.date || '';
+            if (c.paperDate) c.paperDate.textContent = (record.date || '').replace(/-/g, '/');
         }
 
         function loadLastHistory() {
@@ -6925,7 +6925,7 @@ if (window.Permission) {
                 const no = generatePrescriptionNo();
                 safeSetVal(c.prescriptionNo, no);
                 safeSetText(c.paperClinicNo, no);
-                safeSetText(c.paperDate, new Date().toISOString().split('T')[0]);
+                safeSetText(c.paperDate, new Date().toISOString().split('T')[0].replace(/-/g, '/'));
             } catch(e) { console.warn('更新编号失败:', e); }
         }
 
@@ -7077,7 +7077,7 @@ if (window.Permission) {
 
                 const name = c.patientName ? c.patientName.value : '';
                 if (!name) {alert('请输入患者姓名！'); if (c.patientName) c.patientName.focus(); return;}
-                const currentDate = new Date().toISOString().split('T')[0];
+                const currentDate = new Date().toISOString().split('T')[0].replace(/-/g, '/');
                 if (c.visitDate) c.visitDate.value = currentDate;
                 if (c.paperDate) c.paperDate.textContent = currentDate;
                 const doseInput = c.doseCountInput || c.doseCountInput3;

@@ -3177,7 +3177,7 @@ let currentUser = null;
             // 不在init中调用loadData()，因为用户还没登录
             // loadData()会在handleLogin成功后调用
             const now = new Date();
-            document.getElementById('visitDate').value = now.toLocaleDateString('zh-CN');
+            document.getElementById('visitDate').value = now.getFullYear() + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + String(now.getDate()).padStart(2, '0');
             // 显示下一个可用编号（显示当前序号，不递增）
             const presNo = await generatePrescriptionNo();
             document.getElementById('prescriptionNo').value = presNo;
@@ -4481,7 +4481,7 @@ let currentUser = null;
             const _doctorNameEl = document.getElementById('doctorName');
             if (_doctorNameEl) _doctorNameEl.value = record.doctorName || '';
             updatePrescriptionPaper();
-            document.getElementById('paperDate').textContent = record.date || '';
+            document.getElementById('paperDate').textContent = (record.date || '').replace(/-/g, '/');
         }
 
         function loadLastHistory() {
