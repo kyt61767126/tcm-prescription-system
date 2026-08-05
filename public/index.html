@@ -122,6 +122,8 @@
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
         .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
         .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
+        .signature-item.signature-doctor { grid-column: 1 / -1; display: flex; align-items: baseline; }
+        .signature-item.signature-doctor .sign-line { flex: 1; border-bottom: 1px solid #000; margin-left: 8px; min-width: 60px; height: 1em; }
         .right-panel { width: 32%; min-width: 220px; max-width: 340px; background: white; border-left: 2px solid #808080; display: flex; flex-direction: column; height: 100%; }
         .history-header { background: #000080; color: white; padding: 6px 8px; font-weight: bold; font-size: 12px; flex-shrink: 0; }
         .history-list { flex: 1; overflow-y: auto; }
@@ -1029,9 +1031,9 @@
                     <div id="prescriptionLines"></div>
                 </div>
                 <div class="prescription-footer" style="margin-top:3px;">
-                    <div class="usage-text">用法: 水煎服，日一剂，早晚分服</div>
+                    <div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌食生冷辛辣</div>
                     <div class="signature-grid">
-                        <div class="signature-item">医师: <span id="paperDoctor"></span>（签字）</div>
+                        <div class="signature-item signature-doctor">医师: <span id="paperDoctor"></span><span class="sign-line"></span></div>
                         <div class="signature-item">审核: ________</div>
                         <div class="signature-item">调配: ________</div>
                         <div class="signature-item">核对: ________</div>
@@ -7206,6 +7208,8 @@ if (window.Permission) {
         .signature-row { display: flex; justify-content: space-between; font-size: 14px; color: #000; }
         .signature-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 10px; margin-top: 8px; }
         .signature-item { font-size: 14px; color: #000; padding: 2px 0; }
+        .signature-item.signature-doctor { grid-column: 1 / -1; display: flex; align-items: baseline; }
+        .signature-item.signature-doctor .sign-line { flex: 1; border-bottom: 1px solid #000; margin-left: 8px; min-width: 60px; height: 1em; }
     </style>
 </head>
 <body>
@@ -7594,7 +7598,7 @@ if (window.Permission) {
             // 用法用量
             ctx.font = '20px SimSun, serif';
             ctx.lineWidth = 1;
-            ctx.fillText('用法: 水煎服，日一剂，早晚分服', 40, lastY + 30);
+            ctx.fillText('用法：水煎服，每日 1 剂，早晚分温服，忌食生冷辛辣', 40, lastY + 30);
             
             // 医师签名和配方复核
             ctx.fillText('医师: ' + (record.doctorName || '') + '（签字）', 40, lastY + 60);
