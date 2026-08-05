@@ -31,8 +31,9 @@ body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; display: f
 .prescription-info > div:nth-child(1) { grid-column: 1 / 3; }
 .prescription-info > div:nth-child(2) { grid-column: 3 / 5; }
 .prescription-info > div:nth-child(3) { grid-column: 5 / 7; }
-.prescription-info > div:nth-child(4) { grid-column: 1 / 4; }
-.prescription-info > div:nth-child(5) { grid-column: 4 / 7; }
+.prescription-info > div:nth-child(4) { grid-column: 1 / 3; }
+.prescription-info > div:nth-child(5) { grid-column: 3 / 5; }
+.prescription-info > div:nth-child(6) { grid-column: 5 / 7; }
 .prescription-grid { border-top: 1px solid #000; border-bottom: 1px solid #000; min-height: 200px; margin-top: 8px; }
 .prescription-grid-inner { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 2px; }
 .prescription-line { padding: 5px 0; font-size: 15px; text-align: center; font-weight: 500; color: #000; }
