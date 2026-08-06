@@ -6864,8 +6864,8 @@ if (window.Permission) {
             while (prescriptionItems.length < 15) addEmptyRow();
             renderPrescriptionTable();
             calculateAmount();
-            // 恢复历史处方的日期和医师名到输入框
-            if (c.visitDate) c.visitDate.value = (record.date || '').replace(/-/g, '/');
+            // 规范：visitDate 日期输入框只显示最新（当天）日期且为只读，加载历史处方时不被历史日期覆盖
+            // 仅医师名恢复到输入框；历史处方的日期通过 paperDate（处方预览纸张）展示
             if (c.doctorName) c.doctorName.value = record.doctorName || '';
             updatePrescriptionPaper();
             if (c.paperDate) c.paperDate.textContent = (record.date || '').replace(/-/g, '/');

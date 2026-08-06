@@ -7118,9 +7118,8 @@ if (window.Permission) {
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
-            // 恢复历史处方的日期和医师名到输入框
-            const _visitDateEl = document.getElementById('visitDate');
-            if (_visitDateEl) _visitDateEl.value = (record.date || '').replace(/-/g, '/');
+            // 规范：visitDate 日期输入框只显示最新（当天）日期且为只读，加载历史处方时不被历史日期覆盖
+            // 仅医师名恢复到输入框；历史处方的日期通过 paperDate（处方预览纸张）展示
             const _doctorNameEl = document.getElementById('doctorName');
             if (_doctorNameEl) _doctorNameEl.value = record.doctorName || '';
             updatePrescriptionPaper();
