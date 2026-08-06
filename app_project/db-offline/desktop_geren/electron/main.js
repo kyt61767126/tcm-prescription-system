@@ -1728,7 +1728,7 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
 
             printWin.loadURL(dataUrl);
 
-            // 页面加载完成后，等待布局和字体就绪，再调用 window.print()
+            // 页面加载完成后，等待布局和字体就绪，再调用打印
             printWin.webContents.once('did-finish-load', () => {
                 setTimeout(async () => {
                     try {
@@ -1737,9 +1737,20 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                             'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
                         );
                         await new Promise(r => setTimeout(r, 200));
-                        // 渲染进程同步调用 window.print()，弹出系统打印对话框
-                        // 对话框关闭后 window.print() 返回，executeJavaScript 的 Promise resolve
-                        await printWin.webContents.executeJavaScript('window.print();');
+                        // ★ 使用 webContents.print() 强制 A5 纸张，避免系统默认 A4 导致字体偏大
+                        await new Promise((resolvePrint) => {
+                            printWin.webContents.print({
+                                silent: false,
+                                printBackground: true,
+                                pageSize: 'A5',
+                                landscape: isLandscape
+                            }, (success, failureReason) => {
+                                if (!success) {
+                                    console.error('[print] 打印失败:', failureReason);
+                                }
+                                resolvePrint();
+                            });
+                        });
                         safeResolve(true);
                     } catch (e) {
                         console.error('[print] 打印失败:', e);
