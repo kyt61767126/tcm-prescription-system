@@ -45,11 +45,11 @@
             body { background: white; margin: 0; padding: 0; }
             .top-tabs, .left-panel, .right-panel, .bottom-bar, .tab-left-item, .action-buttons-section, .section-hint, .patient-section, .symptom-section, .diagnosis-section, .action-buttons-section, .mobile-nav, .mobile-action-bar { display: none !important; }
             .main-container { display: block !important; height: auto !important; width: 100% !important; overflow: visible !important; }
-            .center-panel { background: white !important; padding: 0 !important; margin: 0 auto !important; width: 148mm !important; max-width: 190mm !important; display: block !important; min-width: auto !important; }
-            .prescription-paper { width: 148mm !important; height: 210mm !important; padding: 15mm !important; margin: 0 auto !important; box-shadow: none !important; page-break-after: always !important; transform: none !important; }
-            @page { size: A4; margin: 10mm; }
+            .center-panel { background: white !important; padding: 0 !important; margin: 0 auto !important; width: 148mm !important; max-width: 148mm !important; display: block !important; min-width: auto !important; }
+            .prescription-paper { width: 148mm !important; height: 210mm !important; padding: 28mm 15mm 20mm !important; margin: 0 auto !important; box-shadow: none !important; page-break-after: always !important; transform: none !important; }
+            @page { size: A5; margin: 0; }
             .no-print, .history-header, .modal, .login-overlay { display: none !important; }
-            .prescription-paper { page-break-inside: avoid; max-width: 190mm !important; border: 1px solid #000 !important; }
+            .prescription-paper { page-break-inside: avoid; max-width: 148mm !important; border: none !important; }
             table { page-break-inside: auto; }
             tr { page-break-inside: avoid; }
             thead { display: table-header-group; }
@@ -108,7 +108,7 @@
         .search-item { padding: 5px 10px; cursor: pointer; font-size: 11px; }
         .search-item:hover, .search-item.selected { background: #000080; color: white; }
         .center-panel { flex: 1; background: #b0b0b0; padding: 10px; overflow: auto; display: flex; justify-content: center; align-items: flex-start; min-width: 350px; }
-        .prescription-paper { background: white; width: 148mm; height: 210mm; padding: 20mm 15mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', '宋体', serif; box-sizing: border-box; position: relative; overflow: hidden; line-height: 1.8; }
+        .prescription-paper { background: white; width: 148mm; height: 210mm; padding: 28mm 15mm 20mm; box-shadow: 3px 3px 10px rgba(0,0,0,0.3); font-family: 'SimSun', '宋体', serif; box-sizing: border-box; position: relative; overflow: hidden; line-height: 1.8; }
         .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
         .prescription-info { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 14px; color: #000; }

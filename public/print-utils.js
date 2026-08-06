@@ -23,7 +23,7 @@
             return `<!DOCTYPE html><html><head><title>打印处方</title><style>
 @page { size: ${pageSize}; margin: 0; }
 body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
-.prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 20mm 15mm; margin: 0 auto; box-sizing: border-box; }
+.prescription-paper { width: ${paperWidth}; height: ${paperHeight}; padding: 28mm 15mm 20mm; margin: 0 auto; box-sizing: border-box; }
 .clinic-name { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 10px; letter-spacing: 2px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
 .prescription-title { text-align: center; font-size: 22px; font-weight: bold; color: #000; margin-bottom: 12px; letter-spacing: 4px; font-family: 'KaiTi', '楷体_GB2312', '楷体', serif; }
 .prescription-info { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px 2px; margin-bottom: 8px; border-bottom: 1px solid #000; padding-bottom: 4px; font-size: 14px; color: #000; }
