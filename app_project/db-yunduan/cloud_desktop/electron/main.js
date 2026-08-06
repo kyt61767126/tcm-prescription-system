@@ -1712,9 +1712,11 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
         const isLandscape = orientation === 'landscape';
 
-        // 隐藏窗口（用户不可见）
+        // 隐藏窗口（用户不可见）- 宽度匹配A5纸(148mm≈559px@96dpi)，避免渲染视口与打印纸张不匹配导致字体缩放
         const printWin = new BrowserWindow({
             show: false,
+            width: isLandscape ? 794 : 559,
+            height: isLandscape ? 559 : 794,
             webPreferences: {
                 contextIsolation: true,
                 nodeIntegration: false
@@ -1722,16 +1724,9 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
         });
         printWin.setMenu(null);
 
-        // 注入打印样式（A5 横向/纵向 + 零边距）
-        let enrichedHtml = html;
-        const printStyle = `<style>@media print { @page { size: A5 ${isLandscape ? 'landscape' : 'portrait'}; margin: 0; } body { margin: 0; } }</style>`;
-        if (/<\/head>/i.test(enrichedHtml)) {
-            enrichedHtml = enrichedHtml.replace(/<\/head>/i, printStyle + '</head>');
-        } else {
-            enrichedHtml = printStyle + enrichedHtml;
-        }
-
-        const base64Html = Buffer.from(enrichedHtml, 'utf8').toString('base64');
+        // ★ htmlContent 已包含 @page { size: A5; margin: 0; } 规则，无需额外注入
+        // 旧方案注入的 body { margin: 0; } 会覆盖 htmlContent 的 body { margin: 0 auto; ... } 导致布局问题
+        const base64Html = Buffer.from(html, 'utf8').toString('base64');
         const dataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
 
         return new Promise((resolve) => {
@@ -1755,13 +1750,15 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                             'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
                         );
                         await new Promise(r => setTimeout(r, 200));
-                        // ★ 使用 webContents.print() 强制 A5 纸张，避免系统默认 A4 导致字体偏大
+                        // ★ 使用 webContents.print() 强制 A5 纸张 + 零边距，与网页端 @page { size: A5; margin: 0; } 完全一致
+                        // margins: { marginType: 'none' } 确保零边距，避免 Electron 默认边距导致内容缩放
                         await new Promise((resolvePrint) => {
                             printWin.webContents.print({
                                 silent: false,
                                 printBackground: true,
                                 pageSize: 'A5',
-                                landscape: isLandscape
+                                landscape: isLandscape,
+                                margins: { marginType: 'none' }
                             }, (success, failureReason) => {
                                 if (!success) {
                                     console.error('[print] 打印失败:', failureReason);
