@@ -1529,7 +1529,7 @@ ipcMain.handle('open-backup-directory', async () => {
 ipcMain.handle('get-app-config', async () => {
     const defaults = {
         clinicName: '本能堂中医诊所',
-        doctorName: '张大夫',
+        doctorName: '本能堂',
         edition: 'personal',
         productName: '惠康中医-YB'
     };
