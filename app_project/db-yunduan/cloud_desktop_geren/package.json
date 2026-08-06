@@ -1,6 +1,6 @@
 {
   "name": "tcm-prescription-cloud-geren",
-  "version": "1.2.10",
+  "version": "1.2.11",
   "description": "惠康中医-云端",
   "main": "electron/main.js",
   "scripts": {
@@ -16,7 +16,7 @@
     "archiver": "^7.0.1",
     "asarmor": "^3.0.2",
     "electron": "^35.0.0",
-    "electron-builder": "^24.9.1"
+    "electron-builder": "24.13.3"
   },
   "build": {
     "appId": "com.tcm.prescription.cloud.geren",
