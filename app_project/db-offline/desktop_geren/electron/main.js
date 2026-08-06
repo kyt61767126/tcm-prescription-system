@@ -1710,9 +1710,11 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
         });
         printWin.setMenu(null);
 
-        // ★ htmlContent 已包含 @page { size: A5; margin: 0; } 规则，无需额外注入
-        // 旧方案注入的 body { margin: 0; } 会覆盖 htmlContent 的 body { margin: 0 auto; ... } 导致布局问题
-        const base64Html = Buffer.from(html, 'utf8').toString('base64');
+        // ★ 彻底修复字体偏大：移除CSS @page的size规则，避免与webContents.print pageSize选项双重指定
+        //   双重指定（CSS @page size + pageSize选项）触发Chromium fit-to-page缩放，内容被放大
+        //   移除size后：纸张大小由pageSize选项唯一控制，边距由CSS @page margin:0唯一控制
+        const processedHtml = html.replace(/@page\s*\{[^}]*\}/g, '');
+        const base64Html = Buffer.from(processedHtml, 'utf8').toString('base64');
         const dataUrl = 'data:text/html;charset=utf-8;base64,' + base64Html;
 
         return new Promise((resolve) => {
@@ -1740,15 +1742,24 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                         // webContents.print({pageSize,margins}) 选项与 CSS @page 规则双重指定，
                         // 触发 Chromium fit-to-page 缩放算法，导致内容放大。
                         // window.print() 仅依赖 CSS @page { size:A5; margin:0 }，与网页版完全一致。
-                        await printWin.webContents.executeJavaScript(`
-                            new Promise(function(resolve) {
-                                var done = false;
-                                function finish() { if (!done) { done = true; resolve(); } }
-                                window.onafterprint = finish;
-                                window.print();
-                                setTimeout(finish, 110000);
-                            })
-                        `);
+                        // ★ 彻底修复字体偏大（window.print()方案无效，改用单一来源方案）
+                        // 移除CSS @page size（替换1已处理）+ webContents.print pageSize唯一控制纸张
+                        // 不设margins，CSS @page margin:0唯一控制边距
+                        // 两个维度都单一来源，彻底消除fit-to-page缩放
+                        await new Promise((resolvePrint) => {
+                            printWin.webContents.print({
+                                silent: false,
+                                printBackground: true,
+                                pageSize: 'A5',
+                                landscape: isLandscape,
+                                margins: { marginType: 'none' }
+                            }, (success, failureReason) => {
+                                if (!success && failureReason) {
+                                    console.error('[print] 打印失败:', failureReason);
+                                }
+                                resolvePrint();
+                            });
+                        });
                         safeResolve(true);
                     } catch (e) {
                         console.error('[print] 打印失败:', e);
