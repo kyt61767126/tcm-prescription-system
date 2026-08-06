@@ -4636,24 +4636,15 @@ let currentUser = null;
             } else if (window.electronAPI && window.electronAPI.printPrescription) {
                 window.electronAPI.printPrescription(html, orientation);
             } else {
-                let printFrame = document.getElementById('printFrame');
-                if (!printFrame) {
-                    printFrame = document.createElement('iframe');
-                    printFrame.id = 'printFrame';
-                    printFrame.style.position = 'fixed';
-                    printFrame.style.left = '-99999px';
-                    printFrame.style.top = '0';
-                    printFrame.style.width = paperWidth;
-                    printFrame.style.height = paperHeight;
-                    printFrame.style.border = '0';
-                    document.body.appendChild(printFrame);
-                }
-                const doc = printFrame.contentWindow.document;
-                doc.open();
-                doc.write(html);
-                doc.close();
-                printFrame.contentWindow.focus();
-                printFrame.contentWindow.print();
+                // 网页端：动态注入打印样式 + 直接打印当前页面（避免 iframe viewport 缩放导致字体偏小）
+                const oldPrintStyle = document.getElementById('__print_style__');
+                if (oldPrintStyle) oldPrintStyle.remove();
+                const printStyleEl = document.createElement('style');
+                printStyleEl.id = '__print_style__';
+                printStyleEl.textContent = '@media print { body * { visibility: hidden; } .prescription-paper, .prescription-paper * { visibility: visible; } .prescription-paper { position: absolute !important; top: 0 !important; left: 0 !important; width: 148mm !important; padding: 28mm 15mm 20mm !important; box-shadow: none !important; } }';
+                document.head.appendChild(printStyleEl);
+                window.print();
+                setTimeout(function() { if (printStyleEl.parentNode) printStyleEl.remove(); }, 2000);
             }
         }
 

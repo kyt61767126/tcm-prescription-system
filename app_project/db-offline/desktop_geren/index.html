@@ -4403,40 +4403,15 @@ if (window.Permission) {
             } else if (window.electronAPI && window.electronAPI.printPrescription) {
                 window.electronAPI.printPrescription(html, orientation);
             } else {
-                // ★ 2026-08-02 同步云端：iframe 每次重建 + onload 时序 + 错误处理
-                let printFrame = document.getElementById('__printFrame__');
-                if (printFrame) printFrame.remove();
-                printFrame = document.createElement('iframe');
-                printFrame.id = '__printFrame__';
-                printFrame.style.position = 'fixed';
-                printFrame.style.left = '-99999px';
-                printFrame.style.top = '0';
-                printFrame.style.width = paperWidth;
-                printFrame.style.height = paperHeight;
-                printFrame.style.border = '0';
-                document.body.appendChild(printFrame);
-                printFrame.contentDocument.open();
-                printFrame.contentDocument.write(html);
-                printFrame.contentDocument.close();
-                // 等待 iframe 内容渲染后调用打印
-                printFrame.onload = function() {
-                    try {
-                        printFrame.contentWindow.focus();
-                        printFrame.contentWindow.print();
-                    } catch (e) {
-                        console.error('[print] iframe 打印失败:', e);
-                        alert('打印失败：' + e.message);
-                    }
-                    // 打印对话框关闭后清理 iframe
-                    setTimeout(function() { if (printFrame && printFrame.parentNode) printFrame.remove(); }, 1000);
-                };
-                // 部分浏览器 onload 不触发，立即尝试一次
-                try {
-                    printFrame.contentWindow.focus();
-                    printFrame.contentWindow.print();
-                } catch (e) {
-                    console.warn('[print] 立即打印失败，等待 onload:', e.message);
-                }
+                // 网页端：动态注入打印样式 + 直接打印当前页面（避免 iframe viewport 缩放导致字体偏小）
+                const oldPrintStyle = document.getElementById('__print_style__');
+                if (oldPrintStyle) oldPrintStyle.remove();
+                const printStyleEl = document.createElement('style');
+                printStyleEl.id = '__print_style__';
+                printStyleEl.textContent = '@media print { body * { visibility: hidden; } .prescription-paper, .prescription-paper * { visibility: visible; } .prescription-paper { position: absolute !important; top: 0 !important; left: 0 !important; width: 148mm !important; padding: 28mm 15mm 20mm !important; box-shadow: none !important; } }';
+                document.head.appendChild(printStyleEl);
+                window.print();
+                setTimeout(function() { if (printStyleEl.parentNode) printStyleEl.remove(); }, 2000);
             }
         }
 
