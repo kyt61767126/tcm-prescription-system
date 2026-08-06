@@ -46,6 +46,16 @@
             return result;
         } catch(e) { return stored; }
     }
+    // 与 index.html 的 simpleEncrypt 保持一致，用于加密 local_systemUsers
+    function simpleEncrypt(text) {
+        if (!text) return '';
+        const key = PASSWORD_SALT;
+        let result = '';
+        for (let i = 0; i < text.length; i++) {
+            result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+        }
+        return 'XORv1:' + btoa(unescape(encodeURIComponent(result)));
+    }
 
     function $(id) { return document.getElementById(id); }
 
@@ -269,8 +279,38 @@
         }
     }
 
+    // ★ 启动时主动清理 localStorage 中的历史遗留用户（doctor1/doctor2/张医生/李医生）
+    function cleanLegacyUsers() {
+        try {
+            const saved = localStorage.getItem(KEY_USERS);
+            if (saved) {
+                const decrypted = simpleDecrypt(saved);
+                const users = safeParse(decrypted, []);
+                if (Array.isArray(users) && users.length > 0) {
+                    const filtered = users.filter(u => !LEGACY_USERNAMES.includes(u.username));
+                    if (filtered.length !== users.length) {
+                        // 保存清理后的列表（用 simpleEncrypt 加密）
+                        const valid = filtered.length > 0 ? filtered : DEFAULT_USERS;
+                        localStorage.setItem(KEY_USERS, simpleEncrypt(JSON.stringify(valid)));
+                        console.log('[login] 已清理历史遗留用户:', users.length, '->', valid.length);
+                    }
+                }
+            }
+        } catch(e) { console.warn('[login] cleanLegacyUsers error:', e); }
+        // 清理指向 doctor1/doctor2 的 rememberedUsername
+        try {
+            const remembered = localStorage.getItem(KEY_REMEMBER_USER);
+            if (remembered && LEGACY_USERNAMES.includes(remembered)) {
+                localStorage.removeItem(KEY_REMEMBER_USER);
+                console.log('[login] 已清理历史遗留 rememberedUsername:', remembered);
+            }
+        } catch(e) {}
+    }
+
     document.addEventListener('DOMContentLoaded', async () => {
         const config = await getAppConfig();
+        // ★ 主动清理历史遗留用户（在渲染下拉列表之前）
+        cleanLegacyUsers();
         loadClinicName(config);
         initLoginDropdown(config);
         initLoginPermissions();
