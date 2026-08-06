@@ -6954,6 +6954,7 @@ if (window.Permission) {
 <html>
 <head>
     <title>打印处方</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
         @page { size: ${pageSize}; margin: 0; }
         body { font-family: 'SimSun', '宋体', serif; padding: 0; margin: 0; line-height: 1.8; -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #000; }
@@ -7014,10 +7015,10 @@ if (window.Permission) {
             printFrame = document.createElement('iframe');
             printFrame.id = '__printFrame__';
             printFrame.style.position = 'fixed';
-            printFrame.style.right = '0';
-            printFrame.style.bottom = '0';
-            printFrame.style.width = '0';
-            printFrame.style.height = '0';
+            printFrame.style.left = '-99999px';
+            printFrame.style.top = '0';
+            printFrame.style.width = paperWidth;
+            printFrame.style.height = paperHeight;
             printFrame.style.border = '0';
             document.body.appendChild(printFrame);
             printFrame.contentDocument.open();
