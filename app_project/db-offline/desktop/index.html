@@ -1760,12 +1760,37 @@ let currentUser = null;
 
         async function loadRememberedUsers() {
             try {
+                // ★ 启动时主动清理 local_rememberedUsers/local_rememberedUsername 中的历史遗留值
+                // 历史遗留账号（doctor1/doctor2/张医生/李医生）需从记住的用户列表中清除
+                const LEGACY_REMEMBERED = ['doctor1', 'doctor2', '张医生', '李医生', '张大夫', 'hkt'];
+                try {
+                    const raw = localStorage.getItem('local_rememberedUsers');
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        const arr = Array.isArray(parsed) ? parsed : [parsed];
+                        const filtered = arr.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
+                        if (filtered.length !== arr.length) {
+                            if (filtered.length > 0) {
+                                localStorage.setItem('local_rememberedUsers', JSON.stringify(filtered));
+                            } else {
+                                localStorage.removeItem('local_rememberedUsers');
+                            }
+                            console.log('[login] 已清理 local_rememberedUsers 历史遗留:', arr.length, '->', filtered.length);
+                        }
+                    }
+                    const rememberedSingle = localStorage.getItem('local_rememberedUsername');
+                    if (rememberedSingle && LEGACY_REMEMBERED.includes(rememberedSingle)) {
+                        localStorage.removeItem('local_rememberedUsername');
+                        console.log('[login] 已清理 local_rememberedUsername 历史遗留:', rememberedSingle);
+                    }
+                } catch(e) { console.warn('[login] 清理 rememberedUsers 失败:', e); }
                 // 优先使用 AuthCore（统一存储适配器）
                 if (window.AuthCore && AuthCore.loadRememberedUsers) {
                     try {
                         const authList = await AuthCore.loadRememberedUsers();
                         if (Array.isArray(authList) && authList.length > 0) {
-                            const stringUsernames = authList.map(u => String(u).trim()).filter(u => u);
+                            // ★ 过滤历史遗留账号（doctor1/doctor2/张医生/李医生等）
+                            const stringUsernames = authList.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
                             if (stringUsernames.length > 0) {
                                 renderRememberedUsers(stringUsernames);
                                 document.getElementById('loginUsername').value = stringUsernames[0];
@@ -1791,7 +1816,7 @@ let currentUser = null;
                         } else if (typeof parsed === 'string') {
                             usernames = [parsed];
                         }
-                        const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u);
+                        const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
                         if (stringUsernames.length > 0) {
                             renderRememberedUsers(stringUsernames);
                             document.getElementById('loginUsername').value = stringUsernames[0];
