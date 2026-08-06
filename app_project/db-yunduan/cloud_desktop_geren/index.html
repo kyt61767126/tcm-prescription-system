@@ -4232,16 +4232,20 @@ if (window.Permission) {
                 const autoStartSection = document.getElementById('autoStartSection');
 
                 // 诊所管理员：显示账户管理 + 开机自启；普通用户：显示修改密码
+                // ★ 标准版(personal)为单用户版，即使管理员也不显示用户管理（规范 2.2）
                 const changePwdBtn = document.getElementById('changePwdBtn');
-                if (isClinicAdmin(currentUser)) {
-                    userManageBtn.style.display = 'block';
-                    autoStartSection.style.display = 'block';
-                    if (changePwdBtn) changePwdBtn.style.display = 'none';
-                } else {
-                    userManageBtn.style.display = 'none';
-                    autoStartSection.style.display = 'none';
-                    if (changePwdBtn) changePwdBtn.style.display = 'block';
-                }
+                const showUserManage = (window.Permission && Permission.shouldShowUserManage)
+                    ? Permission.shouldShowUserManage(currentUser)
+                    : isClinicAdmin(currentUser);
+                const showChangePwd = (window.Permission && Permission.shouldShowChangePwd)
+                    ? Permission.shouldShowChangePwd(currentUser)
+                    : !isClinicAdmin(currentUser);
+                const showAutoStart = (window.Permission && Permission.shouldShowAutoStart)
+                    ? Permission.shouldShowAutoStart(currentUser)
+                    : isClinicAdmin(currentUser);
+                userManageBtn.style.display = showUserManage ? 'block' : 'none';
+                autoStartSection.style.display = showAutoStart ? 'block' : 'none';
+                if (changePwdBtn) changePwdBtn.style.display = showChangePwd ? 'block' : 'none';
 
                 // 平台总管理员：显示平台管理按钮 + 处方监管按钮（不参与诊所业务，不显示账户管理/开机自启）
                 if (platformManageBtn) {
