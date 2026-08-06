@@ -1127,7 +1127,16 @@ let currentUser = null;
             if (saved) {
                 try {
                     const decrypted = simpleDecrypt(saved);
-                    return JSON.parse(decrypted);
+                    const parsed = JSON.parse(decrypted);
+                    // 清除历史遗留账号（doctor1/doctor2/张医生/李医生）
+                    const legacyUsernames = ['doctor1', 'doctor2'];
+                    const filtered = parsed.filter(u => !legacyUsernames.includes(u.username));
+                    if (filtered.length !== parsed.length) {
+                        const result = filtered.length > 0 ? filtered : getDefaultUsers();
+                        saveUsers(result);
+                        return result;
+                    }
+                    return parsed;
                 } catch (e) {
                     try { return JSON.parse(saved); } catch(e2) { console.error('解析用户列表失败:', e); }
                 }

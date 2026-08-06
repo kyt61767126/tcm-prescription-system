@@ -1176,7 +1176,16 @@ if (window.Permission) {
             if (saved) {
                 try {
                     const decrypted = simpleDecrypt(saved);
-                    return JSON.parse(decrypted);
+                    const parsed = JSON.parse(decrypted);
+                    // 清除历史遗留账号（doctor1/doctor2/张医生/李医生）
+                    const legacyUsernames = ['doctor1', 'doctor2'];
+                    const filtered = parsed.filter(u => !legacyUsernames.includes(u.username));
+                    if (filtered.length !== parsed.length) {
+                        const result = filtered.length > 0 ? filtered : getDefaultUsers();
+                        saveUsers(result);
+                        return result;
+                    }
+                    return parsed;
                 } catch (e) {
                     try { return JSON.parse(saved); } catch(e2) { console.error('解析用户列表失败:', e); }
                 }
@@ -1643,7 +1652,11 @@ if (window.Permission) {
             try {
                 // ★ 标准版：优先从 localStorage 读取最新医师姓名，同步 CONFIG.doctorName 和 loginUsername 显示
                 const localDoctor = localStorage.getItem('local_clinicDoctor');
-                if (localDoctor && typeof CONFIG !== 'undefined') {
+                // 清除历史遗留医师名（张大夫/hkt/张医生/李医生）
+                const legacyDoctors = ['张大夫', 'hkt', '张医生', '李医生'];
+                if (localDoctor && legacyDoctors.includes(localDoctor)) {
+                    localStorage.removeItem('local_clinicDoctor');
+                } else if (localDoctor && typeof CONFIG !== 'undefined') {
                     CONFIG.doctorName = localDoctor;
                 }
                 if (typeof CONFIG !== 'undefined' && CONFIG.edition === 'personal' && CONFIG.doctorName) {
@@ -2904,7 +2917,11 @@ if (window.Permission) {
             // 标准版：用户名固定显示医师姓名（来自 CONFIG）
             // ★ 优先从 localStorage 读取最新医师姓名（基础设置修改后保存到这里）
             const localDoctor = localStorage.getItem('local_clinicDoctor');
-            if (localDoctor && typeof CONFIG !== 'undefined') {
+            // 清除历史遗留医师名（张大夫/hkt/张医生/李医生）
+            const legacyDoctors = ['张大夫', 'hkt', '张医生', '李医生'];
+            if (localDoctor && legacyDoctors.includes(localDoctor)) {
+                localStorage.removeItem('local_clinicDoctor');
+            } else if (localDoctor && typeof CONFIG !== 'undefined') {
                 CONFIG.doctorName = localDoctor;
             }
             const input = document.getElementById('loginUsername');
@@ -2929,6 +2946,16 @@ if (window.Permission) {
             document.getElementById('paperClinicNo').textContent = presNo;
             const year = String(new Date().getFullYear()).slice(-2);
             document.getElementById('clinicNo').value = year + String(prescriptionHistory.length).padStart(6, '0');
+            // 可编辑：localStorage 优先（用户修改可保存生效）；config.json 更新时自动应用新值
+            try {
+                const _cfgIssued = (typeof CONFIG !== 'undefined' && CONFIG.configIssuedAt) ? CONFIG.configIssuedAt : '';
+                const _applied = localStorage.getItem('local_configAppliedAt') || '';
+                if (_cfgIssued && _cfgIssued !== _applied) {
+                    localStorage.removeItem('local_clinicName');
+                    localStorage.removeItem('local_clinicDoctor');
+                    localStorage.setItem('local_configAppliedAt', _cfgIssued);
+                }
+            } catch(e) {}
             const clinicNameVal = localStorage.getItem('local_clinicName') || ((typeof CONFIG !== 'undefined' && CONFIG.clinicName) ? CONFIG.clinicName : '本能堂中医诊所');
             const regFeeVal = localStorage.getItem('local_defaultRegFee') || '0';
             const doseVal = localStorage.getItem('local_defaultDose') || '7';
