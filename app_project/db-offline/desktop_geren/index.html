@@ -4403,15 +4403,33 @@ if (window.Permission) {
             } else if (window.electronAPI && window.electronAPI.printPrescription) {
                 window.electronAPI.printPrescription(html, orientation);
             } else {
-                // 网页端：动态注入打印样式 + 直接打印当前页面（避免 iframe viewport 缩放导致字体偏小）
-                const oldPrintStyle = document.getElementById('__print_style__');
-                if (oldPrintStyle) oldPrintStyle.remove();
-                const printStyleEl = document.createElement('style');
-                printStyleEl.id = '__print_style__';
-                printStyleEl.textContent = '@media print { body * { visibility: hidden; } .prescription-paper, .prescription-paper * { visibility: visible; } .prescription-paper { position: absolute !important; top: 0 !important; left: 0 !important; width: 148mm !important; padding: 28mm 15mm 20mm !important; box-shadow: none !important; } }';
-                document.head.appendChild(printStyleEl);
-                window.print();
-                setTimeout(function() { if (printStyleEl.parentNode) printStyleEl.remove(); }, 2000);
+                // 网页端：window.open() 打开新窗口写入独立HTML打印（与桌面Electron方案一致，避免当前页面CSS干扰）
+                const printWin = window.open('', '_blank', 'width=600,height=850');
+                if (!printWin) {
+                    alert('打印窗口被浏览器拦截，请允许此站点弹窗后重试');
+                    return;
+                }
+                printWin.document.open();
+                printWin.document.write(html);
+                printWin.document.close();
+                // 等待内容渲染后打印
+                printWin.onload = function() {
+                    setTimeout(function() {
+                        printWin.focus();
+                        printWin.print();
+                        setTimeout(function() { printWin.close(); }, 500);
+                    }, 300);
+                };
+                // 部分浏览器 onload 不触发，兜底立即尝试
+                setTimeout(function() {
+                    try {
+                        printWin.focus();
+                        printWin.print();
+                        setTimeout(function() { printWin.close(); }, 500);
+                    } catch (e) {
+                        console.warn('[print] 立即打印失败，等待 onload:', e.message);
+                    }
+                }, 500);
             }
         }
 
