@@ -84,6 +84,29 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // ★ 全局崩溃捕获：任何未捕获异常写入 crash_logs 目录，便于排查闪退原因
+        Thread.setDefaultUncaughtExceptionHandler(new Thread.UncaughtExceptionHandler() {
+            @Override
+            public void uncaughtException(Thread t, Throwable e) {
+                try {
+                    Log.e(TAG, "★★★ 未捕获异常导致崩溃 ★★★", e);
+                    File crashDir = new File(getFilesDir(), "crash_logs");
+                    if (!crashDir.exists()) crashDir.mkdirs();
+                    File crashFile = new File(crashDir, "crash_" + System.currentTimeMillis() + ".txt");
+                    java.io.PrintWriter pw = new java.io.PrintWriter(new java.io.FileWriter(crashFile));
+                    pw.println("时间: " + new java.util.Date());
+                    pw.println("线程: " + t.getName());
+                    pw.println("APP版本: " + EXPECTED_APP_VERSION);
+                    pw.println("设备: " + Build.MODEL + " / " + Build.MANUFACTURER);
+                    pw.println("Android: " + Build.VERSION.RELEASE + " (SDK " + Build.VERSION.SDK_INT + ")");
+                    pw.println("========== 堆栈 ==========");
+                    e.printStackTrace(pw);
+                    pw.close();
+                } catch (Exception ignored) {}
+                android.os.Process.killProcess(android.os.Process.myPid());
+            }
+        });
+
         // 只隐藏标题栏，不使用FLAG_FULLSCREEN（会导致内容延伸到状态栏下面）
         requestWindowFeature(Window.FEATURE_NO_TITLE);
 

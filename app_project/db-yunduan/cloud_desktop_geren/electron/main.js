@@ -30,10 +30,43 @@ let sharedSession;
 let currentLoggedInUser = null;
 const SESSION_PARTITION = 'persist:tcm-prescription-cloud';
 
-// 全局异常捕获，避免静默崩溃
+// ============================================================================
+//  ★ 全局异常捕获 + 安全防护
+//  1. uncaughtException / unhandledRejection：写入崩溃日志到 userData/crash_logs
+//  2. asar 运行环境检测：打包后必须从 app.asar 内运行，防止解包篡改
+// ============================================================================
+function writeCrashLog(type, err) {
+    try {
+        const fsSync = require('fs');
+        const crashDir = path.join(app.getPath('userData'), 'crash_logs');
+        if (!fsSync.existsSync(crashDir)) fsSync.mkdirSync(crashDir, { recursive: true });
+        const ts = new Date().toISOString().replace(/[:.]/g, '-');
+        const crashFile = path.join(crashDir, 'crash_' + ts + '.txt');
+        const msg = '[' + type + '] ' + new Date().toLocaleString() + '\n' +
+                    'Error: ' + (err && err.message ? err.message : err) + '\n' +
+                    'Stack: ' + (err && err.stack ? err.stack : 'N/A') + '\n';
+        fsSync.writeFileSync(crashFile, msg, 'utf8');
+        console.error('[CRASH] ' + type + ' logged to ' + crashFile);
+    } catch (e) {
+        console.error('[CRASH] writeCrashLog failed:', e);
+    }
+}
+
 process.on('uncaughtException', (err) => {
     console.error('[uncaughtException]', err && err.stack ? err.stack : err);
+    writeCrashLog('uncaughtException', err);
 });
+
+process.on('unhandledRejection', (reason) => {
+    console.error('[unhandledRejection]', reason);
+    writeCrashLog('unhandledRejection', reason instanceof Error ? reason : new Error(String(reason)));
+});
+
+// asar 运行环境检测：打包后 main.js 必须从 app.asar 内运行（防止解包篡改）
+// 仅记录日志不退出，避免误判合法便携版/开发模式
+if (app.isPackaged && !__dirname.includes('app.asar')) {
+    console.error('[SECURITY] 检测到非 asar 运行环境，可能已被解包篡改: ' + __dirname);
+}
 
 app.commandLine.appendSwitch('enable-usermedia-screen-capturing');
 app.commandLine.appendSwitch('enable-media-stream');

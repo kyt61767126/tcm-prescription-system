@@ -402,19 +402,39 @@ public class SecurityGuard {
     }
 
     /**
-     * 调试器检测：检查 isDebuggerConnected 和 ro.debuggable
+     * 调试器检测：检查 isDebuggerConnected、ro.debuggable、TracerPid
+     * TracerPid 检测：读取 /proc/self/status，TracerPid 非 0 表示被 ptrace 附加
      */
     public static boolean isDebuggerAttached() {
         if (!ENABLE_DEBUGGER_CHECK) return false;
         try {
+            // 1. 系统 debug 标志
             if (android.os.Debug.isDebuggerConnected()) {
                 Log.w(TAG, "调试器检测：isDebuggerConnected=true");
                 return true;
             }
+            // 2. 系统属性 ro.debuggable（release 版应为 0）
             String debuggable = getSystemProperty("ro.debuggable", "0");
             if ("1".equals(debuggable)) {
                 Log.w(TAG, "调试器检测：ro.debuggable=1");
                 return true;
+            }
+            // 3. TracerPid 检测：读取 /proc/self/status，TracerPid 非 0 表示被 ptrace 附加
+            try (BufferedReader reader = new BufferedReader(new FileReader("/proc/self/status"))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.startsWith("TracerPid:")) {
+                        String pidStr = line.substring("TracerPid:".length()).trim();
+                        int tracerPid = Integer.parseInt(pidStr);
+                        if (tracerPid != 0) {
+                            Log.w(TAG, "调试器检测：TracerPid=" + tracerPid + "（进程被 ptrace 附加）");
+                            return true;
+                        }
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                // 读取失败，忽略
             }
         } catch (Exception e) {
             // SystemProperties 可能不可访问，忽略
