@@ -13,6 +13,8 @@
     const DEFAULT_USERS = [
         { username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin' }
     ];
+    // ★ 历史遗留账号（doctor1/doctor2/张医生/李医生）需从 localStorage 中过滤
+    const LEGACY_USERNAMES = ['doctor1', 'doctor2'];
 
     const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
     async function hashPassword(password) {
@@ -87,7 +89,8 @@
 
     function getFirstUserFromConfig(config) {
         if (Array.isArray(config.users) && config.users.length > 0) {
-            const valid = config.users.map(normalizeUser).filter(u => u.username && u.password);
+            // ★ 过滤历史遗留账号（doctor1/doctor2/张医生/李医生）
+            const valid = config.users.map(normalizeUser).filter(u => u.username && u.password && !LEGACY_USERNAMES.includes(u.username));
             if (valid.length > 0) return valid[0];
         }
         return null;
@@ -100,7 +103,8 @@
             const decrypted = simpleDecrypt(saved);
             const users = safeParse(decrypted, []);
             if (Array.isArray(users) && users.length > 0) {
-                const valid = users.map(normalizeUser).filter(u => u.username && u.password);
+                // ★ 过滤历史遗留账号（doctor1/doctor2/张医生/李医生）
+                const valid = users.map(normalizeUser).filter(u => u.username && u.password && !LEGACY_USERNAMES.includes(u.username));
                 if (valid.length > 0) return valid[0];
             }
         }

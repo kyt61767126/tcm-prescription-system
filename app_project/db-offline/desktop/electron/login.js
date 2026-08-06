@@ -12,10 +12,10 @@
     const KEY_CLINIC_NAME = 'local_clinicName';
 
     const DEFAULT_USERS = [
-        { username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin' },
-        { username: 'doctor1', password: '6861055dc561644683c0e517c4e2eb68cfb5ba234ccc4c6da7fc78071771b1b1', name: '张医生', role: 'user' },
-        { username: 'doctor2', password: '6861055dc561644683c0e517c4e2eb68cfb5ba234ccc4c6da7fc78071771b1b1', name: '李医生', role: 'user' }
+        { username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin' }
     ];
+    // ★ 历史遗留账号（doctor1/doctor2/张医生/李医生）需从 localStorage 和 config.users 中过滤
+    const LEGACY_USERNAMES = ['doctor1', 'doctor2'];
 
     const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
     async function hashPassword(password) {
@@ -90,7 +90,8 @@
 
     function getUsersFromConfig(config) {
         if (Array.isArray(config.users) && config.users.length > 0) {
-            return config.users.map(normalizeUser).filter(u => u.username && u.password);
+            // ★ 过滤历史遗留账号（doctor1/doctor2/张医生/李医生）
+            return config.users.map(normalizeUser).filter(u => u.username && u.password && !LEGACY_USERNAMES.includes(u.username));
         }
         return [];
     }
@@ -102,7 +103,9 @@
             const decrypted = simpleDecrypt(saved);
             const users = safeParse(decrypted, []);
             if (Array.isArray(users) && users.length > 0) {
-                return users.map(normalizeUser).filter(u => u.username && u.password);
+                // ★ 过滤历史遗留账号（doctor1/doctor2/张医生/李医生）
+                const filtered = users.map(normalizeUser).filter(u => u.username && u.password && !LEGACY_USERNAMES.includes(u.username));
+                return filtered;
             }
         }
         return [];
