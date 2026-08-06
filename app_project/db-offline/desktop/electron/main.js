@@ -1447,7 +1447,7 @@ ipcMain.handle('get-current-user', async () => {
 ipcMain.handle('get-app-config', async () => {
     const defaults = {
         clinicName: '本能堂中医诊所',
-        doctorName: '张大夫',
+        doctorName: '本能堂',
         edition: 'clinic_custom',
         productName: '惠康中医-LJ'
     };

@@ -1,11 +1,11 @@
 {
     "clinicName":  "本能堂中医诊所",
     "doctorName":  "本能堂",
-    "edition":  "personal",
+    "edition":  "clinic_custom",
     "appMode":  "offline",
-    "maxUsers":  1,
-    "productName":  "惠康中医-LB",
-    "versionLabel":  "离线标准版",
+    "maxUsers":  10,
+    "productName":  "惠康中医-LJ",
+    "versionLabel":  "离线机构版",
     "users":  [
                   {
                       "username":  "admin",
@@ -14,6 +14,6 @@
                       "role":  "admin"
                   }
               ],
-    "configIssuedAt":  "2026-08-06T06:37:01.5953658Z",
-    "configSignature":  "d3652b6ac0271f86fc7914f054b095430bd7191dfca5501ae4e78b50a41ffa80"
+    "configIssuedAt":  "2026-08-06T09:13:44.720Z",
+    "configSignature":  "8e7bd10c59feee2f4fa9274b6e5f0431e273c91668533908158ce97a5c3568d6"
 }
