@@ -1695,13 +1695,8 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
         const isLandscape = orientation === 'landscape';
 
         // 隐藏窗口（用户不可见）
-        // ★ 设置窗口尺寸为A5纸对应像素,避免Chromium按窗口宽度渲染后缩放到A5纸导致字体偏小
-        const printWinWidth = isLandscape ? 850 : 600;
-        const printWinHeight = isLandscape ? 600 : 850;
         const printWin = new BrowserWindow({
             show: false,
-            width: printWinWidth,
-            height: printWinHeight,
             webPreferences: {
                 contextIsolation: true,
                 nodeIntegration: false
@@ -1709,10 +1704,9 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
         });
         printWin.setMenu(null);
 
-        // 注入打印样式（A5 横向/纵向 + 零边距 + body宽度）
+        // 注入打印样式（A5 横向/纵向 + 零边距）
         let enrichedHtml = html;
-        const printWidth = isLandscape ? '210mm' : '148mm';
-        const printStyle = `<style>@media print { @page { size: A5 ${isLandscape ? 'landscape' : 'portrait'}; margin: 0; } body { margin: 0; width: ${printWidth}; } }</style>`;
+        const printStyle = `<style>@media print { @page { size: A5 ${isLandscape ? 'landscape' : 'portrait'}; margin: 0; } body { margin: 0; } }</style>`;
         if (/<\/head>/i.test(enrichedHtml)) {
             enrichedHtml = enrichedHtml.replace(/<\/head>/i, printStyle + '</head>');
         } else {
@@ -1736,7 +1730,6 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
 
             // 页面加载完成后，等待布局和字体就绪，再调用 window.print()
             printWin.webContents.once('did-finish-load', () => {
-                printWin.webContents.setZoomFactor(1.0);
                 setTimeout(async () => {
                     try {
                         // 强制布局刷新 + 等待字体加载
