@@ -664,7 +664,8 @@ if (window.Permission) {
         const CONFIG = {
             clinicName: '本能堂中医诊所',
             doctorName: '本能堂',
-            edition: 'personal'
+            edition: 'personal',
+            configIssuedAt: '2026-08-06T09:38:42.973Z'
         };
 
         async function loadConfigFromFile() {
@@ -674,6 +675,7 @@ if (window.Permission) {
                     const json = await response.json();
                     if (json.clinicName) CONFIG.clinicName = json.clinicName;
                     if (json.doctorName) CONFIG.doctorName = json.doctorName;
+                    if (json.configIssuedAt) CONFIG.configIssuedAt = json.configIssuedAt;
                     console.log('[CONFIG] Loaded from config.json:', CONFIG.clinicName, CONFIG.doctorName);
                 }
             } catch (e) {
