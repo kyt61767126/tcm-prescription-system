@@ -595,89 +595,12 @@ function createLoginWindow() {
     });
 
     loginWindow.webContents.on('dom-ready', () => {
-        // ★ 主动清理 localStorage 中的历史遗留用户（doctor1/doctor2/张医生/李医生）
-        // 不依赖 login.js，由 main.js 直接注入确保执行
-        loginWindow.webContents.executeJavaScript(`
-            (function() {
-                if (sessionStorage.getItem('__cleaned_legacy_users__')) return;
-                sessionStorage.setItem('__cleaned_legacy_users__', '1');
-                var LEGACY = ['doctor1', 'doctor2'];
-                var KEY_USERS = 'local_systemUsers';
-                var KEY_REMEMBER = 'local_rememberedUsername';
-                var KEY_REMEMBER_LIST = 'local_rememberedUsers';
-                var SALT = 'bnzc_prescription_salt_v1';
-                function simpleDecrypt(stored) {
-                    if (!stored || typeof stored !== 'string') return stored;
-                    if (stored.indexOf('XORv1:') !== 0) return stored;
-                    try {
-                        var text = decodeURIComponent(escape(atob(stored.substring(6))));
-                        var result = '';
-                        for (var i = 0; i < text.length; i++) {
-                            result += String.fromCharCode(text.charCodeAt(i) ^ SALT.charCodeAt(i % SALT.length));
-                        }
-                        return result;
-                    } catch(e) { return stored; }
-                }
-                function simpleEncrypt(text) {
-                    if (!text) return '';
-                    var result = '';
-                    for (var i = 0; i < text.length; i++) {
-                        result += String.fromCharCode(text.charCodeAt(i) ^ SALT.charCodeAt(i % SALT.length));
-                    }
-                    return 'XORv1:' + btoa(unescape(encodeURIComponent(result)));
-                }
-                var needReload = false;
-                // 清理 local_systemUsers
-                try {
-                    var saved = localStorage.getItem(KEY_USERS);
-                    if (saved) {
-                        var decrypted = simpleDecrypt(saved);
-                        var users = JSON.parse(decrypted);
-                        if (Array.isArray(users) && users.length > 0) {
-                            var filtered = users.filter(function(u) { return !LEGACY.includes(u.username); });
-                            if (filtered.length !== users.length) {
-                                var valid = filtered.length > 0 ? filtered : [{username:'admin',password:'2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b',name:'管理员',role:'admin'}];
-                                localStorage.setItem(KEY_USERS, simpleEncrypt(JSON.stringify(valid)));
-                                needReload = true;
-                            }
-                        }
-                    }
-                } catch(e) { console.warn('[clean] local_systemUsers error:', e); }
-                // 清理 rememberedUsername
-                try {
-                    var remembered = localStorage.getItem(KEY_REMEMBER);
-                    if (remembered && LEGACY.includes(remembered)) {
-                        localStorage.removeItem(KEY_REMEMBER);
-                        needReload = true;
-                    }
-                } catch(e) {}
-                // 清理 rememberedUsers 列表
-                try {
-                    var rawList = localStorage.getItem(KEY_REMEMBER_LIST);
-                    if (rawList) {
-                        var arr = JSON.parse(rawList);
-                        if (Array.isArray(arr)) {
-                            var filtered = arr.filter(function(u) { return !LEGACY.includes(u); });
-                            if (filtered.length !== arr.length) {
-                                if (filtered.length > 0) {
-                                    localStorage.setItem(KEY_REMEMBER_LIST, JSON.stringify(filtered));
-                                } else {
-                                    localStorage.removeItem(KEY_REMEMBER_LIST);
-                                }
-                                needReload = true;
-                            }
-                        }
-                    }
-                } catch(e) {}
-                if (needReload) {
-                    console.log('[clean] 已清理历史遗留用户，重新加载页面');
-                    location.reload();
-                    return;
-                }
-            })();
-        `).catch(e => console.warn('[login] 清理历史用户注入失败:', e.message));
-
         // ★ 彻底禁用密码输入框自动填充（防止 Chromium 弹出旧版应用名凭据提示）
+        // 根因：Chromium 通过 input type="password" 识别密码字段并弹出凭据提示
+        //       autocomplete="off" 被现代 Chromium 忽略
+        // 彻底修复：将 type="password" 改为 type="text" + webkitTextSecurity=disc（视觉仍为圆点）
+        //           系统不再识别为密码字段，从根源消除提示
+        //           配合 autocomplete="new-password" + readonly 延迟移除双保险
         loginWindow.webContents.executeJavaScript(`
             (function() {
                 var pwds = document.querySelectorAll('input[type="password"]');
@@ -691,8 +614,6 @@ function createLoginWindow() {
                 }
             })();
         `).catch(e => console.warn('[login] 注入 disableAutofill 失败:', e.message));
-
-        // ★ 如果清理后 reload 了，不需要 show（reload 会重新触发 dom-ready）
         loginWindow.show();
     });
 }
