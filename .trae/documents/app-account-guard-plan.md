@@ -92,7 +92,7 @@ JS 逻辑三部分：
 | 一键开关-断网 | 断网点切换 | alert"切换失败"，按钮恢复，KV 未变 |
 | local 用户 UI | local 普通用户登录 → 基础设置 | "离线数据同步"区块隐藏，无模式切换入口 |
 | both 用户改密 | both 普通用户改自己密码 | 成功（diff-check 通过） |
-| 越权拦截 | 用 doctor1 header POST 含新增 admin 账号的列表 | 403 |
+| 越权拦截 | 用普通用户 header POST 含新增 admin 账号的列表 | 403 |
 
 ### 已知限制（文档提醒）
 - **管理员勿把自己设为 local**：`handleEditUser` 允许 admin 改自己模式为 local，一旦如此 admin 的 `fetch` 被离线脚本拦截，用户管理失效。云端网页禁改无法在 prompt 流程加保护，需管理员自律。

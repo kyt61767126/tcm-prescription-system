@@ -10,7 +10,7 @@
 |------|-------------|------|
 | `index.html` | `handleLogin()` (~第896行) | 登入主流程：获取输入→验证→成功/失败处理 |
 | `index.html` | `getUsers()` (~第868行) | 从localStorage读取用户列表，无则返回默认用户 |
-| `index.html` | `getDefaultUsers()` (~第796行) | 返回默认用户（admin/admin, doctor1/123456, doctor2/123456） |
+| `index.html` | `getDefaultUsers()` (~第796行) | 返回默认用户（admin/admin） |
 | `index.html` | `hashPassword()` (~第839行) | SHA-256+salt哈希密码，失败回退明文 |
 | `index.html` | `isPasswordHashed()` (~第851行) | 检测密码是否已哈希（64位hex） |
 | `index.html` | `ensurePasswordsHashed()` IIFE (~第880行) | 启动时自动迁移明文密码为哈希 |
@@ -46,7 +46,7 @@ handleLogin()
   ↓
 getUsers() → localStorage.getItem('local_systemUsers')
   ↓ 无数据
-getDefaultUsers() → [{admin/admin}, {doctor1/123456}, {doctor2/123456}]
+getDefaultUsers() → [{admin/admin}]
   ↓
 hashPassword(password) → crypto.subtle.digest('SHA-256', salt+password)
   ↓ 失败时catch → 返回明文password
@@ -153,7 +153,7 @@ saveUsers(users) → 保存到localStorage
 
 ### 5.2 多用户场景
 
-- 默认用户：admin（管理员）、doctor1/doctor2（普通用户）
+- 默认用户：admin（管理员）
 - 密码迁移：启动时自动将明文密码哈希化，兼容旧数据
 - 权限区分：admin可查看所有处方，普通用户只能查看自己的
 
