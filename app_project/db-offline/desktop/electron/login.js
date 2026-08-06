@@ -152,10 +152,13 @@
             opt.textContent = u.displayName;
             select.appendChild(opt);
         });
+        // ★ 默认选中 admin（离线机构版规范：默认用户 admin）
         const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
-        if (rememberedUser) {
+        if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
             select.value = rememberedUser;
             $('rememberUser').checked = true;
+        } else {
+            select.value = 'admin';
         }
     }
 
