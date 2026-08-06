@@ -1632,11 +1632,15 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
         const isLandscape = orientation === 'landscape';
 
-        // 隐藏窗口（用户不可见）- 宽度匹配A5纸(148mm≈559px@96dpi)，避免渲染视口与打印纸张不匹配导致字体缩放
+        // 隐藏窗口（用户不可见）
+        // ★ 修复字体偏大根因2：窗口宽度从559px改为600px（>148mm=559.37px@96dpi）
+        //   原559px比body宽度(559.37px)少0.37px，触发水平滚动条→连锁触发垂直滚动条→
+        //   有效视口缩至~544px，webContents.print()按559.37/544≈1.028放大内容
+        //   600px与网页版window.open('width=600')完全一致，body(559.37px)在视口内无滚动条
         const printWin = new BrowserWindow({
             show: false,
-            width: isLandscape ? 794 : 559,
-            height: isLandscape ? 559 : 794,
+            width: isLandscape ? 820 : 600,
+            height: isLandscape ? 600 : 850,
             webPreferences: {
                 contextIsolation: true,
                 nodeIntegration: false
@@ -1670,22 +1674,33 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                             'document.body.offsetHeight; document.fonts ? document.fonts.ready : Promise.resolve()'
                         );
                         await new Promise(r => setTimeout(r, 200));
-                        // ★ 使用 webContents.print() 强制 A5 纸张 + 零边距，与网页端 @page { size: A5; margin: 0; } 完全一致
-                        // margins: { marginType: 'none' } 确保零边距，避免 Electron 默认边距导致内容缩放
-                        await new Promise((resolvePrint) => {
-                            printWin.webContents.print({
-                                silent: false,
-                                printBackground: true,
-                                pageSize: 'A5',
-                                landscape: isLandscape,
-                                margins: { marginType: 'none' }
-                            }, (success, failureReason) => {
-                                if (!success) {
-                                    console.error('[print] 打印失败:', failureReason);
-                                }
-                                resolvePrint();
-                            });
-                        });
+                        // ★ 修复字体偏大根因1（主因）：改用 window.print() 代替 webContents.print()
+                        //
+                        // 原因：webContents.print({ pageSize:'A5', margins:{marginType:'none'} }) 选项
+                        //   与 CSS @page { size:A5; margin:0 } 规则形成【双重指定】：
+                        //   - Blink布局引擎按 CSS @page 布局内容（通道A）
+                        //   - Chrome打印后端按 pageSize/margins 选项设置打印参数（通道B）
+                        //   两通道对A5尺寸的内部表示存在微小差异（浮点精度/DPI假设/舍入），
+                        //   触发 fit-to-page 缩放算法，缩放因子略>1.0，内容被放大。
+                        //
+                        // 网页版 window.print() 无 pageSize/margins 选项，仅依赖 CSS @page，
+                        //   打印后端直接使用CSS布局尺寸，不触发fit-to-page缩放，1:1渲染。
+                        //
+                        // 修复方案：桌面版也改用 window.print()，与网页版完全一致。
+                        //   CSS @page { size:A5; margin:0 } 是唯一的页面参数来源，
+                        //   纸张大小和边距均由CSS控制，无双重指定冲突。
+                        //
+                        // 时序：window.print()异步打开系统打印对话框，onafterprint在对话框关闭后触发。
+                        //   等待onafterprint后再safeResolve，避免在用户还在操作打印对话框时关闭窗口。
+                        await printWin.webContents.executeJavaScript(`
+                            new Promise(function(resolve) {
+                                var done = false;
+                                function finish() { if (!done) { done = true; resolve(); } }
+                                window.onafterprint = finish;
+                                window.print();
+                                setTimeout(finish, 110000);
+                            })
+                        `);
                         safeResolve(true);
                     } catch (e) {
                         console.error('[print] 打印失败:', e);
