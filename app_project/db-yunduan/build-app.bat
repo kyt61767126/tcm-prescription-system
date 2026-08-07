@@ -221,7 +221,7 @@ set "PRODUCT_NAME="
 for /f "delims=" %%p in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; (Get-Content '..\cloud_desktop\package.json' -Encoding UTF8 -Raw | ConvertFrom-Json).build.productName"') do (
     set "PRODUCT_NAME=%%p"
 )
-if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-YB"
+if "%PRODUCT_NAME%"=="" set "PRODUCT_NAME=惠康中医-YJ"
 
 set "VERSION_STR="
 for /f "tokens=2 delims=:" %%v in ('findstr "versionName" "app\build.gradle"') do (

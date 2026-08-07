@@ -18,7 +18,7 @@ for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncod
 set "APP_DIR=%~dp0cloud_app_geren"
 set "GRADLEW=%APP_DIR%\gradlew.bat"
 set "APK_SRC=%APP_DIR%\app\build\outputs\apk\release\app-release.apk"
-set "APK_DST=%~dp0惠康中医-YJ.apk"
+set "APK_DST=%~dp0惠康中医-YB.apk"
 
 echo ============================================
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '惠康中医云端APP打包工具（标准版）'"
