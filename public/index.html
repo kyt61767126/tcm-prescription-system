@@ -6960,6 +6960,9 @@ if (window.Permission) {
                         img.src = src;
                         img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;transition:transform 0.08s ease-out;cursor:grab;user-select:none;-webkit-user-drag:none;will-change:transform;';
                         img.draggable = false;
+                        img.onerror = function() {
+                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">图片解码失败<br><button onclick="loadMediaSingleFile(' + idx + ')" style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">重试</button></div>';
+                        };
                         view.appendChild(img);
                         var scale = 1, rot = 0, tx = 0, ty = 0;
                         function apply() { img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ') rotate(' + rot + 'deg)'; }
@@ -7004,12 +7007,18 @@ if (window.Permission) {
                         }, {passive:false});
                         img.addEventListener('touchend', function() { touchState = null; });
                     } else {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
+                        var errMsg = (result && result.error) ? result.error : '未知错误';
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">加载失败: ' + escapeHtml(String(errMsg)) + '<br><button onclick="loadMediaSingleFile(' + idx + ')" style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">重试</button></div>';
+                        console.error('[媒体查看] 图片加载失败:', { filePath: f.path, error: errMsg, result: result });
                     }
-                }).catch(function() {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
+                }).catch(function(err) {
+                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">加载异常: ' + escapeHtml(String(err.message || err)) + '<br><button onclick="loadMediaSingleFile(' + idx + ')" style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">重试</button></div>';
+                    console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
+                var vidMime = '';
+                if (f.path.match(/\.webm$/i)) vidMime = 'video/webm';
+                else if (f.path.match(/\.mp4$/i)) vidMime = 'video/mp4';
                 window.electronAPI.readFileAsBase64(f.path).then(function(result) {
                     if (result.success && (result.data || result.base64)) {
                         var src = result.data || result.base64;
@@ -7019,12 +7028,28 @@ if (window.Permission) {
                         video.controls = true;
                         video.playsInline = true;
                         video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+                        video.onerror = function() {
+                            console.error('[媒体查看] 视频播放失败，降级到系统播放器');
+                            if (window.electronAPI && window.electronAPI.openFile) {
+                                window.electronAPI.openFile(f.path, vidMime);
+                            }
+                        };
                         view.appendChild(video);
                     } else {
-                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
+                        console.error('[媒体查看] 视频加载失败，降级到系统播放器:', result.error);
+                        if (window.electronAPI && window.electronAPI.openFile) {
+                            window.electronAPI.openFile(f.path, vidMime);
+                        } else {
+                            view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载失败</div>';
+                        }
                     }
-                }).catch(function() {
-                    view.innerHTML = '<div style="color:#dc3545;font-size:12px;">加载失败</div>';
+                }).catch(function(err) {
+                    console.error('[媒体查看] 视频加载异常，降级到系统播放器:', err);
+                    if (window.electronAPI && window.electronAPI.openFile) {
+                        window.electronAPI.openFile(f.path, vidMime);
+                    } else {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载异常</div>';
+                    }
                 });
             } else {
                 view.innerHTML = '<div style="color:#999;font-size:12px;">不支持的文件类型</div>';

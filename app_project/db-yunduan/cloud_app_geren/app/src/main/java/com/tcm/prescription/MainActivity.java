@@ -805,11 +805,32 @@ public class MainActivity extends BridgeActivity {
             "    getCurrentUser: function() { return new Promise(function(resolve){ try { var v = localStorage.getItem('currentUser'); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
             "    saveBackupFile: function(filename, content) { return callNativeAsync('saveBackupFile', {jsonStr: content, fileName: filename}); }," +
             "    readFileAsBase64: function(filePath) {" +
-            "      return new Promise(function(resolve, reject){" +
+            "      return new Promise(function(resolve){" +
             "        try {" +
-            "          var r = callNative('readFileAsBase64', {filePath: filePath});" +
-            "          var obj = JSON.parse(r);" +
-            "          resolve(obj);" +
+            "          var sr = JSON.parse(callNative('startReadSession', {filePath: filePath}));" +
+            "          if (sr && sr.success) {" +
+            "            var sid = sr.sessionId, mime = sr.mimeType || 'application/octet-stream';" +
+            "            var chunks = [], total = 0;" +
+            "            function next() {" +
+            "              var r = JSON.parse(callNative('readNextChunk', {sessionId: sid}));" +
+            "              if (!r || !r.success) { callNative('closeReadSession', {sessionId: sid}); resolve({success:false, error:'readNextChunk失败: '+(r&&r.error||'未知')}); return; }" +
+            "              if (r.chunk) { var b = atob(r.chunk); var arr = new Uint8Array(b.length); for (var i=0;i<b.length;i++) arr[i]=b.charCodeAt(i); chunks.push(arr); total += b.length; }" +
+            "              if (r.eof) {" +
+            "                callNative('closeReadSession', {sessionId: sid});" +
+            "                var merged = new Uint8Array(total), off = 0;" +
+            "                for (var i=0;i<chunks.length;i++) { merged.set(chunks[i], off); off += chunks[i].length; }" +
+            "                var blob = new Blob([merged], {type: mime});" +
+            "                if (window.__currentBlobUrl) { try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e){} }" +
+            "                var url = URL.createObjectURL(blob);" +
+            "                window.__currentBlobUrl = url;" +
+            "                resolve({success: true, data: url});" +
+            "              } else { setTimeout(next, 0); }" +
+            "            }" +
+            "            next();" +
+            "          } else {" +
+            "            var r = callNative('readFileAsBase64', {filePath: filePath});" +
+            "            resolve(JSON.parse(r));" +
+            "          }" +
             "        } catch(e) { resolve({success:false, error:String(e)}); }" +
             "      });" +
             "    }," +
