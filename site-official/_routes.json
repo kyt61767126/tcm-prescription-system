@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "description": "Rule9: site-official pure showcase. Block /admin /api /auth-core etc by redirecting to admin domain",
+  "include": [
+    "/*"
+  ],
+  "exclude": [],
+  "rules": [
+    {
+      "pathname": "/admin/*",
+      "status": 301,
+      "location": "https://admin.huikangzy.com/admin/:splat"
+    },
+    {
+      "pathname": "/api/*",
+      "status": 301,
+      "location": "https://admin.huikangzy.com/api/:splat"
+    },
+    {
+      "pathname": "/auth-core.js",
+      "status": 301,
+      "location": "https://admin.huikangzy.com/auth-core.js"
+    },
+    {
+      "pathname": "/permission.js",
+      "status": 301,
+      "location": "https://admin.huikangzy.com/permission.js"
+    },
+    {
+      "pathname": "/login.html",
+      "status": 301,
+      "location": "https://admin.huikangzy.com/login.html"
+    },
+    {
+      "pathname": "/*",
+      "status": 200,
+      "location": "/index.html"
+    }
+  ]
+}

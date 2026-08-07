@@ -1,0 +1,1988 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>惠康中医 - 平台管理后台</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: #f5f7fa;
+    color: #333;
+    line-height: 1.6;
+    padding: 20px;
+    font-size: 14px;
+}
+.container { max-width: 1200px; margin: 0 auto; }
+h1 { color: #2c3e50; margin-bottom: 20px; font-size: 22px; }
+h2 { color: #34495e; margin: 20px 0 12px; font-size: 16px; border-left: 4px solid #3498db; padding-left: 10px; }
+
+/* 登录区域 */
+.login-box {
+    background: white; padding: 30px; border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08); max-width: 400px; margin: 60px auto;
+}
+.login-box h1 { text-align: center; margin-bottom: 24px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; margin-bottom: 6px; color: #606266; font-weight: 500; }
+.form-group input, .form-group select, .form-group textarea {
+    width: 100%; padding: 8px 12px; border: 1px solid #dcdfe6; border-radius: 4px;
+    font-size: 14px; transition: border-color 0.2s;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+    border-color: #3498db; outline: none;
+}
+.btn {
+    display: inline-block; padding: 8px 18px; background: #3498db; color: white;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+    transition: background 0.2s; text-decoration: none;
+}
+.btn:hover { background: #2980b9; }
+.btn-success { background: #27ae60; }
+.btn-success:hover { background: #229954; }
+.btn-warning { background: #f39c12; }
+.btn-warning:hover { background: #d68910; }
+.btn-danger { background: #e74c3c; }
+.btn-danger:hover { background: #c0392b; }
+.btn-sm { padding: 4px 10px; font-size: 12px; margin: 0 2px; }
+.btn-block { display: block; width: 100%; padding: 10px; }
+
+/* 统计卡片 */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 20px; }
+.stat-card {
+    background: white; padding: 16px; border-radius: 8px; text-align: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.stat-card .num { font-size: 24px; font-weight: bold; color: #3498db; }
+.stat-card .label { color: #909399; font-size: 12px; margin-top: 4px; }
+.stat-card.unused .num { color: #27ae60; }
+.stat-card.used .num { color: #3498db; }
+.stat-card.expired .num { color: #f39c12; }
+.stat-card.disabled .num { color: #e74c3c; }
+
+/* 生成表单 */
+.gen-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 20px; }
+.gen-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.gen-actions { display: flex; gap: 10px; margin-top: 12px; }
+
+/* 表格 */
+.table-box { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 900px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #ebeef5; font-size: 13px; }
+th { background: #f5f7fa; color: #606266; font-weight: 600; white-space: nowrap; }
+tr:hover { background: #f9fafc; }
+td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e50; }
+.tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; }
+.tag-unused { background: #d4edda; color: #155724; }
+.tag-used { background: #d1ecf1; color: #0c5460; }
+.tag-expired { background: #fff3cd; color: #856404; }
+.tag-disabled { background: #f8d7da; color: #721c24; }
+.tag-trial { background: #e2e3e5; color: #383d41; }
+.tag-personal { background: #d1ecf1; color: #0c5460; }
+.tag-pro { background: #d4edda; color: #155724; }
+
+/* 过滤栏 */
+.filter-bar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; align-items: center; }
+.filter-bar select, .filter-bar input { padding: 6px 10px; border: 1px solid #dcdfe6; border-radius: 4px; font-size: 13px; }
+.filter-bar input { flex: 1; min-width: 180px; }
+
+.empty { text-align: center; padding: 40px; color: #909399; }
+.loading { text-align: center; padding: 20px; color: #909399; }
+
+/* 提示框 */
+.alert {
+    padding: 10px 16px; border-radius: 4px; margin-bottom: 16px;
+    display: none; white-space: pre-wrap; word-break: break-word;
+}
+.alert.show { display: block; }
+.alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+.alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+
+/* 顶部栏 */
+.top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+.top-bar .user-info { color: #606266; font-size: 13px; }
+.top-bar .user-info strong { color: #3498db; }
+.logout-btn { background: #95a5a6; }
+.logout-btn:hover { background: #7f8c8d; }
+
+/* ★ 任务5：日志弹窗 + v3/v4 字段样式 */
+.modal-overlay {
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 999; justify-content: center; align-items: center;
+}
+.modal-overlay.show { display: flex; }
+.modal-box {
+    background: white; border-radius: 8px; padding: 24px; max-width: 720px; width: 90%;
+    max-height: 80vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+.modal-box h3 { color: #2c3e50; margin-bottom: 16px; border-left: 4px solid #3498db; padding-left: 10px; }
+.modal-close { float: right; cursor: pointer; color: #95a5a6; font-size: 20px; }
+.modal-close:hover { color: #e74c3c; }
+.timeline { list-style: none; padding: 0; }
+.timeline li {
+    padding: 10px 14px; border-left: 3px solid #3498db; margin-bottom: 8px;
+    background: #f9fafc; border-radius: 0 4px 4px 0; font-size: 13px;
+}
+.timeline li .tl-action { font-weight: 600; color: #2c3e50; text-transform: uppercase; }
+.timeline li .tl-time { color: #909399; font-size: 12px; margin-top: 4px; }
+.timeline li .tl-detail { color: #606266; margin-top: 4px; word-break: break-all; }
+.timeline li .tl-meta { color: #909399; font-size: 11px; margin-top: 4px; }
+.tl-tag-generate { color: #27ae60; }
+.tl-tag-activate, .tl-tag-reactivate { color: #3498db; }
+.tl-tag-unbind { color: #f39c12; }
+.tl-tag-disable { color: #e74c3c; }
+.tl-tag-enable { color: #27ae60; }
+.dev-count { font-size: 11px; color: #909399; margin-top: 2px; }
+.dev-count strong { color: #3498db; }
+.clinic-name { font-size: 11px; color: #8e44ad; margin-top: 2px; }
+
+/* ★ 激活码生成优化：快捷模板按钮 */
+.tpl-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; align-items: center; }
+.tpl-label { color: #909399; font-size: 12px; margin-right: 4px; }
+.tpl-btn {
+    padding: 6px 14px; background: white; border: 1px dashed #3498db; color: #3498db;
+    border-radius: 16px; cursor: pointer; font-size: 12px; transition: all 0.2s;
+}
+.tpl-btn:hover { background: #3498db; color: white; border-style: solid; }
+.tpl-btn.active { background: #3498db; color: white; border-style: solid; }
+.tpl-btn.tpl-save { border-color: #27ae60; color: #27ae60; }
+.tpl-btn.tpl-save:hover { background: #27ae60; color: white; }
+.tpl-btn.tpl-manage { border-color: #f39c12; color: #f39c12; }
+.tpl-btn.tpl-manage:hover { background: #f39c12; color: white; }
+.tpl-btn.tpl-custom { border-color: #8e44ad; color: #8e44ad; }
+.tpl-btn.tpl-custom:hover { background: #8e44ad; color: white; }
+.tpl-btn.tpl-custom .tpl-del { margin-left: 6px; color: #e74c3c; font-weight: bold; }
+.tpl-divider { width: 1px; height: 20px; background: #dcdfe6; margin: 0 4px; }
+/* 自定义模板管理面板 */
+.tpl-manage-panel {
+    display: none; margin-top: 8px; padding: 10px; background: #f9fafc;
+    border: 1px solid #ebeef5; border-radius: 4px;
+}
+.tpl-manage-panel.show { display: block; }
+.tpl-manage-panel .empty-tip { color: #909399; font-size: 12px; }
+.tpl-manage-list { display: flex; flex-direction: column; gap: 6px; }
+.tpl-manage-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 6px 10px; background: white; border-radius: 4px; border-left: 3px solid #8e44ad;
+    font-size: 12px;
+}
+.tpl-manage-item .tmi-info { color: #606266; }
+.tpl-manage-item .tmi-actions { display: flex; gap: 6px; }
+.tpl-manage-item .tmi-btn { padding: 2px 8px; font-size: 11px; cursor: pointer; border-radius: 3px; border: 1px solid #dcdfe6; background: white; }
+.tpl-manage-item .tmi-btn.apply-btn { color: #3498db; border-color: #3498db; }
+.tpl-manage-item .tmi-btn.del-btn { color: #e74c3c; border-color: #e74c3c; }
+
+/* ★ 生成结果弹窗：激活码列表 */
+.result-list {
+    background: #f9fafc; border: 1px solid #ebeef5; border-radius: 4px;
+    padding: 12px; margin: 12px 0; max-height: 320px; overflow-y: auto;
+}
+.result-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px; margin-bottom: 6px; background: white; border-radius: 4px;
+    border-left: 3px solid #27ae60; font-family: "Courier New", monospace;
+}
+.result-item .ri-code { font-weight: 600; color: #2c3e50; font-size: 13px; word-break: break-all; }
+.result-item .ri-meta { color: #909399; font-size: 11px; margin-top: 2px; font-family: inherit; }
+.result-item .ri-copy { padding: 2px 8px; font-size: 11px; margin-left: 8px; flex-shrink: 0; }
+.result-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; justify-content: flex-end; }
+
+/* ★ 批量生成 textarea */
+.batch-textarea {
+    width: 100%; min-height: 140px; padding: 10px; border: 1px solid #dcdfe6;
+    border-radius: 4px; font-size: 13px; font-family: "Courier New", monospace;
+    resize: vertical;
+}
+.batch-tip { color: #909399; font-size: 12px; margin-top: 6px; line-height: 1.6; }
+
+.hidden { display: none !important; }
+
+/* 标签页 */
+.tab-bar { display: flex; gap: 0; margin-bottom: 20px; border-bottom: 2px solid #ebeef5; }
+.tab-btn { padding: 10px 20px; background: none; border: none; cursor: pointer; font-size: 14px; color: #606266; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; }
+.tab-btn:hover { color: #3498db; }
+.tab-btn.active { color: #3498db; border-bottom-color: #3498db; font-weight: 600; }
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+@media (max-width: 768px) {
+    body { padding: 10px; }
+    .gen-row { grid-template-columns: 1fr; }
+    .stats { grid-template-columns: repeat(2, 1fr); }
+    .top-bar { flex-direction: column; gap: 10px; align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <!-- 登录区域 -->
+    <div id="loginSection" class="login-box">
+        <h1>惠康中医 平台管理</h1>
+        <div id="loginAlert" class="alert"></div>
+        <div class="form-group">
+            <label>管理员账号</label>
+            <input type="text" id="loginUser" placeholder="平台管理员账号" autocomplete="username">
+        </div>
+        <div class="form-group">
+            <label>密码</label>
+            <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password">
+        </div>
+        <button class="btn btn-block" onclick="doLogin()">登录</button>
+    </div>
+
+    <!-- 主界面 -->
+    <div id="mainSection" class="hidden">
+        <div class="top-bar">
+            <h1>惠康中医 平台管理后台</h1>
+            <div>
+                <span class="user-info">已登录：<strong id="currentAdmin"></strong></span>
+                <button class="btn btn-sm logout-btn" onclick="doLogout()" style="margin-left:10px;">退出</button>
+            </div>
+        </div>
+
+        <div id="mainAlert" class="alert"></div>
+
+        <!-- 标签栏 -->
+        <div class="tab-bar">
+            <button class="tab-btn active" data-tab="License" onclick="switchTab('License')">📋 激活码管理</button>
+            <button class="tab-btn" data-tab="Clinics" onclick="switchTab('Clinics')">🏥 诊所管理</button>
+            <button class="tab-btn" data-tab="Users" onclick="switchTab('Users')">👥 用户管理</button>
+        </div>
+
+        <!-- 激活码管理标签页（原有内容） -->
+        <div id="tabLicense" class="tab-content active">
+        <!-- 统计 -->
+        <h2>统计概览</h2>
+        <div class="stats" id="statsBox">
+            <div class="stat-card"><div class="num" id="statTotal">0</div><div class="label">总数</div></div>
+            <div class="stat-card unused"><div class="num" id="statUnused">0</div><div class="label">未使用</div></div>
+            <div class="stat-card used"><div class="num" id="statUsed">0</div><div class="label">已激活</div></div>
+            <div class="stat-card expired"><div class="num" id="statExpired">0</div><div class="label">已过期</div></div>
+            <div class="stat-card disabled"><div class="num" id="statDisabled">0</div><div class="label">已禁用</div></div>
+        </div>
+
+        <!-- 生成激活码 -->
+        <h2>生成激活码</h2>
+        <div class="gen-box">
+            <!-- ★ 快捷模板：预设 + 自定义 -->
+            <div class="tpl-bar">
+                <span class="tpl-label">快捷模板：</span>
+                <button class="tpl-btn" data-tpl="trial7" onclick="applyTemplate('trial7')">试用 · 7天</button>
+                <button class="tpl-btn" data-tpl="trial30" onclick="applyTemplate('trial30')">试用 · 30天</button>
+                <button class="tpl-btn" data-tpl="personal1y" onclick="applyTemplate('personal1y')">个人 · 1年</button>
+                <button class="tpl-btn" data-tpl="personal3y" onclick="applyTemplate('personal3y')">个人 · 3年</button>
+                <button class="tpl-btn" data-tpl="personalForever" onclick="applyTemplate('personalForever')">个人 · 永久</button>
+                <button class="tpl-btn" data-tpl="pro1y" onclick="applyTemplate('pro1y')">专业 · 1年 · 5设备</button>
+                <button class="tpl-btn" data-tpl="pro3y" onclick="applyTemplate('pro3y')">专业 · 3年 · 10设备</button>
+                <button class="tpl-btn" data-tpl="proForever" onclick="applyTemplate('proForever')">专业 · 永久 · 10设备</button>
+                <span class="tpl-divider"></span>
+                <span id="customTplBar"></span>
+                <button class="tpl-btn tpl-save" onclick="saveCurrentAsTemplate()">💾 存为模板</button>
+                <button class="tpl-btn tpl-manage" onclick="toggleCustomTplManage()">⚙️ 管理</button>
+            </div>
+            <!-- 自定义模板管理面板 -->
+            <div id="tplManagePanel" class="tpl-manage-panel">
+                <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:#606266;">📦 自定义模板管理</div>
+                <div id="tplManageList" class="tpl-manage-list"></div>
+                <div style="margin-top:8px;font-size:11px;color:#909399;">提示：自定义模板保存在本浏览器（localStorage），换浏览器需重新保存。</div>
+            </div>
+            <div class="gen-row">
+                <div class="form-group">
+                    <label>用户名 *</label>
+                    <input type="text" id="genUser" placeholder="如：张三" list="clinicUserList">
+                </div>
+                <div class="form-group">
+                    <label>版本类型 *</label>
+                    <select id="genType">
+                        <option value="trial">试用版（30张/月，7天）</option>
+                        <option value="personal" selected>标准版（无限处方，1年）</option>
+                        <option value="pro">机构版（无限+同步+多设备，1年）</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>有效天数</label>
+                    <input type="number" id="genDays" placeholder="如 365，留空则按类型默认" min="1">
+                </div>
+                <div class="form-group">
+                    <label>到期日期</label>
+                    <input type="date" id="genExpiresAt" placeholder="与天数二选一">
+                </div>
+                <div class="form-group">
+                    <label>生成数量</label>
+                    <input type="number" id="genCount" value="1" min="1" max="100">
+                </div>
+                <div class="form-group">
+                    <label>绑定诊所名</label>
+                    <input type="text" id="genClinicName" placeholder="如：本能堂中医诊所（可留空）" list="clinicNameList">
+                </div>
+                <div class="form-group">
+                    <label>最大设备数</label>
+                    <input type="number" id="genMaxDevices" value="1" min="1" max="10" title="1=单机激活码；5=可激活5台设备（机构版推荐）">
+                </div>
+                <!-- ★ 售后管理字段：订单号/电话/微信，生成时拼接到备注字段，方便售后查询 -->
+                <div class="form-group">
+                    <label>订单号（售后关联）</label>
+                    <input type="text" id="genOrderNo" placeholder="如：BNZC-GR-20260730-AB12CD（可留空）">
+                </div>
+                <div class="form-group">
+                    <label>联系电话（售后）</label>
+                    <input type="tel" id="genPhone" placeholder="如：13800138000（可留空）">
+                </div>
+                <div class="form-group">
+                    <label>微信号（售后）</label>
+                    <input type="text" id="genWechat" placeholder="如：customer_wx（可留空）">
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="genNote" placeholder="如：客户A（订单号/电话/微信会自动拼接到备注前）">
+                </div>
+            </div>
+            <!-- ★ datalist：诊所名/医师用户名自动补全（登录后由 loadClinicNames 填充） -->
+            <datalist id="clinicNameList"></datalist>
+            <datalist id="clinicUserList"></datalist>
+            <div class="gen-actions">
+                <button class="btn btn-success" onclick="generateCodes()">生成激活码</button>
+                <button class="btn" onclick="openBatchGenerateModal()">批量生成（多用户）</button>
+                <button class="btn" onclick="clearGenForm()">清空</button>
+            </div>
+        </div>
+
+        <!-- 激活码列表 -->
+        <h2>激活码列表</h2>
+        <div class="filter-bar">
+            <select id="filterStatus" onchange="loadList()">
+                <option value="">全部状态</option>
+                <option value="unused">未使用</option>
+                <option value="used">已激活</option>
+                <option value="expired">已过期</option>
+                <option value="disabled">已禁用</option>
+            </select>
+            <select id="filterType" onchange="loadList()">
+                <option value="">全部类型</option>
+                <option value="trial">试用版</option>
+                <option value="personal">标准版</option>
+                <option value="pro">机构版</option>
+            </select>
+            <input type="text" id="filterQ" placeholder="搜索激活码/用户名/备注/订单号/电话/微信" onkeyup="if(event.key==='Enter') loadList()">
+            <button class="btn btn-sm" onclick="loadList()">搜索</button>
+            <button class="btn btn-sm" onclick="clearFilter()">重置</button>
+            <button class="btn btn-sm btn-warning" onclick="openBatchExtendModal()">批量延期</button>
+            <button class="btn btn-sm" onclick="loadList()" style="margin-left:auto;">刷新</button>
+        </div>
+        <div class="table-box">
+            <table>
+                <thead>
+                    <tr>
+                        <th>激活码</th>
+                        <th>用户</th>
+                        <th>类型</th>
+                        <th>状态</th>
+                        <th>签发时间</th>
+                        <th>激活时间</th>
+                        <th>到期时间</th>
+                        <th>机器ID / 设备</th>
+                        <th>诊所名</th>
+                        <th>备注</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="listBody">
+                    <tr><td colspan="11" class="loading">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        </div><!-- /tabLicense -->
+
+        <!-- 诊所管理标签页 -->
+        <div id="tabClinics" class="tab-content">
+            <div id="clinicAlert" class="alert"></div>
+            <h2>创建新诊所</h2>
+            <div class="gen-box">
+                <div class="gen-row">
+                    <div class="form-group">
+                        <label>诊所名称 *</label>
+                        <input type="text" id="newClinicName" placeholder="如：惠康中医诊所">
+                    </div>
+                    <div class="form-group">
+                        <label>管理员账号 *</label>
+                        <input type="text" id="newClinicAdminUsername" placeholder="admin_诊所简码（如 admin_hkt）">
+                    </div>
+                    <div class="form-group">
+                        <label>管理员密码 *</label>
+                        <input type="password" id="newClinicAdminPassword" placeholder="初始密码">
+                    </div>
+                    <div class="form-group">
+                        <label>管理员姓名</label>
+                        <input type="text" id="newClinicAdminName" placeholder="如：张三">
+                    </div>
+                </div>
+                <div class="gen-actions">
+                    <button class="btn btn-success" onclick="handleCreateClinic()">创建诊所</button>
+                    <button class="btn" onclick="clearClinicForm()">清空</button>
+                </div>
+            </div>
+
+            <h2>诊所列表</h2>
+            <div id="clinicList" class="table-box" style="padding: 10px;">
+                <div class="loading">加载中...</div>
+            </div>
+        </div>
+
+        <!-- 用户管理标签页 -->
+        <div id="tabUsers" class="tab-content">
+            <div id="userAlert" class="alert"></div>
+            <div class="filter-bar">
+                <button class="btn btn-sm" onclick="loadUsersList()" style="margin-left:auto;">刷新</button>
+            </div>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>用户名</th>
+                            <th>姓名</th>
+                            <th>角色</th>
+                            <th>所属诊所</th>
+                            <th>允许模式</th>
+                            <th>创建时间</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersListBody">
+                        <tr><td colspan="6" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">提示：用户管理（创建/编辑/删除）请到对应诊所内操作，或使用主应用的用户管理界面。此处仅用于查看所有用户列表。</p>
+        </div>
+    </div>
+</div>
+
+<!-- ★ 任务5：日志弹窗 -->
+<div id="logModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeLogModal()">&times;</span>
+        <h3>激活码操作日志</h3>
+        <div id="logModalAlert" class="alert"></div>
+        <div style="margin-bottom:12px;color:#606266;font-size:13px;">
+            <strong>激活码：</strong><span id="logModalCode" style="font-family:Courier New,monospace;"></span>
+        </div>
+        <ul class="timeline" id="logTimeline">
+            <li style="border-left-color:#95a5a6;">加载中...</li>
+        </ul>
+    </div>
+</div>
+
+<!-- 设备列表弹窗 -->
+<div id="devicesModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeDevicesModal()">&times;</span>
+        <h3>已绑定设备列表</h3>
+        <div id="devicesModalAlert" class="alert"></div>
+        <div style="margin-bottom:12px;color:#606266;font-size:13px;">
+            <strong>激活码：</strong><span id="devicesModalCode" style="font-family:Courier New,monospace;"></span>
+            <span style="margin-left:16px;">配额：<strong id="devicesModalMax">1</strong> · 已用：<strong id="devicesModalUsed">0</strong></span>
+        </div>
+        <div id="devicesList" style="max-height:400px;overflow-y:auto;">加载中...</div>
+    </div>
+</div>
+
+<!-- 离线导出 license 弹窗 -->
+<div id="exportModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeExportModal()">&times;</span>
+        <h3>离线导出激活文件</h3>
+        <div id="exportModalAlert" class="alert"></div>
+        <div style="margin-bottom:16px;color:#606266;font-size:13px;line-height:1.6;">
+            为无法联网的客户生成 license.dat 文件。<br>
+            客户在激活窗口点击"📁 导入离线激活文件"选择该文件即可完成激活。
+        </div>
+        <div class="gen-row">
+            <div class="form-group">
+                <label>激活码 *</label>
+                <input type="text" id="exportCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX">
+            </div>
+            <div class="form-group">
+                <label>机器 ID *</label>
+                <input type="text" id="exportMachineId" placeholder="客户提供的32位机器ID">
+            </div>
+            <div class="form-group">
+                <label>诊所名</label>
+                <input type="text" id="exportClinicName" placeholder="绑定的诊所名（如已绑定）">
+            </div>
+        </div>
+        <div style="margin-top:12px;text-align:right;">
+            <button class="btn" onclick="closeExportModal()">取消</button>
+            <button class="btn btn-success" onclick="exportLicense()">生成 license 文件</button>
+        </div>
+    </div>
+</div>
+
+<!-- 批量延期弹窗 -->
+<div id="batchExtendModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeBatchExtendModal()">&times;</span>
+        <h3>批量延期激活码</h3>
+        <div id="batchExtendAlert" class="alert"></div>
+        <div style="margin-bottom:12px;color:#606266;font-size:13px;line-height:1.6;">
+            输入多个激活码（每行一个，最多 100 个），选择延期方式。<br>
+            <strong>延期逻辑</strong>：若已过期，从当前时间起加天数；否则在原到期时间基础上加。
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+            <label>激活码列表（每行一个）*</label>
+            <textarea id="batchExtendCodes" rows="6" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX&#10;BNZC-YYYY-YYYY-YYYY-YYYY" style="width:100%;font-family:Courier New,monospace;"></textarea>
+        </div>
+        <div class="gen-row">
+            <div class="form-group">
+                <label>延期天数</label>
+                <input type="number" id="batchExtendDays" placeholder="如 365" min="1" max="3650">
+            </div>
+            <div class="form-group">
+                <label>或新到期日期</label>
+                <input type="date" id="batchExtendExpiresAt">
+            </div>
+        </div>
+        <div style="margin-top:12px;text-align:right;">
+            <button class="btn" onclick="closeBatchExtendModal()">取消</button>
+            <button class="btn btn-success" onclick="batchExtend()">确认延期</button>
+        </div>
+    </div>
+</div>
+
+<!-- 修改激活码弹窗 -->
+<div id="editModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeEditModal()">&times;</span>
+        <h3>修改激活码信息</h3>
+        <div id="editModalAlert" class="alert"></div>
+        <div style="margin-bottom:12px;color:#606266;font-size:13px;">
+            <strong>激活码：</strong><span id="editCode" style="font-family:Courier New,monospace;"></span>
+        </div>
+        <div class="gen-row">
+            <div class="form-group">
+                <label>最大设备数</label>
+                <input type="number" id="editMaxDevices" min="1" max="10">
+                <small style="color:#909399;">若新配额小于已绑定设备数，将自动解绑最旧的设备</small>
+            </div>
+            <div class="form-group">
+                <label>诊所名</label>
+                <input type="text" id="editClinicName" list="clinicNameList">
+            </div>
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" id="editUser" list="clinicUserList">
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <input type="text" id="editNote">
+            </div>
+        </div>
+        <div style="margin-top:12px;text-align:right;">
+            <button class="btn" onclick="closeEditModal()">取消</button>
+            <button class="btn btn-success" onclick="saveEdit()">保存修改</button>
+        </div>
+    </div>
+</div>
+
+<!-- ★ 批量生成弹窗（多用户，每行一个） -->
+<div id="batchGenModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeBatchGenModal()">&times;</span>
+        <h3>批量生成激活码（多用户）</h3>
+        <div id="batchGenAlert" class="alert"></div>
+        <div style="margin-bottom:12px;color:#606266;font-size:13px;line-height:1.6;">
+            每行一个用户名（最多 100 个），共享下方配置。<br>
+            系统会为每个用户生成一个独立激活码，生成后可在结果弹窗中下载 CSV。
+        </div>
+        <div class="form-group" style="margin-bottom:12px;">
+            <label>用户名列表（每行一个）*</label>
+            <textarea id="batchGenUsers" class="batch-textarea" placeholder="张三&#10;李四&#10;王五&#10;本能堂中医诊所_赵医师"></textarea>
+            <div class="batch-tip">提示：用户名长度 1-50，支持中文。同名用户也可生成多个不同激活码。</div>
+        </div>
+        <!-- ★ 快捷模板栏（批量生成） -->
+        <div class="tpl-bar" style="margin-bottom:8px;">
+            <span class="tpl-label">快捷模板：</span>
+            <button class="tpl-btn" data-btpl="trial7" onclick="applyBatchTemplate('trial7')">试用 · 7天</button>
+            <button class="tpl-btn" data-btpl="personal1y" onclick="applyBatchTemplate('personal1y')">个人 · 1年</button>
+            <button class="tpl-btn" data-btpl="personal3y" onclick="applyBatchTemplate('personal3y')">个人 · 3年</button>
+            <button class="tpl-btn" data-btpl="personalForever" onclick="applyBatchTemplate('personalForever')">个人 · 永久</button>
+            <button class="tpl-btn" data-btpl="pro1y" onclick="applyBatchTemplate('pro1y')">专业 · 1年 · 5设备</button>
+            <button class="tpl-btn" data-btpl="pro3y" onclick="applyBatchTemplate('pro3y')">专业 · 3年 · 10设备</button>
+            <button class="tpl-btn tpl-save" onclick="autoMatchBatchVersion()">🤖 智能匹配</button>
+        </div>
+        <div class="gen-row">
+            <div class="form-group">
+                <label>版本类型 *</label>
+                <select id="batchGenType">
+                    <option value="trial">试用版</option>
+                    <option value="personal" selected>标准版</option>
+                    <option value="pro">机构版</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>有效天数</label>
+                <input type="number" id="batchGenDays" placeholder="如 365" min="1">
+            </div>
+            <div class="form-group">
+                <label>或到期日期</label>
+                <input type="date" id="batchGenExpiresAt">
+            </div>
+            <div class="form-group">
+                <label>绑定诊所名</label>
+                <input type="text" id="batchGenClinicName" placeholder="可留空" list="clinicNameList">
+            </div>
+            <div class="form-group">
+                <label>最大设备数</label>
+                <input type="number" id="batchGenMaxDevices" value="1" min="1" max="10">
+            </div>
+            <!-- ★ 售后管理字段（批量） -->
+            <div class="form-group">
+                <label>订单号（售后关联）</label>
+                <input type="text" id="batchGenOrderNo" placeholder="如：BNZC-GR-20260730-AB12CD（可留空）">
+            </div>
+            <div class="form-group">
+                <label>联系电话（售后）</label>
+                <input type="tel" id="batchGenPhone" placeholder="如：13800138000（可留空）">
+            </div>
+            <div class="form-group">
+                <label>微信号（售后）</label>
+                <input type="text" id="batchGenWechat" placeholder="如：customer_wx（可留空）">
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <input type="text" id="batchGenNote" placeholder="如：批量客户（订单号/电话/微信会自动拼接）">
+            </div>
+        </div>
+        <div style="margin-top:12px;text-align:right;">
+            <button class="btn" onclick="closeBatchGenModal()">取消</button>
+            <button class="btn" onclick="syncBatchFromMain()">从主表单同步配置</button>
+            <button class="btn btn-success" onclick="batchGenerate()">确认批量生成</button>
+        </div>
+    </div>
+</div>
+
+<!-- ★ 生成结果弹窗（含 CSV 导出） -->
+<div id="resultModal" class="modal-overlay">
+    <div class="modal-box">
+        <span class="modal-close" onclick="closeResultModal()">&times;</span>
+        <h3>激活码生成结果</h3>
+        <div id="resultModalAlert" class="alert"></div>
+        <div style="margin-bottom:8px;color:#606266;font-size:13px;">
+            共生成 <strong id="resultCount" style="color:#27ae60;">0</strong> 个激活码：
+        </div>
+        <div id="resultList" class="result-list"></div>
+        <div class="result-actions">
+            <button class="btn" onclick="copyAllResultCodes()">复制全部</button>
+            <button class="btn" onclick="downloadResultCSV()">下载 CSV</button>
+            <button class="btn btn-success" onclick="closeResultModal()">完成</button>
+        </div>
+    </div>
+</div>
+
+<script>
+// API 基础路径（与 Pages Functions 路径一致）
+const API_BASE = '/api';
+let token = localStorage.getItem('cloud_token') || localStorage.getItem('license_admin_token') || '';
+let currentUser = localStorage.getItem('cloud_user') || localStorage.getItem('license_admin_user') || '';
+
+// 显示提示
+function showAlert(elementId, message, type) {
+    const el = document.getElementById(elementId);
+    el.className = 'alert show alert-' + type;
+    el.textContent = message;
+    setTimeout(() => { el.className = 'alert'; }, 4000);
+}
+
+// 登录
+async function doLogin() {
+    const username = document.getElementById('loginUser').value.trim();
+    const password = document.getElementById('loginPass').value;
+    if (!username || !password) {
+        showAlert('loginAlert', '请输入账号和密码', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(API_BASE + '/users?login=true', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        const data = await res.json();
+        if (data.success) {
+            // 校验是否为 platform_admin
+            if (data.user.role !== 'platform_admin') {
+                showAlert('loginAlert', '仅平台总管理员可登录此后台', 'error');
+                return;
+            }
+            token = data.token;
+            currentUser = username;
+            localStorage.setItem('cloud_token', token);
+            localStorage.setItem('cloud_user', username);
+            localStorage.setItem('license_admin_token', token);
+            localStorage.setItem('license_admin_user', username);
+            showMain();
+        } else {
+            showAlert('loginAlert', data.error || '登录失败', 'error');
+        }
+    } catch (e) {
+        showAlert('loginAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+function doLogout() {
+    token = '';
+    currentUser = '';
+    localStorage.removeItem('cloud_token');
+    localStorage.removeItem('cloud_user');
+    localStorage.removeItem('license_admin_token');
+    localStorage.removeItem('license_admin_user');
+    location.reload();
+}
+
+function showMain() {
+    document.getElementById('loginSection').classList.add('hidden');
+    document.getElementById('mainSection').classList.remove('hidden');
+    document.getElementById('currentAdmin').textContent = currentUser;
+    loadList();
+    // ★ 激活码生成优化：登录后异步加载诊所名/用户名补全列表
+    loadClinicNames();
+    // ★ 快捷模板优化：恢复上次配置 + 渲染自定义模板按钮
+    restoreLastGenConfig();
+    renderCustomTplBar();
+}
+
+// ★ 加载诊所列表到 datalist（用于诊所名/用户名自动补全）
+async function loadClinicNames() {
+    try {
+        const res = await fetch(API_BASE + '/users?clinics=true', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.data)) return;
+        // 填充诊所名 datalist
+        const nameSet = new Set();
+        const userSet = new Set();
+        for (const c of data.data) {
+            if (c.name) nameSet.add(c.name);
+            if (c.adminUsername) userSet.add(c.adminUsername);
+            if (c.adminName) userSet.add(c.adminName);
+        }
+        const nameList = document.getElementById('clinicNameList');
+        nameList.innerHTML = Array.from(nameSet).map(n => '<option value="' + escapeHtml(n) + '"></option>').join('');
+        const userList = document.getElementById('clinicUserList');
+        userList.innerHTML = Array.from(userSet).map(u => '<option value="' + escapeHtml(u) + '"></option>').join('');
+    } catch (e) {
+        console.warn('loadClinicNames failed:', e.message);
+    }
+}
+
+// ★ 快捷模板系统：预设 + 自定义 + 记忆
+// 预设模板（系统内置，永久版用 36500 天 = 100 年模拟）
+const PRESET_TEMPLATES = {
+    trial7:           { name: '试用 · 7天',           type: 'trial',    days: 7,     maxDevices: 1  },
+    trial30:          { name: '试用 · 30天',          type: 'trial',    days: 30,    maxDevices: 1  },
+    personal1y:       { name: '个人 · 1年',           type: 'personal', days: 365,   maxDevices: 1  },
+    personal3y:       { name: '个人 · 3年',           type: 'personal', days: 1095,  maxDevices: 1  },
+    personalForever:  { name: '个人 · 永久',          type: 'personal', days: 36500, maxDevices: 1  },
+    pro1y:            { name: '专业 · 1年 · 5设备',   type: 'pro',      days: 365,   maxDevices: 5  },
+    pro3y:            { name: '专业 · 3年 · 10设备',  type: 'pro',      days: 1095,  maxDevices: 10 },
+    proForever:       { name: '专业 · 永久 · 10设备', type: 'pro',      days: 36500, maxDevices: 10 }
+};
+
+// 自定义模板存取（localStorage）
+function getCustomTemplates() {
+    try { return JSON.parse(localStorage.getItem('hk_custom_templates') || '[]'); } catch(e) { return []; }
+}
+function saveCustomTemplatesList(list) {
+    localStorage.setItem('hk_custom_templates', JSON.stringify(list));
+}
+
+// 渲染自定义模板按钮到主表单
+function renderCustomTplBar() {
+    const bar = document.getElementById('customTplBar');
+    if (!bar) return;
+    const list = getCustomTemplates();
+    bar.innerHTML = list.map((t, i) =>
+        `<button class="tpl-btn tpl-custom" onclick="applyCustomTemplate(${i})" title="${escapeHtml(t.name)}">${escapeHtml(t.name)}<span class="tpl-del" onclick="event.stopPropagation();deleteCustomTemplate(${i})">×</span></button>`
+    ).join('');
+}
+
+// 渲染自定义模板管理列表
+function renderCustomTplManageList() {
+    const listEl = document.getElementById('tplManageList');
+    if (!listEl) return;
+    const list = getCustomTemplates();
+    if (list.length === 0) {
+        listEl.innerHTML = '<div class="empty-tip">暂无自定义模板，点击上方"💾 存为模板"按钮保存当前配置</div>';
+        return;
+    }
+    const typeLabel = { trial: '试用版', personal: '标准版', pro: '机构版' };
+    listEl.innerHTML = list.map((t, i) => {
+        const daysLabel = t.days >= 36500 ? '永久' : (t.days >= 365 ? (t.days/365) + '年' : t.days + '天');
+        const info = `${escapeHtml(t.name)} · ${typeLabel[t.type]||t.type} · ${daysLabel} · ${t.maxDevices}设备`;
+        return `<div class="tpl-manage-item">
+            <span class="tmi-info">${info}</span>
+            <span class="tmi-actions">
+                <button class="tmi-btn apply-btn" onclick="applyCustomTemplate(${i})">应用</button>
+                <button class="tmi-btn del-btn" onclick="deleteCustomTemplate(${i})">删除</button>
+            </span>
+        </div>`;
+    }).join('');
+}
+
+// 切换自定义模板管理面板显示
+function toggleCustomTplManage() {
+    const panel = document.getElementById('tplManagePanel');
+    if (!panel) return;
+    panel.classList.toggle('show');
+    if (panel.classList.contains('show')) renderCustomTplManageList();
+}
+
+// 保存当前主表单配置为自定义模板
+function saveCurrentAsTemplate() {
+    const name = prompt('请输入模板名称（如：老客户专属3年5设备）');
+    if (!name || !name.trim()) return;
+    const type = document.getElementById('genType').value;
+    const days = document.getElementById('genDays').value;
+    const maxDevices = document.getElementById('genMaxDevices').value || 1;
+    if (!days) {
+        showAlert('mainAlert', '请先填写有效天数再保存为模板（永久版填 36500）', 'error');
+        return;
+    }
+    const list = getCustomTemplates();
+    list.push({
+        name: name.trim(),
+        type: type,
+        days: parseInt(days, 10),
+        maxDevices: parseInt(maxDevices, 10)
+    });
+    saveCustomTemplatesList(list);
+    renderCustomTplBar();
+    renderCustomTplManageList();
+    showAlert('mainAlert', '已保存自定义模板：' + name.trim() + '（共 ' + list.length + ' 个）', 'success');
+}
+
+// 应用自定义模板
+function applyCustomTemplate(index) {
+    const list = getCustomTemplates();
+    const t = list[index];
+    if (!t) return;
+    // 清除预设模板高亮
+    document.querySelectorAll('.tpl-bar .tpl-btn:not(.tpl-custom)').forEach(b => b.classList.remove('active'));
+    document.getElementById('genType').value = t.type;
+    document.getElementById('genDays').value = t.days;
+    document.getElementById('genExpiresAt').value = '';
+    document.getElementById('genMaxDevices').value = t.maxDevices;
+    rememberGenConfig();
+    showAlert('mainAlert', '已应用自定义模板：' + t.name, 'info');
+}
+
+// 删除自定义模板
+function deleteCustomTemplate(index) {
+    const list = getCustomTemplates();
+    const t = list[index];
+    if (!t) return;
+    if (!confirm('确认删除自定义模板"' + t.name + '"？')) return;
+    list.splice(index, 1);
+    saveCustomTemplatesList(list);
+    renderCustomTplBar();
+    renderCustomTplManageList();
+    showAlert('mainAlert', '已删除模板：' + t.name, 'info');
+}
+
+// ★ 快捷模板：一键填充常用配置（预设模板）
+function applyTemplate(tpl) {
+    const p = PRESET_TEMPLATES[tpl];
+    if (!p) return;
+    // 高亮当前选中预设按钮
+    document.querySelectorAll('.tpl-bar .tpl-btn:not(.tpl-custom):not(.tpl-save):not(.tpl-manage)').forEach(b => {
+        b.classList.toggle('active', b.dataset.tpl === tpl);
+    });
+    document.getElementById('genType').value = p.type;
+    document.getElementById('genDays').value = p.days;
+    document.getElementById('genExpiresAt').value = '';  // 模板使用 days，清空 expiresAt
+    document.getElementById('genMaxDevices').value = p.maxDevices;
+    rememberGenConfig();
+    showAlert('mainAlert', '已应用模板：' + p.name, 'info');
+}
+
+// 记忆主表单配置到 localStorage（user/note/count 不记忆，便于连续生成）
+function rememberGenConfig() {
+    const cfg = {
+        type: document.getElementById('genType').value,
+        days: document.getElementById('genDays').value,
+        expiresAt: document.getElementById('genExpiresAt').value,
+        clinicName: document.getElementById('genClinicName').value,
+        maxDevices: document.getElementById('genMaxDevices').value,
+        note: document.getElementById('genNote').value
+    };
+    localStorage.setItem('hk_last_gen_config', JSON.stringify(cfg));
+}
+
+// 恢复上次主表单配置（登录后调用）
+function restoreLastGenConfig() {
+    try {
+        const cfg = JSON.parse(localStorage.getItem('hk_last_gen_config') || '{}');
+        if (!cfg || Object.keys(cfg).length === 0) return;
+        if (cfg.type) document.getElementById('genType').value = cfg.type;
+        if (cfg.days) document.getElementById('genDays').value = cfg.days;
+        if (cfg.expiresAt) document.getElementById('genExpiresAt').value = cfg.expiresAt;
+        if (cfg.clinicName) document.getElementById('genClinicName').value = cfg.clinicName;
+        if (cfg.maxDevices) document.getElementById('genMaxDevices').value = cfg.maxDevices;
+        if (cfg.note) document.getElementById('genNote').value = cfg.note;
+    } catch(e) { /* ignore */ }
+}
+
+// HTML 转义（防 XSS）— 复用文件末尾已定义的 escapeHtml(str)，此处不再重复定义
+
+// 生成激活码
+async function generateCodes() {
+    const user = document.getElementById('genUser').value.trim();
+    const type = document.getElementById('genType').value;
+    const days = document.getElementById('genDays').value;
+    const expiresAt = document.getElementById('genExpiresAt').value;
+    const count = document.getElementById('genCount').value || 1;
+    const note = document.getElementById('genNote').value.trim();
+    const clinicName = document.getElementById('genClinicName').value.trim();
+    const maxDevices = document.getElementById('genMaxDevices').value;
+    // ★ 售后管理字段
+    const orderNo = document.getElementById('genOrderNo').value.trim();
+    const phone = document.getElementById('genPhone').value.trim();
+    const wechat = document.getElementById('genWechat').value.trim();
+
+    if (!user) { showAlert('mainAlert', '请输入用户名', 'error'); return; }
+    if (!days && !expiresAt) { showAlert('mainAlert', '请填写有效天数或到期日期', 'error'); return; }
+
+    // ★ 拼接售后字段到 note：[订单号:XXX][电话:XXX][微信:XXX] 原备注
+    // 这样售后可通过列表搜索（激活码/用户名/备注）快速定位客户
+    let fullNote = note;
+    const afterSalesPrefix = [];
+    if (orderNo) afterSalesPrefix.push('[订单号:' + orderNo + ']');
+    if (phone) afterSalesPrefix.push('[电话:' + phone + ']');
+    if (wechat) afterSalesPrefix.push('[微信:' + wechat + ']');
+    if (afterSalesPrefix.length > 0) fullNote = afterSalesPrefix.join('') + (note ? ' ' + note : '');
+
+    const body = { user, type, count: parseInt(count, 10), note: fullNote };
+    if (days) body.days = parseInt(days, 10);
+    if (expiresAt) body.expiresAt = expiresAt;
+    if (clinicName) body.clinicName = clinicName;
+    if (maxDevices) body.maxDevices = parseInt(maxDevices, 10);
+
+    try {
+        const res = await fetch(API_BASE + '/license/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            // ★ 优化：使用结果弹窗展示生成结果（含 CSV 导出）
+            showResultModal(data.codes || [], 'generate');
+            // ★ 优化：保留 type/days/clinicName/maxDevices，仅清空 user/note/count/售后字段，便于连续生成
+            document.getElementById('genUser').value = '';
+            document.getElementById('genNote').value = '';
+            document.getElementById('genCount').value = '1';
+            document.getElementById('genOrderNo').value = '';
+            document.getElementById('genPhone').value = '';
+            document.getElementById('genWechat').value = '';
+            // ★ 快捷模板优化：记忆当前配置（user/note/售后字段已清空，不记忆这些）
+            rememberGenConfig();
+            loadList();
+        } else {
+            showAlert('mainAlert', data.error || '生成失败', 'error');
+        }
+    } catch (e) {
+        showAlert('mainAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ★ 批量生成弹窗（多用户）
+function openBatchGenerateModal() {
+    document.getElementById('batchGenAlert').className = 'alert';
+    document.getElementById('batchGenModal').classList.add('show');
+    // 默认从主表单同步一次配置
+    syncBatchFromMain();
+}
+
+function closeBatchGenModal() {
+    document.getElementById('batchGenModal').classList.remove('show');
+    document.getElementById('batchGenAlert').className = 'alert';
+}
+
+// ★ 批量生成弹窗：应用预设模板
+function applyBatchTemplate(tpl) {
+    const p = PRESET_TEMPLATES[tpl];
+    if (!p) return;
+    // 高亮当前选中按钮
+    document.querySelectorAll('#batchGenModal .tpl-btn[data-btpl]').forEach(b => {
+        b.classList.toggle('active', b.dataset.btpl === tpl);
+    });
+    document.getElementById('batchGenType').value = p.type;
+    document.getElementById('batchGenDays').value = p.days;
+    document.getElementById('batchGenExpiresAt').value = '';
+    document.getElementById('batchGenMaxDevices').value = p.maxDevices;
+    showAlert('batchGenAlert', '已应用模板：' + p.name, 'info');
+}
+
+// ★ 智能匹配：根据用户名关键字自动推荐版本配置
+// 规则：用户名包含"试用/test"→试用7天；包含"专业/pro/工作室/连锁"→机构版1年5设备；其他→标准版1年
+function autoMatchBatchVersion() {
+    const usersText = document.getElementById('batchGenUsers').value.trim();
+    if (!usersText) {
+        showAlert('batchGenAlert', '请先输入用户名列表，再进行智能匹配', 'error');
+        return;
+    }
+    const users = usersText.split('\n').map(s => s.trim()).filter(s => s);
+    if (users.length === 0) {
+        showAlert('batchGenAlert', '未识别到有效用户名', 'error');
+        return;
+    }
+
+    // 关键字匹配统计
+    let trialCount = 0, proCount = 0, personalCount = 0;
+    const trialKeywords = ['试用', 'test', 'trial', '体验'];
+    const proKeywords = ['专业', 'pro', '工作室', '连锁', '分院', '诊所群', ' multi', '多设备'];
+
+    for (const u of users) {
+        const lower = u.toLowerCase();
+        if (trialKeywords.some(k => lower.includes(k.toLowerCase()))) {
+            trialCount++;
+        } else if (proKeywords.some(k => lower.includes(k.toLowerCase()))) {
+            proCount++;
+        } else {
+            personalCount++;
+        }
+    }
+
+    // 按多数派推荐
+    let recommended, reason;
+    if (trialCount >= proCount && trialCount >= personalCount) {
+        recommended = 'trial7';
+        reason = `检测到 ${trialCount} 个试用类用户名（含"试用/test"等关键字），推荐试用版 7 天`;
+    } else if (proCount >= personalCount) {
+        recommended = 'pro1y';
+        reason = `检测到 ${proCount} 个专业类用户名（含"专业/工作室/连锁"等关键字），推荐机构版 1 年 5 设备`;
+    } else {
+        recommended = 'personal1y';
+        reason = `检测到 ${personalCount} 个普通用户名，推荐标准版 1 年（默认）`;
+    }
+
+    applyBatchTemplate(recommended);
+    showAlert('batchGenAlert',
+        `🤖 智能匹配结果：${reason}\n统计：试用${trialCount} / 专业${proCount} / 个人${personalCount}（共 ${users.length} 个用户）`,
+        'success');
+}
+
+// 从主表单同步配置到批量生成弹窗
+function syncBatchFromMain() {
+    document.getElementById('batchGenType').value = document.getElementById('genType').value;
+    document.getElementById('batchGenDays').value = document.getElementById('genDays').value;
+    document.getElementById('batchGenExpiresAt').value = document.getElementById('genExpiresAt').value;
+    document.getElementById('batchGenClinicName').value = document.getElementById('genClinicName').value;
+    document.getElementById('batchGenMaxDevices').value = document.getElementById('genMaxDevices').value || 1;
+    document.getElementById('batchGenNote').value = document.getElementById('genNote').value;
+    // ★ 同步售后字段
+    document.getElementById('batchGenOrderNo').value = document.getElementById('genOrderNo').value;
+    document.getElementById('batchGenPhone').value = document.getElementById('genPhone').value;
+    document.getElementById('batchGenWechat').value = document.getElementById('genWechat').value;
+    showAlert('batchGenAlert', '已从主表单同步配置', 'info');
+}
+
+// 批量生成：调用 /api/license/batch
+async function batchGenerate() {
+    const usersText = document.getElementById('batchGenUsers').value.trim();
+    const type = document.getElementById('batchGenType').value;
+    const days = document.getElementById('batchGenDays').value;
+    const expiresAt = document.getElementById('batchGenExpiresAt').value;
+    const clinicName = document.getElementById('batchGenClinicName').value.trim();
+    const maxDevices = document.getElementById('batchGenMaxDevices').value;
+    const note = document.getElementById('batchGenNote').value.trim();
+    // ★ 售后字段（批量）
+    const orderNo = document.getElementById('batchGenOrderNo').value.trim();
+    const phone = document.getElementById('batchGenPhone').value.trim();
+    const wechat = document.getElementById('batchGenWechat').value.trim();
+
+    if (!usersText) { showAlert('batchGenAlert', '请输入用户名列表', 'error'); return; }
+    if (!days && !expiresAt) { showAlert('batchGenAlert', '请填写有效天数或到期日期', 'error'); return; }
+
+    const users = usersText.split('\n').map(s => s.trim()).filter(s => s);
+    if (users.length === 0) { showAlert('batchGenAlert', '未识别到有效用户名', 'error'); return; }
+    if (users.length > 100) { showAlert('batchGenAlert', '最多 100 个用户', 'error'); return; }
+
+    // ★ 拼接售后字段到 note
+    let fullNote = note;
+    const afterSalesPrefix = [];
+    if (orderNo) afterSalesPrefix.push('[订单号:' + orderNo + ']');
+    if (phone) afterSalesPrefix.push('[电话:' + phone + ']');
+    if (wechat) afterSalesPrefix.push('[微信:' + wechat + ']');
+    if (afterSalesPrefix.length > 0) fullNote = afterSalesPrefix.join('') + (note ? ' ' + note : '');
+
+    const body = { users, type };
+    if (days) body.days = parseInt(days, 10);
+    if (expiresAt) body.expiresAt = expiresAt;
+    if (clinicName) body.clinicName = clinicName;
+    if (maxDevices) body.maxDevices = parseInt(maxDevices, 10);
+    if (fullNote) body.note = fullNote;
+
+    try {
+        const res = await fetch(API_BASE + '/license/batch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            // 关闭批量弹窗，打开结果弹窗
+            closeBatchGenModal();
+            const allCodes = (data.codes || []).slice();
+            // 若有失败项，单独提示
+            if (Array.isArray(data.failed) && data.failed.length > 0) {
+                const failDetail = data.failed.slice(0, 5).map(f => f.user + ' (' + (f.error || '未知') + ')').join('；');
+                showAlert('mainAlert', '批量生成部分失败：' + data.failed.length + ' 个\n' + failDetail, 'info');
+            }
+            showResultModal(allCodes, 'batch', data.csv);
+            // 同步主表单的关键字段（便于下次单发使用相同配置）
+            document.getElementById('genType').value = type;
+            if (days) document.getElementById('genDays').value = days;
+            if (expiresAt) document.getElementById('genExpiresAt').value = expiresAt;
+            if (clinicName) document.getElementById('genClinicName').value = clinicName;
+            if (maxDevices) document.getElementById('genMaxDevices').value = maxDevices;
+            loadList();
+        } else {
+            showAlert('batchGenAlert', data.error || '批量生成失败', 'error');
+        }
+    } catch (e) {
+        showAlert('batchGenAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ★ 生成结果弹窗
+let lastResultCodes = [];   // 缓存最近一次生成结果，供 CSV 下载/复制使用
+let lastResultCsv = null;   // 批量生成 API 返回的 CSV（可选）
+
+function showResultModal(codes, source, csv) {
+    lastResultCodes = Array.isArray(codes) ? codes : [];
+    lastResultCsv = csv || null;
+    document.getElementById('resultCount').textContent = lastResultCodes.length;
+    document.getElementById('resultModalAlert').className = 'alert';
+    const listEl = document.getElementById('resultList');
+    if (lastResultCodes.length === 0) {
+        listEl.innerHTML = '<div class="empty">无激活码</div>';
+    } else {
+        listEl.innerHTML = lastResultCodes.map(c => {
+            const code = c.code || '';
+            const user = c.user || '-';
+            const type = c.type || '-';
+            const expiresAt = c.expiresAt ? new Date(c.expiresAt).toLocaleDateString('zh-CN') : '-';
+            const clinic = c.clinicName || '-';
+            return '<div class="result-item">' +
+                '<div>' +
+                    '<div class="ri-code">' + escapeHtml(code) + '</div>' +
+                    '<div class="ri-meta">用户：' + escapeHtml(user) + ' · 类型：' + escapeHtml(type) + ' · 到期：' + escapeHtml(expiresAt) + ' · 诊所：' + escapeHtml(clinic) + '</div>' +
+                '</div>' +
+                '<button class="btn btn-sm ri-copy" onclick="copySingleResultCode(\'' + code + '\')">复制</button>' +
+            '</div>';
+        }).join('');
+    }
+    document.getElementById('resultModal').classList.add('show');
+}
+
+function closeResultModal() {
+    document.getElementById('resultModal').classList.remove('show');
+}
+
+function copySingleResultCode(code) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code).then(() => {
+            showAlert('resultModalAlert', '已复制：' + code, 'info');
+        }).catch(() => {
+            showAlert('resultModalAlert', '复制失败，请手动选择', 'error');
+        });
+    } else {
+        showAlert('resultModalAlert', '请手动复制：' + code, 'info');
+    }
+}
+
+function copyAllResultCodes() {
+    if (lastResultCodes.length === 0) {
+        showAlert('resultModalAlert', '无激活码可复制', 'error');
+        return;
+    }
+    const text = lastResultCodes.map(c => c.code).join('\n');
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(() => {
+            showAlert('resultModalAlert', '已复制 ' + lastResultCodes.length + ' 个激活码到剪贴板', 'success');
+        }).catch(() => {
+            showAlert('resultModalAlert', '复制失败，请使用 CSV 下载', 'error');
+        });
+    } else {
+        showAlert('resultModalAlert', '浏览器不支持自动复制，请使用 CSV 下载', 'info');
+    }
+}
+
+// CSV 字段转义
+function csvEscape(value) {
+    if (value === null || value === undefined) return '';
+    const s = String(value);
+    if (/[",\n\r]/.test(s)) {
+        return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+}
+
+// 格式化日期为 YYYY-MM-DD
+function formatDateISO(iso) {
+    if (!iso) return '';
+    try {
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    } catch (e) { return ''; }
+}
+
+function downloadResultCSV() {
+    if (lastResultCodes.length === 0) {
+        showAlert('resultModalAlert', '无激活码可导出', 'error');
+        return;
+    }
+    // 优先使用 batch API 返回的 CSV（已带 BOM）
+    let csv;
+    if (lastResultCsv) {
+        csv = lastResultCsv;
+    } else {
+        const header = 'code,user,type,expiresAt,clinicName,maxDevices';
+        const lines = lastResultCodes.map(c => [
+            csvEscape(c.code),
+            csvEscape(c.user),
+            csvEscape(c.type),
+            csvEscape(formatDateISO(c.expiresAt)),
+            csvEscape(c.clinicName),
+            csvEscape(c.maxDevices || 1)
+        ].join(','));
+        csv = '\uFEFF' + header + '\n' + lines.join('\n');
+    }
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    a.download = 'activation_codes_' + dateStr + '.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showAlert('resultModalAlert', 'CSV 已下载（' + lastResultCodes.length + ' 条）', 'success');
+}
+
+function clearGenForm() {
+    document.getElementById('genUser').value = '';
+    document.getElementById('genDays').value = '';
+    document.getElementById('genExpiresAt').value = '';
+    document.getElementById('genCount').value = '1';
+    document.getElementById('genClinicName').value = '';
+    document.getElementById('genMaxDevices').value = '1';
+    document.getElementById('genNote').value = '';
+    document.getElementById('genOrderNo').value = '';
+    document.getElementById('genPhone').value = '';
+    document.getElementById('genWechat').value = '';
+    // 取消模板高亮
+    document.querySelectorAll('.tpl-btn').forEach(b => b.classList.remove('active'));
+}
+
+// 加载列表
+async function loadList() {
+    const status = document.getElementById('filterStatus').value;
+    const type = document.getElementById('filterType').value;
+    const q = document.getElementById('filterQ').value.trim();
+    let url = API_BASE + '/license/list?';
+    if (status) url += 'status=' + encodeURIComponent(status) + '&';
+    if (type) url += 'type=' + encodeURIComponent(type) + '&';
+    if (q) url += 'q=' + encodeURIComponent(q) + '&';
+
+    try {
+        const res = await fetch(url, { headers: { 'Authorization': 'Bearer ' + token } });
+        const data = await res.json();
+        if (data.success) {
+            renderList(data.data);
+            renderStats(data.stats);
+        } else {
+            if (res.status === 403) {
+                showAlert('mainAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(doLogout, 1500);
+            } else {
+                document.getElementById('listBody').innerHTML = '<tr><td colspan="10" class="empty">' + (data.error || '加载失败') + '</td></tr>';
+            }
+        }
+    } catch (e) {
+        document.getElementById('listBody').innerHTML = '<tr><td colspan="10" class="empty">网络错误：' + e.message + '</td></tr>';
+    }
+}
+
+function renderStats(stats) {
+    if (!stats) return;
+    document.getElementById('statTotal').textContent = stats.total || 0;
+    document.getElementById('statUnused').textContent = stats.unused || 0;
+    document.getElementById('statUsed').textContent = stats.used || 0;
+    document.getElementById('statExpired').textContent = stats.expired || 0;
+    document.getElementById('statDisabled').textContent = stats.disabled || 0;
+}
+
+function renderList(records) {
+    const tbody = document.getElementById('listBody');
+    if (!records || records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="empty">暂无激活码</td></tr>';
+        return;
+    }
+    const typeNames = { trial: '试用版', personal: '标准版', pro: '机构版' };
+    const statusNames = { unused: '未使用', used: '已激活', expired: '已过期', disabled: '已禁用' };
+
+    tbody.innerHTML = records.map(r => {
+        const typeTag = '<span class="tag tag-' + r.type + '">' + typeNames[r.type] + '</span>';
+        const statusTag = '<span class="tag tag-' + r.status + '">' + statusNames[r.status] + '</span>';
+        const issuedAt = r.issuedAt ? new Date(r.issuedAt).toLocaleString('zh-CN') : '-';
+        const activatedAt = r.activatedAt ? new Date(r.activatedAt).toLocaleString('zh-CN') : '-';
+        const expiresAt = r.expiresAt ? new Date(r.expiresAt).toLocaleDateString('zh-CN') : '-';
+
+        // ★ v4 新增：机器ID + 设备数显示
+        const maxDev = r.maxDevices || 1;
+        const devCount = r.devicesCount || 0;
+        let machineCell = '<span style="font-family:Courier New,monospace;">' + escapeHtml(r.machineId || '-') + '</span>';
+        if (maxDev > 1 || devCount > 0) {
+            machineCell += '<div class="dev-count">设备：<strong>' + devCount + '</strong>/' + maxDev + '</div>';
+        }
+
+        // ★ v3 新增：诊所名显示
+        const clinicCell = r.clinicName ? '<span style="color:#8e44ad;">' + escapeHtml(r.clinicName) + '</span>' : '-';
+
+        let actions = '<button class="btn btn-sm" onclick="copyCode(\'' + r.code + '\')">复制</button>';
+        actions += '<button class="btn btn-sm" onclick="showLogs(\'' + r.code + '\')">日志</button>';
+        actions += '<button class="btn btn-sm" onclick="openEditModal(\'' + r.code + '\')">编辑</button>';
+        if (r.status === 'used') {
+            actions += '<button class="btn btn-sm" onclick="showDevices(\'' + r.code + '\')">查看设备</button>';
+        }
+        actions += '<button class="btn btn-sm" onclick="openExportModal(\'' + r.code + '\')">导出</button>';
+        if (r.status !== 'disabled') {
+            actions += '<button class="btn btn-sm btn-warning" onclick="manageCode(\'' + r.code + '\',\'disable\')">禁用</button>';
+        } else {
+            actions += '<button class="btn btn-sm btn-success" onclick="manageCode(\'' + r.code + '\',\'enable\')">启用</button>';
+        }
+        actions += '<button class="btn btn-sm btn-danger" onclick="deleteCode(\'' + r.code + '\')">删除</button>';
+
+        return '<tr>' +
+            '<td class="code">' + r.code + '</td>' +
+            '<td>' + escapeHtml(r.user || '-') + '</td>' +
+            '<td>' + typeTag + '</td>' +
+            '<td>' + statusTag + '</td>' +
+            '<td>' + issuedAt + '</td>' +
+            '<td>' + activatedAt + '</td>' +
+            '<td>' + expiresAt + '</td>' +
+            '<td>' + machineCell + '</td>' +
+            '<td>' + clinicCell + '</td>' +
+            '<td>' + escapeHtml(r.note || '-') + '</td>' +
+            '<td style="white-space:nowrap;">' + actions + '</td>' +
+            '</tr>';
+    }).join('');
+}
+
+// ★ 任务5：查看操作日志
+async function showLogs(code) {
+    document.getElementById('logModalCode').textContent = code;
+    document.getElementById('logModal').classList.add('show');
+    document.getElementById('logTimeline').innerHTML = '<li style="border-left-color:#95a5a6;">加载中...</li>';
+    try {
+        const res = await fetch(API_BASE + '/license/logs?code=' + encodeURIComponent(code), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success) {
+            renderLogs(data.logs || []);
+        } else {
+            if (res.status === 403) {
+                showAlert('logModalAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(() => { closeLogModal(); doLogout(); }, 1500);
+            } else {
+                document.getElementById('logTimeline').innerHTML = '<li style="border-left-color:#e74c3c;">' + escapeHtml(data.error || '加载失败') + '</li>';
+            }
+        }
+    } catch (e) {
+        document.getElementById('logTimeline').innerHTML = '<li style="border-left-color:#e74c3c;">网络错误：' + escapeHtml(e.message) + '</li>';
+    }
+}
+
+function renderLogs(logs) {
+    const ul = document.getElementById('logTimeline');
+    if (!logs || logs.length === 0) {
+        ul.innerHTML = '<li style="border-left-color:#95a5a6;">暂无操作记录</li>';
+        return;
+    }
+    const actionNames = {
+        generate: '生成激活码',
+        activate: '激活',
+        reactivate: '重激活',
+        unbind: '解绑机器',
+        disable: '禁用',
+        enable: '启用',
+        delete: '删除',
+        'auto-unbind': '自动解绑',
+        extend: '延期',
+        'export-offline': '导出离线文件',
+        'export-offline-reactivate': '导出离线文件(重激活)',
+        update: '修改字段'
+    };
+    ul.innerHTML = logs.map(log => {
+        const time = new Date(log.time).toLocaleString('zh-CN');
+        return '<li>' +
+            '<div class="tl-action tl-tag-' + log.action + '">' + (actionNames[log.action] || log.action) + '</div>' +
+            '<div class="tl-time">' + time + '</div>' +
+            (log.detail ? '<div class="tl-detail">' + escapeHtml(log.detail) + '</div>' : '') +
+            '<div class="tl-meta">操作人：' + escapeHtml(log.operator || '-') + ' · IP：' + escapeHtml(log.ip || '-') + '</div>' +
+            '</li>';
+    }).join('');
+}
+
+function closeLogModal() {
+    document.getElementById('logModal').classList.remove('show');
+}
+
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function copyCode(code) {
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(code).then(() => {
+            showAlert('mainAlert', '已复制：' + code, 'info');
+        });
+    } else {
+        showAlert('mainAlert', '请手动复制：' + code, 'info');
+    }
+}
+
+async function manageCode(code, action) {
+    const actionNames = { unbind: '解绑', disable: '禁用', enable: '启用' };
+    if (!confirm('确认' + actionNames[action] + '激活码 ' + code + ' ?')) return;
+    try {
+        const res = await fetch(API_BASE + '/license/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ code, action })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('mainAlert', data.message, 'success');
+            loadList();
+        } else {
+            showAlert('mainAlert', data.error || '操作失败', 'error');
+        }
+    } catch (e) {
+        showAlert('mainAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 设备列表查看 + 单设备解绑 =====
+// 查看激活码绑定的设备列表
+async function showDevices(code) {
+    document.getElementById('devicesModalCode').textContent = code;
+    document.getElementById('devicesModal').classList.add('show');
+    document.getElementById('devicesModalAlert').className = 'alert';
+    document.getElementById('devicesList').innerHTML = '<div class="loading">加载中...</div>';
+    document.getElementById('devicesModalMax').textContent = '1';
+    document.getElementById('devicesModalUsed').textContent = '0';
+    try {
+        const res = await fetch(API_BASE + '/license/status?code=' + encodeURIComponent(code), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+            const r = data.data;
+            const maxDev = r.maxDevices || 1;
+            const devices = r.devices || [];
+            document.getElementById('devicesModalMax').textContent = maxDev;
+            document.getElementById('devicesModalUsed').textContent = devices.length;
+            renderDevicesList(code, devices);
+        } else {
+            if (res.status === 403) {
+                showAlert('devicesModalAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(() => { closeDevicesModal(); doLogout(); }, 1500);
+            } else {
+                document.getElementById('devicesList').innerHTML = '<div class="empty">' + escapeHtml(data.error || '加载失败') + '</div>';
+            }
+        }
+    } catch (e) {
+        document.getElementById('devicesList').innerHTML = '<div class="empty">网络错误：' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+function renderDevicesList(code, devices) {
+    const el = document.getElementById('devicesList');
+    if (!devices || devices.length === 0) {
+        el.innerHTML = '<div class="empty">暂无已绑定设备</div>';
+        return;
+    }
+    el.innerHTML = devices.map((d, i) => {
+        const activatedAt = d.activatedAt ? new Date(d.activatedAt).toLocaleString('zh-CN') : '-';
+        return '<div style="padding:10px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+            '<div style="flex:1;min-width:200px;">' +
+                '<div style="font-family:Courier New,monospace;color:#2c3e50;font-weight:600;">' + escapeHtml(d.machineId || '-') + '</div>' +
+                '<div style="font-size:12px;color:#909399;margin-top:4px;">激活时间：' + activatedAt + (d.clinicName ? ' · 诊所：' + escapeHtml(d.clinicName) : '') + '</div>' +
+            '</div>' +
+            '<button class="btn btn-sm btn-warning" onclick="unbindDevice(\'' + code + '\',\'' + escapeHtml(d.machineId) + '\',' + i + ')">解绑</button>' +
+        '</div>';
+    }).join('');
+}
+
+function closeDevicesModal() {
+    document.getElementById('devicesModal').classList.remove('show');
+}
+
+// 解绑单台设备（v4 API 已支持传 machineId）
+// 注意：UI 拿到的是 sanitizeRecord 截断后的 machineId（前8位+...），
+// status.js 已增强为：精确匹配失败时回退到前缀匹配，保证 UI 解绑可用。
+async function unbindDevice(code, machineId, index) {
+    if (!confirm('确认解绑该设备？\n机器ID：' + machineId + '\n解绑后该设备将无法继续使用此激活码。')) return;
+    try {
+        const res = await fetch(API_BASE + '/license/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ code, action: 'unbind', machineId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('devicesModalAlert', data.message || '设备已解绑', 'success');
+            // 刷新设备列表
+            showDevices(code);
+            // 同时刷新主列表（设备数会变）
+            loadList();
+        } else {
+            showAlert('devicesModalAlert', data.error || '解绑失败', 'error');
+        }
+    } catch (e) {
+        showAlert('devicesModalAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 离线导出 license =====
+function closeExportModal() {
+    document.getElementById('exportModal').classList.remove('show');
+    document.getElementById('exportCode').value = '';
+    document.getElementById('exportMachineId').value = '';
+    document.getElementById('exportClinicName').value = '';
+    document.getElementById('exportModalAlert').className = 'alert';
+}
+
+// 打开导出弹窗（从列表点击时自动填充激活码）
+function openExportModal(code) {
+    document.getElementById('exportModalAlert').className = 'alert';
+    document.getElementById('exportCode').value = code || '';
+    document.getElementById('exportMachineId').value = '';
+    document.getElementById('exportClinicName').value = '';
+    document.getElementById('exportModal').classList.add('show');
+}
+
+async function exportLicense() {
+    const code = document.getElementById('exportCode').value.trim();
+    const machineId = document.getElementById('exportMachineId').value.trim();
+    const clinicName = document.getElementById('exportClinicName').value.trim();
+    if (!code || !machineId) {
+        showAlert('exportModalAlert', '请填写激活码和机器 ID', 'error');
+        return;
+    }
+    const body = { code, machineId };
+    if (clinicName) body.clinicName = clinicName;
+    try {
+        const res = await fetch(API_BASE + '/license/export-license', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            // 触发文件下载（license 字段为 base64 字符串，即 license.dat 文件内容）
+            const blob = new Blob([data.license], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = data.fileName || ('license_' + machineId.substring(0,8) + '.dat');
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            const info = data.licenseInfo || {};
+            showAlert('exportModalAlert', '✅ license 文件已下载！\n\n用户：' + (info.user || '-') + '\n版本：' + (info.type || '-') + '\n诊所：' + (info.clinicName || '-') + '\n到期：' + (info.expiresAt ? new Date(info.expiresAt).toLocaleDateString('zh-CN') : '-'), 'success');
+            setTimeout(() => closeExportModal(), 3000);
+            loadList();
+        } else {
+            showAlert('exportModalAlert', data.error || '导出失败', 'error');
+        }
+    } catch (e) {
+        showAlert('exportModalAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 批量延期 =====
+function openBatchExtendModal() {
+    document.getElementById('batchExtendAlert').className = 'alert';
+    document.getElementById('batchExtendModal').classList.add('show');
+}
+
+function closeBatchExtendModal() {
+    document.getElementById('batchExtendModal').classList.remove('show');
+    document.getElementById('batchExtendCodes').value = '';
+    document.getElementById('batchExtendDays').value = '';
+    document.getElementById('batchExtendExpiresAt').value = '';
+    document.getElementById('batchExtendAlert').className = 'alert';
+}
+
+async function batchExtend() {
+    const codesText = document.getElementById('batchExtendCodes').value.trim();
+    const addDays = document.getElementById('batchExtendDays').value;
+    const newExpiresAt = document.getElementById('batchExtendExpiresAt').value;
+    if (!codesText) { showAlert('batchExtendAlert', '请输入激活码', 'error'); return; }
+    if (!addDays && !newExpiresAt) { showAlert('batchExtendAlert', '请填写延期天数或新到期日期', 'error'); return; }
+    if (addDays && newExpiresAt) { showAlert('batchExtendAlert', '延期天数与新到期日期只能二选一', 'error'); return; }
+    const codes = codesText.split('\n').map(s => s.trim()).filter(s => s);
+    if (codes.length === 0) { showAlert('batchExtendAlert', '未识别到有效激活码', 'error'); return; }
+    if (codes.length > 100) { showAlert('batchExtendAlert', '最多 100 个激活码', 'error'); return; }
+    const body = { codes };
+    if (addDays) body.addDays = parseInt(addDays, 10);
+    if (newExpiresAt) body.newExpiresAt = newExpiresAt;
+    try {
+        const res = await fetch(API_BASE + '/license/extend', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            // extend API 返回 updated/failed 两个数组
+            const successCount = (data.updated || []).length;
+            const failedCount = (data.failed || []).length;
+            // ★ 统计自动恢复状态的激活码数量（expired → used）
+            const recoveredCount = (data.updated || []).filter(u => u.statusChanged).length;
+            let msg = '延期完成：成功 ' + successCount + ' 个，失败 ' + failedCount + ' 个';
+            if (recoveredCount > 0) {
+                msg += '\n其中 ' + recoveredCount + ' 个已过期激活码已自动恢复为「已激活」状态，用户可重新激活。';
+            }
+            if (failedCount > 0 && Array.isArray(data.failed)) {
+                const failedDetail = data.failed.slice(0, 5).map(f => f.code + ' (' + (f.error || '未知') + ')').join('；');
+                msg += '\n失败明细（前5条）：' + failedDetail;
+            }
+            showAlert('batchExtendAlert', msg, failedCount > 0 ? 'info' : 'success');
+            if (failedCount === 0) {
+                setTimeout(() => closeBatchExtendModal(), 2000);
+                loadList();
+            }
+        } else {
+            showAlert('batchExtendAlert', data.error || '延期失败', 'error');
+        }
+    } catch (e) {
+        showAlert('batchExtendAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 修改激活码字段（maxDevices / clinicName / user / note）=====
+async function openEditModal(code) {
+    document.getElementById('editCode').textContent = code;
+    document.getElementById('editModalAlert').className = 'alert';
+    document.getElementById('editModal').classList.add('show');
+    document.getElementById('editMaxDevices').value = '1';
+    document.getElementById('editClinicName').value = '';
+    document.getElementById('editUser').value = '';
+    document.getElementById('editNote').value = '';
+    // 加载当前值
+    try {
+        const res = await fetch(API_BASE + '/license/status?code=' + encodeURIComponent(code), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && data.data) {
+            const r = data.data;
+            document.getElementById('editMaxDevices').value = r.maxDevices || 1;
+            document.getElementById('editClinicName').value = r.clinicName || '';
+            document.getElementById('editUser').value = r.user || '';
+            document.getElementById('editNote').value = r.note || '';
+        } else {
+            showAlert('editModalAlert', data.error || '加载失败', 'error');
+        }
+    } catch (e) {
+        showAlert('editModalAlert', '加载失败：' + e.message, 'error');
+    }
+}
+
+function closeEditModal() {
+    document.getElementById('editModal').classList.remove('show');
+    document.getElementById('editModalAlert').className = 'alert';
+}
+
+async function saveEdit() {
+    const code = document.getElementById('editCode').textContent;
+    const body = { code };
+    const maxDevices = document.getElementById('editMaxDevices').value;
+    const clinicName = document.getElementById('editClinicName').value.trim();
+    const user = document.getElementById('editUser').value.trim();
+    const note = document.getElementById('editNote').value.trim();
+    if (maxDevices) body.maxDevices = parseInt(maxDevices, 10);
+    body.clinicName = clinicName;
+    body.user = user;
+    body.note = note;
+    try {
+        const res = await fetch(API_BASE + '/license/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('editModalAlert', data.message || '已保存', 'success');
+            setTimeout(() => { closeEditModal(); loadList(); }, 1500);
+        } else {
+            showAlert('editModalAlert', data.error || '保存失败', 'error');
+        }
+    } catch (e) {
+        showAlert('editModalAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+async function deleteCode(code) {
+    if (!confirm('确认删除激活码 ' + code + ' ?\n删除后不可恢复！')) return;
+    try {
+        const res = await fetch(API_BASE + '/license/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ code, action: 'delete' })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('mainAlert', data.message, 'success');
+            loadList();
+        } else {
+            showAlert('mainAlert', data.error || '删除失败', 'error');
+        }
+    } catch (e) {
+        showAlert('mainAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+function clearFilter() {
+    document.getElementById('filterStatus').value = '';
+    document.getElementById('filterType').value = '';
+    document.getElementById('filterQ').value = '';
+    loadList();
+}
+
+// ===== 标签页切换 =====
+function switchTab(tabName) {
+    // 隐藏所有标签页内容
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    // 显示选中标签页
+    const tabContent = document.getElementById('tab' + tabName);
+    const tabBtn = document.querySelector('.tab-btn[data-tab="' + tabName + '"]');
+    if (tabContent) tabContent.classList.add('active');
+    if (tabBtn) tabBtn.classList.add('active');
+    // 按需加载数据
+    if (tabName === 'Clinics') loadClinicsList();
+    else if (tabName === 'Users') loadUsersList();
+    else if (tabName === 'License') loadList();
+}
+
+// ===== 诊所管理 =====
+async function loadClinicsList() {
+    const listEl = document.getElementById('clinicList');
+    if (!listEl) return;
+    listEl.innerHTML = '<div class="loading">加载中...</div>';
+    try {
+        const res = await fetch(API_BASE + '/users?clinics=true', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+            if (data.data.length === 0) {
+                listEl.innerHTML = '<div class="empty">暂无诊所</div>';
+                return;
+            }
+            listEl.innerHTML = data.data.map(c => {
+                const statusBadge = c.status === 'active'
+                    ? '<span style="color:#27ae60;font-weight:bold;">●正常</span>'
+                    : '<span style="color:#e74c3c;font-weight:bold;">●已停用</span>';
+                const toggleBtn = c.status === 'active'
+                    ? '<button class="btn btn-sm btn-warning" onclick="toggleClinicStatus(\'' + c.id + '\',\'disabled\')">停用</button>'
+                    : '<button class="btn btn-sm btn-success" onclick="toggleClinicStatus(\'' + c.id + '\',\'active\')">启用</button>';
+                const editBtn = '<button class="btn btn-sm" onclick=\'editClinic(' + JSON.stringify({id:c.id,name:c.name,adminUsername:c.adminUsername,adminName:c.adminName}).replace(/'/g, "&#39;") + ')\'>编辑</button>';
+                const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '-';
+                return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
+                    '<div style="flex:1;min-width:200px;">' +
+                        '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + statusBadge + '</div>' +
+                        '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + escapeHtml(c.adminUsername || '-') + '</strong>（' + escapeHtml(c.adminName || '-') + '）| 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
+                    '</div>' +
+                    '<div style="white-space:nowrap;">' + editBtn + ' ' + toggleBtn + '</div>' +
+                '</div>';
+            }).join('');
+        } else {
+            if (res.status === 401) {
+                showAlert('mainAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(doLogout, 1500);
+            } else {
+                listEl.innerHTML = '<div class="empty">' + escapeHtml(data.error || '加载失败') + '</div>';
+            }
+        }
+    } catch (e) {
+        listEl.innerHTML = '<div class="empty">网络错误：' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+async function handleCreateClinic() {
+    const clinicName = document.getElementById('newClinicName').value.trim();
+    const adminUsername = document.getElementById('newClinicAdminUsername').value.trim();
+    const adminPassword = document.getElementById('newClinicAdminPassword').value;
+    const adminName = document.getElementById('newClinicAdminName').value.trim();
+    if (!clinicName || !adminUsername || !adminPassword) {
+        showAlert('clinicAlert', '请填写诊所名称、管理员账号、管理员密码', 'error');
+        return;
+    }
+    if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
+        showAlert('clinicAlert', '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅英文小写字母和数字', 'error');
+        return;
+    }
+    try {
+        const res = await fetch(API_BASE + '/users?clinic=create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ clinicName, adminUsername, adminPassword, adminName: adminName || adminUsername })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('clinicAlert', '诊所创建成功！\n\n诊所：' + data.clinic.name + '\nID：' + data.clinic.id + '\n管理员：' + data.admin.username, 'success');
+            clearClinicForm();
+            loadClinicsList();
+        } else {
+            showAlert('clinicAlert', data.error || '创建失败', 'error');
+        }
+    } catch (e) {
+        showAlert('clinicAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+function clearClinicForm() {
+    document.getElementById('newClinicName').value = '';
+    document.getElementById('newClinicAdminUsername').value = '';
+    document.getElementById('newClinicAdminPassword').value = '';
+    document.getElementById('newClinicAdminName').value = '';
+}
+
+async function toggleClinicStatus(clinicId, newStatus) {
+    const action = newStatus === 'active' ? '启用' : '停用';
+    if (!confirm('确定' + action + '该诊所？')) return;
+    try {
+        const res = await fetch(API_BASE + '/users?clinic=update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ clinicId, status: newStatus })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('clinicAlert', '诊所已' + action, 'success');
+            loadClinicsList();
+        } else {
+            showAlert('clinicAlert', data.error || '操作失败', 'error');
+        }
+    } catch (e) {
+        showAlert('clinicAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// 编辑诊所（使用 prompt 简化实现）
+async function editClinic(clinic) {
+    const name = prompt('诊所名称：', clinic.name || '');
+    if (name === null) return;
+    const adminUsername = prompt('管理员账号：', clinic.adminUsername || '');
+    if (adminUsername === null) return;
+    const adminName = prompt('管理员姓名：', clinic.adminName || '');
+    if (adminName === null) return;
+    const adminPassword = prompt('新密码（留空表示不修改）：', '');
+    if (adminPassword === null) return;
+    if (!name || !adminUsername) { showAlert('clinicAlert', '诊所名称和管理员账号不能为空', 'error'); return; }
+    const body = { clinicId: clinic.id, name };
+    if (adminUsername !== clinic.adminUsername) body.adminUsername = adminUsername;
+    if (adminName && adminName !== clinic.adminName) body.adminName = adminName;
+    if (adminPassword) body.adminPassword = adminPassword;
+    try {
+        const res = await fetch(API_BASE + '/users?clinic=update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('clinicAlert', '诊所信息已更新', 'success');
+            loadClinicsList();
+        } else {
+            showAlert('clinicAlert', data.error || '更新失败', 'error');
+        }
+    } catch (e) {
+        showAlert('clinicAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 用户管理 =====
+async function loadUsersList() {
+    const tbody = document.getElementById('usersListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" class="loading">加载中...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + '/users', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.data)) {
+            if (data.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无用户</td></tr>';
+                return;
+            }
+            const roleNames = { platform_admin: '平台总管理员', clinic_admin: '诊所管理员', doctor: '医师' };
+            const modeNames = { both: '云端+本地', cloud: '仅云端', local: '仅本地' };
+            tbody.innerHTML = data.data.map(u => {
+                const roleTag = u.role === 'platform_admin'
+                    ? '<span class="tag tag-pro">' + (roleNames[u.role] || u.role) + '</span>'
+                    : (u.role === 'clinic_admin'
+                        ? '<span class="tag tag-personal">' + (roleNames[u.role] || u.role) + '</span>'
+                        : '<span class="tag tag-trial">' + (roleNames[u.role] || u.role) + '</span>');
+                const created = u.createdAt ? new Date(u.createdAt).toLocaleString('zh-CN') : '-';
+                return '<tr>' +
+                    '<td class="code">' + escapeHtml(u.username) + '</td>' +
+                    '<td>' + escapeHtml(u.name || '-') + '</td>' +
+                    '<td>' + roleTag + '</td>' +
+                    '<td>' + escapeHtml(u.clinicName || '-') + '</td>' +
+                    '<td>' + escapeHtml(modeNames[u.allowedMode] || u.allowedMode || '-') + '</td>' +
+                    '<td>' + escapeHtml(created) + '</td>' +
+                '</tr>';
+            }).join('');
+        } else {
+            if (res.status === 401) {
+                showAlert('userAlert', '登录已过期，请重新登录', 'error');
+                setTimeout(doLogout, 1500);
+            } else {
+                tbody.innerHTML = '<tr><td colspan="6" class="empty">' + escapeHtml(data.error || '加载失败') + '</td></tr>';
+            }
+        }
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+    }
+}
+
+// 回车键登录
+document.getElementById('loginPass').addEventListener('keyup', e => {
+    if (e.key === 'Enter') doLogin();
+});
+document.getElementById('loginUser').addEventListener('keyup', e => {
+    if (e.key === 'Enter') document.getElementById('loginPass').focus();
+});
+
+// 自动登录
+if (token && currentUser) {
+    showMain();
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+/*
+  X-Frame-Options: SAMEORIGIN
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin
+  Content-Security-Policy: default-src 'self'; img-src 'self' data: blob:; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://tcm-prescription-system.pages.dev; form-action 'self'; frame-ancestors 'self'; base-uri 'self'
+  Permissions-Policy: camera=(self), microphone=(self), geolocation=(), clipboard-write=(self)

@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>添加客服微信</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #07c160 0%, #06ad56 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: #fff;
+            border-radius: 20px;
+            padding: 40px 30px;
+            max-width: 360px;
+            width: 100%;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+        .wechat-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 20px;
+            background: #07c160;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 44px;
+        }
+        .title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            font-size: 14px;
+            color: #999;
+            margin-bottom: 28px;
+        }
+        .wx-id-box {
+            background: #f5f7fa;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 24px;
+        }
+        .wx-id-label {
+            font-size: 13px;
+            color: #999;
+            margin-bottom: 6px;
+        }
+        .wx-id-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #07c160;
+            letter-spacing: 1px;
+        }
+        .copy-btn {
+            background: #07c160;
+            color: #fff;
+            border: none;
+            border-radius: 50px;
+            padding: 16px 40px;
+            font-size: 17px;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .copy-btn:active { transform: scale(0.97); }
+        .copy-btn.copied { background: #06ad56; }
+        .tips {
+            margin-top: 28px;
+            padding-top: 24px;
+            border-top: 1px solid #eee;
+            text-align: left;
+        }
+        .tips-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 12px;
+        }
+        .tips-list {
+            list-style: none;
+            counter-reset: step;
+        }
+        .tips-list li {
+            font-size: 13px;
+            color: #666;
+            line-height: 1.8;
+            padding-left: 28px;
+            position: relative;
+            margin-bottom: 6px;
+        }
+        .tips-list li::before {
+            counter-increment: step;
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 2px;
+            width: 20px;
+            height: 20px;
+            background: #07c160;
+            color: #fff;
+            border-radius: 50%;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .toast {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 15px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 999;
+        }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="wechat-icon">💬</div>
+        <div class="title">添加客服微信</div>
+        <div class="subtitle">扫码添加客服，获取技术支持</div>
+
+        <div class="wx-id-box">
+            <div class="wx-id-label">客服微信号</div>
+            <div class="wx-id-value" id="wxId">hktzy1688</div>
+        </div>
+
+        <button class="copy-btn" id="copyBtn" onclick="copyWechatId()">一键复制微信号</button>
+
+        <div class="tips">
+            <div class="tips-title">添加步骤：</div>
+            <ol class="tips-list">
+                <li>点击上方按钮复制微信号</li>
+                <li>打开微信，点击右上角「+」</li>
+                <li>选择「添加朋友」→「微信号/手机号」</li>
+                <li>粘贴微信号，搜索后添加好友</li>
+            </ol>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">复制成功</div>
+
+    <script>
+        function copyWechatId() {
+            var wxId = document.getElementById('wxId').textContent;
+            var btn = document.getElementById('copyBtn');
+            var toast = document.getElementById('toast');
+
+            function showToast(msg) {
+                toast.textContent = msg;
+                toast.classList.add('show');
+                setTimeout(function() { toast.classList.remove('show'); }, 2000);
+            }
+
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(wxId).then(function() {
+                    btn.textContent = '已复制，去微信添加好友';
+                    btn.classList.add('copied');
+                    showToast('微信号已复制');
+                }).catch(function() {
+                    fallbackCopy(wxId, btn, toast);
+                });
+            } else {
+                fallbackCopy(wxId, btn, toast);
+            }
+        }
+
+        function fallbackCopy(text, btn, toast) {
+            var textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            document.body.appendChild(textarea);
+            textarea.select();
+            try {
+                document.execCommand('copy');
+                btn.textContent = '已复制，去微信添加好友';
+                btn.classList.add('copied');
+                toast.textContent = '微信号已复制';
+                toast.classList.add('show');
+                setTimeout(function() { toast.classList.remove('show'); }, 2000);
+            } catch(e) {
+                toast.textContent = '复制失败，请手动复制：' + text;
+                toast.classList.add('show');
+                setTimeout(function() { toast.classList.remove('show'); }, 3000);
+            }
+            document.body.removeChild(textarea);
+        }
+    </script>
+</body>
+</html>

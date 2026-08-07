@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "description": "site-admin SPA fallback",
+  "include": [
+    "/*"
+  ],
+  "exclude": [],
+  "rules": [
+    {
+      "pathname": "/admin/*",
+      "status": 200,
+      "location": "/admin/index.html"
+    },
+    {
+      "pathname": "/*",
+      "status": 200,
+      "location": "/index.html"
+    }
+  ]
+}
