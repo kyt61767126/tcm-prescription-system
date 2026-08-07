@@ -106,13 +106,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncodin
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[4/10] 停止残留 Gradle 进程 + 清理构建缓存...'"
-REM P1-15: kill gradle java daemon
-REM gradlew --stop daemon JVM
+REM P1-15: kill gradle java daemon + stop daemon JVM (与离线版对齐)
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
+call gradlew.bat --stop >nul 2>&1
 
-REM P2-3: TCM_GRADLE_SKIP_CLEAN gradlew clean build-app.bat
-REM (2026-07-22): javac MainActivity.java
-REM (2026-07-23): assets/merged_assets index.html
+REM P2-3: 强制 gradlew clean (2026-07-22: javac缓存, 2026-07-23: assets缓存)
+REM 历史教训(2026-08-03): classes.dex 被Gradle daemon持有文件锁导致clean失败
 if exist "app\build\intermediates\javac" (
     rmdir /S /Q "app\build\intermediates\javac" 2>nul
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] 已清理 javac 缓存'"
@@ -126,11 +125,22 @@ if exist "app\build\intermediates\merged_assets" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] 已清理 merged_assets 缓存'"
 )
 call gradlew.bat clean
+if errorlevel 1 goto :clean_failed
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] 旧缓存已清理'"
+goto :clean_done
+
+:clean_failed
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[警告] gradlew clean 失败，强制删除 build 目录...'"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $p='app\build'; if(Test-Path $p){ try{ Remove-Item -Path $p -Recurse -Force; Write-Host '[OK] build 目录已强制删除' }catch{ Write-Host '[警告] 部分文件被占用，等待2秒重试...'; Start-Sleep -Seconds 2; try{ Remove-Item -Path $p -Recurse -Force; Write-Host '[OK] build 目录重试删除成功' }catch{ Write-Host '[错误] build 目录无法删除，请手动关闭占用进程'; Write-Host $_.Exception.Message } } }"
+call gradlew.bat --stop >nul 2>&1
+call gradlew.bat clean
 if errorlevel 1 (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[警告] clean 失败，继续增量构建'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[警告] clean 重试仍失败，继续增量构建'"
 ) else (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] 旧缓存已清理'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] 重试 clean 成功'"
 )
+
+:clean_done
 REM Purge configuration cache after clean (fixes annotationProcessors.json stale cache)
 if exist ".gradle\configuration-cache" rmdir /S /Q ".gradle\configuration-cache" 2>nul
 
