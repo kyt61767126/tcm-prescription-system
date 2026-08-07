@@ -4147,7 +4147,7 @@ if (window.Permission) {
                 const isLocal = no.startsWith('LOCAL-');
                 const date = (p.date || p.createdAt || '').slice(0, 10);
                 const mediaCount = (p.mediaFiles || []).length;
-                const mediaBadge = (mediaCount > 0 && !window.Capacitor)
+                const mediaBadge = mediaCount > 0
                     ? ` <span style="font-size:11px;color:#1976d2;cursor:pointer;" onclick="event.stopPropagation();viewClinicPrescriptionMedia(${p.id})">📷🎥(${mediaCount})</span>`
                     : '';
                 return `
@@ -6801,7 +6801,7 @@ if (window.Permission) {
                                 <div style="font-size:10px;color:${(p.prescriptionNo || '').startsWith('LOCAL-') ? '#e65100' : '#8b0000'};font-weight:bold;">
                                     [${escapeHtml(p.prescriptionNo || '')}]${(p.prescriptionNo || '').startsWith('LOCAL-') ? '<span style="font-size:9px;color:#e65100;margin-left:2px;">待同步</span>' : ''}
                                 </div>
-                                ${(!window.Capacitor) ? '<button onclick="event.stopPropagation();viewMediaFiles(\'' + escapeHtml(p.patientName || p.name || '') + '\',\'' + escapeHtml(p.prescriptionNo || '') + '\',\'' + escapeHtml(p.createdAt || '') + '\')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button>' : ''}
+                                <button onclick="event.stopPropagation();viewMediaFiles('${escapeHtml(p.patientName || p.name || '')}','${escapeHtml(p.prescriptionNo || '')}','${escapeHtml(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button>
                                 ${isToday ? '<div style="font-size:9px;background:#4CAF50;color:white;padding:1px 5px;border-radius:3px;">今天</div>' : ''}
                             </div>
                             <div class="history-date">${escapeHtml(timeDisplay)} - ${escapeHtml(p.diagnosis || '')} | 诊费:${(p.registrationFee || 0).toFixed(2)}元</div>

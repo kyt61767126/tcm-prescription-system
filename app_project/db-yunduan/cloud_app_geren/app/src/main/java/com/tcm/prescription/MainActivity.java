@@ -1434,53 +1434,6 @@ public class MainActivity extends BridgeActivity {
             return dir;
         }
 
-        // ★ 扫描所有可能的媒体目录（新旧目录都扫描），与离线APP保持一致
-        // 修复：findMediaFiles 之前只扫描 getImageDir/getVideoDir 返回的单个目录，
-        // 导致旧版本(本能中医处方)保存的文件或新版本(惠康中医处方)切换后找不到录像/照片
-        private java.util.List<File> getAllMediaDirs() {
-            java.util.List<File> dirs = new java.util.ArrayList<>();
-            File imgDir = getImageDir();
-            File vidDir = getVideoDir();
-            if (imgDir != null) dirs.add(imgDir);
-            if (vidDir != null) dirs.add(vidDir);
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    File extPic = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-                    File extMov = getExternalFilesDir(Environment.DIRECTORY_MOVIES);
-                    if (extPic != null) {
-                        File newImg = new File(extPic, "惠康中医处方");
-                        File oldImg = new File(extPic, "本能中医处方");
-                        if (!dirs.contains(newImg)) dirs.add(newImg);
-                        if (!dirs.contains(oldImg)) dirs.add(oldImg);
-                    }
-                    if (extMov != null) {
-                        File newVid = new File(extMov, "惠康中医处方");
-                        File oldVid = new File(extMov, "本能中医处方");
-                        if (!dirs.contains(newVid)) dirs.add(newVid);
-                        if (!dirs.contains(oldVid)) dirs.add(oldVid);
-                    }
-                } else {
-                    File picDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
-                    File movDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES);
-                    if (picDir != null) {
-                        File newImg = new File(picDir, "惠康中医处方");
-                        File oldImg = new File(picDir, "本能中医处方");
-                        if (!dirs.contains(newImg)) dirs.add(newImg);
-                        if (!dirs.contains(oldImg)) dirs.add(oldImg);
-                    }
-                    if (movDir != null) {
-                        File newVid = new File(movDir, "惠康中医处方");
-                        File oldVid = new File(movDir, "本能中医处方");
-                        if (!dirs.contains(newVid)) dirs.add(newVid);
-                        if (!dirs.contains(oldVid)) dirs.add(oldVid);
-                    }
-                }
-            } catch (Exception e) {
-                Log.e("TCM-Pres", "getAllMediaDirs 异常", e);
-            }
-            return dirs;
-        }
-
         // 统一路径校验：使用 canonicalPath.startsWith(root) 校验文件路径必须在允许的根目录下
         // 同步离线版本 isMediaPathAllowed 安全实现，供 readFileAsBase64/deleteFile/openFile 共用
         private boolean isMediaPathAllowed(String filePath) {
@@ -1546,20 +1499,18 @@ public class MainActivity extends BridgeActivity {
                     result.put("files", files);
                     return result;
                 }
-
+                
                 String prefix1 = safeName + "_" + safeNo;
                 String prefix2 = safeNo + "_" + safeName;
-
-                // ★ 扫描所有可能的媒体目录（新旧目录都扫描），与离线APP保持一致
-                java.util.List<File> allDirs = getAllMediaDirs();
+                
+                File imgDir = getImageDir();
+                File vidDir = getVideoDir();
+                
                 java.util.Set<String> foundPaths = new java.util.HashSet<>();
-
-                for (File dir : allDirs) {
-                    if (dir != null && dir.exists()) {
-                        scanDirForMediaWithPrefixes(dir, prefix1, prefix2, files, foundPaths);
-                    }
-                }
-
+                
+                scanDirForMediaWithPrefixes(imgDir, prefix1, prefix2, files, foundPaths);
+                scanDirForMediaWithPrefixes(vidDir, prefix1, prefix2, files, foundPaths);
+                
                 // 回退策略：如果按编号未找到文件，用患者姓名+创建时间范围查找
                 if (files.length() == 0) {
                     long[] timeRange;
@@ -1570,27 +1521,25 @@ public class MainActivity extends BridgeActivity {
                         long now = System.currentTimeMillis();
                         timeRange = new long[]{now - 30L * 24 * 60 * 60 * 1000, now + 24 * 60 * 60 * 1000L};
                     }
-                    for (File dir : allDirs) {
-                        if (dir != null && dir.exists()) {
-                            scanDirForMediaByNameAndTime(dir, safeName, timeRange[0], timeRange[1], files, foundPaths);
-                        }
-                    }
+                    scanDirForMediaByNameAndTime(imgDir, safeName, timeRange[0], timeRange[1], files, foundPaths);
+                    scanDirForMediaByNameAndTime(vidDir, safeName, timeRange[0], timeRange[1], files, foundPaths);
                 }
-
+                
                 StringBuilder debug = new StringBuilder();
                 debug.append("prefix1=").append(prefix1);
                 debug.append(" | prefix2=").append(prefix2);
                 debug.append(" | createdAt=").append(createdAt);
-                debug.append(" | scannedDirs=").append(allDirs.size());
-                for (File dir : allDirs) {
-                    if (dir != null) {
-                        debug.append(" | dir=").append(dir.getAbsolutePath()).append(" exists=").append(dir.exists());
-                        if (dir.exists()) {
-                            java.util.List<String> af = new java.util.ArrayList<>();
-                            collectAllFiles(dir, af, 10);
-                            debug.append(" files:").append(String.join(", ", af));
-                        }
-                    }
+                debug.append(" | imgDir=").append(imgDir != null ? imgDir.getAbsolutePath() : "null").append(" exists=").append(imgDir != null && imgDir.exists());
+                debug.append(" | vidDir=").append(vidDir != null ? vidDir.getAbsolutePath() : "null").append(" exists=").append(vidDir != null && vidDir.exists());
+                if (imgDir != null && imgDir.exists()) {
+                    java.util.List<String> af = new java.util.ArrayList<>();
+                    collectAllFiles(imgDir, af, 10);
+                    debug.append(" | imgFiles: ").append(String.join(", ", af));
+                }
+                if (vidDir != null && vidDir.exists()) {
+                    java.util.List<String> af = new java.util.ArrayList<>();
+                    collectAllFiles(vidDir, af, 10);
+                    debug.append(" | vidFiles: ").append(String.join(", ", af));
                 }
                 JSONObject result = new JSONObject();
                 result.put("success", true);
