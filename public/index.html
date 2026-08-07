@@ -6805,7 +6805,10 @@ if (window.Permission) {
                             </div>
                             <div class="history-date">${escapeHtml(timeDisplay)} - ${escapeHtml(p.diagnosis || '')} | 诊费:${(p.registrationFee || 0).toFixed(2)}元</div>
                         </div>
-                        <button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button>
+                        <div style="display:flex;align-items:center;gap:2px;">
+                            <button onclick="event.stopPropagation();viewMediaFiles(${escapeHtml(JSON.stringify(p.patientName || p.name || ''))},${escapeHtml(JSON.stringify(p.prescriptionNo || ''))},${escapeHtml(JSON.stringify(p.createdAt || ''))})" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button>
+                            <button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button>
+                        </div>
                     </div>
                 </div>
             `}).join('') + (hasMore ? `
@@ -6815,10 +6818,19 @@ if (window.Permission) {
             ` : '');
         }
 
-        async function viewMediaFiles(patientName, prescriptionNo, createdAt) {
+        async function viewMediaFiles(patientName, prescriptionNo, createdAt, silent) {
             if (!window.electronAPI || !window.electronAPI.findMediaFiles) {
-                showToast('处方查看功能仅在APP中可用');
+                if (!silent) showToast('处方查看功能仅在APP中可用');
                 return;
+            }
+            // silent 模式：先查找文件，有文件才显示 overlay
+            if (silent) {
+                try {
+                    const preResult = await window.electronAPI.findMediaFiles(patientName, prescriptionNo, createdAt || '');
+                    if (!preResult.success || !preResult.files || preResult.files.length === 0) {
+                        return; // 静默返回，不显示任何提示
+                    }
+                } catch(e) { return; }
             }
             const overlay = document.getElementById('mediaViewerOverlay');
             const content = document.getElementById('mediaViewerContent');
@@ -6828,6 +6840,7 @@ if (window.Permission) {
             try {
                 const result = await window.electronAPI.findMediaFiles(patientName, prescriptionNo, createdAt || '');
                 if (!result.success || !result.files || result.files.length === 0) {
+                    if (silent) { overlay.style.display = 'none'; return; }
                     let debugInfo = '';
                     try {
                         const allFilesResult = await window.electronAPI.listAllMediaFiles();
@@ -7148,6 +7161,12 @@ if (window.Permission) {
             if (_doctorNameEl) _doctorNameEl.value = record.doctorName || '';
             updatePrescriptionPaper();
             document.getElementById('paperDate').textContent = (record.date || '').replace(/-/g, '/');
+            // ★ 点击历史处方自动查看录像照片（silent模式：有文件才显示，无文件静默不提示）
+            if (record.patientName && record.prescriptionNo) {
+                setTimeout(function() {
+                    viewMediaFiles(record.patientName, record.prescriptionNo, record.createdAt || '', true);
+                }, 300);
+            }
         }
 
         function loadLastHistory() {
