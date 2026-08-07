@@ -41,9 +41,12 @@ if errorlevel 1 (
 echo [OK] Signature hash injected
 echo.
 
-echo [Step C] Stop Gradle daemon and rebuild (strict mode)...
-call gradlew.bat --stop 2>nul
-timeout /t 2 /nobreak >nul
+echo [Step C] Rebuild (strict mode)...
+REM ★ 修复（2026-08-07）：移除此处的 gradlew.bat --stop
+REM 原因：build-app.bat [4/10] 已经会调用 gradlew.bat --stop + clean
+REM 在此处额外调用 --stop 会导致竞态条件：
+REM   assembleRelease 期间延迟的 stop 命令到达 daemon，导致构建失败
+echo   [INFO] 跳过手动 --stop（build-app.bat [4/10] 会自动处理）
 call build-app.bat --skip-config
 if errorlevel 1 (
     echo [ERR] Strict rebuild failed

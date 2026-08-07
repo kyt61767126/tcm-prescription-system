@@ -111,20 +111,17 @@ if %EXIT_CODE% neq 0 (
 echo.
 
 REM ==========================================================
-REM Step C: Stop Gradle daemon + Rebuild APK (strict signature mode)
+REM Step C: Rebuild APK (strict signature mode)
 REM ==========================================================
-echo [Step C] Stopping Gradle daemon and rebuilding - strict mode...
+echo [Step C] Rebuilding - strict mode...
 echo.
 
-REM Stop residual Gradle daemon from Step A to free memory for R8
-if exist "%APP_DIR%\gradlew.bat" (
-    echo   [INFO] Stopping Step A Gradle daemon...
-    pushd "%APP_DIR%"
-    call gradlew.bat --stop 2>nul
-    popd
-    timeout /t 2 /nobreak >nul
-    echo   [OK] Gradle daemon stopped
-)
+REM ★ 修复（2026-08-07）：移除此处的 gradlew.bat --stop
+REM 原因：pack-app-geren.bat 内部 [4/10] 已经会调用 gradlew.bat --stop + clean
+REM 在此处额外调用 --stop 会导致竞态条件：
+REM   assembleRelease 期间延迟的 stop 命令到达 daemon，导致构建失败
+REM 修复方案：依赖 pack-app-geren.bat [4/10] 的 --stop，此处不再重复调用
+echo   [INFO] 跳过手动 --stop（pack-app-geren.bat [4/10] 会自动处理）
 
 set "NO_PAUSE=1"
 call "%PACK_APP_BAT%"
@@ -145,7 +142,7 @@ echo.
 if %EXIT_CODE% neq 0 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '========================================' -ForegroundColor Red; Write-Host '  [错误] 构建失败，退出码: %EXIT_CODE%' -ForegroundColor Red; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Red; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Red; Write-Host '  耗时: %BUILD_ELAPSED%' -ForegroundColor Red; Write-Host '========================================' -ForegroundColor Red"
 ) else (
-    powershell -NoProfile -Command "[Console::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] APP构建完成!' -ForegroundColor Yellow; Write-Host '  APK: 惠康中医-YB.apk' -ForegroundColor Yellow; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  耗时: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '========================================' -ForegroundColor Yellow; Write-Host '  [OK] APP构建完成!' -ForegroundColor Yellow; Write-Host '  APK: 惠康中医-YB.apk' -ForegroundColor Yellow; Write-Host '  开始: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  结束: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  耗时: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '========================================' -ForegroundColor Yellow"
 )
 echo.
 if not defined NO_PAUSE (

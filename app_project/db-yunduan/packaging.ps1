@@ -1023,20 +1023,16 @@ function Build-AppStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     Write-Host "  Step C. 重新打包手机 APP（签名严格模式 APK）" -ForegroundColor Cyan
     Write-Host "================================================================" -ForegroundColor Cyan
-    # ★ 关键修复：Step C 前必须停止 Step A 遗留的 Gradle daemon
-    # 原因：Step A 的 daemon 累积了构建内存，Step C 的 R8 full mode 会因内存不足崩溃
-    # 错误现象："Gradle build daemon has been stopped: stop command received"
-    Write-Host "  [INFO] 停止 Step A 遗留的 Gradle daemon（释放内存，避免 R8 OOM）..." -ForegroundColor Yellow
-    $appDir = Join-Path $scriptDir "cloud_app"
-    if (Test-Path "$appDir\gradlew.bat") {
-        Push-Location $appDir
-        try {
-            & .\gradlew.bat --stop 2>&1 | Out-Null
-        } catch {}
-        Pop-Location
-    }
-    Start-Sleep -Seconds 2
-    Write-Host "  [OK] Gradle daemon 已停止" -ForegroundColor Green
+    # ★ 修复（2026-08-07）：移除此处的 gradlew.bat --stop
+    # 原因：build-app.bat [4/10] 已经会调用 gradlew.bat --stop + clean
+    # 在此处额外调用 --stop 会导致竞态条件：
+    #   1. 此处 --stop 停止 Step A daemon（正常）
+    #   2. Build-App 预编译检查启动新 daemon
+    #   3. build-app.bat [4/10] 再次 --stop 停止新 daemon
+    #   4. build-app.bat [7/10] assembleRelease 期间，延迟的 stop 命令到达 daemon
+    #      导致 "Gradle build daemon has been stopped: stop command received"
+    # 修复方案：依赖 build-app.bat [4/10] 的 --stop，此处不再重复调用
+    Write-Host "  [INFO] 跳过手动 --stop（build-app.bat [4/10] 会自动处理）..." -ForegroundColor Yellow
     # ★ 严格模式必须全量清理（不再跳过 clean），原因详见上方 Step D 注释
     $rc = Build-App -SkipConfirm
     if ($rc -ne 0) {

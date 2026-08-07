@@ -1385,16 +1385,12 @@ function Build-AppStrict {
     # Step C: Rebuild mobile (strict)
     Write-Host ""
     Write-Host "  [步骤 C] 重新打包手机 APP (严格模式)..." -ForegroundColor Cyan
-    # ★ 关键修复：Step C 前停止 Step A 遗留的 Gradle daemon，避免 R8 OOM
-    Write-Host "  [INFO] 停止 Step A 遗留的 Gradle daemon..." -ForegroundColor Yellow
-    $capDir = "$versionDir\app"
-    if (Test-Path "$capDir\gradlew.bat") {
-        Push-Location $capDir
-        try { & .\gradlew.bat --stop 2>&1 | Out-Null } catch {}
-        Pop-Location
-    }
-    Start-Sleep -Seconds 2
-    Write-Host "  [OK] Gradle daemon 已停止" -ForegroundColor Green
+    # ★ 修复（2026-08-07）：移除此处的 gradlew.bat --stop
+    # 原因：build-app.bat [4/10] 已经会调用 gradlew.bat --stop + clean
+    # 在此处额外调用 --stop 会导致竞态条件：
+    #   assembleRelease 期间延迟的 stop 命令到达 daemon，导致构建失败
+    # 修复方案：依赖 build-app.bat [4/10] 的 --stop，此处不再重复调用
+    Write-Host "  [INFO] 跳过手动 --stop（build-app.bat [4/10] 会自动处理）..." -ForegroundColor Yellow
     # ★ 严格模式必须全量清理（不再跳过 clean），原因详见上方 Step D 注释
     $rc = Invoke-Packaging -Ver $Ver -Tgt 'app' -SkipCfg $true -SkipEnc $true
     if ($rc -ne 0) {
