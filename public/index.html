@@ -6884,8 +6884,8 @@ if (window.Permission) {
             var label = '处方';
             if (f.name.indexOf('tongue_front') >= 0) label = '舌面图像';
             else if (f.name.indexOf('tongue_under') >= 0) label = '舌下络脉';
-            else if (f.name.indexOf('photo') >= 0) label = '处方';
             else if (f.name.indexOf('prescription') >= 0) label = '处方';
+            else if (f.name.indexOf('photo') >= 0) label = '处方';
             else if (f.name.indexOf('video') >= 0) label = '视频';
             return label;
         }
@@ -7028,10 +7028,16 @@ if (window.Permission) {
                     console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
+                // 视频播放：与离线APP一致，使用 readFileAsBase64 + data URL
+                // 如果文件过大导致 Binder 限制，降级到系统播放器
+                var filePath = f.path;
                 var vidMime = '';
-                if (f.path.match(/\.webm$/i)) vidMime = 'video/webm';
-                else if (f.path.match(/\.mp4$/i)) vidMime = 'video/mp4';
-                window.electronAPI.readFileAsBase64(f.path).then(function(result) {
+                if (filePath.match(/\.webm$/i)) vidMime = 'video/webm';
+                else if (filePath.match(/\.mp4$/i)) vidMime = 'video/mp4';
+
+                view.innerHTML = '<div style="text-align:center;color:#fff;padding:30px 20px;font-size:13px;">🎬 正在加载视频...</div>';
+
+                window.electronAPI.readFileAsBase64(filePath).then(function(result) {
                     if (result.success && (result.data || result.base64)) {
                         var src = result.data || result.base64;
                         view.innerHTML = '';
@@ -7043,22 +7049,22 @@ if (window.Permission) {
                         video.onerror = function() {
                             console.error('[媒体查看] 视频播放失败，降级到系统播放器');
                             if (window.electronAPI && window.electronAPI.openFile) {
-                                window.electronAPI.openFile(f.path, vidMime);
+                                window.electronAPI.openFile(filePath, vidMime);
                             }
                         };
                         view.appendChild(video);
                     } else {
-                        console.error('[媒体查看] 视频加载失败，降级到系统播放器:', result.error);
+                        console.error('[媒体查看] readFileAsBase64 失败，降级到系统播放器:', result.error);
                         if (window.electronAPI && window.electronAPI.openFile) {
-                            window.electronAPI.openFile(f.path, vidMime);
+                            window.electronAPI.openFile(filePath, vidMime);
                         } else {
                             view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载失败</div>';
                         }
                     }
                 }).catch(function(err) {
-                    console.error('[媒体查看] 视频加载异常，降级到系统播放器:', err);
+                    console.error('[媒体查看] 视频加载异常:', err);
                     if (window.electronAPI && window.electronAPI.openFile) {
-                        window.electronAPI.openFile(f.path, vidMime);
+                        window.electronAPI.openFile(filePath, vidMime);
                     } else {
                         view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载异常</div>';
                     }
@@ -7071,11 +7077,14 @@ if (window.Permission) {
         function closeMediaViewer() {
             const overlay = document.getElementById('mediaViewerOverlay');
             if (overlay) overlay.style.display = 'none';
-            const video = document.getElementById('mediaSingleView')?.querySelector('video');
-            if (video) {
-                video.pause();
-                video.src = '';
+            // 遍历所有活动的 Blob URL 全部 revoke（与离线APP一致）
+            if (window.__activeBlobUrls) {
+                Object.keys(window.__activeBlobUrls).forEach(function(id) {
+                    try { URL.revokeObjectURL(window.__activeBlobUrls[id]); } catch(e) {}
+                });
+                window.__activeBlobUrls = {};
             }
+            // 兼容旧变量
             if (window.__currentBlobUrl) {
                 try { URL.revokeObjectURL(window.__currentBlobUrl); } catch(e) {}
                 window.__currentBlobUrl = null;
