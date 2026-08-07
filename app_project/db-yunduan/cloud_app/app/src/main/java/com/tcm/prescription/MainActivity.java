@@ -846,22 +846,7 @@ public class MainActivity extends BridgeActivity {
             "    findMediaFiles: function(patientName, prescriptionNo, createdAt) { return callNativeAsync('findMediaFiles', {patientName: patientName||'', prescriptionNo: prescriptionNo||'', createdAt: createdAt||''}); }," +
             "    startReadSession: function(filePath) { return callNativeAsync('startReadSession', {filePath: filePath}); }," +
             "    readNextChunk: function(sessionId) { return callNativeAsync('readNextChunk', {sessionId: sessionId}); }," +
-            "    closeReadSession: function(sessionId) { callNative('closeReadSession', {sessionId: sessionId}); }," +
-            "    license: {" +
-            "      getStatus: function() { return callNativeAsync('getLicenseStatus', {}); }," +
-            "      validate: function() { return callNativeAsync('validateLicense', {}); }," +
-            "      activate: { importLicense: function(){ return Promise.resolve({success:false, error:'APP端不支持离线license文件导入，请使用在线激活'}); } }," +
-            "      setTrialDays: function(days){ return callNativeAsync('setTrialDays', {days: days}); }," +
-            "      getTrialDays: function(){ return callNativeAsync('getTrialDays', {}); }," +
-            "      verifyOnline: function(){ return callNativeAsync('verifyOnline', {}); }," +
-            "      getActivationRecord: function(){ return callNativeAsync('getActivationRecord', {}); }" +
-            "    }," +
-            "    activate: {" +
-            "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
-            "      submit: function(code, user){ return callNativeAsync('activateLicense', {code: code, user: user||''}); }," +
-            "      close: function(){ return Promise.resolve({success:true}); }," +
-            "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
-            "    }" +
+            "    closeReadSession: function(sessionId) { callNative('closeReadSession', {sessionId: sessionId}); }" +
             "  };" +
             "})();";
         webView.evaluateJavascript(js, null);
