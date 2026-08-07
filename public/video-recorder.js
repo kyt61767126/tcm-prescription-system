@@ -17,8 +17,14 @@
 (function () {
     'use strict';
 
+    // ★ 修复：APP环境下（有 AndroidNative 桥接）不设置注入标记
+    // 允许 video-recorder-inject.js 后续注入完整的原生桥接功能
+    // 网页版/桌面版仍使用本脚本的浏览器API实现
+    var isAppEnv = !!window.AndroidNative;
     if (window.__videoRecorderInjected) return;
-    window.__videoRecorderInjected = true;
+    if (!isAppEnv) {
+        window.__videoRecorderInjected = true;
+    }
 
     var MAX_DURATION = 60;
     var VIDEO_WIDTH = 1280;
@@ -194,8 +200,15 @@
 
     // ========================================================================
     // 按钮注入（与桌面版一致，自动在 history-header 中注入 🎥 和 📷）
+    // ★ 修复：APP环境下不注入历史页顶部按钮（APP使用底部快捷操作栏）
     // ========================================================================
     function injectButton() {
+        // 检测是否为APP环境（Android APP 通过 AndroidNative 桥接调用）
+        if (window.AndroidNative) {
+            console.log('[video-recorder] APP环境，跳过历史页顶部按钮注入');
+            return false;
+        }
+        
         var header = document.querySelector('.history-header');
         if (!header) return false;
         if (document.getElementById('videoRecBtn')) return true;
@@ -1083,14 +1096,24 @@
     // ========================================================================
     function init() {
         injectStyles();
-        if (!injectButton()) {
-            var retryCount = 0;
-            var retryTimer = setInterval(function () {
-                if (injectButton() || ++retryCount > 30) {
-                    clearInterval(retryTimer);
-                }
-            }, 1000);
+        
+        // 检测是否为APP环境
+        var isApp = !!window.AndroidNative;
+        
+        if (!isApp) {
+            // 非APP环境（网页版/桌面版）：注入历史页顶部按钮
+            if (!injectButton()) {
+                var retryCount = 0;
+                var retryTimer = setInterval(function () {
+                    if (injectButton() || ++retryCount > 30) {
+                        clearInterval(retryTimer);
+                    }
+                }, 1000);
+            }
+        } else {
+            console.log('[video-recorder] APP环境，跳过历史页顶部按钮注入（使用底部快捷操作栏）');
         }
+        
         // 暴露到 window，启用移动端底部录像/拍照按钮
         window.openRecordingOverlay = openRecordingOverlay;
         window.openPhotoOverlay = openPhotoOverlay;
@@ -1100,8 +1123,20 @@
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
+        document.addEventListener('DOMContentLoaded', function() {
+            // ★ 修复：APP环境下跳过初始化，由 video-recorder-inject.js 接管
+            if (window.AndroidNative) {
+                console.log('[video-recorder] APP环境，跳过初始化，等待 video-recorder-inject.js 注入');
+                return;
+            }
+            init();
+        });
     } else {
-        init();
+        // ★ 修复：APP环境下跳过初始化
+        if (window.AndroidNative) {
+            console.log('[video-recorder] APP环境，跳过初始化，等待 video-recorder-inject.js 注入');
+        } else {
+            init();
+        }
     }
 })();
