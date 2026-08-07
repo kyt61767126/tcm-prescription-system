@@ -34,6 +34,10 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM Pre-flight check: 检测上次非正常退出残留（configuration-cache/Gradle daemon）
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\pre-flight-check.ps1" -AppDir "%APP_DIR%"
+echo.
+
 REM shared/ db-yunduan/cloud_app_geren assets
 set "SHARED_DIR=%~dp0..\..\shared"
 set "PUBLIC_DIR=%APP_DIR%\app\src\main\assets\public"

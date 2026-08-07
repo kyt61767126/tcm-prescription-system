@@ -476,6 +476,9 @@ function Build-Desktop {
     param([switch]$SkipConfirm)
     Write-Step "打包云端桌面版 exe (Electron)"
 
+    # Pre-flight check: 检测上次非正常退出残留（.bak/certbak/dist_old/Gradle daemon）
+    & "$scriptDir\..\..\tools\pre-flight-check.ps1" -Target cloud -DesktopDir (Join-Path $scriptDir "cloud_desktop")
+
     if (-not $SkipConfirm) {
         if (-not (Confirm-BuildConfig -Target "云端桌面版")) { return 1 }
     } else {
@@ -648,6 +651,9 @@ function Build-Desktop {
 function Build-App {
     param([switch]$SkipConfirm)
     Write-Step "打包云端手机 APP (APK)"
+
+    # Pre-flight check: 检测上次非正常退出残留（.build_vcode_prev/.bak/configuration-cache/Gradle daemon）
+    & "$scriptDir\..\..\tools\pre-flight-check.ps1" -Target cloud -AppDir (Join-Path $scriptDir "cloud_app")
 
     # 打包前配置确认（Build-AllStrict/Build-All 连续流程时跳过，避免中间回车打断）
     if (-not $SkipConfirm) {

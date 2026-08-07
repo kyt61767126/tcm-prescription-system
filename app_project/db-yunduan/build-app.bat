@@ -64,6 +64,10 @@ if not exist "app\src\main\assets\capacitor.config.json" (
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] 环境检查通过'"
 echo.
 
+REM Pre-flight check: 检测上次非正常退出残留（.build_vcode_prev/.bak/certbak/configuration-cache/Gradle daemon）
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\pre-flight-check.ps1" -Target cloud -AppDir "%ANDROID_DIR%"
+echo.
+
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[2/10] 修补 Capacitor Java 版本（21 → 17）+ 同步共享文件...'"
 call node "%~dp0..\..\tools\patch-java-version.js" "%~dp0..\.."
 if errorlevel 1 (

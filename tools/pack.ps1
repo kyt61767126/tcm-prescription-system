@@ -597,6 +597,9 @@ function Restore-VersionCode {
 function Build-Desktop {
     Write-Step "桌面版打包" "Building Electron desktop application..."
 
+    # Pre-flight check: 检测上次非正常退出残留（.bak/certbak/dist_old/Gradle daemon）
+    & "$PSScriptRoot\pre-flight-check.ps1" -Target $Version -DesktopDir $script:DesktopDir
+
     # Kill old process (only target our app, reduce wait time)
     $processNames = @("app-local", "app-custom", "app-personal", "HuikangTCM-Local", "HuikangTCM-Custom", "HuikangTCM-Personal")
     foreach ($proc in $processNames) {
@@ -922,6 +925,9 @@ function Build-Desktop {
 
 function Build-App {
     Write-Step "APP 打包" "Building Android APK..."
+
+    # Pre-flight check: 检测上次非正常退出残留（.build_vcode_prev/.bak/configuration-cache/Gradle daemon）
+    & "$PSScriptRoot\pre-flight-check.ps1" -Target $Version -AppDir $script:AndroidDir
 
     # Kill only Gradle daemon processes (not all java processes - preserves IDE etc.)
     Write-Host "  停止 Gradle daemon 中..." -ForegroundColor Yellow

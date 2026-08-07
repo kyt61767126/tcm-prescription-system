@@ -28,6 +28,10 @@ if /i "%1"=="--skip-config" (
 )
 echo.
 
+REM Pre-flight check: 检测上次非正常退出残留（.build_vcode_prev/.bak/configuration-cache/Gradle daemon）
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\pre-flight-check.ps1" -Target geren -AppDir "%~dp0app"
+echo.
+
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[2/10] 同步文件到 Android + 验证完整性...'"
 set "ANDROID_PUBLIC=%~dp0app\src\main\assets\public"
 set "ANDROID_ASSETS=%~dp0app\src\main\assets"

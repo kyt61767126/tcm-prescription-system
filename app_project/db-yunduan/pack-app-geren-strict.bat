@@ -54,6 +54,10 @@ if not exist "%GEN_HASH_PS1%" (
     exit /b 1
 )
 
+REM Pre-flight check: 检测上次非正常退出残留（.build_vcode_prev/.bak/certbak/configuration-cache/Gradle daemon）
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\pre-flight-check.ps1" -AppDir "%APP_DIR%"
+echo.
+
 REM ==========================================================
 REM Step 0: Java packaging.ps1
 REM ==========================================================
