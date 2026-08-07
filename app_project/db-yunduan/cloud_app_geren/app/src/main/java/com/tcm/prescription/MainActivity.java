@@ -466,6 +466,10 @@ public class MainActivity extends BridgeActivity {
                 view.evaluateJavascript("window.__STATUS_BAR_HEIGHT__ = " + cssPx + ";", null);
                 injectAutocompleteOff(view);
 
+                // ★ 注入 electronAPI 桥接（与离线APP一致：立即注入基本API，含findMediaFiles等）
+                // video-recorder-inject.js 加载后会在此基础上增强（分片上传、录像拍照）
+                mainHandler.post(() -> injectElectronApiShim(view));
+
                 // 记录页面版本到本地（供下次启动时 onCreate 版本检查使用）
                 // 注意：不在onPageFinished中reload，避免双重加载导致启动变慢
                 // 版本不匹配时的清缓存在下次启动的onCreate中处理
@@ -765,6 +769,81 @@ public class MainActivity extends BridgeActivity {
             "btn2.style.display='';" +
             "};" +
             "if(window.currentUser){window.updateMobileActionButtons();}" +
+            "})();";
+        webView.evaluateJavascript(js, null);
+    }
+
+    /**
+     * ★ 注入 electronAPI shim（与离线APP一致）
+     * 立即注入基本 electronAPI（含 findMediaFiles/readFileAsBase64/openFile 等），
+     * 使云端APP页面在 video-recorder-inject.js 加载前就能使用核心功能。
+     * video-recorder-inject.js 加载后会覆盖增强关键方法（分片上传、录像拍照等）。
+     */
+    private void injectElectronApiShim(WebView webView) {
+        String js = "(function(){" +
+            "  if (window.electronAPI && window.electronAPI.__nativeBridgeProxy) return;" +
+            "  function callNative(name, args) {" +
+            "    try { return AndroidNative.invoke(name, JSON.stringify(args)); }" +
+            "    catch(e){ return JSON.stringify({success:false,error:String(e)}); }" +
+            "  }" +
+            "  function callNativeAsync(name, args) {" +
+            "    return new Promise(function(resolve, reject) {" +
+            "      try {" +
+            "        var r = callNative(name, args);" +
+            "        var obj = JSON.parse(r);" +
+            "        resolve(obj);" +
+            "      } catch(e) { reject(e); }" +
+            "    });" +
+            "  }" +
+            "  window.electronAPI = {" +
+            "    __nativeBridgeProxy: true," +
+            "    isElectron: true," +
+            "    isAndroidAPP: true," +
+            "    saveUserData: function(key, data) { return new Promise(function(resolve){ try { localStorage.setItem(key, JSON.stringify(data)); resolve(true); } catch(e){ resolve(false); } }); }," +
+            "    getUserData: function(key) { return new Promise(function(resolve){ try { var v = localStorage.getItem(key); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
+            "    loginSuccess: function(user) { return new Promise(function(resolve){ try { localStorage.setItem('currentUser', JSON.stringify(user)); resolve(true); } catch(e){ resolve(false); } }); }," +
+            "    getCurrentUser: function() { return new Promise(function(resolve){ try { var v = localStorage.getItem('currentUser'); resolve(v ? JSON.parse(v) : null); } catch(e){ resolve(null); } }); }," +
+            "    saveBackupFile: function(filename, content) { return callNativeAsync('saveBackupFile', {jsonStr: content, fileName: filename}); }," +
+            "    readFileAsBase64: function(filePath) {" +
+            "      return new Promise(function(resolve, reject){" +
+            "        try {" +
+            "          var r = callNative('readFileAsBase64', {filePath: filePath});" +
+            "          var obj = JSON.parse(r);" +
+            "          resolve(obj);" +
+            "        } catch(e) { resolve({success:false, error:String(e)}); }" +
+            "      });" +
+            "    }," +
+            "    openFile: function(filePath, mimeType) { return callNativeAsync('openFile', {filePath: filePath, mimeType: mimeType||''}); }," +
+            "    quitApp: function() { callNative('quitApp', {}); }," +
+            "    printPrescription: function(html, orientation) { return callNativeAsync('printPrescription', {html: html, orientation: orientation||'portrait'}); }," +
+            "    showToast: function(message) { callNative('showToast', {message: message}); }," +
+            "    encryptData: function(data, key) { return callNativeAsync('encryptData', {data: data, key: key}); }," +
+            "    decryptData: function(encryptedData, key) { return callNativeAsync('decryptData', {encryptedData: encryptedData, key: key}); }," +
+            "    savePrescriptionImage: function(imageData, fileName) { return callNativeAsync('savePrescriptionImage', {imageData: imageData, fileName: fileName}); }," +
+            "    saveVideoFile: function(base64Data, fileName) { return callNativeAsync('saveVideoFile', {base64Data: base64Data, fileName: fileName}); }," +
+            "    startMediaSession: function(fileName) { return callNativeAsync('startMediaSession', {fileName: fileName}); }," +
+            "    appendMediaChunk: function(sessionId, chunkBase64, index, total) { return callNativeAsync('appendMediaChunk', {sessionId: sessionId, chunkBase64: chunkBase64, index: index, total: total}); }," +
+            "    commitMediaSession: function(sessionId, fileName, type) { return callNativeAsync('commitMediaSession', {sessionId: sessionId, fileName: fileName, type: type||'image'}); }," +
+            "    findMediaFiles: function(patientName, prescriptionNo, createdAt) { return callNativeAsync('findMediaFiles', {patientName: patientName||'', prescriptionNo: prescriptionNo||'', createdAt: createdAt||''}); }," +
+            "    startReadSession: function(filePath) { return callNativeAsync('startReadSession', {filePath: filePath}); }," +
+            "    readNextChunk: function(sessionId) { return callNativeAsync('readNextChunk', {sessionId: sessionId}); }," +
+            "    closeReadSession: function(sessionId) { callNative('closeReadSession', {sessionId: sessionId}); }," +
+            "    license: {" +
+            "      getStatus: function() { return callNativeAsync('getLicenseStatus', {}); }," +
+            "      validate: function() { return callNativeAsync('validateLicense', {}); }," +
+            "      activate: { importLicense: function(){ return Promise.resolve({success:false, error:'APP端不支持离线license文件导入，请使用在线激活'}); } }," +
+            "      setTrialDays: function(days){ return callNativeAsync('setTrialDays', {days: days}); }," +
+            "      getTrialDays: function(){ return callNativeAsync('getTrialDays', {}); }," +
+            "      verifyOnline: function(){ return callNativeAsync('verifyOnline', {}); }," +
+            "      getActivationRecord: function(){ return callNativeAsync('getActivationRecord', {}); }" +
+            "    }," +
+            "    activate: {" +
+            "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
+            "      submit: function(code, user){ return callNativeAsync('activateLicense', {code: code, user: user||''}); }," +
+            "      close: function(){ return Promise.resolve({success:true}); }," +
+            "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
+            "    }" +
+            "  };" +
             "})();";
         webView.evaluateJavascript(js, null);
     }
