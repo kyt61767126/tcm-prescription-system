@@ -37,16 +37,17 @@ const APP_CONFIG = {
         configPath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop_geren', 'config.json')
     },
     'cloud': {
+        // 云端机构版：cloud_app（包名 com.tcm.prescription）
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app'),
-        outputName: '惠康中医-YJ.apk',
+        outputName: '惠康中医-YB.apk',
         configPath: null
     },
     'geren-cloud': {
-        // 云端个人版：独立项目 cloud_app_geren（包名 com.tcm.prescription.geren）
+        // 云端标准版：cloud_app_geren（包名 com.tcm.prescription.geren）
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app_geren', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app_geren'),
-        outputName: '惠康中医-YB.apk',
+        outputName: '惠康中医-YJ.apk',
         configPath: null
     }
 };

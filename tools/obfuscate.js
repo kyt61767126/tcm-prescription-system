@@ -170,8 +170,8 @@ function loadObfuscator() {
         // 尝试全局加载
         return require('javascript-obfuscator');
     } catch (e) {
-        console.error('\n[ERROR] javascript-obfuscator 未安装');
-        console.error('请先执行: npm install --save-dev javascript-obfuscator\n');
+        console.error('\n[ERROR] javascript-obfuscator not installed');
+        console.error('Run: npm install --save-dev javascript-obfuscator\n');
         process.exit(1);
     }
 }
@@ -189,7 +189,7 @@ function loadObfuscator() {
 function obfuscateFile(filePath, config) {
     const code = fs.readFileSync(filePath, 'utf8');
     if (!code.trim()) {
-        console.log(`  [SKIP] 空文件: ${filePath}`);
+        console.log(`  [SKIP] empty file: ${filePath}`);
         return false;
     }
     const bakPath = filePath + '.bak';
@@ -200,7 +200,7 @@ function obfuscateFile(filePath, config) {
         const bakContent = fs.readFileSync(bakPath, 'utf8');
         if (bakContent !== code) {
             // 当前文件与备份不一致，可能是上次打包未还原
-            console.log(`  [WARN] .bak 残留且文件已变化，自动还原后再混淆: ${path.basename(filePath)}`);
+            console.log(`  [WARN] .bak residual and file changed, auto-restore before obfuscation: ${path.basename(filePath)}`);
             fs.copyFileSync(bakPath, filePath);
             sourceCode = bakContent;
         }
@@ -237,7 +237,7 @@ function restoreFile(filePath) {
         fs.unlinkSync(bakPath);
         return true;
     } catch (e) {
-        console.error(`  [WARN] 还原失败 ${filePath}: ${e.message}`);
+        console.error(`  [WARN] restore failed ${filePath}: ${e.message}`);
         return false;
     }
 }
@@ -264,12 +264,12 @@ let failCount = 0;
 let skipCount = 0;
 
 console.log(`\n========================================`);
-console.log(`  JS 代码混淆工具 (${mode}) [${targetLabel}]`);
+console.log(`  JS Obfuscation Tool (${mode}) [${targetLabel}]`);
 console.log(`========================================\n`);
 
 if (mode === 'restore') {
     // 还原模式：从 .bak 恢复所有文件
-    console.log('正在还原原始文件...\n');
+    console.log('Restoring original files...\n');
     const allFiles = [];
     for (const dir of DISTRIBUTION_DIRS) {
         const absDir = path.join(projectRoot, dir);
@@ -304,7 +304,7 @@ if (mode === 'restore') {
             }
         }
     }
-    console.log(`\n还原完成: ${successCount} 个文件已恢复`);
+    console.log(`\nRestore complete: ${successCount} files recovered`);
 
     // ★ 稳定性修复：restore 后必须校验 .bak 已全部清理
     // 修复前问题：restoreFile 在文件被占用/权限不足时 unlink 失败，.bak 残留但脚本静默退出
@@ -317,13 +317,13 @@ if (mode === 'restore') {
         }
     }
     if (residualBaks.length > 0) {
-        console.log(`\n[WARN] 发现 ${residualBaks.length} 个 .bak 残留文件：`);
+        console.log(`\n[WARN] Found ${residualBaks.length} .bak residual files:`);
         residualBaks.forEach(f => console.log(`  - ${f}`));
-        console.log('\n可能原因：文件被占用 / 权限不足 / restoreFile 失败');
-        console.log('建议：手动删除上述 .bak 文件后重新执行 restore');
+        console.log('\nPossible cause: file locked / permission denied / restoreFile failed');
+        console.log('Suggestion: manually delete above .bak files and re-run restore');
         process.exit(2);
     } else {
-        console.log('[OK] .bak 残留检查通过，无残留文件');
+        console.log('[OK] .bak residual check passed, no residual files');
     }
 } else {
     // 混淆模式
@@ -339,7 +339,7 @@ if (mode === 'restore') {
             if (fs.existsSync(path.join(absDir, extraFile))) totalFiles++;
         }
     }
-    console.log(`正在混淆分发目录中的 JS 文件（共 ${totalFiles} 个，预计 1-${Math.max(1, Math.ceil(totalFiles / 10))} 分钟）...\n`);
+    console.log(`Obfuscating JS files in distribution dirs (${totalFiles} files, est. 1-${Math.max(1, Math.ceil(totalFiles / 10))} min)...\n`);
 
     let processed = 0;
     for (const dir of DISTRIBUTION_DIRS) {
@@ -348,7 +348,7 @@ if (mode === 'restore') {
             continue;
         }
 
-        console.log(`目录: ${dir}`);
+        console.log(`Dir: ${dir}`);
 
         // 混淆模块文件
         for (const modFile of MODULE_FILES) {
@@ -386,11 +386,11 @@ if (mode === 'restore') {
     }
 
     console.log(`========================================`);
-    console.log(`  混淆完成`);
-    console.log(`  成功: ${successCount}  失败: ${failCount}  跳过: ${skipCount}`);
+    console.log(`  Obfuscation complete`);
+    console.log(`  Success: ${successCount}  Failed: ${failCount}  Skipped: ${skipCount}`);
     console.log(`========================================`);
-    console.log(`\n注意:`);
-    console.log(`  1. 原始文件已备份为 .bak，可用 "node tools/obfuscate.js restore --target=${targetName}" 还原`);
-    console.log(`  2. 混淆后请测试功能是否正常`);
-    console.log(`  3. 打包分发后，记得执行 restore 还原开发环境\n`);
+    console.log(`\nNote:`);
+    console.log(`  1. Original files backed up as .bak, run "node tools/obfuscate.js restore --target=${targetName}" to restore`);
+    console.log(`  2. Test functionality after obfuscation`);
+    console.log(`  3. Run restore after packaging to revert dev environment\n`);
 }

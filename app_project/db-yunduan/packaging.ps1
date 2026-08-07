@@ -640,7 +640,7 @@ function Build-Desktop {
     }
 
     $stepElapsed = (Get-Date) - $stepStart
-    if (-not $buildSuccess) { Write-Host "  [ERROR] 桌面版打包失败！耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Red; return 1 }
+    if (-not $buildSuccess) { Write-Host "  [错误] 桌面版打包失败，耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Red; return 1 }
     Write-Host "  桌面版打包完成！耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Green
     return 0
 }
@@ -718,7 +718,7 @@ function Build-App {
     if ($code -ne 0) {
         Write-Host ""
         Write-Host "================================================================" -ForegroundColor Red
-        Write-Host "  [ERROR] 手机 APP 打包失败！退出码: $code" -ForegroundColor Red
+        Write-Host "  [错误] 手机 APP 打包失败，退出码: $code" -ForegroundColor Red
         Write-Host "  耗时: $($stepElapsed.ToString('mm\:ss'))" -ForegroundColor Red
         Write-Host "  请查看上方错误日志" -ForegroundColor Red
         Write-Host "================================================================" -ForegroundColor Red
@@ -758,7 +758,7 @@ function Build-All {
     Write-Host "================================================================" -ForegroundColor Cyan
     $rc = Build-Desktop -SkipConfirm
     if ($rc -ne 0) {
-        Write-Host "[ERROR] 桌面版打包失败，终止全部打包" -ForegroundColor Red
+        Write-Host "[错误] 桌面版打包失败，终止全部打包" -ForegroundColor Red
         return 1
     }
 
@@ -768,7 +768,7 @@ function Build-All {
     Write-Host "================================================================" -ForegroundColor Cyan
     $rc = Build-App -SkipConfirm
     if ($rc -ne 0) {
-        Write-Host "[ERROR] APP 打包失败，终止全部打包" -ForegroundColor Red
+        Write-Host "[错误] APP 打包失败，终止全部打包" -ForegroundColor Red
         return 1
     }
 
@@ -907,7 +907,7 @@ function Build-AllStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     $rc = Build-Desktop -SkipConfirm
     if ($rc -ne 0) {
-        Write-Host "[ERROR] 桌面版打包失败，终止一键打包" -ForegroundColor Red
+        Write-Host "[错误] 桌面版打包失败，终止一键打包" -ForegroundColor Red
         return 1
     }
 
@@ -917,7 +917,7 @@ function Build-AllStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     $rc = Build-App -SkipConfirm
     if ($rc -ne 0) {
-        Write-Host "[ERROR] APP 打包失败，终止一键打包" -ForegroundColor Red
+        Write-Host "[错误] APP 打包失败，终止一键打包" -ForegroundColor Red
         return 1
     }
 
@@ -938,7 +938,7 @@ function Build-AllStrict {
         Remove-Item Env:\NO_PAUSE -ErrorAction SilentlyContinue
     }
     if ($rc -ne 0) {
-        Write-Host "[ERROR] 签名哈希提取失败，终止一键打包" -ForegroundColor Red
+        Write-Host "[错误] 签名哈希提取失败，终止一键打包" -ForegroundColor Red
         Write-Host "  您仍可使用 Step B 的 APK（默认模式）" -ForegroundColor Yellow
         return 1
     }
@@ -952,7 +952,7 @@ function Build-AllStrict {
     # 使用旧 javac 缓存未生效，APK 加载旧版页面。详见 tools/pack.ps1 同步注释。
     $rc = Build-App -SkipConfirm
     if ($rc -ne 0) {
-        Write-Host "[ERROR] 签名严格模式重新打包失败" -ForegroundColor Red
+        Write-Host "[错误] 签名严格模式重新打包失败" -ForegroundColor Red
         Write-Host "  您仍可使用 Step B 的 APK（默认模式）" -ForegroundColor Yellow
         return 1
     }
@@ -987,7 +987,7 @@ function Build-AppStrict {
     Write-Host "================================================================" -ForegroundColor Cyan
     $rc = Build-App -SkipConfirm
     if ($rc -ne 0) {
-        Write-Host "[ERROR] APP 打包失败，终止 APP 严格模式" -ForegroundColor Red
+        Write-Host "[错误] APP 打包失败，终止 APP 严格模式" -ForegroundColor Red
         return 1
     }
 
@@ -1008,7 +1008,7 @@ function Build-AppStrict {
         Remove-Item Env:\NO_PAUSE -ErrorAction SilentlyContinue
     }
     if ($rc -ne 0) {
-        Write-Host "[ERROR] 签名哈希提取失败，终止 APP 严格模式" -ForegroundColor Red
+        Write-Host "[错误] 签名哈希提取失败，终止 APP 严格模式" -ForegroundColor Red
         Write-Host "  您仍可使用 Step A 的 APK（默认模式）" -ForegroundColor Yellow
         return 1
     }
@@ -1034,7 +1034,7 @@ function Build-AppStrict {
     # ★ 严格模式必须全量清理（不再跳过 clean），原因详见上方 Step D 注释
     $rc = Build-App -SkipConfirm
     if ($rc -ne 0) {
-        Write-Host "[ERROR] 签名严格模式重新打包失败" -ForegroundColor Red
+        Write-Host "[错误] 签名严格模式重新打包失败" -ForegroundColor Red
         Write-Host "  您仍可使用 Step A 的 APK（默认模式）" -ForegroundColor Yellow
         return 1
     }

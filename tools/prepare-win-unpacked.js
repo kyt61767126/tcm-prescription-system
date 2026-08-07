@@ -195,7 +195,7 @@ async function main() {
     console.log(`asarmor protection applied successfully (asar size: ${newSize} bytes)`);
   } catch (e) {
     console.error(`[ERROR] asarmor protection FAILED: ${e.message}`);
-    console.error('  ASAR 防解包保护未生效！app.asar 可被提取查看源码。');
+    console.error('  ASAR anti-extraction protection not active! app.asar can be extracted to view source code.');
     // Non-fatal: app still works, just without anti-extraction protection
   }
 

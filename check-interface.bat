@@ -1,5 +1,5 @@
-@echo off
 chcp 65001 >nul
+@echo off
 title Interface Structure Integrity Check
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0check-interface.ps1"
 echo.

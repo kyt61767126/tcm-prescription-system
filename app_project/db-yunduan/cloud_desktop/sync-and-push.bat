@@ -1,5 +1,5 @@
-@echo off
 chcp 65001 >nul
+@echo off
 setlocal
 
 REM ============================================================
@@ -35,7 +35,7 @@ if not "%NO_PUSH%"=="1" echo  Mode:   Sync + Commit + Push
 echo.
 
 if not exist "%DST%" (
-    echo [ERROR] Target directory not found: %DST%
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[错误] Target directory not found: %DST%'"
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -43,7 +43,7 @@ if not exist "%DST%" (
 REM [1/4] Sync files
 echo [1/4] Syncing index.html ...
 copy /Y "%SRC%index.html" "%DST%index.html" >nul
-if errorlevel 1 ( echo [ERROR] index.html sync failed & if not defined NO_PAUSE pause & exit /b 1 )
+if errorlevel 1 ( echo [] index.html sync failed & if not defined NO_PAUSE pause & exit /b 1 )
 
 echo [2/4] Syncing xlsx.full.min.js ...
 if exist "%SRC%xlsx.full.min.js" (
@@ -71,25 +71,25 @@ if %errorlevel% equ 0 (
     exit /b 0
 )
 
-for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss' -ca") do set "NOW=%%t"
+for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss' -ca") do set "NOW=%%t"
 git commit -m "sync: db-yunduan/cloud_desktop frontend sync (%NOW%)"
-if errorlevel 1 ( echo [ERROR] git commit failed & if not defined NO_PAUSE pause & exit /b 1 )
+if errorlevel 1 ( echo [] git commit failed & if not defined NO_PAUSE pause & exit /b 1 )
 
 REM [4/4] Push (unless --no-push)
 if "%NO_PUSH%"=="1" (
     echo.
-    echo [4/4] Skipped push (--no-push)
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[4/4] Skipped push （--no-push）'"
 ) else (
     echo [4/4] git pull --rebase + push ...
     REM P1-14: pull --rebase before push to avoid push failure when remote has new commits
     git pull --rebase origin main
     if errorlevel 1 (
-        echo [ERROR] git pull --rebase failed, please resolve conflicts manually
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[错误] git pull --rebase failed, please resolve conflicts manually'"
         if not defined NO_PAUSE pause
         exit /b 1
     )
     git push origin main
-    if errorlevel 1 ( echo [ERROR] git push failed & if not defined NO_PAUSE pause & exit /b 1 )
+ if errorlevel 1 ( echo [] git push failed & if not defined NO_PAUSE pause & exit /b 1 )
 )
 
 echo.

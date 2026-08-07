@@ -1,3 +1,4 @@
+chcp 65001 >nul
 @echo off
 setlocal enabledelayedexpansion
 cd /d "%~dp0"
@@ -12,7 +13,7 @@ echo.
 REM Check node
 where node >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] node not found. Please install Node.js first.
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[错误] node not found. Please install Node.js first.'"
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -20,7 +21,7 @@ if errorlevel 1 (
 REM Check gh
 where gh >nul 2>nul
 if errorlevel 1 (
-    echo [ERROR] gh CLI not found. Install: winget install GitHub.cli
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[错误] gh CLI not found. Install: winget install GitHub.cli'"
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -33,7 +34,6 @@ echo.
 echo Press any key to start checking...
 pause >nul
 echo.
-
 node tools/auto-publish.js %*
 set "RC=%errorlevel%"
 

@@ -1,56 +1,52 @@
-@echo off
 chcp 65001 >nul
+@echo off
 setlocal enableextensions
 cd /d "%~dp0"
 
-REM pack-app-strict.bat - Capacitor APP Strict Build (Personal)
-REM Strict mode: clean build + hash verify + signature hash injection + repack
+REM pack-app-strict.bat - APP Strict Build (geren)
+REM Strict: clean build + hash verify + sig inject + repack
 
 echo ============================================
-echo   Huikang-TCM Personal - Capacitor APP Strict
+echo   APP Strict Build (geren)
 echo   (Clean build + hash verify + sig inject)
 echo ============================================
 echo.
 
-REM Record start time
-for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
+for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
-REM Step A: First build (default mode with full security)
 echo [Step A] First build (default mode)...
 call build-app.bat
 if errorlevel 1 (
-    echo [ERROR] First build failed
+    echo [ERR] First build failed
     if not defined NO_PAUSE pause
     exit /b 1
 )
 echo [OK] First build complete
 echo.
 
-REM Step B: Extract signature hash and inject into LicenseManager
 echo [Step B] Extracting APK signature hash...
 set "HASH_PS1=%~dp0..\..\..\tools\generate-sign-hash.ps1"
 if not exist "%HASH_PS1%" (
-    echo [WARN] generate-sign-hash.ps1 not found, skipping signature injection
-    echo [INFO] APK is still usable in default mode
+    echo [WARN] generate-sign-hash.ps1 not found, skip
+    echo [INFO] APK still usable in default mode
     goto :done
 )
 set "NO_PAUSE=1"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%HASH_PS1%" -Version geren 2>nul
 set "NO_PAUSE="
 if errorlevel 1 (
-    echo [WARN] Signature hash extraction failed, using default mode APK
+    echo [WARN] Sig hash extraction failed, using default APK
     goto :done
 )
 echo [OK] Signature hash injected
 echo.
 
-REM Step C: Stop Gradle daemon from Step A, then rebuild with strict signature mode
-echo [Step C] Stopping Gradle daemon and rebuilding (strict signature mode)...
+echo [Step C] Stop Gradle daemon and rebuild (strict mode)...
 call gradlew.bat --stop 2>nul
 timeout /t 2 /nobreak >nul
 call build-app.bat --skip-config
 if errorlevel 1 (
-    echo [ERROR] Strict rebuild failed
+    echo [ERR] Strict rebuild failed
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -58,18 +54,19 @@ echo [OK] Strict rebuild complete
 echo.
 
 :done
-for /f "delims=" %%t in ('powershell -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
-for /f "delims=" %%e in ('powershell -NoProfile -Command "$s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
+for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
+for /f "delims=" %%e in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
 echo ========================================
 echo   Build Success!
-echo   APK: %~dp0..\惠康中医-LB.apk
-echo   Mode: Strict signature (anti-tamper enabled)
+echo   APK: %~dp0..\APK-geren.apk
+echo   Mode: Strict signature (anti-tamper)
 echo   Start: %BUILD_START_TIME%
 echo   End:   %BUILD_END_TIME%
 echo   Elapsed: %BUILD_ELAPSED%
 echo ========================================
 echo.
 if not defined NO_PAUSE (
+    set "EXIT_KEY="
     set "EXIT_KEY="
     set /p "EXIT_KEY=Press 0 or Enter to exit: "
 )

@@ -20,14 +20,14 @@ const path = require('path');
 function main() {
     const targetDir = process.argv[2];
     if (!targetDir) {
-        console.error('[ERROR] 用法: node pre-build-check.js <项目目录>');
-        console.error('  例如: node pre-build-check.js app_project/db-offline/desktop_geren');
+        console.error('[ERROR] Usage: node pre-build-check.js <project-dir>');
+        console.error('  Example: node pre-build-check.js app_project/db-offline/desktop_geren');
         process.exit(1);
     }
 
     const absDir = path.resolve(targetDir);
     if (!fs.existsSync(absDir)) {
-        console.error(`[ERROR] 目录不存在: ${absDir}`);
+        console.error(`[ERROR] Directory not found: ${absDir}`);
         process.exit(1);
     }
 
@@ -35,18 +35,18 @@ function main() {
     const pkgPath = path.join(absDir, 'package.json');
 
     if (!fs.existsSync(indexPath)) {
-        console.error(`[ERROR] index.html 不存在: ${indexPath}`);
+        console.error(`[ERROR] index.html not found: ${indexPath}`);
         process.exit(1);
     }
     if (!fs.existsSync(pkgPath)) {
-        console.error(`[ERROR] package.json 不存在: ${pkgPath}`);
+        console.error(`[ERROR] package.json not found: ${pkgPath}`);
         process.exit(1);
     }
 
     console.log('====================================');
-    console.log('  打包前安全完整性验证');
+    console.log('  Pre-build Security Integrity Check');
     console.log('====================================');
-    console.log(`项目目录: ${absDir}`);
+    console.log(`Project dir: ${absDir}`);
     console.log('');
 
     // 1. 解析 index.html 中所有 <script src="xxx.js"> 引用
@@ -62,7 +62,7 @@ function main() {
         }
     }
 
-    console.log(`[1/3] index.html 引用的本地 JS 文件 (${referencedFiles.size} 个):`);
+    console.log(`[1/3] index.html referenced local JS files (${referencedFiles.size}):`);
     for (const f of referencedFiles) {
         console.log(`       - ${f}`);
     }
@@ -73,7 +73,7 @@ function main() {
     const filesList = (pkg.build && pkg.build.files) || [];
     const fileListPatterns = new Set(filesList);
 
-    console.log(`[2/3] package.json build.files 列表 (${filesList.length} 项):`);
+    console.log(`[2/3] package.json build.files list (${filesList.length} items):`);
     for (const f of filesList) {
         console.log(`       - ${f}`);
     }
@@ -108,9 +108,9 @@ function main() {
         }
     }
 
-    console.log('[3/3] 完整性检查结果:');
+    console.log('[3/3] Integrity check results:');
     if (present.length > 0) {
-        console.log(`  [OK] 已覆盖 (${present.length} 个):`);
+        console.log(`  [OK] Covered (${present.length}):`);
         for (const f of present) {
             console.log(`       - ${f}`);
         }
@@ -118,21 +118,21 @@ function main() {
 
     if (missing.length > 0) {
         console.log('');
-        console.log(`  [FAIL] 缺失文件 (${missing.length} 个):`);
+        console.log(`  [FAIL] Missing files (${missing.length}):`);
         for (const f of missing) {
             console.log(`       - ${f}`);
         }
         console.log('');
         console.log('====================================');
-        console.log('  [严重] 发现缺失文件！打包后 exe 将缺少这些脚本！'); 
-        console.log('  请在 package.json 的 build.files 列表中添加缺失的文件');
+        console.log('  [CRITICAL] Missing files detected! exe will lack these scripts after build!');
+        console.log('  Add missing files to package.json build.files list');
         console.log('====================================');
         process.exit(1);
     }
 
     console.log('');
     console.log('====================================');
-    console.log('  [PASS] 所有 JS 文件均已覆盖，可以安全打包');
+    console.log('  [PASS] All JS files covered, safe to build');
     console.log('====================================');
 
     // ★新增：IPC 一致性检查（仅云端桌面版）
@@ -142,7 +142,7 @@ function main() {
         const { execSync } = require('child_process');
         console.log('');
         console.log('====================================');
-        console.log('  IPC 一致性检查（云端桌面版）');
+        console.log('  IPC consistency check (cloud desktop)');
         console.log('====================================');
         const checkIpcScript = path.join(__dirname, 'check-ipc-consistency.js');
         execSync('node "' + checkIpcScript + '"' , { stdio: 'inherit' });
@@ -150,7 +150,7 @@ function main() {
         // check-ipc-consistency.js 退出码 1 表示发现不匹配
         console.log('');
         console.log('====================================');
-        console.log('  [FAIL] IPC 一致性检查未通过！请补全 main.js 中的 handler 注册');
+        console.log('  [FAIL] IPC consistency check failed! Add missing handler registrations in main.js');
         console.log('====================================');
         process.exit(1);
     }
