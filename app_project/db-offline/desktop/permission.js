@@ -39,40 +39,68 @@
         get edition() { return this._edition; },
         get config() { return this._config; },
 
-        // 版本判断
-        isCloud() { return this._edition === 'cloud'; },
-        isOffline() { return this._edition === 'offline'; },
-        isPersonal() { return this._edition === 'personal'; },
-        isClinicCustom() { return this._edition === 'clinic_custom'; },
+        // 版本判断（2026-08-08 规则1升级：只保留4个版本 YB/YJ/LB/LJ）
+        //   YB = cloud_personal  云端标准版
+        //   YJ = cloud_clinic    云端机构版
+        //   LB = personal/offline_personal  离线标准版
+        //   LJ = clinic/offline_clinic      离线机构版
+        // 旧 key（cloud / offline / clinic_custom）向后兼容
+        isCloud() {
+            return ['cloud', 'cloud_personal', 'cloud_clinic'].includes(this._edition);
+        },
+        isOffline() {
+            return ['offline', 'personal', 'clinic_custom', 'clinic',
+                    'offline_personal', 'offline_clinic'].includes(this._edition);
+        },
+        // 是否为"标准版（单用户，不能建子账号）"：YB + LB
+        isPersonal() {
+            return ['personal', 'cloud_personal', 'offline_personal'].includes(this._edition);
+        },
+        // 是否为"机构版（多用户，管理子账号）"：YJ + LJ（兼容旧 clinic_custom/offline/clinic）
+        isInstitutional() {
+            return ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic'].includes(this._edition);
+        },
+        // 旧 API 兼容：isClinicCustom = isInstitutional
+        isClinicCustom() {
+            return this.isInstitutional();
+        },
 
-        // 权限判断
+        // 权限判断（规则4：云端标准版只有管理员，不能建子账号；
+        //         云端机构版管理员可增删子账号，子账号只能开方；
+        //         离线标准版单账号；离线机构本地多用户）
         canEditClinicName() {
-            return this.isCloud() || this.isOffline();
+            // 所有版本允许修改诊所名称（2026-07-31 新规范）
+            return true;
         },
         canEditDoctorName() {
-            return !this.isPersonal();
+            // 所有版本允许修改医师姓名（2026-07-31 新规范）
+            return true;
         },
         canManageUsers() {
-            return !this.isPersonal();
+            // 规则4：只有"机构版"可以管理子账号
+            return this.isInstitutional();
         },
         canSync() {
+            // 规则1&2：只有云端版本能同步（但媒体不上云）
             return this.isCloud();
         },
         hasMultiUser() {
-            return !this.isPersonal();
+            return this.isInstitutional();
         },
         hasRememberPassword() {
-            return this.isPersonal();
+            // 规则5：所有版本禁止记住密码，统一强制每次手动输密码
+            return false;
         },
         hasUsernameDropdown() {
-            return !this.isPersonal();
+            // 规则4：仅机构版有多用户下拉；标准版单账号不需要下拉
+            return this.isInstitutional();
         },
 
         // ===== 基于角色的权限判断（统一入口） =====
         // 所有角色判断都通过 AuthCore 的 isAdmin/isClinicAdmin/isPlatformAdmin
         // 确保离线版 admin 和云端版 clinic_admin 行为一致
 
-        // 是否可以管理用户（需要管理员角色 + 非个人版）
+        // 是否可以管理用户（需要管理员角色 + 机构版）
         canManageUsersByRole(user) {
             if (this.isPersonal()) return false;
             if (!user) return false;
@@ -83,11 +111,11 @@
             return user.role === 'admin' || user.role === 'clinic_admin';
         },
 
-        // 是否可以修改密码（个人版所有用户均可；非个人版仅普通用户可修改密码，管理员使用账户管理）
+        // 是否可以修改密码（标准版所有用户均可；机构版仅普通用户可修改密码，管理员使用账户管理）
         canChangePassword(user) {
-            if (this.isPersonal()) return true; // 个人版允许改密
+            if (this.isPersonal()) return true; // 标准版允许改密
             if (!user) return false;
-            // 非个人版：管理员不显示修改密码（由账户管理覆盖），普通用户显示修改密码
+            // 机构版：管理员不显示修改密码（由账户管理覆盖），普通用户显示修改密码
             if (global.AuthCore && global.AuthCore.isClinicAdmin) {
                 return !global.AuthCore.isClinicAdmin(user);
             }
@@ -155,15 +183,15 @@
             //     });
             // }
 
-            // 用户管理按钮（个人定制版隐藏账户管理，但保留修改密码）
-            if (edition === 'personal') {
+            // 用户管理按钮（标准版=单用户，隐藏账户管理，但保留修改密码）
+            if (this.isPersonal()) {
                 const userManageBtn = document.getElementById('userManageBtn');
                 if (userManageBtn) userManageBtn.style.display = 'none';
-                // 个人版保留修改密码功能，不再隐藏 changePwdBtn
+                // 标准版保留修改密码功能，不再隐藏 changePwdBtn
             }
 
             // 同步入口屏蔽（非云端版）
-            if (edition !== 'cloud') {
+            if (!this.isCloud()) {
                 document.querySelectorAll('[onclick*="sync"], #syncBtn, #cloudSyncBtn, #syncStatus').forEach(el => {
                     el.style.display = 'none';
                 });

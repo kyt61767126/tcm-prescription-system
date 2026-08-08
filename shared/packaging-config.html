@@ -35,7 +35,15 @@
             display: inline-block; padding: 4px 12px; border-radius: 12px; font-size: 12px;
             font-weight: bold; margin-bottom: 20px;
         }
-        .edition-personal { background: #e3f2fd; color: #1565c0; }
+        /* P11-12: 规则1 四版本 badge 配色（2026-08-08）
+           YB=云端标准版 / YJ=云端机构版 / LB=离线标准版 / LJ=离线机构版 */
+        .edition-cloud_personal { background: #e3f2fd; color: #1565c0; }  /* YB 蓝 */
+        .edition-cloud_clinic   { background: #f3e5f5; color: #7b1fa2; }  /* YJ 紫 */
+        .edition-personal       { background: #e8f5e9; color: #2e7d32; }  /* LB 绿 （保留 personal key 兼容离线标准版 config.json 中 edition=personal） */
+        .edition-offline_personal { background: #e8f5e9; color: #2e7d32; } /* LB 绿 */
+        .edition-clinic         { background: #fff3e0; color: #e65100; }  /* LJ 橙 （保留 clinic key 兼容离线机构版 config.json 中 edition=clinic） */
+        .edition-offline_clinic { background: #fff3e0; color: #e65100; }  /* LJ 橙 */
+        /* 旧 key 兼容（保持可见性）*/
         .edition-clinic_custom { background: #fff3e0; color: #e65100; }
         .edition-offline { background: #e8f5e9; color: #2e7d32; }
         .edition-cloud { background: #f3e5f5; color: #7b1fa2; }
@@ -90,24 +98,42 @@
                     return;
                 }
 
-                const edition = currentConfig.edition || 'cloud';
+                const edition = currentConfig.edition || 'cloud_personal';
                 const badge = document.getElementById('editionBadge');
+                /* P11-12: 规则1 四版本标签映射（2026-08-08）
+                   云端标准版 YB = cloud_personal
+                   云端机构版 YJ = cloud_clinic
+                   离线标准版 LB = personal / offline_personal
+                   离线机构版 LJ = clinic / offline_clinic
+                   旧 edition 值向后兼容 */
                 const labels = {
-                    'personal': { text: '电脑个人定制版', cls: 'edition-personal' },
-                    'clinic_custom': { text: '电脑诊所定制版', cls: 'edition-clinic_custom' },
-                    'offline': { text: '电脑离线诊所版', cls: 'edition-offline' },
-                    'cloud': { text: '电脑云端诊所版', cls: 'edition-cloud' }
+                    'cloud_personal':    { text: '云端标准版 YB', cls: 'edition-cloud_personal' },
+                    'cloud_clinic':      { text: '云端机构版 YJ', cls: 'edition-cloud_clinic' },
+                    'personal':          { text: '离线标准版 LB', cls: 'edition-personal' },
+                    'offline_personal':  { text: '离线标准版 LB', cls: 'edition-offline_personal' },
+                    'clinic':            { text: '离线机构版 LJ', cls: 'edition-clinic' },
+                    'offline_clinic':    { text: '离线机构版 LJ', cls: 'edition-offline_clinic' },
+                    // 向后兼容旧 key（避免 badge 显示异常）
+                    'cloud':             { text: '云端机构版 YJ', cls: 'edition-cloud_clinic' },
+                    'clinic_custom':     { text: '离线机构版 LJ', cls: 'edition-clinic' },
+                    'offline':           { text: '离线机构版 LJ', cls: 'edition-clinic' }
                 };
-                const info = labels[edition] || labels.cloud;
+                const info = labels[edition] || labels.cloud_personal;
                 badge.textContent = info.text;
                 badge.className = 'edition-badge ' + info.cls;
 
                 document.getElementById('clinicNameInput').value = currentConfig.clinicName || '';
 
-                // 个人定制版显示医师姓名输入框
-                if (edition === 'personal') {
+                /* P11-12: 规则1 已删除"个人定制版"，不再要求填写医师姓名
+                   仅当 edition 是个人/标准版时，兼容保留旧 doctorName 字段但不再强制显示输入框 */
+                const isPersonalLike = ['personal','offline_personal','cloud_personal'].includes(edition);
+                document.getElementById('doctorNameGroup').style.display = 'none';
+                if (isPersonalLike && currentConfig.doctorName) {
+                    // 向后兼容：已有 doctorName 时只读显示，不强制要求
                     document.getElementById('doctorNameGroup').style.display = '';
                     document.getElementById('doctorNameInput').value = currentConfig.doctorName || '';
+                    document.getElementById('doctorNameInput').readOnly = true;
+                    document.getElementById('doctorNameInput').placeholder = '（规则1：2026年起已取消医师姓名必填）';
                 }
             } catch (e) {
                 console.error('加载配置失败:', e);
@@ -126,14 +152,10 @@
             }
 
             currentConfig.clinicName = clinicName;
-            if (currentConfig.edition === 'personal') {
-                const doctorName = document.getElementById('doctorNameInput').value.trim();
-                if (!doctorName) {
-                    document.getElementById('statusMsg').textContent = '请输入医师姓名';
-                    document.getElementById('statusMsg').className = 'status-msg status-error';
-                    return;
-                }
-                currentConfig.doctorName = doctorName;
+            /* P11-12: 规则1 已取消"个人定制版"，doctorName 字段不再强制；
+               仅在已存在旧数据时保留，不再需要校验 */
+            if (currentConfig.doctorName === undefined) {
+                currentConfig.doctorName = '';
             }
 
             try {

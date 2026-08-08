@@ -1,10 +1,12 @@
 // ============================================================================
-// Electron Preload 脚本（安全模式：contextIsolation: true, nodeIntegration: false）
+//  preload.js - 在 contextIsolation 模式下向渲染进程暴露安全 API
+//  所有方法均通过 contextBridge 暴露，渲染进程无法直接访问 ipcRenderer/require
+//
+//  ★ 本文件为机构版 electron/preload.js，基于离线版增加：
+//    - saveVideoFile：视频文件保存（ArrayBuffer → 文件）
+//    - getVideoDirectory：获取视频保存目录
+//    - openVideoDirectory：在文件管理器中打开视频目录
 // ============================================================================
-// 通过 contextBridge 安全暴露 IPC 接口给渲染进程
-// 渲染进程只能访问 window.electronAPI 上白名单列出的方法，不能直接访问 Node.js
-// ============================================================================
-
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -14,172 +16,83 @@ contextBridge.exposeInMainWorld('electronAPI', {
     printPrescription: (html, orientation) =>
         ipcRenderer.invoke('print-prescription', html, orientation),
 
-    // ---------- 图像保存 ----------
-    savePrescriptionImage: (imageData, fileName) => {
-        return ipcRenderer.invoke('save-prescription-image', imageData, fileName);
-    },
+    // 处方图片保存
+    savePrescriptionImage: (imageData, fileName) =>
+        ipcRenderer.invoke('save-prescription-image', imageData, fileName),
 
-    getImageDirectory: () => {
-        return ipcRenderer.invoke('get-image-directory');
-    },
+    // ---------- 视频录制（新增） ----------
+    saveVideoFile: (arrayBuffer, fileName) =>
+        ipcRenderer.invoke('save-video-file', arrayBuffer, fileName),
 
-    openImageDirectory: () => {
-        return ipcRenderer.invoke('open-image-directory');
-    },
+    getVideoDirectory: () =>
+        ipcRenderer.invoke('get-video-directory'),
 
-    selectImageSaveDirectory: () => {
-        return ipcRenderer.invoke('select-image-save-directory');
-    },
-
-    // ---------- 视频录制 ----------
-    saveVideoFile: (arrayBuffer, fileName) => {
-        return ipcRenderer.invoke('save-video-file', arrayBuffer, fileName);
-    },
-
-    getVideoDirectory: () => {
-        return ipcRenderer.invoke('get-video-directory');
-    },
-
-    openVideoDirectory: () => {
-        return ipcRenderer.invoke('open-video-directory');
-    },
+    openVideoDirectory: () =>
+        ipcRenderer.invoke('open-video-directory'),
 
     // ---------- 处方文件查看（新增） ----------
-    findMediaFiles: (patientName, prescriptionNo, createdAt) => {
-        return ipcRenderer.invoke('find-media-files', patientName, prescriptionNo, createdAt);
-    },
+    findMediaFiles: (patientName, prescriptionNo, createdAt) =>
+        ipcRenderer.invoke('find-media-files', patientName, prescriptionNo, createdAt),
 
-    listAllMediaFiles: () => {
-        return ipcRenderer.invoke('list-all-media-files');
-    },
+    openFile: (filePath, mimeType) =>
+        ipcRenderer.invoke('open-file', filePath, mimeType || ''),
 
-    openFile: (filePath, mimeType) => {
-        return ipcRenderer.invoke('open-file', filePath, mimeType || '');
-    },
+    readFileAsBase64: (filePath) =>
+        ipcRenderer.invoke('read-file-as-base64', filePath),
 
-    readFileAsBase64: (filePath) => {
-        return ipcRenderer.invoke('read-file-as-base64', filePath);
-    },
+    renameMediaFiles: (oldPatientName, newPatientName, oldNo, newNo) =>
+        ipcRenderer.invoke('rename-media-files', oldPatientName, newPatientName, oldNo, newNo),
 
-    renameMediaFiles: (oldPatientName, newPatientName, oldNo, newNo) => {
-        return ipcRenderer.invoke('rename-media-files', oldPatientName, newPatientName, oldNo, newNo);
-    },
+    deleteFile: (filePath) =>
+        ipcRenderer.invoke('delete-file', filePath),
 
-    deleteFile: (filePath) => {
-        return ipcRenderer.invoke('delete-file', filePath);
-    },
-
-    // ---------- 备份数据保存（与图片同目录：安装目录/downloads/YYYY-MM/） ----------
-    saveBackupFile: (jsonStr, fileName) => {
-        return ipcRenderer.invoke('save-backup-file', jsonStr, fileName);
-    },
-
-    getBackupDirectory: () => {
-        return ipcRenderer.invoke('get-backup-directory');
-    },
-
-    openBackupDirectory: () => {
-        return ipcRenderer.invoke('open-backup-directory');
-    },
-
-    // ---------- 登录管理 ----------
-    loginSuccess: (userData) => {
-        return ipcRenderer.invoke('login-success', userData);
-    },
-
-    loginCancel: () => {
-        return ipcRenderer.invoke('login-cancel');
-    },
-
-    getLoggedInUser: () => {
-        return ipcRenderer.invoke('get-logged-in-user');
-    },
-
-    getIndexHtmlContent: () => {
-        return ipcRenderer.invoke('get-index-html-content');
-    },
-
-    logout: () => {
-        return ipcRenderer.invoke('logout');
-    },
-
-    quitApp: () => {
-        return ipcRenderer.invoke('quit-app');
-    },
-
-    // ---------- 用户数据目录 ----------
-    getDataDirectory: () => {
-        return ipcRenderer.invoke('get-data-directory');
-    },
-
-    saveUserData: (key, data) => {
-        return ipcRenderer.invoke('save-user-data', key, data);
-    },
-
-    getUserData: (key) => {
-        return ipcRenderer.invoke('get-user-data', key);
-    },
+    // 用户数据持久化
+    saveUserData: (key, data) => ipcRenderer.invoke('save-user-data', key, data),
+    getUserData: (key) => ipcRenderer.invoke('get-user-data', key),
 
     // 安全存储（safeStorage）- P0-2: 基于 Windows DPAPI 的系统级加密
     // 用于替代 auth-core.js 中旧的硬编码盐 XOR 加密（PWDv1/PWDv2）
-    safeStorageAvailable: () => {
-        return ipcRenderer.invoke('auth:safeStorageAvailable');
-    },
+    safeStorageAvailable: () => ipcRenderer.invoke('auth:safeStorageAvailable'),
+    encryptString: (plaintext) => ipcRenderer.invoke('auth:encryptString', plaintext),
+    decryptString: (encryptedBase64) => ipcRenderer.invoke('auth:decryptString', encryptedBase64),
 
-    encryptString: (plaintext) => {
-        return ipcRenderer.invoke('auth:encryptString', plaintext);
-    },
+    // 登录态
+    loginSuccess: (userData) => ipcRenderer.invoke('login-success', userData),
+    getCurrentUser: () => ipcRenderer.invoke('get-current-user'),
 
-    decryptString: (encryptedBase64) => {
-        return ipcRenderer.invoke('auth:decryptString', encryptedBase64);
-    },
+    // 应用配置（取代旧的 get-index-html-content 正则解析）
+    getAppConfig: () => ipcRenderer.invoke('get-app-config'),
+    setAutoStart: (enabled) => ipcRenderer.invoke('set-auto-start', enabled),
 
-    // ---------- 应用配置 ----------
-    getAppConfig: () => {
-        return ipcRenderer.invoke('get-app-config');
-    },
-    setAutoStart: (enabled) => {
-        return ipcRenderer.invoke('set-auto-start', enabled);
-    },
+    // 退出
+    quitApp: () => ipcRenderer.invoke('quit-app'),
+    logout: () => ipcRenderer.invoke('logout'),
 
-    // ---------- 自动备份 ----------
-    saveAutoBackup: (jsonStr, fileName) => {
-        return ipcRenderer.invoke('save-auto-backup', jsonStr, fileName);
-    },
-    listAutoBackups: () => {
-        return ipcRenderer.invoke('list-auto-backups');
-    },
-    deleteAutoBackup: (fileName) => {
-        return ipcRenderer.invoke('delete-auto-backup', fileName);
-    },
+    // 备份文件保存（绕过 Electron 下载机制，直接写文件）
+    saveBackupFile: (jsonStr, fileName) => ipcRenderer.invoke('save-backup-file', jsonStr, fileName),
 
-    // ---------- 兼容方法 ----------
-    getCurrentUser: () => {
-        return ipcRenderer.invoke('get-logged-in-user');
-    },
+    // P1-1 自动备份策略：保存/列出/删除（userData/backups/ 目录）
+    saveAutoBackup: (jsonStr, fileName) => ipcRenderer.invoke('save-auto-backup', jsonStr, fileName),
+    listAutoBackups: () => ipcRenderer.invoke('list-auto-backups'),
+    deleteAutoBackup: (fileName) => ipcRenderer.invoke('delete-auto-backup', fileName),
+
+    // 主进程推送给渲染进程：登录用户信息（主窗口 dom-ready 时一次性发送）
     onLoginUser: (callback) => {
         const handler = (_event, user) => callback(user);
         ipcRenderer.once('main:login-user', handler);
     },
-    showMessageBox: (options) => {
-        return ipcRenderer.invoke('show-message-box', options);
-    },
 
-    // ★清理：移除 localDB 系列（云端桌面版不需要本地数据库，这是离线版功能）
-    // index.html:1524 有防御性检查 `window.electronAPI.localDB ? ... : null`，移除后不会崩溃
+    showMessageBox: (options) => ipcRenderer.invoke('show-message-box', options),
 
-    // ★ 同步对话框（替代原生 alert/confirm 和原 HTML 模态框方案）
-    // 原因：
-    //   1. Electron 35 原生 alert() 关闭后鼠标光标不显示（Chromium 模态框焦点 bug）
-    //   2. 原 HTML 模态框方案将 confirm 改为返回 Promise，破坏了 `if (!confirm(...)) return;` 同步语义
-    //      （Promise 是 truthy，导致删除等危险操作不弹窗直接执行）
+    // ★ 同步对话框（替代原生 alert/confirm）
+    // 原因：Electron 35 中原生 alert() 关闭后鼠标光标不显示（已知 bug）
     // 方案：使用 Electron 原生 dialog.showMessageBoxSync（同步阻塞，行为与原生 alert/confirm 一致）
-    // 兼容：同步返回 boolean，`if (!confirm(...))` 和 `await confirm(...)` 均正确工作
+    // 业务代码同步调用 alert/confirm 不受影响（dom-ready 时已重写 window.alert/confirm 调用这些方法）
     alertSync: (message) => ipcRenderer.sendSync('dialog:alert-sync', String(message || '')),
     confirmSync: (message) => ipcRenderer.sendSync('dialog:confirm-sync', String(message || '')) === 1,
 
     // ★ 异步 prompt 对话框（替代原生 window.prompt）
-    // 原因：Electron 35 BrowserWindow 中 window.prompt() 默认返回 null（不弹框），
+    // 原因：Electron BrowserWindow 中 window.prompt() 默认返回 null（不弹框），
     //      导致 handleEditUser / editMedicine 等函数静默失败（点击"编辑"无反应）
     // 方案：创建独立 BrowserWindow（modal）作为 prompt 对话框，返回 Promise<string|null>
     // 兼容：业务代码需用 `await prompt(...)`，同步调用会得到 Promise 对象
@@ -207,12 +120,29 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // ★ 激活码激活窗口（云端激活系统，第3周任务）
     activate: {
         show: () => ipcRenderer.invoke('license:show-activate'),
-        // ★ 一体化到期提示 + 拉起激活窗口（main process 中 dialog + showActivateWindow）
+        // ★ 一体化到期提示 + 拉起激活窗口（main process 中 dialog.showMessageBoxSync + showActivateWindow）
         showExpireAlert: (message) => ipcRenderer.invoke('license:show-expire-alert', message),
         // ★ v3 新增：clinicName 参数透传给云端做绑定校验
         submit: (code, user, clinicName) => ipcRenderer.invoke('license:submit-activate', code, user, clinicName),
         close: () => ipcRenderer.invoke('license:close-activate'),
         restart: () => ipcRenderer.invoke('license:restart'),
         getMachineId: () => ipcRenderer.invoke('license:get-machine-id')
+    },
+
+    // ---------- 首次配置向导 ----------
+    updateConfig: (updates) => ipcRenderer.invoke('config:update', updates),
+    showActivationWindow: () => ipcRenderer.invoke('showActivationWindow'),
+    changeUserPassword: (payload) => ipcRenderer.invoke('user:change-password', payload),
+
+    // ---------- bnzc:// 一键激活 ----------
+    bnzcGetPendingActivation: () => ipcRenderer.invoke('bnzc:get-pending-activation'),
+    bnzcClearPendingActivation: () => ipcRenderer.invoke('bnzc:clear-pending-activation'),
+    bnzcAutoActivate: (payload) => ipcRenderer.invoke('bnzc:auto-activate', payload),
+
+    // 监听主进程推送的 bnzc:// 激活事件（macOS open-url 或运行时收到链接）
+    onBnzcPendingActivation: (callback) => {
+        const handler = (event, data) => callback(data);
+        ipcRenderer.on('bnzc:pending-activation', handler);
+        return () => ipcRenderer.removeListener('bnzc:pending-activation', handler);
     }
 });

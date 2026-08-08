@@ -684,9 +684,62 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【云端】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【云端】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">
+                    <span>微信号: hktzy1688</span>
+                    <span style="margin-left:10px;">|</span>
+                    <a href="#" onclick="showRegisterModal(); return false;" style="color:#667eea;text-decoration:none;font-weight:bold;">新诊所注册</a>
+                </div></div></div></div></div>
 
-    <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
+    <!-- 新诊所自助注册弹窗 -->
+    <div id="registerModal" class="modal">
+        <div class="modal-content user-modal-content" style="max-width:480px;">
+            <div class="modal-header">
+                <span>🏥 新诊所注册</span>
+                <span class="close-btn" onclick="closeModal('registerModal')">&times;</span>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+                <div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;margin-bottom:16px;font-size:13px;color:#2e7d32;line-height:1.6;">
+                    <strong>📋 注册说明</strong><br>
+                    1. 注册后立即获得云端管理员账号，可登录系统使用<br>
+                    2. 管理员账号格式：<code>admin_诊所简码</code>（如 admin_hkt）<br>
+                    3. 密码需包含字母和数字，至少8位<br>
+                    4. 注册成功后请联系客服获取激活码（如需完整版功能）
+                </div>
+                <div class="form-group">
+                    <label>诊所名称 <span style="color:red;">*</span></label>
+                    <input type="text" id="regClinicName" placeholder="如：惠康中医诊所" maxlength="50" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                </div>
+                <div class="form-group">
+                    <label>管理员登录账号 <span style="color:red;">*</span></label>
+                    <input type="text" id="regAdminUsername" placeholder="admin_诊所简码（如 admin_hkt）" oninput="checkUsernameAvailability()" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;font-family:monospace;">
+                    <div id="regUsernameStatus" style="font-size:11px;margin-top:4px;"></div>
+                </div>
+                <div class="form-group">
+                    <label>管理员姓名</label>
+                    <input type="text" id="regAdminName" placeholder="真实姓名，如：张医生" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                </div>
+                <div class="form-group">
+                    <label>设置密码 <span style="color:red;">*</span></label>
+                    <input type="password" id="regAdminPassword" placeholder="至少8位，含字母和数字" oninput="updatePasswordStrength()" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                    <div id="regPwdStrength" style="font-size:11px;margin-top:4px;"></div>
+                </div>
+                <div class="form-group">
+                    <label>确认密码 <span style="color:red;">*</span></label>
+                    <input type="password" id="regAdminPassword2" placeholder="再次输入密码" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                </div>
+                <div class="form-group">
+                    <label>微信号（可选，用于客服联系）</label>
+                    <input type="text" id="regWechat" placeholder="客服微信" style="width:100%;padding:10px;border:2px solid #e0e0e0;border-radius:8px;">
+                </div>
+                <div id="registerError" style="color:#dc2626;font-size:12px;margin-top:10px;display:none;"></div>
+                <div id="registerSuccess" style="color:#2e7d32;font-size:13px;margin-top:10px;display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="action-btn" onclick="closeModal('registerModal')">取消</button>
+                <button class="action-btn primary" id="registerSubmitBtn" onclick="handleRegisterClinic()">立即注册</button>
+            </div>
+        </div>
+    </div>
 
     <div id="changePwdModal" class="modal">
         <div class="modal-content user-modal-content">
@@ -3389,6 +3442,152 @@ if (window.Permission) {
             }
         }
 
+        // ============ 新诊所自助注册 ============
+        function showRegisterModal() {
+            document.getElementById('registerModal').style.display = 'flex';
+            document.getElementById('registerError').style.display = 'none';
+            document.getElementById('registerSuccess').style.display = 'none';
+        }
+
+        function updatePasswordStrength() {
+            const pwd = document.getElementById('regAdminPassword').value;
+            const indicator = document.getElementById('regPwdStrength');
+            if (!pwd) { indicator.innerHTML = ''; return; }
+            let score = 0;
+            if (pwd.length >= 8) score++;
+            if (pwd.length >= 12) score++;
+            if (/[a-z]/.test(pwd)) score++;
+            if (/[A-Z]/.test(pwd)) score++;
+            if (/[0-9]/.test(pwd)) score++;
+            if (/[^a-zA-Z0-9]/.test(pwd)) score++;
+            const colors = ['#dc2626', '#ea580c', '#d97706', '#ca8a04', '#65a30d', '#16a34a'];
+            const labels = ['太弱', '弱', '一般', '中等', '强', '非常强'];
+            const color = colors[Math.min(score, colors.length - 1)];
+            const label = labels[Math.min(score, labels.length - 1)];
+            indicator.innerHTML = '密码强度：<span style="color:' + color + ';font-weight:bold;">' + label + '</span>';
+        }
+
+        async function handleRegisterClinic() {
+            const clinicName = document.getElementById('regClinicName').value.trim();
+            const adminUsername = document.getElementById('regAdminUsername').value.trim();
+            const adminPassword = document.getElementById('regAdminPassword').value;
+            const adminPassword2 = document.getElementById('regAdminPassword2').value;
+            const adminName = document.getElementById('regAdminName').value.trim();
+            const wechat = document.getElementById('regWechat').value.trim();
+            const errorDiv = document.getElementById('registerError');
+            const successDiv = document.getElementById('registerSuccess');
+            const submitBtn = document.getElementById('registerSubmitBtn');
+
+            errorDiv.style.display = 'none';
+            successDiv.style.display = 'none';
+
+            // 前端校验
+            if (!clinicName) { showRegError('请填写诊所名称'); return; }
+            if (clinicName.length < 2 || clinicName.length > 50) { showRegError('诊所名称长度需在 2-50 个字符之间'); return; }
+            if (!adminUsername) { showRegError('请填写管理员账号'); return; }
+            if (/[\u4e00-\u9fa5]/.test(adminUsername)) { showRegError('管理员账号不能使用中文'); return; }
+            if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(adminUsername)) {
+                showRegError('管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅小写字母和数字，2-12位简码'); return;
+            }
+            if (!adminPassword || adminPassword.length < 8) { showRegError('密码至少8位'); return; }
+            if (!/[a-zA-Z]/.test(adminPassword) || !/[0-9]/.test(adminPassword)) {
+                showRegError('密码必须同时包含字母和数字'); return;
+            }
+            if (adminPassword !== adminPassword2) { showRegError('两次输入的密码不一致'); return; }
+
+            // 提交注册
+            submitBtn.disabled = true;
+            submitBtn.textContent = '注册中...';
+
+            try {
+                const apiBase = (typeof AuthCore !== 'undefined') ? AuthCore.CLOUD_API_BASE : 'https://tcm-prescription-system.pages.dev/api';
+                const response = await fetch(apiBase + '/users?action=register-clinic', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        clinicName, adminUsername, adminPassword, adminName, wechat
+                    })
+                });
+                const data = await response.json();
+                if (data.success) {
+                    successDiv.style.display = 'block';
+                    successDiv.innerHTML = '✅ ' + (data.message || '注册成功！') + '<br><br>' +
+                        '🏥 诊所：' + (data.clinic?.name || clinicName) + '<br>' +
+                        '👤 管理员账号：<code>' + adminUsername + '</code><br><br>' +
+                        '<b>下一步：</b>请使用管理员账号登录系统<br>' +
+                        '💬 如需激活完整版，请联系客服微信：hktzy1688';
+                    submitBtn.style.display = 'none';
+                    setTimeout(function() {
+                        closeModal('registerModal');
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '立即注册';
+                        submitBtn.style.display = '';
+                        // 自动填充用户名到登录框
+                        document.getElementById('loginUsername').value = adminUsername;
+                        document.getElementById('loginPassword').focus();
+                    }, 3000);
+                } else {
+                    showRegError(data.error || '注册失败，请稍后重试');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '立即注册';
+                }
+            } catch (e) {
+                showRegError('网络错误：' + (e.message || '请检查网络连接'));
+                submitBtn.disabled = false;
+                submitBtn.textContent = '立即注册';
+            }
+        }
+
+        function showRegError(msg) {
+            const errorDiv = document.getElementById('registerError');
+            errorDiv.textContent = msg;
+            errorDiv.style.display = 'block';
+        }
+
+        // 用户名可用性实时检查（防抖）
+        let _usernameCheckTimer = null;
+        function checkUsernameAvailability() {
+            const input = document.getElementById('regAdminUsername');
+            const statusEl = document.getElementById('regUsernameStatus');
+            const val = input.value.trim();
+
+            clearTimeout(_usernameCheckTimer);
+            if (!val) { statusEl.innerHTML = ''; statusEl.style.color = ''; return; }
+
+            // 即时格式检查
+            if (/[\u4e00-\u9fa5]/.test(val)) {
+                statusEl.innerHTML = '❌ 不能使用中文';
+                statusEl.style.color = '#dc2626';
+                return;
+            }
+            if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(val)) {
+                statusEl.innerHTML = '⚠️ 格式：admin_ + 2-12位小写字母/数字';
+                statusEl.style.color = '#d97706';
+                return;
+            }
+
+            statusEl.innerHTML = '⏳ 检查可用性...';
+            statusEl.style.color = '#666';
+
+            _usernameCheckTimer = setTimeout(async function() {
+                try {
+                    const apiBase = (typeof AuthCore !== 'undefined') ? AuthCore.CLOUD_API_BASE : 'https://tcm-prescription-system.pages.dev/api';
+                    const resp = await fetch(apiBase + '/users?check-register=' + encodeURIComponent(val));
+                    const data = await resp.json();
+                    if (data.available) {
+                        statusEl.innerHTML = '✅ 账号可用';
+                        statusEl.style.color = '#16a34a';
+                    } else {
+                        statusEl.innerHTML = '❌ ' + (data.reason || '账号不可用');
+                        statusEl.style.color = '#dc2626';
+                    }
+                } catch (e) {
+                    statusEl.innerHTML = '⚠️ 无法检查（网络问题）';
+                    statusEl.style.color = '#888';
+                }
+            }, 600);
+        }
+
         async function handleLogin() {
             const username = document.getElementById('loginUsername').value;
             const password = document.getElementById('loginPassword').value;
@@ -3560,14 +3759,6 @@ if (window.Permission) {
             localStorage.removeItem('cloud_counterDate');
             
             return false;
-        }
-
-        function showRegisterModal() {
-            alert('本系统禁止自助注册，请联系管理员创建账号。');
-        }
-
-        async function handleRegister() {
-            alert('本系统禁止自助注册，请联系管理员创建账号。');
         }
 
         function showChangePwdModal() {
@@ -10473,6 +10664,12 @@ IconFile=${scriptPath}`;
 
     document.addEventListener('DOMContentLoaded', () => {
         init();
+
+        // URL 参数：自动弹出注册
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('showRegister') === '1') {
+            setTimeout(() => showRegisterModal(), 500);
+        }
 
         // 绑定退出按钮点击事件
         const logoutBtn = document.getElementById('logoutBtn');

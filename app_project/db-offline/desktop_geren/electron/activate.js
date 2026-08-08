@@ -28,20 +28,21 @@ const ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/
 // ============================================================================
 //  机器 ID 生成
 // ============================================================================
-// 基于 hostname + username + exePath 生成唯一机器标识
-// 同一台电脑、同一用户、同一安装路径会生成相同的 ID
+// P5-5 安全升级（2026-08-08，规则3）：
+//   不再本地重复实现，直接复用 license-manager.getMachineId()
+//   （license-manager 已升级为"多硬件哈希主体 + 软件补充"，
+//    只返回最终哈希串，不上传原始硬件信息）
 function getMachineId() {
     try {
-        const exePath = process.execPath || app.getPath('exe');
-        const hostname = os.hostname();
-        const userInfo = os.userInfo();
-        const username = userInfo.username;
-        const platform = os.platform();
-        const content = [exePath, hostname, username, platform].join('|');
-        return crypto.createHash('sha256').update(content).digest('hex').substring(0, 32);
+        if (licenseManager && typeof licenseManager.getMachineId === 'function') {
+            const mid = licenseManager.getMachineId();
+            if (mid) return mid;
+        }
+        // 回退：用 crypto 生成一个随机但稳定的占位（尽量不触发）
+        console.warn('[Activate] licenseManager.getMachineId 不可用，回退随机 ID');
+        return crypto.randomBytes(16).toString('hex');
     } catch (e) {
         console.error('[Activate] 生成机器 ID 失败:', e);
-        // 回退：用时间戳 + 随机数（不理想，但避免崩溃）
         return crypto.randomBytes(16).toString('hex');
     }
 }

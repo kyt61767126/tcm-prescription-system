@@ -127,5 +127,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
         close: () => ipcRenderer.invoke('license:close-activate'),
         restart: () => ipcRenderer.invoke('license:restart'),
         getMachineId: () => ipcRenderer.invoke('license:get-machine-id')
+    },
+
+    // ---------- 首次配置向导 ----------
+    updateConfig: (updates) => ipcRenderer.invoke('config:update', updates),
+    showActivationWindow: () => ipcRenderer.invoke('showActivationWindow'),
+    changeUserPassword: (payload) => ipcRenderer.invoke('user:change-password', payload),
+
+    // ---------- bnzc:// 一键激活 ----------
+    bnzcGetPendingActivation: () => ipcRenderer.invoke('bnzc:get-pending-activation'),
+    bnzcClearPendingActivation: () => ipcRenderer.invoke('bnzc:clear-pending-activation'),
+    bnzcAutoActivate: (payload) => ipcRenderer.invoke('bnzc:auto-activate', payload),
+
+    // 监听主进程推送的 bnzc:// 激活事件（macOS open-url 或运行时收到链接）
+    onBnzcPendingActivation: (callback) => {
+        const handler = (event, data) => callback(data);
+        ipcRenderer.on('bnzc:pending-activation', handler);
+        return () => ipcRenderer.removeListener('bnzc:pending-activation', handler);
     }
 });

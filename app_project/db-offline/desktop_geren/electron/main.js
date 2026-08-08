@@ -153,10 +153,28 @@ function getWritableConfigPath() {
 }
 
 // ★ 首次启动时，将 asar 内的 config.json 复制到可写路径（仅复制一次）
+// ★ 修复：如果已存在的 config.json 签名不匹配（旧版用 masterKey 派生密钥签名），用硬编码密钥重新签名
 async function ensureWritableConfig() {
     try {
         const writablePath = getWritableConfigPath();
-        if (await fse.pathExists(writablePath)) return writablePath;
+        if (await fse.pathExists(writablePath)) {
+            // 已存在：检查签名是否有效，无效则重新签名（兼容旧版 masterKey 派生密钥签名）
+            try {
+                const cfg = await fse.readJson(writablePath);
+                if (cfg.configSignature && cfg.configIssuedAt) {
+                    const expected = licenseManager.signConfig(cfg);
+                    const actual = cfg.configSignature;
+                    if (expected !== actual) {
+                        cfg.configSignature = expected;
+                        await fse.writeJson(writablePath, cfg, { spaces: 2 });
+                        console.log('[Config] config.json 签名已修复（兼容旧版密钥）');
+                    }
+                }
+            } catch (e) {
+                console.warn('[Config] 签名检查失败，跳过:', e.message);
+            }
+            return writablePath;
+        }
         const asarPath = path.join(__dirname, '..', 'config.json');
         if (await fse.pathExists(asarPath)) {
             const config = await fse.readJson(asarPath);

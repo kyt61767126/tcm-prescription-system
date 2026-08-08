@@ -539,20 +539,39 @@ export async function onRequest(context) {
             if (!clinicName || !adminUsername || !adminPassword) {
                 return json({ success: false, error: '请填写诊所名称、管理员账号和密码' }, 400);
             }
+            if (!clinicName.trim()) {
+                return json({ success: false, error: '诊所名称不能为空' }, 400);
+            }
+            if (clinicName.trim().length < 2 || clinicName.trim().length > 50) {
+                return json({ success: false, error: '诊所名称长度需在 2-50 个字符之间' }, 400);
+            }
             if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
                 return json({ success: false, error: '管理员登录账号不能使用中文' }, 400);
             }
-            // 命名规则强制校验：必须为 admin_{诊所简码} 格式（如 admin_hkt）
-            // 规则：以 admin_ 开头，后缀为 2-12 位小写字母/数字（诊所简码）
-            // ★ 统一管理员命名规则：admin + 诊所简码（admin_hkt = 惠康中医）
             if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(adminUsername)) {
                 return json({ success: false, error: '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅小写字母和数字，2-12 位' }, 400);
+            }
+            // 密码强度校验（与自助注册保持一致）
+            if (adminPassword.length < 8) {
+                return json({ success: false, error: '密码至少8位' }, 400);
+            }
+            if (adminPassword.length > 128) {
+                return json({ success: false, error: '密码过长（最多128位）' }, 400);
+            }
+            if (!/[a-zA-Z]/.test(adminPassword) || !/[0-9]/.test(adminPassword)) {
+                return json({ success: false, error: '密码必须同时包含字母和数字' }, 400);
             }
 
             // 检查用户名是否已存在（全局唯一，跨诊所 + platform_admins）
             const existing = await findUserForLogin(kv, adminUsername);
             if (existing) {
-                return json({ success: false, error: '登录账号已存在，请更换（admin_诊所简拼 全局唯一）' }, 409);
+                return json({ success: false, error: '登录账号已存在，请更换（admin_诊所简码 全局唯一）' }, 409);
+            }
+
+            // 检查诊所名称是否重复
+            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+            if (clinics.some(c => c.name === clinicName.trim())) {
+                return json({ success: false, error: '该诊所名称已存在，请使用其他名称' }, 409);
             }
 
             const clinicId = generateId('clinic');
@@ -561,7 +580,7 @@ export async function onRequest(context) {
 
             const clinic = {
                 id: clinicId,
-                name: clinicName,
+                name: clinicName.trim(),
                 status: 'active',
                 createdAt: now,
                 updatedAt: now
@@ -569,7 +588,7 @@ export async function onRequest(context) {
 
             const adminUser = {
                 username: adminUsername,
-                name: adminName || adminUsername,
+                name: (adminName || adminUsername).trim(),
                 role: ROLE_CLINIC_ADMIN,
                 passwordHash,
                 salt,
@@ -581,18 +600,25 @@ export async function onRequest(context) {
             };
 
             // 保存诊所
-            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
             clinics.push(clinic);
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
 
             // 保存诊所用户
             await kv.put(`clinic:${clinicId}:users`, JSON.stringify([adminUser]));
 
+            // 审计日志
+            await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'create_clinic', `clinic=${clinicName}`, context.request, {
+                adminUsername,
+                adminName: adminUser.name,
+                source: 'platform-admin'
+            });
+
             return json({
                 success: true,
                 clinic,
-                admin: sanitizeUser(adminUser, clinicId, clinicName)
-            });
+                admin: sanitizeUser(adminUser, clinicId, clinicName),
+                message: '诊所创建成功'
+            }, 201, context.request);
         }
 
         // ===== 更新诊所 POST /users?clinic=update =====
@@ -615,29 +641,55 @@ export async function onRequest(context) {
             }
 
             const now = getNowISO();
+            const oldClinic = clinics[clinicIdx];
+            const changes = [];
 
             // 更新诊所状态或名称
-            if (status !== undefined) {
+            if (status !== undefined && status !== oldClinic.status) {
+                if (!['active', 'disabled'].includes(status)) {
+                    return json({ success: false, error: '状态值无效（active / disabled）' }, 400);
+                }
+                changes.push(`status: ${oldClinic.status} → ${status}`);
                 clinics[clinicIdx].status = status;
             }
-            if (name !== undefined) {
-                clinics[clinicIdx].name = name;
+            if (name !== undefined && name !== oldClinic.name) {
+                if (!name.trim() || name.trim().length < 2 || name.trim().length > 50) {
+                    return json({ success: false, error: '诊所名称长度需在 2-50 个字符之间' }, 400);
+                }
+                // 检查新名称是否与其他诊所重复
+                if (clinics.some((c, i) => i !== clinicIdx && c.name === name.trim())) {
+                    return json({ success: false, error: '该诊所名称已存在' }, 409);
+                }
+                changes.push(`name: ${oldClinic.name} → ${name}`);
+                clinics[clinicIdx].name = name.trim();
             }
             clinics[clinicIdx].updatedAt = now;
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
 
             // 更新管理员信息（如果有提供）
-            // ★安全规则：管理员用户名（username）不可修改，仅可修改姓名（name）和密码
             if (adminUsername || adminName || adminPassword) {
                 const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
                 const adminIdx = users.findIndex(u => u.role === ROLE_CLINIC_ADMIN);
                 if (adminIdx !== -1) {
-                    // 拒绝修改管理员用户名（确保账号唯一性和云端数据安全）
+                    // 拒绝修改管理员用户名
                     if (adminUsername && adminUsername !== users[adminIdx].username) {
                         return json({ success: false, error: '管理员登录账号不可修改（确保全局唯一和数据安全），仅可修改姓名和密码' }, 403);
                     }
-                    if (adminName) users[adminIdx].name = adminName;
+                    if (adminName && adminName !== users[adminIdx].name) {
+                        changes.push(`adminName: ${users[adminIdx].name} → ${adminName}`);
+                        users[adminIdx].name = adminName.trim();
+                    }
                     if (adminPassword) {
+                        if (adminPassword.length < 8) {
+                            return json({ success: false, error: '密码至少8位' }, 400);
+                        }
+                        if (adminPassword.length > 128) {
+                            return json({ success: false, error: '密码过长（最多128位）' }, 400);
+                        }
+                        if (!/[a-zA-Z]/.test(adminPassword) || !/[0-9]/.test(adminPassword)) {
+                            return json({ success: false, error: '密码必须同时包含字母和数字' }, 400);
+                        }
+                        changes.push('password: updated');
                         const { passwordHash, salt } = await hashPassword(adminPassword);
                         users[adminIdx].passwordHash = passwordHash;
                         users[adminIdx].salt = salt;
@@ -645,6 +697,14 @@ export async function onRequest(context) {
                     users[adminIdx].updatedAt = now;
                     await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));
                 }
+            }
+
+            // 审计日志
+            if (changes.length > 0) {
+                await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN, 'update_clinic', `clinic=${oldClinic.name}`, context.request, {
+                    changes: changes.join('; '),
+                    source: 'platform-admin'
+                });
             }
 
             return json({ success: true, clinic: clinics[clinicIdx] });
@@ -976,6 +1036,162 @@ export async function onRequest(context) {
                 clinicId: targetClinicId,
                 clinicName: clinic.name
             }, 200, context.request);
+        }
+
+        // ===== 自助注册诊所用 POST /users?action=register-clinic =====
+        // 新诊所自助注册：创建诊所 + 下发诊所管理员账号
+        // 安全措施：IP限流(3次/小时) + 用户名全局唯一校验 + 密码强度校验
+        if (method === 'POST' && url.searchParams.get('action') === 'register-clinic') {
+            const body = await context.request.json().catch(() => ({}));
+            const { clinicName, adminUsername, adminPassword, adminName, contactPhone, wechat } = body;
+
+            // 1. IP限流（注册更严格：3次/小时）
+            const registerAllowed = await checkIpRateLimit(kv, context.request);
+            if (!registerAllowed) {
+                return json({ success: false, error: '注册请求过于频繁，请稍后再试' }, 429, context.request);
+            }
+            const registerKey = 'register_ip:' + (context.request.headers.get('CF-Connecting-IP') || 'unknown');
+            const registerCount = parseInt(await kv.get(registerKey) || '0', 10) + 1;
+            const REGISTER_MAX = 3;
+            const REGISTER_TTL = 60 * 60; // 1小时
+            if (registerCount === 1) {
+                await kv.put(registerKey, '1', { expirationTtl: REGISTER_TTL });
+            } else {
+                await kv.put(registerKey, String(registerCount), { expirationTtl: REGISTER_TTL });
+            }
+            if (registerCount > REGISTER_MAX) {
+                await writeAuditLog(kv, null, 'anonymous', 'unknown', 'register_rate_limited', registerKey, context.request);
+                return json({ success: false, error: '本IP注册次数已达上限（3次/小时），请稍后再试或联系客服' }, 429, context.request);
+            }
+
+            // 2. 参数校验
+            if (!clinicName || !adminUsername || !adminPassword) {
+                return json({ success: false, error: '请填写诊所名称、管理员账号和密码' }, 400, context.request);
+            }
+            if (!clinicName.trim()) {
+                return json({ success: false, error: '诊所名称不能为空' }, 400, context.request);
+            }
+            if (clinicName.trim().length < 2 || clinicName.trim().length > 50) {
+                return json({ success: false, error: '诊所名称长度需在 2-50 个字符之间' }, 400, context.request);
+            }
+            if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
+                return json({ success: false, error: '管理员登录账号不能使用中文' }, 400, context.request);
+            }
+            if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(adminUsername)) {
+                return json({ success: false, error: '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅小写字母和数字，2-12位简码' }, 400, context.request);
+            }
+            // 密码强度校验（至少8位，含字母和数字）
+            if (adminPassword.length < 8) {
+                return json({ success: false, error: '密码至少8位' }, 400, context.request);
+            }
+            if (adminPassword.length > 128) {
+                return json({ success: false, error: '密码过长（最多128位）' }, 400, context.request);
+            }
+            if (!/[a-zA-Z]/.test(adminPassword) || !/[0-9]/.test(adminPassword)) {
+                return json({ success: false, error: '密码必须同时包含字母和数字' }, 400, context.request);
+            }
+
+            // 3. 用户名全局唯一校验（跨诊所 + platform_admins）
+            const existing = await findUserForLogin(kv, adminUsername);
+            if (existing) {
+                return json({ success: false, error: '登录账号已存在，请更换（admin_诊所简码 全局唯一）' }, 409, context.request);
+            }
+
+            // 4. 诊所名称重名检查
+            const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
+            const clinicList = clinics || [];
+            if (clinicList.some(c => c.name === clinicName.trim())) {
+                return json({ success: false, error: '该诊所名称已被注册，请使用其他名称或联系客服' }, 409, context.request);
+            }
+
+            // 5. 创建诊所和管理员用户
+            const clinicId = generateId('clinic');
+            const now = getNowISO();
+            const { passwordHash, salt } = await hashPassword(adminPassword);
+
+            const clinic = {
+                id: clinicId,
+                name: clinicName.trim(),
+                status: 'active',
+                createdAt: now,
+                updatedAt: now
+            };
+
+            const adminUser = {
+                username: adminUsername,
+                name: (adminName || adminUsername).trim(),
+                role: ROLE_CLINIC_ADMIN,
+                passwordHash,
+                salt,
+                allowedMode: 'both',
+                cloudEnabled: true,
+                allowSavePrescription: true,
+                createdAt: now,
+                updatedAt: now
+            };
+
+            // 6. 保存到KV
+            clinicList.push(clinic);
+            await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinicList));
+            await kv.put(`clinic:${clinicId}:users`, JSON.stringify([adminUser]));
+
+            // 7. 审计日志
+            await writeAuditLog(kv, clinicId, adminUsername, ROLE_CLINIC_ADMIN, 'register_clinic', `clinic=${clinicName}`, context.request, {
+                contactPhone: contactPhone || null,
+                wechat: wechat || null,
+                source: 'self-register'
+            });
+
+            return json({
+                success: true,
+                message: '诊所注册成功！请使用管理员账号登录',
+                clinic: { id: clinicId, name: clinic.name, status: 'active' },
+                admin: sanitizeUser(adminUser, clinicId, clinic.name),
+                nextStep: '请使用 admin_' + adminUsername.replace('admin_', '') + ' 账号登录系统'
+            }, 201, context.request);
+        }
+
+        // ===== 注册预检：检查用户名是否可用 GET /users?check-register=username =====
+        if (method === 'GET' && url.searchParams.get('check-register')) {
+            const username = url.searchParams.get('check-register');
+            if (!username) {
+                return json({ success: false, error: '请提供要检查的用户名' }, 400);
+            }
+            // 格式校验
+            if (/[\u4e00-\u9fa5]/.test(username)) {
+                return json({ available: false, reason: '用户名不能使用中文' });
+            }
+            if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(username)) {
+                return json({ available: false, reason: '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt）' });
+            }
+            // 可用性检查
+            const found = await findUserForLogin(kv, username);
+            if (found) {
+                return json({ available: false, reason: '该账号已被占用，请更换', username });
+            }
+            return json({ available: true, username });
+        }
+
+        // ===== 注册规范查询 GET /users?registration-info=true =====
+        if (method === 'GET' && url.searchParams.get('registration-info') === 'true') {
+            return json({
+                success: true,
+                rules: {
+                    clinicName: { min: 2, max: 50, pattern: '中文/英文/数字' },
+                    adminUsername: { pattern: 'admin_诊所简码', example: 'admin_hkt', minLength: 7, maxLength: 15 },
+                    adminPassword: { minLength: 8, requirements: ['包含字母', '包含数字'] },
+                    rateLimit: '3次/小时/IP'
+                },
+                endpoints: {
+                    register: 'POST /api/users?action=register-clinic',
+                    checkAvailable: 'GET /api/users?check-register={username}',
+                    validateActivation: 'POST /api/license/validate'
+                },
+                support: {
+                    wechat: 'hktzy1688',
+                    note: '注册后立即获得云端管理员账号，可登录系统使用'
+                }
+            });
         }
 
         return json({ success: false, error: 'Method not allowed' }, 405);

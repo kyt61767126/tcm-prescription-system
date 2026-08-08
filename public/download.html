@@ -1136,6 +1136,7 @@
             <button class="tab-btn active" data-tab="mobile">📱 手机端</button>
             <button class="tab-btn" data-tab="desktop">💻 桌面端</button>
             <button class="tab-btn" data-tab="web">🌐 网页端</button>
+            <button class="tab-btn" data-tab="register">📝 注册开通</button>
             <button class="tab-btn" data-tab="purchase">🔑 购买激活码</button>
             <button class="tab-btn" data-tab="install">📋 安装说明</button>
             <button class="tab-btn" data-tab="compare">⚖️ 版本对比</button>
@@ -1183,10 +1184,10 @@
                         <span class="info-value success">✅ 支持（云端实时同步）</span>
                     </div>
                     <div class="notice notice-cloud">
-                        <span class="icon">⚠️</span>
+                        <span class="icon">💡</span>
                         <div>
-                            <strong>无公开试用：</strong>云端机构版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
-                            <strong>试用建议：</strong>请先下载下方"离线版"体验功能，满意后联系开发者开通云端账户。
+                            <strong>开通方式：</strong>请访问<strong><a href="https://tcm-prescription-system.pages.dev/" target="_blank" style="color:#2563eb;">云端网页端</a></strong>自助注册，或联系管理员通过后台一键创建。<br>
+                            <strong>详细流程：</strong><a href="#" onclick="switchTab('register'); return false;" style="color:#2563eb;">查看注册开通说明 →</a>
                         </div>
                     </div>
                     <div class="hash-box">
@@ -1425,15 +1426,16 @@
                     </div>
                     <div class="credential-box">
                         <strong>📝 注册说明：</strong><br>
-                        诊所名称：注册时填写（基础设置中可修改）<br>
-                        管理员用户名：<span class="cred-pair" onclick="copyText(this)">管理员</span><br>
-                        <strong>⚠️ 云端机构版需联系开发者开通账户，注册时提供诊所名称和管理员姓名即可。</strong>
+                        👉 <a href="#" onclick="switchTab('register'); return false;" style="color:#2563eb;font-weight:bold;">查看完整注册开通流程 →</a><br>
+                        <strong>方式一（推荐）：</strong>云端网页端自助注册，即时获得管理员账号<br>
+                        <strong>方式二：</strong>联系平台管理员在后台一键创建<br>
+                        管理员账号格式：<code>admin_</code> + 诊所简码（如 <code>admin_hkt</code>）
                     </div>
                     <div class="notice notice-cloud">
-                        <span class="icon">⚠️</span>
+                        <span class="icon">💡</span>
                         <div>
-                            <strong>无公开试用：</strong>云端桌面版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
-                            <strong>试用建议：</strong>请先下载上方"离线版 APP"体验功能，满意后联系开发者开通云端账户。
+                            <strong>推荐方式：</strong>请直接访问<strong><a href="https://tcm-prescription-system.pages.dev/" target="_blank" style="color:#2563eb;">云端网页端</a></strong>，点击登录页底部「新诊所注册」链接自助开通。<br>
+                            <strong>批量开通：</strong>如需批量开通或企业定制，请联系开发者通过后台管理一键创建。
                         </div>
                     </div>
                     <div class="hash-box">
@@ -1626,6 +1628,112 @@
                     <a href="https://tcm-prescription-system.pages.dev/" class="download-btn success">
                         <span class="icon">🚀</span>立即访问
                     </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ Tab: 注册开通 ============ -->
+        <div class="tab-content" id="tab-register">
+            <div class="section-title">
+                <span>📝 云端版注册开通</span>
+                <span class="sub">自助注册 · 即时开通 · 一键管理</span>
+            </div>
+
+            <div class="card trial-card" style="margin-bottom:16px;">
+                <div class="card-title">
+                    <span class="icon">🎯</span>
+                    两种注册方式
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+                    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;">
+                        <div style="font-weight:bold;color:#03699f;margin-bottom:6px;">🔵 方式一：自助注册（推荐）</div>
+                        <div style="font-size:13px;color:#64748b;line-height:1.6;">
+                            客户自行在云端网页端填写信息，即时获得管理员账号，无需等待。<br>
+                            <a href="https://tcm-prescription-system.pages.dev/" target="_blank" style="color:#2563eb;font-weight:bold;">👉 前往云端网页端注册</a>
+                        </div>
+                    </div>
+                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;">
+                        <div style="font-weight:bold;color:#15803d;margin-bottom:6px;">🟢 方式二：后台创建（管理员）</div>
+                        <div style="font-size:13px;color:#64748b;line-height:1.6;">
+                            平台管理员在后台管理页面一键创建诊所和管理员账号，适合批量开通或特殊需求客户。<br>
+                            <a href="https://tcm-prescription-system.pages.dev/admin/" target="_blank" style="color:#16a34a;font-weight:bold;">👉 前往后台管理</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 方式一：自助注册流程 -->
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-title">
+                    <span class="icon">📝</span>
+                    自助注册流程（客户操作）
+                </div>
+                <div style="padding:14px;line-height:1.8;">
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">1</div>
+                        <div><strong>打开云端网页端</strong>：访问 <code>https://tcm-prescription-system.pages.dev/</code></div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">2</div>
+                        <div><strong>点击「新诊所注册」</strong>：登录页底部的注册链接</div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">3</div>
+                        <div><strong>填写注册信息</strong>：诊所名称、管理员账号（admin_简码）、密码等</div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">4</div>
+                        <div><strong>即时获得账号</strong>：注册成功后自动跳转到登录页，使用管理员账号登录</div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;">
+                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">5</div>
+                        <div><strong>登录并使用</strong>：登录后可创建子账号、管理处方、查看云端数据</div>
+                    </div>
+                </div>
+                <div class="notice notice-cloud" style="margin:0 14px 14px;">
+                    <span class="icon">💡</span>
+                    <div>
+                        <strong>注册规范：</strong><br>
+                        • 管理员账号格式：<code>admin_</code> + 2-12位小写字母/数字（如 <code>admin_hkt</code>）<br>
+                        • 密码要求：至少8位，必须同时包含字母和数字<br>
+                        • 安全限制：每IP每小时限3次注册请求
+                    </div>
+                </div>
+            </div>
+
+            <!-- 方式二：后台一键创建 -->
+            <div class="card">
+                <div class="card-title">
+                    <span class="icon">⚡</span>
+                    后台一键创建（管理员操作）
+                </div>
+                <div style="padding:14px;line-height:1.8;">
+                    <div style="color:#78350f;font-size:13px;margin-bottom:10px;">
+                        平台总管理员登录后台后，可一键为客户创建诊所和管理员账号，适用于以下场景：
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">
+                        <div>✅ 客户不熟悉线上操作</div>
+                        <div>✅ 批量开通多个诊所</div>
+                        <div>✅ 特殊命名需求</div>
+                        <div>✅ 企业定制客户</div>
+                    </div>
+                    <div style="margin-top:14px;padding:12px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
+                        <div style="font-weight:bold;margin-bottom:6px;">📋 操作步骤：</div>
+                        <div style="font-size:13px;line-height:1.8;">
+                            1. 登录 <code>/admin/</code> 后台<br>
+                            2. 进入「🏥 诊所管理」Tab<br>
+                            3. 填写诊所名称、管理员账号、密码<br>
+                            4. 点击「创建诊所」→ 一键完成<br>
+                            5. 将账号信息交付客户
+                        </div>
+                    </div>
+                </div>
+                <div class="notice notice-success" style="margin:0 14px 14px;">
+                    <span class="icon">✅</span>
+                    <div>
+                        <strong>一键完成：</strong>创建后自动生成诊所ID、管理员账号、初始密码，客户可立即登录使用。<br>
+                        <strong>安全保障：</strong>所有操作记录审计日志，密码强度自动校验，用户名全局唯一。
+                    </div>
                 </div>
             </div>
         </div>
@@ -2120,7 +2228,22 @@
                 <div class="faq-answer">
                     <div class="faq-answer-inner">
                         <strong>离线版（离线机构版/离线标准版）</strong>提供 7 天免费试用（限 30 张处方），下载安装后即可使用，无需任何账户注册。<br>
-                        <strong>云端机构版</strong>不提供公开试用。如需体验云端功能，请先下载离线版试用，满意后联系开发者开通云端账户。
+                        <strong>云端机构版</strong>不提供公开试用。如需体验云端功能，请先下载离线版试用，满意后通过自助注册开通云端账户。
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>📝 云端机构版如何注册开通？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>方式一（推荐）：自助注册</strong><br>
+                        访问 <a href="https://tcm-prescription-system.pages.dev/" target="_blank" style="color:#2563eb;">云端网页端</a>，点击登录页底部「新诊所注册」链接，填写诊所名称和管理员信息后即时获得账号。<br><br>
+                        <strong>方式二：后台创建</strong><br>
+                        联系平台管理员在后台管理页面（/admin/）一键创建诊所和管理员账号。<br><br>
+                        <strong>详细流程</strong>请查看本页面「<a href="#" onclick="switchTab('register'); return false;" style="color:#2563eb;">📝 注册开通</a>」Tab。
                     </div>
                 </div>
             </div>

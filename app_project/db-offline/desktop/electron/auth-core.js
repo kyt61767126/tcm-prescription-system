@@ -303,48 +303,59 @@
         return storedPassword === inputPassword;
     }
 
-    // ==================== 用户名语言规则（系统稳定性与使用安全）====================
-    // ★ 统一规则：
-    //   1. 用户名（username）：必须为英文（ASCII 小写字母 + 数字 + 下划线），禁止中文
-    //      - 稳定性：避免编码问题导致 KV/DB 存储异常、跨系统乱码
-    //      - 安全性：防止 Unicode 同形异义攻击（homograph attack）、SQL 注入
-    //      - 兼容性：英文用户名在 URL/Header/Token 中无需额外编码，跨端一致
+    // ==================== 用户名规则（支持中文）====================
+    // ★ 统一规则（2026-08-08 更新，支持中文用户名）：
+    //   1. 用户名（username）：允许中文/英文/数字/下划线/连字符，2-30个字符
+    //      - 历史：曾因 btoa/编码顾虑禁止中文，现通过 encodeURIComponent+btoa 包装已解决
+    //      - 保留：Unicode 同形异义攻击检测（全角英数字替换为半角）
     //   2. 管理员账号格式：admin_{诊所简码}（如 admin_hkt = 惠康中医）
     //      - 诊所简码：2-12 位小写字母/数字，全局唯一
     //   3. 密码（password）：允许中文/英文/符号（哈希后存储，不影响稳定性）
     //   4. 显示姓名（name）：允许中文（仅用于 UI 展示，不参与登录比对）
+    // ★ 关键安全点：所有涉及 btoa 的地方（buildAuthPayload 等）均使用
+    //   btoa(unescape(encodeURIComponent(...))) Unicode 安全包装
     function validateUsername(username) {
         if (!username || typeof username !== 'string') {
             return { valid: false, error: '用户名不能为空' };
         }
-        const trimmed = username.trim();
+        let trimmed = username.trim();
         if (trimmed.length < 2 || trimmed.length > 30) {
             return { valid: false, error: '用户名长度需 2-30 个字符' };
         }
-        // 禁止中文（系统稳定性 + 安全性）
-        if (/[\u4e00-\u9fa5]/.test(trimmed)) {
-            return { valid: false, error: '用户名不能使用中文（系统稳定性与安全要求）' };
+        // Unicode 同形异义攻击防护：将全角英数字（0xFF01-0xFF5E）替换为半角
+        // 防止用户用 ＡＢＣ 冒充 abc 创建重复账号
+        trimmed = trimmed.replace(/[\uff01-\uff5e]/g, function(ch) {
+            return String.fromCharCode(ch.charCodeAt(0) - 0xfee0);
+        });
+        // 禁止控制字符、不可见字符（零宽字符等）
+        if (/[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\ufeff]/.test(trimmed)) {
+            return { valid: false, error: '用户名不能包含控制字符或不可见字符' };
         }
-        // 禁止非 ASCII 字符（全角符号、日韩文等）
-        if (/[^\x20-\x7e]/.test(trimmed)) {
-            return { valid: false, error: '用户名仅允许英文字母、数字和下划线' };
-        }
-        // 仅允许小写字母、数字、下划线、连字符
-        if (!/^[a-z0-9_-]+$/i.test(trimmed)) {
-            return { valid: false, error: '用户名仅允许英文字母、数字、下划线和连字符' };
+        // 禁止常见危险字符（用于 SQL/命令注入；中文用户名已允许）
+        if (/[;'"\\\/<>|&`$#@!%^*()+=\[\]{}?~]/.test(trimmed)) {
+            return { valid: false, error: '用户名不能包含特殊符号（标点/引号/括号等）' };
         }
         return { valid: true, username: trimmed };
     }
 
-    // ★ 管理员账号格式校验：admin_{诊所简码}
+    // ★ 管理员账号格式校验：admin_{诊所简码}（简码仅允许英文数字，简码不是用户名本身）
     function validateAdminUsername(username) {
         const base = validateUsername(username);
         if (!base.valid) return base;
-        if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(base.username)) {
-            return {
-                valid: false,
-                error: '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅小写字母和数字，2-12 位'
-            };
+        // validateUsername 允许中文，管理员简码部分仍限制英文数字
+        const usernameForAdmin = base.username;
+        // 如果包含中文，说明不是 admin_简码 格式，但普通管理员账号允许中文
+        if (/[\u4e00-\u9fa5]/.test(usernameForAdmin)) {
+            return base;
+        }
+        // 纯英文/数字 才校验 admin_简码 格式
+        if (usernameForAdmin.startsWith('admin_')) {
+            if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(usernameForAdmin)) {
+                return {
+                    valid: false,
+                    error: '管理员简码账号必须为 admin_诊所简码 格式（如 admin_hkt），简码为 2-12 位小写字母和数字'
+                };
+            }
         }
         return base;
     }
@@ -414,41 +425,25 @@
         return stored;
     }
 
-    // 保存记住的密码（加密存储）
+    // P3-3: 移除"记住密码"保存/读取/清除（2026-08-08）
+    // 规则5要求：每次手动输密码，禁止自动填充密码框
+    // 保留 API 兼容（返回 null/false/空操作），不破坏现有调用点
     async function saveRememberedPassword(password) {
         try {
-            const encrypted = await encryptPassword(password);
-            if (encrypted) {
-                await StorageAdapter.setItem('auth:savedPassword', encrypted);
-            }
-        } catch (e) {
-            console.warn('保存记住密码失败:', e);
-        }
+            // 安全模式升级：禁止记住密码
+            // 只保留用户名（通过 saveRememberedUser 记住用户名）
+            // 旧调用点会静默成功，不报错
+        } catch (e) { /* 静默忽略 */ }
     }
-
-    // 读取记住的密码（解密）
     async function getRememberedPassword() {
-        try {
-            const stored = await StorageAdapter.getItem('auth:savedPassword');
-            if (!stored) return null;
-            // P0-2: 兼容 SAFE:/PWDv2:/PWDv1:/旧明文
-            if (stored.startsWith('SAFE:') || stored.startsWith('PWDv1:') || stored.startsWith('PWDv2:')) {
-                return await decryptPassword(stored);
-            }
-            return stored;
-        } catch (e) {
-            console.warn('读取记住密码失败:', e);
-            return null;
-        }
+        // 安全模式：永远不返回密码，强制手动输入
+        return null;
     }
-
-    // 清除记住的密码
     async function clearRememberedPassword() {
         try {
+            // 清理历史遗留的密码存储
             await StorageAdapter.removeItem('auth:savedPassword');
-        } catch (e) {
-            console.warn('清除记住密码失败:', e);
-        }
+        } catch (e) { /* 忽略 */ }
     }
 
     // 用户列表加密存储（仅离线版使用，Unicode 安全）
@@ -545,14 +540,60 @@
 
     function buildAuthPayload(user) {
         if (!user) return null;
-        return btoa(JSON.stringify({
+        // Unicode 安全包装（中文用户名兼容）：encodeURIComponent → unescape → btoa
+        // 与 encryptPassword/encryptUsers 使用相同的 Unicode 编码模式
+        return btoa(unescape(encodeURIComponent(JSON.stringify({
             username: user.username,
             role: user.role || 'doctor',
             clinicId: user.clinicId || null
-        }));
+        }))));
     }
 
     // ==================== 会话管理层 ====================
+
+    // P4-4: 周期性会话监控器（8小时自动登出）
+    // 规则5要求：8小时自动登出。checkSession 原本只在启动时调用一次，
+    // 持续运行超过 8 小时不重启/不刷新时不会触发。
+    // 本监控器使用 setInterval 每 5 分钟检查一次会话超时
+    let _sessionMonitorTimer = null;
+    let _sessionLogoutCallback = null;
+
+    function startSessionMonitor(logoutCallback) {
+        // 先清除旧定时器，避免重复启动
+        if (_sessionMonitorTimer) {
+            clearInterval(_sessionMonitorTimer);
+            _sessionMonitorTimer = null;
+        }
+        _sessionLogoutCallback = logoutCallback || null;
+        const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 每5分钟检查一次（省电+及时）
+        _sessionMonitorTimer = setInterval(async function() {
+            try {
+                const session = await checkSession();
+                if (!session.valid && session.reason === 'session_timeout') {
+                    // 会话超时，调用外部登出回调（若有）
+                    if (typeof _sessionLogoutCallback === 'function') {
+                        try { await _sessionLogoutCallback('session_timeout'); } catch (e) {}
+                    }
+                    // 也执行内置 logout 确保登出生效
+                    try { await logout(); } catch (e) {}
+                    try { console.log('[AuthCore] 会话超时，已自动登出（8小时未刷新）'); } catch (e) {}
+                }
+            } catch (e) {
+                // 监控器内部异常不影响主程序
+                try { console.warn('[AuthCore] 会话监控检查异常:', e); } catch (e2) {}
+            }
+        }, CHECK_INTERVAL_MS);
+        try { console.log('[AuthCore] 会话监控已启动（每5分钟检查一次，8小时超时自动登出）'); } catch (e) {}
+    }
+
+    function stopSessionMonitor() {
+        if (_sessionMonitorTimer) {
+            clearInterval(_sessionMonitorTimer);
+            _sessionMonitorTimer = null;
+            try { console.log('[AuthCore] 会话监控已停止'); } catch (e) {}
+        }
+        _sessionLogoutCallback = null;
+    }
 
     async function checkSession() {
         // 会话超时检查
@@ -861,6 +902,10 @@
                 await StorageAdapter.setItem('auth:clinicName', user.clinicName);
             }
 
+            // P4-4: 登录成功后启动会话监控（8小时自动登出）
+            // options.onSessionTimeout 可选外部回调（用于登出后跳转/刷新页面）
+            startSessionMonitor(options.onSessionTimeout || null);
+
             return { success: true, user };
         } catch (e) {
             console.error('登录异常:', e);
@@ -871,6 +916,8 @@
     // ==================== 退出登录 ====================
 
     async function logout() {
+        // P4-4: 登出时停止会话监控器
+        stopSessionMonitor();
         // ★ 优化3：审计日志 - 退出登录
         try { AuditLog.record('logout', ''); } catch(e) {}
         const allKeys = [
@@ -881,7 +928,9 @@
             'user_login_data',
             'cloud_prescription_cache', 'cloud_prescription_cache_time',
             // ★ 离线登录缓存：退出时清除（下次需在线登录重新缓存）
-            'auth:offlineLoginCache'
+            'auth:offlineLoginCache',
+            // P3-3: 清除历史遗留的记住密码
+            'auth:savedPassword'
         ];
         for (const key of allKeys) {
             await StorageAdapter.removeItem(key);
@@ -1090,6 +1139,8 @@
 
         // 会话管理
         checkSession,
+        startSessionMonitor,
+        stopSessionMonitor,
 
         // 登录调度
         login,
@@ -1140,6 +1191,88 @@
     // 上次失败的消息（用于兜底弹窗显示）
     let lastFailMessage = '授权已失效，请激活';
 
+    // ★ P1-7 心跳验证：每 24 小时联网验证一次 License，离线超过 7 天锁定
+    // 防盗破解：破解版无法通过心跳验证，7 天后自动锁定
+    async function performHeartbeatCheck() {
+        try {
+            const HEARTBEAT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 小时
+            const OFFLINE_LOCK_MS = 7 * 24 * 60 * 60 * 1000; // 7 天
+            const now = Date.now();
+
+            // 获取上次心跳时间
+            const lastHeartbeat = await StorageAdapter.getItem('license:lastHeartbeat');
+            if (lastHeartbeat) {
+                const lastTime = parseInt(lastHeartbeat, 10);
+                if (now - lastTime < HEARTBEAT_INTERVAL_MS) {
+                    return; // 24 小时内已心跳，跳过
+                }
+            }
+
+            // 获取 license code 和 machineId
+            const licenseCode = await StorageAdapter.getItem('license:code');
+            const machineId = await StorageAdapter.getItem('license:machineId');
+
+            if (!licenseCode || !machineId) {
+                console.log('[Heartbeat] 无 license code 或 machineId，跳过心跳');
+                return;
+            }
+
+            console.log('[Heartbeat] 开始心跳验证...');
+
+            // 调用心跳接口
+            const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: licenseCode, machineId: machineId })
+            });
+
+            if (!response.ok) {
+                console.warn('[Heartbeat] 网络错误，HTTP', response.status);
+                // 记录离线开始时间
+                const offlineStart = await StorageAdapter.getItem('license:offlineStart');
+                if (!offlineStart) {
+                    await StorageAdapter.setItem('license:offlineStart', String(now));
+                }
+                // 检查离线是否超过 7 天
+                if (offlineStart) {
+                    const offlineTime = now - parseInt(offlineStart, 10);
+                    if (offlineTime > OFFLINE_LOCK_MS) {
+                        console.error('[Heartbeat] 离线超过 7 天，锁定应用');
+                        global.__licenseExpired = true;
+                        await showExpireAlertAndActivate('应用已离线超过 7 天，请联网验证后继续使用');
+                    }
+                }
+                return;
+            }
+
+            const data = await response.json();
+
+            if (data.success && data.valid && data.action === 'ok') {
+                await StorageAdapter.setItem('license:lastHeartbeat', String(now));
+                await StorageAdapter.removeItem('license:offlineStart');
+                console.log('[Heartbeat] 心跳成功，剩余天数:', data.daysRemaining);
+            } else {
+                console.error('[Heartbeat] 心跳失败:', data.action);
+                global.__licenseExpired = true;
+                const msg = {
+                    'expired': '授权已过期，请续费后激活',
+                    'disabled': '授权已被禁用，请联系客服',
+                    'unknown': '授权信息无效，请重新激活',
+                    'device_mismatch': '设备不匹配，请在当前设备重新激活'
+                }[data.action] || '授权验证失败，请重新激活';
+                await showExpireAlertAndActivate(msg);
+            }
+        } catch (e) {
+            console.warn('[Heartbeat] 异常:', e.message);
+            // 心跳异常不阻断使用，但记录离线时间
+            const now = Date.now();
+            const offlineStart = await StorageAdapter.getItem('license:offlineStart');
+            if (!offlineStart) {
+                await StorageAdapter.setItem('license:offlineStart', String(now));
+            }
+        }
+    }
+
     async function checkLicenseAndShowActivate() {
         try {
             // 检查 license API 是否存在（APP 端无 window.electronAPI 时自动跳过）
@@ -1154,6 +1287,8 @@
                 // ★ 兼容逻辑：授权有效时清除失效标志
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ P1-7 心跳验证：异步执行，不阻断使用（24小时验证一次，7天离线锁定）
+                performHeartbeatCheck();
                 // ★ P1-1 在线验证：如果需要在线验证，自动触发（不阻断使用）
                 if (result.needOnlineVerify && global.electronAPI.license.verifyOnline) {
                     try {
@@ -1306,6 +1441,18 @@
             if (result && result.success) {
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ P1-7 心跳验证：存储 license code 和 machineId 供心跳使用
+                try {
+                    await StorageAdapter.setItem('license:code', codeTrim);
+                    if (global.electronAPI && global.electronAPI.license &&
+                        typeof global.electronAPI.license.getMachineId === 'function') {
+                        const mid = await global.electronAPI.license.getMachineId();
+                        if (mid) await StorageAdapter.setItem('license:machineId', String(mid));
+                    }
+                    // 清除旧的心跳记录，立即触发一次心跳
+                    await StorageAdapter.removeItem('license:lastHeartbeat');
+                    await StorageAdapter.removeItem('license:offlineStart');
+                } catch(e) { console.warn('[Heartbeat] 存储 license code 失败:', e); }
                 showHtmlAlert('✅ 激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启');
                 global.electronAPI.activate.restart();
             } else {

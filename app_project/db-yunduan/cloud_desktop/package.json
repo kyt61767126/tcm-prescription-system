@@ -53,8 +53,22 @@
       "target": [
         "nsis",
         "portable"
+      ],
+      "protocols": [
+        {
+          "name": "惠康中医激活协议",
+          "schemes": ["bnzc"],
+          "role": "Editor"
+        }
       ]
     },
+    "protocols": [
+      {
+        "name": "惠康中医激活协议",
+        "schemes": ["bnzc"],
+        "role": "Editor"
+      }
+    ],
     "nsis": {
       "oneClick": false,
       "perMachine": true,

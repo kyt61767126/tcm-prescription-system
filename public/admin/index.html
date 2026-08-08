@@ -403,15 +403,18 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div class="gen-row">
                     <div class="form-group">
                         <label>诊所名称 *</label>
-                        <input type="text" id="newClinicName" placeholder="如：惠康中医诊所">
+                        <input type="text" id="newClinicName" placeholder="如：惠康中医诊所" maxlength="50" oninput="validateClinicName()">
+                        <div id="clinicNameStatus" style="font-size:11px;margin-top:4px;"></div>
                     </div>
                     <div class="form-group">
                         <label>管理员账号 *</label>
-                        <input type="text" id="newClinicAdminUsername" placeholder="admin_诊所简码（如 admin_hkt）">
+                        <input type="text" id="newClinicAdminUsername" placeholder="admin_诊所简码（如 admin_hkt）" oninput="checkAdminUsernameAvailability()" style="font-family:monospace;">
+                        <div id="adminUsernameStatus" style="font-size:11px;margin-top:4px;"></div>
                     </div>
                     <div class="form-group">
                         <label>管理员密码 *</label>
-                        <input type="password" id="newClinicAdminPassword" placeholder="初始密码">
+                        <input type="password" id="newClinicAdminPassword" placeholder="至少8位，含字母和数字" oninput="updateAdminPwdStrength()">
+                        <div id="adminPwdStrength" style="font-size:11px;margin-top:4px;"></div>
                     </div>
                     <div class="form-group">
                         <label>管理员姓名</label>
@@ -421,6 +424,32 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div class="gen-actions">
                     <button class="btn btn-success" onclick="handleCreateClinic()">创建诊所</button>
                     <button class="btn" onclick="clearClinicForm()">清空</button>
+                    <button class="btn btn-warning" onclick="openQuickRegister()">⚡ 一键自助注册</button>
+                    <span style="color:#909399;font-size:12px;margin-left:auto;align-self:center;">💡 格式：admin_简码，密码需≥8位含字母+数字</span>
+                </div>
+            </div>
+
+            <!-- 统计看板 -->
+            <div class="stats" style="margin-bottom:16px;">
+                <div class="stat-card">
+                    <div class="num" id="statTotal">0</div>
+                    <div class="label">🏥 总诊所数</div>
+                </div>
+                <div class="stat-card used">
+                    <div class="num" id="statActive">0</div>
+                    <div class="label">✅ 正常营业</div>
+                </div>
+                <div class="stat-card disabled">
+                    <div class="num" id="statDisabled">0</div>
+                    <div class="label">⏸️ 已停用</div>
+                </div>
+                <div class="stat-card" style="background:#e0f2fe;">
+                    <div class="num" id="statDoctors" style="color:#0369a1;">0</div>
+                    <div class="label">👨‍⚕️ 总医师数</div>
+                </div>
+                <div class="stat-card" style="background:#fef3c7;">
+                    <div class="num" id="statTodayReg" style="color:#b45309;">0</div>
+                    <div class="label">📝 今日新增</div>
                 </div>
             </div>
 
@@ -1798,6 +1827,7 @@ async function loadClinicsList() {
         });
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
+            updateClinicStats(data.data);
             if (data.data.length === 0) {
                 listEl.innerHTML = '<div class="empty">暂无诊所</div>';
                 return;
@@ -1841,11 +1871,28 @@ async function handleCreateClinic() {
         showAlert('clinicAlert', '请填写诊所名称、管理员账号、管理员密码', 'error');
         return;
     }
+    if (clinicName.length < 2 || clinicName.length > 50) {
+        showAlert('clinicAlert', '诊所名称长度需在 2-50 个字符之间', 'error');
+        return;
+    }
     if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
-        showAlert('clinicAlert', '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅英文小写字母和数字', 'error');
+        showAlert('clinicAlert', '管理员账号不能使用中文', 'error');
+        return;
+    }
+    if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(adminUsername)) {
+        showAlert('clinicAlert', '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅小写字母和数字，2-12位简码', 'error');
+        return;
+    }
+    if (adminPassword.length < 8) {
+        showAlert('clinicAlert', '密码至少8位', 'error');
+        return;
+    }
+    if (!/[a-zA-Z]/.test(adminPassword) || !/[0-9]/.test(adminPassword)) {
+        showAlert('clinicAlert', '密码必须同时包含字母和数字', 'error');
         return;
     }
     try {
+        showAlert('clinicAlert', '正在创建诊所...', 'info');
         const res = await fetch(API_BASE + '/users?clinic=create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
@@ -1853,11 +1900,11 @@ async function handleCreateClinic() {
         });
         const data = await res.json();
         if (data.success) {
-            showAlert('clinicAlert', '诊所创建成功！\n\n诊所：' + data.clinic.name + '\nID：' + data.clinic.id + '\n管理员：' + data.admin.username, 'success');
+            showAlert('clinicAlert', '✅ 诊所创建成功！\n\n🏥 诊所：' + data.clinic.name + '\n📋 ID：' + data.clinic.id + '\n👤 管理员：' + data.admin.username + '\n\n💬 请通知管理员使用初始密码登录并及时修改', 'success');
             clearClinicForm();
             loadClinicsList();
         } else {
-            showAlert('clinicAlert', data.error || '创建失败', 'error');
+            showAlert('clinicAlert', '❌ ' + (data.error || '创建失败'), 'error');
         }
     } catch (e) {
         showAlert('clinicAlert', '网络错误：' + e.message, 'error');
@@ -1869,6 +1916,94 @@ function clearClinicForm() {
     document.getElementById('newClinicAdminUsername').value = '';
     document.getElementById('newClinicAdminPassword').value = '';
     document.getElementById('newClinicAdminName').value = '';
+    document.getElementById('clinicNameStatus').innerHTML = '';
+    document.getElementById('clinicNameStatus').style.color = '';
+    document.getElementById('adminUsernameStatus').innerHTML = '';
+    document.getElementById('adminUsernameStatus').style.color = '';
+    document.getElementById('adminPwdStrength').innerHTML = '';
+}
+
+// ===== 诊所创建表单实时校验 =====
+let _adminUserCheckTimer = null;
+
+function validateClinicName() {
+    const name = document.getElementById('newClinicName').value.trim();
+    const statusEl = document.getElementById('clinicNameStatus');
+    if (!name) { statusEl.innerHTML = ''; statusEl.style.color = ''; return; }
+    if (name.length < 2) {
+        statusEl.innerHTML = '❌ 诊所名称至少2个字符';
+        statusEl.style.color = '#e74c3c';
+        return false;
+    }
+    if (name.length > 50) {
+        statusEl.innerHTML = '❌ 诊所名称不能超过50个字符';
+        statusEl.style.color = '#e74c3c';
+        return false;
+    }
+    statusEl.innerHTML = '✅ 名称格式正确';
+    statusEl.style.color = '#27ae60';
+    return true;
+}
+
+function checkAdminUsernameAvailability() {
+    const input = document.getElementById('newClinicAdminUsername');
+    const statusEl = document.getElementById('adminUsernameStatus');
+    const val = input.value.trim();
+
+    clearTimeout(_adminUserCheckTimer);
+    if (!val) { statusEl.innerHTML = ''; statusEl.style.color = ''; return; }
+
+    if (/[\u4e00-\u9fa5]/.test(val)) {
+        statusEl.innerHTML = '❌ 不能使用中文';
+        statusEl.style.color = '#e74c3c';
+        return;
+    }
+    if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(val)) {
+        statusEl.innerHTML = '⚠️ 格式：admin_ + 2-12位小写字母/数字';
+        statusEl.style.color = '#f39c12';
+        return;
+    }
+
+    statusEl.innerHTML = '⏳ 检查可用性...';
+    statusEl.style.color = '#606266';
+
+    _adminUserCheckTimer = setTimeout(async function() {
+        try {
+            const resp = await fetch(API_BASE + '/users?check-register=' + encodeURIComponent(val), {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const data = await resp.json();
+            if (data.available) {
+                statusEl.innerHTML = '✅ 账号可用';
+                statusEl.style.color = '#27ae60';
+            } else {
+                statusEl.innerHTML = '❌ ' + (data.reason || '账号不可用');
+                statusEl.style.color = '#e74c3c';
+            }
+        } catch (e) {
+            statusEl.innerHTML = '⚠️ 无法检查（网络问题）';
+            statusEl.style.color = '#909399';
+        }
+    }, 600);
+}
+
+function updateAdminPwdStrength() {
+    const pwd = document.getElementById('newClinicAdminPassword').value;
+    const indicator = document.getElementById('adminPwdStrength');
+    if (!pwd) { indicator.innerHTML = ''; return; }
+    let score = 0;
+    if (pwd.length >= 8) score++;
+    if (pwd.length >= 12) score++;
+    if (/[a-z]/.test(pwd)) score++;
+    if (/[A-Z]/.test(pwd)) score++;
+    if (/[0-9]/.test(pwd)) score++;
+    if (/[^a-zA-Z0-9]/.test(pwd)) score++;
+    const colors = ['#e74c3c', '#e67e22', '#f39c12', '#f1c40f', '#27ae60', '#2ecc71'];
+    const labels = ['太弱', '弱', '一般', '中等', '强', '非常强'];
+    const color = colors[Math.min(score, colors.length - 1)];
+    const label = labels[Math.min(score, labels.length - 1)];
+    indicator.innerHTML = '密码强度：<span style="color:' + color + ';font-weight:bold;">' + label + '</span>' +
+        (score < 3 ? ' <span style="color:#e74c3c;">（至少8位+字母+数字）</span>' : '');
 }
 
 async function toggleClinicStatus(clinicId, newStatus) {
@@ -1922,6 +2057,49 @@ async function editClinic(clinic) {
         }
     } catch (e) {
         showAlert('clinicAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ===== 统计看板更新 =====
+function updateClinicStats(clinics) {
+    const today = new Date().toISOString().split('T')[0];
+    const total = clinics.length;
+    const active = clinics.filter(c => c.status === 'active').length;
+    const disabled = total - active;
+    const todayNew = clinics.filter(c => c.createdAt && c.createdAt.startsWith(today)).length;
+    document.getElementById('statTotal').textContent = total;
+    document.getElementById('statActive').textContent = active;
+    document.getElementById('statDisabled').textContent = disabled;
+    document.getElementById('statTodayReg').textContent = todayNew;
+    // 总医师数
+    const totalDoctors = clinics.reduce((sum, c) => {
+        const users = c.users || [];
+        return sum + users.filter(u => u.role === 'doctor' || (u.role !== 'platform_admin' && u.role !== 'clinic_admin')).length;
+    }, 0);
+    document.getElementById('statDoctors').textContent = totalDoctors;
+}
+
+// ===== 一键自助注册链接 =====
+function openQuickRegister() {
+    const url = window.location.origin.replace('/admin', '') + '/index.html?showRegister=1';
+    const wechat = prompt('请输入客户微信（可选，用于注册审计追踪）：');
+    const regUrl = url + (wechat ? '&ref=' + encodeURIComponent(wechat) : '');
+    const msg = '📋 一键注册链接已生成！\n\n' +
+        '🔗 注册页面：\n' + regUrl + '\n\n' +
+        '📖 使用说明：\n' +
+        '1. 将上方链接发送给客户\n' +
+        '2. 客户打开链接后自动弹出注册表单\n' +
+        '3. 客户填写信息后即时获得管理员账号\n' +
+        '4. 账号创建后可立即登录使用\n\n' +
+        '⚠️ 安全提示：IP限流3次/小时，请提醒客户妥善保管账号密码';
+    if (confirm(msg)) {
+        const ta = document.createElement('textarea');
+        ta.value = regUrl;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        alert('✅ 注册链接已复制到剪贴板，请发送给客户！');
     }
 }
 

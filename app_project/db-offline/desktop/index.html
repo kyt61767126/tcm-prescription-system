@@ -3285,6 +3285,66 @@ let currentUser = null;
             updatePrescriptionPaper();
             // P1-1 每日首次启动自动备份（异步，不阻塞 UI）
             dailyAutoBackup().catch(e => console.warn('[Backup] dailyAutoBackup error:', e));
+            
+            // ★ bnzc:// 一键激活：检查是否有待激活数据
+            if (IS_ELECTRON && window.electronAPI && window.electronAPI.bnzcGetPendingActivation) {
+                try {
+                    const result = await window.electronAPI.bnzcGetPendingActivation();
+                    if (result && result.success && result.data && result.data.code) {
+                        console.log('[Bnzc] 主窗口检测到待激活数据:', result.data.code);
+                        // 显示激活提示并执行自动激活
+                        showBnzcActivationNotice(result.data);
+                    }
+                } catch (e) {
+                    console.warn('[Bnzc] 主窗口检查待激活数据失败:', e);
+                }
+            }
+            
+            // ★ bnzc:// 运行时监听（软件已运行时收到链接）
+            if (IS_ELECTRON && window.electronAPI && window.electronAPI.onBnzcPendingActivation) {
+                window.electronAPI.onBnzcPendingActivation(async (data) => {
+                    console.log('[Bnzc] 主窗口收到运行时激活链接:', data.code);
+                    showBnzcActivationNotice(data);
+                });
+            }
+        }
+        
+        // ★ bnzc:// 主窗口激活通知与自动激活
+        async function showBnzcActivationNotice(data) {
+            if (!data || !data.code) return;
+            const typeInfo = '机构版';
+            const msg = `收到一键激活链接：\n激活码：${data.code}\n${data.clinicName ? '诊所：' + data.clinicName + '\n' : ''}${data.user ? '用户：' + data.user + '\n' : ''}\n\n是否现在激活？`;
+            if (confirm(msg)) {
+                try {
+                    const result = await window.electronAPI.bnzcAutoActivate({
+                        code: data.code,
+                        clinicName: data.clinicName || '',
+                        user: data.user || ''
+                    });
+                    if (result && result.success) {
+                        alert('✅ 激活成功！即将重启软件...');
+                        if (window.electronAPI.bnzcClearPendingActivation) {
+                            window.electronAPI.bnzcClearPendingActivation();
+                        }
+                        setTimeout(() => {
+                            if (window.electronAPI.license && window.electronAPI.license.restart) {
+                                window.electronAPI.license.restart();
+                            }
+                        }, 1500);
+                    } else {
+                        alert('❌ 激活失败：' + (result.error || '未知错误'));
+                        if (window.electronAPI.bnzcClearPendingActivation) {
+                            window.electronAPI.bnzcClearPendingActivation();
+                        }
+                    }
+                } catch (e) {
+                    alert('❌ 激活异常：' + e.message);
+                }
+            } else {
+                if (window.electronAPI.bnzcClearPendingActivation) {
+                    window.electronAPI.bnzcClearPendingActivation();
+                }
+            }
         }
 
         async function handleBeforeUnload() {

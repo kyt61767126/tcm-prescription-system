@@ -970,11 +970,13 @@ function checkLicenseBinding(license, localMachineId) {
 // ★ v3 新增：校验 config.json 完整性签名
 // 防止用户修改 config.json 中的 clinicName 绕过 license 绑定校验
 // 返回 true=完整 / false=被篡改或无签名
-// ★ P1-3: 使用 getEffectiveConfigSignKey() 派生密钥（从 license.masterKey 派生，向后兼容）
+// ★ 修复：config.json 签名始终用硬编码密钥 CONFIG_SIGN_KEY，不依赖 masterKey
+//   原因：config.json 在打包时签名（此时无 license），masterKey 派生密钥只适用于 license.dat 验签
+//   若用 masterKey 派生密钥验签 config.json，激活后 license 含 masterKey 时验签必然失败
 function signConfig(config) {
     try {
         const signContent = [config.clinicName || '', config.doctorName || '', config.edition || '', config.configIssuedAt || ''].join('|');
-        return crypto.createHmac('sha256', getEffectiveConfigSignKey()).update(signContent).digest('hex');
+        return crypto.createHmac('sha256', CONFIG_SIGN_KEY).update(signContent).digest('hex');
     } catch (e) {
         console.warn('[License] signConfig 异常:', e.message);
         return '';
@@ -992,7 +994,7 @@ function verifyConfigIntegrity() {
         if (!cfg.configIssuedAt) return false;
         // 签名内容：clinicName|doctorName|edition|configIssuedAt
         const signContent = [cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '', cfg.configIssuedAt].join('|');
-        const expected = crypto.createHmac('sha256', getEffectiveConfigSignKey()).update(signContent).digest('hex');
+        const expected = crypto.createHmac('sha256', CONFIG_SIGN_KEY).update(signContent).digest('hex');
         try {
             return crypto.timingSafeEqual(Buffer.from(cfg.configSignature, 'hex'), Buffer.from(expected, 'hex'));
         } catch (e) {

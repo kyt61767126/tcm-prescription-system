@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>惠康中医诊所管理系统 - 登录</title>
     <style>
@@ -17,7 +17,7 @@
             align-items: center;
         }
         .login-container {
-            width: 230px;
+            width: 250px;
             background: rgba(255, 255, 255, 0.95);
             border-radius: 8px;
             box-shadow: 0 14px 40px rgba(0, 0, 0, 0.3);
@@ -35,7 +35,7 @@
         .header-section {
             position: relative;
             z-index: 1;
-            padding: 12px 16px;
+            padding: 12px 16px 10px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -75,14 +75,42 @@
             background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%);
             border: 1px solid #ffcccc;
             border-radius: 4px;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            position: relative;
         }
+        .clinic-info .setup-hint {
+            font-size: 9px;
+            color: #e67e22;
+            margin-top: 2px;
+        }
+        .clinic-info .setup-hint:hover { text-decoration: underline; }
         .clinic-name {
             font-size: 11px;
             font-weight: bold;
             color: #8b0000;
             word-break: break-all;
         }
+        .trial-bar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 8px;
+            border-radius: 4px;
+            margin-bottom: 8px;
+            font-size: 10px;
+        }
+        .trial-bar.trial { background: #fff8e1; border: 1px solid #ffe082; color: #856404; }
+        .trial-bar.active { background: #d4edda; border: 1px solid #c3e6cb; color: #155724; }
+        .trial-bar.expired { background: #f8d7da; border: 1px solid #f5c6cb; color: #721c24; }
+        .trial-bar .trial-text { display: flex; align-items: center; gap: 4px; }
+        .trial-bar .trial-action {
+            color: #667eea;
+            cursor: pointer;
+            font-weight: bold;
+            text-decoration: none;
+        }
+        .trial-bar .trial-action:hover { text-decoration: underline; }
         .login-field {
             margin-bottom: 12px;
             display: flex;
@@ -109,7 +137,6 @@
             box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
             background: white;
         }
-        /* 记住用户样式统一参考网页版（index.html 内嵌 loginOverlay） */
         .login-field.remember-me { justify-content: flex-start; gap: 4px; margin-bottom: 8px; margin-left: 0; display: flex; align-items: center; }
         .login-field.remember-me input[type="checkbox"] { flex: none; width: 12px; height: 12px; accent-color: #667eea; cursor: pointer; margin: 0; }
         .login-field.remember-me label { flex: none; width: auto; font-size: 8px; font-weight: normal; color: #666; cursor: pointer; }
@@ -166,6 +193,111 @@
             font-size: 8px;
             color: #999;
         }
+        /* 首次配置向导 */
+        .wizard-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+        .wizard-overlay.show { display: flex; }
+        .wizard-box {
+            width: 280px;
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        .wizard-box h2 {
+            font-size: 14px;
+            color: #2c3e50;
+            margin-bottom: 4px;
+            text-align: center;
+        }
+        .wizard-box .wizard-sub {
+            font-size: 10px;
+            color: #888;
+            text-align: center;
+            margin-bottom: 14px;
+        }
+        .wizard-step { display: none; }
+        .wizard-step.active { display: block; }
+        .wizard-step label {
+            display: block;
+            font-size: 10px;
+            font-weight: bold;
+            color: #555;
+            margin-bottom: 4px;
+        }
+        .wizard-step input {
+            width: 100%;
+            padding: 8px;
+            border: 2px solid #e0e0e0;
+            border-radius: 5px;
+            font-size: 11px;
+            margin-bottom: 10px;
+        }
+        .wizard-step input:focus {
+            border-color: #667eea;
+            outline: none;
+        }
+        .wizard-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .wizard-nav button {
+            padding: 7px 16px;
+            border: none;
+            border-radius: 5px;
+            font-size: 11px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .wizard-nav .btn-next {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .wizard-nav .btn-prev {
+            background: #f0f0f0;
+            color: #666;
+        }
+        .wizard-nav .btn-skip {
+            background: transparent;
+            color: #888;
+            text-decoration: underline;
+        }
+        .wizard-progress {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin-bottom: 14px;
+        }
+        .wizard-progress .dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #e0e0e0;
+        }
+        .wizard-progress .dot.active {
+            background: #667eea;
+        }
+        .wizard-progress .dot.done {
+            background: #27ae60;
+        }
+        .password-strength {
+            font-size: 9px;
+            margin-top: -6px;
+            margin-bottom: 8px;
+            padding: 4px 6px;
+            border-radius: 3px;
+            display: none;
+        }
+        .password-strength.show { display: block; }
     </style>
 </head>
 <body>
@@ -177,8 +309,10 @@
         </div>
         <div class="main-content">
             <div class="login-box">
-                <div class="clinic-info">
+                <div id="trialBar" class="trial-bar" style="display:none;"></div>
+                <div class="clinic-info" onclick="openFirstRunWizard()" title="点击设置诊所信息">
                     <div id="clinicName" class="clinic-name">本能堂中医诊所</div>
+                    <div id="clinicSetupHint" class="setup-hint" style="display:none;">⚙️ 点击设置诊所信息</div>
                 </div>
                 <div class="login-field">
                     <label>用户名</label>
@@ -203,8 +337,51 @@
                 <div id="loginError" class="login-error"></div>
             </div>
         </div>
-        <div class="footer-section">微信号: hktzy1688</div>
+        <div class="footer-section">
+            <span>微信号: hktzy1688</span>
+            <span style="margin-left:6px;color:#667eea;cursor:pointer;" onclick="openActivationWindow()">🔑 激活软件</span>
+        </div>
     </div>
+
+    <!-- 首次配置向导 -->
+    <div id="wizardOverlay" class="wizard-overlay">
+        <div class="wizard-box">
+            <h2>🏥 首次使用设置</h2>
+            <div class="wizard-sub">完善诊所信息，开启您的中医处方管理之旅</div>
+            <div class="wizard-progress" id="wizardProgress"></div>
+
+            <!-- 步骤1：诊所名称 -->
+            <div class="wizard-step active" data-step="1">
+                <label>诊所名称 *</label>
+                <input type="text" id="wizardClinicName" placeholder="如：惠康中医诊所" maxlength="50">
+            </div>
+
+            <!-- 步骤2：修改密码 -->
+            <div class="wizard-step" data-step="2">
+                <label>设置管理员密码 *</label>
+                <input type="password" id="wizardPassword" placeholder="至少8位，含字母和数字" oninput="checkWizardPassword()">
+                <div id="wizardPwdStrength" class="password-strength"></div>
+                <label>确认密码 *</label>
+                <input type="password" id="wizardPassword2" placeholder="再次输入密码">
+            </div>
+
+            <!-- 步骤3：医师信息 -->
+            <div class="wizard-step" data-step="3">
+                <label>管理员/医师姓名</label>
+                <input type="text" id="wizardDoctorName" placeholder="如：张医生">
+                <label>医师职称（可选）</label>
+                <input type="text" id="wizardTitle" placeholder="如：主治医师 / 主任医师">
+                <div style="font-size:9px;color:#888;margin-top:6px;">💡 以上信息可在登录后"基础设置"中随时修改</div>
+            </div>
+
+            <div class="wizard-nav">
+                <button class="btn-prev" onclick="wizardPrev()" id="wizardPrevBtn" style="display:none;">上一步</button>
+                <button class="btn-skip" onclick="wizardSkip()" id="wizardSkipBtn">跳过</button>
+                <button class="btn-next" onclick="wizardNext()" id="wizardNextBtn">下一步</button>
+            </div>
+        </div>
+    </div>
+
     <script src="auth-core.js"></script>
     <script src="permission.js"></script>
     <script src="login.js"></script>

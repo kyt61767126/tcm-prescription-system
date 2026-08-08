@@ -303,48 +303,59 @@
         return storedPassword === inputPassword;
     }
 
-    // ==================== 用户名语言规则（系统稳定性与使用安全）====================
-    // ★ 统一规则：
-    //   1. 用户名（username）：必须为英文（ASCII 小写字母 + 数字 + 下划线），禁止中文
-    //      - 稳定性：避免编码问题导致 KV/DB 存储异常、跨系统乱码
-    //      - 安全性：防止 Unicode 同形异义攻击（homograph attack）、SQL 注入
-    //      - 兼容性：英文用户名在 URL/Header/Token 中无需额外编码，跨端一致
+    // ==================== 用户名规则（支持中文）====================
+    // ★ 统一规则（2026-08-08 更新，支持中文用户名）：
+    //   1. 用户名（username）：允许中文/英文/数字/下划线/连字符，2-30个字符
+    //      - 历史：曾因 btoa/编码顾虑禁止中文，现通过 encodeURIComponent+btoa 包装已解决
+    //      - 保留：Unicode 同形异义攻击检测（全角英数字替换为半角）
     //   2. 管理员账号格式：admin_{诊所简码}（如 admin_hkt = 惠康中医）
     //      - 诊所简码：2-12 位小写字母/数字，全局唯一
     //   3. 密码（password）：允许中文/英文/符号（哈希后存储，不影响稳定性）
     //   4. 显示姓名（name）：允许中文（仅用于 UI 展示，不参与登录比对）
+    // ★ 关键安全点：所有涉及 btoa 的地方（buildAuthPayload 等）均使用
+    //   btoa(unescape(encodeURIComponent(...))) Unicode 安全包装
     function validateUsername(username) {
         if (!username || typeof username !== 'string') {
             return { valid: false, error: '用户名不能为空' };
         }
-        const trimmed = username.trim();
+        let trimmed = username.trim();
         if (trimmed.length < 2 || trimmed.length > 30) {
             return { valid: false, error: '用户名长度需 2-30 个字符' };
         }
-        // 禁止中文（系统稳定性 + 安全性）
-        if (/[\u4e00-\u9fa5]/.test(trimmed)) {
-            return { valid: false, error: '用户名不能使用中文（系统稳定性与安全要求）' };
+        // Unicode 同形异义攻击防护：将全角英数字（0xFF01-0xFF5E）替换为半角
+        // 防止用户用 ＡＢＣ 冒充 abc 创建重复账号
+        trimmed = trimmed.replace(/[\uff01-\uff5e]/g, function(ch) {
+            return String.fromCharCode(ch.charCodeAt(0) - 0xfee0);
+        });
+        // 禁止控制字符、不可见字符（零宽字符等）
+        if (/[\x00-\x1f\x7f\u200b-\u200f\u202a-\u202e\ufeff]/.test(trimmed)) {
+            return { valid: false, error: '用户名不能包含控制字符或不可见字符' };
         }
-        // 禁止非 ASCII 字符（全角符号、日韩文等）
-        if (/[^\x20-\x7e]/.test(trimmed)) {
-            return { valid: false, error: '用户名仅允许英文字母、数字和下划线' };
-        }
-        // 仅允许小写字母、数字、下划线、连字符
-        if (!/^[a-z0-9_-]+$/i.test(trimmed)) {
-            return { valid: false, error: '用户名仅允许英文字母、数字、下划线和连字符' };
+        // 禁止常见危险字符（用于 SQL/命令注入；中文用户名已允许）
+        if (/[;'"\\\/<>|&`$#@!%^*()+=\[\]{}?~]/.test(trimmed)) {
+            return { valid: false, error: '用户名不能包含特殊符号（标点/引号/括号等）' };
         }
         return { valid: true, username: trimmed };
     }
 
-    // ★ 管理员账号格式校验：admin_{诊所简码}
+    // ★ 管理员账号格式校验：admin_{诊所简码}（简码仅允许英文数字，简码不是用户名本身）
     function validateAdminUsername(username) {
         const base = validateUsername(username);
         if (!base.valid) return base;
-        if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(base.username)) {
-            return {
-                valid: false,
-                error: '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅小写字母和数字，2-12 位'
-            };
+        // validateUsername 允许中文，管理员简码部分仍限制英文数字
+        const usernameForAdmin = base.username;
+        // 如果包含中文，说明不是 admin_简码 格式，但普通管理员账号允许中文
+        if (/[\u4e00-\u9fa5]/.test(usernameForAdmin)) {
+            return base;
+        }
+        // 纯英文/数字 才校验 admin_简码 格式
+        if (usernameForAdmin.startsWith('admin_')) {
+            if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(usernameForAdmin)) {
+                return {
+                    valid: false,
+                    error: '管理员简码账号必须为 admin_诊所简码 格式（如 admin_hkt），简码为 2-12 位小写字母和数字'
+                };
+            }
         }
         return base;
     }
@@ -414,41 +425,25 @@
         return stored;
     }
 
-    // 保存记住的密码（加密存储）
+    // P3-3: 移除"记住密码"保存/读取/清除（2026-08-08）
+    // 规则5要求：每次手动输密码，禁止自动填充密码框
+    // 保留 API 兼容（返回 null/false/空操作），不破坏现有调用点
     async function saveRememberedPassword(password) {
         try {
-            const encrypted = await encryptPassword(password);
-            if (encrypted) {
-                await StorageAdapter.setItem('auth:savedPassword', encrypted);
-            }
-        } catch (e) {
-            console.warn('保存记住密码失败:', e);
-        }
+            // 安全模式升级：禁止记住密码
+            // 只保留用户名（通过 saveRememberedUser 记住用户名）
+            // 旧调用点会静默成功，不报错
+        } catch (e) { /* 静默忽略 */ }
     }
-
-    // 读取记住的密码（解密）
     async function getRememberedPassword() {
-        try {
-            const stored = await StorageAdapter.getItem('auth:savedPassword');
-            if (!stored) return null;
-            // P0-2: 兼容 SAFE:/PWDv2:/PWDv1:/旧明文
-            if (stored.startsWith('SAFE:') || stored.startsWith('PWDv1:') || stored.startsWith('PWDv2:')) {
-                return await decryptPassword(stored);
-            }
-            return stored;
-        } catch (e) {
-            console.warn('读取记住密码失败:', e);
-            return null;
-        }
+        // 安全模式：永远不返回密码，强制手动输入
+        return null;
     }
-
-    // 清除记住的密码
     async function clearRememberedPassword() {
         try {
+            // 清理历史遗留的密码存储
             await StorageAdapter.removeItem('auth:savedPassword');
-        } catch (e) {
-            console.warn('清除记住密码失败:', e);
-        }
+        } catch (e) { /* 忽略 */ }
     }
 
     // 用户列表加密存储（仅离线版使用，Unicode 安全）
@@ -545,14 +540,60 @@
 
     function buildAuthPayload(user) {
         if (!user) return null;
-        return btoa(JSON.stringify({
+        // Unicode 安全包装（中文用户名兼容）：encodeURIComponent → unescape → btoa
+        // 与 encryptPassword/encryptUsers 使用相同的 Unicode 编码模式
+        return btoa(unescape(encodeURIComponent(JSON.stringify({
             username: user.username,
             role: user.role || 'doctor',
             clinicId: user.clinicId || null
-        }));
+        }))));
     }
 
     // ==================== 会话管理层 ====================
+
+    // P4-4: 周期性会话监控器（8小时自动登出）
+    // 规则5要求：8小时自动登出。checkSession 原本只在启动时调用一次，
+    // 持续运行超过 8 小时不重启/不刷新时不会触发。
+    // 本监控器使用 setInterval 每 5 分钟检查一次会话超时
+    let _sessionMonitorTimer = null;
+    let _sessionLogoutCallback = null;
+
+    function startSessionMonitor(logoutCallback) {
+        // 先清除旧定时器，避免重复启动
+        if (_sessionMonitorTimer) {
+            clearInterval(_sessionMonitorTimer);
+            _sessionMonitorTimer = null;
+        }
+        _sessionLogoutCallback = logoutCallback || null;
+        const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 每5分钟检查一次（省电+及时）
+        _sessionMonitorTimer = setInterval(async function() {
+            try {
+                const session = await checkSession();
+                if (!session.valid && session.reason === 'session_timeout') {
+                    // 会话超时，调用外部登出回调（若有）
+                    if (typeof _sessionLogoutCallback === 'function') {
+                        try { await _sessionLogoutCallback('session_timeout'); } catch (e) {}
+                    }
+                    // 也执行内置 logout 确保登出生效
+                    try { await logout(); } catch (e) {}
+                    try { console.log('[AuthCore] 会话超时，已自动登出（8小时未刷新）'); } catch (e) {}
+                }
+            } catch (e) {
+                // 监控器内部异常不影响主程序
+                try { console.warn('[AuthCore] 会话监控检查异常:', e); } catch (e2) {}
+            }
+        }, CHECK_INTERVAL_MS);
+        try { console.log('[AuthCore] 会话监控已启动（每5分钟检查一次，8小时超时自动登出）'); } catch (e) {}
+    }
+
+    function stopSessionMonitor() {
+        if (_sessionMonitorTimer) {
+            clearInterval(_sessionMonitorTimer);
+            _sessionMonitorTimer = null;
+            try { console.log('[AuthCore] 会话监控已停止'); } catch (e) {}
+        }
+        _sessionLogoutCallback = null;
+    }
 
     async function checkSession() {
         // 会话超时检查
@@ -861,6 +902,10 @@
                 await StorageAdapter.setItem('auth:clinicName', user.clinicName);
             }
 
+            // P4-4: 登录成功后启动会话监控（8小时自动登出）
+            // options.onSessionTimeout 可选外部回调（用于登出后跳转/刷新页面）
+            startSessionMonitor(options.onSessionTimeout || null);
+
             return { success: true, user };
         } catch (e) {
             console.error('登录异常:', e);
@@ -871,6 +916,8 @@
     // ==================== 退出登录 ====================
 
     async function logout() {
+        // P4-4: 登出时停止会话监控器
+        stopSessionMonitor();
         // ★ 优化3：审计日志 - 退出登录
         try { AuditLog.record('logout', ''); } catch(e) {}
         const allKeys = [
@@ -881,7 +928,9 @@
             'user_login_data',
             'cloud_prescription_cache', 'cloud_prescription_cache_time',
             // ★ 离线登录缓存：退出时清除（下次需在线登录重新缓存）
-            'auth:offlineLoginCache'
+            'auth:offlineLoginCache',
+            // P3-3: 清除历史遗留的记住密码
+            'auth:savedPassword'
         ];
         for (const key of allKeys) {
             await StorageAdapter.removeItem(key);
@@ -1090,6 +1139,8 @@
 
         // 会话管理
         checkSession,
+        startSessionMonitor,
+        stopSessionMonitor,
 
         // 登录调度
         login,

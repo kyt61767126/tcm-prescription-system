@@ -273,6 +273,85 @@ h1 {
     font-family: inherit;
 }
 .retry-btn:hover { background: #5a6fd6; }
+
+/* 试用期状态提示 */
+.trial-notice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+    border: 1px solid #ffb74d;
+    border-radius: 8px;
+}
+.trial-notice-icon {
+    font-size: 24px;
+    line-height: 1;
+}
+.trial-notice-body {
+    flex: 1;
+}
+.trial-notice-title {
+    color: #e65100;
+    font-weight: 600;
+    font-size: 14px;
+}
+.trial-notice-title b {
+    font-size: 18px;
+    color: #d84315;
+}
+.trial-notice-desc {
+    color: #bf360c;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+/* 购买链接卡片 */
+.purchase-card {
+    margin-top: 14px;
+    padding: 14px;
+    background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%);
+    border: 1px solid #9fa8da;
+    border-radius: 10px;
+    text-align: center;
+}
+.purchase-card .pc-title {
+    color: #283593;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 6px;
+}
+.purchase-card .pc-desc {
+    color: #3949ab;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+.purchase-card .pc-btn {
+    display: inline-block;
+    padding: 8px 20px;
+    background: linear-gradient(135deg, #3f51b5 0%, #5c6bc0 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: transform 0.1s, box-shadow 0.2s;
+}
+.purchase-card .pc-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(63, 81, 181, 0.4);
+}
+.purchase-card .pc-price {
+    margin-top: 8px;
+    color: #1a237e;
+    font-size: 11px;
+}
+.purchase-card .pc-price span {
+    color: #c62828;
+    font-weight: 600;
+}
 </style>
 </head>
 <body>
@@ -280,7 +359,16 @@ h1 {
     <div class="brand">
         <div class="logo">惠</div>
         <h1>软件激活</h1>
-        <div class="subtitle">请输入激活码以继续使用</div>
+        <div class="subtitle">输入激活码，开启完整功能体验</div>
+    </div>
+
+    <!-- 试用期状态提示 -->
+    <div id="trialNotice" class="trial-notice" style="display:none;">
+        <div class="trial-notice-icon">⏳</div>
+        <div class="trial-notice-body">
+            <div class="trial-notice-title">试用期剩余 <b id="trialDays">--</b> 天</div>
+            <div class="trial-notice-desc">激活后可永久使用或至授权到期</div>
+        </div>
     </div>
 
     <div id="statusBox" class="status-box"></div>
@@ -327,9 +415,16 @@ h1 {
 
     <div class="contact-box">
         <div class="title">🎫 获取激活码</div>
-        <a href="https://tcm-prescription-system.pages.dev/download" target="_blank" style="display:block;text-align:center;padding:10px;margin-bottom:8px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:bold;">🌐 前往官网购买激活码</a>
         <div class="item"><strong>客服微信：</strong><span>hktzy1688</span><button class="copy-inline" onclick="copyText(this, 'hktzy1688')">复制</button></div>
-        <div class="item" style="margin-top: 6px; color: #9c640c; font-size: 11px;">复制上方机器 ID 和诊所名，发给客服获取激活码</div>
+        <div class="item" style="margin-top: 6px; color: #9c640c; font-size: 11px;">复制下方机器 ID 和诊所名，发给客服即可获取激活码</div>
+    </div>
+
+    <!-- 购买入口卡片 -->
+    <div class="purchase-card">
+        <div class="pc-title">💡 想了解更多套餐？</div>
+        <div class="pc-desc">在线购买 · 即时开通 · 安全可靠</div>
+        <a class="pc-btn" href="https://tcm-prescription-system.pages.dev/download" target="_blank">🌐 前往官网购买激活码</a>
+        <div class="pc-price">标准版 ¥999/年起 · 机构版 ¥2999/年起</div>
     </div>
 
     <div class="info-box">
@@ -348,6 +443,22 @@ h1 {
 // 从 URL 参数获取机器 ID
 const params = new URLSearchParams(window.location.search);
 document.getElementById('machineId').textContent = params.get('machineId') || '未知';
+
+// ★ 获取试用期状态并显示
+(async function showTrialInfo() {
+    try {
+        if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.getStatus) {
+            const status = await window.electronAPI.license.getStatus();
+            if (status && status.type === 'trial') {
+                const days = status.remainingDays || 0;
+                document.getElementById('trialDays').textContent = days;
+                document.getElementById('trialNotice').style.display = 'flex';
+            } else if (status && status.valid && status.type !== 'trial') {
+                document.getElementById('trialNotice').style.display = 'none';
+            }
+        }
+    } catch (e) { /* 静默失败 */ }
+})();
 
 // ★ v3 新增：自动从 config.json 预填诊所名（用户可改）
 (async function prefillClinicName() {
@@ -386,6 +497,47 @@ document.getElementById('clinicName').addEventListener('keyup', e => {
 document.getElementById('userName').addEventListener('keyup', e => {
     if (e.key === 'Enter') submitActivate();
 });
+
+// ★ bnzc:// 一键激活：检查是否有待激活数据并自动填入
+(async function checkBnzcPending() {
+    try {
+        if (!window.electronAPI || !window.electronAPI.bnzcGetPendingActivation) return;
+        const result = await window.electronAPI.bnzcGetPendingActivation();
+        if (result && result.success && result.data && result.data.code) {
+            console.log('[Bnzc] 激活窗口检测到待激活数据:', result.data.code);
+            const d = result.data;
+            // 自动填入表单
+            document.getElementById('activationCode').value = d.code;
+            if (d.clinicName) document.getElementById('clinicName').value = d.clinicName;
+            if (d.user) document.getElementById('userName').value = d.user;
+            // 自动提交激活
+            console.log('[Bnzc] 激活窗口自动提交激活');
+            const actResult = await window.electronAPI.bnzcAutoActivate({
+                code: d.code,
+                clinicName: d.clinicName || '',
+                user: d.user || ''
+            });
+            if (actResult && actResult.success) {
+                alert('✅ 激活成功！即将重启软件...');
+                if (window.electronAPI.bnzcClearPendingActivation) {
+                    window.electronAPI.bnzcClearPendingActivation();
+                }
+                setTimeout(() => {
+                    if (window.electronAPI.license && window.electronAPI.license.restart) {
+                        window.electronAPI.license.restart();
+                    }
+                }, 1500);
+            } else {
+                showStatus('❌ 自动激活失败：' + (actResult.error || '未知错误'), 'error');
+                if (window.electronAPI.bnzcClearPendingActivation) {
+                    window.electronAPI.bnzcClearPendingActivation();
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[Bnzc] 激活窗口检查待激活数据失败:', e);
+    }
+})();
 
 function showStatus(message, type, withRetry) {
     const box = document.getElementById('statusBox');

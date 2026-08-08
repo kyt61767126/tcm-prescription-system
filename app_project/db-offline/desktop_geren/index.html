@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-离线标准版</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-离线机构版</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -124,7 +124,7 @@
         .close-btn { font-size: 24px; cursor: pointer; line-height: 1; }
         .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; visibility: visible; justify-content: center; align-items: center; z-index: 9999; }
         .login-container { width: 240px; background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); overflow: hidden; position: relative; }
-        .bg-decoration { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400"%3E%3Cdefs%3E%3Cpattern id="grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"%3E%3Cpath d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(102,126,234,0.08)" stroke-width="1"/%3E%3C/defs%3E%3Crect fill="url(%23grid)" width="320" height="400"/%3E%3C/svg%3E'); pointer-events: none; z-index: 0; }
+        .bg-decoration { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400"%3E%3Cdefs%3E%3Cpattern id="grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"%3E%3Cpath d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(102,126,234,0.08)" stroke-width="1"/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill="url(%23grid)" width="320" height="400"/%3E%3C/svg%3E'); pointer-events: none; z-index: 0; }
         .header-section { position: relative; z-index: 1; padding: 20px 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         .system-title { font-size: 18px; font-weight: bold; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 2px; }
         .version-tag { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; }
@@ -292,23 +292,23 @@
             }
             
             .patient-row {
-                flex-wrap: wrap;
+                flex-wrap: nowrap;
                 margin-bottom: 4px;
                 gap: 3px;
             }
-            
+
             .patient-label {
                 width: 45px;
                 font-size: 12px;
                 padding-right: 4px;
             }
-            
+
             .patient-input {
                 min-height: 32px;
                 font-size: 14px;
                 padding: 4px 6px;
             }
-            
+
             .patient-input.x-small { flex: 0 0 55px; }
             .patient-input.xx-small { flex: 0 0 85px; }
             .patient-input.xxx-small { flex: 0 0 110px; }
@@ -403,7 +403,47 @@
 
             /* 统计分析图表 - 手机端缩小显示，确保屏幕内完整显示 */
             #visitTrendChart, #diseaseChart, #medicineChart { height: 130px; }
-            
+
+            /* 患者信息输入栏 - 单行紧凑布局 */
+            .patient-row {
+                flex-wrap: nowrap;
+                gap: 3px;
+                margin-bottom: 5px;
+            }
+            .patient-label {
+                width: auto;
+                font-size: 12px;
+                padding-right: 2px;
+                flex-shrink: 0;
+            }
+            .patient-input {
+                min-height: 34px;
+                font-size: 14px;
+                padding: 4px 6px;
+                min-width: 0;
+            }
+            .patient-input.small { flex: 1 1 160px; }
+            .patient-input.x-small { flex: 0 0 55px; }
+            .patient-input.xx-small { flex: 0 0 85px; }
+            .patient-input.xxx-small { flex: 0 0 80px; }
+            .patient-input.name-input { flex: 0 0 85px; }
+            #patientAddress { flex: 1 1 225px !important; }
+
+            /* 诊断行内联样式覆盖（确保单行不换行） */
+            .diagnosis-section .patient-row input#diagnosis {
+                flex: 1 1 183px;
+                min-width: 30px !important;
+            }
+            .diagnosis-section .patient-row input#doseCountInput3 {
+                flex: 0 0 42px;
+                width: 42px !important;
+            }
+            .diagnosis-section .patient-row input#doctorName {
+                flex: 0 0 60px;
+                width: 60px !important;
+                min-width: 40px !important;
+            }
+
             /* 搜索下拉优化 */
             .medicine-search-dropdown {
                 max-height: 250px;
@@ -469,47 +509,17 @@
             .mobile-nav-icon {
                 font-size: 16px;
             }
-            
-            /* 患者信息输入栏 - 单行紧凑布局 */
-            .patient-row {
-                flex-wrap: nowrap;
-                gap: 3px;
-                margin-bottom: 5px;
-            }
-            .patient-label {
-                width: auto;
-                font-size: 12px;
-                padding-right: 2px;
-                flex-shrink: 0;
-            }
+
+            /* 患者信息栏继承768px的grid布局，仅微调 */
             .patient-input {
                 min-height: 34px;
                 font-size: 14px;
-                padding: 4px 6px;
-                min-width: 0;
             }
-            .patient-input.small { flex: 1 1 160px; }
-            .patient-input.x-small { flex: 0 0 55px; }
-            .patient-input.xx-small { flex: 0 0 85px; }
-            .patient-input.xxx-small { flex: 0 0 80px; }
-            .patient-input.name-input { flex: 0 0 85px; }
-            #patientAddress { flex: 1 1 225px !important; }
 
-            /* 诊断行内联样式覆盖（确保单行不换行） */
-            .diagnosis-section .patient-row input#diagnosis {
-                flex: 1 1 183px;
-                min-width: 30px !important;
+            .patient-label {
+                font-size: 12px;
             }
-            .diagnosis-section .patient-row input#doseCountInput3 {
-                flex: 0 0 42px;
-                width: 42px !important;
-            }
-            .diagnosis-section .patient-row input#doctorName {
-                flex: 0 0 60px;
-                width: 60px !important;
-                min-width: 40px !important;
-            }
-            
+
             /* 药品表格进一步紧凑 */
             .medicine-table-container {
                 max-height: 400px;
@@ -603,27 +613,14 @@
             }
         }
         </style><!-- xlsx 库按需加载：首次使用 Excel 导入时由 loadXlsxLibrary() 动态加载 vendor/xlsx.full.min.js；未放置时 Excel 导入功能不可用，其他功能不受影响 -->
-</head><body><div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【标准版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><input type="text" id="loginUsername" readonly style="background:#f0f0f0;color:#555;cursor:default;" value="本能堂"></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me" style="display:none;"><input type="checkbox" id="rememberUser"><label for="rememberUser">记住用户</label></div><div class="login-field remember-me"><input type="checkbox" id="rememberPassword"><label for="rememberPassword">记住密码</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div><div id="changePwdModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>修改密码</span><span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span></div><div class="modal-body"><div class="form-group"><label>原密码</label><input type="password" id="oldPwd" placeholder="请输入原密码"></div><div class="form-group"><label>新密码</label><input type="password" id="newPwd" placeholder="请输入新密码"></div><div class="form-group"><label>确认新密码</label><input type="password" id="confirmNewPwd" placeholder="请再次输入新密码"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('changePwdModal')">取消</button><button class="action-btn primary" onclick="handleChangePassword()">修改</button></div></div></div><div id="userManageModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>用户管理</span><span class="close-btn" onclick="closeModal('userManageModal')">&times;</span></div><div class="modal-body"><div id="userList" class="user-list"></div><div class="form-group" style="margin-top:15px;"><label>添加新用户</label><input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音"><input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;"><input type="text" id="newUserName" placeholder="医师姓名（必填，中文真实姓名）" style="margin-top:5px;"><select id="newUserRole" style="margin-top:5px;width:100%;padding:5px;"><option value="user">普通用户</option><option value="admin">管理员</option></select></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('userManageModal')">关闭</button><button class="action-btn primary" onclick="handleAddUser()">添加用户</button></div></div></div><div class="top-tabs"><div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div><div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div><div class="tab-item" id="medicineManageBtn" onclick="showModal('medicineModal')">【药品管理】</div><div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div><div class="tab-item" onclick="showModal('analyticsModal')">【数据统计】</div><div class="tab-item" id="changePwdBtn" onclick="showChangePwdModal()">【修改密码】</div><div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div><div class="tab-item" onclick="showHelp()">【系统帮助】</div><div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div><div class="tab-hint">当前用户:<span style="color:#008000;font-weight:bold;" id="userDisplayName"></span>|<span style="color:#008000;font-weight:bold;">【离线标准版】</span></div></div><div class="main-container"><div class="left-panel"><div class="top-tabs-left"><div class="tab-left-item active" style="flex:1;text-align:center;">填资料</div><button class="action-btn" onclick="saveAsFormula()" style="flex:1;padding:2px 8px;font-size:12px;">存验方</button><button class="action-btn" onclick="printPrescription('portrait')" style="flex:1;padding:2px 8px;font-size:12px;">纵向打印</button><button class="action-btn" onclick="printPrescription('landscape')" style="flex:1;padding:2px 8px;font-size:12px;">横向打印</button><button class="action-btn" onclick="clearPrescription()" style="flex:1;padding:2px 8px;font-size:12px;background:#f44336;color:white;">清空</button><button class="action-btn primary" onclick="savePrescription()" style="flex:1;padding:2px 8px;font-size:12px;font-weight:bold;">保存</button></div><div class="patient-section"><div class="patient-row"><span class="patient-label">门诊</span><input type="text" id="prescriptionNo" class="patient-input name-input" readonly><span class="patient-label">性别</span><select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()"><option value="男">男</option><option value="女">女</option></select><span class="patient-label">日期</span><input type="text" id="visitDate" class="patient-input small" readonly></div><div class="patient-row"><span class="patient-label">姓名</span><input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off"><span class="patient-label">年龄</span><input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()"><span class="patient-label">电话</span><input type="text" id="patientPhone" class="patient-input small"></div><div class="patient-row"><span class="patient-label">统计</span><input type="text" id="clinicNo" class="patient-input xx-small" readonly><span class="patient-label">住址</span><input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;"></div></div><div class="symptom-section"><div class="history-tabs"><div class="history-tab active">病史症状</div><div class="history-tab">修改病史</div></div><textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea></div><div class="diagnosis-section"><div class="patient-row"><span class="patient-label">诊断</span><input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()"><span class="patient-label">剂数</span><input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')"><span style="font-size:13px;margin-right:8px;">剂</span><span class="patient-label">医师</span><input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;"></div></div><div class="action-buttons-section"><div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;"><span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span><span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span></div></div><div class="medicine-section"><div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">提示: 在简码栏输入简码，在药名栏输入药名</div><div class="medicine-table-container"><table class="medicine-table" id="prescriptionTable"><thead><tr><th style="width:25px;">#</th><th style="width:45px;">简码</th><th style="width:90px;">药物</th><th style="width:40px;">数量</th><th style="width:30px;">单位</th><th style="width:40px;">单价</th><th style="width:45px;">合计</th><th style="width:30px;">删</th></tr></thead><tbody id="prescriptionBody"></tbody></table></div><div class="medicine-search-dropdown" id="medicineSearchDropdown"></div></div></div><div class="center-panel"><div class="prescription-paper" id="prescriptionPaper"><div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div><div class="prescription-title">处 方 笺</div><div class="prescription-info"><div>姓名:<span id="paperName"></span></div><div>性别:<span id="paperGender"></span></div><div>年龄:<span id="paperAge"></span>岁</div><div>科别:中医科</div><div>门诊号:<span id="paperClinicNo"></span></div><div>日期:<span id="paperDate"></span></div></div><div style="margin-bottom:8px; line-height:1.5;"><span>病史症状:<span id="paperMedicalHistory"></span></span><div style="border-bottom:1px solid #000; margin-top:8px;"></div></div><div style="margin-bottom:3px;"><span>诊断:<span id="paperDiagnosis"></span></span><div style="border-bottom:1px solid #000; margin-top:2px;"></div></div><div class="prescription-grid" style="margin-top:3px;"><div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;"><div class="rp-mark">RP</div><div></div><div class="dose-count"><span id="paperDoseCount">7</span>剂</div></div><div id="prescriptionLines"></div></div><div class="prescription-footer" style="margin-top:3px;"><div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌生冷辛辣</div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr;"><div class="signature-item">医师: <span id="paperDoctor"></span></div><div class="signature-item">金额:</div><div class="signature-item">审核:</div></div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:4px;"><div class="signature-item">调配:</div><div class="signature-item">核对:</div><div class="signature-item">发药:</div></div></div></div></div><div class="right-panel"><div class="history-header"><span>处方历史</span><div style="display:flex;gap:16px;align-items:center;padding-right:4px;"><button class="history-refresh-btn" onclick="refreshHistory()" title="刷新历史处方" style="font-size:16px;padding:8px 10px;min-width:40px;min-height:36px;">🔄</button><button onclick="showRecycleBin()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="回收站">🗑️</button></div></div><div class="history-list" id="historyList"><div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div></div></div></div><div class="bottom-bar"></div><!-- 移动端底部导航 --><div class="mobile-nav" id="mobileNav"><div class="mobile-nav-items"><div class="mobile-nav-item active" onclick="switchMobileTab('prescription')"><span class="mobile-nav-icon">📝</span><span>门诊</span></div><div class="mobile-nav-item" onclick="switchMobileTab('history')"><span class="mobile-nav-icon">📋</span><span>历史</span></div><div class="mobile-nav-item" onclick="switchMobileTab('preview')"><span class="mobile-nav-icon">📄</span><span>预览</span></div><div class="mobile-nav-item" onclick="showModal('medicineModal')"><span class="mobile-nav-icon">💊</span><span>药品</span></div><div class="mobile-nav-item" onclick="showModal('settingsModal')"><span class="mobile-nav-icon">⚙️</span><span>设置</span></div><div class="mobile-nav-item" onclick="handleLogout()" style="color:var(--danger-color);"><span class="mobile-nav-icon">🚪</span><span>退出</span></div></div></div><!-- 移动端快捷操作栏 --><div class="mobile-action-bar" id="mobileActionBar"><div class="action-buttons"><button class="action-btn" style="flex:1;" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button><button class="action-btn" style="flex:1;" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button><button class="action-btn primary" style="flex:1;" onclick="savePrescription()">💾 保存</button><button class="action-btn" style="flex:1;" onclick="clearPrescription()">🗑️ 清空</button><button class="action-btn" style="flex:1;" id="mobileActionBtn2" onclick="showChangePwdModal()">🔐 改密</button></div></div><div class="modal" id="settingsModal"><div class="modal-content"><div class="modal-header"><h3>F1 基础设置</h3><span class="close-btn" onclick="closeModal('settingsModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;"><label>诊所名称:</label><input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>医师姓名:</label><input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>诊疗费:</label><input type="number" id="defaultRegFee" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>默认剂数:</label><input type="number" id="defaultDose" style="width:100%;padding:6px;margin-top:4px;"></div><div id="autoStartSection" style="margin-bottom:12px;display:none;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoStart" style="width:18px;height:18px;">开机自动启动（仅管理员）</label><div style="font-size:11px;color:#666;margin-top:4px;">勾选后，系统将在电脑开机时自动启动</div></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="clinicPrescriptionModal"><div class="modal-content" style="max-width:900px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📋 处方查阅</h3><span class="close-btn" onclick="closeModal('clinicPrescriptionModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;"><input type="text" id="filterText" placeholder="搜索姓名/门诊号/诊断" oninput="filterClinicPrescriptions()" style="flex:1;min-width:150px;padding:6px;"><select id="filterDoctor" onchange="filterClinicPrescriptions()" style="padding:6px;"><option value="">全部医师</option></select><button class="action-btn" onclick="loadClinicPrescriptionList()">🔄 刷新</button></div><div id="clinicPrescriptionStats" style="margin-bottom:10px;font-size:12px;color:#666;"></div><div id="clinicPrescriptionList" style="overflow:auto;max-height:400px;border:1px solid #ddd;border-radius:4px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('clinicPrescriptionModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 数据统计</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js"></script>
-<script src="permission.js"></script>
-<script src="debug-logger.js"></script>
-<script src="print-utils.js"></script>
-<script src="medicine-dict.js"></script>
-<!-- ★ 已移除 db-adapter.js 引用：它与 index.html 的 openDB(DB_VERSION=3) 产生版本冲突
-     db-adapter.js 使用 DB_VERSION=2 自动初始化并持有连接，阻塞 index.html 的版本3升级
-     导致所有 IndexedDB 操作失败，处方数据无法保存，这是"重新登入后历史处方消失"的真正根因
-     index.html 已有完整的 IndexedDB 逻辑（openDB/savePrescriptionToDB/getAllPrescriptionsFromDB），不需要 db-adapter.js -->
-<!-- <script src="db-adapter.js"></script> -->
-<script src="performance-utils.js"></script>
-<script src="prescription-core.js"></script>
-<script src="patient-archive.js"></script>
+</head><body><div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【机构版】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')document.getElementById('loginPassword').focus()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser"><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div><div id="changePwdModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>修改密码</span><span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span></div><div class="modal-body"><div class="form-group"><label>原密码</label><input type="password" id="oldPwd" placeholder="请输入原密码"></div><div class="form-group"><label>新密码</label><input type="password" id="newPwd" placeholder="请输入新密码"></div><div class="form-group"><label>确认新密码</label><input type="password" id="confirmNewPwd" placeholder="请再次输入新密码"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('changePwdModal')">取消</button><button class="action-btn primary" onclick="handleChangePassword()">修改</button></div></div></div><div id="userManageModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>用户管理</span><span class="close-btn" onclick="closeModal('userManageModal')">&times;</span></div><div class="modal-body"><div id="userList" class="user-list"></div><div class="form-group" style="margin-top:15px;"><label>添加新用户</label><input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音"><input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;"><input type="text" id="newUserName" placeholder="医师姓名（必填，中文真实姓名）" style="margin-top:5px;"><select id="newUserRole" style="margin-top:5px;width:100%;padding:5px;"><option value="user">普通用户</option><option value="admin">管理员</option></select></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('userManageModal')">关闭</button><button class="action-btn primary" onclick="handleAddUser()">添加用户</button></div></div></div><div class="top-tabs"><div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div><div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div><div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div><div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div><div class="tab-item" onclick="showModal('analyticsModal')">【数据统计】</div><div class="tab-item" id="userManageBtn" onclick="showUserManageModal()" style="display:none;">【用户管理】</div><div class="tab-item" id="changePwdBtn" style="display:none;" onclick="showChangePwdModal()">【修改密码】</div><div class="tab-item" id="clinicPrescriptionBtn" onclick="showClinicPrescriptions()" style="display:none;background:#e8f5e9;color:#2e7d32;border-color:#4caf50;">【处方查阅】</div><div class="tab-item" onclick="showHelp()">【系统帮助】</div><div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div><div class="tab-hint">当前用户:<span style="color:#008000;font-weight:bold;" id="userDisplayName"></span>|<span style="color:#008000;font-weight:bold;">【离线机构版】</span></div></div><div class="main-container"><div class="left-panel"><div class="top-tabs-left"><div class="tab-left-item active" style="flex:1;text-align:center;">填资料</div><button class="action-btn" onclick="saveAsFormula()" style="flex:1;padding:2px 8px;font-size:12px;">存验方</button><button class="action-btn" onclick="printPrescription('portrait')" style="flex:1;padding:2px 8px;font-size:12px;">纵向打印</button><button class="action-btn" onclick="printPrescription('landscape')" style="flex:1;padding:2px 8px;font-size:12px;">横向打印</button><button class="action-btn" onclick="clearPrescription()" style="flex:1;padding:2px 8px;font-size:12px;background:#f44336;color:white;">清空</button><button class="action-btn primary" onclick="savePrescription()" style="flex:1;padding:2px 8px;font-size:12px;font-weight:bold;">保存</button></div><div class="patient-section"><div class="patient-row"><span class="patient-label">门诊</span><input type="text" id="prescriptionNo" class="patient-input name-input" readonly><span class="patient-label">性别</span><select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()"><option value="男">男</option><option value="女">女</option></select><span class="patient-label">日期</span><input type="text" id="visitDate" class="patient-input small" readonly></div><div class="patient-row"><span class="patient-label">姓名</span><input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off"><span class="patient-label">年龄</span><input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()"><span class="patient-label">电话</span><input type="text" id="patientPhone" class="patient-input small"></div><div class="patient-row"><span class="patient-label">统计</span><input type="text" id="clinicNo" class="patient-input xx-small" readonly><span class="patient-label">住址</span><input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;"></div></div><div class="symptom-section"><div class="history-tabs"><div class="history-tab active">病史症状</div><div class="history-tab">修改病史</div></div><textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea></div><div class="diagnosis-section"><div class="patient-row"><span class="patient-label">诊断</span><input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()"><span class="patient-label">剂数</span><input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')"><span style="font-size:13px;margin-right:8px;">剂</span><span class="patient-label">医师</span><input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;"></div></div><div class="action-buttons-section"><div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;"><span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span><span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span></div></div><div class="medicine-section"><div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">提示: 在简码栏输入简码，在药名栏输入药名</div><div class="medicine-table-container"><table class="medicine-table" id="prescriptionTable"><thead><tr><th style="width:25px;">#</th><th style="width:45px;">简码</th><th style="width:90px;">药物</th><th style="width:40px;">数量</th><th style="width:30px;">单位</th><th style="width:40px;">单价</th><th style="width:45px;">合计</th><th style="width:30px;">删</th></tr></thead><tbody id="prescriptionBody"></tbody></table></div><div class="medicine-search-dropdown" id="medicineSearchDropdown"></div></div></div><div class="center-panel"><div class="prescription-paper" id="prescriptionPaper"><div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div><div class="prescription-title">处 方 笺</div><div class="prescription-info"><div>姓名:<span id="paperName"></span></div><div>性别:<span id="paperGender"></span></div><div>年龄:<span id="paperAge"></span>岁</div><div>科别:中医科</div><div>门诊号:<span id="paperClinicNo"></span></div><div>日期:<span id="paperDate"></span></div></div><div style="margin-bottom:8px; line-height:1.5;"><span>病史症状:<span id="paperMedicalHistory"></span></span><div style="border-bottom:1px solid #000; margin-top:8px;"></div></div><div style="margin-bottom:3px;"><span>诊断:<span id="paperDiagnosis"></span></span><div style="border-bottom:1px solid #000; margin-top:2px;"></div></div><div class="prescription-grid" style="margin-top:3px;"><div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;"><div class="rp-mark">RP</div><div></div><div class="dose-count"><span id="paperDoseCount">7</span>剂</div></div><div id="prescriptionLines"></div></div><div class="prescription-footer" style="margin-top:3px;"><div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌生冷辛辣</div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr;"><div class="signature-item">医师: <span id="paperDoctor"></span></div><div class="signature-item">金额:</div><div class="signature-item">审核:</div></div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:4px;"><div class="signature-item">调配:</div><div class="signature-item">核对:</div><div class="signature-item">发药:</div></div></div></div></div><div class="right-panel"><div class="history-header"><span>处方历史</span><div style="display:flex;gap:16px;align-items:center;padding-right:4px;"><button class="history-refresh-btn" onclick="refreshHistory()" title="刷新历史处方" style="font-size:16px;padding:8px 10px;min-width:40px;min-height:36px;">🔄</button><button onclick="showRecycleBin()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="回收站">🗑️</button></div></div><div class="history-list" id="historyList"><div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div></div></div></div><div class="bottom-bar"></div><!-- 移动端底部导航 --><div class="mobile-nav" id="mobileNav"><div class="mobile-nav-items"><div class="mobile-nav-item active" onclick="switchMobileTab('prescription')"><span class="mobile-nav-icon">📝</span><span>门诊</span></div><div class="mobile-nav-item" onclick="switchMobileTab('history')"><span class="mobile-nav-icon">📋</span><span>历史</span></div><div class="mobile-nav-item" onclick="switchMobileTab('preview')"><span class="mobile-nav-icon">📄</span><span>预览</span></div><div class="mobile-nav-item" onclick="showModal('medicineModal')"><span class="mobile-nav-icon">💊</span><span>药品</span></div><div class="mobile-nav-item" onclick="showModal('settingsModal')"><span class="mobile-nav-icon">⚙️</span><span>设置</span></div><div class="mobile-nav-item" onclick="handleLogout()" style="color:var(--danger-color);"><span class="mobile-nav-icon">🚪</span><span>退出</span></div></div></div><!-- 移动端快捷操作栏 --><div class="mobile-action-bar" id="mobileActionBar"><div class="action-buttons"><button class="action-btn" style="flex:1;" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button><button class="action-btn" style="flex:1;" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button><button class="action-btn primary" style="flex:1;" onclick="savePrescription()">💾 保存</button><button class="action-btn" style="flex:1;" onclick="clearPrescription()">🗑️ 清空</button><button class="action-btn" style="flex:1;" id="mobileActionBtn2" onclick="showChangePwdModal()">🔐 改密</button></div></div><div class="modal" id="settingsModal"><div class="modal-content"><div class="modal-header"><h3>F1 基础设置</h3><span class="close-btn" onclick="closeModal('settingsModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;"><label>诊所名称:</label><input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>医师姓名:</label><input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>诊疗费:</label><input type="number" id="defaultRegFee" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>默认剂数:</label><input type="number" id="defaultDose" style="width:100%;padding:6px;margin-top:4px;"></div><div id="autoStartSection" style="margin-bottom:12px;display:none;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoStart" style="width:18px;height:18px;">开机自动启动（仅管理员）</label><div style="font-size:11px;color:#666;margin-top:4px;">勾选后，系统将在电脑开机时自动启动</div></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="clinicPrescriptionModal"><div class="modal-content" style="max-width:900px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📋 处方查阅</h3><span class="close-btn" onclick="closeModal('clinicPrescriptionModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;"><input type="text" id="filterText" placeholder="搜索姓名/门诊号/诊断" oninput="filterClinicPrescriptions()" style="flex:1;min-width:150px;padding:6px;"><select id="filterDoctor" onchange="filterClinicPrescriptions()" style="padding:6px;"><option value="">全部医师</option></select><button class="action-btn" onclick="loadClinicPrescriptionList()">🔄 刷新</button></div><div id="clinicPrescriptionStats" style="margin-bottom:10px;font-size:12px;color:#666;"></div><div id="clinicPrescriptionList" style="overflow:auto;max-height:400px;border:1px solid #ddd;border-radius:4px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('clinicPrescriptionModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 数据统计</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js"></script><script src="permission.js"></script><script src="debug-logger.js"></script><script src="print-utils.js"></script><script src="medicine-dict.js"></script><!-- ★ 已移除 db-adapter.js 引用：避免与 index.html 的 openDB(DB_VERSION=3) 版本冲突导致IndexedDB操作失败 --><!-- <script src="db-adapter.js"></script> --><script src="performance-utils.js"></script><script src="prescription-core.js"></script><script src="patient-archive.js"></script>
 <script src="security-guard.js"></script>
 <!-- ★ 双重保障：通过 <script> 标签加载 video-recorder.js，防止 main.js injectVideoRecorder 注入失败 -->
 <!-- IIFE 有 window.__videoRecorderInjected 防重复检查，不会与 main.js 注入冲突 -->
 <script src="electron/video-recorder.js"></script>
-
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
-window.EDITION = 'personal';
+window.EDITION = 'clinic_custom';
 // ★v2.0 统一架构：声明 APP_MODE（offline/cloud），供 db-adapter.js 自动检测
 window.APP_MODE = 'offline';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
@@ -655,42 +652,47 @@ if (window.Permission) {
         }
     }).catch(function(e) { console.warn('Permission init failed:', e); });
 }
-</script><script>// ============================================================================
-        // 【诊所定制配置区 - 可编辑】
-        // 方法1: 直接修改下面的 clinicName 和 doctorName 值（打包时 edit-config.ps1 会自动更新）
-        // 方法2: 运行 edit-config.ps1 交互式配置（推荐）
-        // 方法3: 修改 config.json 文件，程序启动时会自动读取
-        // ============================================================================
+</script><script>window.addEventListener('error', function(e) {
+    console.error('[全局错误]', e.message, e.error);
+});
+window.addEventListener('unhandledrejection', function(e) {
+    console.error('[未处理Promise]', e.reason);
+});
+let currentUser = null;
+
         const CONFIG = {
             clinicName: '本能堂中医诊所',
             doctorName: '本能堂',
-            edition: 'personal',
-            configIssuedAt: '2026-08-06T09:38:42.973Z'
+            edition: 'clinic_custom',
+            configIssuedAt: '2026-08-06T09:13:44.720Z'
         };
 
-        async function loadConfigFromFile() {
+        // 同步加载 config.json（file://协议下同步XHR可靠，确保init前CONFIG已更新）
+        (function() {
             try {
-                const response = await fetch('config.json');
-                if (response.ok) {
-                    const json = await response.json();
-                    if (json.clinicName) CONFIG.clinicName = json.clinicName;
-                    if (json.doctorName) CONFIG.doctorName = json.doctorName;
-                    if (json.configIssuedAt) CONFIG.configIssuedAt = json.configIssuedAt;
-                    console.log('[CONFIG] Loaded from config.json:', CONFIG.clinicName, CONFIG.doctorName);
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', 'config.json', false);
+                xhr.send();
+                if (xhr.status === 200 || xhr.status === 0) {
+                    var cfg = JSON.parse(xhr.responseText);
+                    if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
+                    if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
+                    if (cfg.edition) CONFIG.edition = cfg.edition;
+                    if (cfg.users) CONFIG.users = cfg.users;
+                    if (cfg.configIssuedAt) CONFIG.configIssuedAt = cfg.configIssuedAt;
                 }
-            } catch (e) {
-                console.log('[CONFIG] config.json not found, using default values');
+            } catch(e) {
+                console.warn('[CONFIG] 加载 config.json 失败:', e.message);
             }
-        }
-        loadConfigFromFile();
+        })();
 
         window.__APP_VERSION__ = '2026-07-29-v1';
 
         // 版本标签统一显示 V1.0.0（与软著申请版本号一致）
         (function() {
             var tag = document.querySelector('.version-tag');
-            if (tag) tag.textContent = '【离线标准版】 V1.0.0';
-            console.log('%c惠康中医离线标准版 V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
+            if (tag) tag.textContent = '【离线机构版】 V1.0.0';
+            console.log('%c惠康中医离线机构版 V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
         })();
 
         const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
@@ -717,52 +719,6 @@ if (window.Permission) {
         function loadAllPrescriptions() {
             return Storage.getJSON('all_prescription_list', []);
         }
-
-        window.addEventListener('error', function(e) {
-            console.error('[全局错误]', e.message, e.error);
-        });
-        window.addEventListener('unhandledrejection', function(e) {
-            console.error('[未处理Promise]', e.reason);
-        });
-
-        function createPromptModal() {
-            const modal = document.createElement('div');
-            modal.id = 'customPromptModal';
-            modal.className = 'modal';
-            modal.style.display = 'none';
-            modal.innerHTML = '<div class="modal-content" style="max-width:400px;"><div class="modal-header"><span id="promptTitle">提示</span><span class="close-btn" onclick="closePromptModal()">&times;</span></div><div class="modal-body" style="padding:20px;"><div id="promptMessage" style="margin-bottom:15px;font-size:14px;"></div><input type="text" id="promptInput" style="width:100%;padding:8px;border:1px solid #ddd;border-radius:4px;font-size:14px;" autocomplete="off"></div><div class="modal-footer"><button class="action-btn" onclick="closePromptModal(null)">取消</button><button class="action-btn primary" onclick="closePromptModal(true)">确定</button></div></div></div>';
-            document.body.appendChild(modal);
-        }
-        createPromptModal();
-
-        let _promptResolve = null;
-        function closePromptModal(confirmed) {
-            const modal = document.getElementById('customPromptModal');
-            const input = document.getElementById('promptInput');
-            const value = confirmed ? input.value : null;
-            modal.style.display = 'none';
-            if (_promptResolve) {
-                _promptResolve(value);
-                _promptResolve = null;
-            }
-        }
-
-        const _nativePrompt = window.prompt;
-        window.prompt = function(message, defaultValue) {
-            if (!IS_ELECTRON) return _nativePrompt.apply(window, arguments);
-            return new Promise((resolve) => {
-                _promptResolve = resolve;
-                const modal = document.getElementById('customPromptModal');
-                const msgEl = document.getElementById('promptMessage');
-                const input = document.getElementById('promptInput');
-                msgEl.innerHTML = message.replace(/\n/g, '<br>');
-                input.value = defaultValue || '';
-                modal.style.display = 'flex';
-                setTimeout(() => input.focus(), 50);
-            });
-        };
-
-        let currentUser = null;
 
         const DB_NAME = 'PrescriptionDB';
         const DB_VERSION = 3;
@@ -974,9 +930,7 @@ if (window.Permission) {
             }
         }
 
-
-        // Android 返回按钮处理（由 MainActivity.onBackPressed 调用）
-        // 返回 true 表示已处理（阻止默认行为），返回 false 表示未处理（执行默认行为）
+        // Android 返回键处理：关闭弹窗/历史面板/中心面板，否则退出 APP
         function handleAndroidBack() {
             try {
                 const loginOverlay = document.getElementById('loginOverlay');
@@ -1012,24 +966,12 @@ if (window.Permission) {
 
         // 移动端标签切换
         function switchMobileTab(tabName) {
-            const isMobile = window.innerWidth <= 768;
             const leftPanel = document.querySelector('.left-panel');
             const centerPanel = document.querySelector('.center-panel');
             const rightPanel = document.querySelector('.right-panel');
             const mobileNavItems = document.querySelectorAll('.mobile-nav-item');
             const mobileActionBar = document.getElementById('mobileActionBar');
-
-            // 桌面版：只切换激活状态，不改变面板显示
-            if (!isMobile) {
-                mobileNavItems.forEach(item =>item.classList.remove('active'));
-                mobileNavItems.forEach(item =>{
-                    if (item.getAttribute('onclick')?.includes(tabName)) {
-                        item.classList.add('active');
-                    }
-                });
-                return;
-            }
-
+            
             // 移除所有激活状态
             mobileNavItems.forEach(item =>item.classList.remove('active'));
             
@@ -1077,7 +1019,15 @@ if (window.Permission) {
         }
 
         function getDefaultUsers() {
-            // 标准版：永远只有一个固定用户（admin）
+            // 优先使用 config.json 中的用户配置
+            if (CONFIG.users && CONFIG.users.length > 0) {
+                return CONFIG.users.map(u => ({
+                    username: u.username,
+                    password: u.password,
+                    name: u.name,
+                    role: u.role || 'user'
+                }));
+            }
             return [
                 {username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin'}
             ];
@@ -1213,36 +1163,37 @@ if (window.Permission) {
 
         async function handleLogin() {
             try {
+                const username = document.getElementById('loginUsername').value.trim();
                 const password = document.getElementById('loginPassword').value;
                 const errorDiv = document.getElementById('loginError');
-
-                if (!password) {
-                    errorDiv.textContent = '请输入密码';
+                
+                if (!username || !password) {
+                    errorDiv.textContent = '请输入用户名和密码';
                     errorDiv.style.display = 'block';
                     return;
                 }
-
-                // 标准版：使用第一个用户进行认证
+                
                 const users = getUsers();
-                const user = users[0];
                 // 使用 AuthCore.verifyPassword 支持 PBKDF2 + 旧 SHA-256 + 明文兼容
-                let verified = false;
-                if (user) {
+                let user = null;
+                for (const u of users) {
+                    if (u.username !== username) continue;
                     if (window.AuthCore && AuthCore.verifyPassword) {
-                        verified = await AuthCore.verifyPassword(password, user.password || '', user.username);
+                        if (await AuthCore.verifyPassword(password, u.password || '', username)) { user = u; break; }
                     } else {
-                        verified = (user.password === await hashPassword(password));
+                        const hashedPwd = await hashPassword(password);
+                        if (u.password === hashedPwd) { user = u; break; }
                     }
                 }
-
-                if (verified) {
+                
+                if (user) {
                     // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
                     try {
                         if (window.AuthCore && AuthCore.upgradePasswordIfNeeded) {
-                            const upgraded = await AuthCore.upgradePasswordIfNeeded(password, user.password, user.username);
+                            const upgraded = await AuthCore.upgradePasswordIfNeeded(password, user.password, username);
                             if (upgraded) {
                                 const allUsers = getUsers();
-                                const idx = allUsers.findIndex(u => u.username === user.username);
+                                const idx = allUsers.findIndex(u => u.username === username);
                                 if (idx >= 0) {
                                     allUsers[idx].password = upgraded;
                                     saveUsers(allUsers);
@@ -1250,56 +1201,40 @@ if (window.Permission) {
                             }
                         }
                     } catch (e) { console.warn('密码升级失败:', e); }
-
-                    // ★标准版：currentUser.name 固定使用 CONFIG.doctorName（医师姓名）
-                    currentUser = { ...user, name: (typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : user.name };
+                    
+                    currentUser = user;
                     // 使用统一的 user_login_data 存储登录信息
                     const loginData = {
                         user: user,
                         loginTime: Date.now()
                     };
                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
-
+                    
                     const rememberUser = document.getElementById('rememberUser')?.checked;
                     if (rememberUser) {
-                        localStorage.setItem('local_rememberedUsername', user.username);
+                        saveRememberedUser(username);
                     } else {
                         localStorage.removeItem('local_rememberedUsername');
-                    }
-                    
-                    // 标准版：记住密码功能（P0-1 安全优化：禁止明文存储）
-                    // 使用 AuthCore.saveRememberedPassword 加密存储（safeStorage/DPAPI 优先，XOR PWDv2 降级）
-                    // 兼容旧明文 local_rememberedPassword：检测到时自动迁移到加密存储并删除
-                    const rememberPassword = document.getElementById('rememberPassword')?.checked;
-                    if (rememberPassword) {
-                        if (window.AuthCore && AuthCore.saveRememberedPassword) {
-                            AuthCore.saveRememberedPassword(password).catch(e => {
-                                console.warn('加密保存密码失败:', e);
-                            });
-                        } else {
-                            // 兜底：AuthCore 未加载时降级为 sessionStorage（仅会话内有效，关闭即失效）
-                            sessionStorage.setItem('auth:savedPassword', password);
-                        }
-                        // 清除可能存在的旧明文数据
-                        localStorage.removeItem('local_rememberedPassword');
-                    } else {
-                        localStorage.removeItem('local_rememberedPassword');
-                        if (window.AuthCore && AuthCore.clearRememberedPassword) {
-                            AuthCore.clearRememberedPassword().catch(e => {});
-                        } else {
-                            sessionStorage.removeItem('auth:savedPassword');
-                        }
                     }
                     
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.main-container').style.display = 'flex';
                     updateUserDisplay();
                     errorDiv.style.display = 'none';
-                    
+
+                    // 登录后自动设置医师姓名为登录用户的姓名
+                    const doctorNameInput = document.getElementById('doctorName');
+                    if (doctorNameInput) {
+                        doctorNameInput.value = user.name || '';
+                    }
+                    const defaultDoctorInput = document.getElementById('defaultDoctor');
+                    if (defaultDoctorInput) {
+                        defaultDoctorInput.value = user.name || '';
+                    }
+
                     await loadData();
                     refreshUserInterface();
-                    // 登录后切换到处方页，确保移动端底部操作栏显示
-                    try { switchMobileTab('prescription'); } catch(e) { console.warn('switchMobileTab failed:', e); }
+                    if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
 
                     // ★ PC端也显示底部录像/拍照按钮（mobileActionBar 默认 display:none 仅移动端显示）
                     // 参考云端桌面版，登录后确保底部操作栏可见
@@ -1340,9 +1275,7 @@ if (window.Permission) {
                 localStorage.removeItem('auth:loginData');
             } catch(e) {}
 
-            if (window.electronAPI && window.electronAPI.logout) {
-                await window.electronAPI.logout();
-            } else if (window.electronAPI && window.electronAPI.quitApp) {
+            if (window.electronAPI && window.electronAPI.quitApp) {
                 await window.electronAPI.quitApp();
             } else {
                 currentUser = null;
@@ -1354,15 +1287,9 @@ if (window.Permission) {
                     try { renderHistoryList([]); } catch(e) { console.warn('退出时清空历史列表失败:', e); }
                 }
                 const overlay = document.getElementById('loginOverlay');
-                if (overlay) overlay.style.display = 'flex';
-                // ★ 标准版：退出登录后同步 loginUsername 为最新的医师姓名（基础设置修改后保持同步）
-                if (typeof CONFIG !== 'undefined' && CONFIG.edition === 'personal') {
-                    const localDoctor = localStorage.getItem('local_clinicDoctor');
-                    if (localDoctor) CONFIG.doctorName = localDoctor;
-                    if (CONFIG.doctorName) {
-                        const userInput = document.getElementById('loginUsername');
-                        if (userInput) userInput.value = CONFIG.doctorName;
-                    }
+                if (overlay) {
+                    overlay.style.display = 'flex';
+                    loadRememberedUsers();
                 }
             }
         };
@@ -1451,7 +1378,6 @@ if (window.Permission) {
                 } catch(e) { console.warn('密码校验异常:', e); }
                 if (!verified) {
                     // 校验失败：可能是用户忘记之前修改的密码，提供重置为 admin 的选项
-                    // 标准版离线应用，重置密码安全性可接受
                     const reset = confirm('原密码错误！\n\n是否重置密码为默认值 admin？\n（重置后可用 admin 登录，再修改为新密码）');
                     if (reset) {
                         const defaultUsers = getDefaultUsers();
@@ -1490,6 +1416,287 @@ if (window.Permission) {
             }
         }
 
+        function showUserManageModal() {
+            if (!currentUser) return;
+            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+            if (!canManage) {
+                alert('只有管理员可以管理用户');
+                return;
+            }
+
+            renderUserList();
+            document.getElementById('newUserUsername').value = '';
+            document.getElementById('newUserPassword').value = '';
+            document.getElementById('newUserName').value = '';
+            document.getElementById('userManageModal').style.display = 'flex';
+        }
+
+        function renderUserList() {
+            const users = getUsers();
+            const listDiv = document.getElementById('userList');
+            
+            let html = '';
+            users.forEach(user =>{
+                html += `<div class="user-item"><div class="user-item-info"><div class="user-item-name">${escapeHtml(user.name)} (${escapeHtml(user.username)})</div><div class="user-item-role">${user.role === 'admin' ? '管理员' : '普通用户'}</div></div><div class="user-item-actions"><button class="user-item-btn btn-primary" onclick="handleViewUserPrescriptions('${escapeJs(user.username)}')">查看处方</button><button class="user-item-btn btn-primary" onclick="handleEditUser('${escapeJs(user.username)}')">编辑</button>${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + escapeJs(user.username) + '\')">删除</button>' : ''}</div></div>`;
+            });
+            
+            listDiv.innerHTML = html || '暂无用户';
+        }
+
+        function handleEditUser(username) {
+            const users = getUsers();
+            const user = users.find(u => u.username === username);
+            if (!user) return;
+
+            const existing = document.getElementById('editUserModal');
+            if (existing) existing.remove();
+
+            // 离线版本无云端功能，移除"使用模式"字段
+            const modal = document.createElement('div');
+            modal.id = 'editUserModal';
+            modal.className = 'modal';
+            modal.style.display = 'flex';
+            modal.innerHTML = '<div class="modal-content user-modal-content">' +
+                '<div class="modal-header"><span>编辑用户</span>' +
+                '<span class="close-btn" onclick="document.getElementById(\'editUserModal\').remove(); document.getElementById(\'userManageModal\').style.display=\'flex\';">&times;</span></div>' +
+                '<div class="modal-body">' +
+                '<div class="form-group"><label>登录用户（英文或拼音）</label>' +
+                '<input type="text" id="editUserUsername" value="' + escapeHtml(user.username) + '" placeholder="登录账号"></div>' +
+                '<div class="form-group" style="margin-top:10px;"><label>医师姓名</label>' +
+                '<input type="text" id="editUserName" value="' + escapeHtml(user.name) + '" placeholder="医师姓名"></div>' +
+                '<div class="form-group" style="margin-top:10px;"><label>新密码（留空则不修改）</label>' +
+                '<input type="password" id="editUserPassword" placeholder="留空则不修改"></div>' +
+                '<div class="form-group" style="margin-top:10px;"><label>角色</label>' +
+                '<select id="editUserRole" style="width:100%;padding:5px;">' +
+                '<option value="user"' + (user.role === 'user' ? ' selected' : '') + '>普通用户</option>' +
+                '<option value="admin"' + (user.role === 'admin' ? ' selected' : '') + '>管理员</option>' +
+                '</select></div>' +
+                '</div>' +
+                '<div class="modal-footer">' +
+                '<button class="action-btn" onclick="document.getElementById(\'editUserModal\').remove(); document.getElementById(\'userManageModal\').style.display=\'flex\';">取消</button>' +
+                '<button class="action-btn primary" onclick="confirmEditUser(\'' + escapeJs(username) + '\')">保存</button>' +
+                '</div></div>';
+            // 先隐藏用户管理弹窗，避免两个弹窗同时显示导致输入卡顿
+            document.getElementById('userManageModal').style.display = 'none';
+            document.body.appendChild(modal);
+        }
+
+        async function confirmEditUser(originalUsername) {
+            try {
+                const newUsername = document.getElementById('editUserUsername').value.trim();
+                const newName = document.getElementById('editUserName').value.trim();
+                const newPassword = document.getElementById('editUserPassword').value;
+                const newRole = document.getElementById('editUserRole').value;
+
+                if (!newUsername) { alert('用户名不能为空'); return; }
+                if (!newName) { alert('名称不能为空'); return; }
+                if (/[\u4e00-\u9fa5]/.test(newUsername)) {
+                    alert('登录账号不能使用中文，请使用英文或拼音！\n示例：zhaoyisheng 或 doctor3');
+                    return;
+                }
+                // 参考云端APP：医师姓名必须为中文（至少2个汉字）
+                if (!/^[\u4e00-\u9fa5]{2,}$/.test(newName)) {
+                    alert('医师姓名必须为中文（至少2个汉字），请输入医师真实姓名');
+                    return;
+                }
+
+                const users = getUsers();
+                if (newUsername !== originalUsername) {
+                    const exists = users.find(u => u.username === newUsername);
+                    if (exists) { alert('用户名已存在'); return; }
+                }
+                const nameExists = users.find(u => u.name === newName && u.username !== originalUsername);
+                if (nameExists) {
+                    alert('医师姓名已存在，请使用不同的姓名！');
+                    return;
+                }
+
+                const userIndex = users.findIndex(u => u.username === originalUsername);
+                if (userIndex === -1) { alert('用户不存在'); return; }
+
+                users[userIndex].username = newUsername;
+                users[userIndex].name = newName;
+                users[userIndex].role = newRole;
+                if (newPassword.trim()) {
+                    users[userIndex].password = await hashPassword(newPassword.trim());
+                } else if (!isPasswordHashed(users[userIndex].password)) {
+                    users[userIndex].password = await hashPassword(users[userIndex].password);
+                }
+                saveUsers(users);
+
+                if (currentUser && currentUser.username === originalUsername) {
+                    currentUser = users[userIndex];
+                    localStorage.setItem('local_currentUser', JSON.stringify(currentUser));
+                    updateUserDisplay();
+                }
+
+                if (newUsername !== originalUsername) {
+                    const oldPrefix = 'local_web_user_' + originalUsername + '_';
+                    const newPrefix = 'local_web_user_' + newUsername + '_';
+
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        if (key.startsWith(oldPrefix)) {
+                            const value = localStorage.getItem(key);
+                            const newKey = key.replace(oldPrefix, newPrefix);
+                            localStorage.setItem(newKey, value);
+                            localStorage.removeItem(key);
+                            i--;
+                        }
+                    }
+
+                    if (localStorage.getItem('local_rememberedUsername') === originalUsername) {
+                        localStorage.setItem('local_rememberedUsername', newUsername);
+                    }
+                }
+
+                document.getElementById('editUserModal').remove();
+                document.getElementById('userManageModal').style.display = 'flex';
+                renderUserList();
+                alert('✅ 用户信息修改成功！');
+            } catch (e) {
+                console.error('编辑用户失败:', e);
+                alert('编辑用户失败: ' + (e.message || '未知错误'));
+            }
+        }
+
+        async function handleAddUser() {
+            // 权限检查：仅管理员可添加用户
+            if (!currentUser) {
+                alert('请先登录');
+                return;
+            }
+            var adminRole = (currentUser.role || '').toLowerCase();
+            var isAdminRole = (window.AuthCore && AuthCore.isAdmin) ? AuthCore.isAdmin(currentUser) : (adminRole === 'admin' || adminRole === 'clinic_admin');
+            if (!isAdminRole) {
+                alert('只有管理员可以添加用户');
+                return;
+            }
+            const username = document.getElementById('newUserUsername').value.trim();
+            const password = document.getElementById('newUserPassword').value;
+            const name = document.getElementById('newUserName').value.trim();
+
+            if (!username || !password || !name) {
+                alert('请填写完整信息');
+                return;
+            }
+
+            // 验证用户名是否包含中文
+            if (/[\u4e00-\u9fa5]/.test(username)) {
+                alert('登录账号不能使用中文，请使用英文或拼音！\n示例：zhaoyisheng 或 doctor3');
+                return;
+            }
+
+            const users = getUsers();
+            if (users.find(u =>u.username === username)) {
+                alert('用户名已存在');
+                return;
+            }
+            if (users.find(u => u.name === name)) {
+                alert('医师姓名已存在，请使用不同的姓名！');
+                return;
+            }
+
+            const newRole = document.getElementById('newUserRole').value;
+            users.push({
+                username: username,
+                password: await hashPassword(password),
+                name: name,
+                role: newRole,
+                allowSavePrescription: true,
+                allowedMode: 'local'
+            });
+
+            saveUsers(users);
+            renderUserList();
+            document.getElementById('newUserUsername').value = '';
+            document.getElementById('newUserPassword').value = '';
+            document.getElementById('newUserName').value = '';
+            alert('用户添加成功！');
+        }
+
+        async function handleViewUserPrescriptions(username) {
+            // 权限检查：普通用户只能查看自己的处方，管理员可以查看所有用户的处方
+            if (currentUser && currentUser.role !== 'admin' && currentUser.username !== username) {
+                alert('您没有权限查看其他用户的处方！');
+                return;
+            }
+
+            // 使用 getAllUserPrescriptions 完整降级路径读取并按用户过滤处方
+            let prescriptions = await getAllUserPrescriptions(username);
+
+            if (prescriptions.length === 0) {
+                alert('该用户暂无处方数据');
+                return;
+            }
+
+            // 按时间倒序排序（最新的排在最上面）
+            prescriptions = sortPrescriptionsByTimeDesc(prescriptions);
+
+            // 移除已存在的 modal
+            const existing = document.getElementById('viewUserPrescriptionsModal');
+            if (existing) existing.remove();
+
+            // 构建处方列表 HTML
+            let listHtml = '';
+            prescriptions.forEach((p, index) => {
+                listHtml += '<div style="background:#f8f9fa;border-left:3px solid #2c5530;padding:10px 12px;margin-bottom:8px;border-radius:4px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">' +
+                        '<span style="font-weight:bold;color:#2c5530;">' + escapeHtml(p.prescriptionNo || '未编号') + '</span>' +
+                        '<span style="color:#666;font-size:13px;">' + escapeHtml(p.date || '') + '</span>' +
+                    '</div>' +
+                    '<div style="color:#333;font-size:14px;">患者：' + escapeHtml(p.patientName || '未填写') + '</div>' +
+                    (p.diagnosis ? '<div style="color:#555;font-size:13px;margin-top:4px;">诊断：' + escapeHtml(p.diagnosis) + '</div>' : '') +
+                '</div>';
+            });
+
+            const modal = document.createElement('div');
+            modal.id = 'viewUserPrescriptionsModal';
+            modal.className = 'modal';
+            modal.style.display = 'flex';
+            modal.innerHTML = '<div class="modal-content" style="max-width:500px;width:90%;max-height:80vh;">' +
+                '<div class="modal-header"><span>用户 ' + escapeHtml(username) + ' 的处方（共 ' + prescriptions.length + ' 条）</span>' +
+                '<span class="close-btn" onclick="document.getElementById(\'viewUserPrescriptionsModal\').remove()">&times;</span></div>' +
+                '<div class="modal-body" style="max-height:60vh;overflow-y:auto;padding:15px;">' + listHtml + '</div>' +
+                '<div class="modal-footer">' +
+                '<button class="action-btn primary" onclick="document.getElementById(\'viewUserPrescriptionsModal\').remove()">关闭</button>' +
+                '</div></div>';
+            document.body.appendChild(modal);
+        }
+
+        async function handleDeleteUser(username) {
+            // P1-7 安全修复：内层权限校验，防止 DevTools 绕过
+            if (!currentUser || currentUser.role !== 'admin') {
+                alert('无权限：仅管理员可删除用户');
+                return;
+            }
+            // 禁止删除自己
+            if (currentUser.username === username) {
+                alert('无法删除当前登录用户');
+                return;
+            }
+            if (!await confirm('确定删除该用户？删除后该用户的所有处方数据也将被删除！')) return;
+
+            // P7: 从 prescriptions store 批量删除该用户的处方
+            const userPrescriptions = await getAllPrescriptionsFromDB();
+            const toDelete = userPrescriptions.filter(p => p.createdBy === username);
+            for (const p of toDelete) {
+                await deletePrescriptionFromDB(p.id);
+            }
+
+            // 删除用户
+            const users = getUsers().filter(u =>u.username !== username);
+            saveUsers(users);
+
+            // 刷新处方历史列表
+            if (currentUser && currentUser.role === 'admin') {
+                prescriptionHistory = await getAllUserPrescriptions();
+            }
+
+            renderUserList();
+            alert('用户删除成功！');
+        }
+
         // ★P5-3 启用移动端录像/拍照按钮（由 video-recorder.js init 完成后调用）
         // 初始 disabled 避免模块未加载时点击弹 alert，模块加载完成后启用（同步云端 cloud_desktop）
         function enableMediaButtons() {
@@ -1503,17 +1710,14 @@ if (window.Permission) {
 
         function updateUserDisplay() {
             if (currentUser) {
-                // ★ 2026-08-03 同步：优先显示 localStorage 中保存的医师姓名，其次是 CONFIG.doctorName，最后是 currentUser.name
-                const displayName = localStorage.getItem('local_clinicDoctor') 
-                    || (typeof CONFIG !== 'undefined' && CONFIG.doctorName) 
-                    || currentUser.name 
-                    || currentUser.username;
+                // ★ 2026-08-03 同步：当前用户显示医师姓名（localStorage优先），与基础设置保持一致
+                const displayName = localStorage.getItem('local_clinicDoctor') || currentUser.name;
                 document.getElementById('userDisplayName').textContent = displayName;
                 const userManageBtn = document.getElementById('userManageBtn');
                 const changePwdBtn = document.getElementById('changePwdBtn');
                 const autoStartSection = document.getElementById('autoStartSection');
 
-                const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : false;
+                const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
                 const canChangePwd = (window.Permission && Permission.shouldShowChangePwd) ? Permission.shouldShowChangePwd(currentUser) : true;
                 const canAutoStart = (window.Permission && Permission.shouldShowAutoStart) ? Permission.shouldShowAutoStart(currentUser) : (currentUser.role === 'admin');
 
@@ -1535,67 +1739,201 @@ if (window.Permission) {
             const btn2 = document.getElementById('mobileActionBtn2');
             if (!btn2 || !currentUser) return;
 
-            const isApp = !!window.AndroidNative; // Android APP独有桥接（window.electronAPI被注入shim不能用作判断）
+            const isApp = !!window.AndroidNative;
             const changePwdText = isApp ? '🔐 改密' : '🔐 修改密码';
 
-            // 标准版统一显示"改密"按钮（不区分管理员/普通用户）
-            btn2.innerHTML = changePwdText;
-            btn2.onclick = function() { showChangePwdModal(); };
+            // 管理员显示"账户"，普通用户显示"改密"（APP和桌面一致）
+            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
+            if (canManage) {
+                btn2.innerHTML = '👤 用户';
+                btn2.onclick = function() { showUserManageModal(); };
+            } else {
+                btn2.innerHTML = changePwdText;
+                btn2.onclick = function() { showChangePwdModal(); };
+            }
             btn2.style.display = '';
         }
 
-        // 标准版：恢复记住的密码（P0-1：密码改为从加密存储读取）
-        // 标准版输入框始终显示医师姓名，不用 rememberedUsername 覆盖
-        async function initRememberedCredentials() {
-            const rememberedUsername = localStorage.getItem('local_rememberedUsername')
-                || localStorage.getItem('auth:rememberedUsername');
-            if (rememberedUsername) {
-                const rememberUserCheckbox = document.getElementById('rememberUser');
-                if (rememberUserCheckbox) {
-                    rememberUserCheckbox.checked = true;
-                }
-            }
-            // 恢复记住的密码（优先从加密存储读取）
-            let rememberedPassword = null;
-            try {
-                if (window.AuthCore && AuthCore.getRememberedPassword) {
-                    rememberedPassword = await AuthCore.getRememberedPassword();
-                }
-            } catch (e) { console.warn('读取加密密码失败:', e); }
+        // 自动填充记住的用户名
+        function initRememberedCredentials() {
+            loadRememberedUsers();
+        }
 
-            // 兼容旧明文数据：自动迁移到加密存储并删除明文
-            if (!rememberedPassword) {
-                const legacyPlain = localStorage.getItem('local_rememberedPassword');
-                if (legacyPlain) {
-                    rememberedPassword = legacyPlain;
-                    if (window.AuthCore && AuthCore.saveRememberedPassword) {
-                        AuthCore.saveRememberedPassword(legacyPlain).then(() => {
-                            localStorage.removeItem('local_rememberedPassword');
-                            console.log('[P0-1] 旧明文密码已迁移到加密存储并清除');
-                        }).catch(e => console.warn('迁移密码失败:', e));
+        async function loadRememberedUsers() {
+            try {
+                // ★ 启动时主动清理 local_rememberedUsers/local_rememberedUsername 中的历史遗留值
+                // 历史遗留账号（doctor1/doctor2/张医生/李医生）需从记住的用户列表中清除
+                const LEGACY_REMEMBERED = ['doctor1', 'doctor2', '张医生', '李医生', '张大夫', 'hkt'];
+                try {
+                    const raw = localStorage.getItem('local_rememberedUsers');
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        const arr = Array.isArray(parsed) ? parsed : [parsed];
+                        const filtered = arr.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
+                        if (filtered.length !== arr.length) {
+                            if (filtered.length > 0) {
+                                localStorage.setItem('local_rememberedUsers', JSON.stringify(filtered));
+                            } else {
+                                localStorage.removeItem('local_rememberedUsers');
+                            }
+                            console.log('[login] 已清理 local_rememberedUsers 历史遗留:', arr.length, '->', filtered.length);
+                        }
+                    }
+                    const rememberedSingle = localStorage.getItem('local_rememberedUsername');
+                    if (rememberedSingle && LEGACY_REMEMBERED.includes(rememberedSingle)) {
+                        localStorage.removeItem('local_rememberedUsername');
+                        console.log('[login] 已清理 local_rememberedUsername 历史遗留:', rememberedSingle);
+                    }
+                } catch(e) { console.warn('[login] 清理 rememberedUsers 失败:', e); }
+                // 优先使用 AuthCore（统一存储适配器）
+                if (window.AuthCore && AuthCore.loadRememberedUsers) {
+                    try {
+                        const authList = await AuthCore.loadRememberedUsers();
+                        if (Array.isArray(authList) && authList.length > 0) {
+                            // ★ 过滤历史遗留账号（doctor1/doctor2/张医生/李医生等）
+                            const stringUsernames = authList.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
+                            if (stringUsernames.length > 0) {
+                                renderRememberedUsers(stringUsernames);
+                                document.getElementById('loginUsername').value = stringUsernames[0];
+                                document.getElementById('rememberUser').checked = true;
+                                // 同步到 localStorage 作为备份
+                                localStorage.setItem('local_rememberedUsers', JSON.stringify(stringUsernames));
+                                localStorage.setItem('local_rememberedUsername', stringUsernames[0]);
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('AuthCore.loadRememberedUsers 失败，回退到 localStorage:', e);
                     }
                 }
+                // 回退：从 localStorage 读取
+                const localList = localStorage.getItem('local_rememberedUsers');
+                if (localList) {
+                    try {
+                        const parsed = JSON.parse(localList);
+                        let usernames = [];
+                        if (Array.isArray(parsed)) {
+                            usernames = parsed;
+                        } else if (typeof parsed === 'string') {
+                            usernames = [parsed];
+                        }
+                        const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
+                        if (stringUsernames.length > 0) {
+                            renderRememberedUsers(stringUsernames);
+                            document.getElementById('loginUsername').value = stringUsernames[0];
+                            document.getElementById('rememberUser').checked = true;
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('解析本地记住的用户名失败:', e);
+                    }
+                }
+                const localUsername = localStorage.getItem('local_rememberedUsername');
+                if (localUsername) {
+                    const singleList = [localUsername];
+                    renderRememberedUsers(singleList);
+                    document.getElementById('loginUsername').value = localUsername;
+                    document.getElementById('rememberUser').checked = true;
+                    localStorage.setItem('local_rememberedUsers', JSON.stringify(singleList));
+                }
+            } catch (e) {
+                console.warn('loadRememberedUsers error:', e);
             }
-            // 兜底：会话级存储（仅当前会话有效）
-            if (!rememberedPassword) {
-                rememberedPassword = sessionStorage.getItem('auth:savedPassword');
+        }
+
+        function renderRememberedUsers(usernames) {
+            const btn = document.getElementById('usernameDropdownBtn');
+            const menu = document.getElementById('usernameDropdownMenu');
+            if (!btn || !menu) return;
+
+            if (usernames.length === 0) {
+                btn.style.display = 'none';
+                menu.style.display = 'none';
+                return;
             }
 
-            if (rememberedPassword) {
-                const passwordInput = document.getElementById('loginPassword');
-                if (passwordInput) {
-                    passwordInput.value = rememberedPassword;
+            btn.style.display = 'flex';
+            btn.textContent = '▼(' + usernames.length + ')';
+            menu.innerHTML = '';
+
+            // 构建 username → name 映射，下拉菜单显示中文医师姓名
+            const users = getUsers();
+            const nameMap = {};
+            users.forEach(u => { nameMap[u.username] = u.name || u.username; });
+
+            usernames.forEach(username => {
+                const item = document.createElement('div');
+                const displayName = nameMap[username] || (typeof username === 'object' ? (username.name || username.username) : username);
+                const loginValue = typeof username === 'object' ? username.username : username;
+                item.textContent = displayName;
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    document.getElementById('loginUsername').value = loginValue;
+                    document.getElementById('loginPassword').focus();
+                    menu.classList.remove('show');
+                });
+                menu.appendChild(item);
+            });
+
+            btn.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                menu.classList.toggle('show');
+            };
+        }
+
+        function toggleUsernameDropdown() {
+            const menu = document.getElementById('usernameDropdownMenu');
+            if (menu) {
+                menu.classList.toggle('show');
+            }
+        }
+
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('usernameDropdownMenu');
+            const btn = document.getElementById('usernameDropdownBtn');
+            if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.classList.remove('show');
+            }
+        });
+
+        async function saveRememberedUser(username) {
+            if (window.AuthCore) { try { await AuthCore.saveRememberedUser(username); const r = await AuthCore.loadRememberedUsers(); if (typeof renderRememberedUsers === 'function') renderRememberedUsers(r); if (Array.isArray(r) && r.length > 0) { localStorage.setItem('local_rememberedUsers', JSON.stringify(r)); localStorage.setItem('local_rememberedUsername', String(username).trim()); } return; } catch(e) { console.warn('AuthCore.saveRememberedUser 失败，回退到 localStorage:', e); } }
+            try {
+                const cleanUsername = String(username).trim();
+                if (!cleanUsername) return;
+
+                let remembered = [];
+                const localList = localStorage.getItem('local_rememberedUsers');
+                if (localList) {
+                    try {
+                        const parsed = JSON.parse(localList);
+                        if (Array.isArray(parsed)) {
+                            remembered = parsed;
+                        } else if (typeof parsed === 'string') {
+                            remembered = [parsed];
+                        }
+                    } catch (e) {
+                        console.warn('解析本地记住的用户名失败:', e);
+                    }
                 }
-                const rememberPasswordCheckbox = document.getElementById('rememberPassword');
-                if (rememberPasswordCheckbox) {
-                    rememberPasswordCheckbox.checked = true;
-                }
+
+                remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
+                remembered.unshift(cleanUsername);
+                if (remembered.length > 5) remembered = remembered.slice(0, 5);
+
+                localStorage.setItem('local_rememberedUsername', cleanUsername);
+                localStorage.setItem('local_rememberedUsers', JSON.stringify(remembered));
+                renderRememberedUsers(remembered);
+            } catch (e) {
+                console.warn('保存记住的用户名失败:', e);
+                localStorage.setItem('local_rememberedUsername', String(username).trim());
             }
         }
 
         async function checkLoginStatus() {
-          try {
             // ★ 纵深防御 2026-07-28：APP 端启动时再次清除登录态
+            // 防止早期内联脚本和 AuthCore 迁移遗漏，确保每次打开都必须手动登录
             try {
                 if (location.href.indexOf('android_asset') >= 0 ||
                     (window.electronAPI && window.electronAPI.isAndroidAPP)) {
@@ -1635,44 +1973,9 @@ if (window.Permission) {
             }
 
             await loadRememberedUsers();
-            // 不清除密码：保留记住的密码（由 initRememberedCredentials 填充）
+            document.getElementById('loginPassword').value = '';
             document.getElementById('loginOverlay').style.display = 'flex';
-            document.querySelector('.main-container').style.display = 'none';
             currentUser = null;
-          } catch(e) {
-            console.error('checkLoginStatus error:', e);
-            // 出错时也强制显示登录界面，避免用户看到空白操作界面
-            try {
-                document.getElementById('loginOverlay').style.display = 'flex';
-                document.querySelector('.main-container').style.display = 'none';
-            } catch(_) {}
-          }
-        }
-
-        // 标准版：单用户模式，仅同步 AuthCore 状态，无需渲染用户下拉
-        async function loadRememberedUsers() {
-            try {
-                // ★ 标准版：优先从 localStorage 读取最新医师姓名，同步 CONFIG.doctorName 和 loginUsername 显示
-                const localDoctor = localStorage.getItem('local_clinicDoctor');
-                // 清除历史遗留医师名（张大夫/hkt/张医生/李医生）
-                const legacyDoctors = ['张大夫', 'hkt', '张医生', '李医生'];
-                if (localDoctor && legacyDoctors.includes(localDoctor)) {
-                    localStorage.removeItem('local_clinicDoctor');
-                } else if (localDoctor && typeof CONFIG !== 'undefined') {
-                    CONFIG.doctorName = localDoctor;
-                }
-                if (typeof CONFIG !== 'undefined' && CONFIG.edition === 'personal' && CONFIG.doctorName) {
-                    const userInput = document.getElementById('loginUsername');
-                    if (userInput) {
-                        userInput.value = CONFIG.doctorName;
-                    }
-                }
-                if (window.AuthCore && AuthCore.loadRememberedUsers) {
-                    try { await AuthCore.loadRememberedUsers(); } catch(e) {}
-                }
-            } catch(e) {
-                console.warn('loadRememberedUsers error:', e);
-            }
         }
 
         let medicines = [];
@@ -1770,10 +2073,6 @@ if (window.Permission) {
             diseaseChart: null,
             medicineChart: null,
             historyList: null,
-            patientVisitList: null,
-            customPromptModal: null,
-            promptInput: null,
-            promptMessage: null,
             init: function() {
                 this.prescriptionBody = document.getElementById('prescriptionBody');
                 this.medicineSearchDropdown = document.getElementById('medicineSearchDropdown');
@@ -1831,9 +2130,6 @@ if (window.Permission) {
                 this.diseaseChart = document.getElementById('diseaseChart');
                 this.medicineChart = document.getElementById('medicineChart');
                 this.historyList = document.getElementById('historyList');
-                this.customPromptModal = document.getElementById('customPromptModal');
-                this.promptInput = document.getElementById('promptInput');
-                this.promptMessage = document.getElementById('promptMessage');
             }
         };
         let medicineFrequency = {};
@@ -1950,7 +2246,7 @@ if (window.Permission) {
             // 原因：renumber 的 saveAllPrescriptionsToDB(readwrite 事务) 会阻塞
             //       getAllUserPrescriptions 中的 getAllPrescriptionsFromDB(readonly 事务)，
             //       导致 15 秒超时后 prescriptionHistory = []，历史处方消失。
-            // 修改密码触发 loadData → 触发 renumber → 触发 readwrite 事务 →
+            //       修改密码触发 loadData → 触发 renumber → 触发 readwrite 事务 →
             //       getAll 等待 → 超时 → 处方消失。
             // renumber 功能保留，仅在需要时手动调用（如导入数据后）。
 
@@ -1958,7 +2254,7 @@ if (window.Permission) {
 
             let savedFormulas = localStorage.getItem('local_formulas');
             let savedMedicines = localStorage.getItem('local_medicines');
-            
+
             if (IS_ELECTRON) {
                 try {
                     const formulaResult = await window.electronAPI.getUserData('local_formulas');
@@ -1993,10 +2289,9 @@ if (window.Permission) {
                 });
                 const result = await Promise.race([loadPrescriptions(), timeoutPromise]);
                 // ★token 机制：只允许最新的 loadData 调用设置 prescriptionHistory
-                // 防止 init() 异步 loadData 在 handleLogin loadData 之后完成时覆盖已加载的处方
                 if (myToken === _loadDataToken) {
                     prescriptionHistory = result;
-                    // ★双重备份：加载成功后同步到 localStorage，作为 IndexedDB 失败时的降级数据源
+                    // ★双重备份：加载成功后同步到 localStorage
                     try {
                         if (Array.isArray(result) && result.length > 0) {
                             localStorage.setItem('all_prescription_list', JSON.stringify(result));
@@ -2010,9 +2305,6 @@ if (window.Permission) {
                 if (myToken !== _loadDataToken) {
                     console.warn('[loadData] token=' + myToken + ' 已过期，跳过降级处理');
                 } else {
-                    // ★修复"重新登入后历史处方不显示"：失败时优先从 localStorage 读取作为降级，
-                    // 而非保留上一用户的数据（会被 filterPrescriptionsByPermission 过滤为空）。
-                    // 这样即使 IndexedDB 事务冲突/超时，仍能从 localStorage 恢复处方数据。
                     let fallbackPrescriptions = [];
                     try {
                         const savedPrescriptions = localStorage.getItem('all_prescription_list');
@@ -2026,13 +2318,12 @@ if (window.Permission) {
                     } catch(lsErr) {
                         console.warn('[loadData] localStorage 降级读取失败:', lsErr);
                     }
-                    // 仅当降级数据非空或当前 prescriptionHistory 为空时才覆盖，
-                    // 避免降级失败时把已有数据清空
                     if (fallbackPrescriptions.length > 0 || !Array.isArray(prescriptionHistory) || prescriptionHistory.length === 0) {
                         prescriptionHistory = fallbackPrescriptions;
                     }
                 }
             }
+            
             defaultMedicines = [
                 {name:'阿胶',code:'AJ',price:3.3,unit:'g',dosage:9},
                 {name:'矮地茶',code:'ADZ',price:0.048,unit:'g',dosage:15},
@@ -2717,7 +3008,7 @@ if (window.Permission) {
             if (medicines.length === 0) {
                 medicines = defaultMedicines;
             }
-
+            
             buildMedicineMap();
             loadMedicineFrequency();
             
@@ -2730,6 +3021,9 @@ if (window.Permission) {
                 }
                 if (!m.price) {
                     m.price = 0.0;
+                }
+                if (m.costPrice === undefined || m.costPrice === null || m.costPrice === '') {
+                    m.costPrice = Math.round((m.price || 0) * 0.8 * 100) / 100;
                 }
             });
         }
@@ -2827,7 +3121,7 @@ if (window.Permission) {
         }
 
         async function renumberHistoricalPrescriptions() {
-            // P7: 从 prescriptions store 读取
+            // P7: 从 prescriptions store 读取全量处方
             let allPrescriptions = await getAllPrescriptionsFromDB();
 
             if (allPrescriptions.length === 0) {
@@ -2881,16 +3175,11 @@ if (window.Permission) {
                     }
                 }
             });
-            
-            localStorage.setItem('all_prescription_list', JSON.stringify(allPrescriptions));
-            saveToIndexedDB('settings', { key: 'all_prescription_list', value: allPrescriptions }).catch(e => {});
-            // P7: 批量同步到 prescriptions store
+
+            // P7: 批量更新编号到 prescriptions store
             await saveAllPrescriptionsToDB(allPrescriptions).catch(e => {
-                console.error('同步重编号结果到 prescriptions store 失败:', e);
+                console.error('批量更新编号到 prescriptions store 失败:', e);
             });
-            if (IS_ELECTRON) {
-                await window.electronAPI.saveUserData('all_prescription_list', allPrescriptions);
-            }
         }
 
         async function generatePrescriptionNo() {
@@ -2915,29 +3204,9 @@ if (window.Permission) {
             return year + month + day + String(newSeq).padStart(2, '0');
         }
 
-        function populateUserList() {
-            // 标准版：用户名固定显示医师姓名（来自 CONFIG）
-            // ★ 优先从 localStorage 读取最新医师姓名（基础设置修改后保存到这里）
-            const localDoctor = localStorage.getItem('local_clinicDoctor');
-            // 清除历史遗留医师名（张大夫/hkt/张医生/李医生）
-            const legacyDoctors = ['张大夫', 'hkt', '张医生', '李医生'];
-            if (localDoctor && legacyDoctors.includes(localDoctor)) {
-                localStorage.removeItem('local_clinicDoctor');
-            } else if (localDoctor && typeof CONFIG !== 'undefined') {
-                CONFIG.doctorName = localDoctor;
-            }
-            const input = document.getElementById('loginUsername');
-            if (!input) return;
-            input.value = (typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : '本能堂';
-        }
-
         async function init() {
-          try {
             injectRecycleBinButton();
-            populateUserList();
-            checkLoginStatus().catch(e => console.warn('checkLoginStatus error:', e));
-            // 恢复记住的用户名/密码（登录界面显示后；P0-1 改为 async 调用，支持加密读取）
-            initRememberedCredentials().catch(e => console.warn('initRememberedCredentials error:', e));
+            checkLoginStatus();
             // 不在init中调用loadData()，因为用户还没登录
             // loadData()会在handleLogin成功后调用
             const now = new Date();
@@ -2958,10 +3227,10 @@ if (window.Permission) {
                     localStorage.setItem('local_configAppliedAt', _cfgIssued);
                 }
             } catch(e) {}
-            const clinicNameVal = localStorage.getItem('local_clinicName') || ((typeof CONFIG !== 'undefined' && CONFIG.clinicName) ? CONFIG.clinicName : '本能堂中医诊所');
+            const clinicNameVal = localStorage.getItem('local_clinicName') || CONFIG.clinicName || '本能堂中医诊所';
             const regFeeVal = localStorage.getItem('local_defaultRegFee') || '0';
             const doseVal = localStorage.getItem('local_defaultDose') || '7';
-            const clinicDoctorVal = localStorage.getItem('local_clinicDoctor') || ((typeof CONFIG !== 'undefined' && CONFIG.doctorName) ? CONFIG.doctorName : '本能堂');
+            const clinicDoctorVal = localStorage.getItem('local_clinicDoctor') || CONFIG.doctorName || '本能堂';
             document.getElementById('clinicName').value = clinicNameVal;
             document.getElementById('clinicNameDisplay').textContent = clinicNameVal;
             document.getElementById('defaultRegFee').value = regFeeVal;
@@ -3016,23 +3285,79 @@ if (window.Permission) {
             updatePrescriptionPaper();
             // P1-1 每日首次启动自动备份（异步，不阻塞 UI）
             dailyAutoBackup().catch(e => console.warn('[Backup] dailyAutoBackup error:', e));
-          } catch(e) {
-            console.error('init error:', e);
-          }
+            
+            // ★ bnzc:// 一键激活：检查是否有待激活数据
+            if (IS_ELECTRON && window.electronAPI && window.electronAPI.bnzcGetPendingActivation) {
+                try {
+                    const result = await window.electronAPI.bnzcGetPendingActivation();
+                    if (result && result.success && result.data && result.data.code) {
+                        console.log('[Bnzc] 主窗口检测到待激活数据:', result.data.code);
+                        // 显示激活提示并执行自动激活
+                        showBnzcActivationNotice(result.data);
+                    }
+                } catch (e) {
+                    console.warn('[Bnzc] 主窗口检查待激活数据失败:', e);
+                }
+            }
+            
+            // ★ bnzc:// 运行时监听（软件已运行时收到链接）
+            if (IS_ELECTRON && window.electronAPI && window.electronAPI.onBnzcPendingActivation) {
+                window.electronAPI.onBnzcPendingActivation(async (data) => {
+                    console.log('[Bnzc] 主窗口收到运行时激活链接:', data.code);
+                    showBnzcActivationNotice(data);
+                });
+            }
+        }
+        
+        // ★ bnzc:// 主窗口激活通知与自动激活
+        async function showBnzcActivationNotice(data) {
+            if (!data || !data.code) return;
+            const typeInfo = '机构版';
+            const msg = `收到一键激活链接：\n激活码：${data.code}\n${data.clinicName ? '诊所：' + data.clinicName + '\n' : ''}${data.user ? '用户：' + data.user + '\n' : ''}\n\n是否现在激活？`;
+            if (confirm(msg)) {
+                try {
+                    const result = await window.electronAPI.bnzcAutoActivate({
+                        code: data.code,
+                        clinicName: data.clinicName || '',
+                        user: data.user || ''
+                    });
+                    if (result && result.success) {
+                        alert('✅ 激活成功！即将重启软件...');
+                        if (window.electronAPI.bnzcClearPendingActivation) {
+                            window.electronAPI.bnzcClearPendingActivation();
+                        }
+                        setTimeout(() => {
+                            if (window.electronAPI.license && window.electronAPI.license.restart) {
+                                window.electronAPI.license.restart();
+                            }
+                        }, 1500);
+                    } else {
+                        alert('❌ 激活失败：' + (result.error || '未知错误'));
+                        if (window.electronAPI.bnzcClearPendingActivation) {
+                            window.electronAPI.bnzcClearPendingActivation();
+                        }
+                    }
+                } catch (e) {
+                    alert('❌ 激活异常：' + e.message);
+                }
+            } else {
+                if (window.electronAPI.bnzcClearPendingActivation) {
+                    window.electronAPI.bnzcClearPendingActivation();
+                }
+            }
         }
 
         async function handleBeforeUnload() {
             try {
                 localStorage.setItem('local_formulas', JSON.stringify(formulas));
-
-                // P7: 处方数据已通过 savePrescription 保存到 prescriptions store
+                
+                // P7: 处方数据已通过 savePrescriptionToDB 保存到 prescriptions store
                 // 此处仅同步到 Electron 环境
                 if (IS_ELECTRON) {
                     await window.electronAPI.saveUserData('local_formulas', formulas);
                     const allPrescriptions = await getAllPrescriptionsFromDB();
-                    if (allPrescriptions && allPrescriptions.length > 0) {
+                    if (allPrescriptions.length > 0) {
                         await window.electronAPI.saveUserData('all_prescription_list', allPrescriptions);
-                        localStorage.setItem('all_prescription_list', JSON.stringify(allPrescriptions));
                     }
                 }
             } catch(e) {
@@ -3260,25 +3585,17 @@ if (window.Permission) {
                 let filtered = [];
                 const sanitizedQuery = query.replace(/[<>\"\'&]/g, '').toLowerCase();
                 const maxResults = 50;
-                const existingNames = new Set(prescriptionItems.map(item => item.name));
 
                 if (column === 'code') {
                     if (medicineCodeIndex.size > 0) {
                         for (const [code, meds] of medicineCodeIndex) {
                             if (code.startsWith(sanitizedQuery)) {
-                                for (const m of meds) {
-                                    if (!existingNames.has(m.name)) {
-                                        filtered.push(m);
-                                        if (filtered.length >= maxResults) break;
-                                    }
-                                }
+                                filtered.push(...meds);
                                 if (filtered.length >= maxResults) break;
                             }
                         }
                     } else {
-                        const meds = medicines.length > 0 ? medicines : defaultMedicines;
-                        for (const m of meds) {
-                            if (!m || existingNames.has(m.name)) continue;
+                        for (const m of medicines) {
                             if (m.code && m.code.toLowerCase().startsWith(sanitizedQuery)) {
                                 filtered.push(m);
                                 if (filtered.length >= maxResults) break;
@@ -3286,15 +3603,16 @@ if (window.Permission) {
                         }
                     }
                 } else {
-                    const meds = medicines.length > 0 ? medicines : defaultMedicines;
-                    for (const m of meds) {
-                        if (!m || existingNames.has(m.name)) continue;
+                    for (const m of medicines) {
                         if (m.name && m.name.includes(sanitizedQuery)) {
                             filtered.push(m);
                             if (filtered.length >= maxResults) break;
                         }
                     }
                 }
+                
+                const existingNames = new Set(prescriptionItems.map(item => item.name));
+                filtered = filtered.filter(m => !existingNames.has(m.name));
 
                 filtered.sort((a, b) => {
                     const aFreq = medicineFrequency[a.name] || 0;
@@ -3308,19 +3626,16 @@ if (window.Permission) {
 
                 filtered = filtered.slice(0, 20);
 
-                if (filtered.length > 0) {
+                if (filtered.length >0) {
                     selectedSearchIndex = 0;
-                    let html = '';
-                    for (let i = 0; i < filtered.length; i++) {
-                        const m = filtered[i];
+                    dropdown.innerHTML = filtered.map((m,i) =>{
                         const safeName = (m.name || '').replace(/[<>\"\'&]/g, '');
                         const safeCode = (m.code || '').replace(/[<>\"\'&]/g, '');
                         const safePrice = parseFloat(m.price) || 0;
                         const showDosage = m.dosage !== undefined && m.dosage !== null && m.dosage !== '' ? parseInt(m.dosage) : 'undefined';
-                        html += `<div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}"
+                        return `<div class="search-item ${i === selectedSearchIndex ? 'selected' : ''}"
                                 onclick="selectMedicine(${currentEditIndex},'${safeName}','${safeCode}',${safePrice})">${safeName} [${safeCode}] - ${showDosage === 'undefined' ? '?' : showDosage + (m.unit || 'g')}</div>`;
-                    }
-                    dropdown.innerHTML = html;
+                    }).join('');
                     dropdown.style.display = 'block';
                     // ★ 自适应位置：下方空间不足时自动翻到输入框上方显示（修复遮挡）
                     try {
@@ -3405,7 +3720,7 @@ if (window.Permission) {
 
         function deleteRow(index) {
             prescriptionItems.splice(index, 1);
-            if (prescriptionItems.length < 15) addEmptyRow();
+            if (prescriptionItems.length< 15) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
             calculateAmount();
@@ -3419,11 +3734,11 @@ if (window.Permission) {
             } else {
                 value = parseInt(DOM_CACHE.doseCountInput3?.value || '7') || 7;
             }
-
+            
             if (DOM_CACHE.doseCountInput3 && DOM_CACHE.doseCountInput3.value != value) DOM_CACHE.doseCountInput3.value = value;
             const display = document.getElementById('paperDoseCount');
             if (display) display.textContent = value;
-
+            
             calculateAmount();
         }
 
@@ -3434,9 +3749,9 @@ if (window.Permission) {
             } else {
                 value = parseFloat(DOM_CACHE.registrationFee2?.value || '0') || 0;
             }
-
+            
             if (DOM_CACHE.registrationFee2 && DOM_CACHE.registrationFee2.value != value) DOM_CACHE.registrationFee2.value = value;
-
+            
             calculateAmount();
         }
 
@@ -3448,10 +3763,10 @@ if (window.Permission) {
             const perDoseText = medicineTotal.toFixed(2);
             const totalText = (medicineTotal * doseCount).toFixed(2);
             const grandText = total.toFixed(2);
-
+            
             const tempAmountEl = document.getElementById('tempAmount');
             if (tempAmountEl) tempAmountEl.value = grandText;
-
+            
             if (DOM_CACHE.perDosePrice2) DOM_CACHE.perDosePrice2.textContent = perDoseText;
             if (DOM_CACHE.totalPrice2) DOM_CACHE.totalPrice2.textContent = totalText;
             if (DOM_CACHE.grandTotal2) DOM_CACHE.grandTotal2.textContent = grandText;
@@ -4061,22 +4376,21 @@ if (window.Permission) {
                 console.error('[P0-5] 保存到回收站失败（继续硬删除）:', e);
             }
 
-            // ★修复回收站数据不一致：同步保存到 localStorage 回收站（showRecycleBin 从此处读取）
-            // 字段名使用 _deletedAt/_deletedBy（与 getRecycleBin/saveRecycleBin/showRecycleBin 保持一致）
+            // 同时保存到 localStorage 回收站（供UI读取）
             try {
-                const trashRecordForLS = {
-                    ...record,
-                    _deletedAt: new Date().toISOString(),
-                    _deletedBy: (typeof currentUser !== 'undefined' && currentUser?.username) || 'unknown'
-                };
-                const currentBin = getRecycleBin();
-                currentBin.unshift(trashRecordForLS);
-                // 最多保留50条（与 showRecycleBin 提示一致）
-                if (currentBin.length > 50) currentBin.length = 50;
-                saveRecycleBin(currentBin);
-            } catch (e) {
-                console.warn('[回收站] 同步到 localStorage 失败:', e);
-            }
+                const record = prescriptionHistory.find(p => p.id === id);
+                if (record) {
+                    const rbKey = 'recycleBin_' + (currentUser ? currentUser.username : 'default');
+                    const bin = JSON.parse(localStorage.getItem(rbKey) || '[]');
+                    if (!bin.some(r => r.id === id)) {
+                        record._deletedAt = new Date().toISOString();
+                        record._deletedBy = currentUser ? currentUser.username : 'unknown';
+                        bin.unshift(record);
+                        if (bin.length > 50) bin.splice(50);
+                        localStorage.setItem(rbKey, JSON.stringify(bin));
+                    }
+                }
+            } catch(e) { console.warn('保存到处方回收站失败:', e); }
 
             // P7: 单条从 prescriptions store 删除
             await deletePrescriptionFromDB(id);
@@ -4195,8 +4509,6 @@ if (window.Permission) {
             if (header.querySelector('.recycle-bin-btn')) return;
             // 检查是否已有静态的 showRecycleBin 按钮（避免重复注入）
             if (header.querySelector('button[onclick*="showRecycleBin"]')) return;
-            // ★静态回收站按钮已存在于 history-header 中，此函数不再动态注入，避免出现2个回收站按钮
-            return;
             const refreshBtn = header.querySelector('.history-refresh-btn');
             const btn = document.createElement('button');
             btn.className = 'recycle-bin-btn';
@@ -4243,10 +4555,6 @@ if (window.Permission) {
             const doseInput2 = document.getElementById('doseCountInput2');
             if (doseInput2) doseInput2.value = doseCount;
             document.getElementById('paperDoseCount').textContent = doseCount;
-            const regFeeInput = document.getElementById('registrationFee');
-            const regFeeInput2 = document.getElementById('registrationFee2');
-            if (regFeeInput) regFeeInput.value = record.registrationFee || 0;
-            if (regFeeInput2) regFeeInput2.value = record.registrationFee || 0;
             // 加载药物数据，确保所有字段都有值
             prescriptionItems = (record.items || []).map(item =>({
                 code: item.code || '',
@@ -4316,56 +4624,17 @@ if (window.Permission) {
             prescriptionNoEl.focus();
         }
 
-        function showFormulaModal(isSaveAs) {
-            const existing = document.getElementById('formulaModal');
-            if (existing) existing.remove();
-            const modal = document.createElement('div');
-            modal.id = 'formulaModal';
-            modal.className = 'modal';
-            modal.style.display = 'flex';
-            modal.innerHTML = '<div class="modal-content user-modal-content">' +
-                '<div class="modal-header"><span>' + (isSaveAs ? '保存为验方' : '添加验方') + '</span>' +
-                '<span class="close-btn" onclick="document.getElementById(\'formulaModal\').remove()">&times;</span></div>' +
-                '<div class="modal-body">' +
-                '<div class="form-group"><label>验方名称</label>' +
-                '<input type="text" id="formulaName" placeholder="验方名称"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>验方简码</label>' +
-                '<input type="text" id="formulaCode" placeholder="验方简码"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>功效</label>' +
-                '<input type="text" id="formulaEffect" placeholder="功效"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>主治</label>' +
-                '<input type="text" id="formulaIndication" placeholder="主治"></div>' +
-                '</div>' +
-                '<div class="modal-footer">' +
-                '<button class="action-btn" onclick="document.getElementById(\'formulaModal\').remove()">取消</button>' +
-                '<button class="action-btn primary" onclick="confirmFormula(' + (isSaveAs ? 'true' : 'false') + ')">保存</button>' +
-                '</div></div>';
-            document.body.appendChild(modal);
-        }
-
-        function confirmFormula(isSaveAs) {
-            const name = document.getElementById('formulaName').value.trim();
-            const code = document.getElementById('formulaCode').value.trim();
-            const effect = document.getElementById('formulaEffect').value.trim();
-            const indication = document.getElementById('formulaIndication').value.trim();
-
-            if (!name) { alert('验方名称不能为空'); return; }
-            if (!code) { alert('验方简码不能为空'); return; }
-
-            let composition = [];
-            if (isSaveAs) {
-                const items = prescriptionItems.filter(item => item.name);
-                composition = items.map(i => ({name: i.name, dosage: i.dosage, price: i.price, unit: i.unit}));
-            }
-            formulas.push({name, code, effect: effect || '', indication: indication || '', composition: composition});
+        async function saveAsFormula() {
+            const name = await prompt('请输入验方名称：');
+            if (!name) return;
+            const code = await prompt('请输入验方简码：');
+            if (!code) return;
+            const effect = await prompt('请输入功效：');
+            const indication = await prompt('请输入主治：');
+            const items = prescriptionItems.filter(item =>item.name);
+            formulas.push({name, code, effect:effect||'', indication:indication||'', composition:items.map(i =>({name:i.name, dosage:i.dosage, price:i.price, unit:i.unit}))});
             localStorage.setItem('local_formulas', JSON.stringify(formulas));
-            if (!isSaveAs) renderFormulaList();
-            document.getElementById('formulaModal').remove();
-            if (isSaveAs) alert('验方保存成功！');
-        }
-
-        function saveAsFormula() {
-            showFormulaModal(true);
+            alert('验方保存成功！');
         }
 
         async function printPrescription(orientation = 'portrait') {
@@ -4519,9 +4788,8 @@ if (window.Permission) {
             });
             
             // 重新计算总金额
-            const registrationFee = parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0;
             const updatedMedicineTotal = updatedItems.reduce((sum, item) => sum + (parseFloat(item.total) || 0), 0);
-            const updatedTotalAmount = updatedMedicineTotal * doseCount + registrationFee;
+            const updatedTotalAmount = updatedMedicineTotal * doseCount + (parseFloat(document.getElementById('registrationFee2')?.value || document.getElementById('registrationFee')?.value || '0') || 0);
             
             const record = {
                 id: Date.now(),
@@ -4538,7 +4806,7 @@ if (window.Permission) {
                 items: updatedItems,
                 doseCount: doseCount,
                 totalAmount: updatedTotalAmount,
-                registrationFee: registrationFee,
+                registrationFee: parseFloat(document.getElementById('registrationFee2')?.value || '0') || 0,
                 // 新增字段
                 createdAt: now.getTime(), // 生成时间戳
                 createdBy: currentUser?.username || '', // 登录用户名
@@ -4547,30 +4815,12 @@ if (window.Permission) {
             
             // P7: 单条保存到 prescriptions store（O(1) 增量写入，替代全量重写）
             // ★ 优化2：处方保存事务包装，确保数据一致性
-            // 核心步骤（失败则中止保存并提示用户）
             try {
                 await savePrescriptionToDB(record);
             } catch (dbErr) {
                 console.error('[保存失败] 处方写入数据库失败:', dbErr);
                 alert('处方保存失败：' + (dbErr.message || '数据库写入错误') + '\n请重试或联系技术支持。');
                 return;
-            }
-
-            // ★修复"重新登入后历史处方不显示"：双重备份 - 同步写入 localStorage
-            // 确保 IndexedDB 读取失败时，loadData 能从 localStorage 降级恢复处方数据
-            try {
-                const saved = localStorage.getItem('all_prescription_list');
-                const arr = saved ? (JSON.parse(saved) || []) : [];
-                if (Array.isArray(arr)) {
-                    // 移除同 id 旧记录，避免重复
-                    const filtered = arr.filter(p => String(p.id) !== String(record.id));
-                    filtered.unshift(record);
-                    // 限制 localStorage 备份数量，避免超出存储上限
-                    if (filtered.length > 5000) filtered.length = 5000;
-                    localStorage.setItem('all_prescription_list', JSON.stringify(filtered));
-                }
-            } catch(lsErr) {
-                console.warn('[savePrescription] localStorage 备份失败:', lsErr);
             }
 
             // 更新内存数组（会话内查询源，按权限保持一致）
@@ -4582,7 +4832,7 @@ if (window.Permission) {
             if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.incrementPrescription) {
                 try { await window.electronAPI.license.incrementPrescription(); } catch(e) { console.warn('[License] 处方计数+1失败:', e); }
             }
-
+            
             // 9. 重新读取存储内当日最新序号，算出下一条待使用编号，赋值到编号、门诊号输入框，强制页面刷新显示
             const nextPresNo = await generatePrescriptionNo();
             const prescriptionNoEl = document.getElementById('prescriptionNo');
@@ -4780,12 +5030,13 @@ if (window.Permission) {
             const hasElectronAPI = typeof window.electronAPI !== 'undefined';
             const isElectronMarked = hasElectronAPI && window.electronAPI.isElectron;
             const isElectronEnv = hasElectronAPI && isElectronMarked;
-            
+
             // Electron 环境：自动保存到安装目录下的月份文件夹，不弹出任何对话框
             if (isElectronEnv) {
                 try {
                     window.electronAPI.savePrescriptionImage(imageData, fileName).then(result => {
-                        if (!result.success) {
+                        if (result.success) {
+                        } else {
                             console.error('图片保存失败:', result.error);
                         }
                     }).catch(error => {
@@ -4826,26 +5077,8 @@ if (window.Permission) {
         }
 
         function saveSettings() {
-            // 标准版：诊所名称和医师姓名允许管理员在基础设置中修改，保存到 localStorage 并更新 CONFIG
-            var newClinicName = document.getElementById('clinicName').value.trim();
-            var newDoctorName = document.getElementById('defaultDoctor').value.trim();
-            localStorage.setItem('local_clinicName', newClinicName);
-            localStorage.setItem('local_clinicDoctor', newDoctorName);
-            // 同步更新 CONFIG 对象，确保其他地方读取到最新值
-            if (typeof CONFIG !== 'undefined') {
-                CONFIG.clinicName = newClinicName;
-                CONFIG.doctorName = newDoctorName;
-            }
-            // ★ 通过 IPC 回写 config.json（带签名重算），确保登录窗口能读到最新医师姓名
-            // 根因：file:// 协议下 login.html 与 index.html 的 localStorage 不共享
-            if (IS_ELECTRON && window.electronAPI && window.electronAPI.updateClinicInfo) {
-                window.electronAPI.updateClinicInfo({
-                    clinicName: newClinicName,
-                    doctorName: newDoctorName
-                }).then(function(r) {
-                    if (!r || !r.success) console.warn('[saveSettings] 回写 config.json 失败:', r && r.error);
-                }).catch(function(e) { console.warn('[saveSettings] 回写 config.json 异常:', e); });
-            }
+            localStorage.setItem('local_clinicName', document.getElementById('clinicName').value);
+            localStorage.setItem('local_clinicDoctor', document.getElementById('defaultDoctor').value);
             localStorage.setItem('local_defaultRegFee', document.getElementById('defaultRegFee').value || '0');
             localStorage.setItem('local_defaultDose', document.getElementById('defaultDose').value || '7');
             
@@ -4860,18 +5093,8 @@ if (window.Permission) {
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
             // ★ 2026-08-03 同步：保存医师姓名后，立即更新当前用户显示
-            const updatedDisplayName = document.getElementById('userDisplayName');
-            if (updatedDisplayName) {
-                updatedDisplayName.textContent = newDoctorName || (currentUser ? currentUser.name : '');
-            }
-            // ★ 标准版：同步登入窗口的用户名显示（基础设置修改医师姓名后立即生效）
-            // 配合 main.js update-clinic-info IPC 回写 config.json，实现 login.html 和 index.html loginOverlay 双端同步
-            if (typeof CONFIG !== 'undefined' && CONFIG.edition === 'personal') {
-                const loginUsernameInput = document.getElementById('loginUsername');
-                if (loginUsernameInput && newDoctorName) {
-                    loginUsernameInput.value = newDoctorName;
-                }
-            }
+            const newDoctorName = document.getElementById('defaultDoctor').value;
+            document.getElementById('userDisplayName').textContent = newDoctorName || (currentUser ? currentUser.name : '');
             // 同步诊疗费
             const regFeeVal = document.getElementById('defaultRegFee').value || '0';
             const regFeeInput = document.getElementById('registrationFee');
@@ -4897,11 +5120,11 @@ if (window.Permission) {
         }
 
         function showHelp() {
-            alert('惠康中医-离线标准版 V1.0.0\n\n' +
-                  '【版本说明】标准版：含修改密码，无用户管理\n\n' +
+            alert('惠康中医-离线机构版 V1.0.0\n\n' +
+                  '【版本说明】机构版：含用户管理+修改密码\n\n' +
                   '【功能列表】\n' +
                   '✓ 处方录入与打印\n✓ 药品管理\n✓ 验方设置\n' +
-                  '✓ 病例管理\n✓ 数据统计\n✗ 用户管理\n' +
+                  '✓ 病例管理\n✓ 数据统计\n✓ 用户管理（管理员）\n' +
                   '✓ 修改密码\n✓ 离线自动备份\n✓ Excel导出\n\n' +
                   '【快捷键】\n' +
                   'F1 - 基础设置\nF2 - 药品管理\nF3 - 验方设置\n' +
@@ -5055,11 +5278,9 @@ if (window.Permission) {
         // P1-1 自动备份策略升级：每日首次启动触发；保留 7天+4周+12月
         async function dailyAutoBackup() {
             try {
-                const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+                const today = new Date().toISOString().slice(0, 10);
                 const lastBackupDate = localStorage.getItem('lastDailyBackupDate');
-                if (lastBackupDate === today) {
-                    return; // 今天已备份过
-                }
+                if (lastBackupDate === today) return;
                 const ok = await saveLocalBackupToFile();
                 if (ok) {
                     localStorage.setItem('lastDailyBackupDate', today);
@@ -5071,7 +5292,6 @@ if (window.Permission) {
             }
         }
 
-        // 保存备份到文件（桌面端 userData/backups/）或 IndexedDB（APP/网页端）
         async function saveLocalBackupToFile() {
             try {
                 const now = new Date();
@@ -5090,12 +5310,10 @@ if (window.Permission) {
                 };
                 const jsonStr = JSON.stringify(data, null, 2);
 
-                // 桌面端：通过 IPC 保存到 userData/backups/
                 if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.saveAutoBackup === 'function') {
                     const result = await window.electronAPI.saveAutoBackup(jsonStr, fileName);
                     return !!(result && result.success);
                 }
-                // APP/网页端：保存到 IndexedDB PrescriptionBackupDB
                 if (typeof indexedDB !== 'undefined') {
                     return await saveBackupToIndexedDB(fileName, data);
                 }
@@ -5106,7 +5324,6 @@ if (window.Permission) {
             }
         }
 
-        // 保存备份到 IndexedDB（APP/网页端兜底）
         function saveBackupToIndexedDB(fileName, data) {
             return new Promise((resolve) => {
                 try {
@@ -5121,8 +5338,7 @@ if (window.Permission) {
                         const db = e.target.result;
                         if (!db.objectStoreNames.contains('backups')) { resolve(false); return; }
                         const tx = db.transaction(['backups'], 'readwrite');
-                        const store = tx.objectStore('backups');
-                        store.put({ fileName, data, timestamp: Date.now() });
+                        tx.objectStore('backups').put({ fileName, data, timestamp: Date.now() });
                         tx.oncomplete = () => resolve(true);
                         tx.onerror = () => resolve(false);
                     };
@@ -5131,7 +5347,6 @@ if (window.Permission) {
             });
         }
 
-        // 清理过期备份（保留 7天全 + 4周每周1 + 12月每月1）
         async function cleanupOldBackups() {
             try {
                 const now = Date.now();
@@ -5140,7 +5355,6 @@ if (window.Permission) {
                 const keep4Weeks = 28 * DAY;
                 const keep12Months = 365 * DAY;
 
-                // 收集所有备份的列表（fileName + mtime）
                 let backups = [];
                 if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.listAutoBackups === 'function') {
                     const result = await window.electronAPI.listAutoBackups();
@@ -5156,14 +5370,14 @@ if (window.Permission) {
                 let last7Day = 0, last4Week = 0;
                 for (const b of backups) {
                     const age = now - b.timestamp;
-                    if (age <= keep7Days) continue;                 // 7 天内全保留
-                    else if (age <= keep4Weeks) {                   // 4 周内：每周保留 1 个
+                    if (age <= keep7Days) continue;
+                    else if (age <= keep4Weeks) {
                         if (last7Day === 0 || (last7Day - b.timestamp) >= 7 * DAY) last7Day = b.timestamp;
                         else toDelete.push(b);
-                    } else if (age <= keep12Months) {               // 12 月内：每月保留 1 个
+                    } else if (age <= keep12Months) {
                         if (last4Week === 0 || (last4Week - b.timestamp) >= 30 * DAY) last4Week = b.timestamp;
                         else toDelete.push(b);
-                    } else { toDelete.push(b); }                     // 超 12 月删除
+                    } else { toDelete.push(b); }
                 }
 
                 for (const b of toDelete) {
@@ -5179,7 +5393,6 @@ if (window.Permission) {
             }
         }
 
-        // IndexedDB 备份列表（APP/网页端）
         function listIndexedDBBackups() {
             return new Promise((resolve) => {
                 try {
@@ -5194,8 +5407,7 @@ if (window.Permission) {
                         const db = e.target.result;
                         if (!db.objectStoreNames.contains('backups')) { resolve([]); return; }
                         const tx = db.transaction(['backups'], 'readonly');
-                        const store = tx.objectStore('backups');
-                        const req = store.getAll();
+                        const req = tx.objectStore('backups').getAll();
                         req.onsuccess = () => {
                             const list = (req.result || []).map(r => ({
                                 fileName: r.fileName,
@@ -5298,7 +5510,7 @@ if (window.Permission) {
             
             const data = {
                 exportInfo: {
-                    version: '惠康中医-离线标准版',
+                    version: '惠康中医-离线机构版',
                     versionCode: 'V1.0.0',
                     versionType: '本地',
                     exportTime: now.toLocaleString('zh-CN'),
@@ -5345,7 +5557,7 @@ if (window.Permission) {
             if (IS_ELECTRON && window.electronAPI && window.electronAPI.saveBackupFile) {
                 const result = await window.electronAPI.saveBackupFile(jsonStr, fileName);
                 if (result.success) {
-                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${result.fileName}\n\u4FDD\u5B58\u8DEF\u5F84\uFF1Adownloads/\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB`;
+                    const backupInfo = `\u5907\u4EFd\u6210\u529F\uFF01\n\n\u5907\u4EFd\u6587\u4EF6\uFF1A${result.fileName}\n\u4FDD\u5B58\u8DEF\u5F84\uFF1Adownloads/中医处方系统/\n\n\u5907\u4EFd\u6570\u636E\u7EDF\u8BA1\uFF1A\n\u2022 \u836F\u54C1\u6570\u91CF\uFF1A${medicines.length} 种\n\u2022 \u9A8C\u65B9\u6570\u91CF\uFF1A${formulas.length} 个\n\u2022 \u5904\u65B9\u6570\u91CF\uFF1A${prescriptionHistory.length} 张\n\n\u6587\u4EF6\u5927\u5C0F\uFF1A${(jsonStr.length / 1024).toFixed(1)} KB`;
                     alert(backupInfo);
                 } else {
                     alert('备份失败：' + (result.error || '未知错误'));
@@ -5498,7 +5710,7 @@ if (window.Permission) {
                   )
                 : medicines;
 
-            list.innerHTML = filteredMedicines.map((m) => {
+            list.innerHTML = filteredMedicines.map((m,i) => {
                 const idx = medicines.indexOf(m);
                 return `<div style="display:flex;justify-content:space-between;padding:8px;border-bottom:1px solid #d0d0d0;"><div style="flex:1;"><div style="font-weight:bold;">${escapeHtml(m.name)}</div><div style="font-size:11px;color:#666;">简码：${escapeHtml(m.code)} | 进价：${formatPrice(m.costPrice)}元 | 单价：${formatPrice(m.price)}元/${escapeHtml(m.unit)}</div><div style="font-size:10px;color:#999;">用量：${m.dosage || '10'}${escapeHtml(m.unit)} | 库存：${m.stock || '0'}</div></div><div style="display:flex;gap:4px;"><button class="small-btn" onclick="editMedicine(${idx})">编辑</button><button class="small-btn" onclick="deleteMedicine(${idx})">删除</button></div></div>`;
             }).join('');
@@ -5521,94 +5733,103 @@ if (window.Permission) {
             updatePrescriptionPaper();
         }
 
-        function showMedicineModal(index) {
-            const isEdit = index >= 0;
-            const m = isEdit ? medicines[index] : null;
-            const existing = document.getElementById('medicineModal');
-            if (existing) existing.remove();
-            const modal = document.createElement('div');
-            modal.id = 'medicineModal';
-            modal.className = 'modal';
-            modal.style.display = 'flex';
-            modal.innerHTML = '<div class="modal-content user-modal-content">' +
-                '<div class="modal-header"><span>' + (isEdit ? '编辑药品' : '添加药品') + '</span>' +
-                '<span class="close-btn" onclick="document.getElementById(\'medicineModal\').remove()">&times;</span></div>' +
-                '<div class="modal-body">' +
-                '<div class="form-group"><label>药品名称</label>' +
-                '<input type="text" id="medicineName" value="' + escapeHtml(m ? m.name : '') + '" placeholder="药品名称"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>简码</label>' +
-                '<input type="text" id="medicineCode" value="' + escapeHtml(m ? m.code : '') + '" placeholder="简码"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>进价</label>' +
-                '<input type="number" id="medicineCostPrice" value="' + (m ? (m.costPrice || 0) : 0) + '" step="0.01" placeholder="进价"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>单价</label>' +
-                '<input type="number" id="medicinePrice" value="' + (m ? (m.price || 0) : 0) + '" step="0.01" placeholder="单价"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>单位</label>' +
-                '<input type="text" id="medicineUnit" value="' + escapeHtml(m ? (m.unit || 'g') : 'g') + '" placeholder="单位"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>常用用量</label>' +
-                '<input type="number" id="medicineDosage" value="' + (m ? (m.dosage || 10) : 10) + '" step="0.1" placeholder="常用用量"></div>' +
-                '<div class="form-group" style="margin-top:10px;"><label>库存数量</label>' +
-                '<input type="number" id="medicineStock" value="' + (m ? (m.stock || 0) : 0) + '" placeholder="库存数量"></div>' +
-                '</div>' +
-                '<div class="modal-footer">' +
-                '<button class="action-btn" onclick="document.getElementById(\'medicineModal\').remove()">取消</button>' +
-                '<button class="action-btn primary" onclick="confirmMedicine(' + index + ')">保存</button>' +
-                '</div></div>';
-            document.body.appendChild(modal);
+        let editingMedicineIndex = -1;
+
+        function editMedicine(index) {
+            editingMedicineIndex = index;
+            const m = medicines[index];
+            showMedicineEditModal(m, false);
         }
 
-        function confirmMedicine(index) {
-            const name = document.getElementById('medicineName').value.trim();
-            const code = document.getElementById('medicineCode').value.trim();
-            const costPrice = parseFloat(document.getElementById('medicineCostPrice').value) || 0;
-            const price = parseFloat(document.getElementById('medicinePrice').value) || 0;
-            const unit = document.getElementById('medicineUnit').value.trim() || 'g';
-            const dosage = parseFloat(document.getElementById('medicineDosage').value) || 10;
-            const stock = parseInt(document.getElementById('medicineStock').value) || 0;
+        function showAddMedicineForm() {
+            editingMedicineIndex = -1;
+            showMedicineEditModal(null, true);
+        }
 
-            if (!name) { alert('药品名称不能为空'); return; }
-            if (!code) { alert('简码不能为空'); return; }
+        function showMedicineEditModal(m, isAdd) {
+            let modal = document.getElementById('medicineEditModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'medicineEditModal';
+                modal.className = 'modal';
+                modal.innerHTML = '<div class="modal-content" style="max-width:400px;width:90%;">' +
+                    '<div class="modal-header"><h3 id="medicineEditTitle">编辑药品</h3><span class="close-btn" onclick="closeMedicineEditModal()">&times;</span></div>' +
+                    '<div class="modal-body">' +
+                    '<div style="display:flex;flex-direction:column;gap:10px;">' +
+                    '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">药品名称 *</label><input type="text" id="medEditName" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="请输入药品名称"></div>' +
+                    '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">简码 *</label><input type="text" id="medEditCode" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="请输入简码"></div>' +
+                    '<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">进价</label><input type="number" id="medEditCostPrice" step="0.01" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="0.00"></div>' +
+                    '<div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">单价</label><input type="number" id="medEditPrice" step="0.01" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="0.00"></div></div>' +
+                    '<div style="display:flex;gap:10px;"><div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">单位</label><input type="text" id="medEditUnit" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="g" value="g"></div>' +
+                    '<div style="flex:1;"><label style="display:block;margin-bottom:4px;font-weight:bold;">常用用量</label><input type="number" id="medEditDosage" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="10" value="10"></div></div>' +
+                    '<div><label style="display:block;margin-bottom:4px;font-weight:bold;">库存数量</label><input type="number" id="medEditStock" style="width:100%;padding:8px;border:1px solid #888;border-radius:4px;" placeholder="0" value="0"></div>' +
+                    '</div></div>' +
+                    '<div class="modal-footer"><button class="action-btn" onclick="closeMedicineEditModal()">取消</button><button class="action-btn primary" onclick="saveMedicineEdit()">保存</button></div>' +
+                    '</div>';
+                document.body.appendChild(modal);
+            }
+            document.getElementById('medicineEditTitle').textContent = isAdd ? '新增药品' : '编辑药品';
+            document.getElementById('medEditName').value = m ? m.name : '';
+            document.getElementById('medEditCode').value = m ? m.code : '';
+            document.getElementById('medEditCostPrice').value = m ? (m.costPrice || 0) : 0;
+            document.getElementById('medEditPrice').value = m ? (m.price || 0) : 0;
+            document.getElementById('medEditUnit').value = m ? (m.unit || 'g') : 'g';
+            document.getElementById('medEditDosage').value = m ? (m.dosage || 10) : 10;
+            document.getElementById('medEditStock').value = m ? (m.stock || 0) : 0;
+            modal.style.display = 'flex';
+        }
 
-            const medicineData = {name, code, costPrice, price, unit, dosage, stock};
-            if (index >= 0) {
-                medicines[index] = medicineData;
+        function closeMedicineEditModal() {
+            const modal = document.getElementById('medicineEditModal');
+            if (modal) modal.style.display = 'none';
+            editingMedicineIndex = -1;
+        }
+
+        function saveMedicineEdit() {
+            const name = document.getElementById('medEditName').value.trim();
+            const code = document.getElementById('medEditCode').value.trim();
+            if (!name) { alert('请输入药品名称'); return; }
+            if (!code) { alert('请输入简码'); return; }
+            const costPrice = parseFloat(document.getElementById('medEditCostPrice').value) || 0;
+            const price = parseFloat(document.getElementById('medEditPrice').value) || 0;
+            const unit = document.getElementById('medEditUnit').value.trim() || 'g';
+            const dosage = parseFloat(document.getElementById('medEditDosage').value) || 10;
+            const stock = parseInt(document.getElementById('medEditStock').value) || 0;
+            const data = {name, code, costPrice, price, unit, dosage, stock};
+            if (editingMedicineIndex >= 0) {
+                medicines[editingMedicineIndex] = data;
             } else {
-                medicines.push(medicineData);
+                medicines.push(data);
             }
             localStorage.setItem('local_medicines', JSON.stringify(medicines));
             saveMedicinesToDisk();
             buildMedicineMap();
             renderMedicineList();
-            document.getElementById('medicineModal').remove();
-            showToast(index >= 0 ? '药品修改成功！' : '药品添加成功！');
+            closeMedicineEditModal();
         }
 
-        function editMedicine(index) {
-            showMedicineModal(index);
-        }
-
-        function showAddMedicineForm() {
-            showMedicineModal(-1);
-        }
-
-        async function exportMedicines() {
+        function exportMedicines() {
             const headers = ['药品名称', '简码', '进价', '单价', '单位', '常用用量', '库存'];
-            const rows = medicines.map(m => [
-                m.name || '',
-                m.code || '',
-                Number(m.costPrice) || 0,
-                Number(m.price) || 0,
-                m.unit || 'g',
-                Number(m.dosage) || 10,
-                Number(m.stock) || 0
-            ]);
-            try { await loadXlsxLibrary(); } catch (e) {
-                showToast('Excel导出失败：xlsx 库加载失败');
-                return;
-            }
-            const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, ws, '药品库');
-            XLSX.writeFile(wb, `中药库_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.xlsx`);
+            let csvContent = '\uFEFF' + headers.join(',') + '\n';
+            medicines.forEach(m =>{
+                const row = [
+                    m.name || '',
+                    m.code || '',
+                    m.costPrice || '0',
+                    m.price || '0',
+                    m.unit || 'g',
+                    m.dosage || '10',
+                    m.stock || '0'
+                ].map(v =>`"${v}"`).join(',');
+                csvContent += row + '\n';
+            });
+            const blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `中药库_${new Date().toLocaleDateString('zh-CN').replace(/\//g, '-')}.csv`;
+            a.click();
+            URL.revokeObjectURL(url);
             showToast('药品库已导出为Excel格式！');
         }
 
@@ -5768,7 +5989,7 @@ if (window.Permission) {
                 
                 // Excel 文件导入
                 const reader = new FileReader();
-                reader.onload = async function(e) {
+                reader.onload = function(e) {
                     try {
                         const data = new Uint8Array(e.target.result);
                         const workbook = XLSX.read(data, { type: 'array' });
@@ -5801,7 +6022,7 @@ if (window.Permission) {
                             }
                         }
                         
-                        await processImportedMedicines(importedMedicines);
+                        processImportedMedicines(importedMedicines);
                     } catch (err) {
                         alert('Excel导入失败！请尝试将 Excel 另存为 CSV 格式再导入。错误信息：' + err.message);
                     }
@@ -5810,7 +6031,7 @@ if (window.Permission) {
             } else {
                 // CSV 或 JSON 文件导入
                 const reader = new FileReader();
-                reader.onload = async function(e) {
+                reader.onload = function(e) {
                     try {
                         let importedMedicines = [];
                         const arrayBuffer = e.target.result;
@@ -5857,7 +6078,7 @@ if (window.Permission) {
                             importedMedicines = importData.medicines;
                         }
                         
-                        await processImportedMedicines(importedMedicines);
+                        processImportedMedicines(importedMedicines);
                     } catch (err) {
                         alert('导入失败！文件格式错误。' + err.message);
                     }
@@ -5867,74 +6088,71 @@ if (window.Permission) {
             event.target.value = '';
         }
         
-        let _pendingImportedMedicines = null;
+        let pendingImportedMedicines = null;
 
         function processImportedMedicines(importedMedicines) {
             if (importedMedicines.length === 0) {
                 alert('没有导入任何药品！');
                 return;
             }
-            _pendingImportedMedicines = importedMedicines;
-            const existing = document.getElementById('importMedicineModal');
-            if (existing) existing.remove();
-            const modal = document.createElement('div');
-            modal.id = 'importMedicineModal';
-            modal.className = 'modal';
-            modal.style.display = 'flex';
-            modal.innerHTML = '<div class="modal-content user-modal-content">' +
-                '<div class="modal-header"><span>选择导入方式</span>' +
-                '<span class="close-btn" onclick="document.getElementById(\'importMedicineModal\').remove()">&times;</span></div>' +
-                '<div class="modal-body">' +
-                '<div style="padding:10px 0;">共 ' + importedMedicines.length + ' 种药品，请选择导入方式：</div>' +
-                '<div style="display:flex;flex-direction:column;gap:10px;margin-top:10px;">' +
-                '<button class="action-btn primary" onclick="confirmImportMedicines(\'1\')">追加（保留现有药品）</button>' +
-                '<button class="action-btn" style="background:#c0392b;color:#fff;" onclick="confirmImportMedicines(\'2\')">覆盖（替换现有药品）</button>' +
-                '<button class="action-btn primary" onclick="confirmImportMedicines(\'3\')">合并（同名覆盖）</button>' +
-                '</div>' +
-                '</div>' +
-                '<div class="modal-footer">' +
-                '<button class="action-btn" onclick="document.getElementById(\'importMedicineModal\').remove()">取消</button>' +
-                '</div></div>';
-            document.body.appendChild(modal);
+            pendingImportedMedicines = importedMedicines;
+            showImportMethodModal(importedMedicines.length);
         }
 
-        function confirmImportMedicines(action) {
-            const importedMedicines = _pendingImportedMedicines;
-            if (!importedMedicines) return;
+        function showImportMethodModal(count) {
+            let modal = document.getElementById('importMethodModal');
+            if (!modal) {
+                modal = document.createElement('div');
+                modal.id = 'importMethodModal';
+                modal.className = 'modal';
+                modal.innerHTML = '<div class="modal-content" style="max-width:360px;width:90%;">' +
+                    '<div class="modal-header"><h3>选择导入方式</h3><span class="close-btn" onclick="cancelImportMethod()">&times;</span></div>' +
+                    '<div class="modal-body">' +
+                    '<div style="text-align:center;margin-bottom:15px;font-size:14px;">共 <strong id="importMethodCount" style="color:#008000;font-size:18px;">0</strong> 种药品待导入</div>' +
+                    '<div style="display:flex;flex-direction:column;gap:10px;">' +
+                    '<button class="action-btn" onclick="executeImportMethod(\'append\')" style="padding:14px;font-size:15px;">追加（保留现有药品）</button>' +
+                    '<button class="action-btn" onclick="executeImportMethod(\'overwrite\')" style="padding:14px;font-size:15px;background:#ff6b6b;color:white;">覆盖（替换现有药品）</button>' +
+                    '<button class="action-btn" onclick="executeImportMethod(\'merge\')" style="padding:14px;font-size:15px;">合并（同名覆盖，以导入为准）</button>' +
+                    '</div></div></div>';
+                document.body.appendChild(modal);
+            }
+            document.getElementById('importMethodCount').textContent = count;
+            modal.style.display = 'flex';
+        }
 
-            if (action === '1') {
+        function cancelImportMethod() {
+            const modal = document.getElementById('importMethodModal');
+            if (modal) modal.style.display = 'none';
+            pendingImportedMedicines = null;
+        }
+
+        function executeImportMethod(method) {
+            const modal = document.getElementById('importMethodModal');
+            if (modal) modal.style.display = 'none';
+            const importedMedicines = pendingImportedMedicines;
+            pendingImportedMedicines = null;
+            if (!importedMedicines) return;
+            if (method === 'append') {
                 medicines = [...medicines, ...importedMedicines];
                 alert(`导入成功！共导入 ${importedMedicines.length} 种药品`);
-            } else if (action === '2') {
+            } else if (method === 'overwrite') {
                 if (confirm('确定要覆盖现有药品库吗？导入的药品价格将完全替换现有数据！')) {
                     medicines = [...importedMedicines];
                     localStorage.removeItem('local_clearDefaultMedicines');
                     alert(`导入成功！共导入 ${importedMedicines.length} 种药品，已覆盖原有数据`);
-                } else {
-                    document.getElementById('importMedicineModal').remove();
-                    return;
-                }
-            } else if (action === '3') {
+                } else { return; }
+            } else if (method === 'merge') {
                 let addCount = 0, updateCount = 0;
                 importedMedicines.forEach(importMed =>{
                     const existIndex = medicines.findIndex(m =>m.name === importMed.name);
-                    if (existIndex >= 0) {
-                        medicines[existIndex] = importMed;
-                        updateCount++;
-                    } else {
-                        medicines.push(importMed);
-                        addCount++;
-                    }
+                    if (existIndex >= 0) { medicines[existIndex] = importMed; updateCount++; }
+                    else { medicines.push(importMed); addCount++; }
                 });
                 alert(`导入完成！新增：${addCount} 种，更新：${updateCount} 种，更新的药品以导入价格为准`);
-            } else {
-                return;
-            }
+            } else { return; }
             localStorage.setItem('local_medicines', JSON.stringify(medicines));
             buildMedicineMap();
             renderMedicineList();
-            _pendingImportedMedicines = null;
-            document.getElementById('importMedicineModal').remove();
         }
         
         function parseCSVLine(line) {
@@ -5982,8 +6200,16 @@ if (window.Permission) {
             renderFormulaList();
         }
 
-        function showAddFormulaForm() {
-            showFormulaModal(false);
+        async function showAddFormulaForm() {
+            const name = await prompt('请输入验方名称：');
+            if (!name) return;
+            const code = await prompt('请输入验方简码：');
+            if (!code) return;
+            const effect = await prompt('请输入功效：');
+            const indication = await prompt('请输入主治：');
+            formulas.push({name,code,effect:effect||'',indication:indication||'',composition:[]});
+            localStorage.setItem('local_formulas', JSON.stringify(formulas));
+            renderFormulaList();
         }
 
         function renderCaseList(list) {
@@ -6037,13 +6263,6 @@ if (window.Permission) {
                 const dbPrescriptions = await getAllPrescriptionsFromDB();
                 if (dbPrescriptions && dbPrescriptions.length > 0) {
                     allPrescriptions = dbPrescriptions;
-                    // ★修复"重新登入后历史处方不显示"：IndexedDB 读取成功后同步到 localStorage 备份
-                    // 确保 IndexedDB 在后续读取失败时，loadData 能从 localStorage 降级恢复
-                    try {
-                        localStorage.setItem('all_prescription_list', JSON.stringify(dbPrescriptions));
-                    } catch(lsErr) {
-                        console.warn('[getAllUserPrescriptions] localStorage 同步备份失败:', lsErr);
-                    }
                 }
             } catch (e) {
                 console.error('从 prescriptions store 读取失败:', e);
@@ -6082,7 +6301,7 @@ if (window.Permission) {
                         }
                     }
                 } catch (e) {
-                    console.error('从 IndexedDB 读取处方数据失败:', e);
+                    console.error('从 IndexedDB settings 读取处方数据失败:', e);
                 }
             }
 
@@ -6105,6 +6324,7 @@ if (window.Permission) {
                 }
             }
 
+            // 如果指定了用户名，过滤该用户的处方
             if (filterUsername) {
                 const filtered = allPrescriptions.filter(p => p.createdBy === filterUsername);
                 // ★修复历史处方消失：如果按 username 过滤后为空，但原始数据不为空，
@@ -6228,51 +6448,6 @@ if (window.Permission) {
                 .map(([name, totalDosage]) =>({ name, totalDosage }))
                 .sort((a, b) =>b.totalDosage - a.totalDosage)
                 .slice(0, 10);
-        }
-
-        async function analyzeMonthlyStats() {
-            const statsMap = new Map();
-            const allPrescriptions = await getAllUserPrescriptions();
-            
-            allPrescriptions.forEach(p => {
-                const date = new Date(p.createdAt || p.date || 0);
-                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-                
-                if (!statsMap.has(monthKey)) {
-                    statsMap.set(monthKey, {
-                        visits: 0,
-                        totalIncome: 0,
-                        totalRegFee: 0,
-                        totalCost: 0,
-                        totalProfit: 0,
-                        totalDoses: 0
-                    });
-                }
-                
-                const stats = statsMap.get(monthKey);
-                stats.visits++;
-                stats.totalIncome += (parseFloat(p.totalAmount) || 0) + (parseFloat(p.registrationFee) || 0);
-                stats.totalRegFee += parseFloat(p.registrationFee) || 0;
-                stats.totalDoses += parseFloat(p.doseCount) || 0;
-                
-                if (p.items && Array.isArray(p.items)) {
-                    p.items.forEach(item => {
-                        const medicine = medicines.find(m => m.name === (item.name || item.medicineName));
-                        const costPrice = parseFloat(medicine?.costPrice) || parseFloat(item.costPrice) || parseFloat(item.price) || 0;
-                        const dosage = parseFloat(item.dosage) || 0;
-                        const doseCount = parseFloat(p.doseCount) || 1;
-                        stats.totalCost += costPrice * dosage * doseCount;
-                    });
-                }
-            });
-            
-            statsMap.forEach((stats, key) => {
-                stats.totalProfit = stats.totalIncome - stats.totalCost;
-                stats.month = key.split('-')[1];
-            });
-            
-            return Array.from(statsMap.values())
-                .sort((a, b) => b.month - a.month);
         }
 
         function formatDate(date) {
@@ -6528,6 +6703,51 @@ if (window.Permission) {
             }
         }
 
+        async function analyzeMonthlyStats() {
+            const statsMap = new Map();
+            const allPrescriptions = await getAllUserPrescriptions();
+
+            allPrescriptions.forEach(p => {
+                const date = new Date(p.createdAt || p.date || 0);
+                const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+                if (!statsMap.has(monthKey)) {
+                    statsMap.set(monthKey, {
+                        visits: 0,
+                        totalIncome: 0,
+                        totalRegFee: 0,
+                        totalCost: 0,
+                        totalProfit: 0,
+                        totalDoses: 0
+                    });
+                }
+
+                const stats = statsMap.get(monthKey);
+                stats.visits++;
+                stats.totalIncome += (parseFloat(p.totalAmount) || 0) + (parseFloat(p.registrationFee) || 0);
+                stats.totalRegFee += parseFloat(p.registrationFee) || 0;
+                stats.totalDoses += parseFloat(p.doseCount) || 0;
+
+                if (p.items && Array.isArray(p.items)) {
+                    p.items.forEach(item => {
+                        const medicine = medicines.find(m => m.name === (item.name || item.medicineName));
+                        const costPrice = parseFloat(medicine?.costPrice) || parseFloat(item.costPrice) || parseFloat(item.price) || 0;
+                        const dosage = parseFloat(item.dosage) || 0;
+                        const doseCount = parseFloat(p.doseCount) || 1;
+                        stats.totalCost += costPrice * dosage * doseCount;
+                    });
+                }
+            });
+
+            statsMap.forEach((stats, key) => {
+                stats.totalProfit = stats.totalIncome - stats.totalCost;
+                stats.month = key.split('-')[1];
+            });
+
+            return Array.from(statsMap.values())
+                .sort((a, b) => b.month - a.month);
+        }
+
         async function refreshAnalytics() {
           try {
             const patients = analyzePatients();
@@ -6707,6 +6927,14 @@ window.addEventListener('load', function () {
             }
         });
     }
+
+    window.handleEditUser = handleEditUser;
+    window.confirmEditUser = confirmEditUser;
+    window.handleAddUser = handleAddUser;
+    window.handleDeleteUser = handleDeleteUser;
+    window.handleViewUserPrescriptions = handleViewUserPrescriptions;
+    window.renderUserList = renderUserList;
+    window.showUserManageModal = showUserManageModal;
 });</script><div id="mediaViewerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99998;align-items:center;justify-content:center;" onclick="if(event.target===this)closeMediaViewer()"><div style="background:#fff;border-radius:10px;padding:12px;width:92%;max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#333;">拍照录像查看</span><button onclick="closeMediaViewer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;line-height:1;">&times;</button></div><div id="mediaViewerContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;"></div></div></div></body></html>
 
 

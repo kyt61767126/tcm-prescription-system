@@ -41,6 +41,8 @@ h2 { color: #34495e; margin: 20px 0 12px; font-size: 16px; border-left: 4px soli
 .btn:hover { background: #2980b9; }
 .btn-success { background: #27ae60; }
 .btn-success:hover { background: #229954; }
+.btn-primary { background: #3498db; }
+.btn-primary:hover { background: #2980b9; }
 .btn-warning { background: #f39c12; }
 .btn-warning:hover { background: #d68910; }
 .btn-danger { background: #e74c3c; }
@@ -345,6 +347,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <div class="gen-actions">
                 <button class="btn btn-success" onclick="generateCodes()">生成激活码</button>
                 <button class="btn" onclick="openBatchGenerateModal()">批量生成（多用户）</button>
+                <button class="btn btn-primary" onclick="openActivationLinkModal()">🔗 生成一键激活链接</button>
                 <button class="btn" onclick="clearGenForm()">清空</button>
             </div>
         </div>
@@ -679,6 +682,57 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
     </div>
 </div>
 
+<!-- ★ 一键激活链接生成弹窗 -->
+<div id="activationLinkModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:520px;">
+        <span class="modal-close" onclick="closeActivationLinkModal()">&times;</span>
+        <h3>🔗 生成一键激活链接</h3>
+        <div id="activationLinkAlert" class="alert"></div>
+        <div style="margin-bottom:14px;color:#606266;font-size:13px;line-height:1.6;">
+            生成 <code>bnzc://activate</code> 协议链接，客户点击链接即可自动激活软件，无需手动输入激活码。<br>
+            <strong>使用场景：</strong>通过微信/短信发送链接给客户，客户点击后软件自动激活。
+        </div>
+        <div class="form-group">
+            <label>激活码 *</label>
+            <input type="text" id="linkCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" style="font-family:Courier New,monospace;">
+        </div>
+        <div class="form-group">
+            <label>绑定诊所名（可选）</label>
+            <input type="text" id="linkClinicName" placeholder="如：本能堂中医诊所">
+        </div>
+        <div class="form-group">
+            <label>用户名（可选）</label>
+            <input type="text" id="linkUserName" placeholder="如：张三">
+        </div>
+        <div style="margin-top:16px;text-align:right;">
+            <button class="btn" onclick="closeActivationLinkModal()">取消</button>
+            <button class="btn btn-success" onclick="generateActivationLink()">生成链接</button>
+        </div>
+
+        <!-- 生成结果区域 -->
+        <div id="activationLinkResult" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid #e4e7ed;">
+            <div style="text-align:center;margin-bottom:12px;">
+                <div id="qrCodeContainer" style="display:inline-block;padding:8px;background:#fff;border:1px solid #e4e7ed;border-radius:6px;"></div>
+                <div style="font-size:11px;color:#909399;margin-top:4px;">扫描二维码即可激活</div>
+            </div>
+            <div class="form-group">
+                <label>激活链接</label>
+                <div style="display:flex;gap:6px;">
+                    <input type="text" id="generatedLink" readonly style="flex:1;font-family:Courier New,monospace;font-size:12px;background:#f5f7fa;">
+                    <button class="btn btn-sm" onclick="copyGeneratedLink()">复制</button>
+                </div>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-sm" onclick="copyLinkAsText()">📋 复制为文本说明</button>
+                <button class="btn btn-sm" onclick="sendLinkByWechat()">💬 发送微信模板</button>
+                <button class="btn btn-sm" onclick="closeActivationLinkModal()">完成</button>
+            </div>
+            <div id="linkTextPreview" style="display:none;margin-top:8px;padding:10px;background:#f5f7fa;border-radius:6px;font-size:12px;white-space:pre-wrap;line-height:1.6;"></div>
+        </div>
+    </div>
+</div>
+
+<script src="../qrcode.min.js"></script>
 <script>
 // API 基础路径（与 Pages Functions 路径一致）
 const API_BASE = '/api';
@@ -1355,6 +1409,7 @@ function renderList(records) {
         const clinicCell = r.clinicName ? '<span style="color:#8e44ad;">' + escapeHtml(r.clinicName) + '</span>' : '-';
 
         let actions = '<button class="btn btn-sm" onclick="copyCode(\'' + r.code + '\')">复制</button>';
+        actions += '<button class="btn btn-sm btn-primary" onclick="quickGenLinkFromCode(\'' + r.code + '\')" title="生成一键激活链接">🔗 链接</button>';
         actions += '<button class="btn btn-sm" onclick="showLogs(\'' + r.code + '\')">日志</button>';
         actions += '<button class="btn btn-sm" onclick="openEditModal(\'' + r.code + '\')">编辑</button>';
         if (r.status === 'used') {
@@ -1982,6 +2037,140 @@ document.getElementById('loginUser').addEventListener('keyup', e => {
 // 自动登录
 if (token && currentUser) {
     showMain();
+}
+
+// ============================================================================
+// ★ 一键激活链接生成（bnzc:// 协议）
+// ============================================================================
+
+const BNZC_PROTOCOL = 'bnzc://activate';
+
+function openActivationLinkModal() {
+    document.getElementById('activationLinkModal').classList.add('show');
+    document.getElementById('activationLinkResult').style.display = 'none';
+    document.getElementById('activationLinkAlert').className = 'alert';
+    // 如果生成表单有值则填入
+    const genCode = document.querySelector('#genCount') ? '' : '';
+}
+
+function closeActivationLinkModal() {
+    document.getElementById('activationLinkModal').classList.remove('show');
+}
+
+function generateActivationLink() {
+    const code = document.getElementById('linkCode').value.trim().toUpperCase();
+    const clinicName = document.getElementById('linkClinicName').value.trim();
+    const userName = document.getElementById('linkUserName').value.trim();
+
+    if (!code) {
+        showAlert('activationLinkAlert', '请输入激活码', 'error');
+        return;
+    }
+
+    // 校验激活码格式
+    const pattern = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+    if (!pattern.test(code)) {
+        showAlert('activationLinkAlert', '激活码格式错误，应为 BNZC-XXXX-XXXX-XXXX-XXXX', 'error');
+        return;
+    }
+
+    // 生成 URL Scheme
+    let url = BNZC_PROTOCOL + '?code=' + encodeURIComponent(code);
+    if (clinicName) url += '&clinic=' + encodeURIComponent(clinicName);
+    if (userName) url += '&user=' + encodeURIComponent(userName);
+
+    // 显示链接
+    document.getElementById('generatedLink').value = url;
+    document.getElementById('activationLinkResult').style.display = 'block';
+
+    // 生成二维码
+    generateQRCode(url);
+
+    // 生成文本预览
+    const textPreview = '【惠康中医】激活链接\n' +
+        '激活码：' + code + '\n' +
+        (clinicName ? '诊所：' + clinicName + '\n' : '') +
+        (userName ? '用户：' + userName + '\n' : '') +
+        '点击下方链接即可激活（需安装惠康中医软件）：\n' + url;
+    document.getElementById('linkTextPreview').textContent = textPreview;
+
+    showAlert('activationLinkAlert', '链接生成成功！', 'success');
+}
+
+function generateQRCode(text) {
+    const container = document.getElementById('qrCodeContainer');
+    container.innerHTML = '';
+    if (typeof QRCode !== 'undefined') {
+        new QRCode(container, {
+            text: text,
+            width: 160,
+            height: 160,
+            colorDark: '#2c3e50',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.H
+        });
+    } else {
+        container.innerHTML = '<div style="width:160px;height:160px;background:#f5f7fa;display:flex;align-items:center;justify-content:center;font-size:12px;color:#909399;">二维码库未加载</div>';
+    }
+}
+
+function copyGeneratedLink() {
+    const input = document.getElementById('generatedLink');
+    input.select();
+    document.execCommand('copy');
+    const btn = event.target;
+    const origText = btn.textContent;
+    btn.textContent = '已复制';
+    setTimeout(() => { btn.textContent = origText; }, 1500);
+}
+
+function copyLinkAsText() {
+    const preview = document.getElementById('linkTextPreview').textContent;
+    const ta = document.createElement('textarea');
+    ta.value = preview;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showAlert('activationLinkAlert', '已复制文本说明，可粘贴到微信发送给客户', 'success');
+}
+
+function sendLinkByWechat() {
+    const code = document.getElementById('linkCode').value.trim().toUpperCase();
+    const clinicName = document.getElementById('linkClinicName').value.trim();
+    const userName = document.getElementById('linkUserName').value.trim();
+    const url = document.getElementById('generatedLink').value;
+
+    const wechatMsg = '您好！您的惠康中医软件激活信息如下：\n\n' +
+        '📋 激活码：' + code + '\n' +
+        (clinicName ? '🏥 诊所：' + clinicName + '\n' : '') +
+        (userName ? '👤 用户：' + userName + '\n' : '') +
+        '\n🔗 点击下方链接即可一键激活：\n' + url + '\n\n' +
+        '💡 使用说明：\n' +
+        '1. 确保客户电脑已安装惠康中医软件\n' +
+        '2. 在电脑浏览器中打开上述链接\n' +
+        '3. 软件将自动激活并重启\n\n' +
+        '如无法点击链接，请手动复制激活码在软件激活窗口输入。';
+
+    const ta = document.createElement('textarea');
+    ta.value = wechatMsg;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+
+    showAlert('activationLinkAlert', '微信模板已复制，请粘贴到微信发送给客户', 'success');
+    document.getElementById('linkTextPreview').style.display = 'block';
+    document.getElementById('linkTextPreview').textContent = wechatMsg;
+}
+
+// ★ 快捷：从激活码列表点击生成链接
+function quickGenLinkFromCode(code) {
+    document.getElementById('linkCode').value = code;
+    document.getElementById('linkClinicName').value = '';
+    document.getElementById('linkUserName').value = '';
+    openActivationLinkModal();
+    generateActivationLink();
 }
 </script>
 </body>
