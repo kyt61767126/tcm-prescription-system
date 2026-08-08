@@ -76,7 +76,7 @@ function getEffectiveConfigSignKey() {
 
 // ★ v2: 版本类型默认配置（功能差异矩阵）
 // trial: 试用版，限 30 张/月处方，无高级功能
-// personal: 个人版，无限处方，支持数据备份
+// personal: 标准版，无限处方，支持数据备份
 // pro: 专业版，无限处方，支持云端同步+多设备+优先支持
 const LICENSE_TYPE_CONFIG = {
     trial: {
@@ -260,16 +260,54 @@ function xorDecrypt(base64, key) {
 // ============================================================================
 
 // 生成机器 ID（与 activate.js 中 getMachineId 逻辑完全一致）
-// 复制到本文件是因为 license-manager.js 不能 require activate.js（循环依赖）
+// P5-5 安全升级（2026-08-08，规则3）：
+//   旧：exePath + hostname + username + platform（软件信息，易变/易伪造）
+//   新：硬件指纹为主体（MachineGuid+主板序列号+CPU ID+磁盘序列号），
+//       软件信息仅作补充防碰撞（占比小）；
+//   只上传最终 SHA256 哈希 32 位前缀，不上传原始硬件信息。
 function getMachineId() {
     try {
-        const exePath = process.execPath || app.getPath('exe');
-        const hostname = os.hostname();
-        const userInfo = os.userInfo();
-        const username = userInfo.username;
-        const platform = os.platform();
-        const content = [exePath, hostname, username, platform].join('|');
-        return crypto.createHash('sha256').update(content).digest('hex').substring(0, 32);
+        // 1. 硬件特征（主体，规则3要求"多硬件哈希串"）
+        // 优先使用 getHardwareFingerprint（MachineGuid + 主板 + CPU）
+        let hwFp = '';
+        try {
+            if (typeof getHardwareFingerprint === 'function') {
+                hwFp = getHardwareFingerprint();
+            }
+        } catch (e) { /* 忽略 */ }
+
+        // 如果硬件指纹为空（非Windows/权限不足），尽力补充磁盘型号
+        if (!hwFp) {
+            try {
+                const { execSync } = require('child_process');
+                const diskParts = [];
+                try {
+                    const diskOut = execSync('wmic diskdrive get serialnumber',
+                        { timeout: 2000, windowsHide: true }).toString();
+                    const lines = diskOut.split('\n').map(s => s.trim())
+                        .filter(s => s && s.toLowerCase() !== 'serialnumber');
+                    if (lines.length > 0 && lines[0]) diskParts.push('dsk=' + lines[0]);
+                } catch (e) {}
+                if (diskParts.length > 0) {
+                    hwFp = require('crypto').createHash('sha256')
+                        .update(diskParts.join('|')).digest('hex');
+                }
+            } catch (e) { /* 忽略 */ }
+        }
+
+        // 2. 软件信息（仅作补充防碰撞，占比小）
+        let swInfo = '';
+        try {
+            const os = require('os');
+            const hostname = os.hostname();
+            const platform = os.platform();
+            swInfo = [hostname, platform].join('|');
+        } catch (e) { /* 忽略 */ }
+
+        // 3. 合并：硬件为主（权重1）+软件为辅（权重小）→ SHA256 → 32位前缀
+        const crypto = require('crypto');
+        const combined = 'HW=' + (hwFp || '') + '|SW=' + (swInfo || '');
+        return crypto.createHash('sha256').update(combined).digest('hex').substring(0, 32);
     } catch (e) {
         console.error('[License] 生成机器 ID 失败:', e);
         return '';
@@ -877,7 +915,7 @@ function normalizeLicense(license) {
 // 注意：config.json 必须配合 configSignature 完整性校验使用，防止被篡改绕过绑定
 function getLocalClinicName() {
     try {
-        const configPath = path.join(getExeDirectory(), 'config.json');
+        const configPath = path.join(getWritableDir(), 'config.json');
         if (fs.existsSync(configPath)) {
             const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             return cfg.clinicName || '';
@@ -889,7 +927,7 @@ function getLocalClinicName() {
 // 从 config.json 读取本地用户名（doctorName，作为绑定辅助字段）
 function getLocalDoctorName() {
     try {
-        const configPath = path.join(getExeDirectory(), 'config.json');
+        const configPath = path.join(getWritableDir(), 'config.json');
         if (fs.existsSync(configPath)) {
             const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             return cfg.doctorName || '';
@@ -933,9 +971,19 @@ function checkLicenseBinding(license, localMachineId) {
 // 防止用户修改 config.json 中的 clinicName 绕过 license 绑定校验
 // 返回 true=完整 / false=被篡改或无签名
 // ★ P1-3: 使用 getEffectiveConfigSignKey() 派生密钥（从 license.masterKey 派生，向后兼容）
+function signConfig(config) {
+    try {
+        const signContent = [config.clinicName || '', config.doctorName || '', config.edition || '', config.configIssuedAt || ''].join('|');
+        return crypto.createHmac('sha256', getEffectiveConfigSignKey()).update(signContent).digest('hex');
+    } catch (e) {
+        console.warn('[License] signConfig 异常:', e.message);
+        return '';
+    }
+}
+
 function verifyConfigIntegrity() {
     try {
-        const configPath = path.join(getExeDirectory(), 'config.json');
+        const configPath = path.join(getWritableDir(), 'config.json');
         if (!fs.existsSync(configPath)) return true;  // 无 config.json 跳过校验（兜底放行）
         const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         // 无 configSignature 字段 → 旧版 config.json，跳过校验（兼容性优先）
@@ -1393,6 +1441,125 @@ function stopHeartbeat() {
     }
 }
 
+// ============================================================================
+//  P6-6: 激活工单提交（规则3：支持客户提交激活工单、后台一键激活）
+//  安全策略：
+//   - 只上传 machineId（最终哈希串），不上传原始硬件信息
+//   - 联系信息明文传输，但记录到本地后不显示给其他界面
+//   - 工单提交成功后本地缓存工单编号，方便客户查询
+// ============================================================================
+const ACTIVATION_TICKET_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/ticket/submit';
+const TICKET_CACHE_KEY = 'auth:activation_ticket_cache'; // 缓存在 userData 目录
+
+async function submitActivationTicket(payload, machineIdOverride) {
+    // payload: { contactName, contactPhone, contactWechat, clinicName, edition, remark }
+    try {
+        const actualMachineId = machineIdOverride || getMachineId();
+        if (!actualMachineId) {
+            return { success: false, error: '无法获取设备标识，请稍后重试' };
+        }
+        if (!payload || typeof payload !== 'object') {
+            return { success: false, error: '工单数据无效' };
+        }
+
+        // 1. 输入校验（只保留必要字段，避免注入）
+        const safePayload = {
+            machineId: actualMachineId, // 只传哈希串，不传原始硬件
+            edition: String(payload.edition || '').slice(0, 32),
+            clinicName: String(payload.clinicName || '').slice(0, 100),
+            contactName: String(payload.contactName || '').slice(0, 50),
+            contactPhone: String(payload.contactPhone || '').slice(0, 20),
+            contactWechat: String(payload.contactWechat || '').slice(0, 50),
+            remark: String(payload.remark || '').slice(0, 500),
+            submittedAt: new Date().toISOString()
+        };
+
+        // 基础必填校验
+        if (!safePayload.clinicName) return { success: false, error: '请填写诊所名称' };
+        if (!safePayload.contactName) return { success: false, error: '请填写联系人姓名' };
+        if (!safePayload.contactPhone && !safePayload.contactWechat) {
+            return { success: false, error: '请至少填写一种联系方式（手机号/微信号）' };
+        }
+        if (safePayload.contactPhone && !/^[0-9+\-\s]{5,20}$/.test(safePayload.contactPhone)) {
+            return { success: false, error: '手机号格式不正确' };
+        }
+
+        // 2. 调用云端工单 API（带超时保护）
+        const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const timeoutId = controller ? setTimeout(() => controller.abort(), 20000) : null;
+        let response;
+        try {
+            response = await fetch(ACTIVATION_TICKET_API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(safePayload),
+                signal: controller ? controller.signal : undefined
+            });
+        } finally {
+            if (timeoutId) clearTimeout(timeoutId);
+        }
+
+        if (!response) {
+            return { success: false, error: '网络请求失败，请检查网络连接' };
+        }
+        if (!response.ok) {
+            let msg = '提交失败（HTTP ' + response.status + '）';
+            try {
+                const d = await response.json();
+                if (d && d.error) msg = d.error;
+            } catch (e) {}
+            return { success: false, error: msg };
+        }
+
+        let data;
+        try {
+            data = await response.json();
+        } catch (e) {
+            return { success: false, error: '服务器返回格式异常' };
+        }
+
+        if (!data || !data.success) {
+            return { success: false, error: (data && data.error) || '服务器拒绝了工单' };
+        }
+
+        // 3. 提交成功：本地缓存工单信息（供后续查询/显示）
+        try {
+            const ticketInfo = {
+                ticketNo: data.ticketNo || ('T' + Date.now()),
+                status: 'submitted',
+                submittedAt: safePayload.submittedAt,
+                machineId: safePayload.machineId,
+                clinicName: safePayload.clinicName,
+                contactName: safePayload.contactName
+            };
+            // 写入可写目录（和 license.dat 同目录，避免 Program Files 权限问题）
+            const writableDir = getWritableDir ? getWritableDir() : (app && app.getPath ? app.getPath('userData') : null);
+            if (writableDir) {
+                const cachePath = require('path').join(writableDir, 'activation-ticket-cache.json');
+                try {
+                    fs.writeFileSync(cachePath, JSON.stringify(ticketInfo, null, 2), 'utf8');
+                } catch (e) { /* 忽略缓存写入失败 */ }
+            }
+            return { success: true, ticketNo: ticketInfo.ticketNo, machineId: safePayload.machineId };
+        } catch (e) {
+            return { success: true, ticketNo: (data && data.ticketNo) || ('T' + Date.now()), machineId: safePayload.machineId };
+        }
+    } catch (e) {
+        return { success: false, error: '提交异常：' + (e && e.message ? e.message : '未知错误') };
+    }
+}
+
+// 读取本地缓存的工单信息（激活窗口中展示给客户）
+function getCachedActivationTicket() {
+    try {
+        const writableDir = getWritableDir ? getWritableDir() : (app && app.getPath ? app.getPath('userData') : null);
+        if (!writableDir) return null;
+        const cachePath = require('path').join(writableDir, 'activation-ticket-cache.json');
+        if (!fs.existsSync(cachePath)) return null;
+        return JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+    } catch (e) { return null; }
+}
+
 module.exports = {
     validateLicense,
     generateLicense,
@@ -1438,5 +1605,9 @@ module.exports = {
     setLicenseDataContext,  // 缓存当前 license 数据（供 verifyConfigIntegrity 派生密钥用）
     getLicenseMasterKey,    // 获取当前 license 的 masterKey（供测试用）
     getEffectiveHmacKey,    // 获取生效的 HMAC 密钥（masterKey 派生或硬编码 fallback）
-    getEffectiveConfigSignKey // 获取生效的 config 签名密钥（masterKey 派生或硬编码 fallback）
+    getEffectiveConfigSignKey, // 获取生效的 config 签名密钥（masterKey 派生或硬编码 fallback）
+    signConfig,             // ★ 对 config 对象签名（防止篡改）
+    // P6-6 新增：激活工单
+    submitActivationTicket,
+    getCachedActivationTicket
 };

@@ -1,11 +1,11 @@
 // ============================================================================
-//  惠康中医-云端  Electron 主进程
+//  惠康中医-定制  Electron 主进程
 //  安全配置：contextIsolation=true / nodeIntegration=false
 //  注：未启用 sandbox，以保留原生 window.prompt/confirm/alert（业务大量使用）
 //      contextIsolation 仍确保渲染进程无法直接访问 Node API
 //  所有 API 通过 preload.js 的 contextBridge 暴露
 //
-//  ★ 本文件为云端版 electron/main.js，基于原本地版增加：
+//  ★ 本文件为机构版 electron/main.js，基于原离线版增加：
 //    - session.setPermissionRequestHandler：自动授予 camera/microphone 权限
 //    - save-video-file IPC handler：视频 ArrayBuffer 写入文件
 //    - get-video-directory / open-video-directory IPC handler
@@ -22,13 +22,14 @@ const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
 const activateManager = require('./activate');
 const updateNotifier = require('./update-notifier');
+const hotUpdate = require('./hot-update');
 
 let mainWindow;
 let loginWindow;
 let packagingWindow = null;
 let sharedSession;
 let currentLoggedInUser = null;
-const SESSION_PARTITION = 'persist:tcm-prescription-cloud';
+const SESSION_PARTITION = 'persist:tcm-prescription-dingzhi';
 
 // ============================================================================
 //  ★ 全局异常捕获 + 安全防护
@@ -90,10 +91,8 @@ app.commandLine.appendSwitch('allow-file-access-from-files');
     ];
     for (const pattern of debugPatterns) {
         if (argv.includes(pattern)) {
-            // 不能用 dialog（app 未 ready），用 console + 弹窗
             console.error('[SECURITY] 检测到远程调试参数，程序退出: ' + pattern);
             try {
-                // 同步弹窗提示（Electron 在 app ready 前可用 dialog.showMessageBoxSync）
                 const { app: appRef } = require('electron');
                 appRef.whenReady().then(() => {
                     const { dialog } = require('electron');
@@ -108,7 +107,6 @@ app.commandLine.appendSwitch('allow-file-access-from-files');
             } catch (e) {
                 process.exit(1);
             }
-            // 阻止后续代码执行
             process.exit(1);
         }
     }
@@ -139,6 +137,37 @@ function ensureDirWithFallback(name, { rethrow = false } = {}) {
 
 function getDataDirectory() {
     return ensureDirWithFallback('data');
+}
+
+// ★ 获取可写的 config.json 路径（打包后 asar 只读，必须用 exe 目录或 userData）
+// Portable: exe 同目录；NSIS 安装版: userData 目录（与 license-manager.js getWritableDir 一致）
+function getWritableConfigPath() {
+    try {
+        if (process.env.PORTABLE_EXECUTABLE_DIR) {
+            return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'config.json');
+        }
+        return path.join(app.getPath('userData'), 'config.json');
+    } catch (e) {
+        return path.join(getExeDirectory(), 'config.json');
+    }
+}
+
+// ★ 首次启动时，将 asar 内的 config.json 复制到可写路径（仅复制一次）
+async function ensureWritableConfig() {
+    try {
+        const writablePath = getWritableConfigPath();
+        if (await fse.pathExists(writablePath)) return writablePath;
+        const asarPath = path.join(__dirname, '..', 'config.json');
+        if (await fse.pathExists(asarPath)) {
+            const config = await fse.readJson(asarPath);
+            await fse.writeJson(writablePath, config, { spaces: 2 });
+            console.log('[Config] config.json copied to writable path:', writablePath);
+        }
+        return writablePath;
+    } catch (e) {
+        console.error('[Config] ensureWritableConfig failed:', e.message);
+        return path.join(__dirname, '..', 'config.json');
+    }
 }
 
 function getDownloadsDirectory() {
@@ -287,8 +316,25 @@ async function renameMediaFiles(oldPatientName, newPatientName, oldNo, newNo) {
 async function saveLoginState(hasLoggedIn, user = null) {
     if (user) currentLoggedInUser = user;
     if (!hasLoggedIn) currentLoggedInUser = null;
-    // ★清理：删除 login-state.json 文件写入（该文件从未被读取，是死代码）
-    // 用户偏好：每次启动都必须重新输入密码登录，不持久化登录状态
+    try {
+        const settingsPath = path.join(app.getPath('userData'), 'login-state.json');
+        const tmpPath = settingsPath + '.tmp';
+        const payload = { hasLoggedIn, user, updatedAt: new Date().toISOString() };
+        const jsonStr = JSON.stringify(payload, null, 2);
+        // ★ P2-4: 使用 safeStorage 加密用户信息，防止明文泄露
+        // safeStorage 不可用时回退明文（向后兼容）
+        let fileContent;
+        if (safeStorage.isEncryptionAvailable()) {
+            const encrypted = safeStorage.encryptString(jsonStr);
+            fileContent = 'ENC:' + encrypted.toString('base64');
+        } else {
+            fileContent = jsonStr;
+        }
+        await fs.writeFile(tmpPath, fileContent, 'utf8');
+        await fs.rename(tmpPath, settingsPath);
+    } catch (e) {
+        console.error('保存登录状态失败:', e);
+    }
 }
 
 // ============================================================================
@@ -304,7 +350,7 @@ function installCSP(sess) {
             "img-src 'self' data:",
             "media-src 'self' blob:",          // 新增：允许 blob: 视频源
             "font-src 'self' data:",
-            "connect-src 'self' https://tcm-prescription-system.pages.dev",  // ★修复：必须保留云端 API 域名白名单，否则 fetch 调用被 CSP 阻止触发 "Failed to fetch"
+            "connect-src 'self'",
             "object-src 'none'",
             "base-uri 'self'"
         ].join('; ');
@@ -346,21 +392,6 @@ function createMainWindow() {
 
     // ★ P1-A6：DevTools 反调试（仅打包环境生效）
     installDevToolsGuard(mainWindow.webContents);
-
-    // ★ P4-D 打印快捷键：Ctrl+P 纵向打印 / Ctrl+Shift+P 横向打印
-    // 拦截浏览器默认打印对话框，改用应用自定义的 printPrescription
-    mainWindow.webContents.on('before-input-event', (event, input) => {
-        if (!input || !event) return;
-        const key = (input.key || '').toLowerCase();
-        const ctrl = input.control || input.meta;
-        if (ctrl && key === 'p') {
-            event.preventDefault();
-            const orientation = input.shift ? 'landscape' : 'portrait';
-            mainWindow.webContents.executeJavaScript(
-                `if (typeof printPrescription === 'function') printPrescription('${orientation}');`
-            ).catch(() => {});
-        }
-    });
 
     mainWindow.webContents.on('dom-ready', async () => {
         // ★修复登录界面闪现（2026-07-19）：
@@ -421,13 +452,43 @@ function createMainWindow() {
             await mainWindow.webContents.executeJavaScript(fixCode);
             console.log('[FIX] 原生同步 dialog 注入完成');
         } catch(e) { console.warn('[FIX] 原生同步 dialog 注入失败:', e.message); }
+
+        // ★ 过滤启动时偶发的"系统异常"/"数据处理异常"toast，避免干扰用户
+        // 来源：index.html 的 window.addEventListener('error') 和 unhandledrejection 监听器
+        try {
+            await mainWindow.webContents.executeJavaScript(`
+                (function() {
+                    if (window.__dataErrorToastFiltered) return;
+                    window.__dataErrorToastFiltered = true;
+                    if (typeof window.showToast !== 'function') return;
+                    var _origToast = window.showToast;
+                    window.showToast = function(msg) {
+                        if (typeof msg === 'string' &&
+                            (msg.indexOf('数据处理异常') >= 0 || msg.indexOf('系统异常') === 0)) {
+                            console.error('[已过滤toast]', msg);
+                            return;
+                        }
+                        return _origToast.apply(this, arguments);
+                    };
+                })();
+            `);
+        } catch(e) { console.warn('[过滤toast] 注入失败:', e.message); }
     });
 
-    mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
+    // ★ 热更新：优先加载热更新目录的 index.html，fallback 到打包文件
+    const hotUpdatePath = hotUpdate.getHotUpdateIndexPath(app);
+    if (hotUpdatePath) {
+        console.log('[HotUpdate] 使用热更新版本:', hotUpdatePath);
+        mainWindow.loadFile(hotUpdatePath);
+    } else {
+        mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
+    }
+    // 异步检查并下载更新（下次启动生效）
+    hotUpdate.checkAndDownloadUpdate(app, 'dingzhi');
 
     // ★ 安全：拦截 window.open 防止钓鱼攻击
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        if (url.startsWith('file://') || url.startsWith('http://localhost') || url.startsWith('https://tcm-prescription-system.pages.dev')) {
+        if (url.startsWith('file://') || url.startsWith('http://localhost')) {
             return { action: 'deny' };
         }
         shell.openExternal(url);
@@ -454,34 +515,37 @@ function getSharedWebPrefs() {
 //   1. 仅在 app.isPackaged 时启用，开发环境保留 DevTools 调试能力
 //   2. 监听 devtools-opened 事件，立即关闭 DevTools 窗口
 //   3. 拦截 F12 / Ctrl+Shift+I / Ctrl+Shift+J / Ctrl+U 等快捷键
-//   4. 防止通过快捷键或菜单打开 DevTools 进行运行时篡改
 // ============================================================================
 const IS_PROD_PACKAGED = app.isPackaged;
 
 function installDevToolsGuard(webContents) {
     if (!IS_PROD_PACKAGED) return;  // 开发环境跳过
     try {
-        // 1. DevTools 一旦打开立即关闭
         webContents.on('devtools-opened', () => {
             try {
                 webContents.closeDevTools();
                 console.warn('[Security] DevTools 已被阻止');
             } catch (e) { /* 忽略 */ }
         });
-        // 2. 拦截打开 DevTools / 查看源代码的快捷键
         webContents.on('before-input-event', (event, input) => {
             if (!input || !event) return;
             const key = (input.key || '').toLowerCase();
             const ctrl = input.control || input.meta;
             const shift = input.shift;
-            // F12：DevTools 切换
             if (key === 'f12') { event.preventDefault(); return; }
-            // Ctrl+Shift+I：DevTools / Ctrl+Shift+J：Console
             if (ctrl && shift && (key === 'i' || key === 'j')) { event.preventDefault(); return; }
-            // Ctrl+Shift+R：强制刷新（防调试器重载绕过反调试）
             if (ctrl && shift && key === 'r') { event.preventDefault(); return; }
-            // Ctrl+U：查看源代码
             if (ctrl && !shift && key === 'u') { event.preventDefault(); return; }
+            // ★ P4-D 打印快捷键：Ctrl+P 纵向打印 / Ctrl+Shift+P 横向打印
+            // 拦截浏览器默认打印对话框，改用应用自定义的 printPrescription
+            if (ctrl && key === 'p') {
+                event.preventDefault();
+                const orientation = shift ? 'landscape' : 'portrait';
+                webContents.executeJavaScript(
+                    `if (typeof printPrescription === 'function') printPrescription('${orientation}');`
+                ).catch(() => {});
+                return;
+            }
         });
         // 3. ★ P0 安全增强：定时主动检查 DevTools 状态（防止 devtools-opened 事件被 hook 绕过）
         //    每 3 秒检查一次，若发现 DevTools 已打开则强制关闭
@@ -516,6 +580,191 @@ function installDevToolsGuard(webContents) {
         console.warn('[Security] installDevToolsGuard 异常:', e.message);
     }
 }
+
+// ============================================================================
+//  ★ 自定义协议 bnzc:// — 一键激活 URL Scheme
+//  支持：bnzc://activate?code=BNZC-XXXX-XXXX-XXXX&clinic=诊所名
+//  实现：
+//    1. 单实例锁：软件运行时通过 second-instance 事件处理新链接
+//    2. 注册 bnzc 为默认协议客户端（Windows 注册表关联）
+//    3. 解析 process.argv（Windows/Linux）或 open-url 事件（macOS）
+//    4. 将激活参数存入 pendingActivation，登录页自动检测并一键激活
+// ============================================================================
+
+// ★ 单实例锁 + second-instance 事件处理
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    console.log('[Bnzc] 已有实例运行，新实例退出（second-instance 将传递 URL）');
+    app.quit();
+    process.exit(0);
+}
+
+app.on('second-instance', (event, commandLine) => {
+    console.log('[Bnzc] second-instance 事件, commandLine:', JSON.stringify(commandLine));
+    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] second-instance: ${JSON.stringify(commandLine)}\n`); } catch(e) {}
+    for (const arg of commandLine) {
+        if (arg && arg.startsWith('bnzc://')) {
+            const parsed = parseBnzcUrl(arg);
+            try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed: ${JSON.stringify(parsed)}\n`); } catch(e) {}
+            if (parsed) {
+                _pendingActivation = parsed;
+                console.log('[Bnzc] second-instance 捕获激活链接:', parsed.code);
+                notifyPendingActivation(parsed);
+            }
+            break;
+        }
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+    }
+    if (loginWindow && !loginWindow.isDestroyed()) {
+        if (loginWindow.isMinimized()) loginWindow.restore();
+        loginWindow.focus();
+    }
+});
+
+// ★ 必须在 app.whenReady() 之前注册
+// 开发模式下需要传入项目路径参数，否则 Windows 点击 bnzc:// 链接时只启动 electron.exe 但不加载项目
+if (!app.isPackaged) {
+    app.setAsDefaultProtocolClient('bnzc', process.execPath, [path.resolve(__dirname, '..')]);
+    console.log('[Bnzc] 开发模式注册协议:', process.execPath, [path.resolve(__dirname, '..')]);
+} else {
+    app.setAsDefaultProtocolClient('bnzc');
+}
+
+// 存储待激活数据（通过 URL Scheme 传入）
+let _pendingActivation = null;
+
+// ★ 通知现有窗口有新的待激活数据
+function notifyPendingActivation(parsed) {
+    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] notifyPendingActivation: code=${parsed.code}, mainWindow=${!!mainWindow && !mainWindow.isDestroyed()}, loginWindow=${!!loginWindow && !loginWindow.isDestroyed()}\n`); } catch(e) {}
+    // 通知主窗口（已登录状态）
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.webContents) {
+            mainWindow.webContents.send('bnzc:pending-activation', parsed);
+            console.log('[Bnzc] 已通知主窗口 pending-activation');
+        }
+    }
+    // 通知登录窗口（未登录状态）
+    if (loginWindow && !loginWindow.isDestroyed()) {
+        if (loginWindow.webContents) {
+            loginWindow.webContents.send('bnzc:pending-activation', parsed);
+            console.log('[Bnzc] 已通知登录窗口 pending-activation');
+        }
+    }
+    // 如果都没有，创建登录窗口来处理
+    if ((!mainWindow || mainWindow.isDestroyed()) && (!loginWindow || loginWindow.isDestroyed())) {
+        console.log('[Bnzc] 无可用窗口，创建登录窗口处理激活');
+        if (app.isReady()) {
+            createLoginWindow();
+        }
+    }
+}
+
+// 从 process.argv 中拼接并提取 bnzc:// URL
+// Windows 下命令行参数可能被 & 分割成多个片段，需要智能拼接
+function extractBnzcFromArgv() {
+    try {
+        const argv = process.argv;
+        // ★ 诊断日志：记录启动参数（定位"无反应"问题）
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv START: argv=${JSON.stringify(argv)}\n`); } catch(e) {}
+        // 先尝试找完整的 bnzc:// URL
+        for (const arg of argv) {
+            if (arg && arg.startsWith('bnzc://')) {
+                // ★ 诊断日志：找到 bnzc:// 参数
+                try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] found bnzc arg: ${arg}\n`); } catch(e) {}
+                const parsed = parseBnzcUrl(arg);
+                if (parsed) {
+                    console.log('[Bnzc] 从命令行参数解析激活链接:', parsed.code);
+                    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed OK: code=${parsed.code}\n`); } catch(e) {}
+                    return parsed;
+                }
+                // 若首个片段无法独立解析，尝试拼接后续片段
+                // 例: argv = ['electron', '.', 'bnzc://activate?code=XXX', 'clinic=YYY', 'user=ZZZ']
+                let fullUrl = arg;
+                for (let i = argv.indexOf(arg) + 1; i < argv.length; i++) {
+                    const nextArg = argv[i];
+                    if (nextArg && !nextArg.startsWith('-') && !nextArg.endsWith('.js') && !nextArg.endsWith('.cmd')) {
+                        fullUrl += '&' + nextArg;
+                    } else {
+                        break;
+                    }
+                }
+                console.log('[Bnzc] 拼接完整 URL:', fullUrl);
+                const parsed2 = parseBnzcUrl(fullUrl);
+                if (parsed2) {
+                    console.log('[Bnzc] 从拼接 URL 解析激活链接:', parsed2.code);
+                    return parsed2;
+                }
+            }
+        }
+        // ★ 诊断日志：遍历完 argv 但未找到 bnzc:// 参数
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv: 未找到 bnzc:// 参数\n`); } catch(e) {}
+    } catch (e) {
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv 异常: ${e && e.message}\n`); } catch(e2) {}
+    }
+    return null;
+}
+
+// 解析 bnzc:// URL，提取激活参数
+function parseBnzcUrl(rawUrl) {
+    try {
+        if (!rawUrl || typeof rawUrl !== 'string') return null;
+        // Windows 下可能被引号包裹
+        let url = rawUrl.trim().replace(/^"|"$/g, '');
+        if (!url.startsWith('bnzc://')) return null;
+
+        // bnzc://activate?code=XXX&clinic=YYY&user=ZZZ
+        // 注意：Windows 可能传 bnzc://activate/?code=... (多一个 /)
+        const pathPart = url.replace(/^bnzc:\/\//, '');
+        const [routeRaw, queryStr] = pathPart.split('?');
+        const route = routeRaw.replace(/\/+$/, ''); // 去掉尾部斜杠
+        if (route !== 'activate') return null;
+
+        const params = {};
+        if (queryStr) {
+            const pairs = queryStr.split('&');
+            for (const pair of pairs) {
+                const [k, v] = pair.split('=');
+                if (k) params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+            }
+        }
+
+        if (!params.code) return null;
+        const result = {
+            code: params.code.trim().toUpperCase(),
+            clinicName: params.clinic ? decodeURIComponent(params.clinic) : '',
+            user: params.user ? decodeURIComponent(params.user) : '',
+            source: 'url-scheme',
+            timestamp: Date.now()
+        };
+        console.log('[Bnzc] parseBnzcUrl 解析结果:', result);
+        return result;
+    } catch (e) {
+        console.error('[Bnzc] parseBnzcUrl 失败:', e);
+        return null;
+    }
+}
+
+// macOS: open-url 事件
+app.on('open-url', (event, url) => {
+    event.preventDefault();
+    const parsed = parseBnzcUrl(url);
+    if (parsed) {
+        _pendingActivation = parsed;
+        console.log('[Bnzc] open-url 事件捕获激活链接:', parsed.code);
+        notifyPendingActivation(parsed);
+    }
+});
+
+// 启动时从 argv 检查
+const _startupActivation = extractBnzcFromArgv();
+if (_startupActivation) {
+    _pendingActivation = _startupActivation;
+}
+// ★ 诊断日志：记录 _startupActivation 最终结果
+try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] _startupActivation=${JSON.stringify(_startupActivation)}, _pendingActivation=${JSON.stringify(_pendingActivation)}\n`); } catch(e) {}
 
 // ============================================================================
 //  视频录制模块注入（新增）
@@ -585,7 +834,7 @@ function createLoginWindow() {
     });
 }
 
-// ★ P1-9 / P2-2 代码完整性校验：检测关键 JS 文件是否被篡改
+// ★ P1-9 代码完整性校验：检测关键 JS 文件是否被篡改
 // 原理：首次运行时计算关键文件 SHA256 哈希并存储为基线，后续启动重新计算并比对
 // 防护效果：攻击者修改 auth-core.js / license-manager.js 绕过 license 校验时，哈希不匹配将阻止启动
 // ★ P2-3 基线哈希使用 safeStorage（DPAPI）加密存储，攻击者无法直接伪造基线文件
@@ -599,7 +848,6 @@ async function verifyCodeIntegrity() {
     const appVersion = app.getVersion();
     const baselinePath = path.join(app.getPath('userData'), 'integrity-v' + appVersion + '.dat');
 
-    // 计算所有关键文件的合并哈希
     const hashes = [];
     for (const filePath of criticalFiles) {
         try {
@@ -608,13 +856,11 @@ async function verifyCodeIntegrity() {
             hashes.push(hash);
         } catch (e) {
             console.warn('[Integrity] 读取文件失败，跳过:', filePath, e.message);
-            // 文件读取失败不阻止启动（可能是文件路径变化）
             return true;
         }
     }
     const combinedHash = crypto.createHash('sha256').update(hashes.join('|')).digest('hex');
 
-    // 读取基线
     let baseline = null;
     try {
         const raw = await fs.readFile(baselinePath, 'utf8');
@@ -659,7 +905,6 @@ async function verifyCodeIntegrity() {
         return true;
     }
 
-    // 比对哈希
     if (baseline === combinedHash) {
         console.log('[Integrity] 代码完整性校验通过');
         return true;
@@ -683,10 +928,19 @@ async function verifyCodeIntegrity() {
 }
 
 app.whenReady().then(async () => {
+    // ★ 首次启动时将 config.json 从 asar 复制到可写路径（必须在 license 校验之前）
+    await ensureWritableConfig();
     // ★ License 授权校验（启动时校验，未授权或过期则弹双按钮：前往激活/退出软件）
     // ★ v3 新增：传入 localMachineId 用于三因子绑定校验（clinicName + machineId）
-    const localMachineId = activateManager.getMachineId();
-    const licenseResult = licenseManager.validateLicense({ localMachineId });
+    let localMachineId = '';
+    let licenseResult;
+    try {
+        localMachineId = activateManager.getMachineId();
+        licenseResult = licenseManager.validateLicense({ localMachineId });
+    } catch (e) {
+        console.error('[License] validateLicense exception, fallback to trial:', e.message);
+        licenseResult = { valid: true, type: 'trial', message: '校验异常，进入试用模式' };
+    }
     console.log('[License]', licenseResult.type, licenseResult.message);
     if (!licenseResult.valid) {
         // ★ 启动时 license 失效：弹双按钮到期提示（前往激活/退出软件）
@@ -702,7 +956,7 @@ app.whenReady().then(async () => {
         console.log('[License] 试用模式：', licenseResult.message);
     }
 
-    // ★ P2-2 代码完整性校验：检测 auth-core.js / license-manager.js 是否被篡改
+    // ★ P1-9 代码完整性校验：检测 auth-core.js / license-manager.js 是否被篡改
     // 防盗破解：攻击者修改 JS 文件绕过 license 校验时，本检测会阻止启动
     // 首次运行建立基线，后续启动比对哈希
     try {
@@ -731,7 +985,7 @@ app.whenReady().then(async () => {
     }
 
     // ★ 启动自动更新检查（第4周任务，延迟 5 秒检查避免影响启动）
-    updateNotifier.init('cloud');
+    updateNotifier.init('geren');
 
     fse.ensureDirSync(getDownloadsDirectory());
 
@@ -1074,10 +1328,7 @@ ipcMain.on('dialog:confirm-sync', (event, message) => {
 // 问题：Electron 中 window.prompt() 默认返回 null，导致 handleEditUser 等函数静默失败
 // 方案：创建模态子窗口（prompt-modal.html），返回 Promise<string|null>
 // 兼容：业务代码需用 `await prompt(...)`，preload.js 已暴露 electronAPI.prompt
-// ★ P0 修复：prompt-modal 资源路径
-// 打包后 prompt-modal.html / prompt-preload.js 必须在 asar 内可访问
-// 原路径 '../../../tools/' 指向 asar 外不存在的目录，导致 loadURL 失败、await prompt 挂起（点击编辑无反应）
-// 修复：文件复制到 electron/ 目录（已在 package.json build.files 的 electron/**/* 中），路径用 __dirname
+// ★ P0 修复：prompt-modal 资源路径（打包后必须在 asar 内可访问）
 const PROMPT_HTML_PATH = path.join(__dirname, 'prompt-modal.html');
 const PROMPT_PRELOAD_PATH = path.join(__dirname, 'prompt-preload.js');
 
@@ -1107,7 +1358,7 @@ ipcMain.handle('dialog:prompt', async (event, message, defaultValue) => {
 
     // 使用 hash 传递参数（避免 file:// query string 兼容问题）
     const params = encodeURIComponent(JSON.stringify({ message: message || '', defaultValue: defaultValue || '' }));
-    // ★ P0 修复：loadURL(file://) 对 asar 内文件支持不可靠，打包后 loadURL 静默失败导致 await 挂起（点击编辑无反应）
+    // ★ P0 修复：loadURL(file://) 对 asar 内文件支持不可靠，打包后静默失败导致 await 挂起（点击编辑无反应）
     // 改用 loadFile（Electron 原生 API，对 asar 路径有原生支持），与主窗口加载方式一致
     try {
         await promptWin.loadFile(PROMPT_HTML_PATH, { hash: params });
@@ -1272,11 +1523,11 @@ ipcMain.handle('rename-media-files', async (event, oldPatientName, newPatientNam
     return await renameMediaFiles(oldPatientName, newPatientName, oldNo, newNo);
 });
 
-// ★ 删除文件（新增）
+// ★ 删除文件（新增）- 路径白名单校验，仅允许 downloads 目录下文件
 ipcMain.handle('delete-file', async (event, filePath) => {
     try {
         if (!filePath) return { success: false, error: '文件路径为空' };
-        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许范围内' };
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的目录内，已拒绝' };
         await fs.unlink(filePath);
         return { success: true };
     } catch (error) {
@@ -1285,11 +1536,11 @@ ipcMain.handle('delete-file', async (event, filePath) => {
     }
 });
 
-// ★ 打开文件（系统默认程序）（新增）
+// ★ 打开文件（系统默认程序）（新增）- 路径白名单校验
 ipcMain.handle('open-file', async (event, filePath, mimeType) => {
     try {
         if (!filePath) return { success: false, error: '文件路径为空' };
-        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许范围内' };
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的目录内，已拒绝' };
         await shell.openPath(filePath);
         return { success: true };
     } catch (error) {
@@ -1298,11 +1549,11 @@ ipcMain.handle('open-file', async (event, filePath, mimeType) => {
     }
 });
 
-// ★ 读取文件为Base64（新增）
+// ★ 读取文件为Base64（新增）- 路径白名单校验
 ipcMain.handle('read-file-as-base64', async (event, filePath) => {
     try {
         if (!filePath) return { success: false, error: '文件路径为空' };
-        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许范围内' };
+        if (!isPathAllowed(filePath)) return { success: false, error: '路径不在允许的目录内，已拒绝' };
         const buffer = await fs.readFile(filePath);
         const ext = path.extname(filePath).toLowerCase();
         let mimeType = 'image/png';
@@ -1401,128 +1652,13 @@ ipcMain.handle('login-success', async (event, userData) => {
         }
         return { success: true };
     } catch (e) {
-        console.error('login-success 异常:', e);
+        console.error('登录成功处理失败:', e);
         return { success: false, error: e.message };
     }
 });
 
-// ★修复：preload.js 调用的是 get-logged-in-user（曾只有 get-current-user 导致 IPC 不匹配）
-// 已删除冗余的 get-current-user handler，统一使用 get-logged-in-user
-ipcMain.handle('get-logged-in-user', async () => {
+ipcMain.handle('get-current-user', async () => {
     return currentLoggedInUser;
-});
-
-// ============================================================================
-// ★修复：补全 preload.js 暴露但 main.js 未注册的 4 个 IPC handler
-// 历史问题：preload.js 调用这些 IPC 时会抛 "No handler registered" 错误，
-// 导致相关功能（图片目录、媒体文件列表、登录取消按钮）静默失效
-// ============================================================================
-
-// 1. 获取图片保存目录（与视频目录一致，使用当前月份子目录）
-ipcMain.handle('get-image-directory', async () => {
-    return getCurrentMonthDirectory();
-});
-
-// 2. 选择图片保存目录（弹出系统文件夹选择对话框）
-ipcMain.handle('select-image-save-directory', async () => {
-    const result = await dialog.showOpenDialog({
-        properties: ['openDirectory', 'createDirectory'],
-        title: '选择图片保存位置'
-    });
-    if (result.canceled || result.filePaths.length === 0) {
-        return { success: false };
-    }
-    return { success: true, path: result.filePaths[0] };
-});
-
-// 3. 列出所有媒体文件（遍历 downloads 目录所有月份子目录，用于调试）
-ipcMain.handle('list-all-media-files', async () => {
-    try {
-        const downloadsDir = getDownloadsDirectory();
-        const searchDirectories = [downloadsDir];
-        const files = [];
-        const validExtensions = ['.jpg', '.jpeg', '.png', '.webm', '.mp4', '.avi', '.mov'];
-
-        let monthDirs = [];
-        try {
-            const entries = await fs.readdir(downloadsDir, { withFileTypes: true });
-            monthDirs = entries.filter(e => e.isDirectory()).map(e => path.join(downloadsDir, e.name));
-        } catch (e) { /* downloads目录可能不存在 */ }
-
-        for (const monthDir of monthDirs) {
-            let fileEntries = [];
-            try {
-                fileEntries = await fs.readdir(monthDir, { withFileTypes: true });
-            } catch (e) { continue; }
-            for (const fe of fileEntries) {
-                if (!fe.isFile()) continue;
-                const ext = path.extname(fe.name).toLowerCase();
-                if (!validExtensions.includes(ext)) continue;
-                try {
-                    const filePath = path.join(monthDir, fe.name);
-                    const stat = await fs.stat(filePath);
-                    const isVideo = ext === '.webm' || ext === '.mp4' || ext === '.avi' || ext === '.mov';
-                    files.push({
-                        name: fe.name,
-                        path: filePath,
-                        type: isVideo ? 'video' : 'image',
-                        size: stat.size,
-                        lastModified: stat.mtimeMs
-                    });
-                } catch (e) { /* 跳过无法读取的文件 */ }
-            }
-        }
-        return { success: true, files, searchDirectories };
-    } catch (error) {
-        console.error('列出所有媒体文件失败:', error);
-        return { success: false, error: error.message, files: [], searchDirectories: [] };
-    }
-});
-
-// 4. 登录取消（关闭登录窗口并退出应用）
-ipcMain.handle('login-cancel', async () => {
-    try {
-        if (loginWindow && !loginWindow.isDestroyed()) {
-            loginWindow.destroy();
-        }
-    } catch (e) { /* 忽略 */ }
-    app.quit();
-});
-
-// 5. 读取 index.html 内容（登录界面用于获取诊所名称）
-ipcMain.handle('get-index-html-content', async () => {
-    try {
-        const indexPath = path.join(__dirname, '..', 'index.html');
-        const content = await fs.readFile(indexPath, 'utf8');
-        return { success: true, content };
-    } catch (e) {
-        console.error('读取 index.html 失败:', e);
-        return { success: false, content: '' };
-    }
-});
-
-// 6. 获取数据目录（userData 目录）
-ipcMain.handle('get-data-directory', async () => {
-    return app.getPath('userData');
-});
-
-// 7. 打开图片目录（在文件管理器中打开）
-ipcMain.handle('open-image-directory', async () => {
-    const dir = getCurrentMonthDirectory();
-    shell.openPath(dir);
-    return { success: true, directory: dir };
-});
-
-// 8. 获取备份目录
-ipcMain.handle('get-backup-directory', async () => {
-    return getDownloadsDirectory();
-});
-
-// 9. 打开备份目录
-ipcMain.handle('open-backup-directory', async () => {
-    const dir = getDownloadsDirectory();
-    shell.openPath(dir);
-    return { success: true, directory: dir };
 });
 
 // 读取 index.html 同目录下的 config.json；如不存在，则使用内置默认值
@@ -1530,11 +1666,11 @@ ipcMain.handle('get-app-config', async () => {
     const defaults = {
         clinicName: '本能堂中医诊所',
         doctorName: '本能堂',
-        edition: 'cloud',
-        productName: '惠康中医-YJ'
+        edition: 'clinic_custom',
+        productName: '惠康中医-LJ'
     };
     try {
-        const configPath = path.join(__dirname, '..', 'config.json');
+        const configPath = getWritableConfigPath();
         if (await fse.pathExists(configPath)) {
             const cfg = await fse.readJson(configPath);
             return { success: true, config: { ...defaults, ...cfg } };
@@ -1548,7 +1684,7 @@ ipcMain.handle('get-app-config', async () => {
 // 打包配置页：读取 config.json
 ipcMain.handle('packaging-read-config', async () => {
     try {
-        const configPath = path.join(__dirname, '..', 'config.json');
+        const configPath = getWritableConfigPath();
         if (await fse.pathExists(configPath)) {
             const cfg = await fse.readJson(configPath);
             return cfg;
@@ -1560,10 +1696,188 @@ ipcMain.handle('packaging-read-config', async () => {
     }
 });
 
+// ===== 首次配置向导：更新 config.json =====
+ipcMain.handle('config:update', async (event, updates) => {
+    try {
+        const configPath = getWritableConfigPath();
+        let config = {};
+        if (await fse.pathExists(configPath)) {
+            config = await fse.readJson(configPath);
+        }
+        if (updates.clinicName !== undefined) config.clinicName = updates.clinicName;
+        if (updates.doctorName !== undefined) config.doctorName = updates.doctorName;
+        if (updates.title !== undefined) config.title = updates.title;
+        // 签名保护
+        config.configSignature = licenseManager.signConfig(config);
+        await fse.writeJson(configPath, config, { spaces: 2 });
+        console.log('[Config] config.json updated:', JSON.stringify(updates));
+        return { success: true, config };
+    } catch (e) {
+        console.error('[Config] config:update failed:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+// ===== 打开激活窗口 =====
+ipcMain.handle('showActivationWindow', async () => {
+    try {
+        if (activateManager && typeof activateManager.showActivationWindow === 'function') {
+            activateManager.showActivationWindow();
+            return { success: true };
+        }
+        // fallback：通过菜单触发
+        return { success: false, error: 'activateManager 不可用' };
+    } catch (e) {
+        console.error('[Activate] showActivationWindow failed:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+// ===== 修改用户密码 =====
+ipcMain.handle('user:change-password', async (event, { username, oldPassword, newPassword }) => {
+    try {
+        if (!username || !newPassword) {
+            return { success: false, error: '缺少用户名或新密码' };
+        }
+        const pwd = newPassword;
+        if (pwd.length < 8) return { success: false, error: '密码至少8位' };
+        if (!/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) {
+            return { success: false, error: '密码必须同时包含字母和数字' };
+        }
+
+        // 更新 config.json 中的用户
+        const configPath = getWritableConfigPath();
+        if (await fse.pathExists(configPath)) {
+            const config = await fse.readJson(configPath);
+            if (config && Array.isArray(config.users)) {
+                const userIdx = config.users.findIndex(u => u.username === username);
+                if (userIdx !== -1) {
+                    const { passwordHash, salt } = await hashPassword(pwd);
+                    config.users[userIdx].password = passwordHash;
+                    config.users[userIdx].passwordHash = passwordHash;
+                    config.users[userIdx].salt = salt;
+                    config.users[userIdx].updatedAt = new Date().toISOString();
+                    config.configSignature = licenseManager.signConfig(config);
+                    await fse.writeJson(configPath, config, { spaces: 2 });
+                    console.log('[User] password changed for:', username);
+                    return { success: true };
+                }
+            }
+        }
+
+        // 回退：写入 localStorage 路径
+        const userDataPath = path.join(getDataDirectory(), 'systemUsers.json');
+        if (await fse.pathExists(userDataPath)) {
+            const users = await fse.readJson(userDataPath);
+            const userIdx = users.findIndex(u => u.username === username);
+            if (userIdx !== -1) {
+                const { passwordHash, salt } = await hashPassword(pwd);
+                users[userIdx].password = passwordHash;
+                users[userIdx].passwordHash = passwordHash;
+                users[userIdx].salt = salt;
+                await fse.writeJson(userDataPath, users, { spaces: 2 });
+                return { success: true };
+            }
+        }
+
+        return { success: false, error: '用户不存在' };
+    } catch (e) {
+        console.error('[User] change-password failed:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+async function hashPassword(password) {
+    const crypto = require('crypto');
+    const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
+    const data = Buffer.from(PASSWORD_SALT + password, 'utf8');
+    return {
+        passwordHash: crypto.createHash('sha256').update(data).digest('hex'),
+        salt: PASSWORD_SALT
+    };
+}
+
+// ============================================================================
+//  ★ bnzc:// 一键激活 — IPC 处理器
+// ============================================================================
+
+// 查询是否有待激活数据（来自 URL Scheme）
+ipcMain.handle('bnzc:get-pending-activation', () => {
+    try {
+        console.log('[Bnzc] get-pending-activation: _pendingActivation =', JSON.stringify(_pendingActivation));
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC get-pending-activation called, _pendingActivation=${JSON.stringify(_pendingActivation)}\n`); } catch(e) {}
+        return { success: true, data: _pendingActivation };
+    } catch (e) {
+        console.error('[Bnzc] get-pending-activation 异常:', e);
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC get-pending-activation ERROR: ${e && e.message}\n`); } catch(e2) {}
+        return { success: false, error: String(e) };
+    }
+});
+
+// 清除待激活数据（激活完成或用户放弃时调用）
+ipcMain.handle('bnzc:clear-pending-activation', () => {
+    try {
+        console.log('[Bnzc] clear-pending-activation');
+        _pendingActivation = null;
+        return { success: true };
+    } catch (e) {
+        console.error('[Bnzc] clear-pending-activation 异常:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+// ★ 一键激活核心：接收激活码 + 诊所名，直接走激活流程
+// 调用方：登录页检测到 bnzc:// 传来的参数后自动调用
+ipcMain.handle('bnzc:auto-activate', async (event, { code, clinicName, user }) => {
+    try {
+        console.log('[Bnzc] auto-activate 调用:', { code, clinicName, user });
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC auto-activate called: code=${code}, clinic=${clinicName}, user=${user}\n`); } catch(e) {}
+        if (!code) return { success: false, error: '激活码为空' };
+
+        // 1. 校验激活码格式
+        const pattern = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+        if (!pattern.test(code)) {
+            console.warn('[Bnzc] 激活码格式错误:', code);
+            return { success: false, error: '激活码格式错误' };
+        }
+
+        // 2. 获取本机机器 ID
+        const machineId = activateManager.getMachineId();
+        console.log('[Bnzc] 机器 ID:', machineId);
+
+        // 3. 调用云端激活（复用 activateOnline 逻辑）
+        console.log('[Bnzc] 开始云端激活...');
+        const result = await activateManager.activateOnline(code, machineId, user || '', clinicName || '');
+        console.log('[Bnzc] 激活结果:', result);
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] auto-activate RESULT: ${JSON.stringify(result)}\n`); } catch(e) {}
+
+        // 4. 多设备提示
+        if (result && result.success && result.licenseInfo) {
+            const info = result.licenseInfo;
+            const maxDevices = info.maxDevices || 1;
+            const devicesCount = info.devicesCount || 1;
+            if (maxDevices > 1) {
+                result.deviceInfo = { maxDevices, devicesCount };
+            }
+        }
+
+        // 5. 激活成功后清除 pending
+        if (result && result.success) {
+            _pendingActivation = null;
+            console.log('[Bnzc] 激活成功，已清除 pending');
+        }
+
+        return result;
+    } catch (e) {
+        console.error('[Bnzc] auto-activate 异常:', e);
+        return { success: false, error: String(e.message || e) };
+    }
+});
+
 // 打包配置页：写入 config.json
 ipcMain.handle('packaging-write-config', async (event, config) => {
     try {
-        const configPath = path.join(__dirname, '..', 'config.json');
+        const configPath = getWritableConfigPath();
         await fse.writeJson(configPath, config, { spaces: 2 });
         return true;
     } catch (e) {
@@ -1708,6 +2022,8 @@ ipcMain.handle('show-message-box', async (event, options) => {
 // ★ 打印处方（直接打印）
 // 方案：隐藏窗口加载处方 HTML → 渲染进程调用 window.print() → 弹系统打印对话框 → 关闭
 // 最快最简单，无预览窗口、无 PDF 中间步骤
+// ★ 2026-08-02 同步云端 cloud_desktop 方案：隐藏窗口+字体等待+2分钟超时
+//   旧方案（显示窗口+webContents.print+30秒超时）已废弃，用户体验差且超时过短
 ipcMain.handle('print-prescription', async (event, html, orientation) => {
     try {
         const isLandscape = orientation === 'landscape';

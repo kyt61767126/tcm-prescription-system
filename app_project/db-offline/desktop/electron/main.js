@@ -139,6 +139,37 @@ function getDataDirectory() {
     return ensureDirWithFallback('data');
 }
 
+// ★ 获取可写的 config.json 路径（打包后 asar 只读，必须用 exe 目录或 userData）
+// Portable: exe 同目录；NSIS 安装版: userData 目录（与 license-manager.js getWritableDir 一致）
+function getWritableConfigPath() {
+    try {
+        if (process.env.PORTABLE_EXECUTABLE_DIR) {
+            return path.join(process.env.PORTABLE_EXECUTABLE_DIR, 'config.json');
+        }
+        return path.join(app.getPath('userData'), 'config.json');
+    } catch (e) {
+        return path.join(getExeDirectory(), 'config.json');
+    }
+}
+
+// ★ 首次启动时，将 asar 内的 config.json 复制到可写路径（仅复制一次）
+async function ensureWritableConfig() {
+    try {
+        const writablePath = getWritableConfigPath();
+        if (await fse.pathExists(writablePath)) return writablePath;
+        const asarPath = path.join(__dirname, '..', 'config.json');
+        if (await fse.pathExists(asarPath)) {
+            const config = await fse.readJson(asarPath);
+            await fse.writeJson(writablePath, config, { spaces: 2 });
+            console.log('[Config] config.json copied to writable path:', writablePath);
+        }
+        return writablePath;
+    } catch (e) {
+        console.error('[Config] ensureWritableConfig failed:', e.message);
+        return path.join(__dirname, '..', 'config.json');
+    }
+}
+
 function getDownloadsDirectory() {
     return ensureDirWithFallback('downloads');
 }
@@ -551,6 +582,192 @@ function installDevToolsGuard(webContents) {
 }
 
 // ============================================================================
+//  ★ 自定义协议 bnzc:// — 一键激活 URL Scheme
+//  支持：bnzc://activate?code=BNZC-XXXX-XXXX-XXXX&clinic=诊所名
+//  实现：
+//    1. 单实例锁：软件运行时通过 second-instance 事件处理新链接
+//    2. 注册 bnzc 为默认协议客户端（Windows 注册表关联）
+//    3. 解析 process.argv（Windows/Linux）或 open-url 事件（macOS）
+//    4. 将激活参数存入 pendingActivation，登录页自动检测并一键激活
+// ============================================================================
+
+// ★ 单实例锁 + second-instance 事件处理
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+    console.log('[Bnzc] 已有实例运行，新实例退出（second-instance 将传递 URL）');
+    app.quit();
+    process.exit(0);
+}
+
+app.on('second-instance', (event, commandLine) => {
+    console.log('[Bnzc] second-instance 事件, commandLine:', JSON.stringify(commandLine));
+    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] second-instance: ${JSON.stringify(commandLine)}\n`); } catch(e) {}
+    for (const arg of commandLine) {
+        if (arg && arg.startsWith('bnzc://')) {
+            const parsed = parseBnzcUrl(arg);
+            try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed: ${JSON.stringify(parsed)}\n`); } catch(e) {}
+            if (parsed) {
+                _pendingActivation = parsed;
+                console.log('[Bnzc] second-instance 捕获激活链接:', parsed.code);
+                notifyPendingActivation(parsed);
+            }
+            break;
+        }
+    }
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.isMinimized()) mainWindow.restore();
+        mainWindow.focus();
+    }
+    if (loginWindow && !loginWindow.isDestroyed()) {
+        if (loginWindow.isMinimized()) loginWindow.restore();
+        loginWindow.focus();
+    }
+});
+
+// ★ 必须在 app.whenReady() 之前注册
+// 开发模式下需要传入项目路径参数，否则 Windows 点击 bnzc:// 链接时只启动 electron.exe 但不加载项目
+if (!app.isPackaged) {
+    app.setAsDefaultProtocolClient('bnzc', process.execPath, [path.resolve(__dirname, '..')]);
+    console.log('[Bnzc] 开发模式注册协议:', process.execPath, [path.resolve(__dirname, '..')]);
+} else {
+    app.setAsDefaultProtocolClient('bnzc');
+}
+
+// 存储待激活数据（通过 URL Scheme 传入）
+let _pendingActivation = null;
+
+// ★ 通知现有窗口有新的待激活数据
+function notifyPendingActivation(parsed) {
+    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] notifyPendingActivation: code=${parsed.code}, mainWindow=${!!mainWindow && !mainWindow.isDestroyed()}, loginWindow=${!!loginWindow && !loginWindow.isDestroyed()}\n`); } catch(e) {}
+    // 通知主窗口（已登录状态）
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        if (mainWindow.webContents) {
+            mainWindow.webContents.send('bnzc:pending-activation', parsed);
+            console.log('[Bnzc] 已通知主窗口 pending-activation');
+        }
+    }
+    // 通知登录窗口（未登录状态）
+    if (loginWindow && !loginWindow.isDestroyed()) {
+        if (loginWindow.webContents) {
+            loginWindow.webContents.send('bnzc:pending-activation', parsed);
+            console.log('[Bnzc] 已通知登录窗口 pending-activation');
+        }
+    }
+    // 如果都没有，创建登录窗口来处理
+    if ((!mainWindow || mainWindow.isDestroyed()) && (!loginWindow || loginWindow.isDestroyed())) {
+        console.log('[Bnzc] 无可用窗口，创建登录窗口处理激活');
+        // 延迟创建窗口，等待 app ready
+        if (app.isReady()) {
+            createLoginWindow();
+        }
+    }
+}
+
+// 从 process.argv 中拼接并提取 bnzc:// URL
+// Windows 下命令行参数可能被 & 分割成多个片段，需要智能拼接
+function extractBnzcFromArgv() {
+    try {
+        const argv = process.argv;
+        // ★ 诊断日志：记录启动参数（定位"无反应"问题）
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv START: argv=${JSON.stringify(argv)}\n`); } catch(e) {}
+        // 先尝试找完整的 bnzc:// URL
+        for (const arg of argv) {
+            if (arg && arg.startsWith('bnzc://')) {
+                // ★ 诊断日志：找到 bnzc:// 参数
+                try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] found bnzc arg: ${arg}\n`); } catch(e) {}
+                const parsed = parseBnzcUrl(arg);
+                if (parsed) {
+                    console.log('[Bnzc] 从命令行参数解析激活链接:', parsed.code);
+                    try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] parsed OK: code=${parsed.code}\n`); } catch(e) {}
+                    return parsed;
+                }
+                // 若首个片段无法独立解析，尝试拼接后续片段
+                // 例: argv = ['electron', '.', 'bnzc://activate?code=XXX', 'clinic=YYY', 'user=ZZZ']
+                let fullUrl = arg;
+                for (let i = argv.indexOf(arg) + 1; i < argv.length; i++) {
+                    const nextArg = argv[i];
+                    if (nextArg && !nextArg.startsWith('-') && !nextArg.endsWith('.js') && !nextArg.endsWith('.cmd')) {
+                        fullUrl += '&' + nextArg;
+                    } else {
+                        break;
+                    }
+                }
+                console.log('[Bnzc] 拼接完整 URL:', fullUrl);
+                const parsed2 = parseBnzcUrl(fullUrl);
+                if (parsed2) {
+                    console.log('[Bnzc] 从拼接 URL 解析激活链接:', parsed2.code);
+                    return parsed2;
+                }
+            }
+        }
+        // ★ 诊断日志：遍历完 argv 但未找到 bnzc:// 参数
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv: 未找到 bnzc:// 参数\n`); } catch(e) {}
+    } catch (e) {
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] extractBnzcFromArgv 异常: ${e && e.message}\n`); } catch(e2) {}
+    }
+    return null;
+}
+
+// 解析 bnzc:// URL，提取激活参数
+function parseBnzcUrl(rawUrl) {
+    try {
+        if (!rawUrl || typeof rawUrl !== 'string') return null;
+        // Windows 下可能被引号包裹
+        let url = rawUrl.trim().replace(/^"|"$/g, '');
+        if (!url.startsWith('bnzc://')) return null;
+
+        // bnzc://activate?code=XXX&clinic=YYY&user=ZZZ
+        // 注意：Windows 可能传 bnzc://activate/?code=... (多一个 /)
+        const pathPart = url.replace(/^bnzc:\/\//, '');
+        const [routeRaw, queryStr] = pathPart.split('?');
+        const route = routeRaw.replace(/\/+$/, ''); // 去掉尾部斜杠
+        if (route !== 'activate') return null;
+
+        const params = {};
+        if (queryStr) {
+            const pairs = queryStr.split('&');
+            for (const pair of pairs) {
+                const [k, v] = pair.split('=');
+                if (k) params[decodeURIComponent(k)] = decodeURIComponent(v || '');
+            }
+        }
+
+        if (!params.code) return null;
+        const result = {
+            code: params.code.trim().toUpperCase(),
+            clinicName: params.clinic ? decodeURIComponent(params.clinic) : '',
+            user: params.user ? decodeURIComponent(params.user) : '',
+            source: 'url-scheme',
+            timestamp: Date.now()
+        };
+        console.log('[Bnzc] parseBnzcUrl 解析结果:', result);
+        return result;
+    } catch (e) {
+        console.error('[Bnzc] parseBnzcUrl 失败:', e);
+        return null;
+    }
+}
+
+// macOS: open-url 事件
+app.on('open-url', (event, url) => {
+    event.preventDefault();
+    const parsed = parseBnzcUrl(url);
+    if (parsed) {
+        _pendingActivation = parsed;
+        console.log('[Bnzc] open-url 事件捕获激活链接:', parsed.code);
+        notifyPendingActivation(parsed);
+    }
+});
+
+// 启动时从 argv 检查
+const _startupActivation = extractBnzcFromArgv();
+if (_startupActivation) {
+    _pendingActivation = _startupActivation;
+}
+// ★ 诊断日志：记录 _startupActivation 最终结果
+try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] _startupActivation=${JSON.stringify(_startupActivation)}, _pendingActivation=${JSON.stringify(_pendingActivation)}\n`); } catch(e) {}
+
+// ============================================================================
 //  视频录制模块注入（新增）
 // ============================================================================
 async function injectVideoRecorder(win) {
@@ -587,6 +804,24 @@ function createLoginWindow() {
 
     // ★ P1-A6：DevTools 反调试（仅打包环境生效）
     installDevToolsGuard(loginWindow.webContents);
+
+    // ★ 诊断：捕获 loginWindow 的所有 console 输出和错误，写入文件
+    loginWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+        try {
+            const fsSync = require('fs');
+            const logPath = path.join(app.getPath('userData'), 'login-console.log');
+            const levelStr = ['LOG', 'WARN', 'ERROR'][level] || 'LOG';
+            fsSync.appendFileSync(logPath, `[${new Date().toISOString()}] [${levelStr}] ${message} (line:${line}, src:${sourceId})\n`);
+        } catch(e) {}
+    });
+    // ★ 诊断：捕获渲染进程未处理的异常
+    loginWindow.webContents.on('render-process-gone', (event, details) => {
+        try {
+            const fsSync = require('fs');
+            const logPath = path.join(app.getPath('userData'), 'login-console.log');
+            fsSync.appendFileSync(logPath, `[${new Date().toISOString()}] [CRASH] render-process-gone: ${JSON.stringify(details)}\n`);
+        } catch(e) {}
+    });
 
     loginWindow.loadFile(path.join(__dirname, 'login.html'));
 
@@ -712,6 +947,8 @@ async function verifyCodeIntegrity() {
 }
 
 app.whenReady().then(async () => {
+    // ★ 首次启动时将 config.json 从 asar 复制到可写路径（必须在 license 校验之前）
+    await ensureWritableConfig();
     // ★ License 授权校验（启动时校验，未授权或过期则弹双按钮：前往激活/退出软件）
     // ★ v3 新增：传入 localMachineId 用于三因子绑定校验（clinicName + machineId）
     let localMachineId = '';
@@ -1452,7 +1689,7 @@ ipcMain.handle('get-app-config', async () => {
         productName: '惠康中医-LJ'
     };
     try {
-        const configPath = path.join(__dirname, '..', 'config.json');
+        const configPath = getWritableConfigPath();
         if (await fse.pathExists(configPath)) {
             const cfg = await fse.readJson(configPath);
             return { success: true, config: { ...defaults, ...cfg } };
@@ -1466,7 +1703,7 @@ ipcMain.handle('get-app-config', async () => {
 // 打包配置页：读取 config.json
 ipcMain.handle('packaging-read-config', async () => {
     try {
-        const configPath = path.join(__dirname, '..', 'config.json');
+        const configPath = getWritableConfigPath();
         if (await fse.pathExists(configPath)) {
             const cfg = await fse.readJson(configPath);
             return cfg;
@@ -1478,10 +1715,188 @@ ipcMain.handle('packaging-read-config', async () => {
     }
 });
 
+// ===== 首次配置向导：更新 config.json =====
+ipcMain.handle('config:update', async (event, updates) => {
+    try {
+        const configPath = getWritableConfigPath();
+        let config = {};
+        if (await fse.pathExists(configPath)) {
+            config = await fse.readJson(configPath);
+        }
+        if (updates.clinicName !== undefined) config.clinicName = updates.clinicName;
+        if (updates.doctorName !== undefined) config.doctorName = updates.doctorName;
+        if (updates.title !== undefined) config.title = updates.title;
+        // 签名保护
+        config.configSignature = licenseManager.signConfig(config);
+        await fse.writeJson(configPath, config, { spaces: 2 });
+        console.log('[Config] config.json updated:', JSON.stringify(updates));
+        return { success: true, config };
+    } catch (e) {
+        console.error('[Config] config:update failed:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+// ===== 打开激活窗口 =====
+ipcMain.handle('showActivationWindow', async () => {
+    try {
+        if (activateManager && typeof activateManager.showActivationWindow === 'function') {
+            activateManager.showActivationWindow();
+            return { success: true };
+        }
+        // fallback：通过菜单触发
+        return { success: false, error: 'activateManager 不可用' };
+    } catch (e) {
+        console.error('[Activate] showActivationWindow failed:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+// ===== 修改用户密码 =====
+ipcMain.handle('user:change-password', async (event, { username, oldPassword, newPassword }) => {
+    try {
+        if (!username || !newPassword) {
+            return { success: false, error: '缺少用户名或新密码' };
+        }
+        const pwd = newPassword;
+        if (pwd.length < 8) return { success: false, error: '密码至少8位' };
+        if (!/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) {
+            return { success: false, error: '密码必须同时包含字母和数字' };
+        }
+
+        // 更新 config.json 中的用户
+        const configPath = getWritableConfigPath();
+        if (await fse.pathExists(configPath)) {
+            const config = await fse.readJson(configPath);
+            if (config && Array.isArray(config.users)) {
+                const userIdx = config.users.findIndex(u => u.username === username);
+                if (userIdx !== -1) {
+                    const { passwordHash, salt } = await hashPassword(pwd);
+                    config.users[userIdx].password = passwordHash;
+                    config.users[userIdx].passwordHash = passwordHash;
+                    config.users[userIdx].salt = salt;
+                    config.users[userIdx].updatedAt = new Date().toISOString();
+                    config.configSignature = licenseManager.signConfig(config);
+                    await fse.writeJson(configPath, config, { spaces: 2 });
+                    console.log('[User] password changed for:', username);
+                    return { success: true };
+                }
+            }
+        }
+
+        // 回退：写入 localStorage 路径
+        const userDataPath = path.join(getDataDirectory(), 'systemUsers.json');
+        if (await fse.pathExists(userDataPath)) {
+            const users = await fse.readJson(userDataPath);
+            const userIdx = users.findIndex(u => u.username === username);
+            if (userIdx !== -1) {
+                const { passwordHash, salt } = await hashPassword(pwd);
+                users[userIdx].password = passwordHash;
+                users[userIdx].passwordHash = passwordHash;
+                users[userIdx].salt = salt;
+                await fse.writeJson(userDataPath, users, { spaces: 2 });
+                return { success: true };
+            }
+        }
+
+        return { success: false, error: '用户不存在' };
+    } catch (e) {
+        console.error('[User] change-password failed:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+async function hashPassword(password) {
+    const crypto = require('crypto');
+    const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
+    const data = Buffer.from(PASSWORD_SALT + password, 'utf8');
+    return {
+        passwordHash: crypto.createHash('sha256').update(data).digest('hex'),
+        salt: PASSWORD_SALT
+    };
+}
+
+// ============================================================================
+//  ★ bnzc:// 一键激活 — IPC 处理器
+// ============================================================================
+
+// 查询是否有待激活数据（来自 URL Scheme）
+ipcMain.handle('bnzc:get-pending-activation', () => {
+    try {
+        console.log('[Bnzc] get-pending-activation: _pendingActivation =', JSON.stringify(_pendingActivation));
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC get-pending-activation called, _pendingActivation=${JSON.stringify(_pendingActivation)}\n`); } catch(e) {}
+        return { success: true, data: _pendingActivation };
+    } catch (e) {
+        console.error('[Bnzc] get-pending-activation 异常:', e);
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC get-pending-activation ERROR: ${e && e.message}\n`); } catch(e2) {}
+        return { success: false, error: String(e) };
+    }
+});
+
+// 清除待激活数据（激活完成或用户放弃时调用）
+ipcMain.handle('bnzc:clear-pending-activation', () => {
+    try {
+        console.log('[Bnzc] clear-pending-activation');
+        _pendingActivation = null;
+        return { success: true };
+    } catch (e) {
+        console.error('[Bnzc] clear-pending-activation 异常:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+// ★ 一键激活核心：接收激活码 + 诊所名，直接走激活流程
+// 调用方：登录页检测到 bnzc:// 传来的参数后自动调用
+ipcMain.handle('bnzc:auto-activate', async (event, { code, clinicName, user }) => {
+    try {
+        console.log('[Bnzc] auto-activate 调用:', { code, clinicName, user });
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] IPC auto-activate called: code=${code}, clinic=${clinicName}, user=${user}\n`); } catch(e) {}
+        if (!code) return { success: false, error: '激活码为空' };
+
+        // 1. 校验激活码格式
+        const pattern = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+        if (!pattern.test(code)) {
+            console.warn('[Bnzc] 激活码格式错误:', code);
+            return { success: false, error: '激活码格式错误' };
+        }
+
+        // 2. 获取本机机器 ID
+        const machineId = activateManager.getMachineId();
+        console.log('[Bnzc] 机器 ID:', machineId);
+
+        // 3. 调用云端激活（复用 activateOnline 逻辑）
+        console.log('[Bnzc] 开始云端激活...');
+        const result = await activateManager.activateOnline(code, machineId, user || '', clinicName || '');
+        console.log('[Bnzc] 激活结果:', result);
+        try { require('fs').appendFileSync(path.join(app.getPath('userData'), 'bnzc-debug.log'), `[${new Date().toISOString()}] auto-activate RESULT: ${JSON.stringify(result)}\n`); } catch(e) {}
+
+        // 4. 多设备提示
+        if (result && result.success && result.licenseInfo) {
+            const info = result.licenseInfo;
+            const maxDevices = info.maxDevices || 1;
+            const devicesCount = info.devicesCount || 1;
+            if (maxDevices > 1) {
+                result.deviceInfo = { maxDevices, devicesCount };
+            }
+        }
+
+        // 5. 激活成功后清除 pending
+        if (result && result.success) {
+            _pendingActivation = null;
+            console.log('[Bnzc] 激活成功，已清除 pending');
+        }
+
+        return result;
+    } catch (e) {
+        console.error('[Bnzc] auto-activate 异常:', e);
+        return { success: false, error: String(e.message || e) };
+    }
+});
+
 // 打包配置页：写入 config.json
 ipcMain.handle('packaging-write-config', async (event, config) => {
     try {
-        const configPath = path.join(__dirname, '..', 'config.json');
+        const configPath = getWritableConfigPath();
         await fse.writeJson(configPath, config, { spaces: 2 });
         return true;
     } catch (e) {

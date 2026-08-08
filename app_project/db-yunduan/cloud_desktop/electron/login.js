@@ -347,7 +347,7 @@
             if (result && result.success && result.data && result.data.code) {
                 console.log('[Bnzc] 检测到待激活数据:', result.data.code);
                 window.__bnzcHasPending = true;
-                await performAutoActivation(result.data);
+                await performAutoActivation(result.data, config);
             }
         } catch (e) {
             console.warn('[Bnzc] 检查待激活数据失败:', e);
@@ -437,6 +437,7 @@
                 bar.innerHTML = '<span class="trial-text">❌ 自动激活异常</span>' +
                     '<a class="trial-action" onclick="openActivationWindow()">手动激活 →</a>';
             }
+
             // ★ 异常后恢复首次向导
             window.__bnzcHasPending = false;
             checkFirstRun(config);
@@ -488,13 +489,13 @@
         const DEFAULT_CLINIC_NAMES = ['本能堂中医诊所', '惠康中医诊所', '默认诊所'];
         const currentName = (config && config.clinicName) || '';
         const isDefault = !currentName || DEFAULT_CLINIC_NAMES.some(n => currentName === n);
-        
+
         // ★ 如果有 bnzc:// 待激活数据，跳过首次向导（自动激活优先）
         if (window.__bnzcHasPending) {
             console.log('[Bnzc] 有待激活数据，跳过首次向导');
             return;
         }
-        
+
         // 仅当使用默认诊所名且未完成过向导时显示
         const wizardDone = localStorage.getItem('firstRunWizardDone');
         if (isDefault && !wizardDone) {
