@@ -76,7 +76,7 @@ function getEffectiveConfigSignKey() {
 
 // ★ v2: 版本类型默认配置（功能差异矩阵）
 // trial: 试用版，限 30 张/月处方，无高级功能
-// personal: 标准版，无限处方，支持数据备份
+// personal: 个人版，无限处方，支持数据备份
 // pro: 专业版，无限处方，支持云端同步+多设备+优先支持
 const LICENSE_TYPE_CONFIG = {
     trial: {
@@ -915,7 +915,7 @@ function normalizeLicense(license) {
 // 注意：config.json 必须配合 configSignature 完整性校验使用，防止被篡改绕过绑定
 function getLocalClinicName() {
     try {
-        const configPath = path.join(getWritableDir(), 'config.json');
+        const configPath = path.join(getExeDirectory(), 'config.json');
         if (fs.existsSync(configPath)) {
             const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             return cfg.clinicName || '';
@@ -927,7 +927,7 @@ function getLocalClinicName() {
 // 从 config.json 读取本地用户名（doctorName，作为绑定辅助字段）
 function getLocalDoctorName() {
     try {
-        const configPath = path.join(getWritableDir(), 'config.json');
+        const configPath = path.join(getExeDirectory(), 'config.json');
         if (fs.existsSync(configPath)) {
             const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             return cfg.doctorName || '';
@@ -970,22 +970,10 @@ function checkLicenseBinding(license, localMachineId) {
 // ★ v3 新增：校验 config.json 完整性签名
 // 防止用户修改 config.json 中的 clinicName 绕过 license 绑定校验
 // 返回 true=完整 / false=被篡改或无签名
-// ★ 修复：config.json 签名始终用硬编码密钥 CONFIG_SIGN_KEY，不依赖 masterKey
-//   原因：config.json 在打包时签名（此时无 license），masterKey 派生密钥只适用于 license.dat 验签
-//   若用 masterKey 派生密钥验签 config.json，激活后 license 含 masterKey 时验签必然失败
-function signConfig(config) {
-    try {
-        const signContent = [config.clinicName || '', config.doctorName || '', config.edition || '', config.configIssuedAt || ''].join('|');
-        return crypto.createHmac('sha256', CONFIG_SIGN_KEY).update(signContent).digest('hex');
-    } catch (e) {
-        console.warn('[License] signConfig 异常:', e.message);
-        return '';
-    }
-}
-
+// ★ P1-3: 使用 getEffectiveConfigSignKey() 派生密钥（从 license.masterKey 派生，向后兼容）
 function verifyConfigIntegrity() {
     try {
-        const configPath = path.join(getWritableDir(), 'config.json');
+        const configPath = path.join(getExeDirectory(), 'config.json');
         if (!fs.existsSync(configPath)) return true;  // 无 config.json 跳过校验（兜底放行）
         const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         // 无 configSignature 字段 → 旧版 config.json，跳过校验（兼容性优先）
@@ -994,7 +982,7 @@ function verifyConfigIntegrity() {
         if (!cfg.configIssuedAt) return false;
         // 签名内容：clinicName|doctorName|edition|configIssuedAt
         const signContent = [cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '', cfg.configIssuedAt].join('|');
-        const expected = crypto.createHmac('sha256', CONFIG_SIGN_KEY).update(signContent).digest('hex');
+        const expected = crypto.createHmac('sha256', getEffectiveConfigSignKey()).update(signContent).digest('hex');
         try {
             return crypto.timingSafeEqual(Buffer.from(cfg.configSignature, 'hex'), Buffer.from(expected, 'hex'));
         } catch (e) {
@@ -1608,7 +1596,6 @@ module.exports = {
     getLicenseMasterKey,    // 获取当前 license 的 masterKey（供测试用）
     getEffectiveHmacKey,    // 获取生效的 HMAC 密钥（masterKey 派生或硬编码 fallback）
     getEffectiveConfigSignKey, // 获取生效的 config 签名密钥（masterKey 派生或硬编码 fallback）
-    signConfig,             // ★ 对 config 对象签名（防止篡改）
     // P6-6 新增：激活工单
     submitActivationTicket,
     getCachedActivationTicket

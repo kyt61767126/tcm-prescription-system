@@ -1160,7 +1160,82 @@
         migrateOldKeys,
 
         // P1-3: masterKey 派生盐（外部可手动注入，正常情况下由 initMasterKeyFromLicense 自动注入）
-        setMasterKey
+        setMasterKey,
+
+        // ============ 注册流程支持 ============
+
+        // 密码强度校验（返回 { score, label, errors }）
+        validatePasswordStrength(password) {
+            const result = { score: 0, label: '', errors: [] };
+            if (!password) { result.label = '空'; return result; }
+            if (password.length >= 8) result.score++; else result.errors.push('密码至少8位');
+            if (password.length >= 12) result.score++;
+            if (/[a-z]/.test(password)) result.score++; else result.errors.push('密码需包含小写字母');
+            if (/[A-Z]/.test(password)) result.score++;
+            if (/[0-9]/.test(password)) result.score++; else result.errors.push('密码需包含数字');
+            if (/[^a-zA-Z0-9]/.test(password)) result.score++;
+            if (result.score <= 1) result.label = '太弱';
+            else if (result.score <= 2) result.label = '弱';
+            else if (result.score <= 3) result.label = '一般';
+            else if (result.score <= 4) result.label = '中等';
+            else if (result.score <= 5) result.label = '强';
+            else result.label = '非常强';
+            return result;
+        },
+
+        // 诊所自助注册（调用后端 /users?action=register-clinic）
+        async registerClinic(params) {
+            const { clinicName, adminUsername, adminPassword, adminName, wechat } = params || {};
+            if (!clinicName || !adminUsername || !adminPassword) {
+                return { success: false, error: '请填写完整的注册信息' };
+            }
+            const usernameCheck = validateAdminUsername(adminUsername);
+            if (!usernameCheck.valid) {
+                return { success: false, error: usernameCheck.error };
+            }
+            const strength = this.validatePasswordStrength(adminPassword);
+            if (strength.errors.length > 0) {
+                return { success: false, error: strength.errors[0] };
+            }
+            try {
+                const fetchFn = global.cloudFetch || global.fetch;
+                const response = await fetchFn(CLOUD_API_BASE + '/users?action=register-clinic', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        clinicName: clinicName.trim(),
+                        adminUsername: adminUsername.trim(),
+                        adminPassword,
+                        adminName: (adminName || '').trim(),
+                        wechat: (wechat || '').trim()
+                    })
+                });
+                const data = (response && typeof response.json === 'function')
+                    ? await response.json()
+                    : response;
+                return data;
+            } catch (e) {
+                return { success: false, error: '注册请求失败：' + (e.message || '网络错误') };
+            }
+        },
+
+        // 云端激活码格式校验
+        validateActivationCode(code) {
+            if (!code || typeof code !== 'string') {
+                return { valid: false, error: '激活码不能为空' };
+            }
+            const trimmed = code.trim();
+            const pattern = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+            if (!pattern.test(trimmed)) {
+                return {
+                    valid: false,
+                    error: '激活码格式不正确',
+                    format: 'BNZC-XXXX-XXXX-XXXX-XXXX',
+                    note: 'X 为大写字母或数字（不含 I/O/0/1）'
+                };
+            }
+            return { valid: true, code: trimmed };
+        }
     };
 
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);

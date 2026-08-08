@@ -76,7 +76,7 @@ function getEffectiveConfigSignKey() {
 
 // ★ v2: 版本类型默认配置（功能差异矩阵）
 // trial: 试用版，限 30 张/月处方，无高级功能
-// personal: 标准版，无限处方，支持数据备份
+// personal: 个人版，无限处方，支持数据备份
 // pro: 专业版，无限处方，支持云端同步+多设备+优先支持
 const LICENSE_TYPE_CONFIG = {
     trial: {
