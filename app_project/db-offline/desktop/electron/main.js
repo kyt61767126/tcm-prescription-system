@@ -158,17 +158,17 @@ async function ensureWritableConfig() {
     try {
         const writablePath = getWritableConfigPath();
         if (await fse.pathExists(writablePath)) {
-            // 已存在：检查签名是否有效，无效则重新签名（兼容旧版 masterKey 派生密钥签名）
+            // 已存在：确保签名正确（兼容旧版无签名或 masterKey 派生密钥签名）
             try {
                 const cfg = await fse.readJson(writablePath);
-                if (cfg.configSignature && cfg.configIssuedAt) {
-                    const expected = licenseManager.signConfig(cfg);
-                    const actual = cfg.configSignature;
-                    if (expected !== actual) {
-                        cfg.configSignature = expected;
-                        await fse.writeJson(writablePath, cfg, { spaces: 2 });
-                        console.log('[Config] config.json 签名已修复（兼容旧版密钥）');
-                    }
+                if (!cfg.configIssuedAt) {
+                    cfg.configIssuedAt = new Date().toISOString();
+                }
+                const expected = licenseManager.signConfig(cfg);
+                if (cfg.configSignature !== expected) {
+                    cfg.configSignature = expected;
+                    await fse.writeJson(writablePath, cfg, { spaces: 2 });
+                    console.log('[Config] config.json 签名已修复');
                 }
             } catch (e) {
                 console.warn('[Config] 签名检查失败，跳过:', e.message);
