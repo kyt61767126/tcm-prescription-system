@@ -141,6 +141,9 @@ async function main() {
   if (fs.existsSync(electronExe)) {
     if (fs.existsSync(productExe)) fs.unlinkSync(productExe);
     fs.renameSync(electronExe, productExe);
+    // ★ 修复：更新 exe 时间戳为当前打包时间（cpSync+renameSync 保留 electron 原始编译时间，易造成误解）
+    const now = new Date();
+    try { fs.utimesSync(productExe, now, now); } catch(e) {}
     console.log(`Renamed electron.exe -> ${exeName}.exe (productName: ${productName})`);
   }
 
