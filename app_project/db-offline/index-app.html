@@ -3056,7 +3056,7 @@ let currentUser = null;
         }
 
         async function getGlobalMaxSerial() {
-            const today = new Date().toISOString().split('T')[0];
+            const today = new Date().toLocaleDateString('sv-SE');
             const todayPrefix = today.replace(/-/g, '').slice(2); // YYMMDD
             let stored = localStorage.getItem('global_max_serial');
             
@@ -3130,7 +3130,7 @@ let currentUser = null;
 
         // 设置当日最大序号
         function setGlobalMaxSerial(maxSerial) {
-            const today = new Date().toISOString().split('T')[0];
+            const today = new Date().toLocaleDateString('sv-SE');
             const data = { date: today, maxSerial: maxSerial };
             localStorage.setItem('global_max_serial', JSON.stringify(data));
             
@@ -3160,7 +3160,7 @@ let currentUser = null;
             
             allPrescriptions.forEach(p => {
                 if (!p.prescriptionNo || p.prescriptionNo.length !== 8 || !/^\d{8}$/.test(p.prescriptionNo)) {
-                    const dateStr = p.date || new Date(p.createdAt || Date.now()).toISOString().split('T')[0];
+                    const dateStr = p.date || new Date(p.createdAt || Date.now()).toLocaleDateString('sv-SE');
                     const datePrefix = dateStr.replace(/-/g, '').slice(2);
                     
                     if (!dateSerialMap[datePrefix]) {
@@ -3190,7 +3190,7 @@ let currentUser = null;
             
             sortedPrescriptions.forEach(p => {
                 if (!p.prescriptionNo || p.prescriptionNo.length !== 8 || !/^\d{8}$/.test(p.prescriptionNo)) {
-                    const dateStr = p.date || new Date(p.createdAt || Date.now()).toISOString().split('T')[0];
+                    const dateStr = p.date || new Date(p.createdAt || Date.now()).toLocaleDateString('sv-SE');
                     const datePrefix = dateStr.replace(/-/g, '').slice(2);
                     
                     dateSerialMap[datePrefix]++;
@@ -4710,7 +4710,7 @@ let currentUser = null;
             
             // 1. 获取当前保存操作时间戳，解析 YYMMDD 日期串
             const now = new Date();
-            const currentDate = now.toISOString().split('T')[0];
+            const currentDate = now.toLocaleDateString('sv-SE');
             const year = String(now.getFullYear()).slice(-2);
             const month = String(now.getMonth() + 1).padStart(2, '0');
             const day = String(now.getDate()).padStart(2, '0');
@@ -5105,7 +5105,7 @@ let currentUser = null;
         async function saveLocalBackup() {
             // ★ 优化：每日首次保存才触发完整备份，避免每次保存都序列化整个数据（大幅减少耗时）
             // 之前每次保存处方都会 JSON.stringify 整个 prescriptionHistory 写入 localStorage，数据量大时阻塞 UI
-            const today = new Date().toISOString().slice(0, 10);
+            const today = new Date().toLocaleDateString('sv-SE');
             const lastBackupDate = localStorage.getItem('lastSaveBackupDate');
             if (lastBackupDate === today) {
                 // 今天已备份过，跳过完整备份（处方数据已存 IndexedDB，安全）
@@ -5152,7 +5152,7 @@ let currentUser = null;
         // P1-1 自动备份策略升级：每日首次启动触发；保留 7天+4周+12月
         async function dailyAutoBackup() {
             try {
-                const today = new Date().toISOString().slice(0, 10);
+                const today = new Date().toLocaleDateString('sv-SE');
                 const lastBackupDate = localStorage.getItem('lastDailyBackupDate');
                 if (lastBackupDate === today) return;
                 const ok = await saveLocalBackupToFile();

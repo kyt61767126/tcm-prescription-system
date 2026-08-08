@@ -915,7 +915,7 @@ function normalizeLicense(license) {
 // 注意：config.json 必须配合 configSignature 完整性校验使用，防止被篡改绕过绑定
 function getLocalClinicName() {
     try {
-        const configPath = path.join(getExeDirectory(), 'config.json');
+        const configPath = path.join(getWritableDir(), 'config.json');
         if (fs.existsSync(configPath)) {
             const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             return cfg.clinicName || '';
@@ -927,7 +927,7 @@ function getLocalClinicName() {
 // 从 config.json 读取本地用户名（doctorName，作为绑定辅助字段）
 function getLocalDoctorName() {
     try {
-        const configPath = path.join(getExeDirectory(), 'config.json');
+        const configPath = path.join(getWritableDir(), 'config.json');
         if (fs.existsSync(configPath)) {
             const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             return cfg.doctorName || '';
@@ -973,7 +973,7 @@ function checkLicenseBinding(license, localMachineId) {
 // ★ P1-3: 使用 getEffectiveConfigSignKey() 派生密钥（从 license.masterKey 派生，向后兼容）
 function verifyConfigIntegrity() {
     try {
-        const configPath = path.join(getExeDirectory(), 'config.json');
+        const configPath = path.join(getWritableDir(), 'config.json');
         if (!fs.existsSync(configPath)) return true;  // 无 config.json 跳过校验（兜底放行）
         const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         // 无 configSignature 字段 → 旧版 config.json，跳过校验（兼容性优先）
