@@ -444,32 +444,10 @@
     }
 
     // ===== 试用期状态显示 =====
+    // ★ 云端版：无试用、无激活流程，跳过此函数
     async function showTrialStatus() {
-        const bar = document.getElementById('trialBar');
-        if (!bar) return;
-        try {
-            const status = await window.electronAPI.invoke('license:get-status');
-            if (!status || !status.success) return;
-            if (status.type === 'trial') {
-                const days = status.remainingDays || 0;
-                bar.className = 'trial-bar trial';
-                bar.innerHTML = '<span class="trial-text">⏳ 试用期剩余 <b>' + days + '</b> 天</span>' +
-                    '<a class="trial-action" onclick="openActivationWindow()">立即激活 →</a>';
-                bar.style.display = 'flex';
-            } else if (status.valid && status.type !== 'trial') {
-                const typeNames = { personal: '标准版', pro: '机构版', permanent: '永久授权' };
-                const typeName = typeNames[status.type] || '已授权';
-                bar.className = 'trial-bar active';
-                bar.innerHTML = '<span class="trial-text">✅ ' + typeName + ' 已激活' +
-                    (status.expiresAt ? '（到期：' + status.expiresAt.split('T')[0] + '）' : '') + '</span>';
-                bar.style.display = 'flex';
-            } else if (!status.valid) {
-                bar.className = 'trial-bar expired';
-                bar.innerHTML = '<span class="trial-text">❌ 授权已过期</span>' +
-                    '<a class="trial-action" onclick="openActivationWindow()">重新激活 →</a>';
-                bar.style.display = 'flex';
-            }
-        } catch (e) { /* 无 license API 时静默跳过 */ }
+        // 云端版不需要显示试用状态，直接返回
+        return;
     }
 
     // ===== 激活窗口 =====
@@ -484,33 +462,11 @@
     }
 
     // ===== 首次启动检测与向导 =====
+    // ★ 云端版：无试用、无激活、无本地注册流程
+    // 平台管理员产生用户名密码，用户直接登录
     function checkFirstRun(config) {
-        const DEFAULT_CLINIC_NAMES = ['本能堂中医诊所', '惠康中医诊所', '默认诊所'];
-        const currentName = (config && config.clinicName) || '';
-        const isDefault = !currentName || DEFAULT_CLINIC_NAMES.some(n => currentName === n);
-
-        // ★ 如果有 bnzc:// 待激活数据，跳过首次向导（自动激活优先）
-        if (window.__bnzcHasPending) {
-            console.log('[Bnzc] 有待激活数据，跳过首次向导');
-            return;
-        }
-
-        const wizardDone = localStorage.getItem('firstRunWizardDone');
-        const hasAdmin = hasAdminUser(config);
-        
-        // ★ 云端机构版：没有管理员用户时必须注册
-        if (!hasAdmin && !wizardDone) {
-            document.getElementById('clinicSetupHint').textContent = '⚙️ 首次使用，点击注册管理员账户';
-            document.getElementById('clinicSetupHint').style.display = 'block';
-            setTimeout(() => openFirstRunWizard(), 800);
-            return;
-        }
-        
-        // 仅当使用默认诊所名且未完成过向导时显示
-        if (isDefault && !wizardDone) {
-            document.getElementById('clinicSetupHint').style.display = 'block';
-            setTimeout(() => openFirstRunWizard(), 800);
-        }
+        // 云端版跳过所有向导流程，直接显示登录界面
+        return;
     }
 
     // ===== 首次配置向导 =====
@@ -616,6 +572,14 @@
                 });
                 if (result && result.success) {
                     alert('✅ 注册完成！\n\n🏥 诊所：' + clinicName + '\n👤 用户名：' + username + '\n👤 姓名：' + (doctorName || '管理员') + '\n🔑 管理员账户已创建\n\n请使用用户名和密码登录');
+                    // ★ 修复：注册成功后清除 config 缓存并重新加载用户列表
+                    // 根因：addUser 只保存到 config.json，但 _users 列表未更新，导致登录时找不到新注册的用户
+                    appConfigCache = null;
+                    try {
+                        const freshConfig = await getAppConfig();
+                        initLoginInput(freshConfig);
+                        console.log('[Wizard] 用户列表已重新加载');
+                    } catch (e) { console.warn('[Wizard] 重新加载用户列表失败:', e); }
                 } else {
                     alert('⚠️ 诊所信息已保存，但账户注册失败：' + (result.error || '请登录后在设置中创建账户'));
                 }

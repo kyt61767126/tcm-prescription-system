@@ -24,6 +24,7 @@ const licenseManager = require('./license-manager');
 
 // ★ 云端激活 API URL（与 public/index.html 的 CLOUD_API_BASE 一致）
 const ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/validate';
+const ADMIN_ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-submit';
 
 // ============================================================================
 //  机器 ID 生成
@@ -303,12 +304,171 @@ function restartApp() {
     app.exit(0);
 }
 
+// ============================================================================
+//  管理员激活流程
+// ============================================================================
+
+// ★ 提交管理员激活请求到平台
+async function submitAdminRequest(data) {
+    try {
+        const body = {
+            clinicName: data.clinicName,
+            adminName: data.adminName,
+            phone: data.phone,
+            remark: data.remark || '',
+            machineId: data.machineId
+        };
+
+        const fetchPromise = async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            try {
+                const response = await fetch(ADMIN_ACTIVATE_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal: controller.signal
+                });
+                return await response.json();
+            } finally {
+                clearTimeout(timeout);
+            }
+        };
+
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('FETCH_TIMEOUT')), 15000);
+        });
+
+        const result = await Promise.race([fetchPromise(), timeoutPromise]);
+
+        if (result.success) {
+            return {
+                success: true,
+                requestId: result.requestId,
+                message: '激活请求提交成功'
+            };
+        } else {
+            return { success: false, error: result.error || '提交失败' };
+        }
+    } catch (e) {
+        console.error('[Admin] 提交激活请求失败:', e);
+        let errorMsg = e.message;
+        if (e.message === 'FETCH_TIMEOUT') {
+            errorMsg = '连接服务器超时，请检查网络后重试';
+        } else if (e.message && e.message.includes('fetch failed')) {
+            errorMsg = '无法连接服务器，请检查网络连接';
+        }
+        return { success: false, error: errorMsg };
+    }
+}
+
+// ★ 管理员激活状态轮询
+async function checkAdminStatus(requestId) {
+    try {
+        const url = `https://tcm-prescription-system.pages.dev/api/license/admin-status?requestId=${encodeURIComponent(requestId)}`;
+        
+        const fetchPromise = async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal
+                });
+                return await response.json();
+            } finally {
+                clearTimeout(timeout);
+            }
+        };
+
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('FETCH_TIMEOUT')), 10000);
+        });
+
+        const result = await Promise.race([fetchPromise(), timeoutPromise]);
+
+        return result;
+    } catch (e) {
+        console.warn('[Admin] 检查激活状态失败:', e.message);
+        return { success: false, error: e.message };
+    }
+}
+
+// ★ 保存管理员激活返回的license
+async function saveLicense(licenseBase64) {
+    try {
+        const licensePath = licenseManager.getLicensePath();
+        let actualWritePath = licensePath;
+        
+        try {
+            fs.writeFileSync(licensePath, licenseBase64, 'utf8');
+            console.log('[Admin] license.dat 已写入:', licensePath);
+        } catch (writeErr) {
+            // 写入失败时尝试 userData 兜底
+            console.warn('[Admin] 主路径写入失败，尝试 userData 兜底:', writeErr.message);
+            const fallbackPath = path.join(app.getPath('userData'), 'license.dat');
+            fs.writeFileSync(fallbackPath, licenseBase64, 'utf8');
+            actualWritePath = fallbackPath;
+            console.log('[Admin] license.dat 已写入兜底路径:', fallbackPath);
+        }
+
+        // 清除 trial 文件
+        try {
+            const trialPath = licenseManager.getTrialPath();
+            if (fs.existsSync(trialPath)) {
+                fs.unlinkSync(trialPath);
+            }
+        } catch (e) { /* 忽略 */ }
+
+        // 同步 clinicName 到 config.json
+        try {
+            const parsedLicense = licenseManager.readLicense(getMachineId());
+            if (parsedLicense && parsedLicense.clinicName) {
+                const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
+                let config = {};
+                if (fs.existsSync(configPath)) {
+                    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                }
+                config.clinicName = parsedLicense.clinicName;
+                fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            }
+        } catch (e) { /* 忽略 */ }
+
+        return { success: true, licensePath: actualWritePath };
+    } catch (e) {
+        console.error('[Admin] 保存license失败:', e);
+        return { success: false, error: e.message };
+    }
+}
+
+// ★ 取消管理员激活请求
+async function cancelAdminRequest(requestId) {
+    try {
+        const url = `https://tcm-prescription-system.pages.dev/api/license/admin-cancel`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId })
+        });
+        const result = await response.json();
+        return result;
+    } catch (e) {
+        console.warn('[Admin] 取消激活请求失败:', e.message);
+        return { success: true, message: '已本地取消' };
+    }
+}
+
 module.exports = {
     getMachineId,
     activateOnline,
     showActivateWindow,
-    showExpireAlertAndActivate,  // ★ 新增：双按钮到期提示（前往激活/退出软件）
+    showExpireAlertAndActivate,
     closeActivateWindow,
     restartApp,
+    submitAdminRequest,
+    checkAdminStatus,
+    saveLicense,
+    cancelAdminRequest,
     ACTIVATE_API_URL
 };

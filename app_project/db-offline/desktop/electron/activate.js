@@ -245,6 +245,21 @@ function showActivateWindow(parentWindow) {
 
     const machineId = getMachineId();
 
+    // ★★★ 读取 config.json 获取诊所名和管理员名，传递给激活窗口
+    let configClinicName = '';
+    let configUserName = '';
+    try {
+        const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
+        if (fs.existsSync(configPath)) {
+            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            configClinicName = encodeURIComponent(config.clinicName || '');
+            configUserName = encodeURIComponent(config.doctorName || config.adminName || '');
+            console.log('[Activate] 读取配置: clinicName=' + (config.clinicName || '') + ', userName=' + (config.doctorName || config.adminName || ''));
+        }
+    } catch (e) {
+        console.warn('[Activate] 读取 config.json 失败:', e.message);
+    }
+
     activateWindow = new BrowserWindow({
         width: 500,
         height: 760,
@@ -262,9 +277,15 @@ function showActivateWindow(parentWindow) {
         }
     });
 
-    // 加载激活窗口 HTML，通过 URL 参数传递机器 ID
+    // 加载激活窗口 HTML，通过 URL 参数传递机器 ID 和配置数据
     const htmlPath = path.join(__dirname, 'activate-window.html');
-    activateWindow.loadFile(htmlPath, { query: { machineId: machineId } });
+    activateWindow.loadFile(htmlPath, {
+        query: {
+            machineId: machineId,
+            clinicName: configClinicName,
+            userName: configUserName
+        }
+    });
 
     // ★ 兜底限制：激活窗口关闭后重新校验 license
     // 如果 license 仍失效，重新弹 expire-alert（前往激活/退出软件）

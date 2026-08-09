@@ -126,7 +126,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         submit: (code, user, clinicName) => ipcRenderer.invoke('license:submit-activate', code, user, clinicName),
         close: () => ipcRenderer.invoke('license:close-activate'),
         restart: () => ipcRenderer.invoke('license:restart'),
-        getMachineId: () => ipcRenderer.invoke('license:get-machine-id')
+        getMachineId: () => ipcRenderer.invoke('license:get-machine-id'),
+        // ★ 管理员一键激活相关API
+        submitAdminRequest: (data) => ipcRenderer.invoke('license:submit-admin-request', data),
+        checkAdminStatus: (requestId) => ipcRenderer.invoke('license:check-admin-status', requestId),
+        saveLicense: (licenseBase64) => ipcRenderer.invoke('license:save-license', licenseBase64),
+        cancelAdminRequest: (requestId) => ipcRenderer.invoke('license:cancel-admin-request', requestId)
     },
 
     // ---------- 首次配置向导 ----------

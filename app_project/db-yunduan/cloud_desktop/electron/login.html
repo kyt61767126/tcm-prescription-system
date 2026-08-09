@@ -309,7 +309,6 @@
         </div>
         <div class="main-content">
             <div class="login-box">
-                <div id="trialBar" class="trial-bar" style="display:none;"></div>
                 <div class="clinic-info" onclick="openFirstRunWizard()" title="点击设置诊所信息">
                     <div id="clinicName" class="clinic-name">本能堂中医诊所</div>
                     <div id="clinicSetupHint" class="setup-hint" style="display:none;">⚙️ 点击设置诊所信息</div>
@@ -335,11 +334,14 @@
                     <button class="login-btn cancel" id="btnCancel" type="button">取消</button>
                 </div>
                 <div id="loginError" class="login-error"></div>
+                <!-- ★ 激活入口：未激活用户可点击此处打开激活窗口 -->
+                <div style="text-align:center;margin-top:8px;">
+                    <a href="#" id="activateLink" onclick="openActivationWindow();return false;" style="font-size:9px;color:#667eea;text-decoration:none;">激活软件 / 管理员激活</a>
+                </div>
             </div>
         </div>
         <div class="footer-section">
             <span>微信号: hktzy1688</span>
-            <span style="margin-left:6px;color:#667eea;cursor:pointer;" onclick="openActivationWindow()">🔑 激活软件</span>
         </div>
     </div>
 

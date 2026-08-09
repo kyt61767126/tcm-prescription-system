@@ -946,63 +946,21 @@ async function verifyCodeIntegrity() {
 }
 
 app.whenReady().then(async () => {
-    // ★ 首次启动时将 config.json 从 asar 复制到可写路径（必须在 license 校验之前）
+    // ★ 首次启动时将 config.json 从 asar 复制到可写路径
     await ensureWritableConfig();
-    // ★ License 授权校验（启动时校验，未授权或过期则弹双按钮：前往激活/退出软件）
-    // ★ v3 新增：传入 localMachineId 用于三因子绑定校验（clinicName + machineId）
-    let localMachineId = '';
-    let licenseResult;
+    
+    // ★ 云端版：检查license是否已激活，未激活时弹激活窗口
+    let _isLicensed = false;
     try {
-        localMachineId = activateManager.getMachineId();
-        licenseResult = licenseManager.validateLicense({ localMachineId });
+        const localMachineId = activateManager.getMachineId();
+        const licenseResult = licenseManager.validateLicense({ localMachineId });
+        _isLicensed = licenseResult.valid;
+        console.log('[Cloud] License 校验结果:', _isLicensed ? '已激活' : '未激活');
     } catch (e) {
-        console.error('[License] validateLicense exception, fallback to trial:', e.message);
-        licenseResult = { valid: true, type: 'trial', message: '校验异常，进入试用模式' };
-    }
-    console.log('[License]', licenseResult.type, licenseResult.message);
-    if (!licenseResult.valid) {
-        // ★ 启动时 license 失效：弹双按钮到期提示（前往激活/退出软件）
-        // - 用户点击【前往激活】→ 唤起激活码输入页面，激活成功后重启进入主界面
-        // - 用户点击【退出软件】→ app.exit(0) 退出
-        // - 启动时 mainWindow 尚未创建，传 null 作为 parentWindow
-        // - 激活窗口关闭后 license 仍失效时，兜底逻辑会重新弹 expire-alert
-        await activateManager.showExpireAlertAndActivate(null, licenseResult.message);
-        return;
-    }
-    // 授权有效时，在控制台显示授权信息（不弹窗，避免干扰用户）
-    if (licenseResult.type === 'trial') {
-        console.log('[License] 试用模式：', licenseResult.message);
+        console.warn('[Cloud] License 校验异常:', e.message);
     }
 
-    // ★ P1-9 代码完整性校验：检测 auth-core.js / license-manager.js 是否被篡改
-    // 防盗破解：攻击者修改 JS 文件绕过 license 校验时，本检测会阻止启动
-    // 首次运行建立基线，后续启动比对哈希
-    try {
-        const integrityOk = await verifyCodeIntegrity();
-        if (!integrityOk) {
-            dialog.showMessageBoxSync({
-                type: 'error',
-                title: '完整性校验失败',
-                message: '检测到关键代码文件已被篡改，软件无法启动。\n请从官方渠道重新下载安装，或联系客服。',
-                buttons: ['退出']
-            });
-            app.exit(1);
-            return;
-        }
-    } catch (e) {
-        // ★安全优化：完整性校验异常时阻止启动（原为降级放行，存在安全风险）
-        console.error('[Integrity] 完整性校验异常（阻止启动）:', e.message);
-        dialog.showMessageBoxSync({
-            type: 'error',
-            title: '完整性校验异常',
-            message: '软件完整性校验异常，无法启动。\n请从官方渠道重新下载安装，或联系客服。',
-            buttons: ['退出']
-        });
-        app.exit(1);
-        return;
-    }
-
-    // ★ 启动自动更新检查（第4周任务，延迟 5 秒检查避免影响启动）
+    // ★ 启动自动更新检查
     updateNotifier.init('geren');
 
     fse.ensureDirSync(getDownloadsDirectory());
@@ -1010,7 +968,7 @@ app.whenReady().then(async () => {
     sharedSession = session.fromPartition(SESSION_PARTITION);
     installCSP(sharedSession);
 
-    // ★ 授予 camera/microphone 权限（视频录制所需）
+    // ★ 授予 camera/microphone 权限
     sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
         if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
             callback(true);
@@ -1045,7 +1003,18 @@ app.whenReady().then(async () => {
         }
     });
 
-    createLoginWindow();
+    // ★ 云端版流程：未激活时先弹激活窗口，已激活直接进登录
+    if (!_isLicensed) {
+        console.log('[Cloud] 未激活，先显示激活窗口');
+        createLoginWindow();
+        setTimeout(() => {
+            if (loginWindow && !loginWindow.isDestroyed()) {
+                activateManager.showActivateWindow(loginWindow);
+            }
+        }, 500);
+    } else {
+        createLoginWindow();
+    }
 
     app.on('activate', () => {
         const allWindows = BrowserWindow.getAllWindows();
@@ -1298,6 +1267,50 @@ ipcMain.handle('license:get-machine-id', () => {
     } catch (e) {
         console.error('[IPC] get-machine-id 异常:', e);
         return null;
+    }
+});
+
+// ★ 管理员一键激活 - 提交激活请求到平台
+ipcMain.handle('license:submit-admin-request', async (event, data) => {
+    try {
+        const result = await activateManager.submitAdminRequest(data);
+        return result;
+    } catch (e) {
+        console.error('[IPC] submit-admin-request 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ 管理员一键激活 - 检查激活状态
+ipcMain.handle('license:check-admin-status', async (event, requestId) => {
+    try {
+        const result = await activateManager.checkAdminStatus(requestId);
+        return result;
+    } catch (e) {
+        console.error('[IPC] check-admin-status 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ 管理员一键激活 - 保存license
+ipcMain.handle('license:save-license', async (event, licenseBase64) => {
+    try {
+        const result = await activateManager.saveLicense(licenseBase64);
+        return result;
+    } catch (e) {
+        console.error('[IPC] save-license 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ 管理员一键激活 - 取消激活请求
+ipcMain.handle('license:cancel-admin-request', async (event, requestId) => {
+    try {
+        const result = await activateManager.cancelAdminRequest(requestId);
+        return result;
+    } catch (e) {
+        console.error('[IPC] cancel-admin-request 异常:', e);
+        return { success: false, error: e.message };
     }
 });
 

@@ -352,6 +352,89 @@ h1 {
     color: #c62828;
     font-weight: 600;
 }
+
+/* ★ 模式切换标签 */
+.mode-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 16px;
+    border: 1px solid #e4e7ed;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.mode-tab {
+    flex: 1;
+    padding: 10px 12px;
+    background: #f5f7fa;
+    border: none;
+    font-size: 13px;
+    color: #606266;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-weight: 500;
+}
+.mode-tab.active {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #fff;
+}
+.mode-tab:hover:not(.active) {
+    background: #e8eaed;
+}
+
+.mode-content { display: none; }
+.mode-content.active { display: block; }
+
+/* ★ 等待激活状态框 */
+.waiting-box {
+    text-align: center;
+    padding: 20px 16px;
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border: 2px solid #42a5f5;
+    border-radius: 12px;
+}
+.waiting-icon {
+    font-size: 48px;
+    margin-bottom: 8px;
+    animation: pulse 2s infinite;
+}
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+.waiting-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #1565c0;
+    margin-bottom: 6px;
+}
+.waiting-desc {
+    font-size: 12px;
+    color: #1976d2;
+    margin-bottom: 14px;
+    line-height: 1.6;
+}
+.waiting-info {
+    text-align: left;
+    background: #fff;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #37474f;
+    margin-bottom: 12px;
+}
+.waiting-info b {
+    color: #1565c0;
+    font-weight: 600;
+}
+.waiting-status {
+    font-size: 13px;
+    color: #1565c0;
+    font-weight: 500;
+    margin-top: 10px;
+    padding: 8px;
+    background: rgba(255,255,255,0.7);
+    border-radius: 6px;
+}
 </style>
 </head>
 <body>
@@ -359,37 +442,95 @@ h1 {
     <div class="brand">
         <div class="logo">惠</div>
         <h1>软件激活</h1>
-        <div class="subtitle">输入激活码，开启完整功能体验</div>
+        <div class="subtitle">云端版 · 管理员一键激活</div>
     </div>
 
-    <!-- 试用期状态提示 -->
-    <div id="trialNotice" class="trial-notice" style="display:none;">
-        <div class="trial-notice-icon">⏳</div>
-        <div class="trial-notice-body">
-            <div class="trial-notice-title">试用期剩余 <b id="trialDays">--</b> 天</div>
-            <div class="trial-notice-desc">激活后可永久使用或至授权到期</div>
+    <!-- ★ 模式切换：管理员激活（默认） / 激活码激活 -->
+    <div class="mode-tabs">
+        <button class="mode-tab active" data-mode="admin" onclick="switchMode('admin')">管理员激活</button>
+        <button class="mode-tab" data-mode="code" onclick="switchMode('code')">激活码激活</button>
+    </div>
+
+    <!-- 模式1：激活码激活（原有流程） -->
+    <div id="modeCode" class="mode-content">
+        <!-- 试用期状态提示 -->
+        <div id="trialNotice" class="trial-notice" style="display:none;">
+            <div class="trial-notice-icon">⏳</div>
+            <div class="trial-notice-body">
+                <div class="trial-notice-title">试用期剩余 <b id="trialDays">--</b> 天</div>
+                <div class="trial-notice-desc">激活后可永久使用或至授权到期</div>
+            </div>
+        </div>
+
+        <div id="statusBox" class="status-box"></div>
+
+        <div class="form-group">
+            <label>激活码</label>
+            <input type="text" id="activationCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+        </div>
+
+        <div class="form-group">
+            <label>诊所名称</label>
+            <input type="text" id="clinicName" placeholder="如：本能堂中医诊所" autocomplete="off">
+        </div>
+
+        <div class="form-group">
+            <label>管理员名称（可选）</label>
+            <input type="text" id="userName" placeholder="留空则使用默认管理员" autocomplete="off">
+        </div>
+
+        <button class="btn" id="activateBtn" onclick="submitActivate()">🚀 一键激活</button>
+        <button class="btn btn-secondary" onclick="closeWindow()">取 消</button>
+    </div>
+
+    <!-- 模式2：管理员激活（默认显示） -->
+    <div id="modeAdmin" class="mode-content active">
+        <!-- 填写激活信息 -->
+        <div id="adminForm">
+            <div class="form-group">
+                <label>诊所名称 <span style="color:red;">*</span></label>
+                <input type="text" id="adminClinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false">
+            </div>
+
+            <div class="form-group">
+                <label>管理员姓名 <span style="color:red;">*</span></label>
+                <input type="text" id="adminName" placeholder="如：张医生" autocomplete="off" spellcheck="false">
+            </div>
+
+            <div class="form-group">
+                <label>联系电话 <span style="color:red;">*</span></label>
+                <input type="tel" id="adminPhone" placeholder="如：13800138000" autocomplete="off" spellcheck="false">
+            </div>
+
+            <div class="form-group">
+                <label>备注说明（可选）</label>
+                <textarea id="adminRemark" placeholder="如：需要几个账号、使用人数等" rows="3" style="width:100%;padding:10px 12px;border:1.5px solid #dcdfe6;border-radius:6px;font-size:14px;resize:vertical;font-family:inherit;"></textarea>
+            </div>
+
+            <div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.6;">
+                💡 填写信息后提交，平台管理员将尽快为您激活<br>
+                激活完成后软件将自动重启并进入正式版本
+            </div>
+
+            <button class="btn" id="adminSubmitBtn" onclick="submitAdminActivation()">📤 提交管理员激活</button>
+            <button class="btn btn-secondary" onclick="closeWindow()">取 消</button>
+        </div>
+
+        <!-- 等待激活状态 -->
+        <div id="adminWaiting" style="display:none;">
+            <div class="waiting-box">
+                <div class="waiting-icon">⏳</div>
+                <div class="waiting-title">等待管理员激活...</div>
+                <div class="waiting-desc">您的激活请求已提交，请耐心等待平台管理员处理</div>
+                <div class="waiting-info">
+                    <div>请求编号：<b id="requestNo">--</b></div>
+                    <div>提交时间：<b id="submitTime">--</b></div>
+                </div>
+                <div class="waiting-status" id="waitingStatus">正在等待管理员审核...</div>
+                <button class="btn" id="cancelWaitingBtn" onclick="cancelAdminActivation()" style="margin-top:16px;background:#fff;color:#999;border:1.5px solid #ddd;box-shadow:none;">取消等待</button>
+            </div>
         </div>
     </div>
-
-    <div id="statusBox" class="status-box"></div>
-
-    <div class="form-group">
-        <label>激活码</label>
-        <input type="text" id="activationCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
-    </div>
-
-    <div class="form-group">
-        <label>诊所名称（与激活码绑定的诊所一致）</label>
-        <input type="text" id="clinicName" placeholder="如：本能堂中医诊所" autocomplete="off">
-    </div>
-
-    <div class="form-group">
-        <label>用户名（可选）</label>
-        <input type="text" id="userName" placeholder="留空则使用激活码绑定的用户名" autocomplete="off">
-    </div>
-
-    <button class="btn" id="activateBtn" onclick="submitActivate()">激 活</button>
-    <button class="btn btn-secondary" onclick="closeWindow()">取 消</button>
 
     <!-- ★ 新增：离线激活文件导入入口（无网络时使用） -->
     <div style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed #ddd;">
@@ -467,10 +608,206 @@ document.getElementById('machineId').textContent = params.get('machineId') || '�
             const result = await window.electronAPI.getAppConfig();
             if (result && result.success && result.config && result.config.clinicName) {
                 document.getElementById('clinicName').value = result.config.clinicName;
+                document.getElementById('adminClinicName').value = result.config.clinicName;
+            }
+            if (result && result.success && result.config && result.config.doctorName) {
+                document.getElementById('userName').value = result.config.doctorName;
+                document.getElementById('adminName').value = result.config.doctorName;
             }
         }
     } catch (e) { /* 预填失败不影响激活流程 */ }
 })();
+
+// ============================================================================
+// ★ 管理员激活模式相关函数
+// ============================================================================
+
+// 模式切换
+function switchMode(mode) {
+    document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
+    document.querySelectorAll('.mode-content').forEach(c => c.classList.remove('active'));
+    document.getElementById('mode' + mode.charAt(0).toUpperCase() + mode.slice(1)).classList.add('active');
+    
+    // 切换模式时重置状态
+    if (mode === 'admin') {
+        resetAdminForm();
+    }
+}
+
+// 重置管理员表单
+function resetAdminForm() {
+    document.getElementById('adminForm').style.display = 'block';
+    document.getElementById('adminWaiting').style.display = 'none';
+    stopPollingStatus();
+}
+
+// ★ 提交管理员激活请求
+let _pollingTimer = null;
+let _currentRequestId = null;
+
+async function submitAdminActivation() {
+    const clinicName = document.getElementById('adminClinicName').value.trim();
+    const adminName = document.getElementById('adminName').value.trim();
+    const phone = document.getElementById('adminPhone').value.trim();
+    const remark = document.getElementById('adminRemark').value.trim();
+
+    // 表单校验
+    if (!clinicName) {
+        alert('请填写诊所名称');
+        return;
+    }
+    if (!adminName) {
+        alert('请填写管理员姓名');
+        return;
+    }
+    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+        alert('请填写正确的11位手机号');
+        return;
+    }
+
+    const submitBtn = document.getElementById('adminSubmitBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = '提交中...';
+
+    try {
+        // 获取机器ID
+        const machineId = params.get('machineId') || '未知';
+
+        // 调用主进程提交激活请求
+        const result = await window.electronAPI.activate.submitAdminRequest({
+            clinicName,
+            adminName,
+            phone,
+            remark,
+            machineId
+        });
+
+        if (result.success) {
+            // 显示等待状态
+            _currentRequestId = result.requestId;
+            document.getElementById('requestNo').textContent = result.requestId;
+            document.getElementById('submitTime').textContent = new Date().toLocaleString('zh-CN');
+            document.getElementById('adminForm').style.display = 'none';
+            document.getElementById('adminWaiting').style.display = 'block';
+            
+            // 开始轮询状态
+            startPollingStatus();
+        } else {
+            alert('提交失败：' + (result.error || '未知错误'));
+            submitBtn.disabled = false;
+            submitBtn.textContent = '📤 提交管理员激活';
+        }
+    } catch (e) {
+        alert('提交出错：' + e.message);
+        submitBtn.disabled = false;
+        submitBtn.textContent = '📤 提交管理员激活';
+    }
+}
+
+// ★ 轮询激活状态
+function startPollingStatus() {
+    const statusEl = document.getElementById('waitingStatus');
+    let pollCount = 0;
+    const maxPollCount = 60; // 最多轮询 60 次（5分钟）
+    
+    const statusTexts = [
+        '正在等待管理员审核...',
+        '管理员正在处理您的请求...',
+        '正在验证您的信息...',
+        '正在生成激活文件...'
+    ];
+
+    _pollingTimer = setInterval(async () => {
+        pollCount++;
+        
+        // 更新状态文字
+        const textIdx = Math.min(Math.floor(pollCount / 3), statusTexts.length - 1);
+        statusEl.textContent = statusTexts[textIdx] + ' (已等待 ' + Math.floor(pollCount * 5 / 60) + ' 分钟)';
+
+        try {
+            if (!_currentRequestId) {
+                stopPollingStatus();
+                return;
+            }
+
+            const result = await window.electronAPI.activate.checkAdminStatus(_currentRequestId);
+            
+            if (result.success && result.status === 'activated') {
+                // 激活成功
+                stopPollingStatus();
+                showAdminSuccess(result.license);
+            } else if (result.success && result.status === 'rejected') {
+                // 被拒绝
+                stopPollingStatus();
+                alert('❌ 激活请求被拒绝：\n\n' + (result.reason || '未知原因') + '\n\n请联系客服协助处理。');
+                resetAdminForm();
+            } else if (result.success && result.status === 'pending') {
+                // 继续等待
+                console.log('[Admin] 激活状态：pending');
+            }
+        } catch (e) {
+            console.warn('[Admin] 轮询状态失败:', e);
+            // 网络错误不停止轮询，继续重试
+        }
+
+        // 超时处理
+        if (pollCount >= maxPollCount) {
+            stopPollingStatus();
+            alert('⏰ 等待超时（5分钟），管理员可能还在处理中。\n\n您可以稍后重新打开此窗口检查状态。');
+            resetAdminForm();
+        }
+    }, 5000); // 每5秒轮询一次
+}
+
+// 停止轮询
+function stopPollingStatus() {
+    if (_pollingTimer) {
+        clearInterval(_pollingTimer);
+        _pollingTimer = null;
+    }
+}
+
+// ★ 显示管理员激活成功
+async function showAdminSuccess(license) {
+    const statusEl = document.getElementById('waitingStatus');
+    statusEl.innerHTML = '✅ <b style="color:#1565c0;">激活成功！</b> 软件即将重启...';
+    
+    try {
+        // 写入license
+        const result = await window.electronAPI.activate.saveLicense(license);
+        if (result.success) {
+            // 延迟重启
+            setTimeout(() => {
+                window.electronAPI.activate.restart();
+            }, 2000);
+        } else {
+            alert('激活文件写入失败：' + (result.error || '未知错误'));
+            resetAdminForm();
+        }
+    } catch (e) {
+        alert('激活出错：' + e.message);
+        resetAdminForm();
+    }
+}
+
+// ★ 取消管理员激活等待
+async function cancelAdminActivation() {
+    if (!confirm('确定要取消等待吗？\n\n取消后可以重新提交激活请求。')) {
+        return;
+    }
+    
+    stopPollingStatus();
+    
+    // 通知平台取消（可选）
+    if (_currentRequestId) {
+        try {
+            await window.electronAPI.activate.cancelAdminRequest(_currentRequestId);
+        } catch (e) { /* 忽略取消通知失败 */ }
+    }
+    
+    _currentRequestId = null;
+    resetAdminForm();
+}
 
 // 自动格式化激活码输入
 document.getElementById('activationCode').addEventListener('input', function(e) {

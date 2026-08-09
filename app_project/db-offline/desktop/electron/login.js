@@ -198,6 +198,16 @@
         clearError();
         // ★ 优化：防重复提交
         if (_loginInFlight) return;
+        
+        // ★★★ 强制诊所绑定检查：未绑定诊所时阻止登录
+        const config = await getAppConfig();
+        if (!isClinicBound(config)) {
+            showError('请先完成诊所信息设置，点击诊所名称区域设置');
+            // 自动弹出向导
+            setTimeout(() => openFirstRunWizard(), 300);
+            return;
+        }
+        
         const username = $('loginUsername').value;
         const password = $('loginPassword').value;
         if (!username) { showError('请选择用户'); return; }
@@ -499,13 +509,27 @@
             }
         }
         
+        // ★★★ 强制诊所绑定：只有完成诊所绑定后才能试用
         // 仅当使用默认诊所名且未完成过向导时显示
         const wizardDone = localStorage.getItem('firstRunWizardDone');
-        if (isDefault && !wizardDone) {
+        if (isDefault) {
             document.getElementById('clinicSetupHint').style.display = 'block';
             // 首次自动弹出向导
-            setTimeout(() => openFirstRunWizard(), 800);
+            if (!wizardDone) {
+                setTimeout(() => openFirstRunWizard(), 800);
+            }
         }
+    }
+    
+    // ★ 检查诊所是否已绑定（非默认诊所名 + 向导已完成）
+    function isClinicBound(config) {
+        const DEFAULT_CLINIC_NAMES = ['本能堂中医诊所', '惠康中医诊所', '默认诊所'];
+        const currentName = (config && config.clinicName) || '';
+        const wizardDone = localStorage.getItem('firstRunWizardDone');
+        if (!currentName || DEFAULT_CLINIC_NAMES.some(n => currentName === n)) {
+            return false;
+        }
+        return wizardDone === '1';
     }
 
     // ===== 首次配置向导 =====
@@ -540,8 +564,7 @@
         // 导航按钮
         document.getElementById('wizardPrevBtn').style.display = _wizardStep > 1 ? '' : 'none';
         const nextBtn = document.getElementById('wizardNextBtn');
-        nextBtn.textContent = _wizardStep === WIZARD_TOTAL ? '完成设置' : '下一步';
-        document.getElementById('wizardSkipBtn').style.display = _wizardStep < WIZARD_TOTAL ? '' : 'none';
+        nextBtn.textContent = _wizardStep === WIZARD_TOTAL ? '完成诊所绑定并开始试用' : '下一步';
     }
 
     function wizardNext() {
@@ -570,10 +593,8 @@
     }
 
     function wizardSkip() {
-        if (confirm('跳过设置？您可在登录后"基础设置"中随时修改。')) {
-            localStorage.setItem('firstRunWizardDone', 'skipped');
-            closeFirstRunWizard();
-        }
+        // ★ 已移除跳过功能：诊所绑定为强制步骤，不允许跳过
+        alert('请完成诊所信息设置后开始试用');
     }
 
     async function finishWizard() {
@@ -581,6 +602,12 @@
         const newPassword = document.getElementById('wizardPassword').value;
         const doctorName = document.getElementById('wizardDoctorName').value.trim();
         const title = document.getElementById('wizardTitle').value.trim();
+
+        // ★★★ 强制诊所名：必须填写才能完成向导
+        if (!clinicName) {
+            alert('请填写诊所名称后继续');
+            return;
+        }
 
         // 保存诊所名到 config
         if (clinicName && window.electronAPI) {
@@ -590,10 +617,12 @@
                     doctorName: doctorName || '管理员',
                     title: title || ''
                 });
+                console.log('[Wizard] 诊所信息已保存:', clinicName);
             } catch (e) { console.warn('[Wizard] updateConfig failed:', e); }
         }
 
         // 修改管理员密码
+        let pwdChanged = false;
         if (newPassword && window.electronAPI) {
             try {
                 const result = await window.electronAPI.changeUserPassword({
@@ -602,26 +631,30 @@
                     newPassword: newPassword
                 });
                 if (result && result.success) {
-                    // 密码修改成功，提示用户
-                    alert('✅ 设置完成！\n\n🏥 诊所：' + clinicName + '\n👤 管理员：' + (doctorName || '管理员') + '\n🔑 新密码已设置\n\n请使用新密码登录');
-                } else {
-                    alert('⚠️ 诊所信息已保存，但密码修改失败：' + (result.error || '请登录后在设置中修改'));
+                    pwdChanged = true;
                 }
             } catch (e) {
-                alert('⚠️ 诊所信息已保存，请登录后在基础设置中修改密码');
+                console.warn('[Wizard] 密码修改失败:', e);
             }
-        } else {
-            alert('✅ 诊所名称已设置，请登录后在基础设置中完善更多信息');
         }
 
-        // 更新登录页显示
+        // ★ 更新登录页显示
         if (clinicName) {
             document.getElementById('clinicName').textContent = clinicName;
             localStorage.setItem(KEY_CLINIC_NAME, clinicName);
         }
         document.getElementById('clinicSetupHint').style.display = 'none';
+        // ★★★ 标记向导已完成（诊所绑定成功）
         localStorage.setItem('firstRunWizardDone', '1');
         closeFirstRunWizard();
+
+        // ★ 显示成功提示
+        let msg = '✅ 诊所绑定完成！\n\n🏥 诊所：' + clinicName + '\n👤 管理员：' + (doctorName || '管理员');
+        if (pwdChanged) {
+            msg += '\n🔑 新密码已设置';
+        }
+        msg += '\n\n请使用' + (pwdChanged ? '新密码' : '默认密码 admin') + '登录开始试用';
+        alert(msg);
     }
 
     function checkWizardPassword() {

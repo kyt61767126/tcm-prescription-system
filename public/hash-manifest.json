@@ -54,10 +54,10 @@
     "cloud": {
         "apk": {
             "version": "",
-            "sha256": "3de80c8b7dc99b17a2e7398d5bb5bafe8836975b794d6221e4ee5ca55f33845e",
+            "sha256": "d6e323b8285ba12b70341349dea83dd1e035010d21ad16974276d2e2244d9910",
             "url": "/downloads/惠康中医-YJ.apk",
-            "size": 11238956,
-            "updateTime": "2026-08-07T16:47:36.918Z",
+            "size": 11239715,
+            "updateTime": "2026-08-08T22:35:07.934Z",
             "fileName": "惠康中医-YJ.apk"
         },
         "exe": {
@@ -83,7 +83,7 @@
             "sha256": "145b794eac78948d482cccd0410383d6b193056d4343934fb40dc304f84d871b",
             "url": "/downloads/惠康中医-YB.apk",
             "size": 11225745,
-            "updateTime": "2026-08-07T22:22:55.808Z",
+            "updateTime": "2026-08-08T22:35:10.379Z",
             "fileName": "惠康中医-YB.apk"
         },
         "exe": {

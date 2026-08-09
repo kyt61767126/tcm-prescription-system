@@ -274,6 +274,39 @@ h1 {
 }
 .retry-btn:hover { background: #5a6fd6; }
 
+/* ★ 当前绑定信息（自动显示，不可编辑） */
+.bind-info {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    border: 1px solid #81c784;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #2e7d32;
+    line-height: 1.8;
+}
+.bind-info-title {
+    color: #1b5e20;
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+.bind-info-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 2px 0;
+}
+.bind-info-row span {
+    color: #388e3c;
+    min-width: 70px;
+}
+.bind-info-row b {
+    color: #1b5e20;
+    font-weight: 600;
+    word-break: break-all;
+}
+
 /* 试用期状态提示 */
 .trial-notice {
     display: flex;
@@ -378,17 +411,15 @@ h1 {
         <input type="text" id="activationCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
     </div>
 
-    <div class="form-group">
-        <label>诊所名称（与激活码绑定的诊所一致）</label>
-        <input type="text" id="clinicName" placeholder="如：本能堂中医诊所" autocomplete="off">
+    <!-- ★ 当前绑定信息（自动从配置读取） -->
+    <div id="bindInfo" class="bind-info" style="display:none;">
+        <div class="bind-info-title">📋 当前绑定信息</div>
+        <div class="bind-info-row"><span>诊所名称：</span><b id="bindClinicName">--</b></div>
+        <div class="bind-info-row"><span>管理员：</span><b id="bindUserName">--</b></div>
+        <div style="font-size:11px;color:#888;margin-top:4px;">💡 激活码将自动与以上信息绑定，如需修改请先在"基础设置"中更新</div>
     </div>
 
-    <div class="form-group">
-        <label>用户名（可选）</label>
-        <input type="text" id="userName" placeholder="留空则使用激活码绑定的用户名" autocomplete="off">
-    </div>
-
-    <button class="btn" id="activateBtn" onclick="submitActivate()">激 活</button>
+    <button class="btn" id="activateBtn" onclick="submitActivate()">🚀 一键激活</button>
     <button class="btn btn-secondary" onclick="closeWindow()">取 消</button>
 
     <!-- ★ 新增：离线激活文件导入入口（无网络时使用） -->
@@ -460,17 +491,53 @@ document.getElementById('machineId').textContent = params.get('machineId') || '�
     } catch (e) { /* 静默失败 */ }
 })();
 
-// ★ v3 新增：自动从 config.json 预填诊所名（用户可改）
-(async function prefillClinicName() {
+// ★★★ 自动从 config.json 或 URL 参数读取绑定信息并显示
+(async function loadBindInfo() {
     try {
+        let clinicName = '';
+        let userName = '';
+
+        // 优先从 electronAPI 读取（最新配置）
         if (window.electronAPI && window.electronAPI.getAppConfig) {
             const result = await window.electronAPI.getAppConfig();
-            if (result && result.success && result.config && result.config.clinicName) {
-                document.getElementById('clinicName').value = result.config.clinicName;
+            if (result && result.success && result.config) {
+                clinicName = result.config.clinicName || '';
+                userName = result.config.doctorName || result.config.adminName || '';
             }
+        }
+
+        // 回退：从 URL 参数读取（activate.js 传递）
+        if (!clinicName) {
+            const urlClinic = params.get('clinicName');
+            if (urlClinic) clinicName = decodeURIComponent(urlClinic);
+            const urlUser = params.get('userName');
+            if (urlUser) userName = decodeURIComponent(urlUser);
+        }
+
+        // 显示绑定信息
+        if (clinicName) {
+            document.getElementById('bindClinicName').textContent = clinicName;
+            document.getElementById('bindUserName').textContent = userName || '管理员';
+            document.getElementById('bindInfo').style.display = 'block';
         }
     } catch (e) { /* 预填失败不影响激活流程 */ }
 })();
+
+// ★ 获取当前绑定信息（用于激活时传给服务器）
+async function getBindData() {
+    try {
+        if (window.electronAPI && window.electronAPI.getAppConfig) {
+            const result = await window.electronAPI.getAppConfig();
+            if (result && result.success && result.config) {
+                return {
+                    clinicName: result.config.clinicName || '',
+                    userName: result.config.doctorName || result.config.adminName || ''
+                };
+            }
+        }
+    } catch (e) { /* ignore */ }
+    return { clinicName: '', userName: '' };
+}
 
 // 自动格式化激活码输入
 document.getElementById('activationCode').addEventListener('input', function(e) {
@@ -489,12 +556,6 @@ document.getElementById('activationCode').addEventListener('input', function(e) 
 
 // 回车键激活
 document.getElementById('activationCode').addEventListener('keyup', e => {
-    if (e.key === 'Enter') document.getElementById('clinicName').focus();
-});
-document.getElementById('clinicName').addEventListener('keyup', e => {
-    if (e.key === 'Enter') document.getElementById('userName').focus();
-});
-document.getElementById('userName').addEventListener('keyup', e => {
     if (e.key === 'Enter') submitActivate();
 });
 
@@ -506,10 +567,8 @@ document.getElementById('userName').addEventListener('keyup', e => {
         if (result && result.success && result.data && result.data.code) {
             console.log('[Bnzc] 激活窗口检测到待激活数据:', result.data.code);
             const d = result.data;
-            // 自动填入表单
+            // 自动填入激活码
             document.getElementById('activationCode').value = d.code;
-            if (d.clinicName) document.getElementById('clinicName').value = d.clinicName;
-            if (d.user) document.getElementById('userName').value = d.user;
             // 自动提交激活
             console.log('[Bnzc] 激活窗口自动提交激活');
             const actResult = await window.electronAPI.bnzcAutoActivate({
@@ -554,7 +613,7 @@ function showStatus(message, type, withRetry) {
 function resetActivateBtn() {
     const btn = document.getElementById('activateBtn');
     btn.disabled = false;
-    btn.textContent = '激 活';
+    btn.textContent = '🚀 一键激活';
 }
 
 // 复制机器 ID
@@ -598,8 +657,6 @@ function copyText(btn, text) {
 
 async function submitActivate() {
     const code = document.getElementById('activationCode').value.trim();
-    const clinicName = document.getElementById('clinicName').value.trim();
-    const user = document.getElementById('userName').value.trim();
 
     if (!code) {
         showStatus('请输入激活码', 'error');
@@ -613,12 +670,21 @@ async function submitActivate() {
         return;
     }
 
-    // ★ v3 新增：诊所名格式校验（如填写）
+    // ★★★ 自动从配置读取绑定信息，无需用户手动填写
+    const bindData = await getBindData();
+    const clinicName = bindData.clinicName;
+    const user = bindData.userName;
+
+    // 校验诊所名
+    if (!clinicName) {
+        showStatus('诊所名未设置，请先完成诊所绑定', 'error');
+        return;
+    }
     if (clinicName && clinicName.includes('|')) {
         showStatus('诊所名不能包含特殊字符 |', 'error');
         return;
     }
-    if (clinicName && clinicName.length > 100) {
+    if (clinicName.length > 100) {
         showStatus('诊所名长度不能超过 100 字符', 'error');
         return;
     }
@@ -629,10 +695,10 @@ async function submitActivate() {
     showStatus('正在连接服务器验证激活码...', 'loading');
 
     try {
-        // ★ v3 新增：提交 clinicName 给云端校验绑定
+        // ★★★ 使用自动绑定的信息提交激活
         const result = await window.electronAPI.activate.submit(code, user, clinicName);
         if (result.success) {
-            showStatus('激活成功！软件将自动重启...', 'success');
+            showStatus('✅ 激活成功！软件将自动重启...', 'success');
             btn.textContent = '激活成功';
             // 给用户一点时间看到成功提示
             setTimeout(() => {
@@ -644,12 +710,12 @@ async function submitActivate() {
             const withRetry = /权限|网络|超时|连接/.test(err);
             showStatus(err, 'error', withRetry);
             btn.disabled = false;
-            btn.textContent = '激 活';
+            btn.textContent = '🚀 一键激活';
         }
     } catch (e) {
         showStatus('激活过程出错：' + e.message, 'error', true);
         btn.disabled = false;
-        btn.textContent = '激 活';
+        btn.textContent = '🚀 一键激活';
     }
 }
 

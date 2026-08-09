@@ -347,13 +347,14 @@
     <div id="wizardOverlay" class="wizard-overlay">
         <div class="wizard-box">
             <h2>🏥 首次使用设置</h2>
-            <div class="wizard-sub">完善诊所信息，开启您的中医处方管理之旅</div>
+            <div class="wizard-sub">请完善诊所信息后开始试用（激活后永久使用）</div>
             <div class="wizard-progress" id="wizardProgress"></div>
 
-            <!-- 步骤1：诊所名称 -->
+            <!-- 步骤1：诊所名称（必填） -->
             <div class="wizard-step active" data-step="1">
-                <label>诊所名称 *</label>
+                <label>诊所名称 <span style="color:red;">*</span></label>
                 <input type="text" id="wizardClinicName" placeholder="如：惠康中医诊所" maxlength="50">
+                <div style="font-size:9px;color:#888;margin-top:4px;">💡 诊所名需与激活码绑定的诊所名一致</div>
             </div>
 
             <!-- 步骤2：修改密码 -->
@@ -376,7 +377,6 @@
 
             <div class="wizard-nav">
                 <button class="btn-prev" onclick="wizardPrev()" id="wizardPrevBtn" style="display:none;">上一步</button>
-                <button class="btn-skip" onclick="wizardSkip()" id="wizardSkipBtn">跳过</button>
                 <button class="btn-next" onclick="wizardNext()" id="wizardNextBtn">下一步</button>
             </div>
         </div>
