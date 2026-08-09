@@ -1114,6 +1114,32 @@ ipcMain.handle('license:activate', (event, base64Content) => {
             } catch (e) {
                 console.warn('[License] 离线导入：清除 trial.dat 失败:', e);
             }
+            // ★ 激活成功后同步 clinicName 到 config.json（防止重启后诊所名不匹配）
+            try {
+                const parsedLicense = licenseManager.readLicense(localMachineId);
+                if (parsedLicense && parsedLicense.clinicName) {
+                    if (licenseManager.setLicenseDataContext) {
+                        licenseManager.setLicenseDataContext(parsedLicense);
+                    }
+                    const fsSync = require('fs');
+                    const path = require('path');
+                    const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
+                    let config = {};
+                    if (fsSync.existsSync(configPath)) {
+                        config = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
+                    }
+                    if (config.clinicName !== parsedLicense.clinicName) {
+                        config.clinicName = parsedLicense.clinicName;
+                        if (licenseManager.signConfig) {
+                            config = licenseManager.signConfig(config);
+                        }
+                        fsSync.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+                        console.log('[License] 离线激活：config.json clinicName 已同步为:', parsedLicense.clinicName);
+                    }
+                }
+            } catch (syncErr) {
+                console.warn('[License] 离线激活：同步 clinicName 失败:', syncErr.message);
+            }
             // ★ v3 新增：激活后立即校验绑定
             const validate = licenseManager.validateLicense({ localMachineId });
             return { success: true, status: validate };

@@ -1084,7 +1084,6 @@ ipcMain.handle('license:activate', (event, base64Content) => {
         const result = licenseManager.writeLicenseContent(base64Content, localMachineId);
         if (result.success) {
             // ★ 离线激活/导入 license 后清除 trial.dat（与 activateOnline 成功后一致）
-            // 防止试用模式数据残留导致重复弹窗
             try {
                 const fsSync = require('fs');
                 const trialPath = licenseManager.getTrialPath();
@@ -1094,6 +1093,32 @@ ipcMain.handle('license:activate', (event, base64Content) => {
                 }
             } catch (e) {
                 console.warn('[License] 离线导入：清除 trial.dat 失败:', e);
+            }
+            // ★ 激活成功后同步 clinicName 到 config.json
+            try {
+                const parsedLicense = licenseManager.readLicense(localMachineId);
+                if (parsedLicense && parsedLicense.clinicName) {
+                    if (licenseManager.setLicenseDataContext) {
+                        licenseManager.setLicenseDataContext(parsedLicense);
+                    }
+                    const fsSync = require('fs');
+                    const path = require('path');
+                    const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
+                    let config = {};
+                    if (fsSync.existsSync(configPath)) {
+                        config = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
+                    }
+                    if (config.clinicName !== parsedLicense.clinicName) {
+                        config.clinicName = parsedLicense.clinicName;
+                        if (licenseManager.signConfig) {
+                            config = licenseManager.signConfig(config);
+                        }
+                        fsSync.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+                        console.log('[License] 离线激活：config.json clinicName 已同步为:', parsedLicense.clinicName);
+                    }
+                }
+            } catch (syncErr) {
+                console.warn('[License] 离线激活：同步 clinicName 失败:', syncErr.message);
             }
             // ★ v3 新增：激活后立即校验绑定
             const validate = licenseManager.validateLicense({ localMachineId });

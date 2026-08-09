@@ -132,6 +132,32 @@ async function activateOnline(code, machineId, user, clinicName) {
             console.warn('[Activate] 清除 trial.dat 失败:', e);
         }
 
+        // ★ 激活成功后同步 clinicName 到 config.json（防止重启后诊所名不匹配）
+        try {
+            const parsedLicense = licenseManager.readLicense(machineId);
+            if (parsedLicense && parsedLicense.clinicName) {
+                // ★ 先设置 licenseDataContext，使 signConfig 能使用正确的 masterKey
+                if (licenseManager.setLicenseDataContext) {
+                    licenseManager.setLicenseDataContext(parsedLicense);
+                }
+                const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
+                let config = {};
+                if (fs.existsSync(configPath)) {
+                    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                }
+                if (config.clinicName !== parsedLicense.clinicName) {
+                    config.clinicName = parsedLicense.clinicName;
+                    if (licenseManager.signConfig) {
+                        config = licenseManager.signConfig(config);
+                    }
+                    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+                    console.log('[Activate] config.json clinicName 已同步为:', parsedLicense.clinicName);
+                }
+            }
+        } catch (syncErr) {
+            console.warn('[Activate] 同步 clinicName 到 config.json 失败:', syncErr.message);
+        }
+
         return {
             success: true,
             licenseInfo: data.licenseInfo,

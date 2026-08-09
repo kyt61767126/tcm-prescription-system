@@ -994,6 +994,22 @@ function verifyConfigIntegrity() {
     }
 }
 
+// ★ v3 新增：生成 config.json 签名（用于写入 config 时保持签名完整性）
+function signConfig(config) {
+    try {
+        if (!config || typeof config !== 'object') return config;
+        if (!config.configIssuedAt) {
+            config.configIssuedAt = new Date().toISOString();
+        }
+        const signContent = [config.clinicName || '', config.doctorName || '', config.edition || '', config.configIssuedAt].join('|');
+        config.configSignature = crypto.createHmac('sha256', getEffectiveConfigSignKey()).update(signContent).digest('hex');
+        return config;
+    } catch (e) {
+        console.warn('[License] signConfig 异常:', e.message);
+        return config;
+    }
+}
+
 // ============================================================================
 //  ★ P1-B 新增：安全检测（调试器检测，防 hook/调试绕过 license）
 // ============================================================================
@@ -1596,6 +1612,7 @@ module.exports = {
     getLicenseMasterKey,    // 获取当前 license 的 masterKey（供测试用）
     getEffectiveHmacKey,    // 获取生效的 HMAC 密钥（masterKey 派生或硬编码 fallback）
     getEffectiveConfigSignKey, // 获取生效的 config 签名密钥（masterKey 派生或硬编码 fallback）
+    signConfig,             // 生成 config.json 签名（激活后同步 clinicName 时使用）
     // P6-6 新增：激活工单
     submitActivationTicket,
     getCachedActivationTicket
