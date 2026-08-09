@@ -62,6 +62,10 @@ h2 { color: #34495e; margin: 20px 0 12px; font-size: 16px; border-left: 4px soli
 .stat-card.used .num { color: #3498db; }
 .stat-card.expired .num { color: #f39c12; }
 .stat-card.disabled .num { color: #e74c3c; }
+@keyframes pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3); }
+    50% { transform: scale(1.05); box-shadow: 0 4px 16px rgba(231, 76, 60, 0.5); }
+}
 
 /* 生成表单 */
 .gen-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 20px; }
@@ -463,14 +467,28 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <!-- ★ 管理员激活审核标签页 -->
         <div id="tabAdminActivate" class="tab-content">
             <div id="adminActivateAlert" class="alert"></div>
+
+            <!-- 统计概览 -->
+            <h2>激活请求统计</h2>
+            <div class="stats" id="adminActivateStats">
+                <div class="stat-card unused"><div class="num" id="aaStatPending">0</div><div class="label">待审核</div></div>
+                <div class="stat-card used"><div class="num" id="aaStatActivated">0</div><div class="label">已通过</div></div>
+                <div class="stat-card disabled"><div class="num" id="aaStatRejected">0</div><div class="label">已拒绝</div></div>
+                <div class="stat-card expired"><div class="num" id="aaStatCancelled">0</div><div class="label">已取消</div></div>
+                <div class="stat-card"><div class="num" id="aaStatTotal">0</div><div class="label">总计</div></div>
+            </div>
+
+            <!-- 筛选栏 -->
+            <h2>未激活客户列表</h2>
             <div class="filter-bar">
                 <select id="adminActivateFilter" onchange="loadAdminActivateList()">
-                    <option value="pending" selected>待审核</option>
+                    <option value="pending" selected>待审核（未激活）</option>
                     <option value="activated">已通过</option>
                     <option value="rejected">已拒绝</option>
                     <option value="cancelled">已取消</option>
                     <option value="all">全部</option>
                 </select>
+                <input type="text" id="adminActivateSearch" placeholder="搜索诊所名/管理员/电话/机器ID" oninput="filterAdminActivateList()" style="flex:1;min-width:200px;">
                 <button class="btn btn-sm" onclick="loadAdminActivateList()">刷新</button>
                 <label style="font-size:12px;color:#909399;display:flex;align-items:center;gap:4px;">
                     <input type="checkbox" id="adminActivateAutoRefresh" onchange="toggleAdminActivateAutoRefresh()"> 每10秒自动刷新
@@ -483,20 +501,21 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                             <th>请求编号</th>
                             <th>诊所名称</th>
                             <th>管理员</th>
-                            <th>电话</th>
+                            <th>联系电话</th>
                             <th>机器ID</th>
                             <th>备注</th>
                             <th>提交时间</th>
+                            <th>IP</th>
                             <th>状态</th>
                             <th>操作</th>
                         </tr>
                     </thead>
                     <tbody id="adminActivateListBody">
-                        <tr><td colspan="9" class="loading">加载中...</td></tr>
+                        <tr><td colspan="10" class="loading">加载中...</td></tr>
                     </tbody>
                 </table>
             </div>
-            <p style="margin-top:12px;color:#909399;font-size:12px;">说明：客户端激活窗口选择"管理员激活"模式提交的请求会出现在此列表。点击"通过"自动生成激活码并下发 license，客户端将自动激活并重启。</p>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">说明：客户端激活窗口选择"管理员激活"模式提交的请求会出现在此列表。点击"审核"查看客户完整信息并一键通过/拒绝。通过后客户端将在 5 秒内自动获取 license 并重启。</p>
         </div>
     </div>
 </div>
@@ -1955,48 +1974,114 @@ async function loadAdminActivateList() {
     const tbody = document.getElementById('adminActivateListBody');
     if (!tbody) return;
     const filter = document.getElementById('adminActivateFilter').value;
-    tbody.innerHTML = '<tr><td colspan="9" class="loading">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" class="loading">加载中...</td></tr>';
     try {
-        const res = await fetch(API_BASE + '/license/admin-list?status=' + encodeURIComponent(filter) + '&limit=200', {
+        // 同时拉取待审核和已通过（用于统计卡片），filter=all 时一次拉全
+        const fetchUrl = API_BASE + '/license/admin-list?status=' + encodeURIComponent(filter) + '&limit=500';
+        const res = await fetch(fetchUrl, {
             headers: { 'Authorization': 'Bearer ' + token }
         });
         const data = await res.json();
         if (data.success && Array.isArray(data.requests)) {
-            if (data.requests.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty">暂无' + (filter === 'all' ? '' : filter) + '请求</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.requests.map(r => {
-                const submitTime = r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-CN') : '-';
-                const statusBadge = renderAdminActivateStatus(r.status);
-                const actions = r.status === 'pending'
-                    ? '<button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button>'
-                    : '<span style="color:#909399;font-size:12px;">已处理</span>';
-                return '<tr>' +
-                    '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(r.requestId) + '</td>' +
-                    '<td>' + escapeHtml(r.clinicName || '-') + '</td>' +
-                    '<td>' + escapeHtml(r.adminName || '-') + '</td>' +
-                    '<td>' + escapeHtml(r.phone || '-') + '</td>' +
-                    '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(r.machineId || '-') + '</td>' +
-                    '<td style="max-width:200px;word-break:break-all;font-size:12px;color:#606266;">' + escapeHtml(r.remark || '-') + '</td>' +
-                    '<td style="font-size:12px;">' + escapeHtml(submitTime) + '</td>' +
-                    '<td>' + statusBadge + '</td>' +
-                    '<td style="white-space:nowrap;">' + actions + '</td>' +
-                '</tr>';
-            }).join('');
-            // 缓存请求数据用于审核弹窗
             _adminActivateCache = data.requests;
+            // 更新统计卡片（基于当前拉取的数据 + 估算，精确统计需另拉 all）
+            updateAdminActivateStats(data.requests, filter);
+            // 渲染列表（带搜索过滤）
+            renderAdminActivateTable();
         } else {
             if (res.status === 401) {
                 showAlert('adminActivateAlert', '登录已过期，请重新登录', 'error');
                 doLogout();
             } else {
-                tbody.innerHTML = '<tr><td colspan="9" class="empty">加载失败：' + escapeHtml(data.error || '未知错误') + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" class="empty">加载失败：' + escapeHtml(data.error || '未知错误') + '</td></tr>';
             }
         }
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
     }
+}
+
+// 后台拉取全部状态用于统计卡片（不影响主列表显示）
+async function refreshAdminActivateStats() {
+    try {
+        const res = await fetch(API_BASE + '/license/admin-list?status=all&limit=500', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.requests)) {
+            const all = data.requests;
+            const pending = all.filter(r => r.status === 'pending').length;
+            const activated = all.filter(r => r.status === 'activated').length;
+            const rejected = all.filter(r => r.status === 'rejected').length;
+            const cancelled = all.filter(r => r.status === 'cancelled').length;
+            const el = id => document.getElementById(id);
+            if (el('aaStatPending')) el('aaStatPending').textContent = pending;
+            if (el('aaStatActivated')) el('aaStatActivated').textContent = activated;
+            if (el('aaStatRejected')) el('aaStatRejected').textContent = rejected;
+            if (el('aaStatCancelled')) el('aaStatCancelled').textContent = cancelled;
+            if (el('aaStatTotal')) el('aaStatTotal').textContent = all.length;
+            // 待审核数 > 0 时高亮
+            const pendingCard = document.querySelector('#adminActivateStats .stat-card.unused');
+            if (pendingCard) {
+                pendingCard.style.animation = pending > 0 ? 'pulse 2s infinite' : 'none';
+            }
+        }
+    } catch (e) {
+        console.warn('统计刷新失败:', e.message);
+    }
+}
+
+function updateAdminActivateStats(requests, filter) {
+    // 立即用当前数据更新统计（粗略），后台再拉全量精确刷新
+    refreshAdminActivateStats();
+}
+
+// 根据搜索框过滤并渲染列表
+function filterAdminActivateList() {
+    renderAdminActivateTable();
+}
+
+function renderAdminActivateTable() {
+    const tbody = document.getElementById('adminActivateListBody');
+    if (!tbody) return;
+    const search = (document.getElementById('adminActivateSearch').value || '').trim().toLowerCase();
+    let list = _adminActivateCache || [];
+    if (search) {
+        list = list.filter(r => {
+            return (r.clinicName || '').toLowerCase().includes(search) ||
+                   (r.adminName || '').toLowerCase().includes(search) ||
+                   (r.phone || '').toLowerCase().includes(search) ||
+                   (r.machineId || '').toLowerCase().includes(search) ||
+                   (r.requestId || '').toLowerCase().includes(search);
+        });
+    }
+    if (list.length === 0) {
+        const filter = document.getElementById('adminActivateFilter').value;
+        const emptyText = search ? '没有匹配的记录' : '暂无' + (filter === 'all' ? '' : filter) + '请求';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty">' + escapeHtml(emptyText) + '</td></tr>';
+        return;
+    }
+    tbody.innerHTML = list.map(r => {
+        const submitTime = r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-CN') : '-';
+        const statusBadge = renderAdminActivateStatus(r.status);
+        // 电话可点击拨号（移动端友好）
+        const phoneDisplay = r.phone ? '<a href="tel:' + escapeHtml(r.phone) + '" style="color:#409eff;">' + escapeHtml(r.phone) + '</a>' : '-';
+        const actions = r.status === 'pending'
+            ? '<button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button>'
+            : '<span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span>';
+        return '<tr>' +
+            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(r.requestId) + '</td>' +
+            '<td><strong>' + escapeHtml(r.clinicName || '-') + '</strong></td>' +
+            '<td>' + escapeHtml(r.adminName || '-') + '</td>' +
+            '<td>' + phoneDisplay + '</td>' +
+            '<td style="font-family:Courier New,monospace;font-size:11px;" title="' + escapeHtml(r.machineId || '') + '">' + escapeHtml(r.machineId || '-') + '</td>' +
+            '<td style="max-width:200px;word-break:break-all;font-size:12px;color:#606266;">' + escapeHtml(r.remark || '-') + '</td>' +
+            '<td style="font-size:12px;white-space:nowrap;">' + escapeHtml(submitTime) + '</td>' +
+            '<td style="font-size:11px;color:#909399;">' + escapeHtml(r.submittedIp || '-') + '</td>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td style="white-space:nowrap;">' + actions + '</td>' +
+        '</tr>';
+    }).join('');
 }
 
 let _adminActivateCache = [];

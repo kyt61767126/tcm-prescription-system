@@ -33,19 +33,17 @@ const KV_ADMIN_REQ_PREFIX = 'admin_req:';
 const KV_ADMIN_REQ_INDEX = 'admin_req_index';
 
 // 脱敏：对外返回时隐藏 machineId 中间部分、电话中间 4 位
+// ★ 平台管理员后台需要完整客户信息核对身份（电话/机器ID不脱敏）
+// 此 API 仅 platform_admin 角色可访问（onRequest 入口已校验），无需脱敏
 function maskRecord(record) {
     if (!record) return null;
-    const mid = record.machineId || '';
-    const maskedMid = mid.length > 12 ? mid.substring(0, 8) + '****' + mid.substring(mid.length - 4) : mid;
-    const phone = record.phone || '';
-    const maskedPhone = phone.length === 11 ? phone.substring(0, 3) + '****' + phone.substring(7) : phone;
     return {
         requestId: record.requestId,
         clinicName: record.clinicName,
         adminName: record.adminName,
-        phone: maskedPhone,
+        phone: record.phone || '',
         remark: record.remark || '',
-        machineId: maskedMid,
+        machineId: record.machineId || '',
         status: record.status,
         submittedAt: record.submittedAt,
         submittedIp: record.submittedIp || '',
