@@ -41,6 +41,8 @@ h2 { color: #34495e; margin: 20px 0 12px; font-size: 16px; border-left: 4px soli
 .btn:hover { background: #2980b9; }
 .btn-success { background: #27ae60; }
 .btn-success:hover { background: #229954; }
+.btn-primary { background: #3498db; }
+.btn-primary:hover { background: #2980b9; }
 .btn-warning { background: #f39c12; }
 .btn-warning:hover { background: #d68910; }
 .btn-danger { background: #e74c3c; }
@@ -60,6 +62,10 @@ h2 { color: #34495e; margin: 20px 0 12px; font-size: 16px; border-left: 4px soli
 .stat-card.used .num { color: #3498db; }
 .stat-card.expired .num { color: #f39c12; }
 .stat-card.disabled .num { color: #e74c3c; }
+@keyframes pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 2px 8px rgba(231, 76, 60, 0.3); }
+    50% { transform: scale(1.05); box-shadow: 0 4px 16px rgba(231, 76, 60, 0.5); }
+}
 
 /* 生成表单 */
 .gen-box { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 20px; }
@@ -247,6 +253,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <!-- 标签栏 -->
         <div class="tab-bar">
             <button class="tab-btn active" data-tab="License" onclick="switchTab('License')">📋 激活码管理</button>
+            <button class="tab-btn" data-tab="AdminActivate" onclick="switchTab('AdminActivate')">🔔 激活审核</button>
             <button class="tab-btn" data-tab="Clinics" onclick="switchTab('Clinics')">🏥 诊所管理</button>
             <button class="tab-btn" data-tab="Users" onclick="switchTab('Users')">👥 用户管理</button>
         </div>
@@ -345,6 +352,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <div class="gen-actions">
                 <button class="btn btn-success" onclick="generateCodes()">生成激活码</button>
                 <button class="btn" onclick="openBatchGenerateModal()">批量生成（多用户）</button>
+                <button class="btn btn-primary" onclick="openActivationLinkModal()">🔗 生成一键激活链接</button>
                 <button class="btn" onclick="clearGenForm()">清空</button>
             </div>
         </div>
@@ -403,18 +411,15 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div class="gen-row">
                     <div class="form-group">
                         <label>诊所名称 *</label>
-                        <input type="text" id="newClinicName" placeholder="如：惠康中医诊所" maxlength="50" oninput="validateClinicName()">
-                        <div id="clinicNameStatus" style="font-size:11px;margin-top:4px;"></div>
+                        <input type="text" id="newClinicName" placeholder="如：惠康中医诊所">
                     </div>
                     <div class="form-group">
                         <label>管理员账号 *</label>
-                        <input type="text" id="newClinicAdminUsername" placeholder="admin_诊所简码（如 admin_hkt）" oninput="checkAdminUsernameAvailability()" style="font-family:monospace;">
-                        <div id="adminUsernameStatus" style="font-size:11px;margin-top:4px;"></div>
+                        <input type="text" id="newClinicAdminUsername" placeholder="admin_诊所简码（如 admin_hkt）">
                     </div>
                     <div class="form-group">
                         <label>管理员密码 *</label>
-                        <input type="password" id="newClinicAdminPassword" placeholder="至少8位，含字母和数字" oninput="updateAdminPwdStrength()">
-                        <div id="adminPwdStrength" style="font-size:11px;margin-top:4px;"></div>
+                        <input type="password" id="newClinicAdminPassword" placeholder="初始密码">
                     </div>
                     <div class="form-group">
                         <label>管理员姓名</label>
@@ -424,32 +429,6 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div class="gen-actions">
                     <button class="btn btn-success" onclick="handleCreateClinic()">创建诊所</button>
                     <button class="btn" onclick="clearClinicForm()">清空</button>
-                    <button class="btn btn-warning" onclick="openQuickRegister()">⚡ 一键自助注册</button>
-                    <span style="color:#909399;font-size:12px;margin-left:auto;align-self:center;">💡 格式：admin_简码，密码需≥8位含字母+数字</span>
-                </div>
-            </div>
-
-            <!-- 统计看板 -->
-            <div class="stats" style="margin-bottom:16px;">
-                <div class="stat-card">
-                    <div class="num" id="statTotal">0</div>
-                    <div class="label">🏥 总诊所数</div>
-                </div>
-                <div class="stat-card used">
-                    <div class="num" id="statActive">0</div>
-                    <div class="label">✅ 正常营业</div>
-                </div>
-                <div class="stat-card disabled">
-                    <div class="num" id="statDisabled">0</div>
-                    <div class="label">⏸️ 已停用</div>
-                </div>
-                <div class="stat-card" style="background:#e0f2fe;">
-                    <div class="num" id="statDoctors" style="color:#0369a1;">0</div>
-                    <div class="label">👨‍⚕️ 总医师数</div>
-                </div>
-                <div class="stat-card" style="background:#fef3c7;">
-                    <div class="num" id="statTodayReg" style="color:#b45309;">0</div>
-                    <div class="label">📝 今日新增</div>
                 </div>
             </div>
 
@@ -483,6 +462,124 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </table>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">提示：用户管理（创建/编辑/删除）请到对应诊所内操作，或使用主应用的用户管理界面。此处仅用于查看所有用户列表。</p>
+        </div>
+
+        <!-- ★ 管理员激活审核标签页 -->
+        <div id="tabAdminActivate" class="tab-content">
+            <div id="adminActivateAlert" class="alert"></div>
+
+            <!-- 统计概览 -->
+            <h2>激活请求统计</h2>
+            <div class="stats" id="adminActivateStats">
+                <div class="stat-card unused"><div class="num" id="aaStatPending">0</div><div class="label">待审核</div></div>
+                <div class="stat-card used"><div class="num" id="aaStatActivated">0</div><div class="label">已通过</div></div>
+                <div class="stat-card disabled"><div class="num" id="aaStatRejected">0</div><div class="label">已拒绝</div></div>
+                <div class="stat-card expired"><div class="num" id="aaStatCancelled">0</div><div class="label">已取消</div></div>
+                <div class="stat-card"><div class="num" id="aaStatTotal">0</div><div class="label">总计</div></div>
+            </div>
+
+            <!-- 筛选栏 -->
+            <h2>未激活客户列表</h2>
+            <div class="filter-bar">
+                <select id="adminActivateFilter" onchange="loadAdminActivateList()">
+                    <option value="pending" selected>待审核（未激活）</option>
+                    <option value="activated">已通过</option>
+                    <option value="rejected">已拒绝</option>
+                    <option value="cancelled">已取消</option>
+                    <option value="all">全部</option>
+                </select>
+                <input type="text" id="adminActivateSearch" placeholder="搜索诊所名/管理员/电话/机器ID" oninput="filterAdminActivateList()" style="flex:1;min-width:200px;">
+                <button class="btn btn-sm" onclick="loadAdminActivateList()">刷新</button>
+                <label style="font-size:12px;color:#909399;display:flex;align-items:center;gap:4px;">
+                    <input type="checkbox" id="adminActivateAutoRefresh" onchange="toggleAdminActivateAutoRefresh()"> 每10秒自动刷新
+                </label>
+            </div>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>请求编号</th>
+                            <th>诊所名称</th>
+                            <th>管理员</th>
+                            <th>联系电话</th>
+                            <th>机器ID</th>
+                            <th>备注</th>
+                            <th>提交时间</th>
+                            <th>IP</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminActivateListBody">
+                        <tr><td colspan="10" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">说明：客户端激活窗口选择"管理员激活"模式提交的请求会出现在此列表。点击"审核"查看客户完整信息并一键通过/拒绝。通过后客户端将在 5 秒内自动获取 license 并重启。</p>
+        </div>
+    </div>
+</div>
+
+<!-- ★ 管理员激活审核弹窗 -->
+<div id="adminApproveModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:560px;">
+        <span class="modal-close" onclick="closeAdminApproveModal()">&times;</span>
+        <h3>审核激活请求</h3>
+        <div id="adminApproveModalAlert" class="alert"></div>
+        <div style="background:#f9fafc;padding:12px;border-radius:6px;margin-bottom:16px;font-size:13px;line-height:1.8;">
+            <div><strong>请求编号：</strong><span id="approveReqId" style="font-family:Courier New,monospace;"></span></div>
+            <div><strong>诊所名称：</strong><span id="approveClinicName"></span></div>
+            <div><strong>管理员姓名：</strong><span id="approveAdminName"></span></div>
+            <div><strong>联系电话：</strong><span id="approvePhone"></span></div>
+            <div><strong>机器 ID：</strong><span id="approveMachineId" style="font-family:Courier New,monospace;font-size:11px;word-break:break-all;"></span></div>
+            <div><strong>提交时间：</strong><span id="approveSubmitTime"></span></div>
+            <div><strong>备注：</strong><span id="approveRemark"></span></div>
+        </div>
+
+        <div id="approveForm">
+            <h2 style="margin-top:0;">通过审核 · 生成激活码</h2>
+            <div class="gen-row">
+                <div class="form-group">
+                    <label>版本类型 *</label>
+                    <select id="approveType">
+                        <option value="personal" selected>标准版（无限处方，1年）</option>
+                        <option value="pro">机构版（无限+同步+多设备，1年）</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>最大设备数</label>
+                    <input type="number" id="approveMaxDevices" value="1" min="1" max="10">
+                </div>
+                <div class="form-group">
+                    <label>有效天数</label>
+                    <input type="number" id="approveDays" value="365" min="1" placeholder="如 365">
+                </div>
+                <div class="form-group">
+                    <label>到期日期（与天数二选一）</label>
+                    <input type="date" id="approveExpiresAt" placeholder="留空则按天数">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>审核备注（可选）</label>
+                <input type="text" id="approveNote" placeholder="如：客户已付款">
+            </div>
+            <div class="gen-actions">
+                <button class="btn btn-success" onclick="submitApprove('approve')">✅ 通过并生成激活码</button>
+                <button class="btn btn-danger" onclick="showRejectForm()">❌ 拒绝请求</button>
+                <button class="btn" onclick="closeAdminApproveModal()">取消</button>
+            </div>
+        </div>
+
+        <div id="rejectForm" style="display:none;">
+            <h2 style="margin-top:0;color:#e74c3c;">拒绝请求</h2>
+            <div class="form-group">
+                <label>拒绝原因 *</label>
+                <textarea id="rejectReason" rows="3" placeholder="如：信息填写不完整，请补充诊所全称" style="width:100%;padding:8px 12px;border:1px solid #dcdfe6;border-radius:4px;font-size:14px;resize:vertical;font-family:inherit;"></textarea>
+            </div>
+            <div class="gen-actions">
+                <button class="btn btn-danger" onclick="submitApprove('reject')">确认拒绝</button>
+                <button class="btn" onclick="backToApproveForm()">返回</button>
+            </div>
         </div>
     </div>
 </div>
@@ -708,6 +805,57 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
     </div>
 </div>
 
+<!-- ★ 一键激活链接生成弹窗 -->
+<div id="activationLinkModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:520px;">
+        <span class="modal-close" onclick="closeActivationLinkModal()">&times;</span>
+        <h3>🔗 生成一键激活链接</h3>
+        <div id="activationLinkAlert" class="alert"></div>
+        <div style="margin-bottom:14px;color:#606266;font-size:13px;line-height:1.6;">
+            生成 <code>bnzc://activate</code> 协议链接，客户点击链接即可自动激活软件，无需手动输入激活码。<br>
+            <strong>使用场景：</strong>通过微信/短信发送链接给客户，客户点击后软件自动激活。
+        </div>
+        <div class="form-group">
+            <label>激活码 *</label>
+            <input type="text" id="linkCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" style="font-family:Courier New,monospace;">
+        </div>
+        <div class="form-group">
+            <label>绑定诊所名（可选）</label>
+            <input type="text" id="linkClinicName" placeholder="如：本能堂中医诊所">
+        </div>
+        <div class="form-group">
+            <label>用户名（可选）</label>
+            <input type="text" id="linkUserName" placeholder="如：张三">
+        </div>
+        <div style="margin-top:16px;text-align:right;">
+            <button class="btn" onclick="closeActivationLinkModal()">取消</button>
+            <button class="btn btn-success" onclick="generateActivationLink()">生成链接</button>
+        </div>
+
+        <!-- 生成结果区域 -->
+        <div id="activationLinkResult" style="display:none;margin-top:16px;padding-top:16px;border-top:1px solid #e4e7ed;">
+            <div style="text-align:center;margin-bottom:12px;">
+                <div id="qrCodeContainer" style="display:inline-block;padding:8px;background:#fff;border:1px solid #e4e7ed;border-radius:6px;"></div>
+                <div style="font-size:11px;color:#909399;margin-top:4px;">扫描二维码即可激活</div>
+            </div>
+            <div class="form-group">
+                <label>激活链接</label>
+                <div style="display:flex;gap:6px;">
+                    <input type="text" id="generatedLink" readonly style="flex:1;font-family:Courier New,monospace;font-size:12px;background:#f5f7fa;">
+                    <button class="btn btn-sm" onclick="copyGeneratedLink()">复制</button>
+                </div>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-sm" onclick="copyLinkAsText()">📋 复制为文本说明</button>
+                <button class="btn btn-sm" onclick="sendLinkByWechat()">💬 发送微信模板</button>
+                <button class="btn btn-sm" onclick="closeActivationLinkModal()">完成</button>
+            </div>
+            <div id="linkTextPreview" style="display:none;margin-top:8px;padding:10px;background:#f5f7fa;border-radius:6px;font-size:12px;white-space:pre-wrap;line-height:1.6;"></div>
+        </div>
+    </div>
+</div>
+
+<script src="../qrcode.min.js"></script>
 <script>
 // API 基础路径（与 Pages Functions 路径一致）
 const API_BASE = '/api';
@@ -1384,6 +1532,7 @@ function renderList(records) {
         const clinicCell = r.clinicName ? '<span style="color:#8e44ad;">' + escapeHtml(r.clinicName) + '</span>' : '-';
 
         let actions = '<button class="btn btn-sm" onclick="copyCode(\'' + r.code + '\')">复制</button>';
+        actions += '<button class="btn btn-sm btn-primary" onclick="quickGenLinkFromCode(\'' + r.code + '\')" title="生成一键激活链接">🔗 链接</button>';
         actions += '<button class="btn btn-sm" onclick="showLogs(\'' + r.code + '\')">日志</button>';
         actions += '<button class="btn btn-sm" onclick="openEditModal(\'' + r.code + '\')">编辑</button>';
         if (r.status === 'used') {
@@ -1814,6 +1963,265 @@ function switchTab(tabName) {
     if (tabName === 'Clinics') loadClinicsList();
     else if (tabName === 'Users') loadUsersList();
     else if (tabName === 'License') loadList();
+    else if (tabName === 'AdminActivate') loadAdminActivateList();
+}
+
+// ===== ★ 管理员激活审核 =====
+let _adminActivateAutoRefreshTimer = null;
+let _currentApproveRequest = null;
+
+async function loadAdminActivateList() {
+    const tbody = document.getElementById('adminActivateListBody');
+    if (!tbody) return;
+    const filter = document.getElementById('adminActivateFilter').value;
+    tbody.innerHTML = '<tr><td colspan="10" class="loading">加载中...</td></tr>';
+    try {
+        // 同时拉取待审核和已通过（用于统计卡片），filter=all 时一次拉全
+        const fetchUrl = API_BASE + '/license/admin-list?status=' + encodeURIComponent(filter) + '&limit=500';
+        const res = await fetch(fetchUrl, {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.requests)) {
+            _adminActivateCache = data.requests;
+            // 更新统计卡片（基于当前拉取的数据 + 估算，精确统计需另拉 all）
+            updateAdminActivateStats(data.requests, filter);
+            // 渲染列表（带搜索过滤）
+            renderAdminActivateTable();
+        } else {
+            if (res.status === 401) {
+                showAlert('adminActivateAlert', '登录已过期，请重新登录', 'error');
+                doLogout();
+            } else {
+                tbody.innerHTML = '<tr><td colspan="10" class="empty">加载失败：' + escapeHtml(data.error || '未知错误') + '</td></tr>';
+            }
+        }
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="10" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+    }
+}
+
+// 后台拉取全部状态用于统计卡片（不影响主列表显示）
+async function refreshAdminActivateStats() {
+    try {
+        const res = await fetch(API_BASE + '/license/admin-list?status=all&limit=500', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.requests)) {
+            const all = data.requests;
+            const pending = all.filter(r => r.status === 'pending').length;
+            const activated = all.filter(r => r.status === 'activated').length;
+            const rejected = all.filter(r => r.status === 'rejected').length;
+            const cancelled = all.filter(r => r.status === 'cancelled').length;
+            const el = id => document.getElementById(id);
+            if (el('aaStatPending')) el('aaStatPending').textContent = pending;
+            if (el('aaStatActivated')) el('aaStatActivated').textContent = activated;
+            if (el('aaStatRejected')) el('aaStatRejected').textContent = rejected;
+            if (el('aaStatCancelled')) el('aaStatCancelled').textContent = cancelled;
+            if (el('aaStatTotal')) el('aaStatTotal').textContent = all.length;
+            // 待审核数 > 0 时高亮
+            const pendingCard = document.querySelector('#adminActivateStats .stat-card.unused');
+            if (pendingCard) {
+                pendingCard.style.animation = pending > 0 ? 'pulse 2s infinite' : 'none';
+            }
+        }
+    } catch (e) {
+        console.warn('统计刷新失败:', e.message);
+    }
+}
+
+function updateAdminActivateStats(requests, filter) {
+    // 立即用当前数据更新统计（粗略），后台再拉全量精确刷新
+    refreshAdminActivateStats();
+}
+
+// 根据搜索框过滤并渲染列表
+function filterAdminActivateList() {
+    renderAdminActivateTable();
+}
+
+function renderAdminActivateTable() {
+    const tbody = document.getElementById('adminActivateListBody');
+    if (!tbody) return;
+    const search = (document.getElementById('adminActivateSearch').value || '').trim().toLowerCase();
+    let list = _adminActivateCache || [];
+    if (search) {
+        list = list.filter(r => {
+            return (r.clinicName || '').toLowerCase().includes(search) ||
+                   (r.adminName || '').toLowerCase().includes(search) ||
+                   (r.phone || '').toLowerCase().includes(search) ||
+                   (r.machineId || '').toLowerCase().includes(search) ||
+                   (r.requestId || '').toLowerCase().includes(search);
+        });
+    }
+    if (list.length === 0) {
+        const filter = document.getElementById('adminActivateFilter').value;
+        const emptyText = search ? '没有匹配的记录' : '暂无' + (filter === 'all' ? '' : filter) + '请求';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty">' + escapeHtml(emptyText) + '</td></tr>';
+        return;
+    }
+    tbody.innerHTML = list.map(r => {
+        const submitTime = r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-CN') : '-';
+        const statusBadge = renderAdminActivateStatus(r.status);
+        // 电话可点击拨号（移动端友好）
+        const phoneDisplay = r.phone ? '<a href="tel:' + escapeHtml(r.phone) + '" style="color:#409eff;">' + escapeHtml(r.phone) + '</a>' : '-';
+        const actions = r.status === 'pending'
+            ? '<button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button>'
+            : '<span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span>';
+        return '<tr>' +
+            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(r.requestId) + '</td>' +
+            '<td><strong>' + escapeHtml(r.clinicName || '-') + '</strong></td>' +
+            '<td>' + escapeHtml(r.adminName || '-') + '</td>' +
+            '<td>' + phoneDisplay + '</td>' +
+            '<td style="font-family:Courier New,monospace;font-size:11px;" title="' + escapeHtml(r.machineId || '') + '">' + escapeHtml(r.machineId || '-') + '</td>' +
+            '<td style="max-width:200px;word-break:break-all;font-size:12px;color:#606266;">' + escapeHtml(r.remark || '-') + '</td>' +
+            '<td style="font-size:12px;white-space:nowrap;">' + escapeHtml(submitTime) + '</td>' +
+            '<td style="font-size:11px;color:#909399;">' + escapeHtml(r.submittedIp || '-') + '</td>' +
+            '<td>' + statusBadge + '</td>' +
+            '<td style="white-space:nowrap;">' + actions + '</td>' +
+        '</tr>';
+    }).join('');
+}
+
+let _adminActivateCache = [];
+
+function renderAdminActivateStatus(status) {
+    const map = {
+        pending: '<span class="tag tag-unused">待审核</span>',
+        activated: '<span class="tag tag-used">已通过</span>',
+        rejected: '<span class="tag tag-disabled">已拒绝</span>',
+        cancelled: '<span class="tag tag-expired">已取消</span>'
+    };
+    return map[status] || '<span class="tag">' + escapeHtml(status || '未知') + '</span>';
+}
+
+function toggleAdminActivateAutoRefresh() {
+    const checkbox = document.getElementById('adminActivateAutoRefresh');
+    if (checkbox.checked) {
+        if (_adminActivateAutoRefreshTimer) clearInterval(_adminActivateAutoRefreshTimer);
+        _adminActivateAutoRefreshTimer = setInterval(loadAdminActivateList, 10000);
+    } else {
+        if (_adminActivateAutoRefreshTimer) {
+            clearInterval(_adminActivateAutoRefreshTimer);
+            _adminActivateAutoRefreshTimer = null;
+        }
+    }
+}
+
+function openAdminApproveModal(requestId) {
+    const req = _adminActivateCache.find(r => r.requestId === requestId);
+    if (!req) {
+        showAlert('adminActivateAlert', '请求记录不存在，请刷新列表', 'error');
+        return;
+    }
+    _currentApproveRequest = req;
+    document.getElementById('approveReqId').textContent = req.requestId;
+    document.getElementById('approveClinicName').textContent = req.clinicName || '-';
+    document.getElementById('approveAdminName').textContent = req.adminName || '-';
+    document.getElementById('approvePhone').textContent = req.phone || '-';
+    document.getElementById('approveMachineId').textContent = req.machineId || '-';
+    document.getElementById('approveSubmitTime').textContent = req.submittedAt ? new Date(req.submittedAt).toLocaleString('zh-CN') : '-';
+    document.getElementById('approveRemark').textContent = req.remark || '-';
+    // 重置表单
+    document.getElementById('approveType').value = 'personal';
+    document.getElementById('approveMaxDevices').value = '1';
+    document.getElementById('approveDays').value = '365';
+    document.getElementById('approveExpiresAt').value = '';
+    document.getElementById('approveNote').value = '';
+    document.getElementById('rejectReason').value = '';
+    document.getElementById('approveForm').style.display = 'block';
+    document.getElementById('rejectForm').style.display = 'none';
+    document.getElementById('adminApproveModalAlert').className = 'alert';
+    document.getElementById('adminApproveModal').classList.add('show');
+}
+
+function closeAdminApproveModal() {
+    document.getElementById('adminApproveModal').classList.remove('show');
+    _currentApproveRequest = null;
+}
+
+function showRejectForm() {
+    document.getElementById('approveForm').style.display = 'none';
+    document.getElementById('rejectForm').style.display = 'block';
+}
+
+function backToApproveForm() {
+    document.getElementById('rejectForm').style.display = 'none';
+    document.getElementById('approveForm').style.display = 'block';
+}
+
+async function submitApprove(action) {
+    if (!_currentApproveRequest) {
+        showAlert('adminApproveModalAlert', '请求记录丢失，请关闭后重试', 'error');
+        return;
+    }
+    const requestId = _currentApproveRequest.requestId;
+    const body = { requestId, action };
+
+    if (action === 'approve') {
+        body.type = document.getElementById('approveType').value;
+        body.maxDevices = parseInt(document.getElementById('approveMaxDevices').value, 10) || 1;
+        const days = parseInt(document.getElementById('approveDays').value, 10);
+        const expiresAt = document.getElementById('approveExpiresAt').value;
+        if (!days && !expiresAt) {
+            showAlert('adminApproveModalAlert', '请填写有效天数或到期日期', 'error');
+            return;
+        }
+        if (days) body.days = days;
+        if (expiresAt) body.expiresAt = expiresAt;
+        const note = document.getElementById('approveNote').value.trim();
+        if (note) body.note = note;
+    } else if (action === 'reject') {
+        const reason = document.getElementById('rejectReason').value.trim();
+        if (!reason) {
+            showAlert('adminApproveModalAlert', '请填写拒绝原因', 'error');
+            return;
+        }
+        body.reason = reason;
+    }
+
+    // 禁用按钮防止重复提交
+    const btns = document.querySelectorAll('#adminApproveModal .gen-actions button');
+    btns.forEach(b => b.disabled = true);
+
+    try {
+        const res = await fetch(API_BASE + '/license/admin-approve', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        btns.forEach(b => b.disabled = false);
+
+        if (data.success) {
+            if (action === 'approve') {
+                showAlert('adminApproveModalAlert',
+                    '✅ 审核通过！\n激活码：' + (data.licenseCode || '-') +
+                    '\n客户端将在下次轮询时（5秒内）自动获取 license 并重启。',
+                    'success');
+            } else {
+                showAlert('adminApproveModalAlert', '✅ 已拒绝请求，客户端将收到拒绝通知', 'success');
+            }
+            setTimeout(() => {
+                closeAdminApproveModal();
+                loadAdminActivateList();
+            }, 2500);
+        } else {
+            if (res.status === 401) {
+                showAlert('adminApproveModalAlert', '登录已过期，请重新登录', 'error');
+                doLogout();
+            } else {
+                showAlert('adminApproveModalAlert', '审核失败：' + (data.error || '未知错误'), 'error');
+            }
+        }
+    } catch (e) {
+        btns.forEach(b => b.disabled = false);
+        showAlert('adminApproveModalAlert', '网络错误：' + e.message, 'error');
+    }
 }
 
 // ===== 诊所管理 =====
@@ -1827,7 +2235,6 @@ async function loadClinicsList() {
         });
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
-            updateClinicStats(data.data);
             if (data.data.length === 0) {
                 listEl.innerHTML = '<div class="empty">暂无诊所</div>';
                 return;
@@ -1871,28 +2278,11 @@ async function handleCreateClinic() {
         showAlert('clinicAlert', '请填写诊所名称、管理员账号、管理员密码', 'error');
         return;
     }
-    if (clinicName.length < 2 || clinicName.length > 50) {
-        showAlert('clinicAlert', '诊所名称长度需在 2-50 个字符之间', 'error');
-        return;
-    }
     if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
-        showAlert('clinicAlert', '管理员账号不能使用中文', 'error');
-        return;
-    }
-    if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(adminUsername)) {
-        showAlert('clinicAlert', '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅小写字母和数字，2-12位简码', 'error');
-        return;
-    }
-    if (adminPassword.length < 8) {
-        showAlert('clinicAlert', '密码至少8位', 'error');
-        return;
-    }
-    if (!/[a-zA-Z]/.test(adminPassword) || !/[0-9]/.test(adminPassword)) {
-        showAlert('clinicAlert', '密码必须同时包含字母和数字', 'error');
+        showAlert('clinicAlert', '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅英文小写字母和数字', 'error');
         return;
     }
     try {
-        showAlert('clinicAlert', '正在创建诊所...', 'info');
         const res = await fetch(API_BASE + '/users?clinic=create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
@@ -1900,11 +2290,11 @@ async function handleCreateClinic() {
         });
         const data = await res.json();
         if (data.success) {
-            showAlert('clinicAlert', '✅ 诊所创建成功！\n\n🏥 诊所：' + data.clinic.name + '\n📋 ID：' + data.clinic.id + '\n👤 管理员：' + data.admin.username + '\n\n💬 请通知管理员使用初始密码登录并及时修改', 'success');
+            showAlert('clinicAlert', '诊所创建成功！\n\n诊所：' + data.clinic.name + '\nID：' + data.clinic.id + '\n管理员：' + data.admin.username, 'success');
             clearClinicForm();
             loadClinicsList();
         } else {
-            showAlert('clinicAlert', '❌ ' + (data.error || '创建失败'), 'error');
+            showAlert('clinicAlert', data.error || '创建失败', 'error');
         }
     } catch (e) {
         showAlert('clinicAlert', '网络错误：' + e.message, 'error');
@@ -1916,94 +2306,6 @@ function clearClinicForm() {
     document.getElementById('newClinicAdminUsername').value = '';
     document.getElementById('newClinicAdminPassword').value = '';
     document.getElementById('newClinicAdminName').value = '';
-    document.getElementById('clinicNameStatus').innerHTML = '';
-    document.getElementById('clinicNameStatus').style.color = '';
-    document.getElementById('adminUsernameStatus').innerHTML = '';
-    document.getElementById('adminUsernameStatus').style.color = '';
-    document.getElementById('adminPwdStrength').innerHTML = '';
-}
-
-// ===== 诊所创建表单实时校验 =====
-let _adminUserCheckTimer = null;
-
-function validateClinicName() {
-    const name = document.getElementById('newClinicName').value.trim();
-    const statusEl = document.getElementById('clinicNameStatus');
-    if (!name) { statusEl.innerHTML = ''; statusEl.style.color = ''; return; }
-    if (name.length < 2) {
-        statusEl.innerHTML = '❌ 诊所名称至少2个字符';
-        statusEl.style.color = '#e74c3c';
-        return false;
-    }
-    if (name.length > 50) {
-        statusEl.innerHTML = '❌ 诊所名称不能超过50个字符';
-        statusEl.style.color = '#e74c3c';
-        return false;
-    }
-    statusEl.innerHTML = '✅ 名称格式正确';
-    statusEl.style.color = '#27ae60';
-    return true;
-}
-
-function checkAdminUsernameAvailability() {
-    const input = document.getElementById('newClinicAdminUsername');
-    const statusEl = document.getElementById('adminUsernameStatus');
-    const val = input.value.trim();
-
-    clearTimeout(_adminUserCheckTimer);
-    if (!val) { statusEl.innerHTML = ''; statusEl.style.color = ''; return; }
-
-    if (/[\u4e00-\u9fa5]/.test(val)) {
-        statusEl.innerHTML = '❌ 不能使用中文';
-        statusEl.style.color = '#e74c3c';
-        return;
-    }
-    if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(val)) {
-        statusEl.innerHTML = '⚠️ 格式：admin_ + 2-12位小写字母/数字';
-        statusEl.style.color = '#f39c12';
-        return;
-    }
-
-    statusEl.innerHTML = '⏳ 检查可用性...';
-    statusEl.style.color = '#606266';
-
-    _adminUserCheckTimer = setTimeout(async function() {
-        try {
-            const resp = await fetch(API_BASE + '/users?check-register=' + encodeURIComponent(val), {
-                headers: { 'Authorization': 'Bearer ' + token }
-            });
-            const data = await resp.json();
-            if (data.available) {
-                statusEl.innerHTML = '✅ 账号可用';
-                statusEl.style.color = '#27ae60';
-            } else {
-                statusEl.innerHTML = '❌ ' + (data.reason || '账号不可用');
-                statusEl.style.color = '#e74c3c';
-            }
-        } catch (e) {
-            statusEl.innerHTML = '⚠️ 无法检查（网络问题）';
-            statusEl.style.color = '#909399';
-        }
-    }, 600);
-}
-
-function updateAdminPwdStrength() {
-    const pwd = document.getElementById('newClinicAdminPassword').value;
-    const indicator = document.getElementById('adminPwdStrength');
-    if (!pwd) { indicator.innerHTML = ''; return; }
-    let score = 0;
-    if (pwd.length >= 8) score++;
-    if (pwd.length >= 12) score++;
-    if (/[a-z]/.test(pwd)) score++;
-    if (/[A-Z]/.test(pwd)) score++;
-    if (/[0-9]/.test(pwd)) score++;
-    if (/[^a-zA-Z0-9]/.test(pwd)) score++;
-    const colors = ['#e74c3c', '#e67e22', '#f39c12', '#f1c40f', '#27ae60', '#2ecc71'];
-    const labels = ['太弱', '弱', '一般', '中等', '强', '非常强'];
-    const color = colors[Math.min(score, colors.length - 1)];
-    const label = labels[Math.min(score, labels.length - 1)];
-    indicator.innerHTML = '密码强度：<span style="color:' + color + ';font-weight:bold;">' + label + '</span>' +
-        (score < 3 ? ' <span style="color:#e74c3c;">（至少8位+字母+数字）</span>' : '');
 }
 
 async function toggleClinicStatus(clinicId, newStatus) {
@@ -2057,49 +2359,6 @@ async function editClinic(clinic) {
         }
     } catch (e) {
         showAlert('clinicAlert', '网络错误：' + e.message, 'error');
-    }
-}
-
-// ===== 统计看板更新 =====
-function updateClinicStats(clinics) {
-    const today = new Date().toISOString().split('T')[0];
-    const total = clinics.length;
-    const active = clinics.filter(c => c.status === 'active').length;
-    const disabled = total - active;
-    const todayNew = clinics.filter(c => c.createdAt && c.createdAt.startsWith(today)).length;
-    document.getElementById('statTotal').textContent = total;
-    document.getElementById('statActive').textContent = active;
-    document.getElementById('statDisabled').textContent = disabled;
-    document.getElementById('statTodayReg').textContent = todayNew;
-    // 总医师数
-    const totalDoctors = clinics.reduce((sum, c) => {
-        const users = c.users || [];
-        return sum + users.filter(u => u.role === 'doctor' || (u.role !== 'platform_admin' && u.role !== 'clinic_admin')).length;
-    }, 0);
-    document.getElementById('statDoctors').textContent = totalDoctors;
-}
-
-// ===== 一键自助注册链接 =====
-function openQuickRegister() {
-    const url = window.location.origin.replace('/admin', '') + '/index.html?showRegister=1';
-    const wechat = prompt('请输入客户微信（可选，用于注册审计追踪）：');
-    const regUrl = url + (wechat ? '&ref=' + encodeURIComponent(wechat) : '');
-    const msg = '📋 一键注册链接已生成！\n\n' +
-        '🔗 注册页面：\n' + regUrl + '\n\n' +
-        '📖 使用说明：\n' +
-        '1. 将上方链接发送给客户\n' +
-        '2. 客户打开链接后自动弹出注册表单\n' +
-        '3. 客户填写信息后即时获得管理员账号\n' +
-        '4. 账号创建后可立即登录使用\n\n' +
-        '⚠️ 安全提示：IP限流3次/小时，请提醒客户妥善保管账号密码';
-    if (confirm(msg)) {
-        const ta = document.createElement('textarea');
-        ta.value = regUrl;
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-        alert('✅ 注册链接已复制到剪贴板，请发送给客户！');
     }
 }
 
@@ -2160,6 +2419,140 @@ document.getElementById('loginUser').addEventListener('keyup', e => {
 // 自动登录
 if (token && currentUser) {
     showMain();
+}
+
+// ============================================================================
+// ★ 一键激活链接生成（bnzc:// 协议）
+// ============================================================================
+
+const BNZC_PROTOCOL = 'bnzc://activate';
+
+function openActivationLinkModal() {
+    document.getElementById('activationLinkModal').classList.add('show');
+    document.getElementById('activationLinkResult').style.display = 'none';
+    document.getElementById('activationLinkAlert').className = 'alert';
+    // 如果生成表单有值则填入
+    const genCode = document.querySelector('#genCount') ? '' : '';
+}
+
+function closeActivationLinkModal() {
+    document.getElementById('activationLinkModal').classList.remove('show');
+}
+
+function generateActivationLink() {
+    const code = document.getElementById('linkCode').value.trim().toUpperCase();
+    const clinicName = document.getElementById('linkClinicName').value.trim();
+    const userName = document.getElementById('linkUserName').value.trim();
+
+    if (!code) {
+        showAlert('activationLinkAlert', '请输入激活码', 'error');
+        return;
+    }
+
+    // 校验激活码格式
+    const pattern = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+    if (!pattern.test(code)) {
+        showAlert('activationLinkAlert', '激活码格式错误，应为 BNZC-XXXX-XXXX-XXXX-XXXX', 'error');
+        return;
+    }
+
+    // 生成 URL Scheme
+    let url = BNZC_PROTOCOL + '?code=' + encodeURIComponent(code);
+    if (clinicName) url += '&clinic=' + encodeURIComponent(clinicName);
+    if (userName) url += '&user=' + encodeURIComponent(userName);
+
+    // 显示链接
+    document.getElementById('generatedLink').value = url;
+    document.getElementById('activationLinkResult').style.display = 'block';
+
+    // 生成二维码
+    generateQRCode(url);
+
+    // 生成文本预览
+    const textPreview = '【惠康中医】激活链接\n' +
+        '激活码：' + code + '\n' +
+        (clinicName ? '诊所：' + clinicName + '\n' : '') +
+        (userName ? '用户：' + userName + '\n' : '') +
+        '点击下方链接即可激活（需安装惠康中医软件）：\n' + url;
+    document.getElementById('linkTextPreview').textContent = textPreview;
+
+    showAlert('activationLinkAlert', '链接生成成功！', 'success');
+}
+
+function generateQRCode(text) {
+    const container = document.getElementById('qrCodeContainer');
+    container.innerHTML = '';
+    if (typeof QRCode !== 'undefined') {
+        new QRCode(container, {
+            text: text,
+            width: 160,
+            height: 160,
+            colorDark: '#2c3e50',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.H
+        });
+    } else {
+        container.innerHTML = '<div style="width:160px;height:160px;background:#f5f7fa;display:flex;align-items:center;justify-content:center;font-size:12px;color:#909399;">二维码库未加载</div>';
+    }
+}
+
+function copyGeneratedLink() {
+    const input = document.getElementById('generatedLink');
+    input.select();
+    document.execCommand('copy');
+    const btn = event.target;
+    const origText = btn.textContent;
+    btn.textContent = '已复制';
+    setTimeout(() => { btn.textContent = origText; }, 1500);
+}
+
+function copyLinkAsText() {
+    const preview = document.getElementById('linkTextPreview').textContent;
+    const ta = document.createElement('textarea');
+    ta.value = preview;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    showAlert('activationLinkAlert', '已复制文本说明，可粘贴到微信发送给客户', 'success');
+}
+
+function sendLinkByWechat() {
+    const code = document.getElementById('linkCode').value.trim().toUpperCase();
+    const clinicName = document.getElementById('linkClinicName').value.trim();
+    const userName = document.getElementById('linkUserName').value.trim();
+    const url = document.getElementById('generatedLink').value;
+
+    const wechatMsg = '您好！您的惠康中医软件激活信息如下：\n\n' +
+        '📋 激活码：' + code + '\n' +
+        (clinicName ? '🏥 诊所：' + clinicName + '\n' : '') +
+        (userName ? '👤 用户：' + userName + '\n' : '') +
+        '\n🔗 点击下方链接即可一键激活：\n' + url + '\n\n' +
+        '💡 使用说明：\n' +
+        '1. 确保客户电脑已安装惠康中医软件\n' +
+        '2. 在电脑浏览器中打开上述链接\n' +
+        '3. 软件将自动激活并重启\n\n' +
+        '如无法点击链接，请手动复制激活码在软件激活窗口输入。';
+
+    const ta = document.createElement('textarea');
+    ta.value = wechatMsg;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+
+    showAlert('activationLinkAlert', '微信模板已复制，请粘贴到微信发送给客户', 'success');
+    document.getElementById('linkTextPreview').style.display = 'block';
+    document.getElementById('linkTextPreview').textContent = wechatMsg;
+}
+
+// ★ 快捷：从激活码列表点击生成链接
+function quickGenLinkFromCode(code) {
+    document.getElementById('linkCode').value = code;
+    document.getElementById('linkClinicName').value = '';
+    document.getElementById('linkUserName').value = '';
+    openActivationLinkModal();
+    generateActivationLink();
 }
 </script>
 </body>
