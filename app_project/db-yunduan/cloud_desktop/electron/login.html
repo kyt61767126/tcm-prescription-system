@@ -356,8 +356,10 @@
                 <input type="text" id="wizardClinicName" placeholder="如：惠康中医诊所" maxlength="50">
             </div>
 
-            <!-- 步骤2：修改密码 -->
+            <!-- 步骤2：注册管理员账户 -->
             <div class="wizard-step" data-step="2">
+                <label>设置管理员用户名 *</label>
+                <input type="text" id="wizardUsername" placeholder="4-20位，字母/数字/下划线，如：admin" maxlength="20" autocomplete="off">
                 <label>设置管理员密码 *</label>
                 <input type="password" id="wizardPassword" placeholder="至少8位，含字母和数字" oninput="checkWizardPassword()">
                 <div id="wizardPwdStrength" class="password-strength"></div>

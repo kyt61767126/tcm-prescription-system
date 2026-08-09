@@ -133,6 +133,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateConfig: (updates) => ipcRenderer.invoke('config:update', updates),
     showActivationWindow: () => ipcRenderer.invoke('showActivationWindow'),
     changeUserPassword: (payload) => ipcRenderer.invoke('user:change-password', payload),
+    addUser: (payload) => ipcRenderer.invoke('user:add', payload),
 
     // ---------- bnzc:// 一键激活 ----------
     bnzcGetPendingActivation: () => ipcRenderer.invoke('bnzc:get-pending-activation'),

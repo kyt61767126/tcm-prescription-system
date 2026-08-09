@@ -1805,6 +1805,59 @@ ipcMain.handle('user:change-password', async (event, { username, oldPassword, ne
     }
 });
 
+// ===== 添加用户（注册管理员账户） =====
+ipcMain.handle('user:add', async (event, { username, password, name, role }) => {
+    try {
+        if (!username || !password) {
+            return { success: false, error: '缺少用户名或密码' };
+        }
+        if (password.length < 8) return { success: false, error: '密码至少8位' };
+        if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+            return { success: false, error: '密码必须同时包含字母和数字' };
+        }
+        
+        // 校验用户名格式（4-20位，以字母开头，只含字母、数字或下划线）
+        const usernameRegex = /^[a-zA-Z][a-zA-Z0-9_]{3,19}$/;
+        if (!usernameRegex.test(username)) {
+            return { success: false, error: '用户名需为4-20位，以字母开头，只含字母、数字或下划线' };
+        }
+
+        const configPath = getWritableConfigPath();
+        let config = {};
+        if (await fse.pathExists(configPath)) {
+            config = await fse.readJson(configPath);
+        }
+        if (!config.users) config.users = [];
+        
+        // 检查用户名是否已存在
+        if (config.users.find(u => u.username === username)) {
+            return { success: false, error: '用户名已存在' };
+        }
+        
+        // 添加新用户
+        const { passwordHash, salt } = await hashPassword(password);
+        config.users.push({
+            username: username,
+            password: passwordHash,
+            passwordHash: passwordHash,
+            salt: salt,
+            name: name || username,
+            role: role || 'admin',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+        
+        // 签名保护
+        config.configSignature = licenseManager.signConfig(config);
+        await fse.writeJson(configPath, config, { spaces: 2 });
+        console.log('[User] add user:', username);
+        return { success: true };
+    } catch (e) {
+        console.error('[User] add failed:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
 async function hashPassword(password) {
     const crypto = require('crypto');
     const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
