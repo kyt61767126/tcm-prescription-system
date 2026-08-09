@@ -100,7 +100,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         submitAdminRequest: (data) => ipcRenderer.invoke('license:submit-admin-request', data),
         checkAdminStatus: (requestId) => ipcRenderer.invoke('license:check-admin-status', requestId),
         saveLicense: (licenseBase64) => ipcRenderer.invoke('license:save-license', licenseBase64),
-        cancelAdminRequest: (requestId) => ipcRenderer.invoke('license:cancel-admin-request', requestId)
+        cancelAdminRequest: (requestId) => ipcRenderer.invoke('license:cancel-admin-request', requestId),
+        // ★ requestId 本地持久化（解决轮询超时/关闭窗口后丢失状态的问题）
+        loadAdminRequestId: () => ipcRenderer.invoke('license:load-admin-request-id'),
+        clearAdminRequestId: () => ipcRenderer.invoke('license:clear-admin-request-id')
     },
 
     updateConfig: (updates) => ipcRenderer.invoke('config:update', updates),

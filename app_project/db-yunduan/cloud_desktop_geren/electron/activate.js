@@ -308,6 +308,55 @@ function restartApp() {
 //  管理员激活流程
 // ============================================================================
 
+// ★ requestId 本地持久化（解决轮询超时/关闭窗口后丢失状态的问题）
+// 场景：客户提交激活请求后关闭窗口或轮询超时，管理员稍后审核通过，
+//       客户重新打开程序时自动读取本地 requestId 检查状态，获取已通过的 license
+function getAdminRequestIdPath() {
+    try {
+        return path.join(licenseManager.getWritableDir(), 'admin-request-id.dat');
+    } catch (e) {
+        return path.join(app.getPath('userData'), 'admin-request-id.dat');
+    }
+}
+
+function saveAdminRequestId(requestId, clinicName, adminName) {
+    try {
+        const data = {
+            requestId: requestId,
+            clinicName: clinicName || '',
+            adminName: adminName || '',
+            savedAt: new Date().toISOString()
+        };
+        fs.writeFileSync(getAdminRequestIdPath(), JSON.stringify(data), 'utf8');
+        console.log('[Admin] requestId 已保存:', requestId);
+    } catch (e) {
+        console.warn('[Admin] 保存 requestId 失败:', e.message);
+    }
+}
+
+function loadAdminRequestId() {
+    try {
+        const p = getAdminRequestIdPath();
+        if (fs.existsSync(p)) {
+            const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+            return data;  // { requestId, clinicName, adminName, savedAt }
+        }
+    } catch (e) {
+        console.warn('[Admin] 读取 requestId 失败:', e.message);
+    }
+    return null;
+}
+
+function clearAdminRequestId() {
+    try {
+        const p = getAdminRequestIdPath();
+        if (fs.existsSync(p)) {
+            fs.unlinkSync(p);
+            console.log('[Admin] requestId 已清除');
+        }
+    } catch (e) { /* 忽略 */ }
+}
+
 // ★ 提交管理员激活请求到平台
 async function submitAdminRequest(data) {
     try {
@@ -342,6 +391,8 @@ async function submitAdminRequest(data) {
         const result = await Promise.race([fetchPromise(), timeoutPromise]);
 
         if (result.success) {
+            // ★ 持久化 requestId，防止轮询超时/关闭窗口后丢失
+            saveAdminRequestId(result.requestId, data.clinicName, data.adminName);
             return {
                 success: true,
                 requestId: result.requestId,
@@ -431,9 +482,16 @@ async function saveLicense(licenseBase64) {
                     config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
                 }
                 config.clinicName = parsedLicense.clinicName;
+                // 重新签名 config.json
+                try {
+                    config.configSignature = licenseManager.signConfig(config);
+                } catch (e2) { /* 忽略签名失败 */ }
                 fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
             }
         } catch (e) { /* 忽略 */ }
+
+        // ★ 激活成功后清除本地 requestId（不再需要恢复）
+        clearAdminRequestId();
 
         return { success: true, licensePath: actualWritePath };
     } catch (e) {
@@ -470,5 +528,8 @@ module.exports = {
     checkAdminStatus,
     saveLicense,
     cancelAdminRequest,
+    saveAdminRequestId,
+    loadAdminRequestId,
+    clearAdminRequestId,
     ACTIVATE_API_URL
 };

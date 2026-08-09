@@ -618,6 +618,63 @@ document.getElementById('machineId').textContent = params.get('machineId') || '�
     } catch (e) { /* 预填失败不影响激活流程 */ }
 })();
 
+// ★ 自动恢复未完成的激活请求（解决轮询超时/关闭窗口后丢失状态的问题）
+// 场景：客户提交激活请求后关闭窗口或轮询超时，管理员稍后审核通过，
+//       客户重新打开程序时自动检查上次 requestId 状态，获取已通过的 license
+(async function autoRestoreAdminRequest() {
+    try {
+        if (!window.electronAPI || !window.electronAPI.activate || !window.electronAPI.activate.loadAdminRequestId) return;
+        const saved = await window.electronAPI.activate.loadAdminRequestId();
+        if (!saved || !saved.requestId) return;
+        console.log('[Admin] 发现未完成的激活请求:', saved.requestId);
+        // 检查状态
+        const result = await window.electronAPI.activate.checkAdminStatus(saved.requestId);
+        if (result.success && result.status === 'activated') {
+            // ★ 已审核通过，直接获取 license 并激活
+            console.log('[Admin] 上次请求已通过，自动获取 license');
+            // 切换到管理员激活模式
+            switchMode('admin');
+            // 显示等待状态
+            document.getElementById('adminForm').style.display = 'none';
+            document.getElementById('adminWaiting').style.display = 'block';
+            const statusEl = document.getElementById('waitingStatus');
+            if (statusEl) statusEl.innerHTML = '✅ <b style="color:#1565c0;">管理员已审核通过！</b><br>正在自动获取激活信息...';
+            // 调用 showAdminSuccess 完成 license 写入和重启
+            await showAdminSuccess(result.license);
+        } else if (result.success && result.status === 'pending') {
+            // ★ 仍在审核中，自动恢复轮询
+            console.log('[Admin] 上次请求仍在审核中，自动恢复轮询');
+            _currentRequestId = saved.requestId;
+            // 切换到管理员激活模式
+            switchMode('admin');
+            // 预填表单
+            if (saved.clinicName) document.getElementById('adminClinicName').value = saved.clinicName;
+            if (saved.adminName) document.getElementById('adminName').value = saved.adminName;
+            // 显示等待状态
+            document.getElementById('adminForm').style.display = 'none';
+            document.getElementById('adminWaiting').style.display = 'block';
+            const statusEl2 = document.getElementById('waitingStatus');
+            if (statusEl2) statusEl2.innerHTML = '⏳ <b>上次请求正在等待管理员审核</b><br>请求编号：' + saved.requestId + '<br>提交时间：' + (saved.savedAt || '-') + '<br>正在自动轮询状态...';
+            // 恢复轮询
+            startPollingStatus(saved.requestId);
+        } else if (result.success && result.status === 'rejected') {
+            // 已拒绝，清除本地记录，让客户重新提交
+            console.log('[Admin] 上次请求被拒绝，清除记录');
+            await window.electronAPI.activate.clearAdminRequestId();
+            alert('ℹ️ 您上次的激活请求被拒绝：\n\n' + (result.reason || '未知原因') + '\n\n请修改信息后重新提交。');
+        } else if (result.success && result.status === 'cancelled') {
+            // 已取消，清除本地记录
+            await window.electronAPI.activate.clearAdminRequestId();
+        } else if (!result.success) {
+            // 请求不存在（可能已被清理），清除本地记录
+            console.log('[Admin] 上次请求不存在，清除记录');
+            await window.electronAPI.activate.clearAdminRequestId();
+        }
+    } catch (e) {
+        console.warn('[Admin] 自动恢复失败:', e.message);
+    }
+})();
+
 // ============================================================================
 // ★ 管理员激活模式相关函数
 // ============================================================================

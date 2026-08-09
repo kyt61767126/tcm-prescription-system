@@ -1318,9 +1318,31 @@ ipcMain.handle('license:save-license', async (event, licenseBase64) => {
 ipcMain.handle('license:cancel-admin-request', async (event, requestId) => {
     try {
         const result = await activateManager.cancelAdminRequest(requestId);
+        // ★ 取消后清除本地 requestId
+        activateManager.clearAdminRequestId();
         return result;
     } catch (e) {
         console.error('[IPC] cancel-admin-request 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ requestId 本地持久化（解决轮询超时/关闭窗口后丢失状态的问题）
+ipcMain.handle('license:load-admin-request-id', async () => {
+    try {
+        return activateManager.loadAdminRequestId();
+    } catch (e) {
+        console.error('[IPC] load-admin-request-id 异常:', e);
+        return null;
+    }
+});
+
+ipcMain.handle('license:clear-admin-request-id', async () => {
+    try {
+        activateManager.clearAdminRequestId();
+        return { success: true };
+    } catch (e) {
+        console.error('[IPC] clear-admin-request-id 异常:', e);
         return { success: false, error: e.message };
     }
 });
