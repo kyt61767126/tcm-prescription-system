@@ -142,34 +142,15 @@
 
     let _users = [];
 
-    function initLoginDropdown(config) {
-        const select = $('loginUsername');
+    function initLoginInput(config) {
+        const input = $('loginUsername');
         const users = getUsers(config);
         _users = users;
-        select.innerHTML = '';
         
-        // ★ 云端机构版：如果没有用户，显示提示选项
-        if (users.length === 0) {
-            const opt = document.createElement('option');
-            opt.value = '';
-            opt.textContent = '请先注册管理员账户';
-            opt.disabled = true;
-            select.appendChild(opt);
-            select.disabled = true;
-            return;
-        }
-        
-        _users.forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.username;
-            opt.textContent = u.displayName;
-            select.appendChild(opt);
-        });
-        
-        // ★ 不再默认选中admin，保留上次记忆的用户
+        // ★ 云端机构版：手动输入用户名，不自动填充
         const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
         if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
-            select.value = rememberedUser;
+            input.value = rememberedUser;
             $('rememberUser').checked = true;
         }
     }
@@ -196,19 +177,19 @@
     function setLoginLoading(loading) {
         const btn = $('btnOk');
         const pwd = $('loginPassword');
-        const select = $('loginUsername');
+        const input = $('loginUsername');
         if (!btn) return;
         if (loading) {
             btn.disabled = true;
             btn.dataset.originalText = btn.textContent;
             btn.textContent = '登录中...';
             if (pwd) pwd.disabled = true;
-            if (select) select.disabled = true;
+            if (input) input.disabled = true;
         } else {
             btn.disabled = false;
             if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
             if (pwd) pwd.disabled = false;
-            if (select) select.disabled = false;
+            if (input) input.disabled = false;
         }
     }
 
@@ -216,9 +197,9 @@
         clearError();
         // ★ 优化：防重复提交
         if (_loginInFlight) return;
-        const username = $('loginUsername').value;
+        const username = $('loginUsername').value.trim();
         const password = $('loginPassword').value;
-        if (!username) { showError('请选择用户'); return; }
+        if (!username) { showError('请输入用户名'); return; }
         if (!password) { showError('请输入密码'); return; }
 
         _loginInFlight = true;
@@ -319,10 +300,10 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
         const config = await getAppConfig();
-        // ★ 主动清理历史遗留用户（在渲染下拉列表之前）
+        // ★ 主动清理历史遗留用户（在渲染登录界面之前）
         cleanLegacyUsers();
         loadClinicName(config);
-        initLoginDropdown(config);
+        initLoginInput(config);
         initLoginPermissions();
         // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码
         localStorage.removeItem('auth:savedPassword');
