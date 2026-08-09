@@ -949,15 +949,26 @@ app.whenReady().then(async () => {
     // ★ 首次启动时将 config.json 从 asar 复制到可写路径
     await ensureWritableConfig();
     
-    // ★ 云端版：检查license是否已激活，未激活时弹激活窗口
+    // ★ 云端版：不进入试用模式，直接检查 license.dat 是否存在且有效
+    // 云端版需求：无试用、平台管理员一键激活后才可使用
     let _isLicensed = false;
     try {
         const localMachineId = activateManager.getMachineId();
-        const licenseResult = licenseManager.validateLicense({ localMachineId });
-        _isLicensed = licenseResult.valid;
-        console.log('[Cloud] License 校验结果:', _isLicensed ? '已激活' : '未激活');
+        // 直接读取 license 文件，跳过试用模式
+        const rawLicense = licenseManager.readLicense(localMachineId);
+        if (rawLicense) {
+            // 有 license 文件，验证其有效性
+            const licenseResult = licenseManager.validateLicense({ localMachineId });
+            _isLicensed = licenseResult.valid;
+            console.log('[Cloud] License 校验结果:', _isLicensed ? '已激活' : '未激活/已过期');
+        } else {
+            // 没有 license 文件，云端版不进入试用模式
+            _isLicensed = false;
+            console.log('[Cloud] 无 license.dat，未激活状态（云端版无试用）');
+        }
     } catch (e) {
         console.warn('[Cloud] License 校验异常:', e.message);
+        _isLicensed = false;
     }
 
     // ★ 启动自动更新检查

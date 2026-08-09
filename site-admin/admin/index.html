@@ -249,6 +249,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <!-- 标签栏 -->
         <div class="tab-bar">
             <button class="tab-btn active" data-tab="License" onclick="switchTab('License')">📋 激活码管理</button>
+            <button class="tab-btn" data-tab="AdminActivate" onclick="switchTab('AdminActivate')">🔔 激活审核</button>
             <button class="tab-btn" data-tab="Clinics" onclick="switchTab('Clinics')">🏥 诊所管理</button>
             <button class="tab-btn" data-tab="Users" onclick="switchTab('Users')">👥 用户管理</button>
         </div>
@@ -457,6 +458,109 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </table>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">提示：用户管理（创建/编辑/删除）请到对应诊所内操作，或使用主应用的用户管理界面。此处仅用于查看所有用户列表。</p>
+        </div>
+
+        <!-- ★ 管理员激活审核标签页 -->
+        <div id="tabAdminActivate" class="tab-content">
+            <div id="adminActivateAlert" class="alert"></div>
+            <div class="filter-bar">
+                <select id="adminActivateFilter" onchange="loadAdminActivateList()">
+                    <option value="pending" selected>待审核</option>
+                    <option value="activated">已通过</option>
+                    <option value="rejected">已拒绝</option>
+                    <option value="cancelled">已取消</option>
+                    <option value="all">全部</option>
+                </select>
+                <button class="btn btn-sm" onclick="loadAdminActivateList()">刷新</button>
+                <label style="font-size:12px;color:#909399;display:flex;align-items:center;gap:4px;">
+                    <input type="checkbox" id="adminActivateAutoRefresh" onchange="toggleAdminActivateAutoRefresh()"> 每10秒自动刷新
+                </label>
+            </div>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>请求编号</th>
+                            <th>诊所名称</th>
+                            <th>管理员</th>
+                            <th>电话</th>
+                            <th>机器ID</th>
+                            <th>备注</th>
+                            <th>提交时间</th>
+                            <th>状态</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminActivateListBody">
+                        <tr><td colspan="9" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">说明：客户端激活窗口选择"管理员激活"模式提交的请求会出现在此列表。点击"通过"自动生成激活码并下发 license，客户端将自动激活并重启。</p>
+        </div>
+    </div>
+</div>
+
+<!-- ★ 管理员激活审核弹窗 -->
+<div id="adminApproveModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:560px;">
+        <span class="modal-close" onclick="closeAdminApproveModal()">&times;</span>
+        <h3>审核激活请求</h3>
+        <div id="adminApproveModalAlert" class="alert"></div>
+        <div style="background:#f9fafc;padding:12px;border-radius:6px;margin-bottom:16px;font-size:13px;line-height:1.8;">
+            <div><strong>请求编号：</strong><span id="approveReqId" style="font-family:Courier New,monospace;"></span></div>
+            <div><strong>诊所名称：</strong><span id="approveClinicName"></span></div>
+            <div><strong>管理员姓名：</strong><span id="approveAdminName"></span></div>
+            <div><strong>联系电话：</strong><span id="approvePhone"></span></div>
+            <div><strong>机器 ID：</strong><span id="approveMachineId" style="font-family:Courier New,monospace;font-size:11px;word-break:break-all;"></span></div>
+            <div><strong>提交时间：</strong><span id="approveSubmitTime"></span></div>
+            <div><strong>备注：</strong><span id="approveRemark"></span></div>
+        </div>
+
+        <div id="approveForm">
+            <h2 style="margin-top:0;">通过审核 · 生成激活码</h2>
+            <div class="gen-row">
+                <div class="form-group">
+                    <label>版本类型 *</label>
+                    <select id="approveType">
+                        <option value="personal" selected>标准版（无限处方，1年）</option>
+                        <option value="pro">机构版（无限+同步+多设备，1年）</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>最大设备数</label>
+                    <input type="number" id="approveMaxDevices" value="1" min="1" max="10">
+                </div>
+                <div class="form-group">
+                    <label>有效天数</label>
+                    <input type="number" id="approveDays" value="365" min="1" placeholder="如 365">
+                </div>
+                <div class="form-group">
+                    <label>到期日期（与天数二选一）</label>
+                    <input type="date" id="approveExpiresAt" placeholder="留空则按天数">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>审核备注（可选）</label>
+                <input type="text" id="approveNote" placeholder="如：客户已付款">
+            </div>
+            <div class="gen-actions">
+                <button class="btn btn-success" onclick="submitApprove('approve')">✅ 通过并生成激活码</button>
+                <button class="btn btn-danger" onclick="showRejectForm()">❌ 拒绝请求</button>
+                <button class="btn" onclick="closeAdminApproveModal()">取消</button>
+            </div>
+        </div>
+
+        <div id="rejectForm" style="display:none;">
+            <h2 style="margin-top:0;color:#e74c3c;">拒绝请求</h2>
+            <div class="form-group">
+                <label>拒绝原因 *</label>
+                <textarea id="rejectReason" rows="3" placeholder="如：信息填写不完整，请补充诊所全称" style="width:100%;padding:8px 12px;border:1px solid #dcdfe6;border-radius:4px;font-size:14px;resize:vertical;font-family:inherit;"></textarea>
+            </div>
+            <div class="gen-actions">
+                <button class="btn btn-danger" onclick="submitApprove('reject')">确认拒绝</button>
+                <button class="btn" onclick="backToApproveForm()">返回</button>
+            </div>
         </div>
     </div>
 </div>
@@ -1840,6 +1944,199 @@ function switchTab(tabName) {
     if (tabName === 'Clinics') loadClinicsList();
     else if (tabName === 'Users') loadUsersList();
     else if (tabName === 'License') loadList();
+    else if (tabName === 'AdminActivate') loadAdminActivateList();
+}
+
+// ===== ★ 管理员激活审核 =====
+let _adminActivateAutoRefreshTimer = null;
+let _currentApproveRequest = null;
+
+async function loadAdminActivateList() {
+    const tbody = document.getElementById('adminActivateListBody');
+    if (!tbody) return;
+    const filter = document.getElementById('adminActivateFilter').value;
+    tbody.innerHTML = '<tr><td colspan="9" class="loading">加载中...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + '/license/admin-list?status=' + encodeURIComponent(filter) + '&limit=200', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (data.success && Array.isArray(data.requests)) {
+            if (data.requests.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" class="empty">暂无' + (filter === 'all' ? '' : filter) + '请求</td></tr>';
+                return;
+            }
+            tbody.innerHTML = data.requests.map(r => {
+                const submitTime = r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-CN') : '-';
+                const statusBadge = renderAdminActivateStatus(r.status);
+                const actions = r.status === 'pending'
+                    ? '<button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button>'
+                    : '<span style="color:#909399;font-size:12px;">已处理</span>';
+                return '<tr>' +
+                    '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(r.requestId) + '</td>' +
+                    '<td>' + escapeHtml(r.clinicName || '-') + '</td>' +
+                    '<td>' + escapeHtml(r.adminName || '-') + '</td>' +
+                    '<td>' + escapeHtml(r.phone || '-') + '</td>' +
+                    '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(r.machineId || '-') + '</td>' +
+                    '<td style="max-width:200px;word-break:break-all;font-size:12px;color:#606266;">' + escapeHtml(r.remark || '-') + '</td>' +
+                    '<td style="font-size:12px;">' + escapeHtml(submitTime) + '</td>' +
+                    '<td>' + statusBadge + '</td>' +
+                    '<td style="white-space:nowrap;">' + actions + '</td>' +
+                '</tr>';
+            }).join('');
+            // 缓存请求数据用于审核弹窗
+            _adminActivateCache = data.requests;
+        } else {
+            if (res.status === 401) {
+                showAlert('adminActivateAlert', '登录已过期，请重新登录', 'error');
+                doLogout();
+            } else {
+                tbody.innerHTML = '<tr><td colspan="9" class="empty">加载失败：' + escapeHtml(data.error || '未知错误') + '</td></tr>';
+            }
+        }
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="9" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+    }
+}
+
+let _adminActivateCache = [];
+
+function renderAdminActivateStatus(status) {
+    const map = {
+        pending: '<span class="tag tag-unused">待审核</span>',
+        activated: '<span class="tag tag-used">已通过</span>',
+        rejected: '<span class="tag tag-disabled">已拒绝</span>',
+        cancelled: '<span class="tag tag-expired">已取消</span>'
+    };
+    return map[status] || '<span class="tag">' + escapeHtml(status || '未知') + '</span>';
+}
+
+function toggleAdminActivateAutoRefresh() {
+    const checkbox = document.getElementById('adminActivateAutoRefresh');
+    if (checkbox.checked) {
+        if (_adminActivateAutoRefreshTimer) clearInterval(_adminActivateAutoRefreshTimer);
+        _adminActivateAutoRefreshTimer = setInterval(loadAdminActivateList, 10000);
+    } else {
+        if (_adminActivateAutoRefreshTimer) {
+            clearInterval(_adminActivateAutoRefreshTimer);
+            _adminActivateAutoRefreshTimer = null;
+        }
+    }
+}
+
+function openAdminApproveModal(requestId) {
+    const req = _adminActivateCache.find(r => r.requestId === requestId);
+    if (!req) {
+        showAlert('adminActivateAlert', '请求记录不存在，请刷新列表', 'error');
+        return;
+    }
+    _currentApproveRequest = req;
+    document.getElementById('approveReqId').textContent = req.requestId;
+    document.getElementById('approveClinicName').textContent = req.clinicName || '-';
+    document.getElementById('approveAdminName').textContent = req.adminName || '-';
+    document.getElementById('approvePhone').textContent = req.phone || '-';
+    document.getElementById('approveMachineId').textContent = req.machineId || '-';
+    document.getElementById('approveSubmitTime').textContent = req.submittedAt ? new Date(req.submittedAt).toLocaleString('zh-CN') : '-';
+    document.getElementById('approveRemark').textContent = req.remark || '-';
+    // 重置表单
+    document.getElementById('approveType').value = 'personal';
+    document.getElementById('approveMaxDevices').value = '1';
+    document.getElementById('approveDays').value = '365';
+    document.getElementById('approveExpiresAt').value = '';
+    document.getElementById('approveNote').value = '';
+    document.getElementById('rejectReason').value = '';
+    document.getElementById('approveForm').style.display = 'block';
+    document.getElementById('rejectForm').style.display = 'none';
+    document.getElementById('adminApproveModalAlert').className = 'alert';
+    document.getElementById('adminApproveModal').classList.add('show');
+}
+
+function closeAdminApproveModal() {
+    document.getElementById('adminApproveModal').classList.remove('show');
+    _currentApproveRequest = null;
+}
+
+function showRejectForm() {
+    document.getElementById('approveForm').style.display = 'none';
+    document.getElementById('rejectForm').style.display = 'block';
+}
+
+function backToApproveForm() {
+    document.getElementById('rejectForm').style.display = 'none';
+    document.getElementById('approveForm').style.display = 'block';
+}
+
+async function submitApprove(action) {
+    if (!_currentApproveRequest) {
+        showAlert('adminApproveModalAlert', '请求记录丢失，请关闭后重试', 'error');
+        return;
+    }
+    const requestId = _currentApproveRequest.requestId;
+    const body = { requestId, action };
+
+    if (action === 'approve') {
+        body.type = document.getElementById('approveType').value;
+        body.maxDevices = parseInt(document.getElementById('approveMaxDevices').value, 10) || 1;
+        const days = parseInt(document.getElementById('approveDays').value, 10);
+        const expiresAt = document.getElementById('approveExpiresAt').value;
+        if (!days && !expiresAt) {
+            showAlert('adminApproveModalAlert', '请填写有效天数或到期日期', 'error');
+            return;
+        }
+        if (days) body.days = days;
+        if (expiresAt) body.expiresAt = expiresAt;
+        const note = document.getElementById('approveNote').value.trim();
+        if (note) body.note = note;
+    } else if (action === 'reject') {
+        const reason = document.getElementById('rejectReason').value.trim();
+        if (!reason) {
+            showAlert('adminApproveModalAlert', '请填写拒绝原因', 'error');
+            return;
+        }
+        body.reason = reason;
+    }
+
+    // 禁用按钮防止重复提交
+    const btns = document.querySelectorAll('#adminApproveModal .gen-actions button');
+    btns.forEach(b => b.disabled = true);
+
+    try {
+        const res = await fetch(API_BASE + '/license/admin-approve', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        btns.forEach(b => b.disabled = false);
+
+        if (data.success) {
+            if (action === 'approve') {
+                showAlert('adminApproveModalAlert',
+                    '✅ 审核通过！\n激活码：' + (data.licenseCode || '-') +
+                    '\n客户端将在下次轮询时（5秒内）自动获取 license 并重启。',
+                    'success');
+            } else {
+                showAlert('adminApproveModalAlert', '✅ 已拒绝请求，客户端将收到拒绝通知', 'success');
+            }
+            setTimeout(() => {
+                closeAdminApproveModal();
+                loadAdminActivateList();
+            }, 2500);
+        } else {
+            if (res.status === 401) {
+                showAlert('adminApproveModalAlert', '登录已过期，请重新登录', 'error');
+                doLogout();
+            } else {
+                showAlert('adminApproveModalAlert', '审核失败：' + (data.error || '未知错误'), 'error');
+            }
+        }
+    } catch (e) {
+        btns.forEach(b => b.disabled = false);
+        showAlert('adminApproveModalAlert', '网络错误：' + e.message, 'error');
+    }
 }
 
 // ===== 诊所管理 =====
