@@ -11,11 +11,12 @@
     const KEY_REMEMBER_USER = 'local_rememberedUsername';
     const KEY_CLINIC_NAME = 'local_clinicName';
 
-    const DEFAULT_USERS = [
-        { username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin' }
-    ];
+    // 云端标准版：管理员账户通过注册产生，首次启动无默认用户
+    const DEFAULT_USERS = [];
     // ★ 历史遗留账号（doctor1/doctor2/张医生/李医生）需从 localStorage 和 config.users 中过滤
     const LEGACY_USERNAMES = ['doctor1', 'doctor2'];
+    // ★ 管理员用户名校验规则：4-20位字母/数字/下划线
+    const ADMIN_USERNAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_]{3,19}$/;
 
     const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
     async function hashPassword(password) {
@@ -134,6 +135,12 @@
         return DEFAULT_USERS.map(normalizeUser).map(u => ({ ...u, displayName: u.name || u.username }));
     }
 
+    // 检查是否有已注册的管理员账户
+    function hasAdminUser(config) {
+        const users = getUsers(config);
+        return users.length > 0;
+    }
+
     function loadClinicName(config) {
         const name = localStorage.getItem(KEY_CLINIC_NAME) || config.clinicName;
         $('clinicName').textContent = name || '本能堂中医诊所';
@@ -141,24 +148,17 @@
 
     let _users = [];
 
-    function initLoginDropdown(config) {
-        const select = $('loginUsername');
+    // 初始化登录输入框（云端标准版：手动输入用户名）
+    function initLoginInput(config) {
+        const input = $('loginUsername');
         const users = getUsers(config);
         _users = users;
-        select.innerHTML = '';
-        _users.forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.username;
-            opt.textContent = u.displayName;
-            select.appendChild(opt);
-        });
-        // ★ 默认选中 admin（离线机构版规范：默认用户 admin）
+        
+        // ★ 云端标准版：手动输入用户名，不自动填充
         const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
         if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
-            select.value = rememberedUser;
+            input.value = rememberedUser;
             $('rememberUser').checked = true;
-        } else {
-            select.value = 'admin';
         }
     }
 
@@ -178,19 +178,19 @@
     function setLoginLoading(loading) {
         const btn = $('btnOk');
         const pwd = $('loginPassword');
-        const select = $('loginUsername');
+        const input = $('loginUsername');
         if (!btn) return;
         if (loading) {
             btn.disabled = true;
             btn.dataset.originalText = btn.textContent;
             btn.textContent = '登录中...';
             if (pwd) pwd.disabled = true;
-            if (select) select.disabled = true;
+            if (input) input.disabled = true;
         } else {
             btn.disabled = false;
             if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
             if (pwd) pwd.disabled = false;
-            if (select) select.disabled = false;
+            if (input) input.disabled = false;
         }
     }
 
@@ -198,9 +198,9 @@
         clearError();
         // ★ 优化：防重复提交
         if (_loginInFlight) return;
-        const username = $('loginUsername').value;
+        const username = $('loginUsername').value.trim();
         const password = $('loginPassword').value;
-        if (!username) { showError('请选择用户'); return; }
+        if (!username) { showError('请输入用户名'); return; }
         if (!password) { showError('请输入密码'); return; }
 
         _loginInFlight = true;
@@ -301,10 +301,10 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
         const config = await getAppConfig();
-        // ★ 主动清理历史遗留用户（在渲染下拉列表之前）
+        // ★ 主动清理历史遗留用户（在渲染登录界面之前）
         cleanLegacyUsers();
         loadClinicName(config);
-        initLoginDropdown(config);
+        initLoginInput(config);
         initLoginPermissions();
         // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码
         localStorage.removeItem('auth:savedPassword');
@@ -496,11 +496,20 @@
             return;
         }
 
-        // 仅当使用默认诊所名且未完成过向导时显示
         const wizardDone = localStorage.getItem('firstRunWizardDone');
+        const hasAdmin = hasAdminUser(config);
+        
+        // ★ 云端标准版：没有管理员用户时必须注册
+        if (!hasAdmin && !wizardDone) {
+            document.getElementById('clinicSetupHint').textContent = '⚙️ 首次使用，点击注册管理员账户';
+            document.getElementById('clinicSetupHint').style.display = 'block';
+            setTimeout(() => openFirstRunWizard(), 800);
+            return;
+        }
+        
+        // 仅当使用默认诊所名且未完成过向导时显示
         if (isDefault && !wizardDone) {
             document.getElementById('clinicSetupHint').style.display = 'block';
-            // 首次自动弹出向导
             setTimeout(() => openFirstRunWizard(), 800);
         }
     }
@@ -547,6 +556,12 @@
             if (!name) { alert('请输入诊所名称'); return; }
             if (name.length < 2 || name.length > 50) { alert('诊所名称长度需在 2-50 个字符之间'); return; }
         } else if (_wizardStep === 2) {
+            const username = document.getElementById('wizardUsername').value.trim();
+            if (!username) { alert('请设置管理员用户名'); return; }
+            if (!ADMIN_USERNAME_REGEX.test(username)) { 
+                alert('用户名需为4-20位，以字母开头，只含字母、数字或下划线'); 
+                return; 
+            }
             const pwd = document.getElementById('wizardPassword').value;
             const pwd2 = document.getElementById('wizardPassword2').value;
             if (!pwd || pwd.length < 8) { alert('密码至少8位'); return; }
@@ -575,6 +590,7 @@
 
     async function finishWizard() {
         const clinicName = document.getElementById('wizardClinicName').value.trim();
+        const username = document.getElementById('wizardUsername').value.trim();
         const newPassword = document.getElementById('wizardPassword').value;
         const doctorName = document.getElementById('wizardDoctorName').value.trim();
         const title = document.getElementById('wizardTitle').value.trim();
@@ -590,25 +606,25 @@
             } catch (e) { console.warn('[Wizard] updateConfig failed:', e); }
         }
 
-        // 修改管理员密码
-        if (newPassword && window.electronAPI) {
+        // ★ 注册管理员账户（云端标准版：通过注册创建管理员账户）
+        if (username && newPassword && window.electronAPI) {
             try {
-                const result = await window.electronAPI.changeUserPassword({
-                    username: 'admin',
-                    oldPassword: 'admin',
-                    newPassword: newPassword
+                const result = await window.electronAPI.addUser({
+                    username: username,
+                    password: newPassword,
+                    name: doctorName || '管理员',
+                    role: 'admin'
                 });
                 if (result && result.success) {
-                    // 密码修改成功，提示用户
-                    alert('✅ 设置完成！\n\n🏥 诊所：' + clinicName + '\n👤 管理员：' + (doctorName || '管理员') + '\n🔑 新密码已设置\n\n请使用新密码登录');
+                    alert('✅ 注册完成！\n\n🏥 诊所：' + clinicName + '\n👤 用户名：' + username + '\n👤 姓名：' + (doctorName || '管理员') + '\n🔑 管理员账户已创建\n\n请使用用户名和密码登录');
                 } else {
-                    alert('⚠️ 诊所信息已保存，但密码修改失败：' + (result.error || '请登录后在设置中修改'));
+                    alert('⚠️ 诊所信息已保存，但账户注册失败：' + (result.error || '请登录后在设置中创建账户'));
                 }
             } catch (e) {
-                alert('⚠️ 诊所信息已保存，请登录后在基础设置中修改密码');
+                alert('⚠️ 诊所信息已保存，请重新启动软件后在登录界面输入账户信息');
             }
         } else {
-            alert('✅ 诊所名称已设置，请登录后在基础设置中完善更多信息');
+            alert('✅ 诊所名称已设置，请在登录界面输入注册的账户信息登录');
         }
 
         // 更新登录页显示
