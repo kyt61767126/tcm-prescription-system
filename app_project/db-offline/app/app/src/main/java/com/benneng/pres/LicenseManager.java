@@ -182,6 +182,8 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     // ★ P1-2 激活码水印记录文件（追溯盗版泄露源）
     private static final String ACTIVATION_RECORD_FILE = "activation-record.dat";
     private static final String ACTIVATION_RECORD_KEY = "bnzc_activation_v1";
+    // ★ APP版可写 config.json 路径（filesDir 副本，首次从 assets 复制，激活后可修改 clinicName/doctorName）
+    private static final String CONFIG_FILE = "config.json";
 
     // 云端激活 API
     private static final String ACTIVATE_API_URL = "https://tcm-prescription-system.pages.dev/api/license/validate";
@@ -1226,6 +1228,87 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         return new File(context.getFilesDir(), name);
     }
 
+    // ========================================================================
+    //  ★ APP版 config.json 可写副本机制（与桌面版对齐）
+    //  - 首次启动: 从 assets/public/config.json 复制到 filesDir/config.json
+    //  - 后续所有读/写: 统一走 filesDir 副本（可修改，可重签名）
+    //  - 若 filesDir 副本损坏: fallback 到 assets 重新复制
+    // ========================================================================
+    private File getConfigFile() {
+        File f = getFile(CONFIG_FILE);
+        if (!f.exists()) {
+            // 首次启动：从 assets/public/config.json 复制到 filesDir
+            try {
+                InputStream is = context.getAssets().open("public/config.json");
+                String json = readStream(is);
+                writeFileBytes(f, json.getBytes(StandardCharsets.UTF_8));
+                Log.i(TAG, "config.json 已复制到 filesDir 副本（首次启动）");
+            } catch (Exception e) {
+                Log.w(TAG, "初始化 config.json 副本失败: " + e.getMessage());
+            }
+        }
+        return f;
+    }
+
+    private JSONObject readConfigJSON() {
+        try {
+            File f = getConfigFile();
+            if (f.exists()) {
+                String json = new String(readFileBytes(f), StandardCharsets.UTF_8).trim();
+                if (!json.isEmpty()) return new JSONObject(json);
+            }
+            // filesDir 损坏/不存在，fallback 到 assets
+            InputStream is = context.getAssets().open("public/config.json");
+            return new JSONObject(readStream(is));
+        } catch (Exception e) {
+            Log.w(TAG, "readConfigJSON 失败: " + e.getMessage());
+            return new JSONObject();
+        }
+    }
+
+    private JSONObject signConfig(JSONObject cfg) {
+        try {
+            String issuedAt = cfg.optString("configIssuedAt", "");
+            if (issuedAt.isEmpty()) {
+                issuedAt = String.valueOf(System.currentTimeMillis());
+                cfg.put("configIssuedAt", issuedAt);
+            }
+            String signContent = cfg.optString("clinicName", "") + "|" +
+                                 cfg.optString("doctorName", "") + "|" +
+                                 cfg.optString("edition", "") + "|" + issuedAt;
+            String sig = hmacSha256WithKey(signContent, getEffectiveConfigSignKey());
+            cfg.put("configSignature", sig);
+            return cfg;
+        } catch (Exception e) {
+            Log.w(TAG, "signConfig 失败: " + e.getMessage());
+            return cfg;
+        }
+    }
+
+    private boolean writeConfigJSON(JSONObject cfg, boolean needSign) {
+        try {
+            if (needSign) {
+                // 签名前先确保 license 上下文已设置（用于 masterKey 派生密钥）
+                // 调用方应先调用 setLicenseDataContext 或 validateLicense
+                cfg = signConfig(cfg);
+            }
+            String json = cfg.toString(2);
+            writeFileBytes(getConfigFile(), json.getBytes(StandardCharsets.UTF_8));
+            Log.i(TAG, "config.json 已写入 filesDir 副本（签名=" + (needSign ? "已更新" : "未修改") + "）");
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "writeConfigJSON 失败: " + e.getMessage());
+            return false;
+        }
+    }
+
+    private void writeFileBytes(File f, byte[] bytes) throws Exception {
+        try (java.io.FileOutputStream fos = new java.io.FileOutputStream(f)) {
+            fos.write(bytes);
+            fos.flush();
+        }
+    }
+
     // license.dat: 优先 ENC2:hex(hmac):base64(iv+ciphertext)，旧格式 ENC1 / base64 向后兼容
     public JSONObject readLicense() {
         return readLicense(getMachineId());
@@ -1714,25 +1797,21 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     // ========================================================================
     //  ★ v3 新增：本地诊所名/用户名读取 + 三因子绑定校验 + config 完整性校验
     // ========================================================================
-    // 从 assets/public/config.json 读取本地诊所名
+    // 从 filesDir/config.json（可写副本）读取本地诊所名
     public String getLocalClinicName() {
         try {
-            InputStream is = context.getAssets().open("public/config.json");
-            String json = readStream(is);
-            JSONObject cfg = new JSONObject(json);
+            JSONObject cfg = readConfigJSON();
             return cfg.optString("clinicName", "");
         } catch (Exception e) {
-            Log.w(TAG, "读取本地 config.json 诊所名失败: " + e.getMessage());
+            Log.w(TAG, "读取本地诊所名失败: " + e.getMessage());
             return "";
         }
     }
 
-    // 从 assets/public/config.json 读取本地医师名
+    // 从 filesDir/config.json（可写副本）读取本地医师名
     public String getLocalDoctorName() {
         try {
-            InputStream is = context.getAssets().open("public/config.json");
-            String json = readStream(is);
-            JSONObject cfg = new JSONObject(json);
+            JSONObject cfg = readConfigJSON();
             return cfg.optString("doctorName", "");
         } catch (Exception e) {
             return "";
@@ -1782,12 +1861,10 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     }
 
     // ★ v3 新增：校验 config.json 完整性签名
-    // 防止用户修改 assets 中的 config.json 绕过 license 绑定校验
+    // 防止用户修改 filesDir/config.json 绕过 license 绑定校验（统一走可写副本）
     public boolean verifyConfigIntegrity() {
         try {
-            InputStream is = context.getAssets().open("public/config.json");
-            String json = readStream(is);
-            JSONObject cfg = new JSONObject(json);
+            JSONObject cfg = readConfigJSON();
             String sig = cfg.optString("configSignature", "");
             // 无 configSignature 字段 → 旧版 config.json，跳过校验（兼容性优先）
             if (sig.isEmpty()) return true;
@@ -2269,6 +2346,47 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
 
             // ★ 激活成功，重置失败计数
             resetActivateFailCount();
+
+            // ★ APP版：同步 clinicName 和 doctorName(user) 到 filesDir/config.json 副本
+            //  - 与桌面版 activate.js 同步逻辑对齐：防止三因子绑定校验失败(诊所名不匹配)
+            //  - 激活参数传入的 user → doctorName，clinicName → config.clinicName
+            try {
+                // ① 解析刚写入的 license 内容，获取 clinicName 和设置签名密钥上下文(masterKey派生)
+                JSONObject licenseData = null;
+                try {
+                    String jsonStr = decryptLicenseContent(licenseBase64, machineId);
+                    if (jsonStr != null && !jsonStr.isEmpty()) licenseData = new JSONObject(jsonStr);
+                } catch (Exception parseEx) { /* 解析失败不影响激活 */ }
+                if (licenseData == null) {
+                    // fallback: 读刚写入的文件
+                    licenseData = readLicense(machineId);
+                }
+                if (licenseData != null) {
+                    setLicenseDataContext(licenseData); // 供 getEffectiveConfigSignKey() 使用 masterKey
+                }
+                String syncClinicName = "";
+                if (clinicName != null && !clinicName.isEmpty()) syncClinicName = clinicName;
+                if (syncClinicName.isEmpty() && licenseData != null) {
+                    syncClinicName = licenseData.optString("clinicName", "");
+                }
+                // ② 读取当前filesDir的config并更新
+                JSONObject cfg = readConfigJSON();
+                boolean changed = false;
+                if (!syncClinicName.isEmpty() && !syncClinicName.equals(cfg.optString("clinicName", ""))) {
+                    cfg.put("clinicName", syncClinicName);
+                    Log.i(TAG, "激活同步: config.clinicName → " + syncClinicName);
+                    changed = true;
+                }
+                if (user != null && !user.isEmpty() && !user.equals(cfg.optString("doctorName", ""))) {
+                    cfg.put("doctorName", user);
+                    Log.i(TAG, "激活同步: config.doctorName → " + user);
+                    changed = true;
+                }
+                // ③ 写回filesDir（自动重签名，保持完整性校验通过）
+                if (changed) writeConfigJSON(cfg, true);
+            } catch (Exception syncErr) {
+                Log.w(TAG, "激活后同步config失败(不影响激活): " + syncErr.getMessage());
+            }
 
             // ★ P1-1 初始化在线验证状态（激活时视为已验证）
             try {
