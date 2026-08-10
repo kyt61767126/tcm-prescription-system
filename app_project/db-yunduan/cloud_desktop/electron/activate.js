@@ -472,23 +472,47 @@ async function saveLicense(licenseBase64) {
             }
         } catch (e) { /* 忽略 */ }
 
-        // 同步 clinicName 到 config.json
+        // 同步 clinicName 和 doctorName(adminName) 到 config.json
         try {
             const parsedLicense = licenseManager.readLicense(getMachineId());
-            if (parsedLicense && parsedLicense.clinicName) {
-                const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
-                let config = {};
-                if (fs.existsSync(configPath)) {
-                    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            // ★ 先读取 adminName（从保存的 adminRequestId 中，读取必须在 clearAdminRequestId 之前）
+            let savedAdminName = '';
+            try {
+                const adminReqPath = getAdminRequestIdPath();
+                if (fs.existsSync(adminReqPath)) {
+                    const adminReq = JSON.parse(fs.readFileSync(adminReqPath, 'utf8'));
+                    if (adminReq && adminReq.adminName) savedAdminName = adminReq.adminName;
                 }
-                config.clinicName = parsedLicense.clinicName;
-                // 重新签名 config.json
-                try {
-                    config.configSignature = licenseManager.signConfig(config);
-                } catch (e2) { /* 忽略签名失败 */ }
-                fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            } catch (e3) { /* 忽略 */ }
+
+            const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
+            let config = {};
+            if (fs.existsSync(configPath)) {
+                config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
             }
-        } catch (e) { /* 忽略 */ }
+            // 同步诊所名
+            if (parsedLicense && parsedLicense.clinicName) {
+                config.clinicName = parsedLicense.clinicName;
+                console.log('[Activate] config.json clinicName 已同步为:', parsedLicense.clinicName);
+            }
+            // 同步医师名（激活时填写的管理员姓名）
+            if (savedAdminName) {
+                config.doctorName = savedAdminName;
+                console.log('[Activate] config.json doctorName 已同步为:', savedAdminName);
+            }
+            // 重新签名 config.json
+            try {
+                const signed = licenseManager.signConfig(config);
+                if (signed && signed.configSignature) {
+                    config = signed;
+                } else if (typeof signed === 'object') {
+                    config = signed;
+                }
+            } catch (e2) { /* 忽略签名失败 */ }
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        } catch (e) {
+            console.warn('[Activate] 同步 clinicName/doctorName 到 config.json 失败:', e.message);
+        }
 
         // ★ 激活成功后清除本地 requestId（不再需要恢复）
         clearAdminRequestId();

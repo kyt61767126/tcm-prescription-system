@@ -353,32 +353,39 @@ h1 {
     font-weight: 600;
 }
 
-/* ★ 模式切换标签 */
+/* ★ 模式切换标签 - 更大更醒目，小白用户一眼可见 */
 .mode-tabs {
     display: flex;
-    gap: 0;
-    margin-bottom: 16px;
-    border: 1px solid #e4e7ed;
-    border-radius: 8px;
+    gap: 8px;
+    margin-bottom: 20px;
+    border: 2px solid #5c6bc0;
+    border-radius: 12px;
     overflow: hidden;
+    padding: 4px;
+    background: linear-gradient(135deg, #e8eaf6 0%, #f3e5f5 100%);
 }
 .mode-tab {
     flex: 1;
-    padding: 10px 12px;
-    background: #f5f7fa;
-    border: none;
-    font-size: 13px;
+    padding: 14px 12px;
+    background: #fff;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    font-size: 16px;
     color: #606266;
     cursor: pointer;
     transition: all 0.2s;
-    font-weight: 500;
+    font-weight: 700;
+    line-height: 1.3;
 }
 .mode-tab.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: linear-gradient(135deg, #5c6bc0 0%, #7e57c2 100%);
     color: #fff;
+    border-color: #5c6bc0;
+    box-shadow: 0 4px 12px rgba(92, 107, 192, 0.4);
 }
 .mode-tab:hover:not(.active) {
-    background: #e8eaed;
+    background: #ede7f6;
+    border-color: #c5cae9;
 }
 
 .mode-content { display: none; }
@@ -446,12 +453,14 @@ h1 {
     </div>
 
     <!-- ★ 模式切换：管理员激活（默认） / 激活码激活 -->
+    <!-- 注：modeAdmin 硬编码 class="mode-content active" 确保管理员激活模式默认显示，
+         防止打包时 JS 运行时序问题导致两种模式都不显示或显示错误 -->
     <div class="mode-tabs">
-        <button class="mode-tab active" data-mode="admin" onclick="switchMode('admin')">管理员激活</button>
-        <button class="mode-tab" data-mode="code" onclick="switchMode('code')">激活码激活</button>
+        <button class="mode-tab active" data-mode="admin" onclick="switchMode('admin')">🏥 管理员激活（推荐）</button>
+        <button class="mode-tab" data-mode="code" onclick="switchMode('code')">🔑 激活码激活</button>
     </div>
 
-    <!-- 模式1：激活码激活（原有流程） -->
+    <!-- 模式1：激活码激活（原有流程） - 默认隐藏 -->
     <div id="modeCode" class="mode-content">
         <!-- 试用期状态提示 -->
         <div id="trialNotice" class="trial-notice" style="display:none;">
@@ -499,7 +508,8 @@ h1 {
 
             <div class="form-group">
                 <label>联系电话 <span style="color:red;">*</span></label>
-                <input type="tel" id="adminPhone" placeholder="如：13800138000" autocomplete="off" spellcheck="false">
+                <input type="text" id="adminPhone" placeholder="如：13800138000" autocomplete="off" spellcheck="false" inputmode="numeric" maxlength="11" oninput="this.value=this.value.replace(/[^\d]/g,'').slice(0,11);">
+                <div style="font-size:11px;color:#909399;margin-top:4px;">💡 只能输入 11 位数字</div>
             </div>
 
             <div class="form-group">
@@ -1143,6 +1153,24 @@ async function importOfflineLicense() {
         importBtn.textContent = '📁 导入离线激活文件';
     }
 }
+
+// ★ 强制默认切换到管理员激活模式（防止打包时序问题导致显示错误）
+// 在所有 IIFE 执行完后再执行一次 switchMode，确保 100% 显示管理员激活表单
+(function forceDefaultMode() {
+    try {
+        switchMode('admin');
+        console.log('[Init] 已强制切换到管理员激活模式');
+    } catch (e) {
+        console.warn('[Init] 切换模式失败，尝试手动设置：', e.message);
+        // 兜底：手动移除错误的 active，给管理员模式加上 active
+        try {
+            document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === 'admin'));
+            document.querySelectorAll('.mode-content').forEach(c => c.classList.remove('active'));
+            const adminContent = document.getElementById('modeAdmin');
+            if (adminContent) adminContent.classList.add('active');
+        } catch (e2) { /* 最终兜底失败则忽略 */ }
+    }
+})();
 </script>
 </body>
 </html>

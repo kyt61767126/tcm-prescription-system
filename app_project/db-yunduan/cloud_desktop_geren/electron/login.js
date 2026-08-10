@@ -206,6 +206,17 @@
         _loginInFlight = true;
         setLoginLoading(true);
         try {
+            // ★ 如果还没有任何管理员账户 → 自动弹出注册向导（小白用户不知道要点击诊所名）
+            if (!_users || _users.length === 0) {
+                const config = await getAppConfig();
+                if (confirm('ℹ️ 系统检测到您还没有注册管理员账户！\n\n激活成功后需要先注册一个管理员账户才能登录。\n\n是否立即前往注册？')) {
+                    openFirstRunWizard(config);
+                } else {
+                    showError('⚠️ 请先注册管理员账户（点击上方红色提示条）');
+                }
+                return;
+            }
+
             const user = _users.find(u => u.username === username);
             if (!user) {
                 showError('用户名或密码错误');
@@ -400,11 +411,7 @@
                     window.electronAPI.bnzcClearPendingActivation();
                 }
 
-                // ★ 激活成功后完成首次向导
-                try {
-                    localStorage.setItem('firstRunWizardDone', '1');
-                } catch(e) {}
-
+                // ★ 激活成功后不标记向导完成 - 重启后需要弹出注册向导创建管理员账户
                 // 延迟 2 秒后重启
                 setTimeout(() => {
                     if (window.electronAPI.license && window.electronAPI.license.restart) {
@@ -462,19 +469,67 @@
     }
 
     // ===== 首次启动检测与向导 =====
-    // ★ 云端版：无试用、无激活、无本地注册流程
-    // 平台管理员产生用户名密码，用户直接登录
+    // ★ 云端版：激活成功后需要通过注册向导创建本地管理员账户
     function checkFirstRun(config) {
-        // 云端版跳过所有向导流程，直接显示登录界面
-        return;
+        try {
+            const wizardDone = localStorage.getItem('firstRunWizardDone');
+            const noAdmin = !hasAdminUser(config);
+
+            // ★ 无管理员用户时显示醒目提示（即使向导被跳过也提示）
+            const hint = document.getElementById('clinicSetupHint');
+            if (hint) {
+                if (noAdmin) {
+                    hint.innerHTML = '⚠️ <b style="color:#e74c3c;">尚未注册管理员账户 - 点击此处立即注册</b>';
+                    hint.style.display = 'block';
+                    hint.style.fontSize = '13px';
+                    hint.style.marginTop = '6px';
+                    hint.style.padding = '6px 10px';
+                    hint.style.background = '#fff5f5';
+                    hint.style.borderRadius = '4px';
+                    hint.style.border = '1px solid #fecaca';
+                } else {
+                    hint.style.display = 'none';
+                }
+            }
+
+            // 如果向导未完成 且 没有任何管理员用户 → 弹出注册向导
+            if (wizardDone !== '1' && noAdmin) {
+                console.log('[FirstRun] 未检测到管理员账户，弹出注册向导');
+                // 延迟一点打开向导，确保DOM完全渲染
+                setTimeout(() => {
+                    openFirstRunWizard(config);
+                }, 300);
+                return;
+            }
+            if (hasAdminUser(config)) {
+                console.log('[FirstRun] 已有管理员账户，跳过向导');
+            }
+        } catch (e) {
+            console.warn('[FirstRun] checkFirstRun 异常:', e);
+        }
     }
 
     // ===== 首次配置向导 =====
     let _wizardStep = 1;
     const WIZARD_TOTAL = 3;
 
-    function openFirstRunWizard() {
+    function openFirstRunWizard(config) {
         _wizardStep = 1;
+        // 预填诊所名称和医师名（从激活时写入的config中读取）
+        try {
+            if (config) {
+                const clinicInput = document.getElementById('wizardClinicName');
+                const doctorInput = document.getElementById('wizardDoctorName');
+                if (clinicInput && config.clinicName && !clinicInput.value) {
+                    clinicInput.value = config.clinicName;
+                    console.log('[Wizard] 预填诊所名:', config.clinicName);
+                }
+                if (doctorInput && config.doctorName && !doctorInput.value) {
+                    doctorInput.value = config.doctorName;
+                    console.log('[Wizard] 预填医师名:', config.doctorName);
+                }
+            }
+        } catch(e) { console.warn('[Wizard] 预填信息失败:', e); }
         renderWizard();
         document.getElementById('wizardOverlay').classList.add('show');
     }
