@@ -132,10 +132,10 @@ async function activateOnline(code, machineId, user, clinicName) {
             console.warn('[Activate] 清除 trial.dat 失败:', e);
         }
 
-        // ★ 激活成功后同步 clinicName 到 config.json（防止重启后诊所名不匹配）
+        // ★ 激活成功后同步 clinicName 和 doctorName(user) 到 config.json
         try {
             const parsedLicense = licenseManager.readLicense(machineId);
-            if (parsedLicense && parsedLicense.clinicName) {
+            if (parsedLicense && (parsedLicense.clinicName || user)) {
                 if (licenseManager.setLicenseDataContext) {
                     licenseManager.setLicenseDataContext(parsedLicense);
                 }
@@ -144,17 +144,27 @@ async function activateOnline(code, machineId, user, clinicName) {
                 if (fs.existsSync(configPath)) {
                     config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
                 }
-                if (config.clinicName !== parsedLicense.clinicName) {
+                let changed = false;
+                if (parsedLicense.clinicName && config.clinicName !== parsedLicense.clinicName) {
                     config.clinicName = parsedLicense.clinicName;
+                    console.log('[Activate] config.json clinicName 已同步为:', parsedLicense.clinicName);
+                    changed = true;
+                }
+                // ★ 同步 user 参数作为 doctorName（激活时填写的医师名）
+                if (user && config.doctorName !== user) {
+                    config.doctorName = user;
+                    console.log('[Activate] config.json doctorName 已同步为:', user);
+                    changed = true;
+                }
+                if (changed) {
                     if (licenseManager.signConfig) {
                         config = licenseManager.signConfig(config);
                     }
                     fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-                    console.log('[Activate] config.json clinicName 已同步为:', parsedLicense.clinicName);
                 }
             }
         } catch (syncErr) {
-            console.warn('[Activate] 同步 clinicName 到 config.json 失败:', syncErr.message);
+            console.warn('[Activate] 同步 clinicName/doctorName 到 config.json 失败:', syncErr.message);
         }
 
         return {

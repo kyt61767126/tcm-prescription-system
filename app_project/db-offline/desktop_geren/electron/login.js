@@ -204,7 +204,7 @@
         if (!isClinicBound(config)) {
             showError('请先完成诊所信息设置，点击诊所名称区域设置');
             // 自动弹出向导
-            setTimeout(() => openFirstRunWizard(), 300);
+            setTimeout(() => openFirstRunWizard(config), 300);
             return;
         }
 
@@ -410,11 +410,7 @@
                     window.electronAPI.bnzcClearPendingActivation();
                 }
 
-                // ★ 激活成功后完成首次向导
-                try {
-                    localStorage.setItem('firstRunWizardDone', '1');
-                } catch(e) {}
-
+                // ★ 激活成功后不标记向导完成 - 重启后需要弹出向导完成密码设置
                 // 延迟 2 秒后重启
                 setTimeout(() => {
                     if (window.electronAPI.license && window.electronAPI.license.restart) {
@@ -506,6 +502,11 @@
     }
 
     function checkFirstRun(config) {
+        const DEFAULT_CLINIC_NAMES = ['本能堂中医诊所', '惠康中医诊所', '默认诊所'];
+        const currentName = (config && config.clinicName) || '';
+        const isDefault = !currentName || DEFAULT_CLINIC_NAMES.some(n => currentName === n);
+        const wizardDone = localStorage.getItem('firstRunWizardDone');
+
         // ★ 如果有 bnzc:// 待激活数据，跳过首次向导（自动激活优先）
         if (window.__bnzcHasPending) {
             console.log('[Bnzc] 有待激活数据，跳过首次向导');
@@ -513,10 +514,31 @@
         }
         
         // ★ 强制：未绑定诊所时始终显示向导
+        const hint = document.getElementById('clinicSetupHint');
         if (!isClinicBound(config)) {
-            document.getElementById('clinicSetupHint').style.display = 'block';
+            // ★ 醒目样式：默认诊所名→红色提示，已绑定诊所但未完成→橙色提示
+            if (hint) {
+                if (isDefault) {
+                    hint.innerHTML = '⚠️ <b style="color:#e74c3c;">尚未绑定诊所信息 - 点击此处立即设置</b>';
+                    hint.style.background = '#fff5f5';
+                    hint.style.border = '1px solid #fecaca';
+                } else {
+                    hint.innerHTML = '⚠️ <b style="color:#e67e22;">诊所名已绑定但尚未完成向导 - 点击此处完成密码设置</b>';
+                    hint.style.background = '#fffbeb';
+                    hint.style.border = '1px solid #fde68a';
+                }
+                hint.style.display = 'block';
+                hint.style.fontSize = '13px';
+                hint.style.marginTop = '6px';
+                hint.style.padding = '6px 10px';
+                hint.style.borderRadius = '4px';
+            }
             // 首次自动弹出向导
-            setTimeout(() => openFirstRunWizard(), 800);
+            if (!wizardDone) {
+                setTimeout(() => openFirstRunWizard(config), 800);
+            }
+        } else if (hint) {
+            hint.style.display = 'none';
         }
     }
 
@@ -524,8 +546,23 @@
     let _wizardStep = 1;
     const WIZARD_TOTAL = 3;
 
-    function openFirstRunWizard() {
+    function openFirstRunWizard(config) {
         _wizardStep = 1;
+        // ★ 预填诊所名称和医师名（从config读取）
+        try {
+            if (config) {
+                const clinicInput = document.getElementById('wizardClinicName');
+                const doctorInput = document.getElementById('wizardDoctorName');
+                if (clinicInput && config.clinicName && !clinicInput.value) {
+                    clinicInput.value = config.clinicName;
+                    console.log('[Wizard] 预填诊所名:', config.clinicName);
+                }
+                if (doctorInput && config.doctorName && !doctorInput.value) {
+                    doctorInput.value = config.doctorName;
+                    console.log('[Wizard] 预填医师名:', config.doctorName);
+                }
+            }
+        } catch(e) { console.warn('[Wizard] 预填信息失败:', e); }
         renderWizard();
         document.getElementById('wizardOverlay').classList.add('show');
     }
