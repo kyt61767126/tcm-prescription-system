@@ -1058,7 +1058,9 @@
             <div class="history-header" style="display:flex;justify-content:space-between;align-items:center;">
                 <span>处方历史</span>
                 <div style="display:flex;gap:16px;align-items:center;padding-right:4px;">
-                    <button onclick="refreshHistory()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="刷新历史处方">🔄</button>
+                    <button class="history-refresh-btn" onclick="refreshHistory()" title="刷新历史处方" style="font-size:16px;padding:8px 10px;min-width:40px;min-height:36px;">🔄</button>
+                    <button id="photoCaptureBtn" class="video-rec-btn" onclick="event.preventDefault();if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中')" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="拍照">📷</button>
+                    <button id="videoRecBtn" class="video-rec-btn" onclick="event.preventDefault();if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中')" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="录像">🎥</button>
                     <button onclick="showRecycleBin()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="回收站">🗑️</button>
                 </div>
             </div>
@@ -4243,12 +4245,15 @@ if (window.Permission) {
 
         // 收集媒体文件元数据并更新处方记录
         async function collectAndUpdateMediaFiles(savedRecord, officialNo) {
-            if (!window.electronAPI || !window.electronAPI.findMediaFiles) return;
             if (!officialNo) return;
 
             const patientName = savedRecord.patientName || '';
+            var isWeb = !window.electronAPI || !window.electronAPI.findMediaFiles;
+            var searchFn = isWeb ? window.findMediaFilesWeb : (window.electronAPI && window.electronAPI.findMediaFiles);
+            if (!searchFn) return;
+
             try {
-                const result = await window.electronAPI.findMediaFiles(patientName, officialNo);
+                const result = await searchFn(patientName, officialNo);
                 if (result.success && result.files && result.files.length > 0) {
                     const mediaFiles = result.files.map(f => ({
                         name: f.name,
@@ -4257,7 +4262,6 @@ if (window.Permission) {
                         lastModified: f.lastModified || ''
                     }));
 
-                    // 更新处方记录（带上mediaFiles字段重新POST）
                     const updatedRecord = { ...savedRecord, mediaFiles };
                     const authToken = buildAuthHeader(currentUser);
                     await fetch(CLOUD_API_BASE + '/prescriptions', {
@@ -4286,21 +4290,52 @@ if (window.Permission) {
                 return;
             }
 
-            // 尝试本地查找
-            if (window.electronAPI && window.electronAPI.findMediaFiles) {
+            var patientName = p.patientName || p.name || '';
+            var prescriptionNo = p.prescriptionNo || p.outpatientNo || '';
+            var createdAt = p.createdAt || '';
+
+            // 双路径查找：桌面版用 electronAPI，网页版用 IndexedDB
+            var isWeb = !window.electronAPI || !window.electronAPI.findMediaFiles;
+            var searchFn = isWeb ? window.findMediaFilesWeb : (window.electronAPI && window.electronAPI.findMediaFiles);
+
+            if (searchFn) {
                 try {
-                    const result = await window.electronAPI.findMediaFiles(
-                        p.patientName || p.name || '', p.prescriptionNo || p.outpatientNo || '', p.createdAt || ''
-                    );
+                    const result = await searchFn(patientName, prescriptionNo, createdAt);
                     if (result.success && result.files && result.files.length > 0) {
-                        // 本地找到文件，复用现有查看器
-                        viewMediaFiles(p.patientName || p.name || '', p.prescriptionNo || p.outpatientNo || '', p.createdAt || '');
+                        viewMediaFiles(patientName, prescriptionNo, createdAt);
                         return;
                     }
-                } catch (e) { console.warn('本地查找媒体文件失败:', e); }
+                } catch (e) { console.warn('查找媒体文件失败:', e); }
             }
 
-            // 本地未找到：显示元数据列表+提示
+            // 未找到本地文件：如果网页版有云端元数据中的 dataUrl，直接显示
+            if (isWeb) {
+                var filesWithData = mediaFiles.filter(function(f) { return f.dataUrl || f.blob; });
+                if (filesWithData.length > 0) {
+                    var enrichedFiles = filesWithData.map(function(f) {
+                        return {
+                            name: f.name || 'media',
+                            type: f.type || (f.dataUrl && f.dataUrl.indexOf('image') >= 0 ? 'image' : 'video'),
+                            dataUrl: f.dataUrl,
+                            blob: f.blob,
+                            size: f.size || 0
+                        };
+                    });
+                    window.__currentMediaFiles = enrichedFiles;
+                    window.__currentMediaIndex = 0;
+                    window.__mediaIsWeb = true;
+                    var overlay = document.getElementById('mediaViewerOverlay');
+                    var content = document.getElementById('mediaViewerContent');
+                    if (overlay && content) {
+                        content.innerHTML = '';
+                        overlay.style.display = 'flex';
+                        renderMediaViewerSingle(0);
+                        return;
+                    }
+                }
+            }
+
+            // 本地未找到也无 dataUrl：显示元数据列表+提示
             const fileList = mediaFiles.map(f => {
                 const icon = f.type === 'video' ? '🎥' : '📷';
                 const sizeStr = f.size ? `(${(f.size / 1024).toFixed(0)}KB)` : '';
@@ -4315,7 +4350,6 @@ if (window.Permission) {
                     <div style="margin-bottom:8px;color:#666;font-size:13px;">媒体文件保存在 <b>${escapeHtml(createdBy)}</b> 的本地设备上，请联系该用户获取。</div>
                     <div style="max-height:300px;overflow-y:auto;">${fileList}</div>
                 </div>`;
-            // 使用showModal显示
             const modal = document.getElementById('mediaInfoModal');
             if (modal) {
                 modal.querySelector('.modal-body').innerHTML = modalHtml;
@@ -6819,16 +6853,17 @@ if (window.Permission) {
         }
 
         async function viewMediaFiles(patientName, prescriptionNo, createdAt, silent) {
-            if (!window.electronAPI || !window.electronAPI.findMediaFiles) {
-                if (!silent) showToast('处方查看功能仅在APP中可用');
+            var isWeb = !window.electronAPI || !window.electronAPI.findMediaFiles;
+            var searchFn = isWeb ? window.findMediaFilesWeb : (window.electronAPI && window.electronAPI.findMediaFiles);
+            if (!searchFn) {
+                if (!silent) showToast('处方查看功能暂不可用');
                 return;
             }
-            // silent 模式：先查找文件，有文件才显示 overlay
             if (silent) {
                 try {
-                    const preResult = await window.electronAPI.findMediaFiles(patientName, prescriptionNo, createdAt || '');
+                    const preResult = await searchFn(patientName, prescriptionNo, createdAt || '');
                     if (!preResult.success || !preResult.files || preResult.files.length === 0) {
-                        return; // 静默返回，不显示任何提示
+                        return;
                     }
                 } catch(e) { return; }
             }
@@ -6838,26 +6873,30 @@ if (window.Permission) {
             content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">正在查找处方文件...</div>';
             overlay.style.display = 'flex';
             try {
-                const result = await window.electronAPI.findMediaFiles(patientName, prescriptionNo, createdAt || '');
+                const result = await searchFn(patientName, prescriptionNo, createdAt || '');
                 if (!result.success || !result.files || result.files.length === 0) {
                     if (silent) { overlay.style.display = 'none'; return; }
-                    let debugInfo = '';
-                    try {
-                        const allFilesResult = await window.electronAPI.listAllMediaFiles();
-                        if (allFilesResult.success && allFilesResult.files && allFilesResult.files.length > 0) {
-                            debugInfo = '<br><br><div style="font-size:11px;text-align:left;border-top:1px dashed #333;padding-top:10px;margin-top:10px;">';
-                            debugInfo += '<div style="color:#666;margin-bottom:5px;">📁 搜索目录:</div>';
-                            allFilesResult.searchDirectories.forEach(dir => {
-                                debugInfo += '<div style="color:#444;">' + escapeHtml(dir) + '</div>';
-                            });
-                            debugInfo += '<div style="color:#666;margin-top:8px;margin-bottom:5px;">📄 磁盘上的文件:</div>';
-                            allFilesResult.files.forEach(f => {
-                                debugInfo += '<div style="color:#444;">' + escapeHtml(f.name) + '</div>';
-                            });
-                            debugInfo += '</div>';
+                    var debugInfo = '';
+                    if (isWeb) {
+                        debugInfo = '<br><div style="font-size:11px;color:#aaa;">提示：网页版仅显示本设备上通过拍照/录像功能保存的文件</div>';
+                    } else {
+                        try {
+                            const allFilesResult = await window.electronAPI.listAllMediaFiles();
+                            if (allFilesResult.success && allFilesResult.files && allFilesResult.files.length > 0) {
+                                debugInfo = '<br><br><div style="font-size:11px;text-align:left;border-top:1px dashed #333;padding-top:10px;margin-top:10px;">';
+                                debugInfo += '<div style="color:#666;margin-bottom:5px;">📁 搜索目录:</div>';
+                                allFilesResult.searchDirectories.forEach(dir => {
+                                    debugInfo += '<div style="color:#444;">' + escapeHtml(dir) + '</div>';
+                                });
+                                debugInfo += '<div style="color:#666;margin-top:8px;margin-bottom:5px;">📄 磁盘上的文件:</div>';
+                                allFilesResult.files.forEach(f => {
+                                    debugInfo += '<div style="color:#444;">' + escapeHtml(f.name) + '</div>';
+                                });
+                                debugInfo += '</div>';
+                            }
+                        } catch (debugErr) {
+                            console.error('获取调试信息失败:', debugErr);
                         }
-                    } catch (debugErr) {
-                        console.error('获取调试信息失败:', debugErr);
                     }
                     content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件<br><span style="font-size:11px;color:#aaa;">搜索: ' + escapeHtml(patientName) + '_' + escapeHtml(prescriptionNo) + '</span>' + debugInfo + '</div>';
                     return;
@@ -6874,6 +6913,7 @@ if (window.Permission) {
                 });
                 window.__currentMediaFiles = sorted;
                 window.__currentMediaIndex = 0;
+                window.__mediaIsWeb = isWeb;
                 renderMediaViewerSingle(0);
             } catch(e) {
                 content.innerHTML = '<div style="text-align:center;padding:20px;color:#dc3545;">查找失败: ' + escapeHtml(String(e)) + '</div>';
@@ -6947,6 +6987,7 @@ if (window.Permission) {
             view.innerHTML = '<div style="color:#fff;font-size:12px;">加载中...</div>';
             var isImg = f.type === 'image' || /\.(jpg|jpeg|png)$/i.test(f.name);
             var isVid = f.type === 'video' || /\.(webm|mp4)$/i.test(f.name);
+            var isWeb = window.__mediaIsWeb;
             if (!window.__mediaDragBound) {
                 window.__mediaDragBound = true;
                 window.__mediaDragState = null;
@@ -6963,6 +7004,97 @@ if (window.Permission) {
                     window.__mediaDragState = null;
                 });
             }
+
+            function bindImageInteractions(img) {
+                var scale = 1, rot = 0, tx = 0, ty = 0;
+                function apply() { img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ') rotate(' + rot + 'deg)'; }
+                function reset() { scale = 1; rot = 0; tx = 0; ty = 0; apply(); }
+                view.addEventListener('wheel', function(e) {
+                    e.preventDefault();
+                    var d = e.deltaY < 0 ? 1.15 : (1/1.15);
+                    scale = Math.max(0.2, Math.min(scale * d, 8));
+                    apply();
+                }, {passive:false});
+                img.addEventListener('dblclick', reset);
+                img.addEventListener('mousedown', function(e) {
+                    window.__mediaDragState = {img:img, sx:e.clientX, sy:e.clientY, startTx:tx, startTy:ty, apply:apply};
+                    img.style.cursor = 'grabbing'; e.preventDefault();
+                });
+                var touchState = null;
+                img.addEventListener('touchstart', function(e) {
+                    if (e.touches.length === 1) {
+                        touchState = {mode:'pan', sx:e.touches[0].clientX, sy:e.touches[0].clientY, startTx:tx, startTy:ty};
+                    } else if (e.touches.length === 2) {
+                        var dx = e.touches[0].clientX - e.touches[1].clientX;
+                        var dy = e.touches[0].clientY - e.touches[1].clientY;
+                        touchState = {mode:'pinch', d0:Math.hypot(dx,dy), startScale:scale};
+                    }
+                }, {passive:false});
+                img.addEventListener('touchmove', function(e) {
+                    if (!touchState) return;
+                    e.preventDefault();
+                    if (touchState.mode === 'pan' && e.touches.length === 1) {
+                        tx = touchState.startTx + (e.touches[0].clientX - touchState.sx);
+                        ty = touchState.startTy + (e.touches[0].clientY - touchState.sy);
+                        apply();
+                    } else if (touchState.mode === 'pinch' && e.touches.length === 2) {
+                        var dx = e.touches[0].clientX - e.touches[1].clientX;
+                        var dy = e.touches[0].clientY - e.touches[1].clientY;
+                        var d = Math.hypot(dx,dy);
+                        if (touchState.d0 > 0) {
+                            scale = Math.max(0.2, Math.min(touchState.startScale * (d / touchState.d0), 8));
+                            apply();
+                        }
+                    }
+                }, {passive:false});
+                img.addEventListener('touchend', function() { touchState = null; });
+            }
+
+            if (isWeb) {
+                if (isImg) {
+                    var src = f.dataUrl || '';
+                    if (!src && f.blob) {
+                        try { src = URL.createObjectURL(f.blob); } catch(e) {}
+                    }
+                    if (!src) {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">图片数据不可用</div>';
+                        return;
+                    }
+                    view.innerHTML = '';
+                    var img = document.createElement('img');
+                    img.src = src;
+                    img.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;transform-origin:center center;transition:transform 0.08s ease-out;cursor:grab;user-select:none;-webkit-user-drag:none;will-change:transform;';
+                    img.draggable = false;
+                    img.onerror = function() {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">图片解码失败<br><button onclick="loadMediaSingleFile(' + idx + ')" style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">重试</button></div>';
+                    };
+                    view.appendChild(img);
+                    bindImageInteractions(img);
+                } else if (isVid) {
+                    var vidSrc = '';
+                    if (f.blob) {
+                        try { vidSrc = URL.createObjectURL(f.blob); } catch(e) {}
+                    } else if (f.dataUrl) {
+                        vidSrc = f.dataUrl;
+                    }
+                    if (!vidSrc) {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频数据不可用</div>';
+                        return;
+                    }
+                    view.innerHTML = '';
+                    var video = document.createElement('video');
+                    video.src = vidSrc;
+                    video.controls = true;
+                    video.autoplay = true;
+                    video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;background:#000;';
+                    video.onerror = function() {
+                        view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">视频加载失败<br><button onclick="loadMediaSingleFile(' + idx + ')" style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">重试</button></div>';
+                    };
+                    view.appendChild(video);
+                }
+                return;
+            }
+
             if (isImg) {
                 window.electronAPI.readFileAsBase64(f.path).then(function(result) {
                     if (result.success && (result.data || result.base64)) {
@@ -6976,60 +7108,15 @@ if (window.Permission) {
                             view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">图片解码失败<br><button onclick="loadMediaSingleFile(' + idx + ')" style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">重试</button></div>';
                         };
                         view.appendChild(img);
-                        var scale = 1, rot = 0, tx = 0, ty = 0;
-                        function apply() { img.style.transform = 'translate(' + tx + 'px,' + ty + 'px) scale(' + scale + ') rotate(' + rot + 'deg)'; }
-                        function reset() { scale = 1; rot = 0; tx = 0; ty = 0; apply(); }
-                        view.addEventListener('wheel', function(e) {
-                            e.preventDefault();
-                            var d = e.deltaY < 0 ? 1.15 : (1/1.15);
-                            scale = Math.max(0.2, Math.min(scale * d, 8));
-                            apply();
-                        }, {passive:false});
-                        img.addEventListener('dblclick', reset);
-                        img.addEventListener('mousedown', function(e) {
-                            window.__mediaDragState = {img:img, sx:e.clientX, sy:e.clientY, startTx:tx, startTy:ty, apply:apply};
-                            img.style.cursor = 'grabbing'; e.preventDefault();
-                        });
-                        var touchState = null;
-                        img.addEventListener('touchstart', function(e) {
-                            if (e.touches.length === 1) {
-                                touchState = {mode:'pan', sx:e.touches[0].clientX, sy:e.touches[0].clientY, startTx:tx, startTy:ty};
-                            } else if (e.touches.length === 2) {
-                                var dx = e.touches[0].clientX - e.touches[1].clientX;
-                                var dy = e.touches[0].clientY - e.touches[1].clientY;
-                                touchState = {mode:'pinch', d0:Math.hypot(dx,dy), startScale:scale};
-                            }
-                        }, {passive:false});
-                        img.addEventListener('touchmove', function(e) {
-                            if (!touchState) return;
-                            e.preventDefault();
-                            if (touchState.mode === 'pan' && e.touches.length === 1) {
-                                tx = touchState.startTx + (e.touches[0].clientX - touchState.sx);
-                                ty = touchState.startTy + (e.touches[0].clientY - touchState.sy);
-                                apply();
-                            } else if (touchState.mode === 'pinch' && e.touches.length === 2) {
-                                var dx = e.touches[0].clientX - e.touches[1].clientX;
-                                var dy = e.touches[0].clientY - e.touches[1].clientY;
-                                var d = Math.hypot(dx,dy);
-                                if (touchState.d0 > 0) {
-                                    scale = Math.max(0.2, Math.min(touchState.startScale * (d / touchState.d0), 8));
-                                    apply();
-                                }
-                            }
-                        }, {passive:false});
-                        img.addEventListener('touchend', function() { touchState = null; });
+                        bindImageInteractions(img);
                     } else {
                         var errMsg = (result && result.error) ? result.error : '未知错误';
                         view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">加载失败: ' + escapeHtml(String(errMsg)) + '<br><button onclick="loadMediaSingleFile(' + idx + ')" style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">重试</button></div>';
-                        console.error('[媒体查看] 图片加载失败:', { filePath: f.path, error: errMsg, result: result });
                     }
                 }).catch(function(err) {
                     view.innerHTML = '<div style="color:#dc3545;font-size:12px;text-align:center;padding:20px;">加载异常: ' + escapeHtml(String(err.message || err)) + '<br><button onclick="loadMediaSingleFile(' + idx + ')" style="margin-top:8px;padding:6px 14px;font-size:13px;background:#2196F3;color:white;border:none;border-radius:4px;cursor:pointer;">重试</button></div>';
-                    console.error('[媒体查看] 图片加载异常:', err);
                 });
             } else if (isVid) {
-                // 视频播放：与离线APP一致，使用 readFileAsBase64 + data URL
-                // 如果文件过大导致 Binder 限制，降级到系统播放器
                 var filePath = f.path;
                 var vidMime = '';
                 if (filePath.match(/\.webm$/i)) vidMime = 'video/webm';
@@ -7044,8 +7131,8 @@ if (window.Permission) {
                         var video = document.createElement('video');
                         video.src = src;
                         video.controls = true;
-                        video.playsInline = true;
-                        video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;';
+                        video.autoplay = true;
+                        video.style.cssText = 'max-width:100%;max-height:100%;object-fit:contain;background:#000;';
                         video.onerror = function() {
                             console.error('[媒体查看] 视频播放失败，降级到系统播放器');
                             if (window.electronAPI && window.electronAPI.openFile) {
