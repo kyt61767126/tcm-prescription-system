@@ -503,6 +503,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                             <th>管理员</th>
                             <th>联系电话</th>
                             <th>机器ID</th>
+                            <th>版本</th>
                             <th>备注</th>
                             <th>提交时间</th>
                             <th>IP</th>
@@ -511,7 +512,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                         </tr>
                     </thead>
                     <tbody id="adminActivateListBody">
-                        <tr><td colspan="10" class="loading">加载中...</td></tr>
+                        <tr><td colspan="11" class="loading">加载中...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -532,6 +533,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <div><strong>管理员姓名：</strong><span id="approveAdminName"></span></div>
             <div><strong>联系电话：</strong><span id="approvePhone"></span></div>
             <div><strong>机器 ID：</strong><span id="approveMachineId" style="font-family:Courier New,monospace;font-size:11px;word-break:break-all;"></span></div>
+            <div><strong>版本信息：</strong><span id="approveVersionInfo"></span></div>
             <div><strong>提交时间：</strong><span id="approveSubmitTime"></span></div>
             <div><strong>备注：</strong><span id="approveRemark"></span></div>
         </div>
@@ -2052,13 +2054,18 @@ function renderAdminActivateTable() {
                    (r.adminName || '').toLowerCase().includes(search) ||
                    (r.phone || '').toLowerCase().includes(search) ||
                    (r.machineId || '').toLowerCase().includes(search) ||
-                   (r.requestId || '').toLowerCase().includes(search);
+                   (r.requestId || '').toLowerCase().includes(search) ||
+                   (r.appMode || '').toLowerCase().includes(search) ||
+                   (r.edition || '').toLowerCase().includes(search) ||
+                   (r.versionLabel || '').toLowerCase().includes(search) ||
+                   (r.productName || '').toLowerCase().includes(search) ||
+                   (r.env || '').toLowerCase().includes(search);
         });
     }
     if (list.length === 0) {
         const filter = document.getElementById('adminActivateFilter').value;
         const emptyText = search ? '没有匹配的记录' : '暂无' + (filter === 'all' ? '' : filter) + '请求';
-        tbody.innerHTML = '<tr><td colspan="10" class="empty">' + escapeHtml(emptyText) + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" class="empty">' + escapeHtml(emptyText) + '</td></tr>';
         return;
     }
     tbody.innerHTML = list.map(r => {
@@ -2069,12 +2076,15 @@ function renderAdminActivateTable() {
         const actions = r.status === 'pending'
             ? '<div style="display:flex;gap:4px;"><button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>'
             : '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>';
+        // ★ 版本信息渲染：区分离线/云端、机构版/标准版
+        const versionDisplay = renderVersionInfo(r);
         return '<tr>' +
             '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(r.requestId) + '</td>' +
             '<td><strong>' + escapeHtml(r.clinicName || '-') + '</strong></td>' +
             '<td>' + escapeHtml(r.adminName || '-') + '</td>' +
             '<td>' + phoneDisplay + '</td>' +
             '<td style="font-family:Courier New,monospace;font-size:11px;" title="' + escapeHtml(r.machineId || '') + '">' + escapeHtml(r.machineId || '-') + '</td>' +
+            '<td style="font-size:12px;white-space:nowrap;">' + versionDisplay + '</td>' +
             '<td style="max-width:200px;word-break:break-all;font-size:12px;color:#606266;">' + escapeHtml(r.remark || '-') + '</td>' +
             '<td style="font-size:12px;white-space:nowrap;">' + escapeHtml(submitTime) + '</td>' +
             '<td style="font-size:11px;color:#909399;">' + escapeHtml(r.submittedIp || '-') + '</td>' +
@@ -2085,6 +2095,38 @@ function renderAdminActivateTable() {
 }
 
 let _adminActivateCache = [];
+
+// ★ 渲染版本信息：区分离线/云端、机构版/标准版、测试/正式环境
+function renderVersionInfo(r) {
+    if (!r) return '-';
+    const parts = [];
+    
+    // 1. 环境标记（env: test=测试环境，production=正式环境）
+    if (r.env === 'test') {
+        parts.push('<span style="background:#fef0f0;color:#f56c6c;padding:2px 6px;border-radius:3px;font-size:11px;margin-right:4px;font-weight:bold;">🧪 测试</span>');
+    }
+    
+    // 2. 云端/离线标识（appMode: cloud / offline）
+    if (r.appMode === 'cloud') {
+        parts.push('<span style="background:#ecf5ff;color:#409eff;padding:2px 6px;border-radius:3px;font-size:11px;margin-right:4px;">云端</span>');
+    } else if (r.appMode === 'offline') {
+        parts.push('<span style="background:#f0f9eb;color:#67c23a;padding:2px 6px;border-radius:3px;font-size:11px;margin-right:4px;">离线</span>');
+    }
+    
+    // 3. 机构版/标准版（edition: institution / personal）
+    if (r.edition === 'institution' || r.edition === 'pro') {
+        parts.push('<span style="background:#fef0f0;color:#f56c6c;padding:2px 6px;border-radius:3px;font-size:11px;">机构版</span>');
+    } else if (r.edition === 'personal') {
+        parts.push('<span style="background:#fdf6ec;color:#e6a23c;padding:2px 6px;border-radius:3px;font-size:11px;">标准版</span>');
+    }
+    
+    // 4. 版本标签（versionLabel）
+    if (r.versionLabel) {
+        parts.push('<span style="color:#909399;font-size:11px;margin-left:4px;">' + escapeHtml(r.versionLabel) + '</span>');
+    }
+    
+    return parts.length > 0 ? parts.join('') : '<span style="color:#c0c4cc;font-size:11px;">未知</span>';
+}
 
 // ★ 删除激活请求（仅平台总管理员可操作）
 async function deleteAdminActivateRequest(requestId, clinicName) {
@@ -2148,6 +2190,12 @@ function openAdminApproveModal(requestId) {
     document.getElementById('approveAdminName').textContent = req.adminName || '-';
     document.getElementById('approvePhone').textContent = req.phone || '-';
     document.getElementById('approveMachineId').textContent = req.machineId || '-';
+    // ★ 版本信息显示
+    const versionInfo = renderVersionInfo(req);
+    const versionDisplay = document.getElementById('approveVersionInfo');
+    if (versionDisplay) {
+        versionDisplay.innerHTML = versionInfo || '-';
+    }
     document.getElementById('approveSubmitTime').textContent = req.submittedAt ? new Date(req.submittedAt).toLocaleString('zh-CN') : '-';
     document.getElementById('approveRemark').textContent = req.remark || '-';
     // 重置表单
