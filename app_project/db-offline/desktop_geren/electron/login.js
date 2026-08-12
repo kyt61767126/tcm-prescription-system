@@ -11,11 +11,12 @@
     const KEY_REMEMBER_USER = 'local_rememberedUsername';
     const KEY_CLINIC_NAME = 'local_clinicName';
 
-    const DEFAULT_USERS = [
-        { username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin' }
-    ];
+    // 云端机构版：管理员账户通过注册产生，首次启动无默认用户
+    const DEFAULT_USERS = [];
     // ★ 历史遗留账号（doctor1/doctor2/张医生/李医生）需从 localStorage 和 config.users 中过滤
     const LEGACY_USERNAMES = ['doctor1', 'doctor2'];
+    // ★ 管理员用户名校验规则：4-20位字母/数字/下划线
+    const ADMIN_USERNAME_REGEX = /^[a-zA-Z][a-zA-Z0-9_]{3,19}$/;
 
     const PASSWORD_SALT = 'bnzc_prescription_salt_v1';
     async function hashPassword(password) {
@@ -141,25 +142,57 @@
 
     let _users = [];
 
-    function initLoginDropdown(config) {
-        const select = $('loginUsername');
+    function initLoginInput(config) {
+        const input = $('loginUsername');
         const users = getUsers(config);
         _users = users;
-        select.innerHTML = '';
-        _users.forEach(u => {
-            const opt = document.createElement('option');
-            opt.value = u.username;
-            opt.textContent = u.displayName;
-            select.appendChild(opt);
-        });
-        // ★ 默认选中 admin（离线机构版规范：默认用户 admin）
+        
+        // ★ 云端机构版：预填上次用户名（手机号），显示绿色提示
         const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
         if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
-            select.value = rememberedUser;
+            input.value = rememberedUser;
             $('rememberUser').checked = true;
-        } else {
-            select.value = 'admin';
+            // 绿色成功反馈：提示用户账号已预填
+            showGreenHint(`✓ 账号已预填：${rememberedUser}，请输入密码登录`);
+            // 自动聚焦到密码框
+            setTimeout(() => {
+                const pwd = $('loginPassword');
+                if (pwd) pwd.focus();
+            }, 200);
         }
+    }
+    
+    // ★ 绿色成功反馈（账号预填/激活成功提示）
+    function showGreenHint(msg) {
+        let el = document.getElementById('loginGreenHint');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'loginGreenHint';
+            el.style.cssText = 'color:#67c23a;font-size:12px;margin:6px 0;padding:6px 10px;background:#f0f9eb;border:1px solid #e1f3d8;border-radius:6px;text-align:left;line-height:1.5;';
+            // 插入到 loginError 之前或 login-buttons 之前（稳定位置）
+            const errEl = $('loginError');
+            if (errEl && errEl.parentElement) {
+                errEl.parentElement.insertBefore(el, errEl);
+            } else {
+                const buttons = document.querySelector('.login-buttons');
+                if (buttons && buttons.parentElement) {
+                    buttons.parentElement.insertBefore(el, buttons);
+                }
+            }
+        }
+        el.textContent = msg;
+        el.style.display = 'block';
+    }
+    
+    function hideGreenHint() {
+        const el = document.getElementById('loginGreenHint');
+        if (el) el.style.display = 'none';
+    }
+    
+    // 检查是否有已注册的管理员账户
+    function hasAdminUser(config) {
+        const users = getUsers(config);
+        return users.length > 0;
     }
 
     // 版本权限控制
@@ -178,44 +211,45 @@
     function setLoginLoading(loading) {
         const btn = $('btnOk');
         const pwd = $('loginPassword');
-        const select = $('loginUsername');
+        const input = $('loginUsername');
         if (!btn) return;
         if (loading) {
             btn.disabled = true;
             btn.dataset.originalText = btn.textContent;
             btn.textContent = '登录中...';
             if (pwd) pwd.disabled = true;
-            if (select) select.disabled = true;
+            if (input) input.disabled = true;
         } else {
             btn.disabled = false;
             if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
             if (pwd) pwd.disabled = false;
-            if (select) select.disabled = false;
+            if (input) input.disabled = false;
         }
     }
 
     async function handleLogin() {
         clearError();
+        hideGreenHint();
         // ★ 优化：防重复提交
         if (_loginInFlight) return;
-
-        // ★★★ 强制诊所绑定检查：未绑定诊所时阻止登录
-        const config = await getAppConfig();
-        if (!isClinicBound(config)) {
-            showError('请先完成诊所信息设置，点击诊所名称区域设置');
-            // 自动弹出向导
-            setTimeout(() => openFirstRunWizard(config), 300);
-            return;
-        }
-
-        const username = $('loginUsername').value;
+        const username = $('loginUsername').value.trim();
         const password = $('loginPassword').value;
-        if (!username) { showError('请选择用户'); return; }
+        if (!username) { showError('请输入用户名'); return; }
         if (!password) { showError('请输入密码'); return; }
 
         _loginInFlight = true;
         setLoginLoading(true);
         try {
+            // ★ 如果还没有任何管理员账户 → 提示重新激活（新版激活时已自动创建账户）
+            if (!_users || _users.length === 0) {
+                if (confirm('ℹ️ 系统检测到还没有管理员账户！\n\n请先完成软件激活，激活时填写的手机号和密码将自动创建管理员账户。\n\n是否打开激活窗口？')) {
+                    openActivationWindow();
+                } else {
+                    showError('⚠️ 请先激活软件');
+                }
+                return;
+            }
+
             const user = _users.find(u => u.username === username);
             if (!user) {
                 showError('用户名或密码错误');
@@ -264,6 +298,8 @@
             }
 
             if (window.electronAPI && window.electronAPI.loginSuccess) {
+                // ★ 绿色成功反馈：登录成功提示
+                showGreenHint(`✓ 登录成功！欢迎 ${user.name || user.username}，正在进入系统...`);
                 await window.electronAPI.loginSuccess(userData);
             }
         } catch (e) {
@@ -311,10 +347,10 @@
 
     document.addEventListener('DOMContentLoaded', async () => {
         const config = await getAppConfig();
-        // ★ 主动清理历史遗留用户（在渲染下拉列表之前）
+        // ★ 主动清理历史遗留用户（在渲染登录界面之前）
         cleanLegacyUsers();
         loadClinicName(config);
-        initLoginDropdown(config);
+        initLoginInput(config);
         initLoginPermissions();
         // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码
         localStorage.removeItem('auth:savedPassword');
@@ -327,9 +363,14 @@
         }
         $('btnOk').addEventListener('click', handleLogin);
         $('btnCancel').addEventListener('click', handleCancel);
+        // ★ 优化：密码框回车直接登录，用户名框回车跳密码框
         $('loginPassword').addEventListener('keydown', (e) => {
             if (e.key === 'Enter') handleLogin();
         });
+        $('loginUsername').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); $('loginPassword').focus(); }
+        });
+        // ★ 优化：密码框输入足够长时自动提示可登录（绿色反馈已显示，保留手动触发以保证安全）
 
         // 显示试用期状态
         showTrialStatus();
@@ -357,7 +398,7 @@
             if (result && result.success && result.data && result.data.code) {
                 console.log('[Bnzc] 检测到待激活数据:', result.data.code);
                 window.__bnzcHasPending = true;
-                await performAutoActivation(result.data);
+                await performAutoActivation(result.data, config);
             }
         } catch (e) {
             console.warn('[Bnzc] 检查待激活数据失败:', e);
@@ -410,7 +451,7 @@
                     window.electronAPI.bnzcClearPendingActivation();
                 }
 
-                // ★ 激活成功后不标记向导完成 - 重启后需要弹出向导完成密码设置
+                // ★ 激活成功后不标记向导完成 - 重启后需要弹出注册向导创建管理员账户
                 // 延迟 2 秒后重启
                 setTimeout(() => {
                     if (window.electronAPI.license && window.electronAPI.license.restart) {
@@ -443,6 +484,7 @@
                 bar.innerHTML = '<span class="trial-text">❌ 自动激活异常</span>' +
                     '<a class="trial-action" onclick="openActivationWindow()">手动激活 →</a>';
             }
+
             // ★ 异常后恢复首次向导
             window.__bnzcHasPending = false;
             checkFirstRun(config);
@@ -450,32 +492,10 @@
     }
 
     // ===== 试用期状态显示 =====
+    // ★ 云端版：无试用、无激活流程，跳过此函数
     async function showTrialStatus() {
-        const bar = document.getElementById('trialBar');
-        if (!bar) return;
-        try {
-            const status = await window.electronAPI.invoke('license:get-status');
-            if (!status || !status.success) return;
-            if (status.type === 'trial') {
-                const days = status.remainingDays || 0;
-                bar.className = 'trial-bar trial';
-                bar.innerHTML = '<span class="trial-text">⏳ 试用期剩余 <b>' + days + '</b> 天</span>' +
-                    '<a class="trial-action" onclick="openActivationWindow()">立即激活 →</a>';
-                bar.style.display = 'flex';
-            } else if (status.valid && status.type !== 'trial') {
-                const typeNames = { personal: '标准版', pro: '机构版', permanent: '永久授权' };
-                const typeName = typeNames[status.type] || '已授权';
-                bar.className = 'trial-bar active';
-                bar.innerHTML = '<span class="trial-text">✅ ' + typeName + ' 已激活' +
-                    (status.expiresAt ? '（到期：' + status.expiresAt.split('T')[0] + '）' : '') + '</span>';
-                bar.style.display = 'flex';
-            } else if (!status.valid) {
-                bar.className = 'trial-bar expired';
-                bar.innerHTML = '<span class="trial-text">❌ 授权已过期</span>' +
-                    '<a class="trial-action" onclick="openActivationWindow()">重新激活 →</a>';
-                bar.style.display = 'flex';
-            }
-        } catch (e) { /* 无 license API 时静默跳过 */ }
+        // 云端版不需要显示试用状态，直接返回
+        return;
     }
 
     // ===== 激活窗口 =====
@@ -490,77 +510,144 @@
     }
 
     // ===== 首次启动检测与向导 =====
-    // ★ 检查诊所是否已绑定（非默认诊所名 + 向导已完成）
-    function isClinicBound(config) {
-        const DEFAULT_CLINIC_NAMES = ['本能堂中医诊所', '惠康中医诊所', '默认诊所'];
-        const currentName = (config && config.clinicName) || '';
-        const wizardDone = localStorage.getItem('firstRunWizardDone');
-        if (!currentName || DEFAULT_CLINIC_NAMES.some(n => currentName === n)) {
-            return false;
-        }
-        return wizardDone === '1';
-    }
-
+    // ★ 云端版：激活成功后需要通过注册向导创建本地管理员账户
     function checkFirstRun(config) {
-        const DEFAULT_CLINIC_NAMES = ['本能堂中医诊所', '惠康中医诊所', '默认诊所'];
-        const currentName = (config && config.clinicName) || '';
-        const isDefault = !currentName || DEFAULT_CLINIC_NAMES.some(n => currentName === n);
-        const wizardDone = localStorage.getItem('firstRunWizardDone');
+        try {
+            const wizardDone = localStorage.getItem('firstRunWizardDone');
+            const noAdmin = !hasAdminUser(config);
 
-        // ★ 如果有 bnzc:// 待激活数据，跳过首次向导（自动激活优先）
-        if (window.__bnzcHasPending) {
-            console.log('[Bnzc] 有待激活数据，跳过首次向导');
-            return;
-        }
-        
-        // ★ 强制：未绑定诊所时始终显示向导
-        const hint = document.getElementById('clinicSetupHint');
-        if (!isClinicBound(config)) {
-            // ★ 醒目样式：默认诊所名→红色提示，已绑定诊所但未完成→橙色提示
+            // ★ 无管理员用户时显示醒目提示（即使向导被跳过也提示）
+            const hint = document.getElementById('clinicSetupHint');
             if (hint) {
-                if (isDefault) {
-                    hint.innerHTML = '⚠️ <b style="color:#e74c3c;">尚未绑定诊所信息 - 点击此处立即设置</b>';
+                if (noAdmin) {
+                    hint.innerHTML = '⚠️ <b style="color:#e74c3c;">尚未注册管理员账户 - 点击此处立即注册</b>';
+                    hint.style.display = 'block';
+                    hint.style.fontSize = '13px';
+                    hint.style.marginTop = '6px';
+                    hint.style.padding = '6px 10px';
                     hint.style.background = '#fff5f5';
+                    hint.style.borderRadius = '4px';
                     hint.style.border = '1px solid #fecaca';
                 } else {
-                    hint.innerHTML = '⚠️ <b style="color:#e67e22;">诊所名已绑定但尚未完成向导 - 点击此处完成密码设置</b>';
-                    hint.style.background = '#fffbeb';
-                    hint.style.border = '1px solid #fde68a';
+                    hint.style.display = 'none';
                 }
-                hint.style.display = 'block';
-                hint.style.fontSize = '13px';
-                hint.style.marginTop = '6px';
-                hint.style.padding = '6px 10px';
-                hint.style.borderRadius = '4px';
             }
-            // 首次自动弹出向导
-            if (!wizardDone) {
-                setTimeout(() => openFirstRunWizard(config), 800);
+
+            // 如果向导未完成 且 没有任何管理员用户 → 弹出注册向导
+            if (wizardDone !== '1' && noAdmin) {
+                console.log('[FirstRun] 未检测到管理员账户，弹出注册向导');
+                // 延迟一点打开向导，确保DOM完全渲染
+                setTimeout(() => {
+                    openFirstRunWizard(config);
+                }, 300);
+                return;
             }
-        } else if (hint) {
-            hint.style.display = 'none';
+            if (hasAdminUser(config)) {
+                console.log('[FirstRun] 已有管理员账户，跳过向导，使用手机号+密码登录');
+                // ★ 提示用户用手机号登录
+                const hint = document.getElementById('clinicSetupHint');
+                if (hint) {
+                    hint.innerHTML = '💡 请用激活时填写的手机号和密码登录';
+                    hint.style.display = 'block';
+                    hint.style.fontSize = '12px';
+                    hint.style.marginTop = '4px';
+                    hint.style.padding = '4px 8px';
+                    hint.style.background = '#f0f7ff';
+                    hint.style.borderRadius = '4px';
+                    hint.style.border = '1px solid #bfdbfe';
+                    hint.style.color = '#1e40af';
+                    setTimeout(() => { if (hint) hint.style.display = 'none'; }, 8000);
+                }
+            }
+        } catch (e) {
+            console.warn('[FirstRun] checkFirstRun 异常:', e);
         }
     }
 
     // ===== 首次配置向导 =====
     let _wizardStep = 1;
+    let _wizardConfig = {};
     const WIZARD_TOTAL = 3;
 
     function openFirstRunWizard(config) {
         _wizardStep = 1;
-        // ★ 预填诊所名称和医师名（从config读取）
+        _wizardConfig = config || {};
+        // 预填诊所名称和医师名（从激活时写入的config中读取）
         try {
-            if (config) {
+            if (_wizardConfig) {
                 const clinicInput = document.getElementById('wizardClinicName');
                 const doctorInput = document.getElementById('wizardDoctorName');
-                if (clinicInput && config.clinicName && !clinicInput.value) {
-                    clinicInput.value = config.clinicName;
-                    console.log('[Wizard] 预填诊所名:', config.clinicName);
+                if (clinicInput && _wizardConfig.clinicName && !clinicInput.value) {
+                    clinicInput.value = _wizardConfig.clinicName;
+                    console.log('[Wizard] 预填诊所名:', _wizardConfig.clinicName);
                 }
-                if (doctorInput && config.doctorName && !doctorInput.value) {
-                    doctorInput.value = config.doctorName;
-                    console.log('[Wizard] 预填医师名:', config.doctorName);
+                if (doctorInput && _wizardConfig.doctorName && !doctorInput.value) {
+                    doctorInput.value = _wizardConfig.doctorName;
+                    console.log('[Wizard] 预填医师名:', _wizardConfig.doctorName);
                 }
+            }
+            // ★ wizardUsername 输入过滤+实时提示：只允许字母/数字/下划线，强制首字符字母
+            const uInput = document.getElementById('wizardUsername');
+            if (uInput) {
+                uInput.oninput = function() {
+                    const raw = uInput.value;
+                    // ① 完全匹配医师名 → 提示这是真实姓名，清空
+                    if (_wizardConfig.doctorName && raw === _wizardConfig.doctorName) {
+                        const hint = document.getElementById('wizardUsernameHint');
+                        if (hint) {
+                            hint.textContent = '💡 请输入系统登录用户名（建议英文/拼音），您的真实姓名「' + raw + '」请到第3步"管理员/医师真实姓名"处填写';
+                            hint.style.display = 'block';
+                        }
+                    }
+                    // ② 正则过滤：只保留字母/数字/下划线；如首字符非字母则截断
+                    let filtered = raw.replace(/[^a-zA-Z0-9_]/g, '');
+                    if (filtered.length > 0 && !/^[a-zA-Z]/.test(filtered)) {
+                        const hint = document.getElementById('wizardUsernameHint');
+                        if (hint) {
+                            hint.textContent = '⚠️ 用户名必须以英文字母开头（数字/中文/符号已自动清除）';
+                            hint.style.display = 'block';
+                        }
+                        filtered = filtered.replace(/^[^a-zA-Z]+/, '');
+                    }
+                    // ③ 长度实时提示
+                    const hint = document.getElementById('wizardUsernameHint');
+                    if (hint && (!_wizardConfig.doctorName || raw !== _wizardConfig.doctorName)) {
+                        if (filtered.length > 0 && filtered.length < 4) {
+                            hint.textContent = 'ℹ️ 还差 ' + (4 - filtered.length) + ' 位，用户名最少需 4 个字符（建议: wangguijie / wgjie / admin_wgj）';
+                            hint.style.display = 'block';
+                        } else if (filtered.length > 20) {
+                            hint.textContent = '⚠️ 已超出 20 位限制（当前 ' + filtered.length + ' 位）';
+                            hint.style.display = 'block';
+                        } else if (ADMIN_USERNAME_REGEX.test(filtered)) {
+                            hint.style.display = 'none';
+                        } else if (filtered.length === 0) {
+                            hint.style.display = 'none';
+                        }
+                    }
+                    if (filtered.length > 20) filtered = filtered.substring(0, 20);
+                    if (filtered !== raw) {
+                        uInput.value = filtered;
+                    }
+                    // ④ 实时校验步骤2，控制下一步按钮
+                    validateWizardStep2();
+                };
+                uInput.onfocus = function() {
+                    const val = (uInput.value || '').trim();
+                    if (val && /[\u4e00-\u9fa5]/.test(val)) {
+                        uInput.value = '';
+                        const hint = document.getElementById('wizardUsernameHint');
+                        if (hint) {
+                            hint.textContent = '💡 已清除自动填充的中文，请输入英文/拼音用户名';
+                            hint.style.display = 'block';
+                        }
+                    }
+                    validateWizardStep2();
+                };
+            }
+            // ★ 给确认密码框绑定 oninput，实时校验步骤2
+            const pwd2Input = document.getElementById('wizardPassword2');
+            if (pwd2Input) {
+                pwd2Input.oninput = function() { validateWizardStep2(); };
             }
         } catch(e) { console.warn('[Wizard] 预填信息失败:', e); }
         renderWizard();
@@ -589,7 +676,25 @@
         // 导航按钮
         document.getElementById('wizardPrevBtn').style.display = _wizardStep > 1 ? '' : 'none';
         const nextBtn = document.getElementById('wizardNextBtn');
-        nextBtn.textContent = _wizardStep === WIZARD_TOTAL ? '完成诊所绑定并开始试用' : '下一步';
+        nextBtn.textContent = _wizardStep === WIZARD_TOTAL ? '完成设置' : '下一步';
+        document.getElementById('wizardSkipBtn').style.display = _wizardStep < WIZARD_TOTAL ? '' : 'none';
+
+        // 焦点设置：进入某步骤时自动定位到第一个输入框
+        setTimeout(() => {
+            try {
+                if (_wizardStep === 1) {
+                    const i = document.getElementById('wizardClinicName');
+                    if (i) i.focus();
+                } else if (_wizardStep === 2) {
+                    const i = document.getElementById('wizardUsername');
+                    if (i) i.focus();
+                    validateWizardStep2(); // 初始化按钮状态
+                } else if (_wizardStep === 3) {
+                    const i = document.getElementById('wizardDoctorName');
+                    if (i) i.focus();
+                }
+            } catch(e) {}
+        }, 50);
     }
 
     function wizardNext() {
@@ -598,11 +703,9 @@
             if (!name) { alert('请输入诊所名称'); return; }
             if (name.length < 2 || name.length > 50) { alert('诊所名称长度需在 2-50 个字符之间'); return; }
         } else if (_wizardStep === 2) {
-            const pwd = document.getElementById('wizardPassword').value;
-            const pwd2 = document.getElementById('wizardPassword2').value;
-            if (!pwd || pwd.length < 8) { alert('密码至少8位'); return; }
-            if (!/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) { alert('密码必须同时包含字母和数字'); return; }
-            if (pwd !== pwd2) { alert('两次输入的密码不一致'); return; }
+            // 改用 validateWizardStep2 返回（内联提示 + 按钮禁用已生效）
+            const valid = validateWizardStep2(true);
+            if (!valid) return;
         }
 
         if (_wizardStep < WIZARD_TOTAL) {
@@ -618,23 +721,18 @@
     }
 
     function wizardSkip() {
-        // ★ 已移除跳过功能：诊所绑定为强制步骤，不允许跳过
-        alert('请完成诊所信息设置后开始试用');
+        if (confirm('跳过设置？您可在登录后"基础设置"中随时修改。')) {
+            localStorage.setItem('firstRunWizardDone', 'skipped');
+            closeFirstRunWizard();
+        }
     }
 
     async function finishWizard() {
         const clinicName = document.getElementById('wizardClinicName').value.trim();
+        const username = document.getElementById('wizardUsername').value.trim();
         const newPassword = document.getElementById('wizardPassword').value;
         const doctorName = document.getElementById('wizardDoctorName').value.trim();
         const title = document.getElementById('wizardTitle').value.trim();
-
-        // ★ 强制检查：诊所名必填
-        if (!clinicName) {
-            alert('请填写诊所名称（必填项）');
-            _wizardStep = 1;
-            renderWizard();
-            return;
-        }
 
         // 保存诊所名到 config
         if (clinicName && window.electronAPI) {
@@ -647,25 +745,33 @@
             } catch (e) { console.warn('[Wizard] updateConfig failed:', e); }
         }
 
-        // 修改管理员密码
-        if (newPassword && window.electronAPI) {
+        // ★ 注册管理员账户（云端机构版：通过注册创建管理员账户）
+        if (username && newPassword && window.electronAPI) {
             try {
-                const result = await window.electronAPI.changeUserPassword({
-                    username: 'admin',
-                    oldPassword: 'admin',
-                    newPassword: newPassword
+                const result = await window.electronAPI.addUser({
+                    username: username,
+                    password: newPassword,
+                    name: doctorName || '管理员',
+                    role: 'admin'
                 });
                 if (result && result.success) {
-                    // 密码修改成功，提示用户
-                    alert('✅ 诊所绑定完成！\n\n🏥 诊所：' + clinicName + '\n👤 管理员：' + (doctorName || '管理员') + '\n🔑 新密码已设置\n\n👉 请使用新密码登录开始试用');
+                    alert('✅ 注册完成！\n\n🏥 诊所：' + clinicName + '\n👤 用户名：' + username + '\n👤 姓名：' + (doctorName || '管理员') + '\n🔑 管理员账户已创建\n\n请使用用户名和密码登录');
+                    // ★ 修复：注册成功后清除 config 缓存并重新加载用户列表
+                    // 根因：addUser 只保存到 config.json，但 _users 列表未更新，导致登录时找不到新注册的用户
+                    appConfigCache = null;
+                    try {
+                        const freshConfig = await getAppConfig();
+                        initLoginInput(freshConfig);
+                        console.log('[Wizard] 用户列表已重新加载');
+                    } catch (e) { console.warn('[Wizard] 重新加载用户列表失败:', e); }
                 } else {
-                    alert('⚠️ 诊所信息已保存，但密码修改失败：' + (result.error || '请登录后在设置中修改'));
+                    alert('⚠️ 诊所信息已保存，但账户注册失败：' + (result.error || '请登录后在设置中创建账户'));
                 }
             } catch (e) {
-                alert('⚠️ 诊所信息已保存，请登录后在基础设置中修改密码');
+                alert('⚠️ 诊所信息已保存，请重新启动软件后在登录界面输入账户信息');
             }
         } else {
-            alert('✅ 诊所名称已设置，请登录后在基础设置中完善更多信息');
+            alert('✅ 诊所名称已设置，请在登录界面输入注册的账户信息登录');
         }
 
         // 更新登录页显示
@@ -678,10 +784,61 @@
         closeFirstRunWizard();
     }
 
+    // ★ 注册向导步骤2统一校验：用户名/密码/确认密码
+    // 返回 true=全部合法 false=存在问题；showInHint=true 时把错误写进 wizardUsernameHint
+    function validateWizardStep2(showInHint) {
+        const nextBtn = document.getElementById('wizardNextBtn');
+        const username = document.getElementById('wizardUsername').value.trim();
+        const pwd = document.getElementById('wizardPassword').value;
+        const pwd2 = document.getElementById('wizardPassword2').value;
+        const hint = document.getElementById('wizardUsernameHint');
+        let valid = true;
+        let msg = '';
+
+        if (!ADMIN_USERNAME_REGEX.test(username)) {
+            valid = false;
+            if (username.length < 4) {
+                msg = 'ℹ️ 用户名至少 4 位（当前 ' + username.length + ' 位），建议: wgjie / wangguijie / admin_wgj';
+            } else if (username.length > 20) {
+                msg = '⚠️ 用户名最多 20 位（当前 ' + username.length + ' 位）';
+            } else if (!/^[a-zA-Z]/.test(username)) {
+                msg = '⚠️ 用户名必须以英文字母开头';
+            } else {
+                msg = '⚠️ 用户名只能包含字母、数字或下划线';
+            }
+        } else if (!pwd || pwd.length < 8) {
+            valid = false;
+            msg = 'ℹ️ 密码至少 8 位（当前 ' + (pwd ? pwd.length : 0) + ' 位）';
+        } else if (!/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) {
+            valid = false;
+            msg = 'ℹ️ 密码必须同时包含字母和数字';
+        } else if (pwd !== pwd2) {
+            valid = false;
+            msg = '⚠️ 两次输入的密码不一致';
+        }
+
+        if (nextBtn) {
+            if (valid) {
+                nextBtn.disabled = false;
+                nextBtn.style.opacity = '1';
+                nextBtn.style.cursor = 'pointer';
+            } else {
+                nextBtn.disabled = true;
+                nextBtn.style.opacity = '0.45';
+                nextBtn.style.cursor = 'not-allowed';
+            }
+        }
+        if (hint && showInHint && !valid) {
+            hint.textContent = msg;
+            hint.style.display = 'block';
+        }
+        return valid;
+    }
+
     function checkWizardPassword() {
         const pwd = document.getElementById('wizardPassword').value;
         const indicator = document.getElementById('wizardPwdStrength');
-        if (!pwd) { indicator.className = 'password-strength'; indicator.innerHTML = ''; return; }
+        if (!pwd) { indicator.className = 'password-strength'; indicator.innerHTML = ''; validateWizardStep2(); return; }
         let score = 0;
         if (pwd.length >= 8) score++;
         if (pwd.length >= 12) score++;
@@ -698,6 +855,7 @@
         indicator.style.color = color;
         indicator.style.border = '1px solid ' + color + '55';
         indicator.innerHTML = '强度：<b>' + label + '</b>' + (score < 3 ? '（需≥8位+字母+数字）' : '');
+        validateWizardStep2();
     }
 
     // ★ 将 HTML onclick 内联事件引用的函数暴露到全局作用域

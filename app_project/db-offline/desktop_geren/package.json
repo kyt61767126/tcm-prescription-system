@@ -1,6 +1,6 @@
 {
   "name": "tcm-prescription-personal",
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "惠康中医-个人",
   "main": "electron/main.js",
   "scripts": {

@@ -24,6 +24,7 @@ const licenseManager = require('./license-manager');
 
 // ★ 云端激活 API URL（与 public/index.html 的 CLOUD_API_BASE 一致）
 const ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/validate';
+const ADMIN_ACTIVATE_API_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-submit';
 
 // ============================================================================
 //  机器 ID 生成
@@ -45,6 +46,28 @@ function getMachineId() {
         console.error('[Activate] 生成机器 ID 失败:', e);
         return crypto.randomBytes(16).toString('hex');
     }
+}
+
+// ============================================================================
+//  加载客户端配置（config.json），用于上报版本信息
+// ============================================================================
+function loadClientConfig() {
+    try {
+        const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
+        if (fs.existsSync(configPath)) {
+            const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            return {
+                productName: cfg.productName || '',
+                edition: cfg.edition || '',
+                appMode: cfg.appMode || '',
+                versionLabel: cfg.versionLabel || '',
+                env: cfg.env || 'production'
+            };
+        }
+    } catch (e) {
+        console.warn('[Activate] 加载 config.json 失败:', e.message);
+    }
+    return { productName: '', edition: '', appMode: '', versionLabel: '', env: 'production' };
 }
 
 // ============================================================================
@@ -90,88 +113,21 @@ async function activateOnline(code, machineId, user, clinicName) {
             return { success: false, error: data.error || '激活失败' };
         }
 
-        // 写入 license.dat（带权限错误处理 + userData 兜底）
-        const licensePath = licenseManager.getLicensePath();
-        let actualWritePath = licensePath;
-        try {
-            fs.writeFileSync(licensePath, data.license, 'utf8');
-            console.log('[Activate] license.dat 已写入:', licensePath);
-        } catch (writeErr) {
-            // ★ 修复 NSIS 安装到 Program Files 无写权限问题
-            // 主路径写入失败时自动 fallback 到 userData 目录
-            console.warn('[Activate] 主路径写入失败，尝试 userData 兜底:', writeErr.message);
-            const { app } = require('electron');
-            const path = require('path');
-            const fallbackPath = path.join(app.getPath('userData'), 'license.dat');
-            try {
-                fs.writeFileSync(fallbackPath, data.license, 'utf8');
-                actualWritePath = fallbackPath;
-                console.log('[Activate] license.dat 已写入兜底路径:', fallbackPath);
-            } catch (fallbackErr) {
-                // 兜底也失败，给出明确的权限错误提示
-                console.error('[Activate] 兜底路径也写入失败:', fallbackErr.message);
-                const isPermErr = fallbackErr.code === 'EACCES' || fallbackErr.code === 'EPERM' ||
-                                  writeErr.code === 'EACCES' || writeErr.code === 'EPERM';
-                return {
-                    success: false,
-                    error: isPermErr
-                        ? '授权文件写入失败：系统权限不足。\n请以管理员身份运行程序，或联系客服协助。'
-                        : '授权文件写入失败：' + fallbackErr.message
-                };
-            }
-        }
-
-        // ★ 清除 trial 文件（已正式激活，避免残留过期试用标记导致重复弹窗）
-        try {
-            const trialPath = licenseManager.getTrialPath();
-            if (fs.existsSync(trialPath)) {
-                fs.unlinkSync(trialPath);
-                console.log('[Activate] trial.dat 已清除');
-            }
-        } catch (e) {
-            console.warn('[Activate] 清除 trial.dat 失败:', e);
-        }
-
-        // ★ 激活成功后同步 clinicName 和 doctorName(user) 到 config.json
-        try {
-            const parsedLicense = licenseManager.readLicense(machineId);
-            if (parsedLicense && (parsedLicense.clinicName || user)) {
-                if (licenseManager.setLicenseDataContext) {
-                    licenseManager.setLicenseDataContext(parsedLicense);
-                }
-                const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
-                let config = {};
-                if (fs.existsSync(configPath)) {
-                    config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-                }
-                let changed = false;
-                if (parsedLicense.clinicName && config.clinicName !== parsedLicense.clinicName) {
-                    config.clinicName = parsedLicense.clinicName;
-                    console.log('[Activate] config.json clinicName 已同步为:', parsedLicense.clinicName);
-                    changed = true;
-                }
-                // ★ 同步 user 参数作为 doctorName（激活时填写的医师名）
-                if (user && config.doctorName !== user) {
-                    config.doctorName = user;
-                    console.log('[Activate] config.json doctorName 已同步为:', user);
-                    changed = true;
-                }
-                if (changed) {
-                    if (licenseManager.signConfig) {
-                        config = licenseManager.signConfig(config);
-                    }
-                    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-                }
-            }
-        } catch (syncErr) {
-            console.warn('[Activate] 同步 clinicName/doctorName 到 config.json 失败:', syncErr.message);
+        // ★ 统一安装 License（写license+清trial+同步config = 一行搞定）
+        const installResult = licenseManager.installLicense(data.license, {
+            machineId,
+            doctorName: user || '',
+            edition: 'institution'
+        });
+        if (!installResult.success) {
+            return { success: false, error: installResult.error };
         }
 
         return {
             success: true,
             licenseInfo: data.licenseInfo,
             message: '激活成功',
-            licensePath: actualWritePath
+            licensePath: installResult.path
         };
     } catch (e) {
         console.error('[Activate] 在线激活失败:', e);
@@ -246,75 +202,77 @@ async function showExpireAlertAndActivate(parentWindow, message) {
 }
 
 function showActivateWindow(parentWindow) {
-    // 如果已存在，聚焦
+    // 如果已存在，聚焦+置顶
     if (activateWindow && !activateWindow.isDestroyed()) {
+        activateWindow.show();
         activateWindow.focus();
+        activateWindow.setAlwaysOnTop(true, 'screen-saver');
         return;
     }
 
     const machineId = getMachineId();
 
-    // ★★★ 读取 config.json 获取诊所名和管理员名，传递给激活窗口
-    let configClinicName = '';
-    let configUserName = '';
-    try {
-        const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
-        if (fs.existsSync(configPath)) {
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            configClinicName = encodeURIComponent(config.clinicName || '');
-            configUserName = encodeURIComponent(config.doctorName || config.adminName || '');
-            console.log('[Activate] 读取配置: clinicName=' + (config.clinicName || '') + ', userName=' + (config.doctorName || config.adminName || ''));
-        }
-    } catch (e) {
-        console.warn('[Activate] 读取 config.json 失败:', e.message);
-    }
-
+    // ★ 修复激活窗口不显示：不要用modal+parent（父窗口未加载好会导致子窗口隐形）
+    // 改为独立窗口 + alwaysOnTop 强制置顶，确保小白用户一定能看到
     activateWindow = new BrowserWindow({
         width: 500,
         height: 760,
-        parent: parentWindow,
-        modal: true,
         resizable: true,
         minimizable: false,
         maximizable: false,
         autoHideMenuBar: true,
         title: '软件激活',
+        alwaysOnTop: true,              // ★ 强制置顶（含锁屏之上）
+        show: false,                    // ★ 先隐藏，ready-to-show后再show（防白屏闪烁）
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,
             nodeIntegration: false
         }
     });
+    // 最高优先级置顶（screen-saver级 = 仅低于屏保）
+    activateWindow.setAlwaysOnTop(true, 'screen-saver');
+    activateWindow.center();
 
-    // 加载激活窗口 HTML，通过 URL 参数传递机器 ID 和配置数据
+    // 加载激活窗口 HTML，通过 URL 参数传递机器 ID
     const htmlPath = path.join(__dirname, 'activate-window.html');
-    activateWindow.loadFile(htmlPath, {
-        query: {
-            machineId: machineId,
-            clinicName: configClinicName,
-            userName: configUserName
-        }
+    activateWindow.loadFile(htmlPath, { query: { machineId: machineId } });
+
+    // ★ DOM和资源就绪后再show，避免白屏
+    activateWindow.once('ready-to-show', () => {
+        activateWindow.show();
+        activateWindow.focus();
+        // 再次强制置顶，防止show后被其他系统窗口抢焦点
+        setTimeout(() => {
+            if (activateWindow && !activateWindow.isDestroyed()) {
+                activateWindow.setAlwaysOnTop(true, 'screen-saver');
+                activateWindow.focus();
+            }
+        }, 300);
     });
 
-    // ★ 兜底限制：激活窗口关闭后重新校验 license
-    // 如果 license 仍失效，重新弹 expire-alert（前往激活/退出软件）
-    // 防止用户关闭激活窗口后绕过激活使用主界面，杜绝免授权使用漏洞
+    // ★ 关闭后的兜底：不再死循环调用showExpireAlertAndActivate
+    // 未激活状态下，用户关闭激活窗口 = 不想现在激活，直接显示登录窗口让用户知道（但无法操作）
+    let closedOnce = false;
     activateWindow.on('closed', () => {
         activateWindow = null;
-        if (inExpireAlertFlow) return; // 正在 expire-alert 流程中，避免递归
+        if (closedOnce) return;  // 防递归
+        closedOnce = true;
+        if (inExpireAlertFlow) return;
         try {
-            // ★ v3 新增：激活窗口关闭后重新校验 license，传入 localMachineId 进行绑定校验
             const localMachineId = getMachineId();
             const licenseResult = licenseManager.validateLicense({ localMachineId });
             if (!licenseResult.valid) {
-                console.log('[Activate] 激活窗口关闭后 license 仍失效，重新弹到期提示');
-                // 延迟 200ms 避免与当前 closed 事件循环冲突
-                setTimeout(() => {
-                    showExpireAlertAndActivate(parentWindow, licenseResult.message);
-                }, 200);
+                // ★ 优化：未激活时关闭激活窗口，给parent窗口一个提示但不再强弹窗口
+                console.log('[Activate] 用户关闭激活窗口（未激活），不再强弹出期提示（避免死循环）');
+                // 如果有父窗口，把父窗口前置，提示用户稍后可从登录页重新打开激活窗口
+                if (parentWindow && !parentWindow.isDestroyed()) {
+                    parentWindow.show();
+                    parentWindow.focus();
+                }
             }
         } catch (e) {
-            console.warn('[Activate] 关闭后重新校验 license 失败:', e);
+            console.warn('[Activate] 关闭后校验 license 异常:', e.message);
         }
     });
 
@@ -334,12 +292,257 @@ function restartApp() {
     app.exit(0);
 }
 
+// ============================================================================
+//  管理员激活流程
+// ============================================================================
+
+// ★ requestId 本地持久化（解决轮询超时/关闭窗口后丢失状态的问题）
+// 场景：客户提交激活请求后关闭窗口或轮询超时，管理员稍后审核通过，
+//       客户重新打开程序时自动读取本地 requestId 检查状态，获取已通过的 license
+function getAdminRequestIdPath() {
+    try {
+        return path.join(licenseManager.getWritableDir(), 'admin-request-id.dat');
+    } catch (e) {
+        return path.join(app.getPath('userData'), 'admin-request-id.dat');
+    }
+}
+
+function saveAdminRequestId(requestId, clinicName, adminName, phone, password) {
+    try {
+        const data = {
+            requestId: requestId,
+            clinicName: clinicName || '',
+            adminName: adminName || '',
+            phone: phone || '',
+            password: password || '',  // ★ 本地保存密码，激活通过后用于创建管理员账户
+            savedAt: new Date().toISOString()
+        };
+        fs.writeFileSync(getAdminRequestIdPath(), JSON.stringify(data), 'utf8');
+        console.log('[Admin] requestId 已保存:', requestId);
+    } catch (e) {
+        console.warn('[Admin] 保存 requestId 失败:', e.message);
+    }
+}
+
+function loadAdminRequestId() {
+    try {
+        const p = getAdminRequestIdPath();
+        if (fs.existsSync(p)) {
+            const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+            return data;  // { requestId, clinicName, adminName, savedAt }
+        }
+    } catch (e) {
+        console.warn('[Admin] 读取 requestId 失败:', e.message);
+    }
+    return null;
+}
+
+function clearAdminRequestId() {
+    try {
+        const p = getAdminRequestIdPath();
+        if (fs.existsSync(p)) {
+            fs.unlinkSync(p);
+            console.log('[Admin] requestId 已清除');
+        }
+    } catch (e) { /* 忽略 */ }
+}
+
+// ★ 提交管理员激活请求到平台
+async function submitAdminRequest(data) {
+    try {
+        // ★ 加载客户端配置（版本信息）
+        const clientCfg = loadClientConfig();
+        
+        const body = {
+            clinicName: data.clinicName,
+            adminName: data.adminName,
+            phone: data.phone,
+            remark: data.remark || '',
+            machineId: data.machineId,
+            // ★ 版本信息：用于平台区分离线/云端、机构版/标准版
+            productName: clientCfg.productName,
+            edition: clientCfg.edition,
+            appMode: clientCfg.appMode,
+            versionLabel: clientCfg.versionLabel,
+            env: clientCfg.env
+            // 注意：password 不发送到云端，仅本地保存用于创建管理员账户
+        };
+
+        const fetchPromise = async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            try {
+                const response = await fetch(ADMIN_ACTIVATE_API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal: controller.signal
+                });
+                return await response.json();
+            } finally {
+                clearTimeout(timeout);
+            }
+        };
+
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('FETCH_TIMEOUT')), 15000);
+        });
+
+        const result = await Promise.race([fetchPromise(), timeoutPromise]);
+
+        if (result.success) {
+            // ★ 持久化 requestId + phone + password，防止轮询超时/关闭窗口后丢失
+            saveAdminRequestId(result.requestId, data.clinicName, data.adminName, data.phone, data.password);
+            return {
+                success: true,
+                requestId: result.requestId,
+                message: '激活请求提交成功'
+            };
+        } else {
+            return { success: false, error: result.error || '提交失败' };
+        }
+    } catch (e) {
+        console.error('[Admin] 提交激活请求失败:', e);
+        let errorMsg = e.message;
+        if (e.message === 'FETCH_TIMEOUT') {
+            errorMsg = '连接服务器超时，请检查网络后重试';
+        } else if (e.message && e.message.includes('fetch failed')) {
+            errorMsg = '无法连接服务器，请检查网络连接';
+        }
+        return { success: false, error: errorMsg };
+    }
+}
+
+// ★ 管理员激活状态轮询
+async function checkAdminStatus(requestId) {
+    try {
+        const url = `https://tcm-prescription-system.pages.dev/api/license/admin-status?requestId=${encodeURIComponent(requestId)}`;
+        
+        const fetchPromise = async () => {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 8000);
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal
+                });
+                return await response.json();
+            } finally {
+                clearTimeout(timeout);
+            }
+        };
+
+        const timeoutPromise = new Promise((_, reject) => {
+            setTimeout(() => reject(new Error('FETCH_TIMEOUT')), 10000);
+        });
+
+        const result = await Promise.race([fetchPromise(), timeoutPromise]);
+
+        return result;
+    } catch (e) {
+        console.warn('[Admin] 检查激活状态失败:', e.message);
+        return { success: false, error: e.message };
+    }
+}
+
+// ★ 保存管理员激活返回的license + 自动创建管理员账户（统一走installLicense）
+async function saveLicense(licenseBase64) {
+    try {
+        // 读取本地保存的激活信息（adminName, phone, password）
+        let savedAdminName = '';
+        let savedPhone = '';
+        let savedPassword = '';
+        try {
+            const adminReqPath = getAdminRequestIdPath();
+            if (fs.existsSync(adminReqPath)) {
+                const adminReq = JSON.parse(fs.readFileSync(adminReqPath, 'utf8'));
+                if (adminReq) {
+                    savedAdminName = adminReq.adminName || '';
+                    savedPhone = adminReq.phone || '';
+                    savedPassword = adminReq.password || '';
+                }
+            }
+        } catch (e) { /* 忽略 */ }
+
+        // ★ 统一安装（一行搞定：写license+清trial+同步config+创建账户）
+        const installResult = licenseManager.installLicense(licenseBase64, {
+            doctorName: savedAdminName,
+            phone: savedPhone,
+            password: savedPassword,
+            edition: 'institution'
+        });
+
+        if (!installResult.success) {
+            return { success: false, error: installResult.error };
+        }
+
+        // ★ 激活成功后清除本地 requestId
+        clearAdminRequestId();
+
+        return { success: true, licensePath: installResult.path };
+    } catch (e) {
+        console.error('[Admin] 保存license失败:', e);
+        return { success: false, error: e.message };
+    }
+}
+
+// ★ 取消管理员激活请求
+async function cancelAdminRequest(requestId) {
+    try {
+        const url = `https://tcm-prescription-system.pages.dev/api/license/admin-cancel`;
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId })
+        });
+        const result = await response.json();
+        return result;
+    } catch (e) {
+        console.warn('[Admin] 取消激活请求失败:', e.message);
+        return { success: true, message: '已本地取消' };
+    }
+}
+
 module.exports = {
     getMachineId,
     activateOnline,
     showActivateWindow,
-    showExpireAlertAndActivate,  // ★ 新增：双按钮到期提示（前往激活/退出软件）
+    showExpireAlertAndActivate,
     closeActivateWindow,
     restartApp,
+    submitAdminRequest,
+    checkAdminStatus,
+    saveLicense,
+    cancelAdminRequest,
+    saveAdminRequestId,
+    loadAdminRequestId,
+    clearAdminRequestId,
     ACTIVATE_API_URL
 };
+
+
+// ★ 离线版兼容：activateOnline的installLicense若因无云端API失败，回退到旧逻辑
+(function(){
+  const origActivateOnline = activateOnline;
+  if (typeof origActivateOnline === 'function') {
+    activateOnline = async function(data) {
+      try {
+        return await origActivateOnline(data);
+      } catch(e) {
+        console.warn('[Activate] 云端激活失败，尝试离线模式:', e.message);
+        // 离线回退：直接写license
+        try {
+          const path = require('path');
+          const licensePath = licenseManager.getLicensePath();
+          fs.writeFileSync(licensePath, data.license || data, 'utf8');
+          // 清除trial
+          try { const tp = licenseManager.getTrialPath(); if(fs.existsSync(tp)) fs.unlinkSync(tp); } catch {}
+          return { success: true, message: '激活成功（离线模式）' };
+        } catch(e2) {
+          return { success: false, error: e2.message };
+        }
+      }
+    };
+  }
+})();

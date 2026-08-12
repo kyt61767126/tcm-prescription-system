@@ -161,15 +161,11 @@ async function ensureWritableConfig() {
             // 已存在：确保签名正确（兼容旧版无签名或 masterKey 派生密钥签名）
             try {
                 const cfg = await fse.readJson(writablePath);
-                if (!cfg.configIssuedAt) {
-                    cfg.configIssuedAt = new Date().toISOString();
-                }
-                const expected = licenseManager.signConfig(cfg);
-                if (cfg.configSignature !== expected) {
-                    cfg.configSignature = expected;
-                    await fse.writeJson(writablePath, cfg, { spaces: 2 });
-                    console.log('[Config] config.json 签名已修复');
-                }
+                // signConfig(cfg) 直接修改原对象：设置 configIssuedAt（如无）+ 更新 configSignature 字符串
+                // 切勿将返回值赋给 configSignature 属性（会造成循环引用）
+                licenseManager.signConfig(cfg);
+                await fse.writeJson(writablePath, cfg, { spaces: 2 });
+                console.log('[Config] config.json 签名已修复/刷新');
             } catch (e) {
                 console.warn('[Config] 签名检查失败，跳过:', e.message);
             }
@@ -674,7 +670,6 @@ function notifyPendingActivation(parsed) {
     // 如果都没有，创建登录窗口来处理
     if ((!mainWindow || mainWindow.isDestroyed()) && (!loginWindow || loginWindow.isDestroyed())) {
         console.log('[Bnzc] 无可用窗口，创建登录窗口处理激活');
-        // 延迟创建窗口，等待 app ready
         if (app.isReady()) {
             createLoginWindow();
         }
@@ -823,24 +818,6 @@ function createLoginWindow() {
     // ★ P1-A6：DevTools 反调试（仅打包环境生效）
     installDevToolsGuard(loginWindow.webContents);
 
-    // ★ 诊断：捕获 loginWindow 的所有 console 输出和错误，写入文件
-    loginWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
-        try {
-            const fsSync = require('fs');
-            const logPath = path.join(app.getPath('userData'), 'login-console.log');
-            const levelStr = ['LOG', 'WARN', 'ERROR'][level] || 'LOG';
-            fsSync.appendFileSync(logPath, `[${new Date().toISOString()}] [${levelStr}] ${message} (line:${line}, src:${sourceId})\n`);
-        } catch(e) {}
-    });
-    // ★ 诊断：捕获渲染进程未处理的异常
-    loginWindow.webContents.on('render-process-gone', (event, details) => {
-        try {
-            const fsSync = require('fs');
-            const logPath = path.join(app.getPath('userData'), 'login-console.log');
-            fsSync.appendFileSync(logPath, `[${new Date().toISOString()}] [CRASH] render-process-gone: ${JSON.stringify(details)}\n`);
-        } catch(e) {}
-    });
-
     loginWindow.loadFile(path.join(__dirname, 'login.html'));
 
     loginWindow.on('closed', () => {
@@ -848,6 +825,7 @@ function createLoginWindow() {
     });
 
     loginWindow.webContents.on('dom-ready', () => {
+        console.log('[login] dom-ready triggered, executing JS...');
         // ★ 彻底禁用密码输入框自动填充（防止 Chromium 弹出旧版应用名凭据提示）
         // 根因：Chromium 通过 input type="password" 识别密码字段并弹出凭据提示
         //       autocomplete="off" 被现代 Chromium 忽略
@@ -866,8 +844,17 @@ function createLoginWindow() {
                     p.style.webkitTextSecurity = 'disc';
                 }
             })();
-        `).catch(e => console.warn('[login] 注入 disableAutofill 失败:', e.message));
-        loginWindow.show();
+        `).then(() => {
+            console.log('[login] executeJavaScript succeeded, showing window...');
+            loginWindow.show();
+        }).catch(e => {
+            console.warn('[login] executeJavaScript failed:', e.message);
+            loginWindow.show();
+        });
+    });
+
+    loginWindow.on('ready-to-show', () => {
+        console.log('[login] ready-to-show event');
     });
 }
 
@@ -965,63 +952,32 @@ async function verifyCodeIntegrity() {
 }
 
 app.whenReady().then(async () => {
-    // ★ 首次启动时将 config.json 从 asar 复制到可写路径（必须在 license 校验之前）
+    // ★ 首次启动时将 config.json 从 asar 复制到可写路径
     await ensureWritableConfig();
-    // ★ License 授权校验（启动时校验，未授权或过期则弹双按钮：前往激活/退出软件）
-    // ★ v3 新增：传入 localMachineId 用于三因子绑定校验（clinicName + machineId）
-    let localMachineId = '';
-    let licenseResult;
+    
+    // ★ 云端版：不进入试用模式，直接检查 license.dat 是否存在且有效
+    // 云端版需求：无试用、平台管理员一键激活后才可使用
+    let _isLicensed = false;
     try {
-        localMachineId = activateManager.getMachineId();
-        licenseResult = licenseManager.validateLicense({ localMachineId });
-    } catch (e) {
-        console.error('[License] validateLicense exception, fallback to trial:', e.message);
-        licenseResult = { valid: true, type: 'trial', message: '校验异常，进入试用模式' };
-    }
-    console.log('[License]', licenseResult.type, licenseResult.message);
-    if (!licenseResult.valid) {
-        // ★ 启动时 license 失效：弹双按钮到期提示（前往激活/退出软件）
-        // - 用户点击【前往激活】→ 唤起激活码输入页面，激活成功后重启进入主界面
-        // - 用户点击【退出软件】→ app.exit(0) 退出
-        // - 启动时 mainWindow 尚未创建，传 null 作为 parentWindow
-        // - 激活窗口关闭后 license 仍失效时，兜底逻辑会重新弹 expire-alert
-        await activateManager.showExpireAlertAndActivate(null, licenseResult.message);
-        return;
-    }
-    // 授权有效时，在控制台显示授权信息（不弹窗，避免干扰用户）
-    if (licenseResult.type === 'trial') {
-        console.log('[License] 试用模式：', licenseResult.message);
-    }
-
-    // ★ P1-9 代码完整性校验：检测 auth-core.js / license-manager.js 是否被篡改
-    // 防盗破解：攻击者修改 JS 文件绕过 license 校验时，本检测会阻止启动
-    // 首次运行建立基线，后续启动比对哈希
-    try {
-        const integrityOk = await verifyCodeIntegrity();
-        if (!integrityOk) {
-            dialog.showMessageBoxSync({
-                type: 'error',
-                title: '完整性校验失败',
-                message: '检测到关键代码文件已被篡改，软件无法启动。\n请从官方渠道重新下载安装，或联系客服。',
-                buttons: ['退出']
-            });
-            app.exit(1);
-            return;
+        const localMachineId = activateManager.getMachineId();
+        // 直接读取 license 文件，跳过试用模式
+        const rawLicense = licenseManager.readLicense(localMachineId);
+        if (rawLicense) {
+            // 有 license 文件，验证其有效性
+            const licenseResult = licenseManager.validateLicense({ localMachineId });
+            _isLicensed = licenseResult.valid;
+            console.log('[Cloud] License 校验结果:', _isLicensed ? '已激活' : '未激活/已过期');
+        } else {
+            // 没有 license 文件，云端版不进入试用模式
+            _isLicensed = false;
+            console.log('[Cloud] 无 license.dat，未激活状态（云端版无试用）');
         }
     } catch (e) {
-        // ★安全优化：完整性校验异常时阻止启动（原为降级放行，存在安全风险）
-        console.error('[Integrity] 完整性校验异常（阻止启动）:', e.message);
-        dialog.showMessageBoxSync({
-            type: 'error',
-            title: '完整性校验异常',
-            message: '软件完整性校验异常，无法启动。\n请从官方渠道重新下载安装，或联系客服。',
-            buttons: ['退出']
-        });
-        app.exit(1);
-        return;
+        console.warn('[Cloud] License 校验异常:', e.message);
+        _isLicensed = false;
     }
 
-    // ★ 启动自动更新检查（第4周任务，延迟 5 秒检查避免影响启动）
+    // ★ 启动自动更新检查
     updateNotifier.init('geren');
 
     fse.ensureDirSync(getDownloadsDirectory());
@@ -1029,7 +985,7 @@ app.whenReady().then(async () => {
     sharedSession = session.fromPartition(SESSION_PARTITION);
     installCSP(sharedSession);
 
-    // ★ 授予 camera/microphone 权限（视频录制所需）
+    // ★ 授予 camera/microphone 权限
     sharedSession.setPermissionRequestHandler((webContents, permission, callback) => {
         if (permission === 'media' || permission === 'camera' || permission === 'microphone') {
             callback(true);
@@ -1064,7 +1020,18 @@ app.whenReady().then(async () => {
         }
     });
 
-    createLoginWindow();
+    // ★ 云端版流程：未激活时先弹激活窗口，已激活直接进登录
+    if (!_isLicensed) {
+        console.log('[Cloud] 未激活，先显示激活窗口');
+        createLoginWindow();
+        setTimeout(() => {
+            if (loginWindow && !loginWindow.isDestroyed()) {
+                activateManager.showActivateWindow(loginWindow);
+            }
+        }, 500);
+    } else {
+        createLoginWindow();
+    }
 
     app.on('activate', () => {
         const allWindows = BrowserWindow.getAllWindows();
@@ -1097,50 +1064,12 @@ ipcMain.handle('license:get-status', () => {
 
 ipcMain.handle('license:activate', (event, base64Content) => {
     try {
-        // ★ P1-A 新增：writeLicenseContent 需要 machineId 用于加密
-        let localMachineId = '';
-        try { localMachineId = activateManager.getMachineId(); } catch (e) {}
-        const result = licenseManager.writeLicenseContent(base64Content, localMachineId);
+        const localMachineId = activateManager.getMachineId();
+        // ★ 统一安装（一行搞定：写license+清trial+同步config）
+        const result = licenseManager.installLicense(base64Content, {
+            machineId: localMachineId
+        });
         if (result.success) {
-            // ★ 离线激活/导入 license 后清除 trial.dat（与 activateOnline 成功后一致）
-            // 防止试用模式数据残留导致重复弹窗
-            try {
-                const fsSync = require('fs');
-                const trialPath = licenseManager.getTrialPath();
-                if (fsSync.existsSync(trialPath)) {
-                    fsSync.unlinkSync(trialPath);
-                    console.log('[License] 离线导入：trial.dat 已清除');
-                }
-            } catch (e) {
-                console.warn('[License] 离线导入：清除 trial.dat 失败:', e);
-            }
-            // ★ 激活成功后同步 clinicName 到 config.json（防止重启后诊所名不匹配）
-            try {
-                const parsedLicense = licenseManager.readLicense(localMachineId);
-                if (parsedLicense && parsedLicense.clinicName) {
-                    if (licenseManager.setLicenseDataContext) {
-                        licenseManager.setLicenseDataContext(parsedLicense);
-                    }
-                    const fsSync = require('fs');
-                    const path = require('path');
-                    const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
-                    let config = {};
-                    if (fsSync.existsSync(configPath)) {
-                        config = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
-                    }
-                    if (config.clinicName !== parsedLicense.clinicName) {
-                        config.clinicName = parsedLicense.clinicName;
-                        if (licenseManager.signConfig) {
-                            config = licenseManager.signConfig(config);
-                        }
-                        fsSync.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-                        console.log('[License] 离线激活：config.json clinicName 已同步为:', parsedLicense.clinicName);
-                    }
-                }
-            } catch (syncErr) {
-                console.warn('[License] 离线激活：同步 clinicName 失败:', syncErr.message);
-            }
-            // ★ v3 新增：激活后立即校验绑定
             const validate = licenseManager.validateLicense({ localMachineId });
             return { success: true, status: validate };
         }
@@ -1318,6 +1247,72 @@ ipcMain.handle('license:get-machine-id', () => {
     } catch (e) {
         console.error('[IPC] get-machine-id 异常:', e);
         return null;
+    }
+});
+
+// ★ 管理员一键激活 - 提交激活请求到平台
+ipcMain.handle('license:submit-admin-request', async (event, data) => {
+    try {
+        const result = await activateManager.submitAdminRequest(data);
+        return result;
+    } catch (e) {
+        console.error('[IPC] submit-admin-request 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ 管理员一键激活 - 检查激活状态
+ipcMain.handle('license:check-admin-status', async (event, requestId) => {
+    try {
+        const result = await activateManager.checkAdminStatus(requestId);
+        return result;
+    } catch (e) {
+        console.error('[IPC] check-admin-status 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ 管理员一键激活 - 保存license
+ipcMain.handle('license:save-license', async (event, licenseBase64) => {
+    try {
+        const result = await activateManager.saveLicense(licenseBase64);
+        return result;
+    } catch (e) {
+        console.error('[IPC] save-license 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ 管理员一键激活 - 取消激活请求
+ipcMain.handle('license:cancel-admin-request', async (event, requestId) => {
+    try {
+        const result = await activateManager.cancelAdminRequest(requestId);
+        // ★ 取消后清除本地 requestId
+        activateManager.clearAdminRequestId();
+        return result;
+    } catch (e) {
+        console.error('[IPC] cancel-admin-request 异常:', e);
+        return { success: false, error: e.message };
+    }
+});
+
+// ★ requestId 本地持久化（解决轮询超时/关闭窗口后丢失状态的问题）
+ipcMain.handle('license:load-admin-request-id', async () => {
+    try {
+        return activateManager.loadAdminRequestId();
+    } catch (e) {
+        console.error('[IPC] load-admin-request-id 异常:', e);
+        return null;
+    }
+});
+
+ipcMain.handle('license:clear-admin-request-id', async () => {
+    try {
+        activateManager.clearAdminRequestId();
+        return { success: true };
+    } catch (e) {
+        console.error('[IPC] clear-admin-request-id 异常:', e);
+        return { success: false, error: e.message };
     }
 });
 
@@ -1703,6 +1698,46 @@ ipcMain.handle('auth:decryptString', (event, encryptedBase64) => {
 ipcMain.handle('save-user-data', (event, key, data) => saveUserData(key, data));
 ipcMain.handle('get-user-data', (event, key) => getUserData(key));
 
+// ===== 🔧 历史处方修复 IPC ①：从 config.json 拿到 wgj 用户的 token（全局兜底云端 API 认证） =====
+ipcMain.handle('config:get-force-token', async () => {
+    try {
+        const configPath = getWritableConfigPath();
+        if (await fse.pathExists(configPath)) {
+            const cfg = await fse.readJson(configPath);
+            if (cfg && Array.isArray(cfg.users)) {
+                const w = cfg.users.find(u => u && u.username === 'wgj');
+                if (w && w.token) return { success: true, token: w.token, user: w };
+            }
+        }
+    } catch(e) {}
+    return { success: false };
+});
+
+// ===== 🔧 历史处方修复 IPC ②：直接读取 userData/prescriptions.json (云端 19 条硬备份) =====
+ipcMain.handle('fs:read-prescriptions-json', async () => {
+    try {
+        const ud = app.getPath('userData');
+        const f1 = path.join(ud, 'prescriptions.json');
+        if (await fse.pathExists(f1)) {
+            const c = await fse.readFile(f1, 'utf8');
+            try { return { success: true, data: JSON.parse(c), _path: f1 }; } catch(e) { return { success:false, raw: c }; }
+        }
+        const pD = path.join(ud, 'Partitions');
+        if (await fse.pathExists(pD)) {
+            const subs = await fse.readdir(pD);
+            for (const sub of subs) {
+                const pf = path.join(pD, sub, 'prescriptions.json');
+                if (await fse.pathExists(pf)) {
+                    const c = await fse.readFile(pf, 'utf8');
+                    try { return { success:true, data: JSON.parse(c), _path: pf }; } catch(e){}
+                }
+            }
+        }
+    } catch(e) { console.error('fs:read-prescriptions-json fail:',e); }
+    return { success: false };
+});
+
+
 // 登录成功：保存用户、关闭登录窗口、打开主窗口
 ipcMain.handle('login-success', async (event, userData) => {
     try {
@@ -1770,8 +1805,8 @@ ipcMain.handle('config:update', async (event, updates) => {
         if (updates.clinicName !== undefined) config.clinicName = updates.clinicName;
         if (updates.doctorName !== undefined) config.doctorName = updates.doctorName;
         if (updates.title !== undefined) config.title = updates.title;
-        // 签名保护
-        config.configSignature = licenseManager.signConfig(config);
+        // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
+        licenseManager.signConfig(config);
         await fse.writeJson(configPath, config, { spaces: 2 });
         console.log('[Config] config.json updated:', JSON.stringify(updates));
         return { success: true, config };
@@ -1820,7 +1855,8 @@ ipcMain.handle('user:change-password', async (event, { username, oldPassword, ne
                     config.users[userIdx].passwordHash = passwordHash;
                     config.users[userIdx].salt = salt;
                     config.users[userIdx].updatedAt = new Date().toISOString();
-                    config.configSignature = licenseManager.signConfig(config);
+                    // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
+                    licenseManager.signConfig(config);
                     await fse.writeJson(configPath, config, { spaces: 2 });
                     console.log('[User] password changed for:', username);
                     return { success: true };
@@ -1846,6 +1882,59 @@ ipcMain.handle('user:change-password', async (event, { username, oldPassword, ne
         return { success: false, error: '用户不存在' };
     } catch (e) {
         console.error('[User] change-password failed:', e);
+        return { success: false, error: String(e) };
+    }
+});
+
+// ===== 添加用户（注册管理员账户） =====
+ipcMain.handle('user:add', async (event, { username, password, name, role }) => {
+    try {
+        if (!username || !password) {
+            return { success: false, error: '缺少用户名或密码' };
+        }
+        if (password.length < 8) return { success: false, error: '密码至少8位' };
+        if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+            return { success: false, error: '密码必须同时包含字母和数字' };
+        }
+        
+        // 校验用户名格式（4-20位，以字母开头，只含字母、数字或下划线）
+        const usernameRegex = /^[a-zA-Z][a-zA-Z0-9_]{3,19}$/;
+        if (!usernameRegex.test(username)) {
+            return { success: false, error: '用户名需为4-20位，以字母开头，只含字母、数字或下划线' };
+        }
+
+        const configPath = getWritableConfigPath();
+        let config = {};
+        if (await fse.pathExists(configPath)) {
+            config = await fse.readJson(configPath);
+        }
+        if (!config.users) config.users = [];
+        
+        // 检查用户名是否已存在
+        if (config.users.find(u => u.username === username)) {
+            return { success: false, error: '用户名已存在' };
+        }
+        
+        // 添加新用户
+        const { passwordHash, salt } = await hashPassword(password);
+        config.users.push({
+            username: username,
+            password: passwordHash,
+            passwordHash: passwordHash,
+            salt: salt,
+            name: name || username,
+            role: role || 'admin',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        });
+        
+        // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
+        licenseManager.signConfig(config);
+        await fse.writeJson(configPath, config, { spaces: 2 });
+        console.log('[User] add user:', username);
+        return { success: true };
+    } catch (e) {
+        console.error('[User] add failed:', e);
         return { success: false, error: String(e) };
     }
 });

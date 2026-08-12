@@ -1,4 +1,4 @@
-/**
+﻿/**
  * asarmor ASAR 防解压保护插件（云端版，与离线端 afterPack.js 统一）
  *
  * 保护策略：
@@ -37,3 +37,4 @@ exports.default = async ({ appOutDir, packager }) => {
     console.error('[asarmor] Error applying patches:', err.message);
   }
 };
+

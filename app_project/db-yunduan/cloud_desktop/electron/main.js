@@ -161,15 +161,11 @@ async function ensureWritableConfig() {
             // 已存在：确保签名正确（兼容旧版无签名或 masterKey 派生密钥签名）
             try {
                 const cfg = await fse.readJson(writablePath);
-                if (!cfg.configIssuedAt) {
-                    cfg.configIssuedAt = new Date().toISOString();
-                }
-                const expected = licenseManager.signConfig(cfg);
-                if (cfg.configSignature !== expected) {
-                    cfg.configSignature = expected;
-                    await fse.writeJson(writablePath, cfg, { spaces: 2 });
-                    console.log('[Config] config.json 签名已修复');
-                }
+                // signConfig(cfg) 直接修改原对象：设置 configIssuedAt（如无）+ 更新 configSignature 字符串
+                // 切勿将返回值赋给 configSignature 属性（会造成循环引用）
+                licenseManager.signConfig(cfg);
+                await fse.writeJson(writablePath, cfg, { spaces: 2 });
+                console.log('[Config] config.json 签名已修复/刷新');
             } catch (e) {
                 console.warn('[Config] 签名检查失败，跳过:', e.message);
             }
@@ -829,6 +825,7 @@ function createLoginWindow() {
     });
 
     loginWindow.webContents.on('dom-ready', () => {
+        console.log('[login] dom-ready triggered, executing JS...');
         // ★ 彻底禁用密码输入框自动填充（防止 Chromium 弹出旧版应用名凭据提示）
         // 根因：Chromium 通过 input type="password" 识别密码字段并弹出凭据提示
         //       autocomplete="off" 被现代 Chromium 忽略
@@ -847,8 +844,17 @@ function createLoginWindow() {
                     p.style.webkitTextSecurity = 'disc';
                 }
             })();
-        `).catch(e => console.warn('[login] 注入 disableAutofill 失败:', e.message));
-        loginWindow.show();
+        `).then(() => {
+            console.log('[login] executeJavaScript succeeded, showing window...');
+            loginWindow.show();
+        }).catch(e => {
+            console.warn('[login] executeJavaScript failed:', e.message);
+            loginWindow.show();
+        });
+    });
+
+    loginWindow.on('ready-to-show', () => {
+        console.log('[login] ready-to-show event');
     });
 }
 
@@ -1058,49 +1064,12 @@ ipcMain.handle('license:get-status', () => {
 
 ipcMain.handle('license:activate', (event, base64Content) => {
     try {
-        // ★ P1-A 新增：writeLicenseContent 需要 machineId 用于加密
-        let localMachineId = '';
-        try { localMachineId = activateManager.getMachineId(); } catch (e) {}
-        const result = licenseManager.writeLicenseContent(base64Content, localMachineId);
+        const localMachineId = activateManager.getMachineId();
+        // ★ 统一安装（一行搞定：写license+清trial+同步config）
+        const result = licenseManager.installLicense(base64Content, {
+            machineId: localMachineId
+        });
         if (result.success) {
-            // ★ 离线激活/导入 license 后清除 trial.dat（与 activateOnline 成功后一致）
-            try {
-                const fsSync = require('fs');
-                const trialPath = licenseManager.getTrialPath();
-                if (fsSync.existsSync(trialPath)) {
-                    fsSync.unlinkSync(trialPath);
-                    console.log('[License] 离线导入：trial.dat 已清除');
-                }
-            } catch (e) {
-                console.warn('[License] 离线导入：清除 trial.dat 失败:', e);
-            }
-            // ★ 激活成功后同步 clinicName 到 config.json
-            try {
-                const parsedLicense = licenseManager.readLicense(localMachineId);
-                if (parsedLicense && parsedLicense.clinicName) {
-                    if (licenseManager.setLicenseDataContext) {
-                        licenseManager.setLicenseDataContext(parsedLicense);
-                    }
-                    const fsSync = require('fs');
-                    const path = require('path');
-                    const configPath = path.join(licenseManager.getWritableDir(), 'config.json');
-                    let config = {};
-                    if (fsSync.existsSync(configPath)) {
-                        config = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
-                    }
-                    if (config.clinicName !== parsedLicense.clinicName) {
-                        config.clinicName = parsedLicense.clinicName;
-                        if (licenseManager.signConfig) {
-                            config = licenseManager.signConfig(config);
-                        }
-                        fsSync.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-                        console.log('[License] 离线激活：config.json clinicName 已同步为:', parsedLicense.clinicName);
-                    }
-                }
-            } catch (syncErr) {
-                console.warn('[License] 离线激活：同步 clinicName 失败:', syncErr.message);
-            }
-            // ★ v3 新增：激活后立即校验绑定
             const validate = licenseManager.validateLicense({ localMachineId });
             return { success: true, status: validate };
         }
@@ -1729,6 +1698,46 @@ ipcMain.handle('auth:decryptString', (event, encryptedBase64) => {
 ipcMain.handle('save-user-data', (event, key, data) => saveUserData(key, data));
 ipcMain.handle('get-user-data', (event, key) => getUserData(key));
 
+// ===== 🔧 历史处方修复 IPC ①：从 config.json 拿到 wgj 用户的 token（全局兜底云端 API 认证） =====
+ipcMain.handle('config:get-force-token', async () => {
+    try {
+        const configPath = getWritableConfigPath();
+        if (await fse.pathExists(configPath)) {
+            const cfg = await fse.readJson(configPath);
+            if (cfg && Array.isArray(cfg.users)) {
+                const w = cfg.users.find(u => u && u.username === 'wgj');
+                if (w && w.token) return { success: true, token: w.token, user: w };
+            }
+        }
+    } catch(e) {}
+    return { success: false };
+});
+
+// ===== 🔧 历史处方修复 IPC ②：直接读取 userData/prescriptions.json (云端 19 条硬备份) =====
+ipcMain.handle('fs:read-prescriptions-json', async () => {
+    try {
+        const ud = app.getPath('userData');
+        const f1 = path.join(ud, 'prescriptions.json');
+        if (await fse.pathExists(f1)) {
+            const c = await fse.readFile(f1, 'utf8');
+            try { return { success: true, data: JSON.parse(c), _path: f1 }; } catch(e) { return { success:false, raw: c }; }
+        }
+        const pD = path.join(ud, 'Partitions');
+        if (await fse.pathExists(pD)) {
+            const subs = await fse.readdir(pD);
+            for (const sub of subs) {
+                const pf = path.join(pD, sub, 'prescriptions.json');
+                if (await fse.pathExists(pf)) {
+                    const c = await fse.readFile(pf, 'utf8');
+                    try { return { success:true, data: JSON.parse(c), _path: pf }; } catch(e){}
+                }
+            }
+        }
+    } catch(e) { console.error('fs:read-prescriptions-json fail:',e); }
+    return { success: false };
+});
+
+
 // 登录成功：保存用户、关闭登录窗口、打开主窗口
 ipcMain.handle('login-success', async (event, userData) => {
     try {
@@ -1796,8 +1805,8 @@ ipcMain.handle('config:update', async (event, updates) => {
         if (updates.clinicName !== undefined) config.clinicName = updates.clinicName;
         if (updates.doctorName !== undefined) config.doctorName = updates.doctorName;
         if (updates.title !== undefined) config.title = updates.title;
-        // 签名保护
-        config.configSignature = licenseManager.signConfig(config);
+        // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
+        licenseManager.signConfig(config);
         await fse.writeJson(configPath, config, { spaces: 2 });
         console.log('[Config] config.json updated:', JSON.stringify(updates));
         return { success: true, config };
@@ -1846,7 +1855,8 @@ ipcMain.handle('user:change-password', async (event, { username, oldPassword, ne
                     config.users[userIdx].passwordHash = passwordHash;
                     config.users[userIdx].salt = salt;
                     config.users[userIdx].updatedAt = new Date().toISOString();
-                    config.configSignature = licenseManager.signConfig(config);
+                    // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
+                    licenseManager.signConfig(config);
                     await fse.writeJson(configPath, config, { spaces: 2 });
                     console.log('[User] password changed for:', username);
                     return { success: true };
@@ -1918,8 +1928,8 @@ ipcMain.handle('user:add', async (event, { username, password, name, role }) => 
             updatedAt: new Date().toISOString()
         });
         
-        // 签名保护
-        config.configSignature = licenseManager.signConfig(config);
+        // 签名保护：signConfig(config) 直接修改原对象，切勿将返回值赋值给属性（会造成循环引用）
+        licenseManager.signConfig(config);
         await fse.writeJson(configPath, config, { spaces: 2 });
         console.log('[User] add user:', username);
         return { success: true };

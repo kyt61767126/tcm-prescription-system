@@ -1,11 +1,12 @@
 {
   "clinicName": "",
   "doctorName": "",
-  "edition": "cloud_personal",
+  "edition": "personal",
   "appMode": "cloud",
   "maxUsers": 1,
   "productName": "惠康中医-YB",
   "versionLabel": "云端标准版",
+  "env": "test",
   "users": [],
   "configIssuedAt": "2026-07-31T00:00:00Z",
   "configSignature": ""

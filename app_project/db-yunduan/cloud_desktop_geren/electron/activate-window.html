@@ -10,1167 +10,837 @@ body {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: #333;
-    padding: 24px 16px;
+    padding: 16px 14px;
     font-size: 14px;
     user-select: none;
     min-height: 100vh;
-}
-.container {
-    max-width: 440px;
-    margin: 0 auto;
-    background: #fff;
-    border-radius: 12px;
-    padding: 28px 24px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
-}
-.brand {
-    text-align: center;
-    margin-bottom: 20px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #f0f0f0;
-}
-.brand .logo {
-    width: 56px;
-    height: 56px;
-    margin: 0 auto 10px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #fff;
-    font-size: 22px;
-    font-weight: bold;
+}
+.container {
+    width: 100%;
+    max-width: 420px;
+    background: #fff;
+    border-radius: 14px;
+    padding: 24px 22px 20px;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.2);
+}
+
+/* Brand */
+.brand { text-align: center; margin-bottom: 14px; }
+.brand .logo {
+    width: 52px; height: 52px; margin: 0 auto 8px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 20px; font-weight: bold;
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
 }
-h1 {
-    color: #2c3e50;
-    font-size: 20px;
-    text-align: center;
-    margin-bottom: 6px;
+h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
+.subtitle { color: #909399; font-size: 12px; }
+
+/* Progress bar (2 steps) */
+.progress-bar {
+    display: flex; align-items: center; justify-content: center;
+    margin: 14px 0 18px; gap: 0;
 }
-.subtitle {
-    color: #909399;
-    font-size: 12px;
-    text-align: center;
+.progress-step {
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+    flex-shrink: 0;
 }
-.form-group { margin-bottom: 14px; }
+.progress-step .dot {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #e4e7ed; color: #909399;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600;
+    transition: all 0.3s ease;
+}
+.progress-step.active .dot {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: #fff; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    transform: scale(1.1);
+}
+.progress-step.done .dot {
+    background: #67c23a; color: #fff;
+}
+.progress-step .label { font-size: 11px; color: #909399; }
+.progress-step.active .label { color: #5c6bc0; font-weight: 600; }
+.progress-step.done .label { color: #67c23a; }
+.progress-line {
+    flex: 1; height: 2px; background: #e4e7ed;
+    margin: 0 6px; margin-bottom: 20px;
+    transition: background 0.3s;
+}
+.progress-line.done { background: #67c23a; }
+
+/* Forms */
+.form-group { margin-bottom: 12px; }
 .form-group label {
-    display: block;
-    margin-bottom: 6px;
-    color: #606266;
-    font-weight: 500;
-    font-size: 13px;
+    display: block; margin-bottom: 5px;
+    color: #606266; font-weight: 500; font-size: 13px;
 }
-.form-group input {
-    width: 100%;
-    padding: 10px 12px;
-    border: 1.5px solid #dcdfe6;
-    border-radius: 6px;
-    font-size: 14px;
-    font-family: "Courier New", monospace;
-    letter-spacing: 1px;
+.form-group label .req { color: #f56c6c; }
+.form-group input, .form-group textarea {
+    width: 100%; padding: 10px 12px;
+    border: 1.5px solid #dcdfe6; border-radius: 8px;
+    font-size: 14px; font-family: inherit;
     transition: border-color 0.2s, box-shadow 0.2s;
-    user-select: text;
-    background: #fafbfc;
+    user-select: text; background: #fafbfc;
 }
-.form-group input:focus {
-    border-color: #667eea;
-    outline: none;
+.form-group input:focus, .form-group textarea:focus {
+    border-color: #667eea; outline: none;
     box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
     background: #fff;
 }
-.form-group input::placeholder {
-    color: #c0c4cc;
-    letter-spacing: 0;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+.form-group input.invalid {
+    border-color: #f56c6c;
+    box-shadow: 0 0 0 3px rgba(245, 108, 108, 0.15);
 }
+.form-group .field-hint {
+    font-size: 11px; color: #909399; margin-top: 3px; line-height: 1.5;
+}
+.form-group .field-hint.error { color: #f56c6c; }
+.form-group .field-hint.ok { color: #67c23a; }
+
+/* Password strength */
+.pwd-strength {
+    display: flex; gap: 3px; margin-top: 5px;
+}
+.pwd-strength .bar {
+    flex: 1; height: 3px; border-radius: 2px;
+    background: #e4e7ed; transition: background 0.2s;
+}
+.pwd-strength.weak .bar:nth-child(1) { background: #f56c6c; }
+.pwd-strength.medium .bar:nth-child(1),
+.pwd-strength.medium .bar:nth-child(2) { background: #e6a23c; }
+.pwd-strength.strong .bar { background: #67c23a; }
+
+/* Buttons */
 .btn {
-    display: block;
-    width: 100%;
-    padding: 12px;
+    display: block; width: 100%; padding: 12px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 15px;
-    font-weight: 500;
-    transition: transform 0.1s, box-shadow 0.2s, opacity 0.2s;
-    margin-top: 10px;
+    color: white; border: none; border-radius: 8px;
+    cursor: pointer; font-size: 15px; font-weight: 600;
+    transition: all 0.2s; margin-top: 8px;
     box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
-.btn:hover { opacity: 0.92; box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4); }
-.btn:active { transform: translateY(1px); }
-.btn:disabled {
-    background: #bdc3c7;
-    cursor: not-allowed;
-    box-shadow: none;
-    opacity: 0.7;
-}
+.btn:hover:not(:disabled) { opacity: 0.93; box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { background: #bdc3c7; cursor: not-allowed; box-shadow: none; opacity: 0.7; }
 .btn-secondary {
-    background: #fff;
-    color: #606266;
-    border: 1.5px solid #dcdfe6;
-    box-shadow: none;
-    margin-top: 8px;
+    background: #fff; color: #606266;
+    border: 1.5px solid #dcdfe6; box-shadow: none;
+    margin-top: 6px; font-weight: 500;
 }
-.btn-secondary:hover { background: #f5f7fa; border-color: #c0c4cc; }
+.btn-secondary:hover:not(:disabled) { background: #f5f7fa; border-color: #c0c4cc; }
+.btn-success {
+    background: linear-gradient(135deg, #67c23a 0%, #85ce61 100%);
+    box-shadow: 0 4px 12px rgba(103, 194, 58, 0.3);
+}
+.btn-success:hover:not(:disabled) { box-shadow: 0 6px 16px rgba(103, 194, 58, 0.4); }
 
+/* Form navigation */
+.form-nav { display: flex; gap: 10px; margin-top: 10px; }
+.form-nav .btn { margin-top: 0; flex: 1; }
+.form-nav .btn-back {
+    background: #fff; color: #606266;
+    border: 1.5px solid #dcdfe6; box-shadow: none;
+}
+.form-nav .btn-back:hover:not(:disabled) { background: #f5f7fa; }
+
+/* Status box */
 .status-box {
-    margin-top: 14px;
-    padding: 10px 12px;
-    border-radius: 6px;
-    font-size: 13px;
-    display: none;
-    line-height: 1.5;
+    margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+    font-size: 13px; display: none; line-height: 1.5;
 }
 .status-box.show { display: block; }
-.status-box.success {
-    background: #d4edda;
-    color: #155724;
-    border: 1px solid #c3e6cb;
-}
-.status-box.error {
-    background: #f8d7da;
-    color: #721c24;
-    border: 1px solid #f5c6cb;
-}
+.status-box.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+.status-box.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
 .status-box.loading {
-    background: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb;
+    display: flex; align-items: center; gap: 8px;
 }
 .spinner {
-    width: 14px;
-    height: 14px;
-    border: 2px solid #bee5eb;
-    border-top-color: #0c5460;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    flex-shrink: 0;
+    width: 14px; height: 14px;
+    border: 2px solid #bee5eb; border-top-color: #0c5460;
+    border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-.machine-id-box {
-    margin-top: 16px;
-    padding: 10px 12px;
-    background: #f5f7fa;
-    border: 1px solid #e4e7ed;
-    border-radius: 6px;
-    font-size: 11px;
-    color: #606266;
-    font-family: "Courier New", monospace;
-    word-break: break-all;
-    user-select: text;
-    position: relative;
-}
-.machine-id-box .label {
-    color: #606266;
-    font-weight: 500;
-    margin-bottom: 4px;
-    font-family: inherit;
-    font-size: 11px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-.machine-id-box .label-text {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-.machine-id-box .copy-btn {
-    background: #667eea;
-    color: #fff;
-    border: none;
-    padding: 3px 10px;
-    border-radius: 4px;
-    font-size: 11px;
-    cursor: pointer;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
-    transition: background 0.2s;
-}
-.machine-id-box .copy-btn:hover { background: #5a6fd6; }
-.machine-id-box .copy-btn.copied { background: #67c23a; }
-.machine-id-box .id-value {
-    color: #909399;
-    font-size: 12px;
-    padding: 4px 0;
-    letter-spacing: 0.5px;
-}
-
-.contact-box {
-    margin-top: 14px;
-    padding: 12px 14px;
-    background: linear-gradient(135deg, #fff8e1 0%, #fff3cd 100%);
-    border: 1px solid #ffe082;
-    border-radius: 6px;
-    font-size: 12px;
-    color: #856404;
-    line-height: 1.7;
-}
-.contact-box .title {
-    color: #9c640c;
-    font-weight: 600;
-    margin-bottom: 6px;
-    font-size: 13px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-.contact-box .item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 3px 0;
-}
-.contact-box .item strong {
-    color: #9c640c;
-    min-width: 50px;
-}
-.contact-box .copy-inline {
-    background: #9c640c;
-    color: #fff;
-    border: none;
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: 11px;
-    cursor: pointer;
-    font-family: inherit;
-    margin-left: 4px;
-}
-.contact-box .copy-inline:hover { background: #7e5310; }
-.contact-box .copy-inline.copied { background: #67c23a; }
-
-.info-box {
-    margin-top: 14px;
-    padding: 10px 12px;
-    background: #f4f4f5;
-    border: 1px solid #e4e7ed;
-    border-radius: 6px;
-    font-size: 11px;
-    color: #606266;
-    line-height: 1.7;
-}
-.info-box strong { color: #303133; }
-.info-box ol { padding-left: 18px; margin-top: 4px; }
-.info-box ol li { margin: 2px 0; }
-
-.retry-btn {
-    display: inline-block;
-    margin-top: 8px;
-    padding: 5px 14px;
-    background: #667eea;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    font-size: 12px;
-    cursor: pointer;
-    font-family: inherit;
-}
-.retry-btn:hover { background: #5a6fd6; }
-
-/* 试用期状态提示 */
-.trial-notice {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-top: 10px;
-    margin-bottom: 14px;
-    padding: 12px 14px;
-    background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
-    border: 1px solid #ffb74d;
-    border-radius: 8px;
-}
-.trial-notice-icon {
-    font-size: 24px;
-    line-height: 1;
-}
-.trial-notice-body {
-    flex: 1;
-}
-.trial-notice-title {
-    color: #e65100;
-    font-weight: 600;
-    font-size: 14px;
-}
-.trial-notice-title b {
-    font-size: 18px;
-    color: #d84315;
-}
-.trial-notice-desc {
-    color: #bf360c;
-    font-size: 12px;
-    margin-top: 2px;
-}
-
-/* 购买链接卡片 */
-.purchase-card {
-    margin-top: 14px;
-    padding: 14px;
-    background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%);
-    border: 1px solid #9fa8da;
-    border-radius: 10px;
-    text-align: center;
-}
-.purchase-card .pc-title {
-    color: #283593;
-    font-weight: 600;
-    font-size: 14px;
-    margin-bottom: 6px;
-}
-.purchase-card .pc-desc {
-    color: #3949ab;
-    font-size: 12px;
-    margin-bottom: 10px;
-}
-.purchase-card .pc-btn {
-    display: inline-block;
-    padding: 8px 20px;
-    background: linear-gradient(135deg, #3f51b5 0%, #5c6bc0 100%);
-    color: white;
-    text-decoration: none;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    transition: transform 0.1s, box-shadow 0.2s;
-}
-.purchase-card .pc-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(63, 81, 181, 0.4);
-}
-.purchase-card .pc-price {
-    margin-top: 8px;
-    color: #1a237e;
-    font-size: 11px;
-}
-.purchase-card .pc-price span {
-    color: #c62828;
-    font-weight: 600;
-}
-
-/* ★ 模式切换标签 - 更大更醒目，小白用户一眼可见 */
-.mode-tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 20px;
-    border: 2px solid #5c6bc0;
-    border-radius: 12px;
-    overflow: hidden;
-    padding: 4px;
-    background: linear-gradient(135deg, #e8eaf6 0%, #f3e5f5 100%);
-}
-.mode-tab {
-    flex: 1;
-    padding: 14px 12px;
-    background: #fff;
-    border: 2px solid transparent;
-    border-radius: 8px;
-    font-size: 16px;
-    color: #606266;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-weight: 700;
-    line-height: 1.3;
-}
-.mode-tab.active {
-    background: linear-gradient(135deg, #5c6bc0 0%, #7e57c2 100%);
-    color: #fff;
-    border-color: #5c6bc0;
-    box-shadow: 0 4px 12px rgba(92, 107, 192, 0.4);
-}
-.mode-tab:hover:not(.active) {
-    background: #ede7f6;
-    border-color: #c5cae9;
-}
-
-.mode-content { display: none; }
-.mode-content.active { display: block; }
-
-/* ★ 等待激活状态框 */
-.waiting-box {
-    text-align: center;
-    padding: 20px 16px;
+/* Waiting / success panels */
+.panel {
+    text-align: center; padding: 16px 10px;
     background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-    border: 2px solid #42a5f5;
-    border-radius: 12px;
+    border: 2px solid #42a5f5; border-radius: 12px;
 }
-.waiting-icon {
-    font-size: 48px;
-    margin-bottom: 8px;
-    animation: pulse 2s infinite;
+.panel .icon { font-size: 44px; margin-bottom: 6px; animation: pulse 2s infinite; }
+.panel.success {
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    border-color: #66bb6a;
 }
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+.panel.success .icon { animation: none; }
+.panel.success .title { color: #2e7d32; }
+@keyframes pulse { 0%,100%{opacity:1;} 50%{opacity:0.6;} }
+.panel .title { font-size: 17px; font-weight: 600; color: #1565c0; margin-bottom: 6px; }
+.panel .desc { font-size: 12px; color: #1976d2; margin-bottom: 12px; line-height: 1.6; }
+.panel .info-row {
+    text-align: left; background: #fff; padding: 8px 12px;
+    border-radius: 6px; font-size: 12px; color: #37474f; margin-bottom: 10px;
 }
-.waiting-title {
-    font-size: 18px;
-    font-weight: 600;
-    color: #1565c0;
-    margin-bottom: 6px;
+.panel .info-row b { color: #1565c0; font-weight: 600; }
+.panel .status-text {
+    font-size: 12px; color: #1565c0; font-weight: 500;
+    margin-top: 8px; padding: 6px;
+    background: rgba(255,255,255,0.7); border-radius: 5px;
 }
-.waiting-desc {
-    font-size: 12px;
-    color: #1976d2;
-    margin-bottom: 14px;
-    line-height: 1.6;
+
+/* Footer */
+.footer {
+    margin-top: 14px; padding-top: 12px;
+    border-top: 1px solid #f0f0f0;
+    text-align: center;
 }
-.waiting-info {
-    text-align: left;
-    background: #fff;
-    padding: 10px 14px;
-    border-radius: 8px;
-    font-size: 12px;
-    color: #37474f;
-    margin-bottom: 12px;
+.footer .link {
+    font-size: 12px; color: #5c6bc0; cursor: pointer; text-decoration: none;
 }
-.waiting-info b {
-    color: #1565c0;
-    font-weight: 600;
+.footer .link:hover { text-decoration: underline; }
+.footer .divider { font-size: 11px; color: #c0c4cc; margin: 8px 0; }
+.footer .contact {
+    font-size: 11px; color: #909399; line-height: 1.6;
 }
-.waiting-status {
-    font-size: 13px;
-    color: #1565c0;
-    font-weight: 500;
-    margin-top: 10px;
-    padding: 8px;
-    background: rgba(255,255,255,0.7);
-    border-radius: 6px;
+.footer .contact strong { color: #606266; }
+
+/* Demo badge */
+.demo-badge {
+    display: inline-block; padding: 2px 8px;
+    background: linear-gradient(135deg, #ff9800, #f57c00);
+    color: #fff; font-size: 11px; font-weight: 600;
+    border-radius: 10px; margin-left: 6px;
 }
+
+/* Slide animation */
+.slide-in { animation: slideIn 0.35s ease; }
+@keyframes slideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+.fade-in { animation: fadeIn 0.4s ease; }
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* Machine id compact display */
+.mid-compact {
+    margin-top: 10px; padding: 8px 10px;
+    background: #f5f7fa; border: 1px solid #e4e7ed;
+    border-radius: 6px; font-size: 11px; color: #606266;
+    display: flex; align-items: center; justify-content: space-between;
+}
+.mid-compact .mid-val {
+    font-family: "Courier New", monospace; color: #909399;
+    max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mid-compact .copy-btn {
+    background: #5c6bc0; color: #fff; border: none;
+    padding: 2px 8px; border-radius: 4px; font-size: 11px; cursor: pointer;
+}
+.mid-compact .copy-btn:hover { background: #3f51b5; }
+.mid-compact .copy-btn.copied { background: #67c23a; }
 </style>
 </head>
 <body>
 <div class="container">
     <div class="brand">
         <div class="logo">惠</div>
-        <h1>软件激活</h1>
-        <div class="subtitle">云端版 · 管理员一键激活</div>
+        <h1 id="pageTitle">软件激活</h1>
+        <div class="subtitle" id="pageSubtitle">2 步快速完成激活 · 即刻使用</div>
     </div>
 
-    <!-- ★ 模式切换：管理员激活（默认） / 激活码激活 -->
-    <!-- 注：modeAdmin 硬编码 class="mode-content active" 确保管理员激活模式默认显示，
-         防止打包时 JS 运行时序问题导致两种模式都不显示或显示错误 -->
-    <div class="mode-tabs">
-        <button class="mode-tab active" data-mode="admin" onclick="switchMode('admin')">🏥 管理员激活（推荐）</button>
-        <button class="mode-tab" data-mode="code" onclick="switchMode('code')">🔑 激活码激活</button>
-    </div>
-
-    <!-- 模式1：激活码激活（原有流程） - 默认隐藏 -->
-    <div id="modeCode" class="mode-content">
-        <!-- 试用期状态提示 -->
-        <div id="trialNotice" class="trial-notice" style="display:none;">
-            <div class="trial-notice-icon">⏳</div>
-            <div class="trial-notice-body">
-                <div class="trial-notice-title">试用期剩余 <b id="trialDays">--</b> 天</div>
-                <div class="trial-notice-desc">激活后可永久使用或至授权到期</div>
-            </div>
+    <!-- Progress: step1(info) → step2(password) → done -->
+    <div class="progress-bar" id="progressBar">
+        <div class="progress-step active" data-step="1">
+            <div class="dot">1</div>
+            <div class="label">填写信息</div>
         </div>
+        <div class="progress-line" id="progressLine"></div>
+        <div class="progress-step" data-step="2">
+            <div class="dot">2</div>
+            <div class="label">设置密码</div>
+        </div>
+    </div>
 
-        <div id="statusBox" class="status-box"></div>
-
+    <!-- Step 1: 基础信息 -->
+    <div id="step1" class="slide-in">
         <div class="form-group">
-            <label>激活码</label>
-            <input type="text" id="activationCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+            <label>诊所名称 <span class="req">*</span></label>
+            <input type="text" id="clinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false">
         </div>
-
         <div class="form-group">
-            <label>诊所名称</label>
-            <input type="text" id="clinicName" placeholder="如：本能堂中医诊所" autocomplete="off">
+            <label>管理员/医师姓名 <span class="req">*</span></label>
+            <input type="text" id="adminName" placeholder="如：王医生" autocomplete="off" spellcheck="false">
         </div>
-
         <div class="form-group">
-            <label>管理员名称（可选）</label>
-            <input type="text" id="userName" placeholder="留空则使用默认管理员" autocomplete="off">
+            <label>联系电话 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（将作为登录账号）</span></label>
+            <input type="text" id="phone" placeholder="如：13800138000" autocomplete="off" spellcheck="false" inputmode="numeric" maxlength="11">
+            <div class="field-hint" id="phoneHint">💡 11位手机号，激活后用手机号+密码登录</div>
         </div>
-
-        <button class="btn" id="activateBtn" onclick="submitActivate()">🚀 一键激活</button>
-        <button class="btn btn-secondary" onclick="closeWindow()">取 消</button>
+        <div class="form-group">
+            <label>备注（可选）</label>
+            <input type="text" id="remark" placeholder="如：需要几个账号" autocomplete="off" maxlength="100">
+        </div>
+        <button class="btn" id="toStep2Btn">下一步：设置密码 →</button>
     </div>
 
-    <!-- 模式2：管理员激活（默认显示） -->
-    <div id="modeAdmin" class="mode-content active">
-        <!-- 填写激活信息 -->
-        <div id="adminForm">
-            <div class="form-group">
-                <label>诊所名称 <span style="color:red;">*</span></label>
-                <input type="text" id="adminClinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false">
+    <!-- Step 2: 密码 -->
+    <div id="step2" style="display:none;">
+        <div class="form-group">
+            <label>登录密码 <span class="req">*</span></label>
+            <input type="password" id="password" placeholder="至少8位，包含字母和数字" autocomplete="new-password" maxlength="32">
+            <div class="pwd-strength" id="pwdStrength">
+                <div class="bar"></div><div class="bar"></div><div class="bar"></div>
             </div>
-
-            <div class="form-group">
-                <label>管理员姓名 <span style="color:red;">*</span></label>
-                <input type="text" id="adminName" placeholder="如：张医生" autocomplete="off" spellcheck="false">
-            </div>
-
-            <div class="form-group">
-                <label>联系电话 <span style="color:red;">*</span></label>
-                <input type="text" id="adminPhone" placeholder="如：13800138000" autocomplete="off" spellcheck="false" inputmode="numeric" maxlength="11" oninput="this.value=this.value.replace(/[^\d]/g,'').slice(0,11);">
-                <div style="font-size:11px;color:#909399;margin-top:4px;">💡 只能输入 11 位数字</div>
-            </div>
-
-            <div class="form-group">
-                <label>备注说明（可选）</label>
-                <textarea id="adminRemark" placeholder="如：需要几个账号、使用人数等" rows="3" style="width:100%;padding:10px 12px;border:1.5px solid #dcdfe6;border-radius:6px;font-size:14px;resize:vertical;font-family:inherit;"></textarea>
-            </div>
-
-            <div style="font-size:11px;color:#888;margin-bottom:10px;line-height:1.6;">
-                💡 填写信息后提交，平台管理员将尽快为您激活<br>
-                激活完成后软件将自动重启并进入正式版本
-            </div>
-
-            <button class="btn" id="adminSubmitBtn" onclick="submitAdminActivation()">📤 提交管理员激活</button>
-            <button class="btn btn-secondary" onclick="closeWindow()">取 消</button>
+            <div class="field-hint" id="pwdHint">💡 激活后用此密码登录，建议保存到安全位置</div>
         </div>
+        <div class="form-group">
+            <label>确认密码 <span class="req">*</span></label>
+            <input type="password" id="password2" placeholder="再次输入密码" autocomplete="new-password" maxlength="32">
+            <div class="field-hint" id="pwd2Hint"></div>
+        </div>
+        <div class="form-nav">
+            <button class="btn btn-back" id="backBtn">← 返回</button>
+            <button class="btn" id="submitBtn">📤 提交激活申请</button>
+        </div>
+    </div>
 
-        <!-- 等待激活状态 -->
-        <div id="adminWaiting" style="display:none;">
-            <div class="waiting-box">
-                <div class="waiting-icon">⏳</div>
-                <div class="waiting-title">等待管理员激活...</div>
-                <div class="waiting-desc">您的激活请求已提交，请耐心等待平台管理员处理</div>
-                <div class="waiting-info">
-                    <div>请求编号：<b id="requestNo">--</b></div>
-                    <div>提交时间：<b id="submitTime">--</b></div>
-                </div>
-                <div class="waiting-status" id="waitingStatus">正在等待管理员审核...</div>
-                <button class="btn" id="cancelWaitingBtn" onclick="cancelAdminActivation()" style="margin-top:16px;background:#fff;color:#999;border:1.5px solid #ddd;box-shadow:none;">取消等待</button>
+    <!-- Submitting state -->
+    <div id="submitting" style="display:none;">
+        <div class="panel">
+            <div class="icon">📡</div>
+            <div class="title">正在提交激活申请...</div>
+            <div class="desc">正在连接服务器，请稍候</div>
+            <div class="status-box loading show" style="margin-top:14px;">
+                <span class="spinner"></span>
+                <span id="submitStatus">正在提交信息...</span>
             </div>
         </div>
     </div>
 
-    <!-- ★ 新增：离线激活文件导入入口（无网络时使用） -->
-    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed #ddd;">
-        <div style="font-size: 12px; color: #888; margin-bottom: 8px; text-align: center;">— 无法联网？使用离线激活文件 —</div>
-        <button class="btn btn-secondary" id="importOfflineBtn" onclick="importOfflineLicense()" style="background: #fff8e1; color: #e65100; border: 1px solid #ffe082;">
-            📁 导入离线激活文件
-        </button>
-        <div style="font-size: 11px; color: #999; margin-top: 6px; line-height: 1.6;">
-            使用方法：<br>
-            1. 复制上方机器 ID 发给客服<br>
-            2. 客服生成离线激活文件发给您<br>
-            3. 点击上方按钮选择该文件完成激活
+    <!-- Waiting for approval -->
+    <div id="waiting" style="display:none;">
+        <div class="panel">
+            <div class="icon">⏳</div>
+            <div class="title">等待管理员激活...</div>
+            <div class="desc">激活请求已提交，请耐心等待平台管理员处理</div>
+            <div class="info-row">
+                <div>📋 请求编号：<b id="requestNo">--</b></div>
+                <div>🕐 提交时间：<b id="submitTime">--</b></div>
+                <div>📞 联系电话：<b id="savedPhone">--</b></div>
+            </div>
+            <div class="status-text" id="waitStatus">正在等待管理员审核...</div>
+            <div style="font-size:11px;color:#909399;margin-top:10px;line-height:1.5;">
+                💡 关闭窗口不影响审核<br>重新打开将自动恢复状态
+            </div>
+            <button class="btn btn-secondary" id="cancelBtn" style="margin-top:10px;background:#fff;color:#909399;border:1.5px solid #ddd;">取消等待</button>
         </div>
     </div>
 
-    <div class="machine-id-box">
-        <div class="label">
-            <span class="label-text">🔑 本机机器 ID（联系客服时提供）</span>
-            <button class="copy-btn" id="copyMachineIdBtn" onclick="copyMachineId()">复制</button>
+    <!-- Success: activated -->
+    <div id="success" style="display:none;">
+        <div class="panel success">
+            <div class="icon">🎉</div>
+            <div class="title">激活成功！</div>
+            <div class="desc">管理员已通过您的激活申请<br>软件即将自动重启，请使用手机号+密码登录</div>
+            <div class="info-row">
+                <div>✅ 账号：<b id="successPhone">--</b></div>
+                <div>✅ 密码：<b style="color:#2e7d32;">（您设置的密码）</b></div>
+            </div>
+            <div class="status-text" style="background:#fff; color:#2e7d32;">🔄 3 秒后自动重启...</div>
+            <button class="btn btn-success" id="restartNowBtn" style="margin-top:10px;">立即重启 →</button>
         </div>
-        <div class="id-value" id="machineId">加载中...</div>
     </div>
 
-    <div class="contact-box">
-        <div class="title">🎫 获取激活码</div>
-        <div class="item"><strong>客服微信：</strong><span>hktzy1688</span><button class="copy-inline" onclick="copyText(this, 'hktzy1688')">复制</button></div>
-        <div class="item" style="margin-top: 6px; color: #9c640c; font-size: 11px;">复制下方机器 ID 和诊所名，发给客服即可获取激活码</div>
+    <!-- Rejected -->
+    <div id="rejected" style="display:none;">
+        <div class="panel" style="background:linear-gradient(135deg,#ffebee,#ffcdd2);border-color:#ef5350;">
+            <div class="icon" style="color:#c62828;">❌</div>
+            <div class="title" style="color:#c62828;">激活请求被拒绝</div>
+            <div class="desc" id="rejectReason">管理员未通过您的激活申请</div>
+            <button class="btn" id="retryBtn" style="margin-top:12px;">修改后重新提交</button>
+        </div>
     </div>
 
-    <!-- 购买入口卡片 -->
-    <div class="purchase-card">
-        <div class="pc-title">💡 想了解更多套餐？</div>
-        <div class="pc-desc">在线购买 · 即时开通 · 安全可靠</div>
-        <a class="pc-btn" href="https://tcm-prescription-system.pages.dev/download" target="_blank">🌐 前往官网购买激活码</a>
-        <div class="pc-price">标准版 ¥999/年起 · 机构版 ¥2999/年起</div>
-    </div>
-
-    <div class="info-box">
-        <strong>激活说明：</strong>
-        <ol>
-            <li>激活码格式：BNZC-XXXX-XXXX-XXXX-XXXX</li>
-            <li>每个激活码绑定一台设备 + 一个诊所</li>
-            <li>换机或换诊所需联系客服解绑</li>
-            <li>激活成功后软件将自动重启</li>
-            <li>如无法联网，请点击上方"导入离线激活文件"按钮，使用客服提供的离线激活文件完成激活</li>
-        </ol>
+    <!-- Footer -->
+    <div class="footer">
+        <a class="link" onclick="showCodeSection()">🔑 已有激活码？点此激活</a>
+        <div class="divider">— 或 —</div>
+        <a class="link" onclick="importOffline()">📁 导入离线激活文件</a>
+        <div class="divider">— 联系客服 —</div>
+        <div class="contact">
+            <strong>微信：</strong>hktzy1688<br>
+            <strong>官网：</strong>tcm-prescription-system.pages.dev
+        </div>
+        <div class="mid-compact">
+            <span>🔑 机器 ID：<span class="mid-val" id="machineId">加载中...</span></span>
+            <button class="copy-btn" id="copyMidBtn">复制</button>
+        </div>
     </div>
 </div>
 
+<!-- Activation code section (hidden, toggleable) -->
+<div id="codeSection" style="display:none;margin-top:14px;padding:14px;background:#f5f7fa;border-radius:8px;">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px;color:#606266;">🔑 激活码激活（高级）</div>
+    <div class="form-group">
+        <label>激活码</label>
+        <input type="text" id="activationCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="form-group">
+        <label>诊所名称</label>
+        <input type="text" id="codeClinicName" placeholder="如：惠康中医诊所" autocomplete="off">
+    </div>
+    <button class="btn" onclick="submitCodeActivation()">🚀 激活码激活</button>
+    <button class="btn btn-secondary" onclick="hideCodeSection()" style="margin-top:6px;">返回</button>
+</div>
+
 <script>
-// 从 URL 参数获取机器 ID
+// ============ Init ============
 const params = new URLSearchParams(window.location.search);
 document.getElementById('machineId').textContent = params.get('machineId') || '未知';
 
-// ★ 获取试用期状态并显示
-(async function showTrialInfo() {
-    try {
-        if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.getStatus) {
-            const status = await window.electronAPI.license.getStatus();
-            if (status && status.type === 'trial') {
-                const days = status.remainingDays || 0;
-                document.getElementById('trialDays').textContent = days;
-                document.getElementById('trialNotice').style.display = 'flex';
-            } else if (status && status.valid && status.type !== 'trial') {
-                document.getElementById('trialNotice').style.display = 'none';
-            }
-        }
-    } catch (e) { /* 静默失败 */ }
-})();
+const V = {
+    PHONE_RE: /^1[3-9]\d{9}$/,
+    sanitizePhone: v => (v || '').replace(/[^\d]/g, '').slice(0, 11),
+    pwdStrength(pwd) {
+        if (!pwd) return 0;
+        let s = 0;
+        if (pwd.length >= 8) s++;
+        if (/[a-zA-Z]/.test(pwd) && /\d/.test(pwd)) s++;
+        if (pwd.length >= 12 || /[^a-zA-Z0-9]/.test(pwd)) s++;
+        return s; // 0-3
+    }
+};
 
-// ★ v3 新增：自动从 config.json 预填诊所名（用户可改）
-(async function prefillClinicName() {
+// ============ State ============
+let state = { phone: '', clinicName: '', adminName: '', password: '', remark: '' };
+
+// ============ Auto prefill ============
+(async function prefill() {
     try {
         if (window.electronAPI && window.electronAPI.getAppConfig) {
-            const result = await window.electronAPI.getAppConfig();
-            if (result && result.success && result.config && result.config.clinicName) {
-                document.getElementById('clinicName').value = result.config.clinicName;
-                document.getElementById('adminClinicName').value = result.config.clinicName;
-            }
-            if (result && result.success && result.config && result.config.doctorName) {
-                document.getElementById('userName').value = result.config.doctorName;
-                document.getElementById('adminName').value = result.config.doctorName;
+            const r = await window.electronAPI.getAppConfig();
+            if (r && r.success && r.config) {
+                if (r.config.clinicName) {
+                    document.getElementById('clinicName').value = r.config.clinicName;
+                    state.clinicName = r.config.clinicName;
+                }
+                if (r.config.doctorName) {
+                    document.getElementById('adminName').value = r.config.doctorName;
+                    state.adminName = r.config.doctorName;
+                }
+                if (r.config.edition === 'personal') {
+                    document.getElementById('pageSubtitle').textContent = '标准版 · 2 步快速激活';
+                } else if (r.config.edition === 'institution') {
+                    document.getElementById('pageSubtitle').textContent = '机构版 · 2 步快速激活';
+                }
             }
         }
-    } catch (e) { /* 预填失败不影响激活流程 */ }
+    } catch (e) {}
 })();
 
-// ★ 自动恢复未完成的激活请求（解决轮询超时/关闭窗口后丢失状态的问题）
-// 场景：客户提交激活请求后关闭窗口或轮询超时，管理员稍后审核通过，
-//       客户重新打开程序时自动检查上次 requestId 状态，获取已通过的 license
-(async function autoRestoreAdminRequest() {
+// ============ Auto restore pending request ============
+(async function autoRestore() {
     try {
-        if (!window.electronAPI || !window.electronAPI.activate || !window.electronAPI.activate.loadAdminRequestId) return;
+        if (!window.electronAPI?.activate?.loadAdminRequestId) return;
         const saved = await window.electronAPI.activate.loadAdminRequestId();
-        if (!saved || !saved.requestId) return;
-        console.log('[Admin] 发现未完成的激活请求:', saved.requestId);
-        // 检查状态
-        const result = await window.electronAPI.activate.checkAdminStatus(saved.requestId);
-        if (result.success && result.status === 'activated') {
-            // ★ 已审核通过，直接获取 license 并激活
-            console.log('[Admin] 上次请求已通过，自动获取 license');
-            // 切换到管理员激活模式
-            switchMode('admin');
-            // 显示等待状态
-            document.getElementById('adminForm').style.display = 'none';
-            document.getElementById('adminWaiting').style.display = 'block';
-            const statusEl = document.getElementById('waitingStatus');
-            if (statusEl) statusEl.innerHTML = '✅ <b style="color:#1565c0;">管理员已审核通过！</b><br>正在自动获取激活信息...';
-            // 调用 showAdminSuccess 完成 license 写入和重启
-            await showAdminSuccess(result.license);
-        } else if (result.success && result.status === 'pending') {
-            // ★ 仍在审核中，自动恢复轮询
-            console.log('[Admin] 上次请求仍在审核中，自动恢复轮询');
-            _currentRequestId = saved.requestId;
-            // 切换到管理员激活模式
-            switchMode('admin');
-            // 预填表单
-            if (saved.clinicName) document.getElementById('adminClinicName').value = saved.clinicName;
-            if (saved.adminName) document.getElementById('adminName').value = saved.adminName;
-            // 显示等待状态
-            document.getElementById('adminForm').style.display = 'none';
-            document.getElementById('adminWaiting').style.display = 'block';
-            const statusEl2 = document.getElementById('waitingStatus');
-            if (statusEl2) statusEl2.innerHTML = '⏳ <b>上次请求正在等待管理员审核</b><br>请求编号：' + saved.requestId + '<br>提交时间：' + (saved.savedAt || '-') + '<br>正在自动轮询状态...';
-            // 恢复轮询
-            startPollingStatus(saved.requestId);
-        } else if (result.success && result.status === 'rejected') {
-            // 已拒绝，清除本地记录，让客户重新提交
-            console.log('[Admin] 上次请求被拒绝，清除记录');
+        if (!saved?.requestId) return;
+        const r = await window.electronAPI.activate.checkAdminStatus(saved.requestId);
+        if (r.success && r.status === 'activated') {
+            // auto activate
+            const ok = await saveAndRestart(r.license);
+            if (ok) showSuccess(saved.phone);
+        } else if (r.success && r.status === 'pending') {
+            state.phone = saved.phone || '';
+            showWaiting(saved.requestId, saved.savedAt);
+            startPolling(saved.requestId);
+        } else if (r.success && (r.status === 'rejected' || r.status === 'cancelled')) {
             await window.electronAPI.activate.clearAdminRequestId();
-            alert('ℹ️ 您上次的激活请求被拒绝：\n\n' + (result.reason || '未知原因') + '\n\n请修改信息后重新提交。');
-        } else if (result.success && result.status === 'cancelled') {
-            // 已取消，清除本地记录
-            await window.electronAPI.activate.clearAdminRequestId();
-        } else if (!result.success) {
-            // 请求不存在（可能已被清理），清除本地记录
-            console.log('[Admin] 上次请求不存在，清除记录');
+            if (r.status === 'rejected') {
+                document.getElementById('rejectReason').textContent = r.reason || '未知原因';
+                show('rejected');
+            }
+        } else {
             await window.electronAPI.activate.clearAdminRequestId();
         }
-    } catch (e) {
-        console.warn('[Admin] 自动恢复失败:', e.message);
-    }
+    } catch (e) {}
 })();
 
-// ============================================================================
-// ★ 管理员激活模式相关函数
-// ============================================================================
+// ============ Step navigation ============
+function show(which) {
+    ['step1','step2','submitting','waiting','success','rejected'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+    });
+    const el = document.getElementById(which);
+    el.style.display = 'block';
+    el.classList.remove('slide-in','fade-in');
+    void el.offsetWidth;
+    el.classList.add('slide-in');
+}
 
-// 模式切换
-function switchMode(mode) {
-    document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === mode));
-    document.querySelectorAll('.mode-content').forEach(c => c.classList.remove('active'));
-    document.getElementById('mode' + mode.charAt(0).toUpperCase() + mode.slice(1)).classList.add('active');
-    
-    // 切换模式时重置状态
-    if (mode === 'admin') {
-        resetAdminForm();
+function updateProgress(step) {
+    const bars = document.querySelectorAll('.progress-step');
+    const line = document.getElementById('progressLine');
+    bars.forEach(b => {
+        const s = parseInt(b.dataset.step);
+        b.classList.remove('active','done');
+        if (s < step) b.classList.add('done');
+        else if (s === step) b.classList.add('active');
+    });
+    line.classList.toggle('done', step >= 2);
+}
+
+// Phone input sanitization
+document.getElementById('phone').addEventListener('input', e => {
+    e.target.value = V.sanitizePhone(e.target.value);
+    state.phone = e.target.value;
+    const hint = document.getElementById('phoneHint');
+    if (!state.phone) {
+        hint.textContent = '💡 11位手机号，激活后用手机号+密码登录';
+        hint.className = 'field-hint';
+    } else if (!V.PHONE_RE.test(state.phone)) {
+        hint.textContent = '⚠ 请输入正确的11位手机号';
+        hint.className = 'field-hint error';
+    } else {
+        hint.textContent = '✓ 手机号格式正确';
+        hint.className = 'field-hint ok';
     }
-}
+});
 
-// 重置管理员表单
-function resetAdminForm() {
-    document.getElementById('adminForm').style.display = 'block';
-    document.getElementById('adminWaiting').style.display = 'none';
-    stopPollingStatus();
-}
-
-// ★ 提交管理员激活请求
-let _pollingTimer = null;
-let _currentRequestId = null;
-
-async function submitAdminActivation() {
-    const clinicName = document.getElementById('adminClinicName').value.trim();
+// Step 1 → Step 2
+document.getElementById('toStep2Btn').addEventListener('click', () => {
+    const clinicName = document.getElementById('clinicName').value.trim();
     const adminName = document.getElementById('adminName').value.trim();
-    const phone = document.getElementById('adminPhone').value.trim();
-    const remark = document.getElementById('adminRemark').value.trim();
+    const phone = document.getElementById('phone').value.trim();
+    const remark = document.getElementById('remark').value.trim();
 
-    // 表单校验
-    if (!clinicName) {
-        alert('请填写诊所名称');
-        return;
-    }
-    if (!adminName) {
-        alert('请填写管理员姓名');
-        return;
-    }
-    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
-        alert('请填写正确的11位手机号');
+    // Validate step 1
+    let firstErr = null;
+    if (!clinicName) firstErr = { msg: '请填写诊所名称', id: 'clinicName' };
+    else if (!adminName) firstErr = { msg: '请填写管理员/医师姓名', id: 'adminName' };
+    else if (!phone) firstErr = { msg: '请填写联系电话', id: 'phone' };
+    else if (!V.PHONE_RE.test(phone)) firstErr = { msg: '请输入正确的11位手机号', id: 'phone' };
+
+    if (firstErr) {
+        showFieldError(firstErr.id, firstErr.msg);
         return;
     }
 
-    const submitBtn = document.getElementById('adminSubmitBtn');
-    submitBtn.disabled = true;
-    submitBtn.textContent = '提交中...';
+    state.clinicName = clinicName;
+    state.adminName = adminName;
+    state.phone = phone;
+    state.remark = remark;
+    updateProgress(2);
+    show('step2');
+    setTimeout(() => document.getElementById('password').focus(), 200);
+});
 
+function showFieldError(id, msg) {
+    const el = document.getElementById(id);
+    if (el) {
+        el.classList.add('invalid');
+        const hint = el.parentElement.querySelector('.field-hint');
+        if (hint) { hint.textContent = '⚠ ' + msg; hint.className = 'field-hint error'; }
+        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        setTimeout(() => el.focus(), 150);
+    }
+}
+
+document.getElementById('backBtn').addEventListener('click', () => {
+    updateProgress(1);
+    show('step1');
+});
+
+// Password strength
+document.getElementById('password').addEventListener('input', e => {
+    const pwd = e.target.value;
+    state.password = pwd;
+    const strength = V.pwdStrength(pwd);
+    const bar = document.getElementById('pwdStrength');
+    bar.className = 'pwd-strength ' + (strength === 0 ? '' : strength === 1 ? 'weak' : strength === 2 ? 'medium' : 'strong');
+    const hint = document.getElementById('pwdHint');
+    if (!pwd) {
+        hint.textContent = '💡 激活后用此密码登录，建议保存到安全位置';
+        hint.className = 'field-hint';
+    } else if (strength < 2) {
+        hint.textContent = '⚠ 密码强度不足：至少8位，需包含字母和数字';
+        hint.className = 'field-hint error';
+    } else if (strength === 2) {
+        hint.textContent = '✓ 密码强度：中等';
+        hint.className = 'field-hint ok';
+    } else {
+        hint.textContent = '✓ 密码强度：强';
+        hint.className = 'field-hint ok';
+    }
+    // If password2 filled, revalidate
+    const p2 = document.getElementById('password2').value;
+    if (p2) validatePassword2();
+});
+
+document.getElementById('password2').addEventListener('input', validatePassword2);
+function validatePassword2() {
+    const p1 = state.password;
+    const p2 = document.getElementById('password2').value;
+    const hint = document.getElementById('pwd2Hint');
+    if (!p2) { hint.textContent = ''; hint.className = 'field-hint'; return false; }
+    if (p1 !== p2) {
+        hint.textContent = '⚠ 两次密码不一致';
+        hint.className = 'field-hint error';
+        return false;
+    }
+    hint.textContent = '✓ 密码一致';
+    hint.className = 'field-hint ok';
+    return true;
+}
+
+// Submit
+document.getElementById('submitBtn').addEventListener('click', async () => {
+    const pwd = state.password;
+    const pwd2 = document.getElementById('password2').value;
+
+    // Validate password
+    let firstErr = null;
+    if (!pwd) firstErr = { msg: '请设置登录密码', id: 'password' };
+    else if (pwd.length < 8) firstErr = { msg: '密码至少8位', id: 'password' };
+    else if (!/[a-zA-Z]/.test(pwd)) firstErr = { msg: '密码需包含字母', id: 'password' };
+    else if (!/\d/.test(pwd)) firstErr = { msg: '密码需包含数字', id: 'password' };
+    else if (!pwd2) firstErr = { msg: '请再次输入密码', id: 'password2' };
+    else if (pwd !== pwd2) firstErr = { msg: '两次密码输入不一致', id: 'password2' };
+
+    if (firstErr) { showFieldError(firstErr.id, firstErr.msg); return; }
+
+    const btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+
+    show('submitting');
     try {
-        // 获取机器ID
         const machineId = params.get('machineId') || '未知';
-
-        // 调用主进程提交激活请求
         const result = await window.electronAPI.activate.submitAdminRequest({
-            clinicName,
-            adminName,
-            phone,
-            remark,
+            clinicName: state.clinicName,
+            adminName: state.adminName,
+            phone: state.phone,
+            password: pwd,
+            remark: state.remark,
             machineId
         });
-
         if (result.success) {
-            // 显示等待状态
-            _currentRequestId = result.requestId;
-            document.getElementById('requestNo').textContent = result.requestId;
-            document.getElementById('submitTime').textContent = new Date().toLocaleString('zh-CN');
-            document.getElementById('adminForm').style.display = 'none';
-            document.getElementById('adminWaiting').style.display = 'block';
-            
-            // 开始轮询状态
-            startPollingStatus();
+            showWaiting(result.requestId, new Date().toISOString());
+            startPolling(result.requestId);
         } else {
             alert('提交失败：' + (result.error || '未知错误'));
-            submitBtn.disabled = false;
-            submitBtn.textContent = '📤 提交管理员激活';
+            show('step2');
         }
     } catch (e) {
         alert('提交出错：' + e.message);
-        submitBtn.disabled = false;
-        submitBtn.textContent = '📤 提交管理员激活';
+        show('step2');
+    } finally {
+        btn.disabled = false;
     }
+});
+
+// ============ Waiting + polling ============
+let _pollTimer = null;
+function showWaiting(requestId, savedAt) {
+    document.getElementById('requestNo').textContent = requestId;
+    document.getElementById('submitTime').textContent = savedAt ? new Date(savedAt).toLocaleString('zh-CN') : new Date().toLocaleString('zh-CN');
+    document.getElementById('savedPhone').textContent = state.phone;
+    show('waiting');
 }
 
-// ★ 轮询激活状态
-function startPollingStatus() {
-    const statusEl = document.getElementById('waitingStatus');
-    let pollCount = 0;
-    const maxPollCount = 60; // 最多轮询 60 次（5分钟）
-    
-    const statusTexts = [
-        '正在等待管理员审核...',
-        '管理员正在处理您的请求...',
-        '正在验证您的信息...',
-        '正在生成激活文件...'
-    ];
-
-    _pollingTimer = setInterval(async () => {
-        pollCount++;
-        
-        // 更新状态文字
-        const textIdx = Math.min(Math.floor(pollCount / 3), statusTexts.length - 1);
-        statusEl.textContent = statusTexts[textIdx] + ' (已等待 ' + Math.floor(pollCount * 5 / 60) + ' 分钟)';
-
+function startPolling(requestId) {
+    const statusEl = document.getElementById('waitStatus');
+    let count = 0;
+    const msgs = ['正在等待管理员审核...', '管理员正在处理您的请求...', '正在验证您的信息...', '即将完成激活...'];
+    _pollTimer = setInterval(async () => {
+        count++;
+        statusEl.textContent = msgs[Math.min(Math.floor(count / 3), msgs.length - 1)] +
+            (count > 3 ? `（已等待 ${Math.floor(count * 5 / 60)} 分钟）` : '');
         try {
-            if (!_currentRequestId) {
-                stopPollingStatus();
-                return;
+            const r = await window.electronAPI.activate.checkAdminStatus(requestId);
+            if (r.success && r.status === 'activated') {
+                clearInterval(_pollTimer); _pollTimer = null;
+                const ok = await saveAndRestart(r.license);
+                if (ok) showSuccess(state.phone);
+            } else if (r.success && r.status === 'rejected') {
+                clearInterval(_pollTimer); _pollTimer = null;
+                await window.electronAPI.activate.clearAdminRequestId();
+                document.getElementById('rejectReason').textContent = r.reason || '未知原因';
+                show('rejected');
             }
-
-            const result = await window.electronAPI.activate.checkAdminStatus(_currentRequestId);
-            
-            if (result.success && result.status === 'activated') {
-                // 激活成功
-                stopPollingStatus();
-                showAdminSuccess(result.license);
-            } else if (result.success && result.status === 'rejected') {
-                // 被拒绝
-                stopPollingStatus();
-                alert('❌ 激活请求被拒绝：\n\n' + (result.reason || '未知原因') + '\n\n请联系客服协助处理。');
-                resetAdminForm();
-            } else if (result.success && result.status === 'pending') {
-                // 继续等待
-                console.log('[Admin] 激活状态：pending');
-            }
-        } catch (e) {
-            console.warn('[Admin] 轮询状态失败:', e);
-            // 网络错误不停止轮询，继续重试
+        } catch (e) {}
+        if (count >= 120) { // 10 min max
+            clearInterval(_pollTimer); _pollTimer = null;
+            statusEl.innerHTML = '⏰ 等待时间较长，管理员可能还在处理<br>关闭窗口不影响审核';
         }
-
-        // 超时处理
-        if (pollCount >= maxPollCount) {
-            stopPollingStatus();
-            alert('⏰ 等待超时（5分钟），管理员可能还在处理中。\n\n您可以稍后重新打开此窗口检查状态。');
-            resetAdminForm();
-        }
-    }, 5000); // 每5秒轮询一次
+    }, 5000);
 }
 
-// 停止轮询
-function stopPollingStatus() {
-    if (_pollingTimer) {
-        clearInterval(_pollingTimer);
-        _pollingTimer = null;
-    }
-}
-
-// ★ 显示管理员激活成功
-async function showAdminSuccess(license) {
-    const statusEl = document.getElementById('waitingStatus');
-    statusEl.innerHTML = '✅ <b style="color:#1565c0;">激活成功！</b> 软件即将重启...';
-    
+async function saveAndRestart(license) {
     try {
-        // 写入license
-        const result = await window.electronAPI.activate.saveLicense(license);
-        if (result.success) {
-            // 延迟重启
-            setTimeout(() => {
-                window.electronAPI.activate.restart();
-            }, 2000);
-        } else {
-            alert('激活文件写入失败：' + (result.error || '未知错误'));
-            resetAdminForm();
+        const r = await window.electronAPI.activate.saveLicense(license);
+        if (!r.success) { alert('激活文件写入失败：' + (r.error || '未知错误')); return false; }
+        return true;
+    } catch (e) { alert('激活出错：' + e.message); return false; }
+}
+
+function showSuccess(phone) {
+    document.getElementById('successPhone').textContent = phone || state.phone;
+    show('success');
+    // Auto restart in 3s
+    let secs = 3;
+    const statusEl = document.querySelector('#success .status-text');
+    const timer = setInterval(() => {
+        secs--;
+        if (statusEl) statusEl.innerHTML = secs > 0 ? `🔄 ${secs} 秒后自动重启...` : '🔄 正在重启...';
+        if (secs <= 0) {
+            clearInterval(timer);
+            window.electronAPI.activate.restart();
         }
-    } catch (e) {
-        alert('激活出错：' + e.message);
-        resetAdminForm();
-    }
+    }, 1000);
+    // manual restart
+    document.getElementById('restartNowBtn').onclick = () => {
+        clearInterval(timer);
+        window.electronAPI.activate.restart();
+    };
 }
 
-// ★ 取消管理员激活等待
-async function cancelAdminActivation() {
-    if (!confirm('确定要取消等待吗？\n\n取消后可以重新提交激活请求。')) {
-        return;
-    }
-    
-    stopPollingStatus();
-    
-    // 通知平台取消（可选）
-    if (_currentRequestId) {
-        try {
-            await window.electronAPI.activate.cancelAdminRequest(_currentRequestId);
-        } catch (e) { /* 忽略取消通知失败 */ }
-    }
-    
-    _currentRequestId = null;
-    resetAdminForm();
-}
+document.getElementById('cancelBtn').onclick = async () => {
+    if (!confirm('确定要取消等待吗？\n\n取消后可以重新提交激活请求。')) return;
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    try { await window.electronAPI.activate.clearAdminRequestId(); } catch (e) {}
+    show('step1');
+    updateProgress(1);
+};
 
-// 自动格式化激活码输入
-document.getElementById('activationCode').addEventListener('input', function(e) {
-    let val = e.target.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9-]/g, '');
-    // 自动添加连字符
-    const clean = val.replace(/-/g, '');
-    if (clean.length > 4) {
-        const groups = [];
-        for (let i = 0; i < clean.length && i < 20; i += 4) {
-            groups.push(clean.substring(i, i + 4));
-        }
-        val = groups.join('-');
-    }
-    e.target.value = val;
-});
+document.getElementById('retryBtn').onclick = () => {
+    show('step1');
+    updateProgress(1);
+};
 
-// 回车键激活
-document.getElementById('activationCode').addEventListener('keyup', e => {
-    if (e.key === 'Enter') document.getElementById('clinicName').focus();
-});
-document.getElementById('clinicName').addEventListener('keyup', e => {
-    if (e.key === 'Enter') document.getElementById('userName').focus();
-});
-document.getElementById('userName').addEventListener('keyup', e => {
-    if (e.key === 'Enter') submitActivate();
-});
-
-// ★ bnzc:// 一键激活：检查是否有待激活数据并自动填入
-(async function checkBnzcPending() {
-    try {
-        if (!window.electronAPI || !window.electronAPI.bnzcGetPendingActivation) return;
-        const result = await window.electronAPI.bnzcGetPendingActivation();
-        if (result && result.success && result.data && result.data.code) {
-            console.log('[Bnzc] 激活窗口检测到待激活数据:', result.data.code);
-            const d = result.data;
-            // 自动填入表单
-            document.getElementById('activationCode').value = d.code;
-            if (d.clinicName) document.getElementById('clinicName').value = d.clinicName;
-            if (d.user) document.getElementById('userName').value = d.user;
-            // 自动提交激活
-            console.log('[Bnzc] 激活窗口自动提交激活');
-            const actResult = await window.electronAPI.bnzcAutoActivate({
-                code: d.code,
-                clinicName: d.clinicName || '',
-                user: d.user || ''
-            });
-            if (actResult && actResult.success) {
-                alert('✅ 激活成功！即将重启软件...');
-                if (window.electronAPI.bnzcClearPendingActivation) {
-                    window.electronAPI.bnzcClearPendingActivation();
-                }
-                setTimeout(() => {
-                    if (window.electronAPI.license && window.electronAPI.license.restart) {
-                        window.electronAPI.license.restart();
-                    }
-                }, 1500);
-            } else {
-                showStatus('❌ 自动激活失败：' + (actResult.error || '未知错误'), 'error');
-                if (window.electronAPI.bnzcClearPendingActivation) {
-                    window.electronAPI.bnzcClearPendingActivation();
-                }
-            }
-        }
-    } catch (e) {
-        console.warn('[Bnzc] 激活窗口检查待激活数据失败:', e);
-    }
-})();
-
-function showStatus(message, type, withRetry) {
-    const box = document.getElementById('statusBox');
-    box.className = 'status-box show ' + type;
-    if (type === 'loading') {
-        box.innerHTML = '<span class="spinner"></span><span>' + message + '</span>';
-    } else if (withRetry) {
-        box.innerHTML = message + ' <button class="retry-btn" onclick="resetActivateBtn()">重试</button>';
-    } else {
-        box.textContent = message;
-    }
-}
-
-function resetActivateBtn() {
-    const btn = document.getElementById('activateBtn');
-    btn.disabled = false;
-    btn.textContent = '激 活';
-}
-
-// 复制机器 ID
-function copyMachineId() {
+// ============ Machine ID copy ============
+document.getElementById('copyMidBtn').addEventListener('click', function() {
     const text = document.getElementById('machineId').textContent;
-    copyText(document.getElementById('copyMachineIdBtn'), text);
-}
-
-// 通用复制函数
-function copyText(btn, text) {
     const fallback = () => {
         try {
             const ta = document.createElement('textarea');
             ta.value = text;
-            ta.style.position = 'fixed';
-            ta.style.opacity = '0';
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
+            ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
             return true;
         } catch (e) { return false; }
     };
-    const markCopied = () => {
-        const orig = btn.textContent;
-        btn.classList.add('copied');
-        btn.textContent = '已复制';
-        setTimeout(() => {
-            btn.classList.remove('copied');
-            btn.textContent = orig;
-        }, 1500);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(markCopied).catch(() => {
-            if (fallback()) markCopied();
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text).then(() => { markCopied(); }).catch(fallback);
+    } else fallback();
+    function markCopied() {
+        const orig = '复制';
+        const b = document.getElementById('copyMidBtn');
+        b.textContent = '✓'; b.classList.add('copied');
+        setTimeout(() => { b.textContent = orig; b.classList.remove('copied'); }, 1200);
+    }
+});
+
+// ============ Activation code (hidden section) ============
+function showCodeSection() {
+    const cs = document.getElementById('codeSection');
+    cs.style.display = cs.style.display === 'none' ? 'block' : 'none';
+    if (cs.style.display === 'block') {
+        const cc = document.getElementById('clinicName').value.trim();
+        if (cc && !document.getElementById('codeClinicName').value) {
+            document.getElementById('codeClinicName').value = cc;
+        }
+    }
+}
+function hideCodeSection() {
+    document.getElementById('codeSection').style.display = 'none';
+}
+
+document.getElementById('activationCode').addEventListener('input', e => {
+    let v = e.target.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9-]/g, '');
+    const c = v.replace(/-/g, '');
+    if (c.length > 4) {
+        const g = [];
+        for (let i = 0; i < c.length && i < 20; i += 4) g.push(c.substring(i, i + 4));
+        v = g.join('-');
+    }
+    e.target.value = v;
+});
+
+document.getElementById('activationCode').addEventListener('keyup', e => {
+    if (e.key === 'Enter') document.getElementById('codeClinicName').focus();
+});
+
+async function submitCodeActivation() {
+    const code = document.getElementById('activationCode').value.trim();
+    const clinicName = document.getElementById('codeClinicName').value.trim();
+    if (!code) { alert('请输入激活码'); return; }
+    const re = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/i;
+    if (!re.test(code)) { alert('激活码格式错误'); return; }
+
+    const btn = event.target;
+    btn.disabled = true; btn.textContent = '激活中...';
+    try {
+        const result = await window.electronAPI.activate.submit(code, '', clinicName);
+        if (result.success) {
+            alert('✅ 激活成功！即将重启...');
+            window.electronAPI.activate.restart();
+        } else {
+            alert('激活失败：' + (result.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('激活出错：' + e.message);
+    } finally {
+        btn.disabled = false; btn.textContent = '🚀 激活码激活';
+    }
+}
+
+function importOffline() {
+    if (window.electronAPI?.license?.selectOfflineFile) {
+        window.electronAPI.license.selectOfflineFile().then(r => {
+            if (!r?.success) return;
+            window.electronAPI.license.activate(r.base64Content).then(ar => {
+                if (ar.success) { alert('✅ 离线激活成功！即将重启...'); window.electronAPI.activate.restart(); }
+                else alert('激活失败：' + (ar.error || '未知错误'));
+            });
         });
     } else {
-        if (fallback()) markCopied();
+        alert('当前版本不支持离线激活，请升级软件');
     }
 }
 
-async function submitActivate() {
-    const code = document.getElementById('activationCode').value.trim();
-    const clinicName = document.getElementById('clinicName').value.trim();
-    const user = document.getElementById('userName').value.trim();
-
-    if (!code) {
-        showStatus('请输入激活码', 'error');
-        return;
-    }
-
-    // 校验格式
-    const pattern = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
-    if (!pattern.test(code)) {
-        showStatus('激活码格式错误，应为 BNZC-XXXX-XXXX-XXXX-XXXX', 'error');
-        return;
-    }
-
-    // ★ v3 新增：诊所名格式校验（如填写）
-    if (clinicName && clinicName.includes('|')) {
-        showStatus('诊所名不能包含特殊字符 |', 'error');
-        return;
-    }
-    if (clinicName && clinicName.length > 100) {
-        showStatus('诊所名长度不能超过 100 字符', 'error');
-        return;
-    }
-
-    const btn = document.getElementById('activateBtn');
-    btn.disabled = true;
-    btn.textContent = '激活中...';
-    showStatus('正在连接服务器验证激活码...', 'loading');
-
+// ============ Demo / auto activate (bnzc) ============
+(async function checkBnzcPending() {
     try {
-        // ★ v3 新增：提交 clinicName 给云端校验绑定
-        const result = await window.electronAPI.activate.submit(code, user, clinicName);
-        if (result.success) {
-            showStatus('激活成功！软件将自动重启...', 'success');
-            btn.textContent = '激活成功';
-            // 给用户一点时间看到成功提示
-            setTimeout(() => {
-                window.electronAPI.activate.restart();
-            }, 1500);
-        } else {
-            const err = result.error || '激活失败';
-            // 权限错误/网络错误显示重试按钮
-            const withRetry = /权限|网络|超时|连接/.test(err);
-            showStatus(err, 'error', withRetry);
-            btn.disabled = false;
-            btn.textContent = '激 活';
-        }
-    } catch (e) {
-        showStatus('激活过程出错：' + e.message, 'error', true);
-        btn.disabled = false;
-        btn.textContent = '激 活';
-    }
-}
-
-function closeWindow() {
-    window.electronAPI.activate.close();
-}
-
-// ★ 离线激活文件导入（无网络时使用）
-// 流程：选择文件 → 读取内容 → 调用 license:activate IPC 写入 license.dat → 重启
-async function importOfflineLicense() {
-    const importBtn = document.getElementById('importOfflineBtn');
-    try {
-        if (!window.electronAPI || !window.electronAPI.license || !window.electronAPI.license.selectOfflineFile) {
-            showStatus('当前版本不支持离线激活文件导入，请升级软件', 'error');
-            return;
-        }
-
-        // 1. 选择文件
-        importBtn.disabled = true;
-        importBtn.textContent = '正在选择文件...';
-        const selectResult = await window.electronAPI.license.selectOfflineFile();
-        if (!selectResult.success) {
-            importBtn.disabled = false;
-            importBtn.textContent = '📁 导入离线激活文件';
-            if (selectResult.cancelled) {
-                // 用户取消选择，不显示错误
-                return;
-            }
-            showStatus('选择文件失败：' + (selectResult.error || '未知错误'), 'error');
-            return;
-        }
-
-        // 2. 校验文件内容（base64 格式，能解码为 JSON）
-        importBtn.textContent = '正在验证文件...';
-        const base64Content = selectResult.base64Content;
-        if (!base64Content) {
-            importBtn.disabled = false;
-            importBtn.textContent = '📁 导入离线激活文件';
-            showStatus('激活文件为空，请检查文件内容', 'error');
-            return;
-        }
-        let licenseData;
-        try {
-            const jsonStr = atob(base64Content);
-            licenseData = JSON.parse(jsonStr);
-        } catch (e) {
-            importBtn.disabled = false;
-            importBtn.textContent = '📁 导入离线激活文件';
-            showStatus('激活文件格式错误（非有效的 license 文件）', 'error');
-            return;
-        }
-
-        // 3. 显示 license 信息，二次确认
-        const info = licenseData.user ? `用户：${licenseData.user}\n` : '';
-        const type = licenseData.type ? `版本：${licenseData.type}\n` : '';
-        const clinic = licenseData.clinicName ? `诊所：${licenseData.clinicName}\n` : '';
-        const expires = licenseData.expiresAt ? `到期：${licenseData.expiresAt.slice(0, 10)}\n` : '';
-        const confirmMsg = `已加载离线激活文件：\n\n${info}${type}${clinic}${expires}\n点击"确定"完成激活并重启软件，点击"取消"放弃激活。`;
-        // 用 Electron 原生确认框
-        const confirmSync = window.electronAPI.confirmSync;
-        if (typeof confirmSync === 'function') {
-            const ok = confirmSync(confirmMsg);
-            if (!ok) {
-                importBtn.disabled = false;
-                importBtn.textContent = '📁 导入离线激活文件';
-                return;
+        if (!window.electronAPI?.bnzcGetPendingActivation) return;
+        const r = await window.electronAPI.bnzcGetPendingActivation();
+        if (r?.success?.data?.code) {
+            const d = r.data;
+            document.getElementById('activationCode').value = d.code;
+            if (d.clinicName) document.getElementById('codeClinicName').value = d.clinicName;
+            const act = await window.electronAPI.bnzcAutoActivate({ code: d.code, clinicName: d.clinicName || '', user: d.user || '' });
+            if (act?.success) {
+                alert('✅ 激活成功！即将重启...');
+                window.electronAPI.bnzcClearPendingActivation?.();
+                setTimeout(() => window.electronAPI.license.restart(), 1500);
             }
         }
-
-        // 4. 调用 license:activate IPC 写入 license.dat（加密写入 + 清除 trial.dat）
-        importBtn.textContent = '正在激活...';
-        showStatus('正在写入授权文件...', 'loading');
-        const activateResult = await window.electronAPI.license.activate(base64Content);
-        if (activateResult.success) {
-            showStatus('✅ 激活成功！软件将自动重启...', 'success');
-            importBtn.textContent = '激活成功';
-            // 给用户一点时间看到成功提示
-            setTimeout(() => {
-                window.electronAPI.activate.restart();
-            }, 1500);
-        } else {
-            const err = activateResult.error || '激活失败';
-            // 区分错误类型：绑定不匹配 / 文件损坏 / 权限问题
-            let friendlyErr = err;
-            if (/machineId|机器|绑定/.test(err)) {
-                friendlyErr = '激活文件与本机不匹配：' + err + '\n\n请确认该文件是为本机机器 ID 生成的。';
-            } else if (/permission|EACCES|EPERM|权限/.test(err)) {
-                friendlyErr = '授权文件写入权限不足：' + err + '\n\n请以管理员身份运行程序后重试。';
-            }
-            showStatus(friendlyErr, 'error', true);
-            importBtn.disabled = false;
-            importBtn.textContent = '📁 导入离线激活文件';
-        }
-    } catch (e) {
-        showStatus('导入激活文件出错：' + e.message, 'error', true);
-        importBtn.disabled = false;
-        importBtn.textContent = '📁 导入离线激活文件';
-    }
-}
-
-// ★ 强制默认切换到管理员激活模式（防止打包时序问题导致显示错误）
-// 在所有 IIFE 执行完后再执行一次 switchMode，确保 100% 显示管理员激活表单
-(function forceDefaultMode() {
-    try {
-        switchMode('admin');
-        console.log('[Init] 已强制切换到管理员激活模式');
-    } catch (e) {
-        console.warn('[Init] 切换模式失败，尝试手动设置：', e.message);
-        // 兜底：手动移除错误的 active，给管理员模式加上 active
-        try {
-            document.querySelectorAll('.mode-tab').forEach(t => t.classList.toggle('active', t.dataset.mode === 'admin'));
-            document.querySelectorAll('.mode-content').forEach(c => c.classList.remove('active'));
-            const adminContent = document.getElementById('modeAdmin');
-            if (adminContent) adminContent.classList.add('active');
-        } catch (e2) { /* 最终兜底失败则忽略 */ }
-    }
+    } catch (e) {}
 })();
+
+// Close on ESC
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') window.electronAPI?.activate?.close?.();
+});
 </script>
 </body>
 </html>

@@ -1,0 +1,2167 @@
+﻿{
+    "version":  "2.0",
+    "type":  "prescriptionBackup",
+    "exportedFrom":  "https://tcm-prescription-system.pages.dev/api/prescriptions",
+    "exportedAt":  "2026-08-10T20:19:01.6133644+08:00",
+    "count":  19,
+    "data":  [
+                 {
+                     "id":  1786141701582,
+                     "date":  "2026/08/07",
+                     "patientName":  "å¼å¼å¼",
+                     "patientGender":  "ç·",
+                     "patientAge":  "",
+                     "patientPhone":  "",
+                     "patientAddress":  "",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "",
+                     "diagnosis":  "",
+                     "items":  [
+
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  0,
+                     "registrationFee":  0,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-08-07T22:28:21.582Z",
+                     "updatedAt":  "2026-08-08T06:28:23.947Z",
+                     "prescriptionNo":  "26080803",
+                     "outpatientNo":  "26080803",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true,
+                     "mediaFiles":  [
+                                        {
+                                            "name":  "å¼å¼å¼_26080803_photo_tongue_under.jpg",
+                                            "type":  "image",
+                                            "size":  84229,
+                                            "lastModified":  1786141689000
+                                        },
+                                        {
+                                            "name":  "å¼å¼å¼_26080803_prescription.png",
+                                            "type":  "image",
+                                            "size":  70920,
+                                            "lastModified":  1786141703000
+                                        },
+                                        {
+                                            "name":  "å¼å¼å¼_26080803_video.webm",
+                                            "type":  "video",
+                                            "size":  1159946,
+                                            "lastModified":  1786141680000
+                                        },
+                                        {
+                                            "name":  "å¼å¼å¼_26080803_photo_tongue_front.jpg",
+                                            "type":  "image",
+                                            "size":  83134,
+                                            "lastModified":  1786141689000
+                                        }
+                                    ]
+                 },
+                 {
+                     "id":  1785899339480,
+                     "date":  "2026-08-05",
+                     "patientName":  "ä¼æ¤å£«",
+                     "patientGender":  "ç·",
+                     "patientAge":  "33",
+                     "patientPhone":  "",
+                     "patientAddress":  "",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "MX",
+                                       "name":  "èç¡",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.03,
+                                       "total":  0.8999999999999999
+                                   },
+                                   {
+                                       "code":  "LST",
+                                       "name":  "ç»ç³è¤",
+                                       "dosage":  23,
+                                       "unit":  "g",
+                                       "price":  0.108,
+                                       "total":  2.484
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  23.688,
+                     "registrationFee":  0,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-08-05T03:08:59.480Z",
+                     "updatedAt":  "2026-08-05T11:09:00.779Z",
+                     "prescriptionNo":  "26080502",
+                     "outpatientNo":  "26080502",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true,
+                     "mediaFiles":  [
+                                        {
+                                            "name":  "ä¼æ¤å£«_26080502_prescription.png",
+                                            "type":  "image",
+                                            "size":  67550,
+                                            "lastModified":  1785899341917.3706
+                                        }
+                                    ]
+                 },
+                 {
+                     "id":  1785890594568,
+                     "date":  "2026-08-05",
+                     "patientName":  "æ¨ææ°",
+                     "patientGender":  "ç·",
+                     "patientAge":  "56",
+                     "patientPhone":  "",
+                     "patientAddress":  "",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "DK",
+                                       "name":  "è±è»",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.2975,
+                                       "total":  2.9749999999999996
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  20.824999999999996,
+                     "registrationFee":  0,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-08-05T00:43:14.568Z",
+                     "updatedAt":  "2026-08-05T08:43:16.215Z",
+                     "prescriptionNo":  "26080501",
+                     "outpatientNo":  "26080501",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true,
+                     "mediaFiles":  [
+                                        {
+                                            "name":  "æ¨ææ°_26080501_prescription.png",
+                                            "type":  "image",
+                                            "size":  66190,
+                                            "lastModified":  1785890597471.8555
+                                        }
+                                    ]
+                 },
+                 {
+                     "id":  1785835669282,
+                     "date":  "2026-08-04",
+                     "patientName":  "çè´µå",
+                     "patientGender":  "ç·",
+                     "patientAge":  "57",
+                     "patientPhone":  "",
+                     "patientAddress":  "",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "è¡ç³5.3-4.8ï¼ç å·®ãæ¶ç¦ãçº³å·®",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "WM",
+                                       "name":  "ä¹æ¢\u0085",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "GJ",
+                                       "name":  "å¹²å§",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  1
+                                   },
+                                   {
+                                       "code":  "HL",
+                                       "name":  "é»è¿",
+                                       "dosage":  5,
+                                       "unit":  "g",
+                                       "price":  0.825,
+                                       "total":  4.125
+                                   },
+                                   {
+                                       "code":  "SZY",
+                                       "name":  "å±±è±è¸",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.26,
+                                       "total":  3.12
+                                   },
+                                   {
+                                       "code":  "CP",
+                                       "name":  "éç®",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.12,
+                                       "total":  1.2
+                                   },
+                                   {
+                                       "code":  "SCP",
+                                       "name":  "ç³èè²",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.33,
+                                       "total":  3.3000000000000003
+                                   },
+                                   {
+                                       "code":  "YJ",
+                                       "name":  "éé",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "ZQ",
+                                       "name":  "æ³å£³",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  1
+                                   },
+                                   {
+                                       "code":  "SDH",
+                                       "name":  "çå°é»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  2.625
+                                   },
+                                   {
+                                       "code":  "TZS",
+                                       "name":  "å¤ªå­å",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.3,
+                                       "total":  9
+                                   },
+                                   {
+                                       "code":  "BBD",
+                                       "name":  "ç½æè±",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "SY",
+                                       "name":  "å±±è¯",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.18,
+                                       "total":  5.3999999999999995
+                                   },
+                                   {
+                                       "code":  "GJY",
+                                       "name":  "é¬¼ç®­ç¾½",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.405,
+                                       "total":  4.050000000000001
+                                   }
+                               ],
+                     "doseCount":  10,
+                     "totalAmount":  390.70000000000005,
+                     "registrationFee":  0,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-08-04T09:27:49.282Z",
+                     "updatedAt":  "2026-08-04T17:27:50.326Z",
+                     "prescriptionNo":  "26080402",
+                     "outpatientNo":  "26080402",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true
+                 },
+                 {
+                     "id":  1785823306629,
+                     "date":  "2026-08-04",
+                     "patientName":  "æ¥éå¨",
+                     "patientGender":  "å¥³",
+                     "patientAge":  "42",
+                     "patientPhone":  "",
+                     "patientAddress":  "",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "æ¨èµ·ç¼çè¿ãå£å¹²ãç®è¤çãç å·®ãèé\u0085åé«",
+                     "diagnosis":  "è¾è¾äºè",
+                     "items":  [
+                                   {
+                                       "code":  "SZY",
+                                       "name":  "å±±è±è¸",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.26,
+                                       "total":  3.12
+                                   },
+                                   {
+                                       "code":  "SY",
+                                       "name":  "å±±è¯",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.18,
+                                       "total":  2.6999999999999997
+                                   },
+                                   {
+                                       "code":  "BBD",
+                                       "name":  "ç½æè±",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "XHC",
+                                       "name":  "ä»é¹¤è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.108,
+                                       "total":  1.6199999999999999
+                                   },
+                                   {
+                                       "code":  "MDP",
+                                       "name":  "ç¡ä¸¹ç®",
+                                       "dosage":  8,
+                                       "unit":  "g",
+                                       "price":  0.2975,
+                                       "total":  2.38
+                                   },
+                                   {
+                                       "code":  "SDH",
+                                       "name":  "çå°é»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  2.625
+                                   },
+                                   {
+                                       "code":  "DZ",
+                                       "name":  "æä»²",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  1.75
+                                   },
+                                   {
+                                       "code":  "SJS",
+                                       "name":  "æ¡å¯ç",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  0.8999999999999999
+                                   },
+                                   {
+                                       "code":  "HX",
+                                       "name":  "è¿é¦",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  1.3499999999999999
+                                   },
+                                   {
+                                       "code":  "FF",
+                                       "name":  "é²é£",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  2
+                                   },
+                                   {
+                                       "code":  "YCH",
+                                       "name":  "é¶æ´è¡",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.3325,
+                                       "total":  3.325
+                                   },
+                                   {
+                                       "code":  "FL",
+                                       "name":  "è¯è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  2.625
+                                   },
+                                   {
+                                       "code":  "BS",
+                                       "name":  "ç½è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.21,
+                                       "total":  3.15
+                                   },
+                                   {
+                                       "code":  "GC",
+                                       "name":  "çè",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  2
+                                   }
+                               ],
+                     "doseCount":  10,
+                     "totalAmount":  307.95,
+                     "registrationFee":  0,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-08-04T06:01:46.629Z",
+                     "updatedAt":  "2026-08-04T14:01:50.706Z",
+                     "prescriptionNo":  "26080401",
+                     "outpatientNo":  "26080401",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true,
+                     "mediaFiles":  [
+                                        {
+                                            "name":  "æ¥éå¨_26080401_prescription.png",
+                                            "type":  "image",
+                                            "size":  92519,
+                                            "lastModified":  1785823309208.393
+                                        }
+                                    ]
+                 },
+                 {
+                     "id":  1785745151085,
+                     "date":  "2026-08-03",
+                     "patientName":  "å­å®ªå",
+                     "patientGender":  "ç·",
+                     "patientAge":  "44",
+                     "patientPhone":  "13846528325",
+                     "patientAddress":  "é»é¾æ±çé»æ²³å¸å«©æ±å¿çº¢5æååº",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "ç©æãèµ·å§ææ¾ï¼æ­£å¼ç»æï¼å¤§ä¾¿æ¥2æ¬¡åæºï¼èç½èèåè\u0085»ï¼èæ²å¼¦ï¼ç å·®èå£ä¸è¬å¶æåé\u0085¸ç§å¿ã",
+                     "diagnosis":  "ç©æ-è¾è¾äºè",
+                     "items":  [
+                                   {
+                                       "code":  "FL",
+                                       "name":  "è¯è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  2.625
+                                   },
+                                   {
+                                       "code":  "BBD",
+                                       "name":  "ç½æè±",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "GZ",
+                                       "name":  "æ¡æ",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.105,
+                                       "total":  1.05
+                                   },
+                                   {
+                                       "code":  "JBX",
+                                       "name":  "å§åå¤",
+                                       "dosage":  9,
+                                       "unit":  "g",
+                                       "price":  0.2975,
+                                       "total":  2.6774999999999998
+                                   },
+                                   {
+                                       "code":  "BZ",
+                                       "name":  "ç½æ¯",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.24,
+                                       "total":  2.88
+                                   },
+                                   {
+                                       "code":  "GC",
+                                       "name":  "çè",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  2
+                                   },
+                                   {
+                                       "code":  "PGY",
+                                       "name":  "è²å\u0085¬è±",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.108,
+                                       "total":  1.6199999999999999
+                                   },
+                                   {
+                                       "code":  "MX",
+                                       "name":  "æ¨é¦",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  1.75
+                                   },
+                                   {
+                                       "code":  "CX",
+                                       "name":  "æ²é¦",
+                                       "dosage":  4.5,
+                                       "unit":  "g",
+                                       "price":  0.35,
+                                       "total":  1.575
+                                   },
+                                   {
+                                       "code":  "MDP",
+                                       "name":  "ç¡ä¸¹ç®",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.2975,
+                                       "total":  3.57
+                                   },
+                                   {
+                                       "code":  "ZX",
+                                       "name":  "æ³½æ³»",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.15,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "DG",
+                                       "name":  "å½å½",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.272,
+                                       "total":  3.2640000000000002
+                                   },
+                                   {
+                                       "code":  "HQ",
+                                       "name":  "é»èª",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.225,
+                                       "total":  6.75
+                                   }
+                               ],
+                     "doseCount":  10,
+                     "totalAmount":  550.115,
+                     "registrationFee":  225,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-08-03T08:19:11.085Z",
+                     "updatedAt":  "2026-08-03T16:19:16.051Z",
+                     "prescriptionNo":  "26080301",
+                     "outpatientNo":  "26080301",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true,
+                     "mediaFiles":  [
+                                        {
+                                            "name":  "å­å®ªå_26080301_prescription.png",
+                                            "type":  "image",
+                                            "size":  97737,
+                                            "lastModified":  1785745154597.8218
+                                        }
+                                    ]
+                 },
+                 {
+                     "id":  1785662139241,
+                     "date":  "2026-08-02",
+                     "patientName":  "åºæ¥é¦",
+                     "patientGender":  "å¥³",
+                     "patientAge":  "68",
+                     "patientPhone":  "",
+                     "patientAddress":  "",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "è¡ç³ä¸é1ä¸ªç¹ï¼å¤§ä¾¿é¡ºç\u0085æé«ï¼èº«ä½æè§è½»æ¾",
+                     "diagnosis":  "è¾è¾äºè",
+                     "items":  [
+                                   {
+                                       "code":  "SDH",
+                                       "name":  "çå°é»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  2.625
+                                   },
+                                   {
+                                       "code":  "ZHSW",
+                                       "name":  "å¶ä½é¦ä¹",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  2.4000000000000004
+                                   },
+                                   {
+                                       "code":  "FL",
+                                       "name":  "è¯è",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  3.5
+                                   },
+                                   {
+                                       "code":  "CZ",
+                                       "name":  "èæ¯",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.24,
+                                       "total":  2.4
+                                   },
+                                   {
+                                       "code":  "HB",
+                                       "name":  "é»æ",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.345,
+                                       "total":  5.175
+                                   },
+                                   {
+                                       "code":  "RG",
+                                       "name":  "èæ¡",
+                                       "dosage":  5,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  0.625
+                                   },
+                                   {
+                                       "code":  "QGL",
+                                       "name":  "å\u0085¨çè",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  5.25
+                                   },
+                                   {
+                                       "code":  "SZ",
+                                       "name":  "å±±æ¥",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.15,
+                                       "total":  2.25
+                                   },
+                                   {
+                                       "code":  "CQC",
+                                       "name":  "è½¦åè",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.12,
+                                       "total":  3.5999999999999996
+                                   },
+                                   {
+                                       "code":  "LFZ",
+                                       "name":  "è±èå­",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "BS",
+                                       "name":  "ç½è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.21,
+                                       "total":  3.15
+                                   },
+                                   {
+                                       "code":  "ZQ",
+                                       "name":  "æ³å£³",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "DH",
+                                       "name":  "å¤§é»",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.15,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "ZM",
+                                       "name":  "ç¥æ¯",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.875
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  351.95,
+                     "registrationFee":  80,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-08-02T09:15:39.241Z",
+                     "updatedAt":  "2026-08-02T17:15:42.363Z",
+                     "prescriptionNo":  "26080201",
+                     "outpatientNo":  "26080201",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true,
+                     "mediaFiles":  [
+                                        {
+                                            "name":  "åºæ¥é¦_26080201_prescription.png",
+                                            "type":  "image",
+                                            "size":  93265,
+                                            "lastModified":  1785662140890.3843
+                                        }
+                                    ]
+                 },
+                 {
+                     "id":  1785406054190,
+                     "date":  "2026-07-30",
+                     "patientName":  "é©åºå\u0085°",
+                     "patientGender":  "å¥³",
+                     "patientAge":  "51",
+                     "patientPhone":  "",
+                     "patientAddress":  "æµ·é¾å®¶å\u0085·å",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "RDT",
+                                       "name":  "å¿å¬è¤",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.054,
+                                       "total":  1.6199999999999999
+                                   },
+                                   {
+                                       "code":  "TFG",
+                                       "name":  "åè¯è",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.22,
+                                       "total":  6.6
+                                   },
+                                   {
+                                       "code":  "ZX",
+                                       "name":  "æ³½æ³»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.15,
+                                       "total":  2.25
+                                   },
+                                   {
+                                       "code":  "FL",
+                                       "name":  "è¯è",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  3.5
+                                   },
+                                   {
+                                       "code":  "SJC",
+                                       "name":  "ä¼¸ç­è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.12,
+                                       "total":  1.7999999999999998
+                                   },
+                                   {
+                                       "code":  "MG",
+                                       "name":  "æ¨ç",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "XS",
+                                       "name":  "çå",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.135,
+                                       "total":  2.7
+                                   },
+                                   {
+                                       "code":  "SZ",
+                                       "name":  "æ¡æ",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.054,
+                                       "total":  1.6199999999999999
+                                   },
+                                   {
+                                       "code":  "LST",
+                                       "name":  "ç»ç³è¤",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.108,
+                                       "total":  1.6199999999999999
+                                   },
+                                   {
+                                       "code":  "CQC",
+                                       "name":  "è½¦åè",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.12,
+                                       "total":  3.5999999999999996
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  307.67,
+                     "registrationFee":  120,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-07-30T10:07:34.190Z",
+                     "updatedAt":  "2026-07-30T18:07:34.758Z",
+                     "prescriptionNo":  "26073003",
+                     "outpatientNo":  "26073003",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true
+                 },
+                 {
+                     "id":  1785287034135,
+                     "date":  "2026-07-29",
+                     "patientName":  "çå§(5æ¥¼)",
+                     "patientGender":  "ç·",
+                     "patientAge":  "62",
+                     "patientPhone":  "",
+                     "patientAddress":  "æ°´çµå®¶å­",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "åç­ä¸åéãå¤´ççæ£±éª¨åé¢ãåå­ç¼ãé¼»å¡æµæ¶ï¼èæ·¡ç½ãé£æ¬²ä¸æ¯ï¼",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "LQ",
+                                       "name":  "è¿ç¿",
+                                       "price":  0.22,
+                                       "unit":  "g",
+                                       "dosage":  15,
+                                       "total":  3.3
+                                   },
+                                   {
+                                       "code":  "XS",
+                                       "name":  "çå",
+                                       "price":  0.135,
+                                       "unit":  "g",
+                                       "dosage":  15,
+                                       "total":  2.0250000000000004
+                                   },
+                                   {
+                                       "code":  "QH",
+                                       "name":  "ç¾æ´»",
+                                       "price":  0.375,
+                                       "unit":  "g",
+                                       "dosage":  10,
+                                       "total":  3.75
+                                   },
+                                   {
+                                       "code":  "HQ",
+                                       "name":  "é»è©",
+                                       "price":  0.26,
+                                       "unit":  "g",
+                                       "dosage":  15,
+                                       "total":  3.9000000000000004
+                                   },
+                                   {
+                                       "code":  "GG",
+                                       "name":  "èæ ¹",
+                                       "price":  0.1,
+                                       "unit":  "g",
+                                       "dosage":  30,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "CX",
+                                       "name":  "å·è",
+                                       "price":  0.125,
+                                       "unit":  "g",
+                                       "dosage":  10,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "MH",
+                                       "name":  "éº»é»",
+                                       "price":  0.1,
+                                       "unit":  "g",
+                                       "dosage":  10,
+                                       "total":  1
+                                   },
+                                   {
+                                       "code":  "KXR",
+                                       "name":  "è¦æä»",
+                                       "price":  0.175,
+                                       "unit":  "g",
+                                       "dosage":  10,
+                                       "total":  1.75
+                                   },
+                                   {
+                                       "code":  "FF",
+                                       "name":  "é²é£",
+                                       "price":  0.2,
+                                       "unit":  "g",
+                                       "dosage":  15,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "JG",
+                                       "name":  "æ¡æ¢",
+                                       "price":  0.225,
+                                       "unit":  "g",
+                                       "dosage":  20,
+                                       "total":  4.5
+                                   },
+                                   {
+                                       "code":  "GC",
+                                       "name":  "çè",
+                                       "price":  0.2,
+                                       "unit":  "g",
+                                       "dosage":  13,
+                                       "total":  2.6
+                                   },
+                                   {
+                                       "code":  "CH",
+                                       "name":  "æ´è¡",
+                                       "price":  0.36,
+                                       "unit":  "g",
+                                       "dosage":  30,
+                                       "total":  10.799999999999999
+                                   }
+                               ],
+                     "doseCount":  1,
+                     "totalAmount":  40.875,
+                     "registrationFee":  0,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-07-29T01:03:54.135Z",
+                     "updatedAt":  "2026-07-29T09:03:58.750Z",
+                     "prescriptionNo":  "26072902",
+                     "outpatientNo":  "26072902",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true,
+                     "mediaFiles":  [
+                                        {
+                                            "name":  "çå§(5æ¥¼)_26072902_prescription.png",
+                                            "type":  "image",
+                                            "size":  90325,
+                                            "lastModified":  1785287036293.9905
+                                        }
+                                    ]
+                 },
+                 {
+                     "id":  1785209130473,
+                     "date":  "2026-07-28",
+                     "patientName":  "å¾æº",
+                     "patientGender":  "ç·",
+                     "patientAge":  "15",
+                     "patientPhone":  "",
+                     "patientAddress":  "",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "å¤´æï¼è¡å85/152ï¼èèç½è\u0085»é½¿çï¼èå¼¦æ»ï¼æ å£è¦å£å¹²ï¼å¤§ä¾¿æ¥2æ¬¡ï¼ååèé£ï¼ä½èèå­é»æ£ç®çã",
+                     "diagnosis":  "è¾è¾ä¸è°",
+                     "items":  [
+                                   {
+                                       "code":  "JBX",
+                                       "name":  "å§åå¤",
+                                       "dosage":  25,
+                                       "unit":  "g",
+                                       "price":  0.2975,
+                                       "total":  7.4375
+                                   },
+                                   {
+                                       "code":  "BZ",
+                                       "name":  "ç½æ¯",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.24,
+                                       "total":  7.199999999999999
+                                   },
+                                   {
+                                       "code":  "GT",
+                                       "name":  "é©è¤",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.28,
+                                       "total":  4.2
+                                   },
+                                   {
+                                       "code":  "SZ",
+                                       "name":  "å±±æ¥",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.15,
+                                       "total":  2.25
+                                   },
+                                   {
+                                       "code":  "LBM",
+                                       "name":  "ç½å¸éº»",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  3.75
+                                   },
+                                   {
+                                       "code":  "FL",
+                                       "name":  "è¯è",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  3.5
+                                   },
+                                   {
+                                       "code":  "ZX",
+                                       "name":  "æ³½æ³»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.15,
+                                       "total":  2.25
+                                   },
+                                   {
+                                       "code":  "MDP",
+                                       "name":  "ç¡ä¸¹ç®",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.2975,
+                                       "total":  8.924999999999999
+                                   },
+                                   {
+                                       "code":  "DH",
+                                       "name":  "å¤§é»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.15,
+                                       "total":  2.25
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  292.3375,
+                     "registrationFee":  0,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-07-28T03:25:30.473Z",
+                     "updatedAt":  "2026-07-28T11:25:41.369Z",
+                     "prescriptionNo":  "26072801",
+                     "outpatientNo":  "26072801",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true
+                 },
+                 {
+                     "id":  1784641447161,
+                     "date":  "2026-07-21",
+                     "patientName":  "é©åºå\u0085°",
+                     "patientGender":  "å¥³",
+                     "patientAge":  "51",
+                     "patientPhone":  "",
+                     "patientAddress":  "æµ·é¾å®¶å\u0085·å",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "SJS",
+                                       "name":  "æ¡å¯ç",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  0.8999999999999999
+                                   },
+                                   {
+                                       "code":  "DZ",
+                                       "name":  "æä»²",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  1.75
+                                   },
+                                   {
+                                       "code":  "BS",
+                                       "name":  "ç½è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.21,
+                                       "total":  3.15
+                                   },
+                                   {
+                                       "code":  "DS",
+                                       "name":  "ä¸¹å",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.225,
+                                       "total":  6.75
+                                   },
+                                   {
+                                       "code":  "CS",
+                                       "name":  "èµ¤è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "RDT",
+                                       "name":  "å¿å¬è¤",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.054,
+                                       "total":  1.6199999999999999
+                                   },
+                                   {
+                                       "code":  "JXT",
+                                       "name":  "é¸¡è¡è¤",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  1.3499999999999999
+                                   },
+                                   {
+                                       "code":  "YYR",
+                                       "name":  "èè¡ä»",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  2.6999999999999997
+                                   },
+                                   {
+                                       "code":  "XX",
+                                       "name":  "ç»è¾",
+                                       "dosage":  3,
+                                       "unit":  "g",
+                                       "price":  0.825,
+                                       "total":  2.4749999999999996
+                                   },
+                                   {
+                                       "code":  "CZ",
+                                       "name":  "èæ¯",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.24,
+                                       "total":  2.4
+                                   },
+                                   {
+                                       "code":  "HB",
+                                       "name":  "é»æ",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.345,
+                                       "total":  3.4499999999999997
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  306.815,
+                     "registrationFee":  100,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-07-21T13:44:07.161Z",
+                     "updatedAt":  "2026-07-21T21:44:10.101Z",
+                     "prescriptionNo":  "26072103",
+                     "outpatientNo":  "26072103",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true,
+                     "mediaFiles":  [
+                                        {
+                                            "name":  "é©åºå\u0085°_26072103_prescription.png",
+                                            "type":  "image",
+                                            "size":  86677,
+                                            "lastModified":  1784641449000
+                                        }
+                                    ]
+                 },
+                 {
+                     "id":  1783991103490,
+                     "date":  "2026-07-14",
+                     "patientName":  "åºæ¥é¦",
+                     "patientGender":  "å¥³",
+                     "patientAge":  "68",
+                     "patientPhone":  "",
+                     "patientAddress":  "",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "å°ä¾¿æ¶©çãä¸è\u0085¹éçãèèç½åè\u0085»ãè¡ç³14.9",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "DG",
+                                       "name":  "å½å½",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.272,
+                                       "total":  4.08
+                                   },
+                                   {
+                                       "code":  "KC",
+                                       "name":  "è¦å",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "ZBM",
+                                       "name":  "æµè´æ¯",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.37,
+                                       "total":  5.55
+                                   },
+                                   {
+                                       "code":  "ZL",
+                                       "name":  "çªè",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.4125,
+                                       "total":  6.1875
+                                   },
+                                   {
+                                       "code":  "ZX",
+                                       "name":  "æ³½æ³»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.15,
+                                       "total":  2.25
+                                   },
+                                   {
+                                       "code":  "FL",
+                                       "name":  "è¯è",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  3.5
+                                   },
+                                   {
+                                       "code":  "HS",
+                                       "name":  "æ»ç³",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.06,
+                                       "total":  1.7999999999999998
+                                   },
+                                   {
+                                       "code":  "SY",
+                                       "name":  "å±±è¯",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.18,
+                                       "total":  2.6999999999999997
+                                   },
+                                   {
+                                       "code":  "SZY",
+                                       "name":  "å±±è±è¸",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.26,
+                                       "total":  3.9000000000000004
+                                   },
+                                   {
+                                       "code":  "RG",
+                                       "name":  "èæ¡",
+                                       "dosage":  3,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  0.375
+                                   },
+                                   {
+                                       "code":  "PFZ",
+                                       "name":  "ç®éå­",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.2975,
+                                       "total":  2.9749999999999996
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  351.9725,
+                     "registrationFee":  110,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-07-14T01:05:03.490Z",
+                     "updatedAt":  "2026-07-14T09:05:04.682Z",
+                     "prescriptionNo":  "26071405",
+                     "outpatientNo":  "26071405",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "isAdmin":  true
+                 },
+                 {
+                     "id":  1783247227564,
+                     "date":  "2026-07-05",
+                     "patientName":  "çå®å«å­",
+                     "patientGender":  "ç·",
+                     "patientAge":  "40",
+                     "patientPhone":  "",
+                     "patientAddress":  "é«ç¢åº",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "è¸é·æ°ç­ãå¤±ç ãå£å¹²å£è¦ï¼å\u0085¥ç¡å°é¾ï¼è\u0085°é\u0085¸ç¼",
+                     "diagnosis":  "ä¸å¯-èè¾äºè",
+                     "items":  [
+                                   {
+                                       "code":  "ZR",
+                                       "name":  "ç«¹è¹",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  0.8999999999999999
+                                   },
+                                   {
+                                       "code":  "SCP",
+                                       "name":  "ç³èè²",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.33,
+                                       "total":  3.3000000000000003
+                                   },
+                                   {
+                                       "code":  "YJ",
+                                       "name":  "éé",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "FL",
+                                       "name":  "è¯è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  2.625
+                                   },
+                                   {
+                                       "code":  "MDP",
+                                       "name":  "ç¡ä¸¹ç®",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.2975,
+                                       "total":  3.57
+                                   },
+                                   {
+                                       "code":  "ZZ",
+                                       "name":  "æ å­",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "HHP",
+                                       "name":  "åæ¬¢ç®",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  1.2000000000000002
+                                   },
+                                   {
+                                       "code":  "BH",
+                                       "name":  "ç¾å",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.294,
+                                       "total":  3.5279999999999996
+                                   },
+                                   {
+                                       "code":  "SDH",
+                                       "name":  "çå°é»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  2.625
+                                   },
+                                   {
+                                       "code":  "ZM",
+                                       "name":  "ç¥æ¯",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "CX",
+                                       "name":  "å·è",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "QGL",
+                                       "name":  "å\u0085¨çè",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  2.625
+                                   },
+                                   {
+                                       "code":  "XB",
+                                       "name":  "è¤ç½",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.24,
+                                       "total":  2.4
+                                   },
+                                   {
+                                       "code":  "DS",
+                                       "name":  "ä¸¹å",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.225,
+                                       "total":  3.375
+                                   },
+                                   {
+                                       "code":  "YJH",
+                                       "name":  "éèè±",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.26,
+                                       "total":  3.9000000000000004
+                                   },
+                                   {
+                                       "code":  "YJT",
+                                       "name":  "å¤äº¤è¤",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.108,
+                                       "total":  1.6199999999999999
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  300.17599999999993,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-07-05T10:27:07.564Z",
+                     "updatedAt":  "2026-07-05T18:27:08.713Z",
+                     "prescriptionNo":  "26070501",
+                     "outpatientNo":  "26070501",
+                     "cloudSeq":  "26070501",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "clinicId":  "clinic_mqvrtr6m7bjg"
+                 },
+                 {
+                     "id":  1783074116281,
+                     "date":  "2026-07-03",
+                     "patientName":  "åºæ¥é¦",
+                     "patientGender":  "å¥³",
+                     "patientAge":  "68",
+                     "patientPhone":  "",
+                     "patientAddress":  "",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "è¡ç³14ãèç½è\u0085»èå¤§ãå¤§ä¾¿ç²è\u0085»ãå·¦ä¾§å¤´é¨é·ãå¤´æåºæ±ï¼èå¼¦æ»æ°ã",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "GG",
+                                       "name":  "èæ ¹",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "HX",
+                                       "name":  "è¿é¦",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  0.8999999999999999
+                                   },
+                                   {
+                                       "code":  "YC",
+                                       "name":  "èµé",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.108,
+                                       "total":  1.6199999999999999
+                                   },
+                                   {
+                                       "code":  "ZX",
+                                       "name":  "æ³½æ³»",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.15,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "CP",
+                                       "name":  "éç®",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.12,
+                                       "total":  1.2
+                                   },
+                                   {
+                                       "code":  "ZQ",
+                                       "name":  "æ³å£³",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  1
+                                   },
+                                   {
+                                       "code":  "FL",
+                                       "name":  "è¯è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  2.625
+                                   },
+                                   {
+                                       "code":  "ZR",
+                                       "name":  "ç«¹è¹",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  0.8999999999999999
+                                   },
+                                   {
+                                       "code":  "HL",
+                                       "name":  "é»è¿",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.825,
+                                       "total":  8.25
+                                   },
+                                   {
+                                       "code":  "SY",
+                                       "name":  "æ¡å¶",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.072,
+                                       "total":  0.72
+                                   },
+                                   {
+                                       "code":  "QGL",
+                                       "name":  "å\u0085¨çè",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  5.25
+                                   },
+                                   {
+                                       "code":  "JSX",
+                                       "name":  "ç¦ä¸ä»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  1.3499999999999999
+                                   },
+                                   {
+                                       "code":  "MX",
+                                       "name":  "æ¨é¦",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  1.75
+                                   },
+                                   {
+                                       "code":  "BBD",
+                                       "name":  "ç½æè±",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "YJ",
+                                       "name":  "éé",
+                                       "dosage":  12,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.5
+                                   },
+                                   {
+                                       "code":  "SCP",
+                                       "name":  "ç³èè²",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.33,
+                                       "total":  3.3000000000000003
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  242.30499999999995,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-07-03T10:21:56.281Z",
+                     "updatedAt":  "2026-07-03T18:21:57.685Z",
+                     "prescriptionNo":  "26070301",
+                     "outpatientNo":  "26070301",
+                     "cloudSeq":  "26070301",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "clinicId":  "clinic_mqvrtr6m7bjg"
+                 },
+                 {
+                     "id":  1782818193582,
+                     "date":  "2026-06-30",
+                     "patientName":  "å¤äºå\u0085",
+                     "patientGender":  "ç·",
+                     "patientAge":  "44",
+                     "patientPhone":  "",
+                     "patientAddress":  "åå°å±å\u0085´ååè·¯",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "çç®ç£17å¹´ ççº¢åè¢è¸è\u0085¹é¨ï¼èèæ°´æ»ç½è\u0085»ãå¤§ä¾¿æºå°ä¾¿é»ï¼å£é»çº³å·®ï¼å£è\u0085ç­æ°ã",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "HX",
+                                       "name":  "è¿é¦",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  1.7999999999999998
+                                   },
+                                   {
+                                       "code":  "LQ",
+                                       "name":  "è¿ç¿",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.22,
+                                       "total":  3.3
+                                   },
+                                   {
+                                       "code":  "CXD",
+                                       "name":  "èµ¤å°è±",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.375,
+                                       "total":  5.625
+                                   },
+                                   {
+                                       "code":  "SG",
+                                       "name":  "ç³è",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.054,
+                                       "total":  1.6199999999999999
+                                   },
+                                   {
+                                       "code":  "CS",
+                                       "name":  "èµ¤è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "MDP",
+                                       "name":  "ç¡ä¸¹ç®",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.2975,
+                                       "total":  4.4624999999999995
+                                   },
+                                   {
+                                       "code":  "GG",
+                                       "name":  "èæ ¹",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "FF",
+                                       "name":  "é²é£",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "YYR",
+                                       "name":  "èè¡ä»",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  2.6999999999999997
+                                   },
+                                   {
+                                       "code":  "CZ",
+                                       "name":  "èæ¯",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.24,
+                                       "total":  3.5999999999999996
+                                   },
+                                   {
+                                       "code":  "HQ",
+                                       "name":  "é»è©",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.26,
+                                       "total":  3.9000000000000004
+                                   },
+                                   {
+                                       "code":  "TFG",
+                                       "name":  "åè¯è",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.22,
+                                       "total":  6.6
+                                   },
+                                   {
+                                       "code":  "KC",
+                                       "name":  "è¦å",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "XS",
+                                       "name":  "çå",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.135,
+                                       "total":  2.0250000000000004
+                                   },
+                                   {
+                                       "code":  "BS",
+                                       "name":  "ç½è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.21,
+                                       "total":  3.15
+                                   },
+                                   {
+                                       "code":  "GC",
+                                       "name":  "çè",
+                                       "dosage":  13,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  2.6
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  361.42749999999995,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-06-30T11:16:33.582Z",
+                     "updatedAt":  "2026-06-30T19:16:33.285Z",
+                     "prescriptionNo":  "26063003",
+                     "outpatientNo":  "26063003",
+                     "cloudSeq":  "26063003",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "clinicId":  "clinic_mqvrtr6m7bjg"
+                 },
+                 {
+                     "id":  1782731251335,
+                     "date":  "2026-06-29",
+                     "patientName":  "åºæ¥é¦",
+                     "patientGender":  "å¥³",
+                     "patientAge":  "68",
+                     "patientPhone":  "",
+                     "patientAddress":  "",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "å·¦ä¾§å¤´ä»ç¼ãå·¦ä¾§è\u0085°è\u0085¹ä¸èæ",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "JH",
+                                       "name":  "å§é»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.875
+                                   },
+                                   {
+                                       "code":  "HQ",
+                                       "name":  "é»èª",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.225,
+                                       "total":  4.5
+                                   },
+                                   {
+                                       "code":  "YZ",
+                                       "name":  "è¿å¿",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.504,
+                                       "total":  7.5600000000000005
+                                   },
+                                   {
+                                       "code":  "FF",
+                                       "name":  "é²é£",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "QH",
+                                       "name":  "ç¾æ´»",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.375,
+                                       "total":  3.75
+                                   },
+                                   {
+                                       "code":  "HX",
+                                       "name":  "è¿é¦",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  1.3499999999999999
+                                   },
+                                   {
+                                       "code":  "CX",
+                                       "name":  "å·è",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "TM",
+                                       "name":  "å¤©éº»",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.432,
+                                       "total":  6.4799999999999995
+                                   },
+                                   {
+                                       "code":  "CQZ",
+                                       "name":  "è½¦åå­",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.15,
+                                       "total":  2.25
+                                   },
+                                   {
+                                       "code":  "JMZ",
+                                       "name":  "å³æå­",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  2.6999999999999997
+                                   },
+                                   {
+                                       "code":  "MH",
+                                       "name":  "éº»é»",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  1
+                                   },
+                                   {
+                                       "code":  "GG",
+                                       "name":  "èæ ¹",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  3
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  346.005,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-06-29T11:07:31.335Z",
+                     "updatedAt":  "2026-06-29T19:07:31.625Z",
+                     "prescriptionNo":  "26062904",
+                     "outpatientNo":  "26062904",
+                     "cloudSeq":  "26062904",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "clinicId":  "clinic_mqvrtr6m7bjg"
+                 },
+                 {
+                     "id":  1782731011015,
+                     "date":  "2026-06-29",
+                     "patientName":  "é©åºå\u0085°",
+                     "patientGender":  "å¥³",
+                     "patientAge":  "51",
+                     "patientPhone":  "",
+                     "patientAddress":  "æµ·é¾å®¶å\u0085·å",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "ææèç¼ãèæ·¡ç½ãèå¼¦ç´§",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "CZ",
+                                       "name":  "èæ¯",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.24,
+                                       "total":  2.4
+                                   },
+                                   {
+                                       "code":  "RDT",
+                                       "name":  "å¿å¬è¤",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.054,
+                                       "total":  1.6199999999999999
+                                   },
+                                   {
+                                       "code":  "TFG",
+                                       "name":  "åè¯è",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.22,
+                                       "total":  6.6
+                                   },
+                                   {
+                                       "code":  "JH",
+                                       "name":  "å§é»",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  1.25
+                                   },
+                                   {
+                                       "code":  "QJ",
+                                       "name":  "ç§¦è½",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.225,
+                                       "total":  2.25
+                                   },
+                                   {
+                                       "code":  "CS",
+                                       "name":  "èµ¤è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "SJC",
+                                       "name":  "ä¼¸ç­è",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.12,
+                                       "total":  1.7999999999999998
+                                   },
+                                   {
+                                       "code":  "JXT",
+                                       "name":  "é¸¡è¡è¤",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  1.3499999999999999
+                                   },
+                                   {
+                                       "code":  "YHS",
+                                       "name":  "å»¶è¡ç´¢",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.315,
+                                       "total":  4.725
+                                   },
+                                   {
+                                       "code":  "YYR",
+                                       "name":  "èè¡ä»",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.09,
+                                       "total":  2.6999999999999997
+                                   },
+                                   {
+                                       "code":  "CQC",
+                                       "name":  "è½¦åè",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.12,
+                                       "total":  1.7999999999999998
+                                   }
+                               ],
+                     "doseCount":  10,
+                     "totalAmount":  421.95,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-06-29T11:03:31.015Z",
+                     "updatedAt":  "2026-06-29T19:03:31.291Z",
+                     "prescriptionNo":  "26062903",
+                     "outpatientNo":  "26062903",
+                     "cloudSeq":  "26062903",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "clinicId":  "clinic_mqvrtr6m7bjg"
+                 },
+                 {
+                     "id":  1782730836167,
+                     "date":  "2026-06-29",
+                     "patientName":  "åå æ¥ ",
+                     "patientGender":  "ç·",
+                     "patientAge":  "38",
+                     "patientPhone":  "",
+                     "patientAddress":  "è´¤æ å±\u0085",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "å³å½ãå£å¹²ãè¿å¨åºæ±åå£å¹²",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "HQ",
+                                       "name":  "é»è©",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.26,
+                                       "total":  2.6
+                                   },
+                                   {
+                                       "code":  "BSS",
+                                       "name":  "åæ²å",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  3.5
+                                   },
+                                   {
+                                       "code":  "THF",
+                                       "name":  "å¤©è±ç²",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "BBD",
+                                       "name":  "ç½æè±",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.125,
+                                       "total":  2.5
+                                   },
+                                   {
+                                       "code":  "YZ",
+                                       "name":  "çç«¹",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "JG",
+                                       "name":  "æ¡æ¢",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.225,
+                                       "total":  4.5
+                                   },
+                                   {
+                                       "code":  "GG",
+                                       "name":  "èæ ¹",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  3
+                                   },
+                                   {
+                                       "code":  "SY",
+                                       "name":  "å±±è¯",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.18,
+                                       "total":  2.6999999999999997
+                                   },
+                                   {
+                                       "code":  "GC",
+                                       "name":  "çè",
+                                       "dosage":  13,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  2.6
+                                   },
+                                   {
+                                       "code":  "XS",
+                                       "name":  "çå",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.135,
+                                       "total":  2.0250000000000004
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  320.975,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-06-29T11:00:36.167Z",
+                     "updatedAt":  "2026-06-29T19:00:36.445Z",
+                     "prescriptionNo":  "26062902",
+                     "outpatientNo":  "26062902",
+                     "cloudSeq":  "26062902",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "clinicId":  "clinic_mqvrtr6m7bjg"
+                 },
+                 {
+                     "id":  1782730559465,
+                     "date":  "2026-06-29",
+                     "patientName":  "å¼ å­å°§",
+                     "patientGender":  "ç·",
+                     "patientAge":  "61",
+                     "patientPhone":  "",
+                     "patientAddress":  "å»ºå®å\u0085¬å¯",
+                     "doctorName":  "çæ¡æ°",
+                     "medicalHistory":  "å³å½ç½ç°ï¼èç½æ°´æ»ãè¡ç³é«ãä½è",
+                     "diagnosis":  "",
+                     "items":  [
+                                   {
+                                       "code":  "MH",
+                                       "name":  "éº»é»",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  1
+                                   },
+                                   {
+                                       "code":  "KXR",
+                                       "name":  "è¦æä»",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  1.75
+                                   },
+                                   {
+                                       "code":  "GC",
+                                       "name":  "çè",
+                                       "dosage":  13,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  2.6
+                                   },
+                                   {
+                                       "code":  "CZ",
+                                       "name":  "èæ¯",
+                                       "dosage":  15,
+                                       "unit":  "g",
+                                       "price":  0.24,
+                                       "total":  3.5999999999999996
+                                   },
+                                   {
+                                       "code":  "FL",
+                                       "name":  "è¯è",
+                                       "dosage":  30,
+                                       "unit":  "g",
+                                       "price":  0.175,
+                                       "total":  5.25
+                                   },
+                                   {
+                                       "code":  "WWZ",
+                                       "name":  "äºå³å­",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.2,
+                                       "total":  2
+                                   },
+                                   {
+                                       "code":  "BJZ",
+                                       "name":  "ç½è¥å­",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.108,
+                                       "total":  1.08
+                                   },
+                                   {
+                                       "code":  "TLZ",
+                                       "name":  "è¶èå­",
+                                       "dosage":  10,
+                                       "unit":  "g",
+                                       "price":  0.1,
+                                       "total":  1
+                                   },
+                                   {
+                                       "code":  "JBX",
+                                       "name":  "å§åå¤",
+                                       "dosage":  20,
+                                       "unit":  "g",
+                                       "price":  0.2975,
+                                       "total":  5.949999999999999
+                                   }
+                               ],
+                     "doseCount":  7,
+                     "totalAmount":  300.61,
+                     "createdBy":  "wgj",
+                     "createdAt":  "2026-06-29T10:55:59.465Z",
+                     "updatedAt":  "2026-06-29T18:55:59.737Z",
+                     "prescriptionNo":  "26062901",
+                     "outpatientNo":  "26062901",
+                     "cloudSeq":  "26062901",
+                     "userId":  "wgj",
+                     "userRole":  "clinic_admin",
+                     "clinicId":  "clinic_mqvrtr6m7bjg"
+                 }
+             ]
+}

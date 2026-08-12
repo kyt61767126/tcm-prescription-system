@@ -305,18 +305,17 @@
         <div class="bg-decoration"></div>
         <div class="header-section">
             <span class="system-title">惠康中医诊所管理系统</span>
-            <span class="version-tag">【离线机构版】</span>
+            <span class="version-tag">【云端机构版】</span>
         </div>
         <div class="main-content">
             <div class="login-box">
-                <div id="trialBar" class="trial-bar" style="display:none;"></div>
                 <div class="clinic-info" onclick="openFirstRunWizard()" title="点击设置诊所信息">
                     <div id="clinicName" class="clinic-name">本能堂中医诊所</div>
                     <div id="clinicSetupHint" class="setup-hint" style="display:none;">⚙️ 点击设置诊所信息</div>
                 </div>
                 <div class="login-field">
-                    <label>用户名</label>
-                    <select id="loginUsername"></select>
+                    <label>手机号/用户名</label>
+                    <input type="text" id="loginUsername" placeholder="请输入手机号或用户名" autocomplete="off">
                 </div>
                 <div class="login-field">
                     <label>密码</label>
@@ -335,11 +334,14 @@
                     <button class="login-btn cancel" id="btnCancel" type="button">取消</button>
                 </div>
                 <div id="loginError" class="login-error"></div>
+                <!-- ★ 激活入口：未激活用户可点击此处打开激活窗口 -->
+                <div style="text-align:center;margin-top:8px;">
+                    <a href="#" id="activateLink" onclick="openActivationWindow();return false;" style="font-size:9px;color:#667eea;text-decoration:none;">激活软件 / 管理员激活</a>
+                </div>
             </div>
         </div>
         <div class="footer-section">
             <span>微信号: hktzy1688</span>
-            <span style="margin-left:6px;color:#667eea;cursor:pointer;" onclick="openActivationWindow()">🔑 激活软件</span>
         </div>
     </div>
 
@@ -347,18 +349,23 @@
     <div id="wizardOverlay" class="wizard-overlay">
         <div class="wizard-box">
             <h2>🏥 首次使用设置</h2>
-            <div class="wizard-sub">请完善诊所信息后开始试用（激活后永久使用）</div>
+            <div class="wizard-sub">完善诊所信息，开启您的中医处方管理之旅</div>
             <div class="wizard-progress" id="wizardProgress"></div>
 
-            <!-- 步骤1：诊所名称（必填） -->
+            <!-- 步骤1：诊所名称 -->
             <div class="wizard-step active" data-step="1">
-                <label>诊所名称 <span style="color:red;">*</span></label>
+                <label>诊所名称 *</label>
                 <input type="text" id="wizardClinicName" placeholder="如：惠康中医诊所" maxlength="50">
-                <div style="font-size:9px;color:#888;margin-top:4px;">💡 诊所名需与激活码绑定的诊所名一致</div>
             </div>
 
-            <!-- 步骤2：修改密码 -->
+            <!-- 步骤2：注册管理员账户 -->
             <div class="wizard-step" data-step="2">
+                <label>设置管理员用户名 *</label>
+                <div style="font-size:11px;color:#3b82f6;background:#eff6ff;border:1px solid #bfdbfe;padding:4px 8px;border-radius:4px;margin-bottom:6px;">
+                    ℹ️ 此为系统登录用户名（<b>≠真实姓名</b>），建议使用英文或拼音，真实姓名请在下一步填写
+                </div>
+                <input type="text" id="wizardUsername" placeholder="4-20位，以字母开头，如：admin / wangguijie" maxlength="20" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false">
+                <div id="wizardUsernameHint" style="font-size:11px;color:#ef4444;margin-top:4px;display:none;"></div>
                 <label>设置管理员密码 *</label>
                 <input type="password" id="wizardPassword" placeholder="至少8位，含字母和数字" oninput="checkWizardPassword()">
                 <div id="wizardPwdStrength" class="password-strength"></div>
@@ -368,8 +375,9 @@
 
             <!-- 步骤3：医师信息 -->
             <div class="wizard-step" data-step="3">
-                <label>管理员/医师姓名</label>
-                <input type="text" id="wizardDoctorName" placeholder="如：张医生">
+                <label>管理员/医师真实姓名</label>
+                <div style="font-size:11px;color:#6b7280;margin-bottom:4px;">💡 此处填写您的真实姓名（可中文），将显示在处方签名处</div>
+                <input type="text" id="wizardDoctorName" placeholder="如：张医生 / 王桂杰">
                 <label>医师职称（可选）</label>
                 <input type="text" id="wizardTitle" placeholder="如：主治医师 / 主任医师">
                 <div style="font-size:9px;color:#888;margin-top:6px;">💡 以上信息可在登录后"基础设置"中随时修改</div>
@@ -377,6 +385,7 @@
 
             <div class="wizard-nav">
                 <button class="btn-prev" onclick="wizardPrev()" id="wizardPrevBtn" style="display:none;">上一步</button>
+                <button class="btn-skip" onclick="wizardSkip()" id="wizardSkipBtn">跳过</button>
                 <button class="btn-next" onclick="wizardNext()" id="wizardNextBtn">下一步</button>
             </div>
         </div>

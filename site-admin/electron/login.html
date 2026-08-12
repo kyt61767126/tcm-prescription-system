@@ -6,11 +6,33 @@
     <title>惠康中医诊所管理系统 - 登录</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --login-primary: #6366f1;
+            --login-secondary: #8b5cf6;
+            --login-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --login-header-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --login-accent: #6366f1;
+            --login-accent-light: rgba(99, 102, 241, 0.1);
+            --login-btn-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --login-version-label: '机构版';
+            --login-version-icon: '🏛️';
+        }
+        :root.edition-standard {
+            --login-primary: #0ea5e9;
+            --login-secondary: #06b6d4;
+            --login-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-header-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-accent: #0ea5e9;
+            --login-accent-light: rgba(14, 165, 233, 0.1);
+            --login-btn-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-version-label: '标准版';
+            --login-version-icon: '🏥';
+        }
         body {
             font-family: "Microsoft YaHei", "SimHei", Arial, sans-serif;
             overflow: hidden;
             height: 100vh;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--login-gradient);
             display: flex;
             justify-content: center;
             align-items: center;
@@ -39,8 +61,9 @@
             flex-direction: column;
             align-items: center;
             gap: 8px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--login-header-gradient);
         }
+        .login-logo { width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 28px; backdrop-filter: blur(5px); }
         .system-title {
             font-size: 18px;
             font-weight: bold;
@@ -51,11 +74,13 @@
         .version-tag {
             font-size: 12px;
             font-weight: bold;
-            color: rgba(255,255,255,0.9);
-            background: rgba(255,255,255,0.2);
-            padding: 2px 10px;
-            border-radius: 10px;
+            color: rgba(255,255,255,0.95);
+            background: rgba(255,255,255,0.25);
+            padding: 3px 12px;
+            border-radius: 12px;
+            backdrop-filter: blur(5px);
         }
+        .version-features { font-size: 10px; color: rgba(255,255,255,0.85); text-align: center; line-height: 1.4; margin-top: 4px; }
         .main-content {
             position: relative;
             z-index: 1;
@@ -65,8 +90,8 @@
             background: white;
             border-radius: 10px;
             padding: 20px;
-            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15);
-            border: 1px solid rgba(102, 126, 234, 0.2);
+            box-shadow: 0 4px 15px var(--login-accent-light);
+            border: 1px solid rgba(0,0,0,0.05);
         }
         .login-field {
             margin-bottom: 18px;
@@ -89,9 +114,9 @@
             transition: all 0.2s;
         }
         .login-field select:focus, .login-field input:focus {
-            border-color: #667eea;
+            border-color: var(--login-accent);
             outline: none;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            box-shadow: 0 0 0 3px var(--login-accent-light);
             background: white;
         }
         .remember-me {
@@ -103,7 +128,7 @@
         .remember-me input[type="checkbox"] {
             width: 16px;
             height: 16px;
-            accent-color: #667eea;
+            accent-color: var(--login-accent);
             cursor: pointer;
         }
         .remember-me label {
@@ -120,19 +145,19 @@
         .login-btn {
             flex: 1;
             padding: 10px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: var(--login-btn-gradient);
             color: #fff;
             border: none;
             border-radius: 8px;
             font-size: 13px;
             font-weight: bold;
             cursor: pointer;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
+            transition: all 0.25s ease;
         }
-        .login-btn:hover {
+        .login-btn:hover:not(:disabled) {
             transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
         }
         .login-btn:active {
             transform: translateY(0);
@@ -169,8 +194,10 @@
     <div class="login-container">
         <div class="bg-decoration"></div>
         <div class="header-section">
+            <div class="login-logo" id="loginLogo">🏛️</div>
             <span class="system-title">惠康中医诊所管理系统</span>
-            <span class="version-tag">【云版】</span>
+            <span class="version-tag" id="loginVersionTag">【机构版】</span>
+            <div class="version-features" id="loginVersionFeatures">多用户管理 · 权限控制 · 数据统计</div>
         </div>
         <div class="main-content">
             <div class="login-box">
@@ -211,6 +238,43 @@
                     Permission.applyLoginPermissions();
                 }
             } catch(e) { console.warn('Login permission init failed:', e); }
+        }
+
+        // 根据版本切换登录界面主题
+        function applyLoginTheme(edition) {
+            const root = document.documentElement;
+            const logoEl = document.getElementById('loginLogo');
+            const tagEl = document.getElementById('loginVersionTag');
+            const featuresEl = document.getElementById('loginVersionFeatures');
+
+            if (edition === 'standard' || edition === 'clinic_standard') {
+                root.classList.add('edition-standard');
+                if (logoEl) logoEl.textContent = '🏥';
+                if (tagEl) tagEl.textContent = '【标准版】';
+                if (featuresEl) featuresEl.textContent = '基础诊疗 · 处方管理 · 数据统计';
+            } else {
+                root.classList.remove('edition-standard');
+                if (logoEl) logoEl.textContent = '🏛️';
+                if (tagEl) tagEl.textContent = '【机构版】';
+                if (featuresEl) featuresEl.textContent = '多用户管理 · 权限控制 · 数据统计';
+            }
+        }
+
+        // 初始化登录界面
+        function initLoginUI() {
+            try {
+                const params = new URLSearchParams(window.location.search);
+                let edition = params.get('edition') || window.EDITION || 'institution';
+
+                if (edition === 'personal') {
+                    edition = 'standard';
+                }
+
+                applyLoginTheme(edition);
+            } catch(e) {
+                console.warn('初始化登录界面失败:', e);
+                applyLoginTheme('institution');
+            }
         }
 
         const { ipcRenderer } = require('electron');
@@ -447,6 +511,7 @@
         }
         
         document.addEventListener('DOMContentLoaded', async () => {
+            initLoginUI();
             await initLoginDropdown();
             initLoginPermissions();
             let savedPassword = localStorage.getItem('auth:savedPassword');

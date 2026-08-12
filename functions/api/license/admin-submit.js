@@ -124,7 +124,8 @@ export async function onRequest(context) {
         }
 
         const body = await context.request.json().catch(() => ({}));
-        const { clinicName, adminName, phone, remark, machineId } = body;
+        const { clinicName, adminName, phone, remark, machineId, 
+                productName, edition, appMode, versionLabel, env } = body;
 
         // 参数校验
         if (!clinicName || typeof clinicName !== 'string' || clinicName.trim().length === 0) {
@@ -168,7 +169,14 @@ export async function onRequest(context) {
             resolvedBy: null,
             licenseCode: null,      // 审核通过时关联的激活码
             licenseBase64: null,    // 审核通过时下发的 license（base64）
-            rejectReason: null
+            rejectReason: null,
+            // ★ 版本信息：区分离线/云端、机构版/标准版
+            productName: (productName || '').trim(),
+            edition: (edition || '').trim(),
+            appMode: (appMode || '').trim(),
+            versionLabel: (versionLabel || '').trim(),
+            // ★ 环境标记：test=测试环境，production=正式环境
+            env: (env || 'production').trim()
         };
 
         await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));

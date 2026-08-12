@@ -38,6 +38,26 @@
             --shadow: 3px 3px 10px rgba(0,0,0,0.3);
             --touch-min-height: 44px;
             --mobile-font-size: 16px;
+            --login-primary: #6366f1;
+            --login-secondary: #8b5cf6;
+            --login-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --login-header-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --login-accent: #6366f1;
+            --login-accent-light: rgba(99, 102, 241, 0.1);
+            --login-btn-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+            --login-version-label: '机构版';
+            --login-version-icon: '🏛️';
+        }
+        :root.edition-standard {
+            --login-primary: #0ea5e9;
+            --login-secondary: #06b6d4;
+            --login-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-header-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-accent: #0ea5e9;
+            --login-accent-light: rgba(14, 165, 233, 0.1);
+            --login-btn-gradient: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --login-version-label: '标准版';
+            --login-version-icon: '🏥';
         }
         
         @page { size: A5; margin: 0; }
@@ -153,45 +173,49 @@
         .modal-body { flex: 1; overflow: auto; padding: 15px; background: white; }
         .modal-footer { padding: 10px 15px; background: #e0e0e0; display: flex; justify-content: flex-end; gap: 10px; border-top: 2px solid #808080; }
         .close-btn { font-size: 24px; cursor: pointer; line-height: 1; }
-        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--login-gradient); display: flex; justify-content: center; align-items: center; z-index: 9999; }
         .login-container { width: 240px; background: rgba(255, 255, 255, 0.95); border-radius: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); overflow: hidden; position: relative; }
         .bg-decoration { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400"%3E%3Cdefs%3E%3Cpattern id="grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"%3E%3Cpath d="M 24 0 L 0 0 0 24" fill="none" stroke="rgba(102,126,234,0.08)" stroke-width="1"/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill="url(%23grid)" width="320" height="400"/%3E%3C/svg%3E'); pointer-events: none; z-index: 0; }
-        .header-section { position: relative; z-index: 1; padding: 20px 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .header-section { position: relative; z-index: 1; padding: 20px 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; background: var(--login-header-gradient); }
+        .login-logo { width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 28px; backdrop-filter: blur(5px); }
         .system-title { font-size: 18px; font-weight: bold; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 2px; }
-        .version-tag { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; }
+        .version-tag { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.95); background: rgba(255,255,255,0.25); padding: 3px 12px; border-radius: 12px; backdrop-filter: blur(5px); }
+        .version-features { font-size: 10px; color: rgba(255,255,255,0.85); text-align: center; line-height: 1.4; margin-top: 4px; }
         .main-content { position: relative; z-index: 1; padding: 24px 18px; }
-        .login-box { background: white; border-radius: 10px; padding: 20px 15px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.2); }
+        .login-box { background: white; border-radius: 10px; padding: 20px 15px; box-shadow: 0 4px 15px var(--login-accent-light); border: 1px solid rgba(0,0,0,0.05); }
         .login-field { margin-bottom: 18px; display: flex; flex-direction: row; align-items: center; gap: 6px; }
         .login-field label { width: 36px; font-size: 12px; font-weight: bold; color: #555; text-align: right; flex-shrink: 0; }
         .login-field input, .login-field select { width: 100%; padding: 10px 9px; border: 2px solid #e0e0e0; border-radius: 8px; font-size: 13px; background: #fafafa; transition: all 0.2s; }
-        .login-field input:focus, .login-field select:focus { border-color: #667eea; outline: none; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); background: white; }
+        .login-field input:focus, .login-field select:focus { border-color: var(--login-accent); outline: none; box-shadow: 0 0 0 3px var(--login-accent-light); background: white; }
         .username-input-wrapper { position: relative; flex: 1; }
         .username-input-wrapper input { width: 100%; padding-right: 30px; box-sizing: border-box; }
         .username-dropdown-btn { position: absolute; right: 0; top: 0; bottom: 0; width: 27px; padding: 0; border: 2px solid #e0e0e0; border-left: none; border-radius: 0 8px 8px 0; background: linear-gradient(135deg, #f5f5f5 0%, #e0e0e0 100%); color: #666; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; transition: all 0.2s; }
         .username-dropdown-btn:hover { background: linear-gradient(135deg, #e8e8e8 0%, #d0d0d0 100%); }
-        .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 2px solid #667eea; border-radius: 8px; top: calc(100% + 4px); left: 0; right: 0; box-shadow: 0 8px 20px rgba(102, 126, 234, 0.25); max-height: 150px; overflow-y: auto; }
+        .username-dropdown-menu { position: absolute; z-index: 100; display: none; background: white; border: 2px solid var(--login-accent); border-radius: 8px; top: calc(100% + 4px); left: 0; right: 0; box-shadow: 0 8px 20px rgba(0, 0, 0, 0.12); max-height: 150px; overflow-y: auto; }
         .username-dropdown-menu.show { display: block; }
         .username-dropdown-menu div { padding: 10px 11px; font-size: 12px; color: #333; cursor: pointer; transition: background 0.2s; }
-        .username-dropdown-menu div:hover { background: #667eea; color: white; }
+        .username-dropdown-menu div:hover { background: var(--login-accent); color: white; }
         .login-field.remember-me { flex-direction: row; align-items: center; justify-content: center; gap: 6px; margin-bottom: 20px; padding-left: 0; width: 100%; }
-        .login-field.remember-me input[type="checkbox"] { flex: none; width: 16px; height: 16px; accent-color: #667eea; cursor: pointer; margin: 0; }
+        .login-field.remember-me input[type="checkbox"] { flex: none; width: 16px; height: 16px; accent-color: var(--login-accent); cursor: pointer; margin: 0; }
         .login-field.remember-me label { flex: none; width: auto; font-size: 12px; font-weight: normal; color: #666; cursor: pointer; }
         .login-buttons { display: flex; gap: 9px; }
-        .login-btn { flex: 1; padding: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4); transition: all 0.2s; }
-        .login-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(102, 126, 234, 0.5); }
+        .login-btn { flex: 1; padding: 10px; background: var(--login-btn-gradient); color: #fff; border: none; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35); transition: all 0.25s ease; }
+        .login-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45); }
         .login-btn.cancel { background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%); color: #555; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
         .login-btn.cancel:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15); }
         .login-footer { text-align: center; margin-top: 12px; font-size: 10px; color: #999; }
         .login-error { color: #dc2626; font-size: 11px; text-align: center; margin-top: 12px; padding: 8px; background: #fff5f5; border-radius: 4px; border: 1px solid #fcc; display: none; }
-        .clinic-info { text-align: center; padding: 12px; background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%); border: 1px solid #ffcccc; border-radius: 6px; margin-bottom: 20px; }
-        .clinic-info-name { font-size: 14px; font-weight: bold; color: #8b0000; }
+        .clinic-info { text-align: center; padding: 12px; background: var(--login-accent-light); border: 1px solid rgba(0,0,0,0.05); border-radius: 10px; margin-bottom: 20px; }
+        .clinic-info-name { font-size: 14px; font-weight: bold; color: var(--login-accent); }
         .login-links a:hover { text-decoration: underline; }
         
         @media screen and (max-width: 480px) {
             .login-container { width: 90%; max-width: 360px; }
             .header-section { padding: 24px 20px; }
+            .login-logo { width: 52px; height: 52px; font-size: 30px; }
             .system-title { font-size: 20px; letter-spacing: 2px; }
-            .version-tag { font-size: 13px; }
+            .version-tag { font-size: 13px; padding: 3px 14px; }
+            .version-features { font-size: 11px; }
             .main-content { padding: 28px 20px; }
             .login-box { padding: 24px; }
             .login-field { flex-direction: row; align-items: center; gap: 8px; margin-bottom: 22px; }
@@ -684,7 +708,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【云端】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="login-logo" id="loginLogo">🏛️</div><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag" id="loginVersionTag">【机构版】</div><div class="version-features" id="loginVersionFeatures">多用户管理 · 权限控制 · 数据统计</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>用户:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -3380,6 +3404,41 @@ if (window.Permission) {
             }
         }
 
+        // 根据版本切换登录界面主题
+        window.applyLoginTheme = function(edition) {
+            const root = document.documentElement;
+            const logoEl = document.getElementById('loginLogo');
+            const tagEl = document.getElementById('loginVersionTag');
+            const featuresEl = document.getElementById('loginVersionFeatures');
+
+            if (edition === 'standard' || edition === 'clinic_standard') {
+                root.classList.add('edition-standard');
+                if (logoEl) logoEl.textContent = '🏥';
+                if (tagEl) tagEl.textContent = '【标准版】';
+                if (featuresEl) featuresEl.textContent = '基础诊疗 · 处方管理 · 数据统计';
+            } else {
+                root.classList.remove('edition-standard');
+                if (logoEl) logoEl.textContent = '🏛️';
+                if (tagEl) tagEl.textContent = '【机构版】';
+                if (featuresEl) featuresEl.textContent = '多用户管理 · 权限控制 · 数据统计';
+            }
+        };
+
+        // 初始化登录界面
+        window.initLoginUI = function() {
+            try {
+                const edition = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) || window.EDITION || 'institution';
+                window.applyLoginTheme(edition);
+
+                const clinicNameEl = document.getElementById('loginClinicName');
+                if (clinicNameEl && typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) {
+                    clinicNameEl.textContent = CONFIG.clinicName;
+                }
+            } catch(e) {
+                console.warn('初始化登录界面失败:', e);
+            }
+        };
+
         // 退出 APP（登录界面取消按钮）
         function exitApp() {
             // 立即隐藏页面，给用户即时反馈（避免感知到 finish() 的延迟）
@@ -5968,6 +6027,9 @@ if (window.Permission) {
         }
 
         async function init() {
+            // 初始化登录界面主题（标准版/机构版）
+            window.initLoginUI();
+
             // 先初始化用户下拉框
             await initLoginDropdown();
 

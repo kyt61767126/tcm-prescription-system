@@ -1,7 +1,7 @@
 {
   "clinicName": "本能堂中医诊所",
   "doctorName": "本能堂",
-  "edition": "clinic",
+  "edition": "custom",
   "appMode": "offline",
   "maxUsers": 10,
   "productName": "惠康中医-LJ",

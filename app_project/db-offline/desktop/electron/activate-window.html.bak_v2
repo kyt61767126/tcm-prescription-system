@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>软件激活</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: #333;
+    padding: 24px 16px;
+    font-size: 14px;
+    user-select: none;
+    min-height: 100vh;
+}
+.container {
+    max-width: 440px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 12px;
+    padding: 28px 24px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+}
+.brand {
+    text-align: center;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #f0f0f0;
+}
+.brand .logo {
+    width: 56px;
+    height: 56px;
+    margin: 0 auto 10px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: 22px;
+    font-weight: bold;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+h1 {
+    color: #2c3e50;
+    font-size: 20px;
+    text-align: center;
+    margin-bottom: 6px;
+}
+.subtitle {
+    color: #909399;
+    font-size: 12px;
+    text-align: center;
+}
+.form-group { margin-bottom: 14px; }
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    color: #606266;
+    font-weight: 500;
+    font-size: 13px;
+}
+.form-group input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1.5px solid #dcdfe6;
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: "Courier New", monospace;
+    letter-spacing: 1px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    user-select: text;
+    background: #fafbfc;
+}
+.form-group input:focus {
+    border-color: #667eea;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+    background: #fff;
+}
+.form-group input::placeholder {
+    color: #c0c4cc;
+    letter-spacing: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+.btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    transition: transform 0.1s, box-shadow 0.2s, opacity 0.2s;
+    margin-top: 10px;
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+.btn:hover { opacity: 0.92; box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4); }
+.btn:active { transform: translateY(1px); }
+.btn:disabled {
+    background: #bdc3c7;
+    cursor: not-allowed;
+    box-shadow: none;
+    opacity: 0.7;
+}
+.btn-secondary {
+    background: #fff;
+    color: #606266;
+    border: 1.5px solid #dcdfe6;
+    box-shadow: none;
+    margin-top: 8px;
+}
+.btn-secondary:hover { background: #f5f7fa; border-color: #c0c4cc; }
+
+.status-box {
+    margin-top: 14px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    display: none;
+    line-height: 1.5;
+}
+.status-box.show { display: block; }
+.status-box.success {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+.status-box.error {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+.status-box.loading {
+    background: #d1ecf1;
+    color: #0c5460;
+    border: 1px solid #bee5eb;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #bee5eb;
+    border-top-color: #0c5460;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.machine-id-box {
+    margin-top: 16px;
+    padding: 10px 12px;
+    background: #f5f7fa;
+    border: 1px solid #e4e7ed;
+    border-radius: 6px;
+    font-size: 11px;
+    color: #606266;
+    font-family: "Courier New", monospace;
+    word-break: break-all;
+    user-select: text;
+    position: relative;
+}
+.machine-id-box .label {
+    color: #606266;
+    font-weight: 500;
+    margin-bottom: 4px;
+    font-family: inherit;
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+.machine-id-box .label-text {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.machine-id-box .copy-btn {
+    background: #667eea;
+    color: #fff;
+    border: none;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    transition: background 0.2s;
+}
+.machine-id-box .copy-btn:hover { background: #5a6fd6; }
+.machine-id-box .copy-btn.copied { background: #67c23a; }
+.machine-id-box .id-value {
+    color: #909399;
+    font-size: 12px;
+    padding: 4px 0;
+    letter-spacing: 0.5px;
+}
+
+.contact-box {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #fff8e1 0%, #fff3cd 100%);
+    border: 1px solid #ffe082;
+    border-radius: 6px;
+    font-size: 12px;
+    color: #856404;
+    line-height: 1.7;
+}
+.contact-box .title {
+    color: #9c640c;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+.contact-box .item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 3px 0;
+}
+.contact-box .item strong {
+    color: #9c640c;
+    min-width: 50px;
+}
+.contact-box .copy-inline {
+    background: #9c640c;
+    color: #fff;
+    border: none;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    cursor: pointer;
+    font-family: inherit;
+    margin-left: 4px;
+}
+.contact-box .copy-inline:hover { background: #7e5310; }
+.contact-box .copy-inline.copied { background: #67c23a; }
+
+.info-box {
+    margin-top: 14px;
+    padding: 10px 12px;
+    background: #f4f4f5;
+    border: 1px solid #e4e7ed;
+    border-radius: 6px;
+    font-size: 11px;
+    color: #606266;
+    line-height: 1.7;
+}
+.info-box strong { color: #303133; }
+.info-box ol { padding-left: 18px; margin-top: 4px; }
+.info-box ol li { margin: 2px 0; }
+
+.retry-btn {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 5px 14px;
+    background: #667eea;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+}
+.retry-btn:hover { background: #5a6fd6; }
+
+/* ★ 当前绑定信息（自动显示，不可编辑） */
+.bind-info {
+    margin-top: 14px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+    border: 1px solid #81c784;
+    border-radius: 8px;
+    font-size: 12px;
+    color: #2e7d32;
+    line-height: 1.8;
+}
+.bind-info-title {
+    color: #1b5e20;
+    font-weight: 600;
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+.bind-info-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 2px 0;
+}
+.bind-info-row span {
+    color: #388e3c;
+    min-width: 70px;
+}
+.bind-info-row b {
+    color: #1b5e20;
+    font-weight: 600;
+    word-break: break-all;
+}
+
+/* 试用期状态提示 */
+.trial-notice {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-top: 10px;
+    margin-bottom: 14px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #fff3e0 0%, #ffe0b2 100%);
+    border: 1px solid #ffb74d;
+    border-radius: 8px;
+}
+.trial-notice-icon {
+    font-size: 24px;
+    line-height: 1;
+}
+.trial-notice-body {
+    flex: 1;
+}
+.trial-notice-title {
+    color: #e65100;
+    font-weight: 600;
+    font-size: 14px;
+}
+.trial-notice-title b {
+    font-size: 18px;
+    color: #d84315;
+}
+.trial-notice-desc {
+    color: #bf360c;
+    font-size: 12px;
+    margin-top: 2px;
+}
+
+/* 购买链接卡片 */
+.purchase-card {
+    margin-top: 14px;
+    padding: 14px;
+    background: linear-gradient(135deg, #e8eaf6 0%, #c5cae9 100%);
+    border: 1px solid #9fa8da;
+    border-radius: 10px;
+    text-align: center;
+}
+.purchase-card .pc-title {
+    color: #283593;
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 6px;
+}
+.purchase-card .pc-desc {
+    color: #3949ab;
+    font-size: 12px;
+    margin-bottom: 10px;
+}
+.purchase-card .pc-btn {
+    display: inline-block;
+    padding: 8px 20px;
+    background: linear-gradient(135deg, #3f51b5 0%, #5c6bc0 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: transform 0.1s, box-shadow 0.2s;
+}
+.purchase-card .pc-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(63, 81, 181, 0.4);
+}
+.purchase-card .pc-price {
+    margin-top: 8px;
+    color: #1a237e;
+    font-size: 11px;
+}
+.purchase-card .pc-price span {
+    color: #c62828;
+    font-weight: 600;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="brand">
+        <div class="logo">惠</div>
+        <h1>软件激活</h1>
+        <div class="subtitle">填写激活码，一键完成激活</div>
+    </div>
+
+    <!-- 试用期状态提示 -->
+    <div id="trialNotice" class="trial-notice" style="display:none;">
+        <div class="trial-notice-icon">⏳</div>
+        <div class="trial-notice-body">
+            <div class="trial-notice-title">试用期剩余 <b id="trialDays">--</b> 天</div>
+            <div class="trial-notice-desc">激活后可永久使用或至授权到期</div>
+        </div>
+    </div>
+
+    <!-- ★ 当前绑定信息（自动从配置读取） -->
+    <div id="bindInfo" class="bind-info" style="display:none;">
+        <div class="bind-info-title">📋 当前绑定信息</div>
+        <div class="bind-info-row"><span>诊所名称：</span><b id="bindClinicName">--</b></div>
+        <div class="bind-info-row"><span>管理员：</span><b id="bindUserName">--</b></div>
+        <div style="font-size:11px;color:#888;margin-top:4px;">💡 激活码将自动与以上信息绑定，如需修改请先在"基础设置"中更新</div>
+    </div>
+
+    <div id="statusBox" class="status-box"></div>
+
+    <div class="form-group">
+        <label>激活码</label>
+        <input type="text" id="activationCode" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+    </div>
+
+    <button class="btn" id="activateBtn" onclick="submitActivate()">🚀 一键激活</button>
+    <button class="btn btn-secondary" onclick="closeWindow()">取 消</button>
+
+    <!-- ★ 新增：离线激活文件导入入口（无网络时使用） -->
+    <div style="margin-top: 16px; padding-top: 16px; border-top: 1px dashed #ddd;">
+        <div style="font-size: 12px; color: #888; margin-bottom: 8px; text-align: center;">— 无法联网？使用离线激活文件 —</div>
+        <button class="btn btn-secondary" id="importOfflineBtn" onclick="importOfflineLicense()" style="background: #fff8e1; color: #e65100; border: 1px solid #ffe082;">
+            📁 导入离线激活文件
+        </button>
+        <div style="font-size: 11px; color: #999; margin-top: 6px; line-height: 1.6;">
+            使用方法：<br>
+            1. 复制上方机器 ID 发给客服<br>
+            2. 客服生成离线激活文件发给您<br>
+            3. 点击上方按钮选择该文件完成激活
+        </div>
+    </div>
+
+    <div class="machine-id-box">
+        <div class="label">
+            <span class="label-text">🔑 本机机器 ID（联系客服时提供）</span>
+            <button class="copy-btn" id="copyMachineIdBtn" onclick="copyMachineId()">复制</button>
+        </div>
+        <div class="id-value" id="machineId">加载中...</div>
+    </div>
+
+    <div class="contact-box">
+        <div class="title">🎫 获取激活码</div>
+        <div class="item"><strong>客服微信：</strong><span>hktzy1688</span><button class="copy-inline" onclick="copyText(this, 'hktzy1688')">复制</button></div>
+        <div class="item" style="margin-top: 6px; color: #9c640c; font-size: 11px;">复制下方机器 ID 和诊所名，发给客服即可获取激活码</div>
+    </div>
+
+    <!-- 购买入口卡片 -->
+    <div class="purchase-card">
+        <div class="pc-title">💡 想了解更多套餐？</div>
+        <div class="pc-desc">在线购买 · 即时开通 · 安全可靠</div>
+        <a class="pc-btn" href="https://tcm-prescription-system.pages.dev/download" target="_blank">🌐 前往官网购买激活码</a>
+        <div class="pc-price">标准版 ¥999/年起 · 机构版 ¥2999/年起</div>
+    </div>
+
+    <div class="info-box">
+        <strong>激活说明：</strong>
+        <ol>
+            <li>激活码格式：BNZC-XXXX-XXXX-XXXX-XXXX</li>
+            <li>每个激活码绑定一台设备 + 一个诊所</li>
+            <li>换机或换诊所需联系客服解绑</li>
+            <li>激活成功后软件将自动重启</li>
+            <li>如无法联网，请点击上方"导入离线激活文件"按钮，使用客服提供的离线激活文件完成激活</li>
+        </ol>
+    </div>
+</div>
+
+<script>
+// 从 URL 参数获取机器 ID
+const params = new URLSearchParams(window.location.search);
+document.getElementById('machineId').textContent = params.get('machineId') || '未知';
+
+// ★ 获取试用期状态并显示
+(async function showTrialInfo() {
+    try {
+        if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.getStatus) {
+            const status = await window.electronAPI.license.getStatus();
+            if (status && status.type === 'trial') {
+                const days = status.remainingDays || 0;
+                document.getElementById('trialDays').textContent = days;
+                document.getElementById('trialNotice').style.display = 'flex';
+            } else if (status && status.valid && status.type !== 'trial') {
+                document.getElementById('trialNotice').style.display = 'none';
+            }
+        }
+    } catch (e) { /* 静默失败 */ }
+})();
+
+// ★★★ 自动从 config.json 或 URL 参数读取绑定信息并显示
+(async function loadBindInfo() {
+    try {
+        let clinicName = '';
+        let userName = '';
+
+        // 优先从 electronAPI 读取（最新配置）
+        if (window.electronAPI && window.electronAPI.getAppConfig) {
+            const result = await window.electronAPI.getAppConfig();
+            if (result && result.success && result.config) {
+                clinicName = result.config.clinicName || '';
+                userName = result.config.doctorName || result.config.adminName || '';
+            }
+        }
+
+        // 回退：从 URL 参数读取（activate.js 传递）
+        if (!clinicName) {
+            const urlClinic = params.get('clinicName');
+            if (urlClinic) clinicName = decodeURIComponent(urlClinic);
+            const urlUser = params.get('userName');
+            if (urlUser) userName = decodeURIComponent(urlUser);
+        }
+
+        // 显示绑定信息
+        if (clinicName) {
+            document.getElementById('bindClinicName').textContent = clinicName;
+            document.getElementById('bindUserName').textContent = userName || '管理员';
+            document.getElementById('bindInfo').style.display = 'block';
+        }
+    } catch (e) { /* 预填失败不影响激活流程 */ }
+})();
+
+// ★ 获取当前绑定信息（用于激活时传给服务器）
+async function getBindData() {
+    try {
+        if (window.electronAPI && window.electronAPI.getAppConfig) {
+            const result = await window.electronAPI.getAppConfig();
+            if (result && result.success && result.config) {
+                return {
+                    clinicName: result.config.clinicName || '',
+                    userName: result.config.doctorName || result.config.adminName || ''
+                };
+            }
+        }
+    } catch (e) { /* ignore */ }
+    return { clinicName: '', userName: '' };
+}
+
+// 自动格式化激活码输入
+document.getElementById('activationCode').addEventListener('input', function(e) {
+    let val = e.target.value.toUpperCase().replace(/[^A-HJ-NP-Z2-9-]/g, '');
+    // 自动添加连字符
+    const clean = val.replace(/-/g, '');
+    if (clean.length > 4) {
+        const groups = [];
+        for (let i = 0; i < clean.length && i < 20; i += 4) {
+            groups.push(clean.substring(i, i + 4));
+        }
+        val = groups.join('-');
+    }
+    e.target.value = val;
+});
+
+// 回车键激活
+document.getElementById('activationCode').addEventListener('keyup', e => {
+    if (e.key === 'Enter') submitActivate();
+});
+
+// ★ bnzc:// 一键激活：检查是否有待激活数据并自动填入
+(async function checkBnzcPending() {
+    try {
+        if (!window.electronAPI || !window.electronAPI.bnzcGetPendingActivation) return;
+        const result = await window.electronAPI.bnzcGetPendingActivation();
+        if (result && result.success && result.data && result.data.code) {
+            console.log('[Bnzc] 激活窗口检测到待激活数据:', result.data.code);
+            const d = result.data;
+            // 自动填入激活码
+            document.getElementById('activationCode').value = d.code;
+            // 自动提交激活
+            console.log('[Bnzc] 激活窗口自动提交激活');
+            const actResult = await window.electronAPI.bnzcAutoActivate({
+                code: d.code,
+                clinicName: d.clinicName || '',
+                user: d.user || ''
+            });
+            if (actResult && actResult.success) {
+                showStatus('✅ 激活成功！软件将自动重启...', 'success');
+                if (window.electronAPI.bnzcClearPendingActivation) {
+                    window.electronAPI.bnzcClearPendingActivation();
+                }
+                setTimeout(() => {
+                    if (window.electronAPI.license && window.electronAPI.license.restart) {
+                        window.electronAPI.license.restart();
+                    }
+                }, 1500);
+            } else {
+                showStatus('❌ 自动激活失败：' + (actResult.error || '未知错误'), 'error');
+                if (window.electronAPI.bnzcClearPendingActivation) {
+                    window.electronAPI.bnzcClearPendingActivation();
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[Bnzc] 激活窗口检查待激活数据失败:', e);
+    }
+})();
+
+function showStatus(message, type, withRetry) {
+    const box = document.getElementById('statusBox');
+    box.className = 'status-box show ' + type;
+    if (type === 'loading') {
+        box.innerHTML = '<span class="spinner"></span><span>' + message + '</span>';
+    } else if (withRetry) {
+        box.innerHTML = message + ' <button class="retry-btn" onclick="resetActivateBtn()">重试</button>';
+    } else {
+        box.textContent = message;
+    }
+}
+
+function resetActivateBtn() {
+    const btn = document.getElementById('activateBtn');
+    btn.disabled = false;
+    btn.textContent = '🚀 一键激活';
+}
+
+// 复制机器 ID
+function copyMachineId() {
+    const text = document.getElementById('machineId').textContent;
+    copyText(document.getElementById('copyMachineIdBtn'), text);
+}
+
+// 通用复制函数
+function copyText(btn, text) {
+    const fallback = () => {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.style.position = 'fixed';
+            ta.style.opacity = '0';
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            return true;
+        } catch (e) { return false; }
+    };
+    const markCopied = () => {
+        const orig = btn.textContent;
+        btn.classList.add('copied');
+        btn.textContent = '已复制';
+        setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.textContent = orig;
+        }, 1500);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(markCopied).catch(() => {
+            if (fallback()) markCopied();
+        });
+    } else {
+        if (fallback()) markCopied();
+    }
+}
+
+async function submitActivate() {
+    const code = document.getElementById('activationCode').value.trim();
+
+    if (!code) {
+        showStatus('请输入激活码', 'error');
+        return;
+    }
+
+    // 校验格式
+    const pattern = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+    if (!pattern.test(code)) {
+        showStatus('激活码格式错误，应为 BNZC-XXXX-XXXX-XXXX-XXXX', 'error');
+        return;
+    }
+
+    // ★★★ 自动从配置读取绑定信息，无需用户手动填写
+    const bindData = await getBindData();
+    const clinicName = bindData.clinicName;
+    const user = bindData.userName;
+
+    // 校验诊所名
+    if (!clinicName) {
+        showStatus('诊所名未设置，请先完成诊所绑定', 'error');
+        return;
+    }
+    if (clinicName && clinicName.includes('|')) {
+        showStatus('诊所名不能包含特殊字符 |', 'error');
+        return;
+    }
+    if (clinicName.length > 100) {
+        showStatus('诊所名长度不能超过 100 字符', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('activateBtn');
+    btn.disabled = true;
+    btn.textContent = '激活中...';
+    showStatus('正在连接服务器验证激活码...', 'loading');
+
+    try {
+        // ★★★ 使用自动绑定的信息提交激活
+        const result = await window.electronAPI.activate.submit(code, user, clinicName);
+        if (result.success) {
+            showStatus('✅ 激活成功！软件将自动重启...', 'success');
+            btn.textContent = '激活成功';
+            // 给用户一点时间看到成功提示
+            setTimeout(() => {
+                window.electronAPI.activate.restart();
+            }, 1500);
+        } else {
+            const err = result.error || '激活失败';
+            // 权限错误/网络错误显示重试按钮
+            const withRetry = /权限|网络|超时|连接/.test(err);
+            showStatus(err, 'error', withRetry);
+            btn.disabled = false;
+            btn.textContent = '🚀 一键激活';
+        }
+    } catch (e) {
+        showStatus('激活过程出错：' + e.message, 'error', true);
+        btn.disabled = false;
+        btn.textContent = '🚀 一键激活';
+    }
+}
+
+function closeWindow() {
+    window.electronAPI.activate.close();
+}
+
+// ★ 离线激活文件导入（无网络时使用）
+// 流程：选择文件 → 读取内容 → 调用 license:activate IPC 写入 license.dat → 重启
+async function importOfflineLicense() {
+    const importBtn = document.getElementById('importOfflineBtn');
+    try {
+        if (!window.electronAPI || !window.electronAPI.license || !window.electronAPI.license.selectOfflineFile) {
+            showStatus('当前版本不支持离线激活文件导入，请升级软件', 'error');
+            return;
+        }
+
+        // 1. 选择文件
+        importBtn.disabled = true;
+        importBtn.textContent = '正在选择文件...';
+        const selectResult = await window.electronAPI.license.selectOfflineFile();
+        if (!selectResult.success) {
+            importBtn.disabled = false;
+            importBtn.textContent = '📁 导入离线激活文件';
+            if (selectResult.cancelled) {
+                // 用户取消选择，不显示错误
+                return;
+            }
+            showStatus('选择文件失败：' + (selectResult.error || '未知错误'), 'error');
+            return;
+        }
+
+        // 2. 校验文件内容（base64 格式，能解码为 JSON）
+        importBtn.textContent = '正在验证文件...';
+        const base64Content = selectResult.base64Content;
+        if (!base64Content) {
+            importBtn.disabled = false;
+            importBtn.textContent = '📁 导入离线激活文件';
+            showStatus('激活文件为空，请检查文件内容', 'error');
+            return;
+        }
+        let licenseData;
+        try {
+            const jsonStr = atob(base64Content);
+            licenseData = JSON.parse(jsonStr);
+        } catch (e) {
+            importBtn.disabled = false;
+            importBtn.textContent = '📁 导入离线激活文件';
+            showStatus('激活文件格式错误（非有效的 license 文件）', 'error');
+            return;
+        }
+
+        // 3. 显示 license 信息，二次确认
+        const info = licenseData.user ? `用户：${licenseData.user}\n` : '';
+        const type = licenseData.type ? `版本：${licenseData.type}\n` : '';
+        const clinic = licenseData.clinicName ? `诊所：${licenseData.clinicName}\n` : '';
+        const expires = licenseData.expiresAt ? `到期：${licenseData.expiresAt.slice(0, 10)}\n` : '';
+        const confirmMsg = `已加载离线激活文件：\n\n${info}${type}${clinic}${expires}\n点击"确定"完成激活并重启软件，点击"取消"放弃激活。`;
+        // 用 Electron 原生确认框
+        const confirmSync = window.electronAPI.confirmSync;
+        if (typeof confirmSync === 'function') {
+            const ok = confirmSync(confirmMsg);
+            if (!ok) {
+                importBtn.disabled = false;
+                importBtn.textContent = '📁 导入离线激活文件';
+                return;
+            }
+        }
+
+        // 4. 调用 license:activate IPC 写入 license.dat（加密写入 + 清除 trial.dat）
+        importBtn.textContent = '正在激活...';
+        showStatus('正在写入授权文件...', 'loading');
+        const activateResult = await window.electronAPI.license.activate(base64Content);
+        if (activateResult.success) {
+            showStatus('✅ 激活成功！软件将自动重启...', 'success');
+            importBtn.textContent = '激活成功';
+            // 给用户一点时间看到成功提示
+            setTimeout(() => {
+                window.electronAPI.activate.restart();
+            }, 1500);
+        } else {
+            const err = activateResult.error || '激活失败';
+            // 区分错误类型：绑定不匹配 / 文件损坏 / 权限问题
+            let friendlyErr = err;
+            if (/machineId|机器|绑定/.test(err)) {
+                friendlyErr = '激活文件与本机不匹配：' + err + '\n\n请确认该文件是为本机机器 ID 生成的。';
+            } else if (/permission|EACCES|EPERM|权限/.test(err)) {
+                friendlyErr = '授权文件写入权限不足：' + err + '\n\n请以管理员身份运行程序后重试。';
+            }
+            showStatus(friendlyErr, 'error', true);
+            importBtn.disabled = false;
+            importBtn.textContent = '📁 导入离线激活文件';
+        }
+    } catch (e) {
+        showStatus('导入激活文件出错：' + e.message, 'error', true);
+        importBtn.disabled = false;
+        importBtn.textContent = '📁 导入离线激活文件';
+    }
+}
+</script>
+</body>
+</html>

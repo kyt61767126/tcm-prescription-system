@@ -1,9 +1,9 @@
 {
   "clinicName": "",
   "doctorName": "",
-  "edition": "cloud_clinic",
+  "edition": "institution",
   "appMode": "cloud",
-  "maxUsers": 0,
+  "maxUsers": 10,
   "productName": "惠康中医-YJ",
   "versionLabel": "云端机构版",
   "users": [],

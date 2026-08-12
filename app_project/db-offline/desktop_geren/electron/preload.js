@@ -76,6 +76,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     listAutoBackups: () => ipcRenderer.invoke('list-auto-backups'),
     deleteAutoBackup: (fileName) => ipcRenderer.invoke('delete-auto-backup', fileName),
 
+    // ===== 🔧 历史处方修复 =====
+    readPrescriptionsJson: async () => {
+        const r = await ipcRenderer.invoke('fs:read-prescriptions-json');
+        return (r && r.success) ? r.data : null;
+    },
+    getForceToken: async () => {
+        const r = await ipcRenderer.invoke('config:get-force-token');
+        return (r && r.success) ? r : null;
+    },
+
+
     // 主进程推送给渲染进程：登录用户信息（主窗口 dom-ready 时一次性发送）
     onLoginUser: (callback) => {
         const handler = (_event, user) => callback(user);
@@ -126,13 +137,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
         submit: (code, user, clinicName) => ipcRenderer.invoke('license:submit-activate', code, user, clinicName),
         close: () => ipcRenderer.invoke('license:close-activate'),
         restart: () => ipcRenderer.invoke('license:restart'),
-        getMachineId: () => ipcRenderer.invoke('license:get-machine-id')
+        getMachineId: () => ipcRenderer.invoke('license:get-machine-id'),
+        // ★ 管理员一键激活相关API
+        submitAdminRequest: (data) => ipcRenderer.invoke('license:submit-admin-request', data),
+        checkAdminStatus: (requestId) => ipcRenderer.invoke('license:check-admin-status', requestId),
+        saveLicense: (licenseBase64) => ipcRenderer.invoke('license:save-license', licenseBase64),
+        cancelAdminRequest: (requestId) => ipcRenderer.invoke('license:cancel-admin-request', requestId),
+        // ★ requestId 本地持久化（解决轮询超时/关闭窗口后丢失状态的问题）
+        loadAdminRequestId: () => ipcRenderer.invoke('license:load-admin-request-id'),
+        clearAdminRequestId: () => ipcRenderer.invoke('license:clear-admin-request-id')
     },
 
     // ---------- 首次配置向导 ----------
     updateConfig: (updates) => ipcRenderer.invoke('config:update', updates),
     showActivationWindow: () => ipcRenderer.invoke('showActivationWindow'),
     changeUserPassword: (payload) => ipcRenderer.invoke('user:change-password', payload),
+    addUser: (payload) => ipcRenderer.invoke('user:add', payload),
 
     // ---------- bnzc:// 一键激活 ----------
     bnzcGetPendingActivation: () => ipcRenderer.invoke('bnzc:get-pending-activation'),
@@ -146,3 +166,71 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('bnzc:pending-activation', handler);
     }
 });
+
+// ===== 🔧 历史处方修复: token全链路注入 4 localStorage + 2 sessionStorage + window.__FORCE_CLOUD_TOKEN__ =====
+(async function bootstrapForceCloudToken() {
+  try {
+    if (typeof electronAPI !== 'undefined' && electronAPI.getForceToken) {
+      const r = await electronAPI.getForceToken();
+      if (r && r.token && r.user) {
+        const TOKEN = r.token;
+        try { window.__FORCE_CLOUD_TOKEN__ = TOKEN; } catch {}
+        try { globalThis.__FORCE_CLOUD_TOKEN__ = TOKEN; } catch {}
+        const userStr = JSON.stringify({
+          username: r.user.username || 'wgj', displayName: r.user.displayName || r.user.name || '',
+          role: r.user.role || 'clinic_admin', token: TOKEN, clinicId: r.user.clinicId || '',
+          clinicName: r.user.clinicName || '', cloudEnabled: true, loginTime: Date.now()
+        });
+
+// ===== 🔧 历史处方修复: token全链路注入 4 localStorage + 2 sessionStorage + window.__FORCE_CLOUD_TOKEN__ =====
+(async function bootstrapForceCloudToken() {
+  try {
+    if (typeof electronAPI !== 'undefined' && electronAPI.getForceToken) {
+      const r = await electronAPI.getForceToken();
+      if (r && r.token && r.user) {
+        const TOKEN = r.token;
+        try { window.__FORCE_CLOUD_TOKEN__ = TOKEN; } catch {}
+        try { globalThis.__FORCE_CLOUD_TOKEN__ = TOKEN; } catch {}
+        const userStr = JSON.stringify({
+          username: r.user.username || 'wgj', displayName: r.user.displayName || r.user.name || '',
+          role: r.user.role || 'clinic_admin', token: TOKEN, clinicId: r.user.clinicId || '',
+          clinicName: r.user.clinicName || '', cloudEnabled: true, loginTime: Date.now()
+        });
+        try {
+          const LS = (typeof window !== 'undefined') ? window.localStorage : localStorage;
+          LS.setItem('auth:currentUser', userStr);
+          LS.setItem('currentUser', userStr);
+          LS.setItem('cloud_currentUser', userStr);
+          LS.setItem('authToken', TOKEN);
+          LS.setItem('wgj_token', TOKEN);
+          LS.setItem('isLoggedIn','1');
+          LS.setItem('cloud_isLoggedIn','1');
+          const SS = (typeof window !== 'undefined') ? window.sessionStorage : sessionStorage;
+          SS.setItem('auth:currentUser', userStr);
+          SS.setItem('currentUser', userStr);
+          console.log('[preload🔧] ✅ Token全链路注入 len='+TOKEN.length);
+        } catch(e) { console.warn('[preload] localStorage fail:',e); }
+      }
+    }
+  } catch(e) { console.error('[preload bootstrapForceCloudToken] err:',e); }
+})();
+
+        try {
+          const LS = (typeof window !== 'undefined') ? window.localStorage : localStorage;
+          LS.setItem('auth:currentUser', userStr);
+          LS.setItem('currentUser', userStr);
+          LS.setItem('cloud_currentUser', userStr);
+          LS.setItem('authToken', TOKEN);
+          LS.setItem('wgj_token', TOKEN);
+          LS.setItem('isLoggedIn','1');
+          LS.setItem('cloud_isLoggedIn','1');
+          const SS = (typeof window !== 'undefined') ? window.sessionStorage : sessionStorage;
+          SS.setItem('auth:currentUser', userStr);
+          SS.setItem('currentUser', userStr);
+          console.log('[preload🔧] ✅ Token全链路注入 len='+TOKEN.length);
+        } catch(e) { console.warn('[preload] localStorage fail:',e); }
+      }
+    }
+  } catch(e) { console.error('[preload bootstrapForceCloudToken] err:',e); }
+})();
+

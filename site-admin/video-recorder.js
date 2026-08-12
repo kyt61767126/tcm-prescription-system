@@ -514,7 +514,7 @@
         setTimeout(saveVideo, 300);
     }
 
-    // ★ 网页版保存：使用浏览器下载方式（替代桌面版的 electronAPI.saveVideoFile）
+    // ★ 网页版保存：使用浏览器下载方式 + IndexedDB 存储
     async function saveVideo() {
         var blob = window.__pendingVideoBlob;
         var fileName = window.__pendingVideoFileName;
@@ -528,7 +528,6 @@
         saveBtn.textContent = '保存中...';
 
         try {
-            // 网页版：使用 <a download> 下载文件
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
@@ -537,6 +536,38 @@
             a.click();
             document.body.removeChild(a);
             setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+
+            var info = getCurrentPrescriptionInfo();
+            var ext = (fileName.split('.').pop() || 'webm').toLowerCase();
+            var isVideo = ext === 'webm' || ext === 'mp4' || ext === 'avi' || ext === 'mov';
+            var reader = new FileReader();
+            reader.onload = function () {
+                saveMediaToDB({
+                    patientName: info.patientName || 'unknown',
+                    prescriptionNo: info.prescriptionNo || '',
+                    createdAt: new Date().toISOString(),
+                    timestamp: Date.now(),
+                    name: fileName,
+                    type: isVideo ? 'video' : 'image',
+                    blob: blob,
+                    dataUrl: reader.result,
+                    size: blob.size
+                }).catch(function (e) { console.warn('[video-recorder] IndexedDB存储失败:', e); });
+            };
+            reader.onerror = function () {
+                saveMediaToDB({
+                    patientName: info.patientName || 'unknown',
+                    prescriptionNo: info.prescriptionNo || '',
+                    createdAt: new Date().toISOString(),
+                    timestamp: Date.now(),
+                    name: fileName,
+                    type: isVideo ? 'video' : 'image',
+                    blob: blob,
+                    dataUrl: '',
+                    size: blob.size
+                }).catch(function (e) { console.warn('[video-recorder] IndexedDB存储失败:', e); });
+            };
+            try { reader.readAsDataURL(blob); } catch (e) {}
 
             setStatus('视频已下载：' + fileName, 'success');
             showToast('视频已下载到本地：' + fileName);
@@ -897,7 +928,7 @@
         setStatus('请采集舌下络脉图像，点击"拍照"', '');
     }
 
-    // ★ 网页版保存照片：使用浏览器下载方式（替代桌面版的 electronAPI.savePrescriptionImage）
+    // ★ 网页版保存照片：使用浏览器下载方式 + IndexedDB 存储
     async function savePhoto() {
         if (capturedPhotos.length === 0) {
             setStatus('没有可保存的照片', 'error');
@@ -911,13 +942,14 @@
         try {
             var successCount = 0;
             var photoTypes = ['tongue_front', 'tongue_under'];
+            var info = getCurrentPrescriptionInfo();
+            var savePromises = [];
 
             for (var i = 0; i < capturedPhotos.length; i++) {
                 if (!capturedPhotos[i]) continue;
                 var dataUrl = capturedPhotos[i];
                 var fileName = generateFileName('photo', photoTypes[i]);
 
-                // 网页版：使用 <a download> 下载 dataURL
                 var a = document.createElement('a');
                 a.href = dataUrl;
                 a.download = fileName;
@@ -925,12 +957,25 @@
                 a.click();
                 document.body.removeChild(a);
 
+                savePromises.push(saveMediaToDB({
+                    patientName: info.patientName || 'unknown',
+                    prescriptionNo: info.prescriptionNo || '',
+                    createdAt: new Date().toISOString(),
+                    timestamp: Date.now() + i,
+                    name: fileName,
+                    type: 'image',
+                    blob: null,
+                    dataUrl: dataUrl,
+                    size: Math.round((dataUrl.length - 'data:image/jpeg;base64,'.length) * 3 / 4)
+                }).catch(function (e) { console.warn('[video-recorder] IndexedDB存储失败:', e); }));
+
                 successCount++;
-                // 多文件下载间隔，避免浏览器拦截
                 if (i < capturedPhotos.length - 1) {
                     await new Promise(function (r) { setTimeout(r, 500); });
                 }
             }
+
+            await Promise.all(savePromises);
 
             if (successCount > 0) {
                 setStatus('照片已下载（' + successCount + ' 张）', 'success');
@@ -1089,6 +1134,122 @@
         window.__pendingVideoFileName = null;
         currentCaptureStep = 1;
         capturedPhotos = [];
+    }
+
+    // ========================================================================
+    // IndexedDB 存储（网页版：替代桌面版 electronAPI 文件查找）
+    // ========================================================================
+    var MEDIA_DB_NAME = 'PrescriptionMediaDB';
+    var MEDIA_DB_VERSION = 1;
+    var MEDIA_STORE = 'media_files';
+    var _mediaDB = null;
+
+    function openMediaDB() {
+        if (_mediaDB) return Promise.resolve(_mediaDB);
+        return new Promise(function (resolve, reject) {
+            try {
+                var req = indexedDB.open(MEDIA_DB_NAME, MEDIA_DB_VERSION);
+                req.onupgradeneeded = function (e) {
+                    var db = e.target.result;
+                    if (!db.objectStoreNames.contains(MEDIA_STORE)) {
+                        var store = db.createObjectStore(MEDIA_STORE, { keyPath: 'id', autoIncrement: true });
+                        store.createIndex('patientName', 'patientName', { unique: false });
+                        store.createIndex('prescriptionNo', 'prescriptionNo', { unique: false });
+                        store.createIndex('createdAt', 'createdAt', { unique: false });
+                        store.createIndex('timestamp', 'timestamp', { unique: false });
+                    }
+                };
+                req.onsuccess = function () {
+                    _mediaDB = req.result;
+                    resolve(_mediaDB);
+                };
+                req.onerror = function () { reject(req.error); };
+            } catch (e) { reject(e); }
+        });
+    }
+
+    function saveMediaToDB(entry) {
+        return openMediaDB().then(function (db) {
+            return new Promise(function (resolve, reject) {
+                var tx = db.transaction(MEDIA_STORE, 'readwrite');
+                var store = tx.objectStore(MEDIA_STORE);
+                store.put(entry);
+                tx.oncomplete = function () { resolve(true); };
+                tx.onerror = function () { reject(tx.error); };
+            });
+        });
+    }
+
+    function findMediaInDB(patientName, prescriptionNo, createdAt) {
+        return openMediaDB().then(function (db) {
+            return new Promise(function (resolve, reject) {
+                var tx = db.transaction(MEDIA_STORE, 'readonly');
+                var store = tx.objectStore(MEDIA_STORE);
+                var request = store.getAll();
+                request.onsuccess = function () {
+                    var all = request.result || [];
+                    var cleanPatient = (patientName || '').trim();
+                    var cleanNo = (prescriptionNo || '').trim();
+                    var results = all.filter(function (r) {
+                        if (!r || !r.patientName) return false;
+                        var matchPatient = cleanPatient && r.patientName.indexOf(cleanPatient) >= 0;
+                        var matchNo = cleanNo && r.prescriptionNo && r.prescriptionNo.indexOf(cleanNo) >= 0;
+                        if (matchPatient && matchNo) return true;
+                        if (matchPatient && !cleanNo) return true;
+                        return false;
+                    });
+                    results.sort(function (a, b) {
+                        return (b.timestamp || 0) - (a.timestamp || 0);
+                    });
+                    var files = results.map(function (r) {
+                        return {
+                            name: r.name,
+                            type: r.type,
+                            blob: r.blob,
+                            dataUrl: r.dataUrl,
+                            size: r.size || 0,
+                            lastModified: r.timestamp || 0,
+                            patientName: r.patientName,
+                            prescriptionNo: r.prescriptionNo
+                        };
+                    });
+                    resolve({ success: true, files: files });
+                };
+                request.onerror = function () { reject(request.error); };
+            });
+        });
+    }
+
+    window.findMediaFilesWeb = findMediaInDB;
+
+    function getCurrentPrescriptionInfo() {
+        var patientName = '';
+        var nameEl = document.querySelector('input[name="patientName"], #patientName, [data-field="patientName"]');
+        if (nameEl) patientName = (nameEl.value || nameEl.textContent || '').trim();
+        if (!patientName) {
+            var nameSpan = document.querySelector('.patient-name, [data-patient-name]');
+            if (nameSpan) patientName = (nameSpan.textContent || '').trim();
+        }
+        patientName = patientName || (document.getElementById('paperName') ? document.getElementById('paperName').textContent : '').trim();
+        if (!patientName && window.__latestPrescriptionPatientName) {
+            patientName = window.__latestPrescriptionPatientName;
+        }
+        if (!patientName) {
+            try { patientName = localStorage.getItem('lastUsedMediaPatientName') || ''; } catch (e) {}
+        }
+
+        var prescriptionNo = '';
+        var noEl = document.querySelector('input[name="prescriptionNo"], #prescriptionNo, [data-field="prescriptionNo"]');
+        if (noEl) prescriptionNo = (noEl.value || noEl.textContent || '').trim();
+        prescriptionNo = prescriptionNo || (document.getElementById('clinicNo') ? document.getElementById('clinicNo').value : '').trim() ||
+                         (document.getElementById('paperClinicNo') ? document.getElementById('paperClinicNo').textContent : '').trim();
+        if (!prescriptionNo && window.__latestPrescriptionNo) {
+            prescriptionNo = window.__latestPrescriptionNo;
+        }
+        if (!prescriptionNo) {
+            try { prescriptionNo = localStorage.getItem('lastUsedMediaIdentifier') || ''; } catch (e) {}
+        }
+        return { patientName: patientName, prescriptionNo: prescriptionNo };
     }
 
     // ========================================================================

@@ -50,7 +50,14 @@ function maskRecord(record) {
         resolvedAt: record.resolvedAt || null,
         resolvedBy: record.resolvedBy || null,
         licenseCode: record.licenseCode || null,
-        rejectReason: record.rejectReason || null
+        rejectReason: record.rejectReason || null,
+        // ★ 版本信息：区分离线/云端、机构版/标准版
+        productName: record.productName || '',
+        edition: record.edition || '',
+        appMode: record.appMode || '',
+        versionLabel: record.versionLabel || '',
+        // ★ 环境标记：test=测试环境，production=正式环境
+        env: record.env || 'production'
     };
 }
 
