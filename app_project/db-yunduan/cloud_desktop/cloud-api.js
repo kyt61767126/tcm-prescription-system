@@ -28,25 +28,7 @@ window.cloudFetch = async function(url, options = {}) {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-
-    // ===== 🔐 修复: 5 级 Token 兜底（wgj 历史处方关键!） =====
-    let bearerToken = '';
-    try {
-      const extractFromUserJSON = (s) => { try { const u = JSON.parse(s); return (u && u.token) ? u.token : ''; } catch(e){ return '';} };
-      if (options && options.headers && options.headers.Authorization) bearerToken = String(options.headers.Authorization).replace(/^Bearers+/i,'');
-      if (!bearerToken && typeof localStorage !== 'undefined') {
-        bearerToken = extractFromUserJSON(localStorage.getItem('auth:currentUser'));
-        if (!bearerToken) bearerToken = extractFromUserJSON(localStorage.getItem('currentUser'));
-        if (!bearerToken) bearerToken = extractFromUserJSON(localStorage.getItem('cloud_currentUser'));
-        if (!bearerToken) bearerToken = localStorage.getItem('authToken') || '';
-      }
-      if (!bearerToken && typeof window !== 'undefined' && window.__FORCE_CLOUD_TOKEN__) bearerToken = window.__FORCE_CLOUD_TOKEN__;
-      if (!bearerToken && typeof globalThis !== 'undefined' && globalThis.__FORCE_CLOUD_TOKEN__) bearerToken = globalThis.__FORCE_CLOUD_TOKEN__;
-    } catch(e) {}
-    options = options || {};
-    options.headers = options.headers || {};
-    if (bearerToken && !options.headers.Authorization) options.headers.Authorization = 'Bearer ' + bearerToken;
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
         const response = await fetch(url, {
