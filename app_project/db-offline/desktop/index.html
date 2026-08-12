@@ -990,9 +990,7 @@ let currentUser = null;
                 case 'prescription':
                     leftPanel.style.display = 'flex';
                     leftPanel.style.flexDirection = 'column';
-                    if (mobileActionBar) {
-                        mobileActionBar.style.display = 'block';
-                    }
+                    
                     break;
                 case 'history':
                     // 检查是否有历史病历，没有则不显示
@@ -1235,13 +1233,6 @@ let currentUser = null;
                     await loadData();
                     refreshUserInterface();
                     if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
-
-                    // ★ PC端也显示底部录像/拍照按钮（mobileActionBar 默认 display:none 仅移动端显示）
-                    // 参考云端桌面版，登录后确保底部操作栏可见
-                    try {
-                        const __mab = document.getElementById('mobileActionBar');
-                        if (__mab) __mab.style.display = 'block';
-                    } catch(e) { console.warn('显示mobileActionBar失败:', e); }
 
                     // 通知主进程放大窗口
                     if (window.electronAPI && window.electronAPI.loginSuccess) {
