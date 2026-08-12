@@ -2067,8 +2067,8 @@ function renderAdminActivateTable() {
         // 电话可点击拨号（移动端友好）
         const phoneDisplay = r.phone ? '<a href="tel:' + escapeHtml(r.phone) + '" style="color:#409eff;">' + escapeHtml(r.phone) + '</a>' : '-';
         const actions = r.status === 'pending'
-            ? '<button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button>'
-            : '<span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span>';
+            ? '<div style="display:flex;gap:4px;"><button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>'
+            : '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>';
         return '<tr>' +
             '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(r.requestId) + '</td>' +
             '<td><strong>' + escapeHtml(r.clinicName || '-') + '</strong></td>' +
@@ -2085,6 +2085,33 @@ function renderAdminActivateTable() {
 }
 
 let _adminActivateCache = [];
+
+// ★ 删除激活请求（仅平台总管理员可操作）
+async function deleteAdminActivateRequest(requestId, clinicName) {
+    const displayName = clinicName ? escapeHtml(clinicName) : '未知诊所';
+    if (!confirm('确定删除此激活请求？\n\n请求编号：' + requestId + '\n诊所名称：' + displayName + '\n\n⚠ 此操作不可恢复！')) {
+        return;
+    }
+    try {
+        const res = await fetch(API_BASE + '/license/admin-delete', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + token
+            },
+            body: JSON.stringify({ requestId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('✅ 已删除激活请求');
+            loadAdminActivateList();
+        } else {
+            alert('❌ 删除失败：' + (data.error || '未知错误'));
+        }
+    } catch (e) {
+        alert('❌ 网络错误：' + e.message);
+    }
+}
 
 function renderAdminActivateStatus(status) {
     const map = {
