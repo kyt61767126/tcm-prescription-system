@@ -2178,6 +2178,33 @@ if (window.Permission) {
             console.error('未处理的Promise拒绝:', e.reason);
         });
 
+        // 云端可达性状态：null=未知（保守按离线显示），true=可达，false=不可达
+        // 由 cloudFetch 的真实成功/失败驱动，比 navigator.onLine 更准确
+        let _cloudReachable = null;
+
+        // 更新在线/离线状态显示（替换原固定的"【云版】"）
+        // "仅离线"账号永远显示离线；其他模式依据云端可达性判断
+        function updateModeStatus() {
+            const el = document.getElementById('modeStatus');
+            if (!el) return;
+            // "仅离线"模式（allowedMode=local）账号不允许使用云端，永远显示离线
+            const mode = getAllowedMode();
+            if (mode === 'local') {
+                el.textContent = '【离线】';
+                el.style.color = '#d32f2f';
+                return;
+            }
+            // 其他模式严格依据云端可达性判断；null（未检测）保守按离线显示
+            const online = (_cloudReachable === true);
+            if (online) {
+                el.textContent = '【在线】';
+                el.style.color = '#008000';
+            } else {
+                el.textContent = '【离线】';
+                el.style.color = '#d32f2f';
+            }
+        }
+
         // 云端同步辅助函数 - 对用户、处方、药品、方剂API启用
         async function cloudFetch(url, options = {}) {
             if (!url.includes('/users') && !url.includes('/prescriptions') &&
@@ -4635,33 +4662,6 @@ if (window.Permission) {
             const saveSuccess = await saveUsers(filteredUsers);
             await renderUserList();
             showToast(saveSuccess ? '用户已删除并同步到云端' : '用户已删除，云端同步失败');
-        }
-
-        // 云端可达性状态：null=未知（保守按离线显示），true=可达，false=不可达
-        // 由 cloudFetch 的真实成功/失败驱动，比 navigator.onLine 更准确
-        let _cloudReachable = null;
-
-        // 更新在线/离线状态显示（替换原固定的"【云版】"）
-        // "仅离线"账号永远显示离线；其他模式依据云端可达性判断
-        function updateModeStatus() {
-            const el = document.getElementById('modeStatus');
-            if (!el) return;
-            // "仅离线"模式（allowedMode=local）账号不允许使用云端，永远显示离线
-            const mode = getAllowedMode();
-            if (mode === 'local') {
-                el.textContent = '【离线】';
-                el.style.color = '#d32f2f';
-                return;
-            }
-            // 其他模式严格依据云端可达性判断；null（未检测）保守按离线显示
-            const online = (_cloudReachable === true);
-            if (online) {
-                el.textContent = '【在线】';
-                el.style.color = '#008000';
-            } else {
-                el.textContent = '【离线】';
-                el.style.color = '#d32f2f';
-            }
         }
 
         function updateUserDisplay() {
