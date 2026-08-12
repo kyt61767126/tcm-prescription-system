@@ -5,18 +5,18 @@
 //    - window.CLOUD_API_BASE: 云端 API 基础 URL
 //    - window.cloudFetch(): 带认证、超时、错误处理的云端请求函数
 //
-//  兼容：自动适配 _cloudReachable / updateModeStatus 缺失场景
+//  兼容：自动适配 window._cloudReachable / updateModeStatus 缺失场景
 // ============================================================================
 
 // Cloudflare KV API 地址
 window.CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
 
 // 确保全局变量存在（兼容不同版本的 index.html）
-if (typeof _cloudReachable === 'undefined') {
-    var _cloudReachable = null;
+if (typeof window._cloudReachable === 'undefined') {
+    window._cloudReachable = null;
 }
-if (typeof updateModeStatus !== 'function') {
-    var updateModeStatus = function() { /* no-op */ };
+if (typeof window.updateModeStatus !== 'function') {
+    window.updateModeStatus = function() { /* no-op */ };
 }
 
 // 云端同步辅助函数 - 对用户、处方、药品、方剂API启用
@@ -77,9 +77,9 @@ window.cloudFetch = async function(url, options = {}) {
 
         const isReachable = !(data && data.success === false);
         if (isReachable) {
-            if (_cloudReachable !== true) { _cloudReachable = true; updateModeStatus(); }
+            if (window._cloudReachable !== true) { window._cloudReachable = true; window.updateModeStatus(); }
         } else {
-            if (_cloudReachable !== false) { _cloudReachable = false; updateModeStatus(); }
+            if (window._cloudReachable !== false) { window._cloudReachable = false; window.updateModeStatus(); }
         }
 
         if (Array.isArray(data) || typeof data === 'object' && data !== null) {
@@ -97,9 +97,9 @@ window.cloudFetch = async function(url, options = {}) {
     } catch (error) {
         clearTimeout(timeoutId);
         console.error('Cloud sync failed:', error.message);
-        if (_cloudReachable !== false) {
-            _cloudReachable = false;
-            updateModeStatus();
+        if (window._cloudReachable !== false) {
+            window._cloudReachable = false;
+            window.updateModeStatus();
         }
         return { success: false, error: error.message, fromCloud: false };
     }

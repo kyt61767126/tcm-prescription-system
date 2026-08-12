@@ -1,10 +1,10 @@
-// ============================================================================
+﻿// ============================================================================
 //  cloud-api.js - 云端 API 通信模块（从云端 index.html 提取）
 //
 //  依赖全局变量：
 //    - currentUser: 当前登录用户对象
-//    - _cloudReachable: 云端可达性标志
-//    - updateModeStatus(): 更新状态栏 UI 函数
+//    - window._cloudReachable: 云端可达性标志
+//    - window.updateModeStatus(): 更新状态栏 UI 函数
 //
 //  暴露全局：
 //    - window.CLOUD_API_BASE: 云端 API 基础 URL
@@ -92,9 +92,9 @@ window.cloudFetch = async function(url, options = {}) {
 
         const isReachable = !(data && data.success === false);
         if (isReachable) {
-            if (_cloudReachable !== true) { _cloudReachable = true; updateModeStatus(); }
+            if (window._cloudReachable !== true) { window._cloudReachable = true; window.updateModeStatus(); }
         } else {
-            if (_cloudReachable !== false) { _cloudReachable = false; updateModeStatus(); }
+            if (window._cloudReachable !== false) { window._cloudReachable = false; window.updateModeStatus(); }
         }
 
         if (Array.isArray(data) || typeof data === 'object' && data !== null) {
@@ -112,9 +112,9 @@ window.cloudFetch = async function(url, options = {}) {
     } catch (error) {
         clearTimeout(timeoutId);
         console.error('Cloud sync failed:', error.message);
-        if (_cloudReachable !== false) {
-            _cloudReachable = false;
-            updateModeStatus();
+        if (window._cloudReachable !== false) {
+            window._cloudReachable = false;
+            window.updateModeStatus();
         }
         return { success: false, error: error.message, fromCloud: false };
     }
