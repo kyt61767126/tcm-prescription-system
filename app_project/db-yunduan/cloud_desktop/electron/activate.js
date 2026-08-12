@@ -77,12 +77,13 @@ function loadClientConfig() {
 // ★ v3 新增：clinicName 参数，传给云端做诊所名绑定校验
 // ★ 修复：license.dat 写入失败时友好提示 + 自动 fallback 到 userData 目录
 // ★ 优化：Promise.race 双保险超时，解决 Electron 28 中 AbortController 可能不生效导致 fetch 卡死几十分钟的问题
-async function activateOnline(code, machineId, user, clinicName) {
+async function activateOnline(code, machineId, user, clinicName, phone, password) {
     try {
         const body = { code, machineId };
         if (user) body.user = user;
         // ★ v3 新增：提交 clinicName（如填写）
         if (clinicName) body.clinicName = clinicName;
+        if (phone) body.phone = phone;
 
         // ★ 优化：Promise.race 实现可靠超时
         // 原问题：Electron 28 中 AbortController.abort() 可能不中断 fetch，导致卡死几十分钟
@@ -113,11 +114,13 @@ async function activateOnline(code, machineId, user, clinicName) {
             return { success: false, error: data.error || '激活失败' };
         }
 
-        // ★ 统一安装 License（写license+清trial+同步config = 一行搞定）
+        // ★ 统一安装 License（写license+清trial+同步config+创建管理员账户 = 一行搞定）
         const installResult = licenseManager.installLicense(data.license, {
             machineId,
             doctorName: user || '',
             clinicName: clinicName || '',
+            phone: phone || '',
+            password: password || '',
             edition: loadClientConfig().edition || 'standard'
         });
         if (!installResult.success) {

@@ -1195,11 +1195,12 @@ ipcMain.handle('license:show-activate', () => {
     }
 });
 
-ipcMain.handle('license:submit-activate', async (event, code, user, clinicName) => {
+ipcMain.handle('license:submit-activate', async (event, code, user, clinicName, phone, password) => {
     try {
         const machineId = activateManager.getMachineId();
         // ★ v3 新增：透传 clinicName 给云端做绑定校验
-        const result = await activateManager.activateOnline(code, machineId, user, clinicName);
+        // ★ P1优化：增加phone/password参数，激活码激活也自动创建管理员账户
+        const result = await activateManager.activateOnline(code, machineId, user, clinicName, phone, password);
         // ★ v4 新增：激活成功后弹窗显示"已绑定 X/N 台设备"
         if (result && result.success && result.licenseInfo) {
             const info = result.licenseInfo;
