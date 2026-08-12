@@ -523,11 +523,46 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 
 <!-- ★ 管理员激活审核弹窗 -->
 <div id="adminApproveModal" class="modal-overlay">
-    <div class="modal-box" style="max-width:560px;">
+    <div class="modal-box" style="max-width:580px;">
         <span class="modal-close" onclick="closeAdminApproveModal()">&times;</span>
         <h3>审核激活请求</h3>
         <div id="adminApproveModalAlert" class="alert"></div>
-        <div style="background:#f9fafc;padding:12px;border-radius:6px;margin-bottom:16px;font-size:13px;line-height:1.8;">
+
+        <!-- 审核结果面板（审核通过后显示） -->
+        <div id="approveResultPanel" style="display:none;background:linear-gradient(135deg,#d4edda 0%,#c3e6cb 100%);border:2px solid #28a745;border-radius:8px;padding:14px;margin-bottom:16px;">
+            <div style="text-align:center;margin-bottom:10px;">
+                <div style="font-size:36px;margin-bottom:4px;">🎉</div>
+                <div style="font-size:16px;font-weight:700;color:#155724;">审核通过！激活码已生成</div>
+                <div style="font-size:12px;color:#155724;margin-top:2px;">客户端将在 5 秒内自动获取 license 并重启</div>
+            </div>
+
+            <div style="background:#fff;border-radius:6px;padding:10px;margin-bottom:10px;border:1px solid #28a745;">
+                <div style="font-size:11px;color:#6c757d;margin-bottom:4px;">🔑 激活码（请复制发送给客户）</div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <code id="resultLicenseCode" style="flex:1;font-size:13px;font-family:'Courier New',monospace;color:#2c3e50;word-break:break-all;background:#f8f9fa;padding:6px 10px;border-radius:4px;border:1px solid #dee2e6;"></code>
+                    <button class="btn btn-sm btn-success" onclick="copyResultLicense()" style="flex-shrink:0;">📋 复制</button>
+                </div>
+            </div>
+
+            <div style="background:#fff;border-radius:6px;padding:10px;margin-bottom:10px;font-size:12px;line-height:1.8;">
+                <div style="font-weight:600;color:#2c3e50;margin-bottom:4px;">📋 激活码详情</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 12px;">
+                    <div><span style="color:#6c757d;">版本类型：</span><strong id="resultType">-</strong></div>
+                    <div><span style="color:#6c757d;">有效天数：</span><strong id="resultDays">-</strong></div>
+                    <div><span style="color:#6c757d;">最大设备：</span><strong id="resultDevices">-</strong></div>
+                    <div><span style="color:#6c757d;">到期时间：</span><strong id="resultExpires">-</strong></div>
+                    <div style="grid-column:1/-1;"><span style="color:#6c757d;">诊所名称：</span><strong id="resultClinicName">-</strong></div>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:8px;margin-top:10px;">
+                <button class="btn btn-success" onclick="copyResultLicense()" style="flex:1;">📋 复制激活码</button>
+                <button class="btn" onclick="closeAdminApproveModal()" style="flex:1;">关闭并返回列表</button>
+            </div>
+        </div>
+
+        <!-- 原始请求信息 -->
+        <div id="approveRequestInfo" style="background:#f9fafc;padding:12px;border-radius:6px;margin-bottom:16px;font-size:13px;line-height:1.8;">
             <div><strong>请求编号：</strong><span id="approveReqId" style="font-family:Courier New,monospace;"></span></div>
             <div><strong>诊所名称：</strong><span id="approveClinicName"></span></div>
             <div><strong>管理员姓名：</strong><span id="approveAdminName"></span></div>
@@ -2181,12 +2216,19 @@ function openAdminApproveModal(requestId) {
     document.getElementById('approveForm').style.display = 'block';
     document.getElementById('rejectForm').style.display = 'none';
     document.getElementById('adminApproveModalAlert').className = 'alert';
+    // ★ 重置结果面板
+    document.getElementById('approveResultPanel').style.display = 'none';
+    document.getElementById('approveRequestInfo').style.display = 'block';
+    document.getElementById('approveForm').style.display = 'block';
+    document.getElementById('rejectForm').style.display = 'none';
     document.getElementById('adminApproveModal').classList.add('show');
 }
 
 function closeAdminApproveModal() {
     document.getElementById('adminApproveModal').classList.remove('show');
     _currentApproveRequest = null;
+    // ★ 重置结果面板
+    document.getElementById('approveResultPanel').style.display = 'none';
 }
 
 function showRejectForm() {
@@ -2247,17 +2289,19 @@ async function submitApprove(action) {
 
         if (data.success) {
             if (action === 'approve') {
-                showAlert('adminApproveModalAlert',
-                    '✅ 审核通过！\n激活码：' + (data.licenseCode || '-') +
-                    '\n客户端将在下次轮询时（5秒内）自动获取 license 并重启。',
-                    'success');
+                // ★ 审核通过：显示结果面板
+                showApproveResult(data);
+                // 延迟刷新列表，但不自动关闭弹窗（让管理员可以复制激活码）
+                setTimeout(() => {
+                    loadAdminActivateList();
+                }, 1000);
             } else {
                 showAlert('adminApproveModalAlert', '✅ 已拒绝请求，客户端将收到拒绝通知', 'success');
+                setTimeout(() => {
+                    closeAdminApproveModal();
+                    loadAdminActivateList();
+                }, 2000);
             }
-            setTimeout(() => {
-                closeAdminApproveModal();
-                loadAdminActivateList();
-            }, 2500);
         } else {
             if (res.status === 401) {
                 showAlert('adminApproveModalAlert', '登录已过期，请重新登录', 'error');
@@ -2269,6 +2313,66 @@ async function submitApprove(action) {
     } catch (e) {
         btns.forEach(b => b.disabled = false);
         showAlert('adminApproveModalAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ★ 审核通过后显示结果面板
+function showApproveResult(data) {
+    const licenseCode = data.licenseCode || '-';
+    const info = data.licenseInfo || {};
+    const typeMap = { 'personal': '标准版', 'pro': '机构版' };
+
+    // 填充结果面板
+    document.getElementById('resultLicenseCode').textContent = licenseCode;
+    document.getElementById('resultType').textContent = typeMap[info.type] || info.type || '-';
+    document.getElementById('resultDays').textContent = document.getElementById('approveDays').value + ' 天';
+    document.getElementById('resultDevices').textContent = (info.maxDevices || 1) + ' 台';
+    document.getElementById('resultExpires').textContent = info.expiresAt
+        ? new Date(info.expiresAt).toLocaleDateString('zh-CN')
+        : (document.getElementById('approveExpiresAt').value || '-');
+    document.getElementById('resultClinicName').textContent = _currentApproveRequest.clinicName || '-';
+
+    // 显示结果面板，隐藏表单
+    document.getElementById('approveRequestInfo').style.display = 'none';
+    document.getElementById('approveForm').style.display = 'none';
+    document.getElementById('rejectForm').style.display = 'none';
+    document.getElementById('adminApproveModalAlert').className = 'alert';
+    document.getElementById('approveResultPanel').style.display = 'block';
+}
+
+// ★ 复制激活码
+function copyResultLicense() {
+    const code = document.getElementById('resultLicenseCode').textContent;
+    const originalBtn = event.target;
+    const originalText = originalBtn.textContent;
+
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(code).then(() => {
+                originalBtn.textContent = '✅ 已复制';
+                originalBtn.style.background = '#28a745';
+                setTimeout(() => {
+                    originalBtn.textContent = originalText;
+                    originalBtn.style.background = '';
+                }, 2000);
+            });
+        } else {
+            // Fallback
+            const ta = document.createElement('textarea');
+            ta.value = code;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            originalBtn.textContent = '✅ 已复制';
+            originalBtn.style.background = '#28a745';
+            setTimeout(() => {
+                originalBtn.textContent = originalText;
+                originalBtn.style.background = '';
+            }, 2000);
+        }
+    } catch (e) {
+        alert('复制失败，请手动复制：' + code);
     }
 }
 
