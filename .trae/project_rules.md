@@ -141,6 +141,7 @@ const today = new Date().toISOString().split('T')[0];
 | 7 | config.json路径 | Grep `getExeDirectory` |
 | 8 | cloud-api.js同步 | 验证所有副本 |
 | 9 | 全局变量window.前缀 | Grep裸变量引用 |
+| 10 | ★APP版防御性初始化 | Grep `typeof window._cloudReachable` in 4 APP copies |
 
 ---
 

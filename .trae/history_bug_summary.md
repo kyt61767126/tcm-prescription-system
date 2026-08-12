@@ -158,6 +158,26 @@
 
 **对策**：每次修改后按版本矩阵（4版本×3平台）验证
 
+### 13. APP版cloud-api.js缺少防御性初始化 ★★★★
+**日期**：2026-08-12
+**影响**：[云端/离线] [APP] [标准版/机构版] 全部4个APP版本
+**现象**：APP环境下如果 `cloudFetch()` 被调用时 `window.updateModeStatus` 未定义，抛出 `TypeError: window.updateModeStatus is not a function`
+
+**根因**：APP版 `cloud-api.js` 从桌面版模板复制时，遗漏了防御性初始化代码块（`typeof window._cloudReachable` 检查）。桌面版的初始化在 `public/cloud-api.js` 中，但APP版独立维护的副本中缺失。
+
+**修复**：向4个APP版 `cloud-api.js` 添加防御性初始化：
+```javascript
+if (typeof window._cloudReachable === 'undefined') {
+    window._cloudReachable = null;
+}
+if (typeof window.updateModeStatus !== 'function') {
+    window.updateModeStatus = function() { /* no-op */ };
+}
+```
+
+**教训**：
+> 共享模块（cloud-api.js）在APP版的副本必须保持与桌面版完全一致；APP构建产物不纳入git追踪，需在本地维护时确保同步。
+
 ---
 
 ## 防踩坑速查表
@@ -171,3 +191,5 @@
 | 5 | cloud-api.js 同步 | 对比所有副本文件大小和内容 |
 | 6 | Edit 后验证 | Edit 操作后立即 Grep 验证 |
 | 7 | Git 推送冲突 | `git pull --rebase` 而非 `git pull` |
+| 8 | ★APP版防御性初始化 | 检查4个APP版cloud-api.js是否有 `typeof window._cloudReachable` 守卫 |
+| 9 | 注释一致性 | 检查cloud-api.js头部注释是否都有 `window.` 前缀 |

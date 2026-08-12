@@ -207,3 +207,35 @@ function autoRestoreAdminRequest() {
 - `pages_build_output_dir` = `public`（在 wrangler.toml 中配置）
 - 修改 `site-admin/` 下的文件必须同步到 `public/` 对应路径
 - 认证密钥存储在 Cloudflare 环境变量中
+
+---
+
+## ADR-009: APP版cloud-api.js必须包含防御性初始化
+
+**日期**：2026-08-12
+**状态**：已采纳
+
+### 背景
+APP版 `cloud-api.js` 从桌面版模板复制时，遗漏了 `typeof window._cloudReachable` / `typeof window.updateModeStatus` 防御性初始化代码块。当 APP 环境中 `window.updateModeStatus` 未定义时，`cloudFetch()` 会抛出 `TypeError`。
+
+### 决策
+所有版本（桌面版+APP版）的 `cloud-api.js` 必须在文件头部包含防御性初始化：
+```javascript
+if (typeof window._cloudReachable === 'undefined') {
+    window._cloudReachable = null;
+}
+if (typeof window.updateModeStatus !== 'function') {
+    window.updateModeStatus = function() { /* no-op */ };
+}
+```
+
+### 检查方法
+```bash
+# 验证所有APP版是否包含防御性初始化
+Grep 'typeof window._cloudReachable' in 4 APP cloud-api.js copies
+```
+
+### 后果
+- ✅ 优点：APP环境下独立运行不会因全局变量缺失而崩溃
+- ❌ 缺点：需要在每次同步时检查4个APP副本
+- ⚠️ 注意：APP构建产物在 `.gitignore` 中，需手动维护
