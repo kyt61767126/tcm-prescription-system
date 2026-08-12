@@ -1,20 +1,23 @@
 // ============================================================================
-//  cloud-api.js - 云端 API 通信模块（从云端 index.html 提取）
-//
-//  依赖全局变量：
-//    - currentUser: 当前登录用户对象
-//    - _cloudReachable: 云端可达性标志
-//    - updateModeStatus(): 更新状态栏 UI 函数
+//  cloud-api.js - 云端 API 通信模块
 //
 //  暴露全局：
 //    - window.CLOUD_API_BASE: 云端 API 基础 URL
 //    - window.cloudFetch(): 带认证、超时、错误处理的云端请求函数
 //
-//  仅在 appMode === 'cloud' 时加载
+//  兼容：自动适配 _cloudReachable / updateModeStatus 缺失场景
 // ============================================================================
 
 // Cloudflare KV API 地址
 window.CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
+
+// 确保全局变量存在（兼容不同版本的 index.html）
+if (typeof _cloudReachable === 'undefined') {
+    var _cloudReachable = null;
+}
+if (typeof updateModeStatus !== 'function') {
+    var updateModeStatus = function() { /* no-op */ };
+}
 
 // 云端同步辅助函数 - 对用户、处方、药品、方剂API启用
 window.cloudFetch = async function(url, options = {}) {

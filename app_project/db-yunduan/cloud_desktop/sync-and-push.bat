@@ -57,6 +57,38 @@ if exist "%SRC%xlsx.full.min.js" (
     echo [SKIP] xlsx.full.min.js not found
 )
 
+echo [2b/4] Syncing electron/video-recorder.js ...
+if exist "%SRC%electron\video-recorder.js" (
+    if not exist "%DST%electron" mkdir "%DST%electron" >nul 2>&1
+    copy /Y "%SRC%electron\video-recorder.js" "%DST%electron\video-recorder.js" >nul
+    if errorlevel 1 (
+        echo [WARN] electron/video-recorder.js sync failed, continue
+    ) else (
+        echo       electron/video-recorder.js synced
+    )
+) else (
+    echo [SKIP] electron/video-recorder.js not found
+)
+
+echo [2c/4] Syncing cloud-api.js ...
+if exist "%SRC%cloud-api.js" (
+    copy /Y "%SRC%cloud-api.js" "%DST%cloud-api.js" >nul
+    if errorlevel 1 (
+        echo [WARN] cloud-api.js sync failed, continue
+    ) else (
+        echo       cloud-api.js synced
+    )
+    if not exist "%DST%electron" mkdir "%DST%electron" >nul 2>&1
+    copy /Y "%SRC%cloud-api.js" "%DST%electron\cloud-api.js" >nul
+    if errorlevel 1 (
+        echo [WARN] electron/cloud-api.js sync failed, continue
+    ) else (
+        echo       electron/cloud-api.js synced
+    )
+) else (
+    echo [SKIP] cloud-api.js not found
+)
+
 REM [3/4] Git add + commit
 echo [3/4] git add ...
 cd /d "%REPO%"

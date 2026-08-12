@@ -1,20 +1,23 @@
 // ============================================================================
-//  cloud-api.js - 云端 API 通信模块（从云端 index.html 提取）
-//
-//  依赖全局变量：
-//    - currentUser: 当前登录用户对象
-//    - _cloudReachable: 云端可达性标志
-//    - updateModeStatus(): 更新状态栏 UI 函数
+//  cloud-api.js - 云端 API 通信模块
 //
 //  暴露全局：
 //    - window.CLOUD_API_BASE: 云端 API 基础 URL
 //    - window.cloudFetch(): 带认证、超时、错误处理的云端请求函数
 //
-//  仅在 appMode === 'cloud' 时加载
+//  兼容：自动适配 _cloudReachable / updateModeStatus 缺失场景
 // ============================================================================
 
 // Cloudflare KV API 地址
 window.CLOUD_API_BASE = 'https://tcm-prescription-system.pages.dev/api';
+
+// 确保全局变量存在（兼容不同版本的 index.html）
+if (typeof _cloudReachable === 'undefined') {
+    var _cloudReachable = null;
+}
+if (typeof updateModeStatus !== 'function') {
+    var updateModeStatus = function() { /* no-op */ };
+}
 
 // 云端同步辅助函数 - 对用户、处方、药品、方剂API启用
 window.cloudFetch = async function(url, options = {}) {
@@ -25,7 +28,25 @@ window.cloudFetch = async function(url, options = {}) {
     }
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+    // ===== 🔐 修复: 5 级 Token 兜底（wgj 历史处方关键!） =====
+    let bearerToken = '';
+    try {
+      const extractFromUserJSON = (s) => { try { const u = JSON.parse(s); return (u && u.token) ? u.token : ''; } catch(e){ return '';} };
+      if (options && options.headers && options.headers.Authorization) bearerToken = String(options.headers.Authorization).replace(/^Bearers+/i,'');
+      if (!bearerToken && typeof localStorage !== 'undefined') {
+        bearerToken = extractFromUserJSON(localStorage.getItem('auth:currentUser'));
+        if (!bearerToken) bearerToken = extractFromUserJSON(localStorage.getItem('currentUser'));
+        if (!bearerToken) bearerToken = extractFromUserJSON(localStorage.getItem('cloud_currentUser'));
+        if (!bearerToken) bearerToken = localStorage.getItem('authToken') || '';
+      }
+      if (!bearerToken && typeof window !== 'undefined' && window.__FORCE_CLOUD_TOKEN__) bearerToken = window.__FORCE_CLOUD_TOKEN__;
+      if (!bearerToken && typeof globalThis !== 'undefined' && globalThis.__FORCE_CLOUD_TOKEN__) bearerToken = globalThis.__FORCE_CLOUD_TOKEN__;
+    } catch(e) {}
+    options = options || {};
+    options.headers = options.headers || {};
+    if (bearerToken && !options.headers.Authorization) options.headers.Authorization = 'Bearer ' + bearerToken;
 
     try {
         const response = await fetch(url, {
