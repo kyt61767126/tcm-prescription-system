@@ -5,7 +5,7 @@
 //    - window.CLOUD_API_BASE: 云端 API 基础 URL
 //    - window.cloudFetch(): 带认证、超时、错误处理的云端请求函数
 //
-//  兼容：自动适配 _cloudReachable / updateModeStatus 缺失场景
+//  兼容：自动适配 window._cloudReachable / window.updateModeStatus 缺失场景
 // ============================================================================
 
 // Cloudflare KV API 地址
