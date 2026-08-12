@@ -2180,11 +2180,14 @@ if (window.Permission) {
 
         // 云端可达性状态：null=未知（保守按离线显示），true=可达，false=不可达
         // 由 cloudFetch 的真实成功/失败驱动，比 navigator.onLine 更准确
-        let _cloudReachable = null;
+        // ★ 修复：使用 window._cloudReachable 而非 let _cloudReachable，避免 TDZ 和多脚本作用域问题
+        if (typeof window._cloudReachable === 'undefined') {
+            window._cloudReachable = null;
+        }
 
         // 更新在线/离线状态显示（替换原固定的"【云版】"）
         // "仅离线"账号永远显示离线；其他模式依据云端可达性判断
-        function updateModeStatus() {
+        window.updateModeStatus = function() {
             const el = document.getElementById('modeStatus');
             if (!el) return;
             // "仅离线"模式（allowedMode=local）账号不允许使用云端，永远显示离线
@@ -2195,7 +2198,7 @@ if (window.Permission) {
                 return;
             }
             // 其他模式严格依据云端可达性判断；null（未检测）保守按离线显示
-            const online = (_cloudReachable === true);
+            const online = (window._cloudReachable === true);
             if (online) {
                 el.textContent = '【在线】';
                 el.style.color = '#008000';
@@ -2203,7 +2206,7 @@ if (window.Permission) {
                 el.textContent = '【离线】';
                 el.style.color = '#d32f2f';
             }
-        }
+        };
 
         // 云端同步辅助函数 - 对用户、处方、药品、方剂API启用
         async function cloudFetch(url, options = {}) {
@@ -2275,9 +2278,9 @@ if (window.Permission) {
                 // 避免"仅离线"账号收到 {success:false} 时误显示"在线"
                 const isReachable = !(data && data.success === false);
                 if (isReachable) {
-                    if (_cloudReachable !== true) { _cloudReachable = true; updateModeStatus(); }
+                    if (window._cloudReachable !== true) { window._cloudReachable = true; window.updateModeStatus(); }
                 } else {
-                    if (_cloudReachable !== false) { _cloudReachable = false; updateModeStatus(); }
+                    if (window._cloudReachable !== false) { window._cloudReachable = false; window.updateModeStatus(); }
                 }
 
                 // 兼容不同的响应格式：有些API可能直接返回数组或对象，没有success字段
@@ -2303,9 +2306,9 @@ if (window.Permission) {
                 clearTimeout(timeoutId);
                 console.error('Cloud sync failed:', error.message);
                 // 云端不可达，更新离线状态显示
-                if (_cloudReachable !== false) {
-                    _cloudReachable = false;
-                    updateModeStatus();
+                if (window._cloudReachable !== false) {
+                    window._cloudReachable = false;
+                    window.updateModeStatus();
                 }
                 return { success: false, error: error.message, fromCloud: false };
             }
@@ -4672,7 +4675,7 @@ if (window.Permission) {
                     || '';
                 document.getElementById('userDisplayName').textContent = displayName;
                 // 更新在线/离线状态显示
-                updateModeStatus();
+                window.updateModeStatus();
                 // 普通用户隐藏云端状态显示（modeStatusWrapper 包含 " | " 分隔符和状态文本）
                 const modeStatusWrapper = document.getElementById('modeStatusWrapper');
                 if (modeStatusWrapper) {
@@ -10641,16 +10644,16 @@ IconFile=${scriptPath}`;
         // 监听网络状态变化，实时更新"在线/离线"显示
         window.addEventListener('online', () => {
             // 网络恢复，重置云端可达性为未知，由下次 cloudFetch 重新判断
-            _cloudReachable = null;
-            updateModeStatus();
+            window._cloudReachable = null;
+            window.updateModeStatus();
         });
         window.addEventListener('offline', () => {
             // 网络断开，云端必然不可达
-            _cloudReachable = false;
-            updateModeStatus();
+            window._cloudReachable = false;
+            window.updateModeStatus();
         });
         // 初始更新一次状态显示
-        updateModeStatus();
+        window.updateModeStatus();
     });
     </script>
 <div id="mediaViewerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99998;align-items:center;justify-content:center;" onclick="if(event.target===this)closeMediaViewer()"><div style="background:#fff;border-radius:10px;padding:12px;width:92%;max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#333;">拍照录像查看</span><button onclick="closeMediaViewer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;line-height:1;">&times;</button></div><div id="mediaViewerContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;"></div></div></div>
