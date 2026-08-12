@@ -117,7 +117,8 @@ async function activateOnline(code, machineId, user, clinicName) {
         const installResult = licenseManager.installLicense(data.license, {
             machineId,
             doctorName: user || '',
-            edition: 'institution'
+            clinicName: clinicName || '',
+            edition: loadClientConfig().edition || 'standard'
         });
         if (!installResult.success) {
             return { success: false, error: installResult.error };
@@ -449,7 +450,8 @@ async function checkAdminStatus(requestId) {
 // ★ 保存管理员激活返回的license + 自动创建管理员账户（统一走installLicense）
 async function saveLicense(licenseBase64) {
     try {
-        // 读取本地保存的激活信息（adminName, phone, password）
+        // 读取本地保存的激活信息（clinicName, adminName, phone, password）
+        let savedClinicName = '';
         let savedAdminName = '';
         let savedPhone = '';
         let savedPassword = '';
@@ -458,6 +460,7 @@ async function saveLicense(licenseBase64) {
             if (fs.existsSync(adminReqPath)) {
                 const adminReq = JSON.parse(fs.readFileSync(adminReqPath, 'utf8'));
                 if (adminReq) {
+                    savedClinicName = adminReq.clinicName || '';
                     savedAdminName = adminReq.adminName || '';
                     savedPhone = adminReq.phone || '';
                     savedPassword = adminReq.password || '';
@@ -467,10 +470,11 @@ async function saveLicense(licenseBase64) {
 
         // ★ 统一安装（一行搞定：写license+清trial+同步config+创建账户）
         const installResult = licenseManager.installLicense(licenseBase64, {
+            clinicName: savedClinicName,
             doctorName: savedAdminName,
             phone: savedPhone,
             password: savedPassword,
-            edition: 'institution'
+            edition: loadClientConfig().edition || 'standard'
         });
 
         if (!installResult.success) {
@@ -520,29 +524,3 @@ module.exports = {
     clearAdminRequestId,
     ACTIVATE_API_URL
 };
-
-
-// ★ 离线版兼容：activateOnline的installLicense若因无云端API失败，回退到旧逻辑
-(function(){
-  const origActivateOnline = activateOnline;
-  if (typeof origActivateOnline === 'function') {
-    activateOnline = async function(data) {
-      try {
-        return await origActivateOnline(data);
-      } catch(e) {
-        console.warn('[Activate] 云端激活失败，尝试离线模式:', e.message);
-        // 离线回退：直接写license
-        try {
-          const path = require('path');
-          const licensePath = licenseManager.getLicensePath();
-          fs.writeFileSync(licensePath, data.license || data, 'utf8');
-          // 清除trial
-          try { const tp = licenseManager.getTrialPath(); if(fs.existsSync(tp)) fs.unlinkSync(tp); } catch {}
-          return { success: true, message: '激活成功（离线模式）' };
-        } catch(e2) {
-          return { success: false, error: e2.message };
-        }
-      }
-    };
-  }
-})();

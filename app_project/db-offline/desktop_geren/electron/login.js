@@ -122,15 +122,24 @@
         return [];
     }
 
-    // 获取用户列表：优先使用 localStorage（用户管理中维护的），为空时回退到 config.json
+    // 获取用户列表：合并 config.json（主要）+ localStorage（补充），以 username 去重
     function getUsers(config) {
-        const stored = getUsersFromStorage();
-        if (stored.length > 0) {
-            return stored.map(u => ({ ...u, displayName: u.name || u.username }));
-        }
         const cfg = getUsersFromConfig(config);
-        if (cfg.length > 0) {
-            return cfg.map(u => ({ ...u, displayName: u.name || u.username }));
+        const stored = getUsersFromStorage();
+        const merged = new Map();
+        // 优先添加 config.json 中的用户（注册/激活产生的）
+        cfg.forEach(u => {
+            if (u.username) merged.set(u.username, u);
+        });
+        // 补充 localStorage 中的用户（以 config 为准，不覆盖）
+        stored.forEach(u => {
+            if (u.username && !merged.has(u.username)) {
+                merged.set(u.username, u);
+            }
+        });
+        const result = Array.from(merged.values());
+        if (result.length > 0) {
+            return result.map(u => ({ ...u, displayName: u.name || u.username }));
         }
         return DEFAULT_USERS.map(normalizeUser).map(u => ({ ...u, displayName: u.name || u.username }));
     }
@@ -148,12 +157,21 @@
         _users = users;
         
         // ★ 云端机构版：预填上次用户名（手机号），显示绿色提示
+        let usernameToFill = null;
         const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
         if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
-            input.value = rememberedUser;
+            usernameToFill = rememberedUser;
+        } else if (users.length === 1 && users[0].username) {
+            // ★ 刚激活成功：只有一个管理员账户时自动预填（一键激活场景）
+            usernameToFill = users[0].username;
             $('rememberUser').checked = true;
+        }
+        
+        if (usernameToFill) {
+            input.value = usernameToFill;
+            localStorage.setItem(KEY_REMEMBER_USER, usernameToFill);
             // 绿色成功反馈：提示用户账号已预填
-            showGreenHint(`✓ 账号已预填：${rememberedUser}，请输入密码登录`);
+            showGreenHint(`✓ 账号已预填：${usernameToFill}，请输入密码登录`);
             // 自动聚焦到密码框
             setTimeout(() => {
                 const pwd = $('loginPassword');
@@ -296,6 +314,17 @@
                 rememberPassword.disabled = true;
                 rememberPassword.title = '安全升级：为保护账户安全，不再支持记住密码';
             }
+
+            // ★ 同步用户列表到 localStorage（供 index.html 主界面读取）
+            try {
+                if (window.electronAPI && window.electronAPI.getAppConfig) {
+                    const cfgResult = await window.electronAPI.getAppConfig();
+                    if (cfgResult && cfgResult.success && cfgResult.config && Array.isArray(cfgResult.config.users)) {
+                        const usersToSave = cfgResult.config.users.map(normalizeUser);
+                        localStorage.setItem(KEY_USERS, simpleEncrypt(JSON.stringify(usersToSave)));
+                    }
+                }
+            } catch(e) { console.warn('同步用户列表失败:', e); }
 
             if (window.electronAPI && window.electronAPI.loginSuccess) {
                 // ★ 绿色成功反馈：登录成功提示

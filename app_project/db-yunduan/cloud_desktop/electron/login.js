@@ -157,12 +157,21 @@
         _users = users;
         
         // ★ 云端机构版：预填上次用户名（手机号），显示绿色提示
+        let usernameToFill = null;
         const rememberedUser = localStorage.getItem(KEY_REMEMBER_USER);
         if (rememberedUser && !LEGACY_USERNAMES.includes(rememberedUser)) {
-            input.value = rememberedUser;
+            usernameToFill = rememberedUser;
+        } else if (users.length === 1 && users[0].username) {
+            // ★ 刚激活成功：只有一个管理员账户时自动预填（一键激活场景）
+            usernameToFill = users[0].username;
             $('rememberUser').checked = true;
+        }
+        
+        if (usernameToFill) {
+            input.value = usernameToFill;
+            localStorage.setItem(KEY_REMEMBER_USER, usernameToFill);
             // 绿色成功反馈：提示用户账号已预填
-            showGreenHint(`✓ 账号已预填：${rememberedUser}，请输入密码登录`);
+            showGreenHint(`✓ 账号已预填：${usernameToFill}，请输入密码登录`);
             // 自动聚焦到密码框
             setTimeout(() => {
                 const pwd = $('loginPassword');
