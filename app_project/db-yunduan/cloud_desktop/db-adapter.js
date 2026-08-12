@@ -265,34 +265,25 @@
 
     // ★v2.0 优先使用已加载的 window.cloudFetch（带认证、超时、401处理）
     async function _cloudFetch(path, options) {
-        // ===== 🔧 修复: 【先用自己的实现】（确保 Authorization: Bearer 一定会被注入！cloud-api.js 版本之前漏了这个header） =====
+        // 优先使用 cloud-api.js 的 cloudFetch（功能更完整）
+        if (typeof global.cloudFetch === 'function') {
+            const url = path.startsWith('http') ? path : CLOUD_API_BASE + path;
+            return await global.cloudFetch(url, options);
+        }
+        // 降级：自行实现简单版本
         options = options || {};
         options.headers = options.headers || {};
         options.headers['Content-Type'] = 'application/json';
-        let token = _getAuthToken();
-        // 额外兜底 3 级：
-        if (!token) { try { if (typeof global.localStorage!=='undefined') { const u = global.localStorage.getItem('cloud_currentUser'); if (u) token = (JSON.parse(u)||{}).token; } } catch {} }
-        if (!token && typeof globalThis !== 'undefined' && globalThis.__FORCE_CLOUD_TOKEN__) token = globalThis.__FORCE_CLOUD_TOKEN__;
-        if (!token && typeof window !== 'undefined' && window.__FORCE_CLOUD_TOKEN__) token = window.__FORCE_CLOUD_TOKEN__;
+        const token = _getAuthToken();
         if (token) options.headers['Authorization'] = 'Bearer ' + token;
         try {
             const response = await fetch(CLOUD_API_BASE + path, options);
             if (!response.ok) {
-                console.warn('[DbAdapter] 云端 API HTTP ' + response.status + ' → 尝试 cloud-api.js 作为 fallback');
-                // HTTP 失败 fallback 到 cloudFetch
-                if (typeof global.cloudFetch === 'function') {
-                    const url = path.startsWith('http') ? path : CLOUD_API_BASE + path;
-                    return await global.cloudFetch(url, options);
-                }
+                console.warn('[DbAdapter] 云端 API HTTP ' + response.status);
             }
             return await response.json();
         } catch (e) {
-            console.warn('[DbAdapter] 自实现云端失败: ' + e.message + ' → 回 cloudFetch');
-            // fallback 到 cloud-api.js
-            if (typeof global.cloudFetch === 'function') {
-                const url = path.startsWith('http') ? path : CLOUD_API_BASE + path;
-                try { return await global.cloudFetch(url, options); } catch(e2){}
-            }
+            console.warn('[DbAdapter] 云端 API 请求失败:', e);
             return { success: false, error: e.message, offline: true };
         }
     }
@@ -410,7 +401,6 @@
 
             // 降级：Electron 文件系统
             if (result.length === 0 && _hasElectron()) {
-                // Layer5.1 默认键名
                 const rawData = await _electronGet(LS_KEY_PRESCRIPTIONS);
                 if (rawData) {
                     try {
@@ -422,43 +412,11 @@
                         }
                     } catch (e) { /* 忽略 */ }
                 }
-                // ===== 🔧 修复 Layer5.2: 直接读主进程 prescriptions.json (19 条云端备份) =====
-                if (result.length === 0) {
-                    try {
-                        if (global.electronAPI && typeof global.electronAPI.readPrescriptionsJson === 'function') {
-                            const fileJson = await global.electronAPI.readPrescriptionsJson();
-                            if (fileJson && Array.isArray(fileJson) && fileJson.length>0) {
-                                console.log('[getAllPrescriptions] ✅ 从 userData/prescriptions.json 读取 '+fileJson.length+' 条');
-                                result = fileJson;
-                                _lsSetPrescriptions(result);
-                                try { await _idbPutAllPrescriptions(result); } catch(e){}
-                                // 同步回 Electron KV
-                                try { await _electronSet(LS_KEY_PRESCRIPTIONS, JSON.stringify(result)); } catch(e){}
-                            } else if (fileJson && fileJson.prescriptions && Array.isArray(fileJson.prescriptions) && fileJson.prescriptions.length>0) {
-                                result = fileJson.prescriptions;
-                                _lsSetPrescriptions(result);
-                                try { await _idbPutAllPrescriptions(result); } catch(e){}
-                                try { await _electronSet(LS_KEY_PRESCRIPTIONS, JSON.stringify(result)); } catch(e){}
-                            } else if (fileJson && fileJson.data && Array.isArray(fileJson.data) && fileJson.data.length>0) {
-                                result = fileJson.data;
-                                _lsSetPrescriptions(result);
-                                try { await _idbPutAllPrescriptions(result); } catch(e){}
-                                try { await _electronSet(LS_KEY_PRESCRIPTIONS, JSON.stringify(result)); } catch(e){}
-                            }
-                        }
-                    } catch(e) { console.warn('读prescriptions.json失败:',e); }
-                }
             }
 
-            // ===== 🔧 修复: 按用户名过滤，但如果过滤后为0则取消（createdBy字段旧数据可能缺失/不匹配） =====
+            // 按用户名过滤
             if (options.filterUsername) {
-                const before = result.length;
-                const filtered = result.filter(p => p.createdBy === options.filterUsername);
-                if (filtered.length === 0 && before > 0) {
-                    console.warn('[getAllPrescriptions] createdBy 过滤 ('+options.filterUsername+') 导致 0 条，原始 '+before+' 条，取消过滤强制显示');
-                } else {
-                    result = filtered;
-                }
+                result = result.filter(p => p.createdBy === options.filterUsername);
             }
 
             // 过滤已删除的处方 ID
