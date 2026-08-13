@@ -252,7 +252,7 @@
         if (_loginInFlight) return;
         const username = $('loginUsername').value.trim();
         const password = $('loginPassword').value;
-        if (!username) { showError('请输入用户名'); return; }
+        if (!username) { showError('请输入手机号/用户名'); return; }
         if (!password) { showError('请输入密码'); return; }
 
         _loginInFlight = true;
@@ -268,16 +268,20 @@
                 return;
             }
 
-            const user = _users.find(u => u.username === username);
+            // ★ 支持手机号/用户名双模式登录：先按 username 查找，再按 phone 字段查找
+            let user = _users.find(u => u.username === username);
             if (!user) {
-                showError('用户名或密码错误');
+                user = _users.find(u => u.phone && String(u.phone) === username);
+            }
+            if (!user) {
+                showError('手机号/用户名或密码错误');
                 return;
             }
             const storedPwd = user.password || '';
             const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
             const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
             if (!pwdOk) {
-                showError('用户名或密码错误');
+                showError('手机号/用户名或密码错误');
                 return;
             }
 

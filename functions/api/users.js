@@ -148,13 +148,18 @@ function computeCloudEnabled(user) {
 }
 
 // 隐藏密码字段，返回安全的用户对象
-function sanitizeUser(user, clinicId, clinicName) {
+// ★ 优化：添加 clinicStatus 和 userType 字段，区分正式用户和测试用户
+function sanitizeUser(user, clinicId, clinicName, clinicStatus) {
+    const effectiveStatus = clinicStatus || 'active';
+    const isTestUser = effectiveStatus === 'test';
     return {
         username: user.username,
         name: user.name || user.username,
         role: user.role,
         clinicId: clinicId || user.clinicId || null,
         clinicName: clinicName || null,
+        clinicStatus: effectiveStatus,
+        userType: isTestUser ? 'test' : 'production',
         allowedMode: user.allowedMode || 'both',
         cloudEnabled: user.cloudEnabled !== undefined ? user.cloudEnabled : computeCloudEnabled(user),
         allowSavePrescription: user.allowSavePrescription !== undefined ? user.allowSavePrescription : true,
@@ -165,34 +170,91 @@ function sanitizeUser(user, clinicId, clinicName) {
 }
 
 // 登录：遍历 platform_admins + 所有诊所用户
+// ★ 支持手机号/用户名双模式登录：username 参数可传手机号或用户名
+// 搜索策略：先匹配 username 字段，再匹配 phone 字段
+// 返回值：{ user, clinicId, clinicName, clinicStatus, error }
+//   - 成功：返回 user 信息
+//   - 失败：返回 { user: null, error: { code, message } }
+//     - USER_NOT_FOUND: 用户不存在
+//     - CLINIC_DISABLED: 诊所已被禁用
 async function findUserForLogin(kv, username) {
+    if (!username) return { user: null, error: { code: 'USER_NOT_FOUND', message: '用户不存在' } };
+    const trimmed = String(username).trim();
+
+    // 判断输入是否为纯手机号（11位数字），若是则优先按 phone 字段查找
+    const isPhoneInput = /^1[3-9]\d{9}$/.test(trimmed);
+
     // 1. 先查 platform_admins
     const platformAdmins = await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json');
     if (platformAdmins && Array.isArray(platformAdmins)) {
-        const found = platformAdmins.find(u => u.username === username);
+        // 优先 username 匹配
+        let found = platformAdmins.find(u => u.username === trimmed);
+        // 如果输入是手机号，额外匹配 phone 字段
+        if (!found && isPhoneInput) {
+            found = platformAdmins.find(u => u.phone === trimmed);
+        }
+        // 兜底：如果 username 匹配不到，尝试 phone 字段（兼容所有输入类型）
+        if (!found) {
+            found = platformAdmins.find(u => u.phone === trimmed);
+        }
         if (found) {
-            return { user: found, clinicId: null, clinicName: null };
+            return { user: found, clinicId: null, clinicName: null, clinicStatus: 'active', error: null };
         }
     }
 
     // 2. 查所有诊所用户
     const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
     if (!clinics || !Array.isArray(clinics)) {
-        return null;
+        return { user: null, error: { code: 'USER_NOT_FOUND', message: '用户不存在' } };
     }
 
+    // 先查找用户在哪个诊所（包括被禁用的诊所）
+    let foundInDisabledClinic = null;
+    let foundClinicInfo = null;
+
     for (const clinic of clinics) {
-        if (clinic.status !== 'active') continue;
         const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
         if (users && Array.isArray(users)) {
-            const found = users.find(u => u.username === username);
+            // 优先 username 匹配
+            let found = users.find(u => u.username === trimmed);
+            // 如果输入是手机号，额外匹配 phone 字段
+            if (!found && isPhoneInput) {
+                found = users.find(u => u.phone === trimmed);
+            }
+            // 兜底：如果 username 匹配不到，尝试 phone 字段（兼容所有输入类型）
+            if (!found) {
+                found = users.find(u => u.phone === trimmed);
+            }
             if (found) {
-                return { user: found, clinicId: clinic.id, clinicName: clinic.name };
+                foundClinicInfo = { 
+                    user: found, 
+                    clinicId: clinic.id, 
+                    clinicName: clinic.name,
+                    clinicStatus: clinic.status || 'active'
+                };
+                if (clinic.status === 'disabled') {
+                    foundInDisabledClinic = foundClinicInfo;
+                } else {
+                    return foundClinicInfo;
+                }
+                break; // 找到用户即停止搜索
             }
         }
     }
 
-    return null;
+    // 用户存在但所在诊所被禁用
+    if (foundInDisabledClinic) {
+        return {
+            user: null,
+            error: {
+                code: 'CLINIC_DISABLED',
+                message: `该账户所在诊所「${foundInDisabledClinic.clinicName}」已被停用，请联系管理员`,
+                clinicName: foundInDisabledClinic.clinicName
+            }
+        };
+    }
+
+    return { user: null, error: { code: 'USER_NOT_FOUND', message: '用户不存在' } };
 }
 
 // 获取所有诊所的用户（用于 platform_admin）
@@ -240,11 +302,16 @@ export async function onRequest(context) {
             }
 
             const found = await findUserForLogin(kv, checkUsername);
-            if (!found) {
-                return json({ success: false, error: '用户不存在', username: checkUsername });
+            if (!found || !found.user) {
+                return json({ 
+                    success: false, 
+                    error: found?.error?.message || '用户不存在', 
+                    username: checkUsername,
+                    errorCode: found?.error?.code || 'USER_NOT_FOUND'
+                });
             }
 
-            const { user, clinicId, clinicName } = found;
+            const { user, clinicId, clinicName, clinicStatus } = found;
             return json({
                 success: true,
                 username: user.username,
@@ -252,12 +319,130 @@ export async function onRequest(context) {
                 role: user.role,
                 clinicId: clinicId,
                 clinicName: clinicName,
+                clinicStatus: clinicStatus || 'active',
                 hasPasswordHash: !!user.passwordHash,
                 hasSalt: !!user.salt,
                 hasPasswordField: !!user.password,
                 allowedMode: user.allowedMode,
+                cloudEnabled: user.cloudEnabled,
+                userType: user.userType || (clinicStatus === 'test' ? 'test' : 'production'),
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt,
                 userKeys: Object.keys(user)
             });
+        }
+
+        // ===== 公开诊断端点 GET /users?diagnose=username&key=xxx =====
+        // 用于临时排查账号问题，需要 DIAGNOSE_KEY 环境变量验证
+        if (method === 'GET' && url.searchParams.get('diagnose')) {
+            const DIAGNOSE_KEY = context.env.DIAGNOSE_KEY || 'tcm_diagnose_2026';
+            const providedKey = url.searchParams.get('key');
+            
+            if (providedKey !== DIAGNOSE_KEY) {
+                return json({ success: false, error: '诊断密钥错误' }, 403);
+            }
+
+            const checkUsername = url.searchParams.get('diagnose');
+            if (!checkUsername) {
+                return json({ success: false, error: '请提供要诊断的用户名' }, 400);
+            }
+
+            const result = {
+                timestamp: new Date().toISOString(),
+                username: checkUsername,
+                checks: {}
+            };
+
+            // 1. 检查 platform_admins
+            const platformAdmins = await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json');
+            if (platformAdmins && Array.isArray(platformAdmins)) {
+                const adminFound = platformAdmins.find(u => 
+                    u.username === checkUsername || u.phone === checkUsername
+                );
+                if (adminFound) {
+                    result.checks.platformAdmin = {
+                        found: true,
+                        role: adminFound.role,
+                        name: adminFound.name,
+                        hasPasswordHash: !!adminFound.passwordHash,
+                        hasSalt: !!adminFound.salt,
+                        allowedMode: adminFound.allowedMode,
+                        createdAt: adminFound.createdAt,
+                        updatedAt: adminFound.updatedAt
+                    };
+                } else {
+                    result.checks.platformAdmin = { found: false, totalAdmins: platformAdmins.length };
+                }
+            } else {
+                result.checks.platformAdmin = { found: false, reason: 'No platform admins or empty' };
+            }
+
+            // 2. 检查所有诊所用户
+            const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
+            if (clinics && Array.isArray(clinics)) {
+                result.checks.clinics = { totalClinics: clinics.length };
+                
+                let foundInClinic = false;
+                for (const clinic of clinics) {
+                    const users = await kv.get(`clinic:${clinic.id}:users`, 'json');
+                    if (users && Array.isArray(users)) {
+                        const userFound = users.find(u => 
+                            u.username === checkUsername || u.phone === checkUsername
+                        );
+                        if (userFound) {
+                            foundInClinic = true;
+                            result.checks.userSearch = {
+                                found: true,
+                                location: 'clinic',
+                                clinicId: clinic.id,
+                                clinicName: clinic.name,
+                                clinicStatus: clinic.status || 'active',
+                                userInfo: {
+                                    username: userFound.username,
+                                    name: userFound.name,
+                                    role: userFound.role,
+                                    hasPasswordHash: !!userFound.passwordHash,
+                                    hasSalt: !!userFound.salt,
+                                    allowedMode: userFound.allowedMode,
+                                    cloudEnabled: userFound.cloudEnabled,
+                                    createdAt: userFound.createdAt,
+                                    updatedAt: userFound.updatedAt
+                                }
+                            };
+                            break;
+                        }
+                    }
+                }
+                
+                if (!foundInClinic) {
+                    result.checks.userSearch = { 
+                        found: false, 
+                        searchedClinics: clinics.length 
+                    };
+                }
+            } else {
+                result.checks.clinics = { totalClinics: 0 };
+                result.checks.userSearch = { found: false, reason: 'No clinics' };
+            }
+
+            // 3. 检查登录失败次数
+            const failKey = 'login_fail:' + checkUsername;
+            const failCount = parseInt(await kv.get(failKey) || '0', 10);
+            result.checks.loginFailures = {
+                count: failCount,
+                isLocked: failCount >= 5
+            };
+
+            // 4. 汇总
+            result.summary = {
+                exists: result.checks.platformAdmin?.found || result.checks.userSearch?.found || false,
+                location: result.checks.platformAdmin?.found ? 'platform_admin' : 
+                        (result.checks.userSearch?.found ? 'clinic_user' : 'not_found'),
+                isLocked: result.checks.loginFailures?.isLocked || false,
+                failCount: result.checks.loginFailures?.count || 0
+            };
+
+            return json(result);
         }
 
         // ===== 初始化平台管理员 POST /users?action=bootstrap =====
@@ -338,7 +523,7 @@ export async function onRequest(context) {
             // P1-1：IP 限流（10 次/分钟）
             const allowedIp = await checkIpRateLimit(kv, context.request);
             if (!allowedIp) {
-                return json({ success: false, error: '请求过于频繁，请稍后再试' }, 429, context.request);
+                return json({ success: false, error: '请求过于频繁，请稍后再试', code: 'IP_RATE_LIMITED' }, 429, context.request);
             }
 
             const bodyText = await context.request.text();
@@ -346,7 +531,7 @@ export async function onRequest(context) {
             try { body = JSON.parse(bodyText); } catch (e) {}
             const { username, password } = body;
             if (!username || !password) {
-                return json({ success: false, error: '用户名或密码不能为空' }, 400, context.request);
+                return json({ success: false, error: '手机号/用户名或密码不能为空', code: 'MISSING_CREDENTIALS' }, 400, context.request);
             }
 
             // P1-1：检查账户是否被锁定
@@ -356,18 +541,53 @@ export async function onRequest(context) {
             }
 
             const found = await findUserForLogin(kv, username);
-            if (!found) {
+            
+            // 处理查找结果
+            if (!found || !found.user) {
+                const error = found?.error || { code: 'USER_NOT_FOUND', message: '用户不存在' };
+                
+                // 诊所被禁用的特殊提示
+                if (error.code === 'CLINIC_DISABLED') {
+                    console.error('[登录失败] 诊所被禁用:', username, error.message);
+                    await writeAuditLog(kv, null, username, 'unknown', 'login_failed', 'clinic_disabled', context.request, { clinicName: error.clinicName });
+                    return json({ 
+                        success: false, 
+                        error: error.message,
+                        code: 'CLINIC_DISABLED',
+                        clinicName: error.clinicName
+                    }, 403, context.request);
+                }
+                
+                // 用户不存在
                 console.error('[登录失败] 用户不存在:', username);
                 const failCount = await recordLoginFailure(kv, username);
                 await writeAuditLog(kv, null, username, 'unknown', 'login_failed', 'user_not_found', context.request, { failCount });
-                return json({ success: false, error: '用户名或密码错误' }, 401, context.request);
+                return json({ 
+                    success: false, 
+                    error: '手机号/用户名不存在，请检查账号是否正确', 
+                    code: 'USER_NOT_FOUND' 
+                }, 401, context.request);
             }
 
-            const { user, clinicId, clinicName } = found;
+            const { user, clinicId, clinicName, clinicStatus } = found;
+
+            // 检查用户角色是否有效
+            if (!user.role || !['platform_admin', 'clinic_admin', 'doctor'].includes(user.role)) {
+                console.error('[登录失败] 用户角色无效:', username, user.role);
+                return json({ 
+                    success: false, 
+                    error: '用户角色无效，请联系管理员', 
+                    code: 'INVALID_ROLE' 
+                }, 401, context.request);
+            }
 
             if (!user.passwordHash || !user.salt) {
                 console.error('[登录失败] 用户数据不完整，缺少 passwordHash 或 salt:', username);
-                return json({ success: false, error: '用户尚未设置密码，请联系管理员重置密码', code: 'NO_PASSWORD' }, 401, context.request);
+                return json({ 
+                    success: false, 
+                    error: '用户尚未设置密码，请联系管理员重置密码', 
+                    code: 'NO_PASSWORD' 
+                }, 401, context.request);
             }
 
             const ok = await verifyPassword(password, user.passwordHash, user.salt);
@@ -377,10 +597,15 @@ export async function onRequest(context) {
                 await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'wrong_password', context.request, { failCount });
                 const remaining = Math.max(0, LOGIN_MAX_FAILURES - failCount);
                 const errorMsg = remaining > 0
-                    ? `用户名或密码错误，剩余尝试次数：${remaining}`
-                    : '账户已被锁定，请 15 分钟后再试';
+                    ? `密码错误，剩余尝试次数：${remaining} 次（${failCount}/${LOGIN_MAX_FAILURES}）`
+                    : '密码错误次数过多，账户已被锁定 15 分钟，请稍后再试';
                 const status = remaining > 0 ? 401 : 423;
-                return json({ success: false, error: errorMsg, code: remaining > 0 ? 'WRONG_PASSWORD' : 'ACCOUNT_LOCKED' }, status, context.request);
+                return json({ 
+                    success: false, 
+                    error: errorMsg, 
+                    code: remaining > 0 ? 'WRONG_PASSWORD' : 'ACCOUNT_LOCKED',
+                    remainingAttempts: remaining
+                }, status, context.request);
             }
 
             // P0-11 自动升级：检测旧 SHA-256 哈希，登录成功后自动升级为 PBKDF2
@@ -427,7 +652,7 @@ export async function onRequest(context) {
             return json({
                 success: true,
                 token,
-                user: sanitizeUser(user, clinicId, clinicName)
+                user: sanitizeUser(user, clinicId, clinicName, clinicStatus)
             }, 200, context.request);
         }
 
@@ -535,7 +760,7 @@ export async function onRequest(context) {
             }
 
             const body = await context.request.json().catch(() => ({}));
-            const { clinicName, adminUsername, adminPassword, adminName } = body;
+            const { clinicName, adminUsername, adminPassword, adminName, clinicStatus } = body;
             if (!clinicName || !adminUsername || !adminPassword) {
                 return json({ success: false, error: '请填写诊所名称、管理员账号和密码' }, 400);
             }
@@ -646,8 +871,9 @@ export async function onRequest(context) {
 
             // 更新诊所状态或名称
             if (status !== undefined && status !== oldClinic.status) {
-                if (!['active', 'disabled'].includes(status)) {
-                    return json({ success: false, error: '状态值无效（active / disabled）' }, 400);
+                // ★ 优化：支持 active/test/disabled 三种状态
+                if (!['active', 'test', 'disabled'].includes(status)) {
+                    return json({ success: false, error: '状态值无效（active / test / disabled）' }, 400);
                 }
                 changes.push(`status: ${oldClinic.status} → ${status}`);
                 clinics[clinicIdx].status = status;
@@ -1043,7 +1269,7 @@ export async function onRequest(context) {
         // 安全措施：IP限流(3次/小时) + 用户名全局唯一校验 + 密码强度校验
         if (method === 'POST' && url.searchParams.get('action') === 'register-clinic') {
             const body = await context.request.json().catch(() => ({}));
-            const { clinicName, adminUsername, adminPassword, adminName, contactPhone, wechat } = body;
+            const { clinicName, adminUsername, adminPassword, adminName, contactPhone, wechat, clinicStatus } = body;
 
             // 1. IP限流（注册更严格：3次/小时）
             const registerAllowed = await checkIpRateLimit(kv, context.request);
@@ -1109,10 +1335,14 @@ export async function onRequest(context) {
             const now = getNowISO();
             const { passwordHash, salt } = await hashPassword(adminPassword);
 
+            // ★ 优化：支持创建时指定诊所状态（active/test/disabled），默认 active
+            const validStatuses = ['active', 'test', 'disabled'];
+            const finalStatus = validStatuses.includes(clinicStatus) ? clinicStatus : 'active';
+
             const clinic = {
                 id: clinicId,
                 name: clinicName.trim(),
-                status: 'active',
+                status: finalStatus,
                 createdAt: now,
                 updatedAt: now
             };
@@ -1126,6 +1356,7 @@ export async function onRequest(context) {
                 allowedMode: 'both',
                 cloudEnabled: true,
                 allowSavePrescription: true,
+                phone: contactPhone || '',
                 createdAt: now,
                 updatedAt: now
             };

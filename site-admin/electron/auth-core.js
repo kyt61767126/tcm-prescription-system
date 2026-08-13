@@ -303,6 +303,22 @@
         return storedPassword === inputPassword;
     }
 
+    // ==================== 用户查找辅助（支持手机号/用户名双模式）====================
+    // 统一 findUserByIdentifier：在本地用户列表中按 username 或 phone 字段匹配
+    // 用于 handleLogin / login.js 等所有登录入口，避免散落的 username-only 判断
+    function findUserByIdentifier(users, identifier) {
+        if (!Array.isArray(users) || !identifier) return null;
+        const trimmed = String(identifier).trim();
+        if (!trimmed) return null;
+        // 优先 username 精确匹配
+        let user = users.find(u => u && u.username === trimmed);
+        // 兜底 phone 匹配：支持手机号作为登录账号
+        if (!user) {
+            user = users.find(u => u && u.phone && String(u.phone) === trimmed);
+        }
+        return user || null;
+    }
+
     // ==================== 用户名规则（支持中文）====================
     // ★ 统一规则（2026-08-08 更新，支持中文用户名）：
     //   1. 用户名（username）：允许中文/英文/数字/下划线/连字符，2-30个字符
@@ -659,7 +675,7 @@
                     ? await response.json()
                     : response;
                 if (!data || !data.success || !data.user) {
-                    return { success: false, error: (data && data.error) || '用户名或密码错误' };
+                    return { success: false, error: (data && data.error) || '手机号/用户名或密码错误' };
                 }
                 // ★ P0 修复：保留 API 返回的 token，附加到 user 对象
                 // buildAuthHeader(user) 依赖 user.token 构造 Bearer header
@@ -800,7 +816,11 @@
                     if (!Array.isArray(users)) {
                         return { success: false, error: '用户数据加载失败' };
                     }
-                    const user = users.find(u => u.username === username);
+                    // ★ 支持手机号/用户名双模式登录：先按 username 查找，再按 phone 字段查找
+                    let user = users.find(u => u.username === username);
+                    if (!user) {
+                        user = users.find(u => u.phone === username);
+                    }
                     if (!user) {
                         return { success: false, error: '用户不存在' };
                     }
@@ -835,6 +855,11 @@
                     if (!user) {
                         return { success: false, error: '用户信息加载失败' };
                     }
+                    // ★ 支持手机号/用户名双模式登录：检查 username 或 phone 是否匹配
+                    const usernameMatch = (user.username === username) || (user.phone === username);
+                    if (!usernameMatch) {
+                        return { success: false, error: '用户不存在' };
+                    }
                     const pwdOk = await verifyPassword(password, user.password || '');
                     if (!pwdOk) {
                         // ★ 优化3：密码错误计数+1，5次后锁定30分钟
@@ -856,7 +881,7 @@
         try {
             // 1. 验证输入
             if (!username || !password) {
-                return { success: false, error: '请输入用户名和密码' };
+                return { success: false, error: '请输入手机号或用户名和密码' };
             }
 
             // 2. 选择适配器
@@ -969,7 +994,7 @@
     async function tryOfflineLogin(username, password) {
         try {
             if (!username || !password) {
-                return { success: false, error: '请输入用户名和密码' };
+                return { success: false, error: '请输入手机号或用户名和密码' };
             }
             const cached = await StorageAdapter.getItem('auth:offlineLoginCache');
             if (!cached) {
@@ -1151,6 +1176,9 @@
         createLocalAdapter,
         createSingleUserAdapter,
 
+        // 用户查找辅助（手机号/用户名双模式）
+        findUserByIdentifier,
+
         // 记住用户名
         saveRememberedUser,
         loadRememberedUsers,
@@ -1160,7 +1188,82 @@
         migrateOldKeys,
 
         // P1-3: masterKey 派生盐（外部可手动注入，正常情况下由 initMasterKeyFromLicense 自动注入）
-        setMasterKey
+        setMasterKey,
+
+        // ============ 注册流程支持 ============
+
+        // 密码强度校验（返回 { score, label, errors }）
+        validatePasswordStrength(password) {
+            const result = { score: 0, label: '', errors: [] };
+            if (!password) { result.label = '空'; return result; }
+            if (password.length >= 8) result.score++; else result.errors.push('密码至少8位');
+            if (password.length >= 12) result.score++;
+            if (/[a-z]/.test(password)) result.score++; else result.errors.push('密码需包含小写字母');
+            if (/[A-Z]/.test(password)) result.score++;
+            if (/[0-9]/.test(password)) result.score++; else result.errors.push('密码需包含数字');
+            if (/[^a-zA-Z0-9]/.test(password)) result.score++;
+            if (result.score <= 1) result.label = '太弱';
+            else if (result.score <= 2) result.label = '弱';
+            else if (result.score <= 3) result.label = '一般';
+            else if (result.score <= 4) result.label = '中等';
+            else if (result.score <= 5) result.label = '强';
+            else result.label = '非常强';
+            return result;
+        },
+
+        // 诊所自助注册（调用后端 /users?action=register-clinic）
+        async registerClinic(params) {
+            const { clinicName, adminUsername, adminPassword, adminName, wechat } = params || {};
+            if (!clinicName || !adminUsername || !adminPassword) {
+                return { success: false, error: '请填写完整的注册信息' };
+            }
+            const usernameCheck = validateAdminUsername(adminUsername);
+            if (!usernameCheck.valid) {
+                return { success: false, error: usernameCheck.error };
+            }
+            const strength = this.validatePasswordStrength(adminPassword);
+            if (strength.errors.length > 0) {
+                return { success: false, error: strength.errors[0] };
+            }
+            try {
+                const fetchFn = global.cloudFetch || global.fetch;
+                const response = await fetchFn(CLOUD_API_BASE + '/users?action=register-clinic', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        clinicName: clinicName.trim(),
+                        adminUsername: adminUsername.trim(),
+                        adminPassword,
+                        adminName: (adminName || '').trim(),
+                        wechat: (wechat || '').trim()
+                    })
+                });
+                const data = (response && typeof response.json === 'function')
+                    ? await response.json()
+                    : response;
+                return data;
+            } catch (e) {
+                return { success: false, error: '注册请求失败：' + (e.message || '网络错误') };
+            }
+        },
+
+        // 云端激活码格式校验
+        validateActivationCode(code) {
+            if (!code || typeof code !== 'string') {
+                return { valid: false, error: '激活码不能为空' };
+            }
+            const trimmed = code.trim();
+            const pattern = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+            if (!pattern.test(trimmed)) {
+                return {
+                    valid: false,
+                    error: '激活码格式不正确',
+                    format: 'BNZC-XXXX-XXXX-XXXX-XXXX',
+                    note: 'X 为大写字母或数字（不含 I/O/0/1）'
+                };
+            }
+            return { valid: true, code: trimmed };
+        }
     };
 
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);

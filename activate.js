@@ -549,6 +549,7 @@ async function saveLicense(licenseBase64) {
                         password: hashedPwd,
                         name: savedAdminName,
                         role: 'admin',
+                        phone: savedPhone,
                         createdAt: new Date().toISOString()
                     });
                     console.log('[Activate] ✅ 管理员账户已自动创建:', savedPhone);

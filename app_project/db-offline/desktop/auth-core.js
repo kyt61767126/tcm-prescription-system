@@ -303,6 +303,22 @@
         return storedPassword === inputPassword;
     }
 
+    // ==================== 用户查找辅助（支持手机号/用户名双模式）====================
+    // 统一 findUserByIdentifier：在本地用户列表中按 username 或 phone 字段匹配
+    // 用于 handleLogin / login.js 等所有登录入口，避免散落的 username-only 判断
+    function findUserByIdentifier(users, identifier) {
+        if (!Array.isArray(users) || !identifier) return null;
+        const trimmed = String(identifier).trim();
+        if (!trimmed) return null;
+        // 优先 username 精确匹配
+        let user = users.find(u => u && u.username === trimmed);
+        // 兜底 phone 匹配：支持手机号作为登录账号
+        if (!user) {
+            user = users.find(u => u && u.phone && String(u.phone) === trimmed);
+        }
+        return user || null;
+    }
+
     // ==================== 用户名规则（支持中文）====================
     // ★ 统一规则（2026-08-08 更新，支持中文用户名）：
     //   1. 用户名（username）：允许中文/英文/数字/下划线/连字符，2-30个字符
@@ -659,7 +675,7 @@
                     ? await response.json()
                     : response;
                 if (!data || !data.success || !data.user) {
-                    return { success: false, error: (data && data.error) || '用户名或密码错误' };
+                    return { success: false, error: (data && data.error) || '手机号/用户名或密码错误' };
                 }
                 // ★ P0 修复：保留 API 返回的 token，附加到 user 对象
                 // buildAuthHeader(user) 依赖 user.token 构造 Bearer header
@@ -800,7 +816,11 @@
                     if (!Array.isArray(users)) {
                         return { success: false, error: '用户数据加载失败' };
                     }
-                    const user = users.find(u => u.username === username);
+                    // ★ 支持手机号/用户名双模式登录：先按 username 查找，再按 phone 字段查找
+                    let user = users.find(u => u.username === username);
+                    if (!user) {
+                        user = users.find(u => u.phone === username);
+                    }
                     if (!user) {
                         return { success: false, error: '用户不存在' };
                     }
@@ -835,6 +855,11 @@
                     if (!user) {
                         return { success: false, error: '用户信息加载失败' };
                     }
+                    // ★ 支持手机号/用户名双模式登录：检查 username 或 phone 是否匹配
+                    const usernameMatch = (user.username === username) || (user.phone === username);
+                    if (!usernameMatch) {
+                        return { success: false, error: '用户不存在' };
+                    }
                     const pwdOk = await verifyPassword(password, user.password || '');
                     if (!pwdOk) {
                         // ★ 优化3：密码错误计数+1，5次后锁定30分钟
@@ -856,7 +881,7 @@
         try {
             // 1. 验证输入
             if (!username || !password) {
-                return { success: false, error: '请输入用户名和密码' };
+                return { success: false, error: '请输入手机号或用户名和密码' };
             }
 
             // 2. 选择适配器
@@ -969,7 +994,7 @@
     async function tryOfflineLogin(username, password) {
         try {
             if (!username || !password) {
-                return { success: false, error: '请输入用户名和密码' };
+                return { success: false, error: '请输入手机号或用户名和密码' };
             }
             const cached = await StorageAdapter.getItem('auth:offlineLoginCache');
             if (!cached) {
@@ -1150,6 +1175,9 @@
         cloudAdapter,
         createLocalAdapter,
         createSingleUserAdapter,
+
+        // 用户查找辅助（手机号/用户名双模式）
+        findUserByIdentifier,
 
         // 记住用户名
         saveRememberedUser,

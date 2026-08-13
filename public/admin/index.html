@@ -411,15 +411,20 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <div class="gen-row">
                     <div class="form-group">
                         <label>诊所名称 *</label>
-                        <input type="text" id="newClinicName" placeholder="如：惠康中医诊所">
+                        <input type="text" id="newClinicName" placeholder="如：惠康中医诊所" oninput="autoGenerateAdminUsername(this.value)">
                     </div>
                     <div class="form-group">
-                        <label>管理员账号 *</label>
-                        <input type="text" id="newClinicAdminUsername" placeholder="admin_诊所简码（如 admin_hkt）">
+                        <label>管理员账号 * <span style="color:#10b981;font-size:11px;font-weight:normal;cursor:pointer;" onclick="generateAdminUsername()" title="根据诊所名称自动生成">✨ 自动生成</span></label>
+                        <div style="display:flex;gap:6px;">
+                            <input type="text" id="newClinicAdminUsername" placeholder="admin_诊所简码（如 admin_hkt）" style="flex:1;" oninput="checkUsernameAvailability(this.value)">
+                            <button type="button" class="btn btn-sm" onclick="generateAdminUsername()" style="white-space:nowrap;padding:0 10px;" title="自动生成账号">🎲</button>
+                        </div>
+                        <div id="usernameAvailability" style="font-size:11px;margin-top:4px;display:none;"></div>
+                        <div id="usernameSuggestion" style="font-size:11px;margin-top:4px;color:#6b7280;display:none;"></div>
                     </div>
                     <div class="form-group">
                         <label>管理员密码 *</label>
-                        <input type="password" id="newClinicAdminPassword" placeholder="初始密码">
+                        <input type="password" id="newClinicAdminPassword" placeholder="初始密码（建议：首字母+数字+符号）">
                     </div>
                     <div class="form-group">
                         <label>管理员姓名</label>
@@ -1129,7 +1134,7 @@ async function generateCodes() {
     const phone = document.getElementById('genPhone').value.trim();
     const wechat = document.getElementById('genWechat').value.trim();
 
-    if (!user) { showAlert('mainAlert', '请输入用户名', 'error'); return; }
+    if (!user) { showAlert('mainAlert', '请输入手机号或用户名', 'error'); return; }
     if (!days && !expiresAt) { showAlert('mainAlert', '请填写有效天数或到期日期', 'error'); return; }
 
     // ★ 拼接售后字段到 note：[订单号:XXX][电话:XXX][微信:XXX] 原备注
@@ -1281,7 +1286,7 @@ async function batchGenerate() {
     const phone = document.getElementById('batchGenPhone').value.trim();
     const wechat = document.getElementById('batchGenWechat').value.trim();
 
-    if (!usersText) { showAlert('batchGenAlert', '请输入用户名列表', 'error'); return; }
+    if (!usersText) { showAlert('batchGenAlert', '请输入手机号或用户名列表', 'error'); return; }
     if (!days && !expiresAt) { showAlert('batchGenAlert', '请填写有效天数或到期日期', 'error'); return; }
 
     const users = usersText.split('\n').map(s => s.trim()).filter(s => s);
@@ -2315,12 +2320,25 @@ async function loadClinicsList() {
                 return;
             }
             listEl.innerHTML = data.data.map(c => {
-                const statusBadge = c.status === 'active'
-                    ? '<span style="color:#27ae60;font-weight:bold;">●正常</span>'
-                    : '<span style="color:#e74c3c;font-weight:bold;">●已停用</span>';
-                const toggleBtn = c.status === 'active'
-                    ? '<button class="btn btn-sm btn-warning" onclick="toggleClinicStatus(\'' + c.id + '\',\'disabled\')">停用</button>'
-                    : '<button class="btn btn-sm btn-success" onclick="toggleClinicStatus(\'' + c.id + '\',\'active\')">启用</button>';
+                // ★ 优化：支持三种状态显示
+                let statusBadge, nextStatus, toggleText;
+                if (c.status === 'active') {
+                    statusBadge = '<span style="color:#27ae60;font-weight:bold;">●正常</span>';
+                    nextStatus = 'disabled';
+                    toggleText = '停用';
+                } else if (c.status === 'test') {
+                    statusBadge = '<span style="color:#f39c12;font-weight:bold;">●测试</span>';
+                    nextStatus = 'active';
+                    toggleText = '转正';
+                } else {
+                    statusBadge = '<span style="color:#e74c3c;font-weight:bold;">●已停用</span>';
+                    nextStatus = 'active';
+                    toggleText = '启用';
+                }
+                const toggleBtn = '<button class="btn btn-sm btn-warning" onclick="toggleClinicStatus(\'' + c.id + '\',\'' + nextStatus + '\')">' + toggleText + '</button>';
+                const testBtn = c.status !== 'test' 
+                    ? '<button class="btn btn-sm btn-info" onclick="toggleClinicStatus(\'' + c.id + '\',\'test\')">设为测试</button>'
+                    : '';
                 const editBtn = '<button class="btn btn-sm" onclick=\'editClinic(' + JSON.stringify({id:c.id,name:c.name,adminUsername:c.adminUsername,adminName:c.adminName}).replace(/'/g, "&#39;") + ')\'>编辑</button>';
                 const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '-';
                 return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
@@ -2328,7 +2346,7 @@ async function loadClinicsList() {
                         '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + statusBadge + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + escapeHtml(c.adminUsername || '-') + '</strong>（' + escapeHtml(c.adminName || '-') + '）| 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
                     '</div>' +
-                    '<div style="white-space:nowrap;">' + editBtn + ' ' + toggleBtn + '</div>' +
+                    '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + '</div>' +
                 '</div>';
             }).join('');
         } else {
@@ -2376,11 +2394,329 @@ async function handleCreateClinic() {
     }
 }
 
+// ===== 管理员账号自动生成逻辑 =====
+
+// 常见中文名称到拼音首字母的映射（常用字）
+const PINYIN_MAP = {
+    '惠': 'h', '康': 'k', '中': 'z', '医': 'y', '诊': 'z', '所': 's',
+    '药': 'y', '堂': 't', '仁': 'r', '和': 'h', '养': 'y', '生': 's',
+    '保': 'b', '健': 'j', '华': 'h', '夏': 'x', '古': 'g',
+    '今': 'j', '新': 'x', '老': 'l', '大': 'd', '小': 'x', '多': 'd',
+    '少': 's', '长': 'c', '短': 'd', '高': 'g', '低': 'd', '上': 's',
+    '下': 'x', '前': 'q', '后': 'h', '左': 'z', '右': 'y', '东': 'd',
+    '西': 'x', '南': 'n', '北': 'b', '外': 'w', '内': 'n',
+    '心': 'x', '肝': 'g', '脾': 'p', '肺': 'f', '肾': 's', '胃': 'w',
+    '肠': 'c', '脑': 'n', '血': 'x', '气': 'q', '火': 'h', '水': 's',
+    '土': 't', '木': 'm', '金': 'j', '山': 's', '川': 'c', '河': 'h',
+    '湖': 'h', '海': 'h', '林': 'l', '森': 's', '园': 'y', '村': 'c',
+    '镇': 'z', '城': 'c', '市': 's', '区': 'q', '县': 'x', '省': 's',
+    '州': 'z', '府': 'f', '路': 'l', '街': 'j', '道': 'd', '巷': 'x',
+    '号': 'h', '楼': 'l', '栋': 'd', '层': 'c', '室': 's', '房': 'f',
+    '馆': 'g', '院': 'y', '阁': 'g', '轩': 'x', '斋': 'z',
+    '苑': 'y', '居': 'j', '舍': 's', '庵': 'a', '观': 'g',
+    '庙': 'm', '祠': 'c', '寺': 's',
+    '梅': 'm', '县': 'x', '本': 'b', '草': 'c', '安': 'a', '康': 'k',
+    '华': 'h', '佗': 't', '北': 'b', '京': 'j', '同': 't', '仁': 'r',
+    '静': 'j', '安': 'a', '阳': 'y', '泉': 'q', '福': 'f', '寿': 's',
+    '喜': 'x', '乐': 'l', '善': 's', '德': 'd', '义': 'y',
+    '礼': 'l', '智': 'z', '信': 'x', '忠': 'z', '孝': 'x', '廉': 'l',
+    '清': 'q', '顺': 's', '昌': 'c', '盛': 's',
+    '兴': 'x', '隆': 'l', '茂': 'm', '丰': 'f', '盈': 'y', '满': 'm',
+    '春': 'c', '秋': 'q', '冬': 'd', '暖': 'n', '凉': 'l',
+    '寒': 'h', '热': 'r', '温': 'w', '冷': 'l', '明': 'm', '暗': 'a',
+    '光': 'g', '黑': 'h', '白': 'b', '红': 'h', '黄': 'h',
+    '绿': 'l', '青': 'q', '蓝': 'l', '紫': 'z', '色': 's', '彩': 'c',
+    '凤': 'f', '凰': 'h', '龙': 'l', '虎': 'h', '鹤': 'h', '鹿': 'l',
+    '麒': 'q', '麟': 'l', '鲲': 'k', '鹏': 'p', '飞': 'f', '翔': 'x',
+    '舞': 'w', '歌': 'g', '诗': 's', '书': 's', '画': 'h', '琴': 'q',
+    '剑': 'j', '刀': 'd', '枪': 'q', '戟': 'j', '弓': 'g', '弩': 'n',
+    '云': 'y', '雾': 'w', '雨': 'y', '雪': 'x', '风': 'f', '雷': 'l',
+    '电': 'd', '星': 'x', '月': 'y', '日': 'r', '天': 't', '地': 'd',
+    '人': 'r', '民': 'm', '众': 'z', '群': 'q', '体': 't',
+    '身': 's', '志': 'z', '愿': 'y', '望': 'w', '梦': 'm',
+    '想': 'x', '理': 'l', '念': 'n', '思': 's', '考': 'k', '忆': 'y',
+    '情': 'q', '意': 'y', '趣': 'q', '味': 'w', '道': 'd',
+    '行': 'x', '为': 'w', '作': 'z', '业': 'y', '务': 'w',
+    '公': 'g', '私': 's', '独': 'd', '集': 'j', '散': 's',
+    '聚': 'j', '分': 'f', '合': 'h', '离': 'l', '别': 'b', '同': 't',
+    '共': 'g', '享': 'x', '有': 'y', '无': 'w', '生': 's', '死': 's',
+    '久': 'j', '暂': 'z', '永': 'y', '远': 'y',
+    '近': 'j', '深': 's', '浅': 'q', '重': 'z',
+    '轻': 'q', '快': 'k', '慢': 'm', '早': 'z', '晚': 'w', '午': 'w',
+    '夜': 'y', '昼': 'z', '时': 's', '分': 'f', '秒': 'm', '刻': 'k',
+    '年': 'n', '月': 'y', '周': 'z', '期': 'q', '代': 'd',
+    '世': 's', '纪': 'j', '元': 'y', '末': 'm', '初': 'c',
+    '后': 'h', '前': 'q', '华': 'h'
+};
+
+// 更完整的诊所常用字拼音映射
+const CLINIC_PINYIN = {
+    '惠': 'h', '康': 'k', '中': 'z', '医': 'y', '诊': 'z', '所': 's',
+    '药': 'y', '堂': 't', '仁': 'r', '和': 'h', '养': 'y', '生': 's',
+    '保': 'b', '健': 'j', '华': 'h', '夏': 'x', '古': 'g', '今': 'j',
+    '新': 'x', '老': 'l', '大': 'd', '小': 'x', '多': 'd', '少': 's',
+    '长': 'c', '高': 'g', '东': 'd', '西': 'x', '南': 'n', '北': 'b',
+    '心': 'x', '肝': 'g', '脾': 'p', '肺': 'f', '肾': 's', '胃': 'w',
+    '肠': 'c', '血': 'x', '气': 'q', '火': 'h', '水': 's', '土': 't',
+    '木': 'm', '金': 'j', '山': 's', '川': 'c', '河': 'h', '海': 'h',
+    '林': 'l', '森': 's', '园': 'y', '村': 'c', '镇': 'z', '城': 'c',
+    '市': 's', '区': 'q', '县': 'x', '省': 's', '州': 'z', '路': 'l',
+    '街': 'j', '道': 'd', '楼': 'l', '栋': 'd', '层': 'c', '室': 's',
+    '房': 'f', '馆': 'g', '院': 'y', '堂': 't', '阁': 'g', '轩': 'x',
+    '斋': 'z', '居': 'j', '舍': 's', '安': 'a', '平': 'p', '福': 'f',
+    '寿': 's', '喜': 'x', '乐': 'l', '善': 's', '德': 'd', '义': 'y',
+    '礼': 'l', '智': 'z', '信': 'x', '忠': 'z', '孝': 'x', '廉': 'l',
+    '清': 'q', '静': 'j', '和': 'h', '顺': 's', '昌': 'c', '盛': 's',
+    '兴': 'x', '隆': 'l', '茂': 'm', '丰': 'f', '盈': 'y', '满': 'm',
+    '春': 'c', '夏': 'x', '秋': 'q', '冬': 'd', '暖': 'n', '凉': 'l',
+    '寒': 'h', '热': 'r', '温': 'w', '冷': 'l', '明': 'm', '暗': 'a',
+    '光': 'g', '亮': 'l', '黑': 'h', '白': 'b', '红': 'h', '黄': 'h',
+    '绿': 'l', '青': 'q', '蓝': 'l', '紫': 'z', '色': 's', '彩': 'c',
+    '凤': 'f', '凰': 'h', '龙': 'l', '虎': 'h', '鹤': 'h', '鹿': 'l',
+    '麒': 'q', '麟': 'l', '鲲': 'k', '鹏': 'p', '飞': 'f', '翔': 'x',
+    '舞': 'w', '歌': 'g', '诗': 's', '书': 's', '画': 'h', '琴': 'q',
+    '剑': 'j', '刀': 'd', '枪': 'q', '戟': 'j', '弓': 'g', '弩': 'n',
+    '云': 'y', '雾': 'w', '雨': 'y', '雪': 'x', '风': 'f', '雷': 'l',
+    '电': 'd', '星': 'x', '月': 'y', '日': 'r', '天': 't', '地': 'd',
+    '人': 'r', '和': 'h', '民': 'm', '众': 'z', '群': 'q', '体': 't',
+    '身': 's', '心': 'x', '志': 'z', '愿': 'y', '望': 'w', '梦': 'm',
+    '想': 'x', '理': 'l', '念': 'n', '思': 's', '考': 'k', '忆': 'y',
+    '情': 'q', '意': 'y', '志': 'z', '趣': 'q', '味': 'w', '道': 'd',
+    '德': 'd', '行': 'x', '为': 'w', '作': 'z', '业': 'y', '务': 'w',
+    '公': 'g', '私': 's', '独': 'd', '众': 'z', '集': 'j', '散': 's',
+    '聚': 'j', '分': 'f', '合': 'h', '离': 'l', '别': 'b', '同': 't',
+    '共': 'g', '享': 'x', '有': 'y', '无': 'w', '生': 's', '死': 's',
+    '长': 'c', '短': 'd', '久': 'j', '暂': 'z', '永': 'y', '远': 'y',
+    '近': 'j', '深': 's', '浅': 'q', '高': 'g', '低': 'd', '重': 'z',
+    '轻': 'q', '快': 'k', '慢': 'm', '早': 'z', '晚': 'w', '午': 'w',
+    '夜': 'y', '昼': 'z', '时': 's', '分': 'f', '秒': 'm', '刻': 'k',
+    '年': 'n', '月': 'y', '日': 'r', '周': 'z', '期': 'q', '代': 'd',
+    '世': 's', '纪': 'j', '元': 'y', '末': 'm', '初': 'c', '中': 'z',
+    '后': 'h', '前': 'q'
+};
+
+// 将中文诊所名称转换为简码
+function chineseToPinyinInitials(text) {
+    if (!text) return '';
+    
+    // 先尝试直接提取英文字母和数字
+    const englishMatch = text.match(/[a-zA-Z]+/g);
+    if (englishMatch && englishMatch.length > 0) {
+        return englishMatch.join('').toLowerCase();
+    }
+    
+    // 中文转换
+    let result = '';
+    for (const char of text) {
+        if (/[\u4e00-\u9fa5]/.test(char)) {
+            // 查找拼音首字母
+            let initial = CLINIC_PINYIN[char] || PINYIN_MAP[char] || '';
+            if (initial) {
+                result += initial;
+            }
+        } else if (/[a-zA-Z0-9]/.test(char)) {
+            result += char.toLowerCase();
+        }
+    }
+    
+    return result;
+}
+
+// 从诊所名称中提取简码
+function extractClinicCode(clinicName) {
+    if (!clinicName) return '';
+    
+    // 清理名称：去除常见后缀
+    let cleaned = clinicName
+        .replace(/[，,。.、\s]/g, '')  // 去除标点和空格
+        .replace(/(中医|中药|诊所|医馆|医院|门诊|堂|馆|院|所|中心|健康|保健|养生)/g, '');  // 去除常见词
+    
+    // 如果清理后为空，使用原名称
+    if (!cleaned) {
+        cleaned = clinicName.replace(/[，,。.、\s]/g, '');
+    }
+    
+    // 提取简码
+    let code = chineseToPinyinInitials(cleaned);
+    
+    // 如果简码太短，尝试使用整个名称
+    if (code.length < 2) {
+        code = chineseToPinyinInitials(clinicName);
+    }
+    
+    // 取前4个字符作为简码
+    if (code.length > 4) {
+        code = code.substring(0, 4);
+    }
+    
+    return code;
+}
+
+// 生成随机后缀
+function generateRandomSuffix(length = 3) {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+}
+
+// 生成管理员账号建议
+function generateAdminUsernameSuggestions(clinicName) {
+    const code = extractClinicCode(clinicName);
+    if (!code) return [];
+    
+    const suggestions = [];
+    
+    // 方式1: admin_简码
+    suggestions.push({
+        username: `admin_${code}`,
+        desc: '简码（推荐）'
+    });
+    
+    // 方式2: admin_简码+随机后缀
+    suggestions.push({
+        username: `admin_${code}${generateRandomSuffix(3)}`,
+        desc: '简码+随机码'
+    });
+    
+    // 方式3: admin_简码首字
+    if (code.length >= 2) {
+        suggestions.push({
+            username: `admin_${code.substring(0, 2)}${generateRandomSuffix(4)}`,
+            desc: '短简码+随机码'
+        });
+    }
+    
+    return suggestions;
+}
+
+// 自动生成管理员账号（输入诊所名称时触发）
+let autoGenerateTimer = null;
+function autoGenerateAdminUsername(clinicName) {
+    clearTimeout(autoGenerateTimer);
+    autoGenerateTimer = setTimeout(() => {
+        const usernameInput = document.getElementById('newClinicAdminUsername');
+        const suggestionDiv = document.getElementById('usernameSuggestion');
+        
+        if (!clinicName || !clinicName.trim()) {
+            if (usernameInput && !usernameInput.value.startsWith('admin_')) {
+                // 只在账号为空或不是admin_开头时才自动填充
+                // 但不覆盖用户已经手动输入的内容
+            }
+            if (suggestionDiv) {
+                suggestionDiv.style.display = 'none';
+            }
+            return;
+        }
+        
+        // 只有当用户还没有手动输入账号时才自动填充
+        if (usernameInput && (!usernameInput.value || !usernameInput.value.startsWith('admin_'))) {
+            const code = extractClinicCode(clinicName);
+            if (code) {
+                const suggestedUsername = `admin_${code}`;
+                usernameInput.value = suggestedUsername;
+                checkUsernameAvailability(suggestedUsername);
+            }
+        }
+        
+        // 显示建议
+        const suggestions = generateAdminUsernameSuggestions(clinicName);
+        if (suggestionDiv && suggestions.length > 0) {
+            suggestionDiv.innerHTML = `
+                💡 建议账号：${suggestions.map(s => 
+                    `<span style="color:#6366f1;cursor:pointer;text-decoration:underline;margin:0 3px;" onclick="document.getElementById('newClinicAdminUsername').value='${s.username}';checkUsernameAvailability('${s.username}')">${s.username}</span>`
+                ).join(' ')}
+            `;
+            suggestionDiv.style.display = 'block';
+        }
+    }, 500); // 防抖500ms
+}
+
+// 手动生成管理员账号
+function generateAdminUsername() {
+    const clinicNameInput = document.getElementById('newClinicName');
+    const usernameInput = document.getElementById('newClinicAdminUsername');
+    const suggestionDiv = document.getElementById('usernameSuggestion');
+    const availabilityDiv = document.getElementById('usernameAvailability');
+    
+    if (!clinicNameInput || !clinicNameInput.value.trim()) {
+        if (availabilityDiv) {
+            availabilityDiv.style.display = 'block';
+            availabilityDiv.style.color = '#ef4444';
+            availabilityDiv.textContent = '⚠️ 请先填写诊所名称';
+        }
+        return;
+    }
+    
+    const suggestions = generateAdminUsernameSuggestions(clinicNameInput.value);
+    if (suggestions.length > 0) {
+        // 随机选择一个建议
+        const randomIndex = Math.floor(Math.random() * suggestions.length);
+        const selected = suggestions[randomIndex];
+        usernameInput.value = selected.username;
+        
+        // 显示所有建议
+        if (suggestionDiv) {
+            suggestionDiv.innerHTML = `
+                💡 建议账号：${suggestions.map(s => 
+                    `<span style="color:#6366f1;cursor:pointer;text-decoration:underline;margin:0 3px;" onclick="document.getElementById('newClinicAdminUsername').value='${s.username}';checkUsernameAvailability('${s.username}')">${s.username}</span>`
+                ).join(' ')}
+                <br><span style="color:#9ca3af;font-size:10px;">（点击可切换）</span>
+            `;
+            suggestionDiv.style.display = 'block';
+        }
+        
+        checkUsernameAvailability(selected.username);
+    }
+}
+
+// 检查账号可用性
+let checkAvailabilityTimer = null;
+async function checkUsernameAvailability(username) {
+    clearTimeout(checkAvailabilityTimer);
+    checkAvailabilityTimer = setTimeout(async () => {
+        const availabilityDiv = document.getElementById('usernameAvailability');
+        if (!availabilityDiv || !username) return;
+        
+        // 清除状态
+        availabilityDiv.style.display = 'block';
+        availabilityDiv.style.color = '#9ca3af';
+        availabilityDiv.textContent = '检查中...';
+        
+        try {
+            const res = await fetch(API_BASE + '/users?check-register=' + encodeURIComponent(username), {
+                headers: { 'Authorization': 'Bearer ' + token }
+            });
+            const data = await res.json();
+            
+            if (data.available) {
+                availabilityDiv.style.color = '#10b981';
+                availabilityDiv.textContent = '✅ 该账号可用';
+            } else {
+                availabilityDiv.style.color = '#ef4444';
+                availabilityDiv.textContent = '❌ ' + (data.error || '账号已存在或不可用');
+            }
+        } catch (e) {
+            // 如果检查接口不可用，显示中性提示
+            availabilityDiv.style.color = '#f59e0b';
+            availabilityDiv.textContent = '⚠️ 无法检查，请手动确认';
+        }
+    }, 300); // 防抖300ms
+}
+
 function clearClinicForm() {
     document.getElementById('newClinicName').value = '';
     document.getElementById('newClinicAdminUsername').value = '';
     document.getElementById('newClinicAdminPassword').value = '';
     document.getElementById('newClinicAdminName').value = '';
+    
+    // 清除建议和可用性提示
+    const suggestionDiv = document.getElementById('usernameSuggestion');
+    const availabilityDiv = document.getElementById('usernameAvailability');
+    if (suggestionDiv) suggestionDiv.style.display = 'none';
+    if (availabilityDiv) availabilityDiv.style.display = 'none';
 }
 
 async function toggleClinicStatus(clinicId, newStatus) {
