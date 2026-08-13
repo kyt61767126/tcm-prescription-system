@@ -660,51 +660,6 @@
 
     // ==================== 登录调度层 ====================
 
-    // 根据错误码生成详细的错误提示
-    function getDetailedLoginError(data) {
-        if (!data) return { message: '登录失败', type: 'unknown' };
-        
-        const errorCode = data.code || '';
-        const errorMsg = data.error || '登录失败';
-        
-        const errorMap = {
-            'USER_NOT_FOUND': {
-                message: '❌ 账号不存在\n\n可能的原因：\n• 用户名或手机号输入错误\n• 账号尚未注册\n\n请确认账号是否正确，或联系管理员查询',
-                type: 'not_found'
-            },
-            'WRONG_PASSWORD': {
-                message: `❌ 密码错误\n\n${errorMsg}\n\n提示：请检查密码是否正确，注意大小写`,
-                type: 'wrong_password'
-            },
-            'ACCOUNT_LOCKED': {
-                message: `🔒 账号已被锁定\n\n${errorMsg}\n\n请等待 15 分钟后再尝试登录`,
-                type: 'locked'
-            },
-            'CLINIC_DISABLED': {
-                message: `⛔ 账户所在诊所已被停用\n\n${errorMsg}\n\n如需帮助，请联系平台管理员`,
-                type: 'disabled_clinic'
-            },
-            'MISSING_CREDENTIALS': {
-                message: '请输入用户名/手机号和密码',
-                type: 'missing'
-            },
-            'IP_RATE_LIMITED': {
-                message: '请求过于频繁，请稍后再试',
-                type: 'rate_limited'
-            },
-            'NO_PASSWORD': {
-                message: '❌ 账号尚未设置密码\n\n请联系管理员重置密码',
-                type: 'no_password'
-            },
-            'INVALID_ROLE': {
-                message: '❌ 用户角色无效\n\n请联系管理员检查账号配置',
-                type: 'invalid_role'
-            }
-        };
-        
-        return errorMap[errorCode] || { message: errorMsg, type: 'unknown' };
-    }
-
     // 云端适配器
     const cloudAdapter = {
         async authenticate(username, password) {
@@ -720,14 +675,7 @@
                     ? await response.json()
                     : response;
                 if (!data || !data.success || !data.user) {
-                    const detailedError = getDetailedLoginError(data);
-                    return { 
-                        success: false, 
-                        error: detailedError.message,
-                        errorCode: data?.code || 'UNKNOWN_ERROR',
-                        errorType: detailedError.type,
-                        remainingAttempts: data?.remainingAttempts
-                    };
+                    return { success: false, error: (data && data.error) || '手机号/用户名或密码错误' };
                 }
                 // ★ P0 修复：保留 API 返回的 token，附加到 user 对象
                 // buildAuthHeader(user) 依赖 user.token 构造 Bearer header
@@ -747,19 +695,9 @@
                     if (offlineResult.success) {
                         return { success: true, user: offlineResult.user, offline: true };
                     }
-                    return { 
-                        success: false, 
-                        error: '📡 网络不可用\n\n请检查网络连接后重试',
-                        errorCode: 'NO_NETWORK',
-                        errorType: 'network_error'
-                    };
+                    return { success: false, error: '网络不可用，' + (offlineResult.error || '离线登录失败') };
                 }
-                return { 
-                    success: false, 
-                    error: '登录失败：' + (e.message || '网络错误'),
-                    errorCode: 'NETWORK_ERROR',
-                    errorType: 'network_error'
-                };
+                return { success: false, error: '登录失败：' + (e.message || '网络错误') };
             }
         }
     };
