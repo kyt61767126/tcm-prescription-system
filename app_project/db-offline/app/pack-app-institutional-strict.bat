@@ -3,8 +3,8 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 REM ============================================================
-REM pack-app-strict.bat - Offline APP Standard (Strict)
-REM Process: Step A (Build Standard) -> Step B (Sign Hash) -> Step C (Strict Rebuild)
+REM pack-app-institutional-strict.bat - Offline APP Institutional (Strict)
+REM Process: Step A (Build Institutional) -> Step B (Sign Hash) -> Step C (Strict Rebuild)
 REM ============================================================
 
 set "PROJECT_DIR=%~dp0"
@@ -12,7 +12,7 @@ set "PACK_APP_BAT=%~dp0build-app.bat"
 set "GEN_HASH_PS1=%~dp0..\..\tools\generate-sign-hash.ps1"
 
 echo ============================================
-echo   Huikang TCM Offline APP (Standard Strict)
+echo   Huikang TCM Offline APP (Institutional Strict)
 echo ============================================
 echo.
 
@@ -29,7 +29,7 @@ if not exist "%GEN_HASH_PS1%" (
 
 echo [Step 0] Java pre-compile check...
 pushd "%PROJECT_DIR%"
-call gradlew.bat javaPreCompileStandardRelease compileStandardReleaseJavaWithJavac --quiet 2>&1
+call gradlew.bat javaPreCompileInstitutionalRelease compileInstitutionalReleaseJavaWithJavac --quiet 2>&1
 set "PRECOMPILE_RC=%errorlevel%"
 popd
 if %PRECOMPILE_RC% neq 0 (
@@ -40,9 +40,9 @@ if %PRECOMPILE_RC% neq 0 (
 echo [OK] Java pre-compile passed
 echo.
 
-echo [Step A] Build APK - Standard mode...
+echo [Step A] Build APK - Institutional mode...
 set "NO_PAUSE=1"
-call "%PACK_APP_BAT%" standard
+call "%PACK_APP_BAT%" institutional
 set "TEMP_RC=%errorlevel%"
 set "NO_PAUSE="
 if %TEMP_RC% neq 0 (
@@ -54,7 +54,7 @@ echo.
 
 echo [Step B] Extract sign hash and inject SecurityGuard.java...
 set "NO_PAUSE=1"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%GEN_HASH_PS1%" -Version offline-standard
+powershell -NoProfile -ExecutionPolicy Bypass -File "%GEN_HASH_PS1%" -Version offline-institutional
 set "TEMP_RC=%errorlevel%"
 set "NO_PAUSE="
 if %TEMP_RC% neq 0 (
@@ -64,10 +64,10 @@ if %TEMP_RC% neq 0 (
 )
 echo.
 
-echo [Step C] Rebuild APK - Strict mode (Standard)...
+echo [Step C] Rebuild APK - Strict mode (Institutional)...
 echo   [INFO] Skip manual --stop (build-app.bat handles it)
 set "NO_PAUSE=1"
-call "%PACK_APP_BAT%" standard
+call "%PACK_APP_BAT%" institutional
 set "TEMP_RC=%errorlevel%"
 set "NO_PAUSE="
 if %TEMP_RC% neq 0 (
@@ -77,8 +77,8 @@ if %TEMP_RC% neq 0 (
 )
 
 echo.
-echo [OK] Offline APP (Standard Strict) build completed
-echo      APK: HuikangTCM-LB.apk
+echo [OK] Offline APP (Institutional Strict) build completed
+echo      APK: HuikangTCM-LJG.apk
 echo.
 if not defined NO_PAUSE pause
 exit /b 0

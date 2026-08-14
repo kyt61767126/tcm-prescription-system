@@ -1,4 +1,3 @@
-chcp 65001 >nul
 @echo off
 setlocal
 
@@ -35,7 +34,7 @@ if not "%NO_PUSH%"=="1" echo  Mode:   Sync + Commit + Push
 echo.
 
 if not exist "%DST%" (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[错误] Target directory not found: %DST%'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Target directory not found: %DST%'"
     if not defined NO_PAUSE pause
     exit /b 1
 )
@@ -110,13 +109,13 @@ if errorlevel 1 ( echo [] git commit failed & if not defined NO_PAUSE pause & ex
 REM [4/4] Push (unless --no-push)
 if "%NO_PUSH%"=="1" (
     echo.
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[4/4] Skipped push （--no-push）'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[4/4] Skipped push (--no-push)'"
 ) else (
     echo [4/4] git pull --rebase + push ...
     REM P1-14: pull --rebase before push to avoid push failure when remote has new commits
     git pull --rebase origin main
     if errorlevel 1 (
-        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[错误] git pull --rebase failed, please resolve conflicts manually'"
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] git pull --rebase failed, please resolve conflicts manually'"
         if not defined NO_PAUSE pause
         exit /b 1
     )

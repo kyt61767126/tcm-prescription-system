@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
-REM  Huikang TCM - Customer Service Offline Activation Launcher
-REM  Double-click to run generate-license.ps1
+REM Huikang TCM - Customer Service Offline Activation Launcher
+REM Double-click to run generate-license.ps1
 REM ============================================================
 title Huikang TCM - Offline Activation License Generator
 
@@ -10,7 +10,7 @@ cd /d "%~dp0"
 
 echo.
 echo ============================================================
-echo  Huikang TCM - Customer Service Offline Activation Tool
+echo Huikang TCM - Customer Service Offline Activation Tool
 echo ============================================================
 echo.
 echo Starting PowerShell script...
@@ -22,8 +22,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0generate-license.p
 REM Always pause to prevent window close
 echo.
 echo ============================================================
-echo  Script finished (exit code %errorlevel%)
-echo  If no success message above, contact technical support
+echo Script finished (exit code %errorlevel%)
+echo If no success message above, contact technical support
 echo ============================================================
 echo.
 if not defined NO_PAUSE pause

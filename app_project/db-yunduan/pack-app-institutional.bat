@@ -5,11 +5,11 @@ cd /d "%~dp0"
 set "PACK_APP_BAT=%~dp0build-app.bat"
 
 echo ============================================
-echo   Cloud APP Builder (Standard)
+echo   Cloud APP Builder (Institutional)
 echo ============================================
 echo.
 
-call "%PACK_APP_BAT%" standard
+call "%PACK_APP_BAT%" institutional
 set "TEMP_RC=%errorlevel%"
 if %TEMP_RC% neq 0 (
     echo.
@@ -20,8 +20,8 @@ if %TEMP_RC% neq 0 (
 )
 echo.
 echo ============================================
-echo   [OK] Cloud APP (Standard) completed
-echo   APK: YB.apk
+echo   [OK] Cloud APP (Institutional) completed
+echo   APK: YJ.apk
 echo ============================================
 echo.
 pause
