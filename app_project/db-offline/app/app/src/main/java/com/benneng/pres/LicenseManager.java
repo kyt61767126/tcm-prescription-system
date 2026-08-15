@@ -189,6 +189,10 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     private static final String ACTIVATE_API_URL = "https://tcm-prescription-system.pages.dev/api/license/validate";
     // ★ P1-1 在线验证 API（定期校验授权有效性）
     private static final String VERIFY_API_URL = "https://tcm-prescription-system.pages.dev/api/license/verify";
+    // ★ 2026-08-15 防重复试用：试用注册 API（硬件指纹判重）
+    private static final String TRIAL_REGISTER_API_URL = "https://tcm-prescription-system.pages.dev/api/trial/register";
+    // ★ 试用次数阈值（与后端 MAX_TRIALS 一致）
+    private static final int MAX_TRIALS = 3;
     private static final int ACTIVATE_TIMEOUT_MS = 15000;
 
     // ★ P1-1 在线验证阈值
@@ -242,6 +246,95 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             Log.e(TAG, "生成机器 ID 失败", e);
             // 失败时返回固定的回退 ID（避免完全无法激活）
             return "fallback_" + packageName.hashCode() + "_" + versionName.hashCode();
+        }
+    }
+
+    // ========================================================================
+    //  ★ 2026-08-15 防重复试用：硬件指纹（防卸载重装重置试用）
+    //  组合 ANDROID_ID + Build.SERIAL + Build.MODEL + Build.FINGERPRINT + manufacturer
+    //  SHA256 → 64位 hex，与后端 hwFp 校验格式一致
+    // ========================================================================
+    public String getHwFingerprint() {
+        try {
+            String androidId = Settings.Secure.getString(
+                    context.getContentResolver(), Settings.Secure.ANDROID_ID);
+            if (androidId == null) androidId = "";
+            String serial = "";
+            try { serial = Build.SERIAL; } catch (Exception e) { }
+            if (serial == null) serial = "";
+            String model = Build.MODEL != null ? Build.MODEL : "";
+            String manufacturer = Build.MANUFACTURER != null ? Build.MANUFACTURER : "";
+            String fingerprint = Build.FINGERPRINT != null ? Build.FINGERPRINT : "";
+            String src = androidId + "|" + serial + "|" + manufacturer + "|" + model + "|" + fingerprint;
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] hash = md.digest(src.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : hash) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "生成硬件指纹失败", e);
+            // 失败时回退到 machineId 补齐到 64 位（保证格式合法，弱化指纹）
+            String mid = getMachineId();
+            String padded = mid + mid + mid + mid;
+            return padded.substring(0, 64);
+        }
+    }
+
+    // ========================================================================
+    //  ★ 2026-08-15 防重复试用：云端试用注册（宽限模式）
+    //  行为：首次创建试用时上报硬件指纹，云端判定是否允许。
+    //  宽限模式：网络不可用/超时/解析失败时默认允许（返回 true），不阻断首次使用；
+    //  仅当云端明确返回 allowed=false（次数超限）时才拒绝。
+    //  返回：true=允许试用，false=云端拒绝（试用次数已达上限）
+    // ========================================================================
+    public boolean registerTrialOnline() {
+        HttpURLConnection conn = null;
+        try {
+            URL url = new URL(TRIAL_REGISTER_API_URL);
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");
+            conn.setRequestProperty("Accept", "application/json");
+            conn.setConnectTimeout(8000);
+            conn.setReadTimeout(8000);
+            conn.setDoOutput(true);
+
+            JSONObject reqBody = new JSONObject();
+            reqBody.put("hwFp", getHwFingerprint());
+            reqBody.put("machineId", getMachineId());
+            reqBody.put("productName", "惠康中医");
+            reqBody.put("edition", "offline");
+            reqBody.put("appMode", "app");
+
+            try (OutputStream os = conn.getOutputStream()) {
+                os.write(reqBody.toString().getBytes(StandardCharsets.UTF_8));
+                os.flush();
+            }
+
+            int codeResp = conn.getResponseCode();
+            InputStream is = (codeResp >= 200 && codeResp < 400) ? conn.getInputStream() : conn.getErrorStream();
+            if (is == null) return true; // 宽限：无响应默认允许
+            String response = readStream(is);
+            Log.i(TAG, "试用注册响应: " + response);
+            JSONObject respJson = new JSONObject(response);
+
+            if (respJson.optBoolean("success", false)) {
+                return respJson.optBoolean("allowed", true);
+            }
+            return true; // 云端返回非成功，宽限默认允许
+        } catch (java.net.SocketTimeoutException e) {
+            Log.w(TAG, "试用注册超时（宽限允许）", e);
+            return true;
+        } catch (java.net.UnknownHostException e) {
+            Log.w(TAG, "试用注册无法连接（宽限允许）", e);
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "试用注册异常（宽限允许）", e);
+            return true;
+        } finally {
+            if (conn != null) conn.disconnect();
         }
     }
 
@@ -2186,6 +2279,14 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             JSONObject trial = readTrial();
             int currentTrialDays = getTrialDays();   // ★ 当前配置的试用期天数
             if (trial == null) {
+                // ★ 2026-08-15 防重复试用：首次创建试用前先上报硬件指纹到云端
+                // 宽限模式：网络失败默认允许；仅云端明确拒绝（次数超限）才阻止
+                if (!registerTrialOnline()) {
+                    JSONObject r = failValidation(
+                            "该设备试用次数已达上限，无法继续试用。\n请联系客服购买正式授权。",
+                            "trial_limit_reached");
+                    return r;
+                }
                 trial = new JSONObject();
                 trial.put("startTime", now);
                 trial.put("expiresAt", now + (long) currentTrialDays * 24 * 60 * 60 * 1000);

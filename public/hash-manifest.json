@@ -2,10 +2,10 @@
     "dingzhi": {
         "apk": {
             "version": "1.0.0",
-            "sha256": "a44194d102b5c08f9455fc2537f58e1b27f62d5fd57f1feadb2a0d6c709fd975",
+            "sha256": "60f5d2bd6efa7aa688b27890fd75b5b2d1b22de444d100bd3c5e3ae44f3e3865",
             "url": "/downloads/惠康中医-本地.apk",
-            "size": 2303148,
-            "updateTime": "2026-08-15T07:41:29.592Z",
+            "size": 2303710,
+            "updateTime": "2026-08-15T08:28:59.725Z",
             "fileName": "惠康中医-本地.apk"
         },
         "portable": {
@@ -13,7 +13,7 @@
             "sha256": "4e8da60a431bec2fc740700b879fe6e83fb4c45e0f80af227db11c27e4ff2ec0",
             "url": "",
             "size": 78326739,
-            "updateTime": "2026-08-15T07:41:28.496Z",
+            "updateTime": "2026-08-15T08:28:58.241Z",
             "fileName": "惠康中医-本地 1.0.8.exe"
         },
         "exe": {
@@ -21,7 +21,7 @@
             "sha256": "1d05d66dc4c99773136303647ae7a19b88393dccb056c3ca119304041c32a906",
             "url": "",
             "size": 78541497,
-            "updateTime": "2026-08-15T07:41:28.496Z",
+            "updateTime": "2026-08-15T08:28:58.241Z",
             "fileName": "惠康中医-本地 Setup 1.0.8.exe"
         }
     },
