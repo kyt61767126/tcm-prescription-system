@@ -156,7 +156,38 @@ async function main() {
     // ★ 修复：更新 exe 时间戳为当前打包时间（cpSync+renameSync 保留 electron 原始编译时间，易造成误解）
     const now = new Date();
     try { fs.utimesSync(productExe, now, now); } catch(e) {}
-    console.log(`Renamed electron.exe -> ${exeName}.exe (productName: ${productName})`);
+    // ★ 嵌入 APP 统一图标（本能印章）到 exe
+    // 背景：本脚本直接重命名 electron.exe，其图标为 Electron 默认图标；--prepackaged 模式
+    //       不会给 win-unpacked 里的 exe 应用 build/win/icon。因此用 electron-builder 自带
+    //       的 rcedit 工具将 build/icon.ico 嵌入 exe，实现桌面与 APP 图标统一。
+    try {
+      const iconPath = path.join(versionDir, 'build', 'icon.ico');
+      if (fs.existsSync(iconPath)) {
+        const winCodeSignRoot = path.join(process.env.LOCALAPPDATA || '', 'electron-builder', 'Cache', 'winCodeSign');
+        let rcedit;
+        if (fs.existsSync(winCodeSignRoot)) {
+          const walk = (dir) => {
+            let ents;
+            try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+            for (const e of ents) {
+              if (e.isDirectory()) walk(path.join(dir, e.name));
+              else if (/^rcedit-x64\.exe$/.test(e.name)) { rcedit = path.join(dir, e.name); return; }
+            }
+          };
+          walk(winCodeSignRoot);
+        }
+        if (rcedit) {
+          require('child_process').execSync(`"${rcedit}" "${productExe}" --set-icon "${iconPath}"`, { stdio: 'inherit' });
+          console.log(`  [OK] 已嵌入 APP 统一图标到 ${exeName}.exe`);
+        } else {
+          console.log('  [WARN] 未找到 rcedit，跳过 exe 图标嵌入（exe 将显示 Electron 默认图标）');
+        }
+      } else {
+        console.log('  [SKIP] build/icon.ico 不存在，跳过 exe 图标嵌入');
+      }
+    } catch (e) {
+      console.error(`  [WARN] exe 图标嵌入失败（不影响打包）: ${e.message}`);
+    }
   }
 
   console.log('Creating app.asar...');
