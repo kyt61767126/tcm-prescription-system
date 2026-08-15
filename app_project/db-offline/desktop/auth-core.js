@@ -2047,8 +2047,59 @@
                 '">🔒 试用期 / 立即激活</a>';
             container.parentNode.insertBefore(link, container.nextSibling);
             console.log('[LicenseCheck] 登录界面已注入激活入口');
+            // ★ 新增（2026-08-15）：注入默认账号密码提示（仅未激活时显示，激活后自动隐藏）
+            injectDefaultCredentialHint(overlay);
         } catch (e) {
             console.warn('[LicenseCheck] 注入登录激活入口失败:', e);
+        }
+    }
+
+    // ★ 新增（2026-08-15）：登录界面注入默认账号密码提示
+    // 仅未激活（试用期）时显示，激活后自动隐藏
+    // 不改 HTML 源码，运行时动态注入
+    function injectDefaultCredentialHint(overlay) {
+        try {
+            if (!overlay) return;
+            if (document.getElementById('defaultCredentialHint')) return;
+
+            // 检查 license 状态：已激活则不显示默认账号提示
+            const hasLicenseApi = global.electronAPI && global.electronAPI.license &&
+                typeof global.electronAPI.license.getStatus === 'function';
+            if (hasLicenseApi) {
+                global.electronAPI.license.getStatus().then(function(status) {
+                    if (status && status.valid && status.licenseType !== 'trial') {
+                        // 已激活，不显示提示
+                        return;
+                    }
+                    // 未激活或试用期，显示默认账号提示
+                    doInjectHint(overlay);
+                }).catch(function() {
+                    // 获取状态失败，默认显示提示
+                    doInjectHint(overlay);
+                });
+            } else {
+                // 无 license API（开发环境），直接显示
+                doInjectHint(overlay);
+            }
+        } catch (e) {
+            console.warn('[LicenseCheck] 注入默认账号提示失败:', e);
+        }
+    }
+
+    function doInjectHint(overlay) {
+        if (document.getElementById('defaultCredentialHint')) return;
+        var hint = document.createElement('div');
+        hint.id = 'defaultCredentialHint';
+        hint.style.cssText = 'text-align:center;margin-top:6px;font-size:11px;color:#888;background:#f0f7ff;border:1px solid #d0e0f0;border-radius:4px;padding:6px;';
+        hint.innerHTML = '🔑 默认账号：<b>admin</b> 密码：<b>admin</b>（登录后请修改密码）';
+        var loginError = overlay.querySelector('#loginError');
+        if (loginError && loginError.nextSibling) {
+            loginError.parentNode.insertBefore(hint, loginError.nextSibling);
+        } else if (loginError) {
+            loginError.parentNode.appendChild(hint);
+        } else {
+            var footer = overlay.querySelector('.login-footer');
+            if (footer) footer.parentNode.insertBefore(hint, footer);
         }
     }
 
