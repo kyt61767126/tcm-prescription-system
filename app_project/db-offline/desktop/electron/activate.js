@@ -459,6 +459,7 @@ async function saveLicense(licenseBase64) {
         let savedAdminName = '';
         let savedPhone = '';
         let savedPassword = '';
+        let savedEdition = '';
         try {
             const adminReqPath = getAdminRequestIdPath();
             if (fs.existsSync(adminReqPath)) {
@@ -468,6 +469,7 @@ async function saveLicense(licenseBase64) {
                     savedAdminName = adminReq.adminName || '';
                     savedPhone = adminReq.phone || '';
                     savedPassword = adminReq.password || '';
+                    savedEdition = adminReq.edition || '';  // ★ 读取用户选择的版本
                 }
             }
         } catch (e) { /* 忽略 */ }
@@ -477,7 +479,8 @@ async function saveLicense(licenseBase64) {
             clinicName: savedClinicName,
             doctorName: savedAdminName,
             phone: savedPhone,
-            password: savedPassword
+            password: savedPassword,
+            edition: savedEdition || loadClientConfig().edition || 'standard'
         });
 
         if (!installResult.success) {

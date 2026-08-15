@@ -186,6 +186,72 @@ async function ensureWritableConfig() {
     }
 }
 
+// ============================================================================
+//  ★ 首次启动版本选择：统一安装包首次运行时，让用户选择标准版或机构版
+//  ★ 选择后写入 config.json（edition + 默认用户角色），后续启动不再询问
+// ============================================================================
+async function ensureEditionSelected() {
+    try {
+        const configPath = getWritableConfigPath();
+        let config = {};
+        if (await fse.pathExists(configPath)) {
+            config = await fse.readJson(configPath);
+        }
+
+        // 已有明确的 edition 值，跳过
+        const knownEditions = ['personal', 'clinic', 'cloud_personal', 'cloud_clinic',
+                               'offline_personal', 'offline_clinic', 'clinic_custom', 'custom'];
+        if (config.edition && knownEditions.includes(config.edition)) {
+            console.log('[Edition] 版本已设置:', config.edition);
+            return;
+        }
+
+        // 首次启动：弹出版本选择对话框
+        console.log('[Edition] 首次启动，显示版本选择对话框');
+        const { dialog } = require('electron');
+        const choice = dialog.showMessageBoxSync({
+            type: 'question',
+            title: '选择版本',
+            message: '欢迎使用惠康中医诊所管理系统',
+            detail: '请选择您要使用的版本：',
+            buttons: ['标准版（个人诊所·单用户）', '机构版（多人机构·多用户管理）'],
+            defaultId: 0,
+            cancelId: 0,
+            noLink: true
+        });
+
+        const isInstitutional = (choice === 1);
+        const newEdition = isInstitutional ? 'clinic' : 'personal';
+        const newRole = isInstitutional ? 'admin' : 'user';
+
+        console.log('[Edition] 用户选择:', isInstitutional ? '机构版' : '标准版');
+
+        // 更新 config.edition
+        config.edition = newEdition;
+
+        // 调整默认用户角色
+        if (Array.isArray(config.users)) {
+            for (const u of config.users) {
+                if (u.role === 'admin' && !isInstitutional) {
+                    u.role = 'user';
+                    console.log('[Edition] 用户', u.username, '角色已调整为 user');
+                } else if (u.role === 'user' && isInstitutional) {
+                    u.role = 'admin';
+                    console.log('[Edition] 用户', u.username, '角色已调整为 admin');
+                }
+            }
+        }
+
+        // 签名并保存
+        licenseManager.signConfig(config);
+        await fse.writeJson(configPath, config, { spaces: 2 });
+        console.log('[Edition] 版本选择已保存:', newEdition);
+    } catch (e) {
+        console.error('[Edition] 版本选择失败:', e.message);
+        // 失败不阻塞启动，使用默认配置
+    }
+}
+
 function getDownloadsDirectory() {
     return ensureDirWithFallback('downloads');
 }
@@ -958,6 +1024,9 @@ async function verifyCodeIntegrity() {
 app.whenReady().then(async () => {
     // ★ 首次启动时将 config.json 从 asar 复制到可写路径
     await ensureWritableConfig();
+
+    // ★ 首次启动版本选择（统一安装包，试用前确定标准版/机构版）
+    await ensureEditionSelected();
     
     // ★ 离线版：License 授权校验（启动时校验）
     // 离线版流程：无 license 时进入试用模式（默认7天），试用有效直接进登录；

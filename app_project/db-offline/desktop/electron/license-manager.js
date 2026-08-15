@@ -1587,6 +1587,41 @@ function signConfig(config) {
 //    base64Content - license base64 字符串
 //    options - { machineId, doctorName, phone, password, clinicName, edition }
 // ============================================================================
+// ============================================================================
+//  ★ 版本规范化：将激活窗口/API传入的edition映射为config.json标准值
+//  ★ 同时确定用户角色：机构版=admin，标准版=user
+// ============================================================================
+function normalizeEdition(rawEdition, existingConfig) {
+    const raw = (rawEdition || '').toLowerCase();
+    const isCloud = (existingConfig && existingConfig.appMode === 'cloud') ||
+                    ['cloud', 'cloud_personal', 'cloud_clinic'].includes(existingConfig && existingConfig.edition);
+
+    // 标准版（个人/标准）
+    if (raw === 'personal' || raw === 'standard') {
+        return {
+            edition: isCloud ? 'cloud_personal' : 'personal',
+            role: 'user',
+            isInstitutional: false
+        };
+    }
+    // 机构版（机构/专业/诊所）
+    if (raw === 'institution' || raw === 'pro' || raw === 'clinic' || raw === 'clinic_custom') {
+        return {
+            edition: isCloud ? 'cloud_clinic' : 'clinic',
+            role: 'admin',
+            isInstitutional: true
+        };
+    }
+    // 默认：保持现有edition或机构版
+    const fallbackEdition = (existingConfig && existingConfig.edition) || (isCloud ? 'cloud_clinic' : 'clinic');
+    const fallbackIsInst = ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic'].includes(fallbackEdition);
+    return {
+        edition: fallbackEdition,
+        role: fallbackIsInst ? 'admin' : 'user',
+        isInstitutional: fallbackIsInst
+    };
+}
+
 function installLicense(base64Content, options = {}) {
     try {
         const actualMachineId = options.machineId || getMachineId();
@@ -1621,6 +1656,14 @@ function installLicense(base64Content, options = {}) {
         }
 
         let configChanged = false;
+
+        // ★ 版本规范化：根据激活时选择的版本设置 config.edition
+        const editionInfo = normalizeEdition(options.edition, config);
+        if (editionInfo.edition && config.edition !== editionInfo.edition) {
+            config.edition = editionInfo.edition;
+            configChanged = true;
+            console.log('[License] 版本已设置:', editionInfo.edition);
+        }
 
         // 更新诊所名
         if (options.clinicName && config.clinicName !== options.clinicName) {
@@ -1657,11 +1700,11 @@ function installLicense(base64Content, options = {}) {
                     passwordHash: passwordHash,
                     salt: PASSWORD_SALT,
                     name: doctorName || phone,
-                    role: 'admin',
+                    role: editionInfo.role,
                     createdAt: new Date().toISOString()
                 });
                 configChanged = true;
-                console.log('[License] 已创建管理员账户:', phone);
+                console.log('[License] 已创建' + (editionInfo.isInstitutional ? '管理员' : '普通用户') + '账户:', phone);
             }
         }
 
@@ -1694,6 +1737,7 @@ function installLicense(base64Content, options = {}) {
 }
 
 module.exports = {
+    normalizeEdition,
     validateLicense,
     generateLicense,
     readLicense,
