@@ -230,7 +230,7 @@ goto :main
 
     set "NO_PAUSE="
 
-    call :finalize %TEMP_RC% "Cloud Desktop (Unified) completed" "EXE: %~dp0cloud_desktop\dist\惠康中医-云端 Setup *.exe" "EXE: %~dp0cloud_desktop\dist\惠康中医-云端 *.exe (portable)"
+    call :finalize %TEMP_RC% "云端桌面版（统一版）打包完成" "EXE: %~dp0cloud_desktop\dist\惠康中医-云端 Setup *.exe" "EXE: %~dp0cloud_desktop\dist\惠康中医-云端 *.exe (portable)"
 
     goto :eof
 
@@ -248,7 +248,7 @@ goto :main
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -AutoApp
 
-    call :finalize %errorlevel% "Cloud APP (Unified) completed" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
+    call :finalize %errorlevel% "云端APP（统一版）打包完成" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
 
     goto :eof
 
@@ -287,7 +287,7 @@ goto :main
 
     set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
-    call :finalize %TEMP_RC% "Cloud APP (Standard Strict) completed" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
+    call :finalize %TEMP_RC% "云端APP（标准严格版）打包完成" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
 
     goto :eof
 

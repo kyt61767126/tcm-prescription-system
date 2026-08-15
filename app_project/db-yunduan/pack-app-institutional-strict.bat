@@ -64,7 +64,7 @@ if %TEMP_RC% neq 0 (
 )
 echo.
 echo ============================================
-echo   [OK] Cloud APP (Institutional Strict) completed
+echo   [OK] 云端APP（机构严格版）打包完成
 echo   APK: 惠康中医-云端.apk
 echo ============================================
 echo.

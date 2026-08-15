@@ -19,7 +19,7 @@ set "APK_DIR=app\build\outputs\apk\release"
 
 echo ============================================
 echo   Huikang TCM Cloud APP Builder (%FLAVOR_NAME%)
-echo   Flavor: %FLAVOR%
+echo   版本类型: %FLAVOR%
 echo   Start: %BUILD_START_TIME%
 echo ============================================
 echo.
@@ -264,15 +264,15 @@ if errorlevel 1 (
 echo.
 
 echo ============================================
-echo   APK Build Complete!
+echo   APK 打包完成！
 echo   Path: %FINAL_APK%
-echo   Flavor: %FLAVOR%
-echo   Version: %VERSION_STR%
+echo   版本类型: %FLAVOR%
+echo   版本号: %VERSION_STR%
 echo ============================================
 echo.
 
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
-echo Start: %BUILD_START_TIME%  End: %BUILD_END_TIME%
+echo 开始: %BUILD_START_TIME%  结束: %BUILD_END_TIME%
 echo.
 
 if not defined NO_PAUSE (

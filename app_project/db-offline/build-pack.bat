@@ -230,7 +230,7 @@ goto :main
 
     set "NO_PAUSE="
 
-    call :finalize %TEMP_RC% "Offline Desktop (Unified) completed" "EXE: %~dp0desktop\dist\惠康中医-本地 Setup *.exe" "EXE: %~dp0desktop\dist\惠康中医-本地 *.exe (portable)"
+    call :finalize %TEMP_RC% "离线桌面版（统一版）打包完成" "EXE: %~dp0desktop\dist\惠康中医-本地 Setup *.exe" "EXE: %~dp0desktop\dist\惠康中医-本地 *.exe (portable)"
 
     goto :eof
 
@@ -254,7 +254,7 @@ goto :main
 
     set "NO_PAUSE="
 
-    call :finalize %TEMP_RC% "Offline APP (Unified) completed" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
+    call :finalize %TEMP_RC% "离线APP（统一版）打包完成" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
 
     goto :eof
 
@@ -278,7 +278,7 @@ goto :main
 
     set "NO_PAUSE="
 
-    call :finalize %TEMP_RC% "Offline APP (Standard Strict) completed" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
+    call :finalize %TEMP_RC% "离线APP（标准严格版）打包完成" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
 
     goto :eof
 

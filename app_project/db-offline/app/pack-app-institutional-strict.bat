@@ -78,7 +78,7 @@ if %TEMP_RC% neq 0 (
 )
 
 echo.
-echo [OK] Offline APP (Institutional Strict) build completed
+echo [OK] 离线APP（机构严格版）打包完成
 echo      APK: 惠康中医-本地.apk
 echo.
 if not defined NO_PAUSE pause
