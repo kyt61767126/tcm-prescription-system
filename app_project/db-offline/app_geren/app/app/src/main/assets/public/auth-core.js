@@ -1556,6 +1556,18 @@
                     await StorageAdapter.removeItem('license:lastHeartbeat');
                     await StorageAdapter.removeItem('license:offlineStart');
                 } catch(e) { console.warn('[Heartbeat] 存储 license code 失败:', e); }
+                // ★ 版本绑定：激活成功后按 license 类型(type)推导 edition 并持久化
+                //   统一词汇：pro→clinic_custom(机构版)，其他→personal(标准版)
+                //   （服务器权威，防止篡改 config.json 在标准版/机构版间切换）
+                try {
+                    const licType = (result.type || '').toString().toLowerCase();
+                    if (licType) {
+                        const boundEdition = licType === 'pro' ? 'clinic_custom' : 'personal';
+                        await StorageAdapter.setItem('license:edition', boundEdition);
+                        if (typeof CONFIG !== 'undefined') CONFIG.edition = boundEdition;
+                        console.log('[License] 版本绑定:', licType, '→', boundEdition);
+                    }
+                } catch(e) { console.warn('[License] 版本绑定持久化失败:', e.message); }
                 showHtmlAlert('✅ 激活成功！\n' + (result.message || '') + '\n\n点击确定后应用将重启');
                 global.electronAPI.activate.restart();
             } else {

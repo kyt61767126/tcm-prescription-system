@@ -679,6 +679,17 @@ let currentUser = null;
             }
         })();
 
+        // ★ 版本绑定：存在已激活 license 时，用持久化 edition 覆盖 config.json（服务器权威）
+        //   保证标准版/机构版与激活码一致，防止篡改 config.json 切换版本
+        try {
+            const licEdition = localStorage.getItem('license:edition');
+            if (licEdition && (licEdition === 'personal' || licEdition === 'clinic_custom')) {
+                CONFIG.edition = licEdition;
+            }
+        } catch(e) {}
+
+
+
         // ★ 根据 edition 动态更新版本标签和默认用户名
         (function initVersionTagAndUser() {
             const tagEl = document.querySelector('.version-tag');
