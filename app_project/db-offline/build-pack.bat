@@ -230,7 +230,7 @@ goto :main
 
     set "NO_PAUSE="
 
-    call :finalize %TEMP_RC% "Offline Desktop (Unified) completed" "" "EXE: desktop\dist\"
+    call :finalize %TEMP_RC% "Offline Desktop (Unified) completed" "EXE: %~dp0desktop\dist\惠康中医-本地 Setup *.exe" "EXE: %~dp0desktop\dist\惠康中医-本地 *.exe (portable)"
 
     goto :eof
 

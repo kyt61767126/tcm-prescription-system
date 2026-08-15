@@ -230,7 +230,7 @@ goto :main
 
     set "NO_PAUSE="
 
-    call :finalize %TEMP_RC% "Cloud Desktop (Unified) completed" "" "EXE: cloud_desktop\dist\"
+    call :finalize %TEMP_RC% "Cloud Desktop (Unified) completed" "EXE: %~dp0cloud_desktop\dist\惠康中医-云端 Setup *.exe" "EXE: %~dp0cloud_desktop\dist\惠康中医-云端 *.exe (portable)"
 
     goto :eof
 

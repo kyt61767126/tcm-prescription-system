@@ -241,9 +241,7 @@ for /f "delims=" %%e in ('powershell -NoProfile -Command "[Console]::OutputEncod
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  Build complete!' -ForegroundColor Yellow; Write-Host '  Started: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  Finished: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Total elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
 if not defined NO_PAUSE (
     set "EXIT_KEY="
-    set /p "EXIT_KEY=
- 0 :
-"
+    set /p "EXIT_KEY=Press 0 or Enter to exit: "
 )
 
 exit /b 0
