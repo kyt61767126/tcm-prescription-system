@@ -9,7 +9,7 @@ REM ============================================================
 
 set "PROJECT_DIR=%~dp0"
 set "PACK_APP_BAT=%~dp0build-app.bat"
-set "GEN_HASH_PS1=%~dp0..\..\tools\generate-sign-hash.ps1"
+set "GEN_HASH_PS1=%~dp0..\..\..\tools\generate-sign-hash.ps1"
 
 echo ============================================
 echo   Huikang TCM Offline APP (Standard Strict)
@@ -54,7 +54,7 @@ echo.
 
 echo [Step B] Extract sign hash and inject SecurityGuard.java...
 set "NO_PAUSE=1"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%GEN_HASH_PS1%" -Version offline-standard
+powershell -NoProfile -ExecutionPolicy Bypass -File "%GEN_HASH_PS1%" -Version dingzhi
 set "TEMP_RC=%errorlevel%"
 set "NO_PAUSE="
 if %TEMP_RC% neq 0 (

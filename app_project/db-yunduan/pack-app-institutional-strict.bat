@@ -3,7 +3,7 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 set "PACK_APP_BAT=%~dp0build-app.bat"
-set "GEN_HASH_PS1=%~dp0..\..\tools\generate-sign-hash.ps1"
+set "GEN_HASH_PS1=%~dp0..\..\..\tools\generate-sign-hash.ps1"
 
 echo ============================================
 echo   Step A: Build APK - Institutional mode...
@@ -31,7 +31,7 @@ echo ============================================
 echo.
 
 set "NO_PAUSE=1"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%GEN_HASH_PS1%" -Version cloud-institutional
+powershell -NoProfile -ExecutionPolicy Bypass -File "%GEN_HASH_PS1%" -Version cloud
 set "TEMP_RC=%errorlevel%"
 set "NO_PAUSE="
 if %TEMP_RC% neq 0 (

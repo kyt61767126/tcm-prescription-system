@@ -278,7 +278,7 @@ goto :main
     )
 
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step B: Extract signature hash...'"
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\generate-sign-hash.ps1" -Version cloud-standard 2>nul
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\generate-sign-hash.ps1" -Version cloud 2>nul
 
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step C: Strict rebuild (standard)...'"
     call "%BUILD_APP%" standard
