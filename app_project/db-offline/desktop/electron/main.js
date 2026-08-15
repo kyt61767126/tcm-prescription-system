@@ -971,6 +971,16 @@ app.whenReady().then(async () => {
         _isLicensed = true;
     }
 
+    // ★ 版本绑定：存在正式 license 时强制校正 config.edition 与激活码版本一致
+    try {
+        const binding = licenseManager.enforceEditionBinding();
+        if (binding && binding.success && binding.corrected) {
+            console.log('[License] 启动版本绑定已校正:', binding.edition);
+        }
+    } catch (e) {
+        console.warn('[License] 启动版本绑定校验失败（非致命）:', e.message);
+    }
+
     // ★ 启动自动更新检查
     updateNotifier.init('geren');
 

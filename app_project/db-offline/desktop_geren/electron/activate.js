@@ -120,8 +120,7 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
             doctorName: user || '',
             clinicName: clinicName || '',
             phone: phone || '',
-            password: password || '',
-            edition: loadClientConfig().edition || 'standard'
+            password: password || ''
         });
         if (!installResult.success) {
             return { success: false, error: installResult.error };
@@ -476,8 +475,7 @@ async function saveLicense(licenseBase64) {
             clinicName: savedClinicName,
             doctorName: savedAdminName,
             phone: savedPhone,
-            password: savedPassword,
-            edition: loadClientConfig().edition || 'standard'
+            password: savedPassword
         });
 
         if (!installResult.success) {
