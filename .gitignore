@@ -90,6 +90,11 @@ android/local.properties
 .gradle/
 **/.gradle/
 **/build/
+# 桌面版 build 目录仅保留 APP 统一图标（.gitignore 优先级最低，需先解除目录忽略再解除文件忽略）
+!app_project/db-offline/desktop/build/
+!app_project/db-offline/desktop/build/*
+!app_project/db-yunduan/cloud_desktop/build/
+!app_project/db-yunduan/cloud_desktop/build/*
 
 # Cloudflare
 .wrangler/

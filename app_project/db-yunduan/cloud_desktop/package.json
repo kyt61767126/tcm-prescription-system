@@ -57,15 +57,20 @@
       "protocols": [
         {
           "name": "惠康中医激活协议",
-          "schemes": ["bnzc"],
+          "schemes": [
+            "bnzc"
+          ],
           "role": "Editor"
         }
-      ]
+      ],
+      "icon": "build/icon.ico"
     },
     "protocols": [
       {
         "name": "惠康中医激活协议",
-        "schemes": ["bnzc"],
+        "schemes": [
+          "bnzc"
+        ],
         "role": "Editor"
       }
     ],
