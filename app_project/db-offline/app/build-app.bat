@@ -21,14 +21,14 @@ if /i "%FLAVOR%"=="standard" (
     set "FLAVOR_CAP=Standard"
     set "FLAVOR_TARGET=standard"
     set "APK_NAME=LB"
-    set "ASSEMBLE_TASK=assembleStandardRelease"
+    set "ASSEMBLE_TASK=:app:assembleStandardRelease"
     set "APK_DIR=app\build\outputs\apk\standard\release"
 ) else if /i "%FLAVOR%"=="institutional" (
     set "FLAVOR_NAME=Institutional"
     set "FLAVOR_CAP=Institutional"
     set "FLAVOR_TARGET=institutional"
     set "APK_NAME=LJ"
-    set "ASSEMBLE_TASK=assembleInstitutionalRelease"
+    set "ASSEMBLE_TASK=:app:assembleInstitutionalRelease"
     set "APK_DIR=app\build\outputs\apk\institutional\release"
 ) else (
     echo [ERROR] Invalid flavor: %FLAVOR%
@@ -272,7 +272,7 @@ if errorlevel 1 (
 )
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] JS code obfuscation completed'"
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[STAGE:precompile] Java pre-compile checking (catch compile errors early)...'"
-call gradlew.bat javaPreCompile%FLAVOR_CAP%Release compile%FLAVOR_CAP%ReleaseJavaWithJavac --quiet
+call gradlew.bat :app:javaPreCompile%FLAVOR_CAP%Release :app:compile%FLAVOR_CAP%ReleaseJavaWithJavac --quiet
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Java pre-compile check failed, aborting build'"
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Restoring JavaScript due to pre-compile failure...'"

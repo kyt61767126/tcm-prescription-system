@@ -47,6 +47,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.map'
         }
     }
+    flavorDimensions "default"
+    productFlavors {
+        standard {
+            dimension "default"
+            applicationId = "com.tcm.prescription.standard"
+            versionNameSuffix = "-YB"
+            resValue "string", "app_name", "Huikang Cloud Standard"
+        }
+        institutional {
+            dimension "default"
+            applicationId = "com.tcm.prescription.institutional"
+            versionNameSuffix = "-YJ"
+            resValue "string", "app_name", "Huikang Cloud Institutional"
+        }
+    }
     buildTypes {
         release {
             signingConfig signingConfigs.release

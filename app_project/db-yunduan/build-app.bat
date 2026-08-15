@@ -17,13 +17,13 @@ if /i "%FLAVOR%"=="standard" (
     set "FLAVOR_NAME=Standard"
     set "FLAVOR_CAP=Standard"
     set "APK_NAME=YB"
-    set "ASSEMBLE_TASK=assembleStandardRelease"
+    set "ASSEMBLE_TASK=:app:assembleStandardRelease"
     set "APK_DIR=app\build\outputs\apk\standard\release"
 ) else if /i "%FLAVOR%"=="institutional" (
     set "FLAVOR_NAME=Institutional"
     set "FLAVOR_CAP=Institutional"
     set "APK_NAME=YJ"
-    set "ASSEMBLE_TASK=assembleInstitutionalRelease"
+    set "ASSEMBLE_TASK=:app:assembleInstitutionalRelease"
     set "APK_DIR=app\build\outputs\apk\institutional\release"
 ) else (
     echo [ERROR] Invalid flavor: %FLAVOR%
@@ -179,7 +179,7 @@ echo [OK] JS code obfuscation completed
 echo.
 
 echo [6/10] Java pre-compile check (Flavor: %FLAVOR%)...
-call gradlew.bat javaPreCompile%FLAVOR_CAP%Release compile%FLAVOR_CAP%ReleaseJavaWithJavac --quiet
+call gradlew.bat :app:javaPreCompile%FLAVOR_CAP%Release :app:compile%FLAVOR_CAP%ReleaseJavaWithJavac --quiet
 if errorlevel 1 (
     echo [ERROR] Java pre-compile check failed
     echo [WARN] Restoring JavaScript due to pre-compile failure...
