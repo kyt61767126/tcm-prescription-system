@@ -2291,6 +2291,14 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                 trial.put("startTime", now);
                 trial.put("expiresAt", now + (long) currentTrialDays * 24 * 60 * 60 * 1000);
                 writeTrial(trial);
+                // ★ 试用版默认版本：标准版（首次启动时设置）
+                try {
+                    JSONObject cfg = readConfigJSON();
+                    String curEdition = cfg.optString("edition", "");
+                    if (curEdition.isEmpty() || curEdition.equals("offline")) {
+                        syncConfigEdition("personal");  // 默认标准版
+                    }
+                } catch (Exception ignored) {}
             } else if (currentTrialDays == 0) {
                 // ★ 配置为 0 天时，立即过期（测试用）
                 trial.put("expiresAt", trial.optLong("startTime", now));
@@ -2489,6 +2497,14 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                 Log.w(TAG, "激活后同步config失败(不影响激活): " + syncErr.getMessage());
             }
 
+            // ★ 同步版本信息（edition + 用户角色）
+            try {
+                String licenseType = respJson.optString("type", "personal");
+                syncConfigEdition(licenseType);
+            } catch (Exception edErr) {
+                Log.w(TAG, "版本同步失败(不影响激活): " + edErr.getMessage());
+            }
+
             // ★ P1-1 初始化在线验证状态（激活时视为已验证）
             try {
                 JSONObject vs = new JSONObject();
@@ -2537,6 +2553,87 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             return failResult("激活失败: " + e.getMessage());
         } finally {
             if (conn != null) conn.disconnect();
+        }
+    }
+
+
+    // ========================================================================
+    //  ★ 版本规范化：将API返回的license type映射为config.json标准edition值
+    //    并确定用户角色：机构版=admin，标准版=user
+    //  ========================================================================
+    private JSONObject normalizeEdition(String rawType) {
+        JSONObject result = new JSONObject();
+        try {
+            String t = (rawType != null) ? rawType.toLowerCase().trim() : "";
+            // 标准版（个人/标准）
+            if (t.equals("personal") || t.equals("standard")) {
+                result.put("edition", "personal");
+                result.put("role", "user");
+                result.put("isInstitutional", false);
+            }
+            // 机构版（机构/专业）
+            else if (t.equals("pro") || t.equals("institution") || t.equals("clinic") || t.equals("clinic_custom")) {
+                result.put("edition", "clinic");
+                result.put("role", "admin");
+                result.put("isInstitutional", true);
+            }
+            // 默认：标准版
+            else {
+                result.put("edition", "personal");
+                result.put("role", "user");
+                result.put("isInstitutional", false);
+            }
+        } catch (Exception e) {
+            try {
+                result.put("edition", "personal");
+                result.put("role", "user");
+                result.put("isInstitutional", false);
+            } catch (Exception ignored) {}
+        }
+        return result;
+    }
+
+    // ========================================================================
+    //  ★ 同步 config.edition 和用户角色到 filesDir/config.json
+    //  ========================================================================
+    private void syncConfigEdition(String rawType) {
+        try {
+            JSONObject editionInfo = normalizeEdition(rawType);
+            String newEdition = editionInfo.optString("edition", "personal");
+            String newRole = editionInfo.optString("role", "user");
+            boolean isInstitutional = editionInfo.optBoolean("isInstitutional", false);
+
+            JSONObject cfg = readConfigJSON();
+            boolean changed = false;
+
+            // 更新 edition
+            if (!newEdition.equals(cfg.optString("edition", ""))) {
+                cfg.put("edition", newEdition);
+                Log.i(TAG, "版本同步: config.edition → " + newEdition);
+                changed = true;
+            }
+
+            // 调整用户角色
+            if (cfg.has("users")) {
+                org.json.JSONArray users = cfg.optJSONArray("users");
+                if (users != null) {
+                    for (int i = 0; i < users.length(); i++) {
+                        org.json.JSONObject u = users.optJSONObject(i);
+                        if (u != null) {
+                            String oldRole = u.optString("role", "");
+                            if (!newRole.equals(oldRole)) {
+                                u.put("role", newRole);
+                                Log.i(TAG, "版本同步: 用户 " + u.optString("username", "?") + " role → " + newRole);
+                                changed = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (changed) writeConfigJSON(cfg, true);
+        } catch (Exception e) {
+            Log.w(TAG, "同步版本信息失败(不影响激活): " + e.getMessage());
         }
     }
 
