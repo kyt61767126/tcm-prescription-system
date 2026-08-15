@@ -146,9 +146,6 @@ goto :main
 
     if /i "%MODE%"=="app-strict" goto :mode_app_strict
 
-    if /i "%MODE%"=="institutional" goto :mode_institutional
-
-    if /i "%MODE%"=="institutional-strict" goto :mode_institutional_strict
 
     powershell -NoProfile -Command "Write-Host '[ERROR] Unknown mode: %MODE%' -ForegroundColor Red"
 
@@ -182,13 +179,9 @@ goto :main
 
     echo [APP]
 
-    echo   app               - Cloud APP Standard (YB)
+    echo   app               - Cloud APP (Unified)
 
-    echo   app-strict        - Cloud APP Standard Strict
-
-    echo   institutional     - Cloud APP Institutional (YJ)
-
-    echo   institutional-strict - Cloud APP Institutional Strict
+    echo   app-strict        - Cloud APP Strict
 
     echo.
 
@@ -244,7 +237,7 @@ goto :main
 
 :mode_app
 
-    call :log_title "Cloud APP Builder (Standard)"
+    call :log_title "Cloud APP Builder (Unified)"
 
     call :check_node || call :finalize 1 "Node.js check failed"
 
@@ -254,7 +247,7 @@ goto :main
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -AutoApp
 
-    call :finalize %errorlevel% "Cloud APP (Standard) completed" "Output: %~dp0YB.apk" "APK: YB.apk"
+    call :finalize %errorlevel% "Cloud APP (Unified) completed" "Output: %~dp0YB.apk" "APK: YB.apk"
 
     goto :eof
 
@@ -299,63 +292,3 @@ goto :main
 
 
 
-:mode_institutional
-
-    call :log_title "Cloud APP Builder (Institutional)"
-
-    call :check_node || call :finalize 1 "Node.js check failed"
-
-    set "BUILD_APP=%~dp0build-app.bat"
-
-    call :check_file "build-app.bat" "%BUILD_APP%" || call :finalize 1 "Script not found"
-
-    set "NO_PAUSE=1"
-
-    call "%BUILD_APP%" institutional
-
-    set "TEMP_RC=%errorlevel%"
-
-    set "NO_PAUSE="
-
-    call :finalize %TEMP_RC% "Cloud APP (Institutional) completed" "Output: %~dp0YJ.apk" "APK: YJ.apk"
-
-    goto :eof
-
-
-
-:mode_institutional_strict
-
-    call :log_title "Cloud APP Builder (Institutional Strict)"
-
-    call :check_node || call :finalize 1 "Node.js check failed"
-
-    call :check_java || call :finalize 1 "Java check failed"
-
-    set "BUILD_APP=%~dp0build-app.bat"
-
-    call :check_file "build-app.bat" "%BUILD_APP%" || call :finalize 1 "Script not found"
-
-    set "SAVED_NO_PAUSE=%NO_PAUSE%"
-    set "NO_PAUSE=1"
-
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step A: First build (institutional)...'"
-    call "%BUILD_APP%" institutional
-    set "TEMP_RC=%errorlevel%"
-    if not "%TEMP_RC%"=="0" (
-        set "NO_PAUSE=%SAVED_NO_PAUSE%"
-        call :finalize %TEMP_RC% "First build failed"
-        goto :eof
-    )
-
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step B: Extract signature hash...'"
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\generate-sign-hash.ps1" -Version cloud-institutional 2>nul
-
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step C: Strict rebuild (institutional)...'"
-    call "%BUILD_APP%" institutional
-    set "TEMP_RC=%errorlevel%"
-
-    set "NO_PAUSE=%SAVED_NO_PAUSE%"
-
-    call :finalize %TEMP_RC% "Cloud APP (Institutional Strict) completed" "Output: %~dp0YJ.apk" "APK: YJ.apk"
-
-    goto :eof

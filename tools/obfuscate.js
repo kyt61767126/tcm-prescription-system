@@ -103,42 +103,32 @@ const MODULE_FILES = [
 ];
 
 // 全部分发目录（相对于项目根目录）
+// 统一安装包：标准版/机构版由运行时激活码决定，不再区分 _geren 目录（合并 8 包 → 4 包）
 const ALL_DISTRIBUTION_DIRS = [
     'public',
     'public/electron',
     'app_project/db-yunduan/cloud_desktop',
     'app_project/db-yunduan/cloud_desktop/electron',
-    'app_project/db-yunduan/cloud_desktop_geren',
-    'app_project/db-yunduan/cloud_desktop_geren/electron',
     'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
     'app_project/db-yunduan/cloud_app/app/src/main/assets',
     'app_project/db-offline/desktop',
     'app_project/db-offline/desktop/electron',
-    'app_project/db-offline/desktop_geren',
-    'app_project/db-offline/desktop_geren/electron',
-    'app_project/db-offline/app/app/src/main/assets/public',
-    'app_project/db-offline/app_geren/app/src/main/assets/public'
+    'app_project/db-offline/app/app/src/main/assets/public'
 ];
 
 // 按 target 分组（用于 --target=dingzhi 等参数，只处理对应版本，大幅加速打包）
+// dingzhi = 离线统一包，cloud = 云端统一包
 const TARGET_DIRS = {
     dingzhi: [
         'app_project/db-offline/desktop',
         'app_project/db-offline/desktop/electron',
         'app_project/db-offline/app/app/src/main/assets/public'
     ],
-    geren: [
-        'app_project/db-offline/desktop_geren',
-        'app_project/db-offline/desktop_geren/electron',
-        'app_project/db-offline/app_geren/app/src/main/assets/public'
-    ],
     cloud: [
         'public',
         'public/electron',
         'app_project/db-yunduan/cloud_desktop',
         'app_project/db-yunduan/cloud_desktop/electron',
-        'app_project/db-yunduan/cloud_desktop_geren',
-        'app_project/db-yunduan/cloud_desktop_geren/electron',
         'app_project/db-yunduan/cloud_app/app/src/main/assets/public',
         'app_project/db-yunduan/cloud_app/app/src/main/assets'
     ],
@@ -246,7 +236,7 @@ function restoreFile(filePath) {
 const JavaScriptObfuscator = loadObfuscator();
 const projectRoot = path.resolve(__dirname, '..');
 
-// 解析参数：支持 --target=dingzhi|geren|cloud|all 和 restore
+// 解析参数：支持 --target=dingzhi|cloud|all 和 restore
 // 用法示例:
 //   node tools/obfuscate.js                          # 混淆全部（默认）
 //   node tools/obfuscate.js --target=dingzhi         # 仅混淆 dingzhi

@@ -47,21 +47,9 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!*.map'
         }
     }
-    flavorDimensions "default"
-    productFlavors {
-        standard {
-            dimension "default"
-            applicationId = "com.benneng.pres.standard"
-            versionNameSuffix = "-LB"
-            resValue "string", "app_name", "Huikang TCM Standard"
-        }
-        institutional {
-            dimension "default"
-            applicationId = "com.benneng.pres.dingzhi"
-            versionNameSuffix = "-LJ"
-            resValue "string", "app_name", "Huikang TCM Institutional"
-        }
-    }
+
+    // 统一安装包：标准版/机构版由运行时激活码决定（合并 8 包 → 4 包）
+
     buildTypes {
         release {
             signingConfig signingConfigs.release

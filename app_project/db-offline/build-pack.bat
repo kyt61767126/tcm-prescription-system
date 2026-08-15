@@ -146,9 +146,6 @@ goto :main
 
     if /i "%MODE%"=="app-strict" goto :mode_app_strict
 
-    if /i "%MODE%"=="institutional" goto :mode_institutional
-
-    if /i "%MODE%"=="institutional-strict" goto :mode_institutional_strict
 
     powershell -NoProfile -Command "Write-Host '[ERROR] Unknown mode: %MODE%' -ForegroundColor Red"
 
@@ -182,13 +179,9 @@ goto :main
 
     echo [APP]
 
-    echo   app               - Offline APP (Standard)
+    echo   app               - Offline APP (Unified)
 
     echo   app-strict        - Offline APP (Standard Strict)
-
-    echo   institutional     - Offline APP (Institutional)
-
-    echo   institutional-strict - Offline APP (Institutional Strict)
 
     echo.
 
@@ -244,7 +237,7 @@ goto :main
 
 :mode_app
 
-    call :log_title "Offline APP Builder (Standard)"
+    call :log_title "Offline APP Builder (Unified)"
 
     call :check_java || call :finalize 1 "Java check failed"
 
@@ -260,31 +253,7 @@ goto :main
 
     set "NO_PAUSE="
 
-    call :finalize %TEMP_RC% "Offline APP (Standard) completed" "Output: %~dp0LB.apk" "APK: LB.apk"
-
-    goto :eof
-
-
-
-:mode_institutional
-
-    call :log_title "Offline APP Builder (Institutional)"
-
-    call :check_java || call :finalize 1 "Java check failed"
-
-    set "CAP_DIR=%~dp0app"
-
-    call :check_file "app\build-app.bat" "%CAP_DIR%\build-app.bat" || call :finalize 1 "Script not found"
-
-    set "NO_PAUSE=1"
-
-    call "%CAP_DIR%\build-app.bat" institutional
-
-    set "TEMP_RC=%errorlevel%"
-
-    set "NO_PAUSE="
-
-    call :finalize %TEMP_RC% "Offline APP (Institutional) completed" "Output: %~dp0LJ.apk" "APK: LJ.apk"
+    call :finalize %TEMP_RC% "Offline APP (Unified) completed" "Output: %~dp0LB.apk" "APK: LB.apk"
 
     goto :eof
 
@@ -314,24 +283,3 @@ goto :main
 
 
 
-:mode_institutional_strict
-
-    call :log_title "Offline APP Builder (Institutional Strict)"
-
-    call :check_java || call :finalize 1 "Java check failed"
-
-    set "CAP_DIR=%~dp0app"
-
-    call :check_file "app\pack-app-institutional-strict.bat" "%CAP_DIR%\pack-app-institutional-strict.bat" || call :finalize 1 "Script not found"
-
-    set "NO_PAUSE=1"
-
-    call "%CAP_DIR%\pack-app-institutional-strict.bat"
-
-    set "TEMP_RC=%errorlevel%"
-
-    set "NO_PAUSE="
-
-    call :finalize %TEMP_RC% "Offline APP (Institutional Strict) completed" "Output: %~dp0LJ.apk" "APK: LJ.apk"
-
-    goto :eof

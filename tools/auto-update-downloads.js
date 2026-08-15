@@ -3,7 +3,7 @@
 // auto-update-downloads.js — 自动更新下载页面的APK文件
 //
 // 用法：node auto-update-downloads.js <target>
-//   target: dingzhi / geren / cloud / geren-cloud / all
+//   target: dingzhi / cloud / all
 //
 // 功能：
 //   1. 查找刚打包的APK文件
@@ -23,31 +23,20 @@ const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 
 // 各APP的APK搜索路径和产品名称
 // appDir: 项目根目录（包含 app/ 子目录），用于读取 build.gradle 版本号
+// 统一安装包：标准版/机构版由运行时激活码决定（合并 8 包 → 4 包）
 const APP_CONFIG = {
     'dingzhi': {
+        // 离线统一包
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline'),
-        outputName: '惠康中医-LJ.apk',
+        outputName: '惠康中医-本地.apk',
         configPath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'config.json')
     },
-    'geren': {
-        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app_geren', 'app', 'build', 'outputs', 'apk', 'release'),
-        appDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline'),
-        outputName: '惠康中医-LB.apk',
-        configPath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop_geren', 'config.json')
-    },
     'cloud': {
-        // 云端机构版：cloud_app（包名 com.tcm.prescription）
+        // 云端统一包
         apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app', 'app', 'build', 'outputs', 'apk', 'release'),
         appDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app'),
-        outputName: '惠康中医-YJ.apk',
-        configPath: null
-    },
-    'geren-cloud': {
-        // 云端标准版：cloud_app_geren（包名 com.tcm.prescription.geren）
-        apkDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app_geren', 'app', 'build', 'outputs', 'apk', 'release'),
-        appDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_app_geren'),
-        outputName: '惠康中医-YB.apk',
+        outputName: '惠康中医-云端.apk',
         configPath: null
     }
 };
@@ -206,9 +195,9 @@ function main() {
     const args = process.argv.slice(2).filter(a => !a.startsWith('--'));
     const target = args[0] || 'all';
 
-    if (!['dingzhi', 'geren', 'cloud', 'geren-cloud', 'all'].includes(target)) {
+    if (!['dingzhi', 'cloud', 'all'].includes(target)) {
         console.error('用法: node auto-update-downloads.js <target>');
-        console.error('  target: dingzhi / geren / cloud / geren-cloud / all');
+        console.error('  target: dingzhi / cloud / all');
         process.exit(1);
     }
 

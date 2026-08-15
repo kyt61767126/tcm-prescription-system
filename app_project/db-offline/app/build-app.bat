@@ -6,36 +6,14 @@ title Huikang-TCM Build Tool
 REM
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
-REM Product Flavors: support standard and institutional
-set "FLAVOR=%1"
-if "%FLAVOR%"=="" set "FLAVOR=standard"
+REM 统一安装包：单 APK，标准版/机构版由运行时激活码决定（合并 8 包 → 4 包）
+set "FLAVOR_TARGET=dingzhi"
+set "FLAVOR_NAME="
+set "FLAVOR_CAP="
+set "APK_NAME=惠康中医-本地"
+set "ASSEMBLE_TASK=:app:assembleRelease"
+set "APK_DIR=app\build\outputs\apk\release"
 
-if /i "%FLAVOR%"=="--skip-config" (
-    set "FLAVOR=standard"
-    set "SKIP_CONFIG=1"
-)
-
-REM Set flavor variables
-if /i "%FLAVOR%"=="standard" (
-    set "FLAVOR_NAME=Standard"
-    set "FLAVOR_CAP=Standard"
-    set "FLAVOR_TARGET=standard"
-    set "APK_NAME=LB"
-    set "ASSEMBLE_TASK=:app:assembleStandardRelease"
-    set "APK_DIR=app\build\outputs\apk\standard\release"
-) else if /i "%FLAVOR%"=="institutional" (
-    set "FLAVOR_NAME=Institutional"
-    set "FLAVOR_CAP=Institutional"
-    set "FLAVOR_TARGET=institutional"
-    set "APK_NAME=LJ"
-    set "ASSEMBLE_TASK=:app:assembleInstitutionalRelease"
-    set "APK_DIR=app\build\outputs\apk\institutional\release"
-) else (
-    echo [ERROR] Invalid flavor: %FLAVOR%
-    echo Available: standard, institutional
-    if not defined NO_PAUSE pause
-    exit /b 1
-)
 
 echo ============================================
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Huikang TCM Offline APP Build Tool (%FLAVOR_NAME%)'"
@@ -310,12 +288,10 @@ if errorlevel 1 (
 )
 echo.
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Locating APK file...'"
-set "APK_DIR=app\build\outputs\apk\%FLAVOR%\release"
+set "APK_DIR=app\build\outputs\apk\release"
 set "APK_FILE="
-if exist "%APK_DIR%\app-%FLAVOR%-release.apk" (
-    set "APK_FILE=%APK_DIR%\app-%FLAVOR%-release.apk"
-) else if exist "%APK_DIR%\app-%FLAVOR_NAME%-release.apk" (
-    set "APK_FILE=%APK_DIR%\app-%FLAVOR_NAME%-release.apk"
+if exist "%APK_DIR%\app-release.apk" (
+    set "APK_FILE=%APK_DIR%\app-release.apk"
 ) else (
     for %%f in ("%APK_DIR%\*.apk") do (
         set "APK_FILE=%%f"

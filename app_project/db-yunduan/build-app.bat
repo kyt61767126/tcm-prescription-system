@@ -8,29 +8,13 @@ title Huikang-TCM Build Tool
 
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
-REM Product Flavors: standard and institutional
-set "FLAVOR=%~1"
-if "%FLAVOR%"=="" set "FLAVOR=standard"
-
-REM Set flavor variables
-if /i "%FLAVOR%"=="standard" (
-    set "FLAVOR_NAME=Standard"
-    set "FLAVOR_CAP=Standard"
-    set "APK_NAME=YB"
-    set "ASSEMBLE_TASK=:app:assembleStandardRelease"
-    set "APK_DIR=app\build\outputs\apk\standard\release"
-) else if /i "%FLAVOR%"=="institutional" (
-    set "FLAVOR_NAME=Institutional"
-    set "FLAVOR_CAP=Institutional"
-    set "APK_NAME=YJ"
-    set "ASSEMBLE_TASK=:app:assembleInstitutionalRelease"
-    set "APK_DIR=app\build\outputs\apk\institutional\release"
-) else (
-    echo [ERROR] Invalid flavor: %FLAVOR%
-    echo Available: standard, institutional
-    if not defined NO_PAUSE pause
-    exit /b 1
-)
+REM 统一安装包：单 APK，标准版/机构版由运行时激活码决定（合并 8 包 → 4 包）
+set "FLAVOR="
+set "FLAVOR_NAME="
+set "FLAVOR_CAP="
+set "APK_NAME=惠康中医-云端"
+set "ASSEMBLE_TASK=:app:assembleRelease"
+set "APK_DIR=app\build\outputs\apk\release"
 
 echo ============================================
 echo   Huikang TCM Cloud APP Builder (%FLAVOR_NAME%)
@@ -217,8 +201,8 @@ echo.
 
 echo Locating APK file...
 set "APK_FILE="
-if exist "%APK_DIR%\app-%FLAVOR%-release.apk" (
-    set "APK_FILE=%APK_DIR%\app-%FLAVOR%-release.apk"
+if exist "%APK_DIR%\app-release.apk" (
+    set "APK_FILE=%APK_DIR%\app-release.apk"
 ) else (
     for %%f in ("%APK_DIR%\*.apk") do (
         set "APK_FILE=%%f"

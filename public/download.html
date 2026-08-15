@@ -1147,13 +1147,13 @@
         <div class="tab-content active" id="tab-mobile">
             <div class="section-title">
                 <span>📱 手机端 APP</span>
-                <span class="sub">云端机构版 · 离线版</span>
+                <span class="sub">云端统一包 · 本地统一包</span>
             </div>
             <div class="grid-2">
             <div class="card featured" id="card-cloud-app">
                 <div class="card-title">
                     <span class="icon">☁️</span>
-                    惠康中医 · 云端机构版
+                    惠康中医 · 云端统一包
                     <span class="badge cloud">云端</span>
                     <span class="status-tag latest" id="tag-cloud-app">最新</span>
                 </div>
@@ -1205,63 +1205,10 @@
                 </div>
             </div>
 
-            <div class="card featured" id="card-geren-cloud">
-                <div class="card-title">
-                    <span class="icon">👤</span>
-                    惠康中医 · 云端标准版
-                    <span class="badge cloud">云端</span>
-                    <span class="badge offline">个人</span>
-                    <span class="status-tag latest" id="tag-geren-cloud">最新</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">版本</span>
-                    <span class="info-value version" id="ver-geren-cloud">加载中...</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">更新时间</span>
-                    <span class="info-value date" id="mtime-geren-cloud">-</span>
-                </div>
-                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
-                <div class="card-details">
-                    <div class="info-row">
-                        <span class="info-label">适用场景</span>
-                        <span class="info-value">个人医生联网使用，云端数据同步，轻量简洁</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">多设备登入</span>
-                        <span class="info-value success">✅ 支持（云端实时同步）</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">功能差异</span>
-                        <span class="info-value">与云端机构版相同，默认以"离线标准版"模式运行（无用户管理、有修改密码）</span>
-                    </div>
-                    <div class="notice notice-cloud">
-                        <span class="icon">ℹ️</span>
-                        <div>
-                            <strong>关于云端标准版：</strong>此版本与"云端机构版"使用同一安装包，仅在服务端以离线标准版模式运行，界面更简洁。<br>
-                            <strong>适合人群：</strong>个人医生、单医师诊所，需要云端数据同步但无需多账户管理功能。<br>
-                            <strong>账户开通：</strong>需联系开发者（平台管理员）开通离线标准版账户后登录使用。
-                        </div>
-                    </div>
-                    <div class="hash-box">
-                        <div class="hash-label">
-                            🔒 SHA-256 校验值（APK）
-                            <button class="hash-copy" onclick="copyHash('hash-geren-cloud')">复制</button>
-                        </div>
-                        <div class="hash-value pending" id="hash-geren-cloud">（打包后自动更新）</div>
-                    </div>
-                </div>
-                <div class="btn-group">
-                    <a href="#" class="download-btn" id="dl-geren-cloud">
-                        <span class="icon">⬇️</span>下载 APK（Android）
-                    </a>
-                </div>
-            </div>
-
             <div class="card" id="card-dingzhi">
                 <div class="card-title">
                     <span class="icon">🏥</span>
-                    惠康中医 · 离线机构版
+                    惠康中医 · 本地统一包
                     <span class="badge offline">离线</span>
                     <span class="status-tag latest" id="tag-dingzhi">最新</span>
                 </div>
@@ -1320,67 +1267,6 @@
                 </div>
             </div>
 
-            <div class="card" id="card-geren">
-                <div class="card-title">
-                    <span class="icon">👤</span>
-                    惠康中医 · 离线标准版
-                    <span class="badge offline">离线</span>
-                    <span class="status-tag latest" id="tag-geren">最新</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">版本</span>
-                    <span class="info-value version" id="ver-geren">加载中...</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">发布日期</span>
-                    <span class="info-value date" id="date-geren">-</span>
-                </div>
-                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
-                <div class="card-details">
-                    <div class="info-row">
-                        <span class="info-label">更新时间</span>
-                        <span class="info-value date" id="mtime-geren">-</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">更新说明</span>
-                        <span class="info-value" id="notes-geren">-</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">适用场景</span>
-                        <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">多设备登入</span>
-                        <span class="info-value danger">❌ 不支持（仅单机使用）</span>
-                    </div>
-                    <div class="credential-box">
-                        <strong>📝 注册说明：</strong><br>
-                        诊所名称：<span class="cred-pair" onclick="copyText(this)">本能堂中医诊所</span>（基础设置中可修改）<br>
-                        管理员用户名：<span class="cred-pair" onclick="copyText(this)">本能堂</span><br>
-                        默认密码：<span class="cred-pair" onclick="copyText(this)">admin</span><br>
-                        <strong>⚠️ 离线标准版仅一个管理员账号，首次登录后请在基础设置中修改诊所名称和医师姓名！</strong>
-                    </div>
-                    <div class="notice notice-single">
-                        <span class="icon">⚠️</span>
-                        <div>
-                            <strong>仅支持单机使用：</strong>不支持多设备同时登入同一数据源。<br>
-                            <strong>如需多设备登入</strong>，请选择上方<strong>云端机构版</strong>。
-                        </div>
-                    </div>
-                    <div class="hash-box">
-                        <div class="hash-label">
-                            🔒 SHA-256 校验值（APK）
-                            <button class="hash-copy" onclick="copyHash('hash-geren')">复制</button>
-                        </div>
-                        <div class="hash-value pending" id="hash-geren">（打包后自动更新）</div>
-                    </div>
-                </div>
-                <div class="btn-group">
-                    <a href="#" class="download-btn secondary" id="dl-geren">
-                        <span class="icon">⬇️</span>下载 APK（Android）
-                    </a>
-                </div>
-            </div>
             </div>
         </div>
 
@@ -1388,13 +1274,13 @@
         <div class="tab-content" id="tab-desktop">
             <div class="section-title">
                 <span>💻 桌面端程序</span>
-                <span class="sub">云端桌面版 · 离线桌面版</span>
+                <span class="sub">云端统一包 · 本地统一包</span>
             </div>
             <div class="grid-2">
             <div class="card featured" id="card-cloud-desktop">
                 <div class="card-title">
                     <span class="icon">☁️</span>
-                    惠康中医 · 云端桌面版
+                    惠康中医 · 云端统一包
                     <span class="badge desktop">桌面</span>
                     <span class="badge cloud">云端</span>
                 </div>
@@ -1459,7 +1345,7 @@
             <div class="card" id="card-dingzhi-desktop">
                 <div class="card-title">
                     <span class="icon">🏥</span>
-                    惠康中医 · 定制桌面版
+                    惠康中医 · 本地统一包
                     <span class="badge desktop">桌面</span>
                     <span class="badge offline">离线</span>
                 </div>
@@ -1521,70 +1407,6 @@
                 </div>
             </div>
 
-            <div class="card" id="card-geren-desktop">
-                <div class="card-title">
-                    <span class="icon">👤</span>
-                    惠康中医 · 个人桌面版
-                    <span class="badge desktop">桌面</span>
-                    <span class="badge offline">离线</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">版本</span>
-                    <span class="info-value version" id="ver-geren-desktop">加载中...</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">发布日期</span>
-                    <span class="info-value date" id="date-geren-desktop">-</span>
-                </div>
-                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
-                <div class="card-details">
-                    <div class="info-row">
-                        <span class="info-label">更新时间</span>
-                        <span class="info-value date" id="mtime-geren-desktop">-</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">更新说明</span>
-                        <span class="info-value" id="notes-geren-desktop">-</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">适用场景</span>
-                        <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">多设备登入</span>
-                        <span class="info-value danger">❌ 不支持（仅单机使用）</span>
-                    </div>
-                    <div class="credential-box">
-                        <strong>📝 注册说明：</strong><br>
-                        诊所名称：<span class="cred-pair" onclick="copyText(this)">本能堂中医诊所</span>（基础设置中可修改）<br>
-                        管理员用户名：<span class="cred-pair" onclick="copyText(this)">本能堂</span><br>
-                        默认密码：<span class="cred-pair" onclick="copyText(this)">admin</span><br>
-                        <strong>⚠️ 离线标准版仅一个管理员账号，首次登录后请在基础设置中修改诊所名称和医师姓名！</strong>
-                    </div>
-                    <div class="notice notice-single">
-                        <span class="icon">⚠️</span>
-                        <div>
-                            <strong>仅支持单机使用：</strong>不支持多设备同时登入同一数据源。<br>
-                            <strong>如需多设备登入</strong>，请选择上方<strong>云端桌面版</strong>。
-                        </div>
-                    </div>
-                    <div class="hash-box">
-                        <div class="hash-label">
-                            🔒 SHA-256 校验值（安装版）
-                            <button class="hash-copy" onclick="copyHash('hash-geren-desktop')">复制</button>
-                        </div>
-                        <div class="hash-value pending" id="hash-geren-desktop">（打包后自动更新）</div>
-                    </div>
-                </div>
-                <div class="btn-group">
-                    <a href="#" class="download-btn" id="dl-geren-desktop">
-                        <span class="icon">⬇️</span>下载安装版（推荐）
-                    </a>
-                    <a href="#" class="download-btn secondary" id="dl-geren-desktop-portable">
-                        <span class="icon">📦</span>便携版
-                    </a>
-                </div>
-            </div>
             </div>
         </div>
 
@@ -2012,8 +1834,8 @@
                 <div class="info-row">
                     <span class="info-label">下载入口</span>
                     <span class="info-value">
-                        📱 <a href="#card-geren" onclick="switchTab('mobile','card-geren')">离线标准版 APK</a> ·
-                        💻 <a href="#card-geren-desktop" onclick="switchTab('desktop','card-geren-desktop')">离线标准版桌面版</a>
+                        📱 <a href="#card-dingzhi" onclick="switchTab('mobile','card-dingzhi')">本地统一包 APK</a> ·
+                        💻 <a href="#card-dingzhi-desktop" onclick="switchTab('desktop','card-dingzhi-desktop')">本地统一包桌面版</a>
                     </span>
                 </div>
                 <p style="font-size:12px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
@@ -2892,8 +2714,6 @@
             'cloud-app': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'app' },
             'dingzhi-desktop': { jsonUrl: BASE + '/updates/dingzhi/latest.json', type: 'desktop' },
             'dingzhi': { jsonUrl: BASE + '/updates/dingzhi/latest.json', type: 'app' },
-            'geren-desktop': { jsonUrl: BASE + '/updates/geren/latest.json', type: 'desktop' },
-            'geren': { jsonUrl: BASE + '/updates/geren/latest.json', type: 'app' }
         };
 
         // 安全下载：先验证文件存在再跳转
@@ -3014,7 +2834,7 @@
                     } catch(e) { return '-'; }
                 }
 
-                ['cloud-app', 'geren-cloud', 'dingzhi', 'geren'].forEach(key => {
+                ['cloud-app', 'dingzhi'].forEach(key => {
                     const manifestKey = key === 'cloud-app' ? 'cloud' : key;
                     const hashEl = document.getElementById('hash-' + key);
                     const data = manifest[manifestKey] && manifest[manifestKey].apk;
@@ -3032,20 +2852,9 @@
                     if (mtimeEl && data && data.updateTime) {
                         mtimeEl.textContent = fmtUpdateTime(data.updateTime);
                     }
-                    // 云端标准版无 latest.json，从 manifest 显示版本
-                    if (key === 'geren-cloud') {
-                        const verEl = document.getElementById('ver-' + key);
-                        if (verEl && data && data.version) {
-                            verEl.textContent = 'v' + data.version;
-                        } else if (verEl) {
-                            verEl.textContent = 'v1.0';
-                        }
-                    }
                 });
-                ['cloud', 'dingzhi-desktop', 'geren-desktop'].forEach(key => {
-                    const manifestKey = key === 'dingzhi-desktop' ? 'dingzhi'
-                                      : key === 'geren-desktop' ? 'geren'
-                                      : key;
+                ['cloud', 'dingzhi-desktop'].forEach(key => {
+                    const manifestKey = key === 'dingzhi-desktop' ? 'dingzhi' : key;
                     const hashEl = document.getElementById('hash-' + key);
                     const data = manifest[manifestKey] && manifest[manifestKey].exe;
                     if (hashEl && data && data.sha256) {

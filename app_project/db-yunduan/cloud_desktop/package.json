@@ -20,7 +20,7 @@
   },
   "build": {
     "appId": "com.tcm.prescription.cloud",
-    "productName": "惠康中医-YJ",
+    "productName": "惠康中医-云端",
     "directories": {
       "output": "dist"
     },

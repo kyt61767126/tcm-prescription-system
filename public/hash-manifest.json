@@ -3,10 +3,10 @@
         "apk": {
             "version": "",
             "sha256": "b0073e23bf04ad2e626ab0f55bde18fa328f0d24d0c482c90323b9040c905dc4",
-            "url": "/downloads/惠康中医-LJ.apk",
+            "url": "/downloads/惠康中医-本地.apk",
             "size": 2207293,
             "updateTime": "2026-08-11T11:36:33.577Z",
-            "fileName": "惠康中医-LJ.apk"
+            "fileName": "惠康中医-本地.apk"
         },
         "portable": {
             "version": "",
@@ -25,40 +25,14 @@
             "fileName": "惠康中医-LJ Setup 1.0.5.exe"
         }
     },
-    "geren": {
-        "apk": {
-            "version": "1.0.0",
-            "sha256": "c4e8e0e5c9535609acb16f3d856235e35bb444f6a8526129535d1e8b052cc5e6",
-            "url": "/downloads/惠康中医-LB.apk",
-            "size": 2205132,
-            "updateTime": "2026-08-11T11:36:37.520Z",
-            "fileName": "惠康中医-LB.apk"
-        },
-        "portable": {
-            "version": "",
-            "sha256": "8f39fb26e767ef06deaa950377b856fd5258ef62d8001e3e7cacf007f3e293e8",
-            "url": "",
-            "size": 78321464,
-            "updateTime": "2026-08-11T11:36:33.577Z",
-            "fileName": "惠康中医-LB 1.0.3.exe"
-        },
-        "exe": {
-            "version": "",
-            "sha256": "93585a3be04424fb42c6e5bb89467970cad95e89a43ed4139a47bacfd326e9b0",
-            "url": "",
-            "size": 78536228,
-            "updateTime": "2026-08-11T11:36:33.577Z",
-            "fileName": "惠康中医-LB Setup 1.0.3.exe"
-        }
-    },
     "cloud": {
         "apk": {
             "version": "",
             "sha256": "edbf4c8a0d5a55003e907898165757ab317d6dc2024b492c87b3b7a1ffd77387",
-            "url": "/downloads/惠康中医-YJ.apk",
+            "url": "/downloads/惠康中医-云端.apk",
             "size": 11379200,
             "updateTime": "2026-08-11T11:30:22.292Z",
-            "fileName": "惠康中医-YJ.apk"
+            "fileName": "惠康中医-云端.apk"
         },
         "exe": {
             "version": "",
@@ -75,32 +49,6 @@
             "size": 81041053,
             "updateTime": "2026-08-11T11:36:33.577Z",
             "fileName": "惠康中医-YJ 1.2.15.exe"
-        }
-    },
-    "geren-cloud": {
-        "apk": {
-            "version": "",
-            "sha256": "8d94c8ee364910004204458f09e702cb52a6ea7b715d9bba903d7d8bd9a5b010",
-            "url": "/downloads/惠康中医-YB.apk",
-            "size": 11345766,
-            "updateTime": "2026-08-11T13:52:36.115Z",
-            "fileName": "惠康中医-YB.apk"
-        },
-        "exe": {
-            "version": "",
-            "sha256": "50ca0c2a0b353e58d288a03d5521aa5de88a959ea5f9096533921518258a46ba",
-            "url": "",
-            "size": 81262384,
-            "updateTime": "2026-08-11T11:36:33.577Z",
-            "fileName": "惠康中医-YB Setup 1.2.26.exe"
-        },
-        "portable": {
-            "version": "",
-            "sha256": "9d2838e51815f06a42ab8841fe70484a24fa19bd25d731e45f30f15aad2c4bea",
-            "url": "",
-            "size": 81047591,
-            "updateTime": "2026-08-11T11:36:33.577Z",
-            "fileName": "惠康中医-YB 1.2.26.exe"
         }
     }
 }
