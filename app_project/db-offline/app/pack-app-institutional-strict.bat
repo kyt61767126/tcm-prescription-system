@@ -29,7 +29,7 @@ if not exist "%GEN_HASH_PS1%" (
 
 echo [Step 0] Java pre-compile check...
 pushd "%PROJECT_DIR%"
-call gradlew.bat :app:javaPreCompileInstitutionalRelease :app:compileInstitutionalReleaseJavaWithJavac --quiet 2>&1
+call gradlew.bat :app:javaPreCompileRelease :app:compileReleaseJavaWithJavac --quiet 2>&1
 set "PRECOMPILE_RC=%errorlevel%"
 popd
 if %PRECOMPILE_RC% neq 0 (
