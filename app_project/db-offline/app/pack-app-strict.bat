@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal EnableExtensions
 cd /d "%~dp0"
 
@@ -78,7 +79,7 @@ if %TEMP_RC% neq 0 (
 
 echo.
 echo [OK] Offline APP (Standard Strict) build completed
-echo      APK: HuikangTCM-LB.apk
+echo      APK: 惠康中医-本地.apk
 echo.
 if not defined NO_PAUSE pause
 exit /b 0

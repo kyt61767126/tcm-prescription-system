@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 
 setlocal EnableExtensions EnableDelayedExpansion
 
@@ -247,7 +248,7 @@ goto :main
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -AutoApp
 
-    call :finalize %errorlevel% "Cloud APP (Unified) completed" "Output: %~dp0YB.apk" "APK: YB.apk"
+    call :finalize %errorlevel% "Cloud APP (Unified) completed" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
 
     goto :eof
 
@@ -286,7 +287,7 @@ goto :main
 
     set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
-    call :finalize %TEMP_RC% "Cloud APP (Standard Strict) completed" "Output: %~dp0YB.apk" "APK: YB.apk"
+    call :finalize %TEMP_RC% "Cloud APP (Standard Strict) completed" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
 
     goto :eof
 

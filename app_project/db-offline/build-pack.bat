@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 
 setlocal EnableExtensions EnableDelayedExpansion
 
@@ -253,7 +254,7 @@ goto :main
 
     set "NO_PAUSE="
 
-    call :finalize %TEMP_RC% "Offline APP (Unified) completed" "Output: %~dp0LB.apk" "APK: LB.apk"
+    call :finalize %TEMP_RC% "Offline APP (Unified) completed" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
 
     goto :eof
 
@@ -277,7 +278,7 @@ goto :main
 
     set "NO_PAUSE="
 
-    call :finalize %TEMP_RC% "Offline APP (Standard Strict) completed" "Output: %~dp0LB.apk" "APK: LB.apk"
+    call :finalize %TEMP_RC% "Offline APP (Standard Strict) completed" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
 
     goto :eof
 

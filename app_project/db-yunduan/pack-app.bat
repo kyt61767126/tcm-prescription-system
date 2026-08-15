@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal EnableExtensions
 cd /d "%~dp0"
 
@@ -21,7 +22,7 @@ if %TEMP_RC% neq 0 (
 echo.
 echo ============================================
 echo   [OK] Cloud APP (Standard) completed
-echo   APK: YB.apk
+echo   APK: 惠康中医-云端.apk
 echo ============================================
 echo.
 pause
