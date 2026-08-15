@@ -77,7 +77,7 @@ function loadClientConfig() {
 // ★ v3 新增：clinicName 参数，传给云端做诊所名绑定校验
 // ★ 修复：license.dat 写入失败时友好提示 + 自动 fallback 到 userData 目录
 // ★ 优化：Promise.race 双保险超时，解决 Electron 28 中 AbortController 可能不生效导致 fetch 卡死几十分钟的问题
-async function activateOnline(code, machineId, user, clinicName, phone, password) {
+async function activateOnline(code, machineId, user, clinicName, phone, password, edition) {
     try {
         const body = { code, machineId };
         if (user) body.user = user;
@@ -120,7 +120,8 @@ async function activateOnline(code, machineId, user, clinicName, phone, password
             doctorName: user || '',
             clinicName: clinicName || '',
             phone: phone || '',
-            password: password || ''
+            password: password || '',
+            edition: edition || ''
         });
         if (!installResult.success) {
             return { success: false, error: installResult.error };
@@ -310,7 +311,7 @@ function getAdminRequestIdPath() {
     }
 }
 
-function saveAdminRequestId(requestId, clinicName, adminName, phone, password) {
+function saveAdminRequestId(requestId, clinicName, adminName, phone, password, edition) {
     try {
         const data = {
             requestId: requestId,
@@ -318,7 +319,8 @@ function saveAdminRequestId(requestId, clinicName, adminName, phone, password) {
             adminName: adminName || '',
             phone: phone || '',
             password: password || '',  // ★ 本地保存密码，激活通过后用于创建管理员账户
-            savedAt: new Date().toISOString()
+            savedAt: new Date().toISOString(),
+            edition: edition || '',  // ★ 保存版本选择
         };
         fs.writeFileSync(getAdminRequestIdPath(), JSON.stringify(data), 'utf8');
         console.log('[Admin] requestId 已保存:', requestId);
@@ -364,7 +366,7 @@ async function submitAdminRequest(data) {
             machineId: data.machineId,
             // ★ 版本信息：用于平台区分离线/云端、机构版/标准版
             productName: clientCfg.productName,
-            edition: clientCfg.edition,
+            edition: data.edition || clientCfg.edition,
             appMode: clientCfg.appMode,
             versionLabel: clientCfg.versionLabel,
             env: clientCfg.env
@@ -395,7 +397,7 @@ async function submitAdminRequest(data) {
 
         if (result.success) {
             // ★ 持久化 requestId + phone + password，防止轮询超时/关闭窗口后丢失
-            saveAdminRequestId(result.requestId, data.clinicName, data.adminName, data.phone, data.password);
+            saveAdminRequestId(result.requestId, data.clinicName, data.adminName, data.phone, data.password, data.edition);
             return {
                 success: true,
                 requestId: result.requestId,

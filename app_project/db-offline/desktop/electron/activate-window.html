@@ -283,6 +283,34 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
 /* Tab content panels */
 .tab-content { display: none; }
 .tab-content.active { display: block; }
+
+/* Edition selector */
+.edition-selector {
+    display: flex; gap: 10px; margin-bottom: 14px;
+}
+.edition-card {
+    flex: 1; padding: 14px 10px; text-align: center;
+    border: 2px solid #e4e7ed; border-radius: 10px;
+    cursor: pointer; transition: all 0.2s;
+    background: #fafbfc;
+}
+.edition-card:hover {
+    border-color: var(--primary-1);
+    background: #f0f3ff;
+}
+.edition-card.selected {
+    border-color: var(--primary-1);
+    background: linear-gradient(135deg, #f0f3ff 0%, #e8ecff 100%);
+    box-shadow: 0 2px 8px var(--primary-shadow-strong);
+}
+.edition-card .edition-icon { font-size: 28px; margin-bottom: 4px; }
+.edition-card .edition-name {
+    font-size: 14px; font-weight: 600; color: #303133; margin-bottom: 2px;
+}
+.edition-card .edition-desc {
+    font-size: 11px; color: #909399;
+}
+
 </style>
 </head>
 <body>
@@ -290,10 +318,25 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
     <div class="brand">
         <div class="logo" id="logoIcon">惠</div>
         <h1 id="pageTitle">软件激活</h1>
-        <div class="subtitle" id="pageSubtitle">快速完成激活 · 即刻使用</div>
+        <div class="subtitle" id="pageSubtitle">请选择您要激活的版本</div>
     </div>
 
-    <!-- Tab 切换 -->
+    <!-- 版本选择器 -->
+    <div class="edition-selector" id="editionSelector">
+        <div class="edition-card" data-edition="personal" onclick="selectEdition('personal')">
+            <div class="edition-icon">🏥</div>
+            <div class="edition-name">标准版</div>
+            <div class="edition-desc">个人诊所 · 单用户</div>
+        </div>
+        <div class="edition-card" data-edition="institution" onclick="selectEdition('institution')">
+            <div class="edition-icon">🏨</div>
+            <div class="edition-name">机构版</div>
+            <div class="edition-desc">多人机构 · 多用户管理</div>
+        </div>
+    </div>
+
+    <!-- Tab 切换 + 内容（版本选择后显示） -->
+    <div id="tabContainer" style="display:none;">
     <div class="tabs">
         <div class="tab active" data-tab="admin" onclick="switchTab('admin')">📋 管理员激活</div>
         <div class="tab" data-tab="code" onclick="switchTab('code')">🔑 激活码激活</div>
@@ -487,6 +530,8 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
         </div>
     </div>
 
+    </div><!-- /tabContainer -->
+
     <!-- 通用错误提示（内联） -->
     <div class="status-box error" id="globalError" style="margin-top:10px;"></div>
 
@@ -539,21 +584,34 @@ let codeState = { phone: '', clinicName: '', adminName: '', password: '' };
 let _pollTimer = null;
 let _restartTimer = null;
 
-// ============ Theme detection ============
+// ============ Edition selection ============
+function selectEdition(edition) {
+    state.edition = edition;
+    codeState.edition = edition;
+    // Update card styles
+    document.querySelectorAll('.edition-card').forEach(card => {
+        card.classList.toggle('selected', card.dataset.edition === edition);
+    });
+    // Update theme
+    if (edition === 'personal') {
+        document.body.classList.add('edition-standard');
+        document.getElementById('pageSubtitle').textContent = '标准版 · 快速激活';
+    } else {
+        document.body.classList.remove('edition-standard');
+        document.getElementById('pageSubtitle').textContent = '机构版 · 快速激活';
+    }
+    // Show tabs after selection
+    document.getElementById('editionSelector').style.display = 'none';
+    document.getElementById('tabContainer').style.display = 'block';
+}
+
+// ============ Theme + config init ============
 (async function initTheme() {
     try {
         if (window.electronAPI && window.electronAPI.getAppConfig) {
             const r = await window.electronAPI.getAppConfig();
             if (r && r.success && r.config) {
                 const cfg = r.config;
-                // 主题色：标准版=青绿，机构版=深紫
-                if (cfg.edition === 'personal') {
-                    document.body.classList.add('edition-standard');
-                    document.getElementById('pageSubtitle').textContent = '标准版 · 快速激活';
-                } else {
-                    document.body.classList.remove('edition-standard');
-                    document.getElementById('pageSubtitle').textContent = '机构版 · 快速激活';
-                }
                 // 预填诊所名和医师名
                 if (cfg.clinicName) {
                     document.getElementById('clinicName').value = cfg.clinicName;
@@ -571,7 +629,6 @@ let _restartTimer = null;
         }
     } catch (e) { console.warn('Theme init failed:', e); }
 })();
-
 // ============ Tab switching ============
 function switchTab(tab) {
     state.mode = tab;
@@ -605,6 +662,13 @@ function hideGlobalError() {
         if (!window.electronAPI?.activate?.loadAdminRequestId) return;
         const saved = await window.electronAPI.activate.loadAdminRequestId();
         if (!saved?.requestId) return;
+        // 恢复版本选择
+        if (saved.edition) {
+            selectEdition(saved.edition);
+        } else {
+            // 无版本信息，显示选择器让用户选择
+            return;
+        }
         // 自动切换到管理员激活tab
         switchTab('admin');
         const r = await window.electronAPI.activate.checkAdminStatus(saved.requestId);
@@ -1056,7 +1120,8 @@ document.getElementById('codeSubmitBtn').addEventListener('click', async () => {
             codeState.adminName,
             codeState.clinicName,
             codeState.phone,
-            pwd
+            pwd,
+            codeState.edition || 'institution'
         );
         if (result.success) {
             document.getElementById('codeActivateStatus').textContent = '激活成功，正在重启...';
