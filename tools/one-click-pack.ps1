@@ -97,7 +97,6 @@ function Build-Offline {
     )
     $verLabel = switch ($Version) {
         "dingzhi" { "定制" }
-        "geren"   { "个人" }
         default   { $Version }
     }
 
@@ -184,15 +183,14 @@ function Build-All {
     $allStart = Get-TimeStamp
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
-    Write-Host "  全部3个版本打包开始: $allStart" -ForegroundColor Cyan
+    Write-Host "  全部2个版本打包开始: $allStart" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Build-Cloud -Target "all"
     Build-Offline -Version "dingzhi" -Target "all"
-    Build-Offline -Version "geren" -Target "all"
     $allEnd = Get-TimeStamp
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Green
-    Write-Host "  全部3个版本打包完成！" -ForegroundColor Green
+    Write-Host "  全部2个版本打包完成！" -ForegroundColor Green
     Write-Host "  开始: $allStart" -ForegroundColor Green
     Write-Host "  结束: $allEnd" -ForegroundColor Green
     Write-Host "========================================" -ForegroundColor Green
@@ -211,13 +209,11 @@ function Show-PickVersionMenu {
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host "  [1] 云端版"
         Write-Host "  [2] 离线定制版"
-        Write-Host "  [3] 离线个人版"
         Write-Host "  [0] 返回主菜单"
         $choice = Read-Host "请选择"
         switch ($choice) {
             "1" { Build-Cloud -Target $Mode; return }
             "2" { Build-Offline -Version "dingzhi" -Target $Mode; return }
-            "3" { Build-Offline -Version "geren" -Target $Mode; return }
             "0" { return }
         }
     }
@@ -239,11 +235,6 @@ function Show-StandaloneUsage {
     Write-Host "    pack-desktop.bat       打包桌面版"
     Write-Host "    pack-app.bat           打包手机APP"
     Write-Host "    pack-app-strict.bat    严格模式APP"
-    Write-Host ""
-    Write-Host "  离线个人版 (db-offline/desktop_geren):" -ForegroundColor Yellow
-    Write-Host "    pack-desktop-geren.bat     打包桌面版"
-    Write-Host "    pack-app-geren.bat         打包手机APP"
-    Write-Host "    pack-app-strict-geren.bat  严格模式APP"
     Write-Host ""
     Write-Host "  提示: 直接双击对应目录下的 bat 文件即可" -ForegroundColor DarkGray
     Write-Host "========================================" -ForegroundColor Cyan
@@ -284,7 +275,6 @@ while ($true) {
     switch ($choice) {
         "1" { Build-Cloud -Target "all" }
         "2" { Build-Offline -Version "dingzhi" -Target "all" }
-        "3" { Build-Offline -Version "geren" -Target "all" }
         "4" { Build-All }
         "5" { Show-PickVersionMenu -Mode "desktop" }
         "6" { Show-PickVersionMenu -Mode "app" }

@@ -20,12 +20,9 @@ $baselineDir = Join-Path $projectRoot '.interface-baseline'
 
 # 待校验的 index.html
 $targets = @(
-    'app_project\db-offline\desktop_geren\index.html',
     'app_project\db-offline\desktop\index.html',
-    'app_project\db-offline\app_geren\app\app\src\main\assets\public\index.html',
     'app_project\db-offline\app\app\src\main\assets\public\index.html',
-    'app_project\db-yunduan\cloud_desktop\index.html',
-    'app_project\db-yunduan\cloud_desktop_geren\index.html'
+    'app_project\db-yunduan\cloud_desktop\index.html'
 )
 
 function Get-BodyDOM {

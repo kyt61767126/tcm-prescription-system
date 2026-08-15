@@ -2,7 +2,7 @@
 # 检测并修复上次非正常退出（崩溃/Ctrl+C/进程被杀）留下的残留文件
 # 调用方式：powershell -NoProfile -ExecutionPolicy Bypass -File pre-flight-check.ps1 [-Target cloud] [-AppDir ...] [-DesktopDir ...]
 param(
-    [string]$Target = "",       # obfuscate target: cloud/dingzhi/geren-cloud/geren/dingzhi-cloud
+    [string]$Target = "",       # obfuscate target: cloud/dingzhi/dingzhi-cloud
     [string]$AppDir = "",       # APP 项目目录（清理 .gradle/configuration-cache）
     [string]$DesktopDir = ""    # 桌面项目目录（清理 dist_old_*/package.json.certbak）
 )
@@ -23,8 +23,7 @@ Write-Host "[Pre-flight] 预防性检查（检测上次非正常退出残留）.
 # ---------------------------------------------------------------------------
 $vcodePrevCandidates = @(
     (Join-Path $projectRoot "app_project\db-yunduan\.build_vcode_prev"),
-    (Join-Path $projectRoot "app_project\db-offline\app\.build_vcode_prev"),
-    (Join-Path $projectRoot "app_project\db-offline\app_geren\.build_vcode_prev")
+    (Join-Path $projectRoot "app_project\db-offline\app\.build_vcode_prev")
 ) | Where-Object { Test-Path $_ }
 
 foreach ($f in $vcodePrevCandidates) {
@@ -49,17 +48,11 @@ if ($Target -ne "") {
             "public\electron",
             "app_project\db-yunduan\cloud_desktop",
             "app_project\db-yunduan\cloud_desktop\electron",
-            "app_project\db-yunduan\cloud_desktop_geren",
-            "app_project\db-yunduan\cloud_desktop_geren\electron",
             "app_project\db-yunduan\cloud_app\app\src\main\assets\public",
             "app_project\db-yunduan\cloud_app\app\src\main\assets",
-            "app_project\db-yunduan\cloud_app_geren\app\src\main\assets\public",
             "app_project\db-offline\desktop",
             "app_project\db-offline\desktop\electron",
-            "app_project\db-offline\desktop_geren",
-            "app_project\db-offline\desktop_geren\electron",
-            "app_project\db-offline\app\app\src\main\assets\public",
-            "app_project\db-offline\app_geren\app\src\main\assets\public"
+            "app_project\db-offline\app\app\src\main\assets\public"
         )
 
         $hasBak = $false
@@ -103,9 +96,7 @@ if ($DesktopDir -ne "" -and (Test-Path $DesktopDir)) {
     $certBakCandidates += Join-Path $DesktopDir "package.json.certbak"
 } else {
     $certBakCandidates += (Join-Path $projectRoot "app_project\db-yunduan\cloud_desktop\package.json.certbak")
-    $certBakCandidates += (Join-Path $projectRoot "app_project\db-yunduan\cloud_desktop_geren\package.json.certbak")
     $certBakCandidates += (Join-Path $projectRoot "app_project\db-offline\desktop\package.json.certbak")
-    $certBakCandidates += (Join-Path $projectRoot "app_project\db-offline\desktop_geren\package.json.certbak")
 }
 
 foreach ($f in ($certBakCandidates | Where-Object { Test-Path $_ })) {
@@ -133,9 +124,7 @@ if ($DesktopDir -ne "" -and (Test-Path $DesktopDir)) {
     $desktopCheckDirs += $DesktopDir
 } else {
     $desktopCheckDirs += (Join-Path $projectRoot "app_project\db-yunduan\cloud_desktop")
-    $desktopCheckDirs += (Join-Path $projectRoot "app_project\db-yunduan\cloud_desktop_geren")
     $desktopCheckDirs += (Join-Path $projectRoot "app_project\db-offline\desktop")
-    $desktopCheckDirs += (Join-Path $projectRoot "app_project\db-offline\desktop_geren")
 }
 
 foreach ($dir in $desktopCheckDirs) {
@@ -161,9 +150,7 @@ if ($AppDir -ne "" -and (Test-Path $AppDir)) {
     $appCheckDirs += $AppDir
 } else {
     $appCheckDirs += (Join-Path $projectRoot "app_project\db-yunduan\cloud_app")
-    $appCheckDirs += (Join-Path $projectRoot "app_project\db-yunduan\cloud_app_geren")
     $appCheckDirs += (Join-Path $projectRoot "app_project\db-offline\app\app")
-    $appCheckDirs += (Join-Path $projectRoot "app_project\db-offline\app_geren\app")
 }
 
 foreach ($appDir in $appCheckDirs) {

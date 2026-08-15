@@ -51,25 +51,19 @@ $BusinessJsTargets = @(
     'public/electron',
     'app_project/db-yunduan/cloud_desktop',
     'app_project/db-yunduan/cloud_desktop/electron',
-    'app_project/db-yunduan/cloud_desktop_geren',
-    'app_project/db-yunduan/cloud_desktop_geren/electron',
-    'app_project/db-offline/desktop_geren',
-    'app_project/db-offline/desktop',
-    'app_project/db-offline/app_geren/app/app/src/main/assets/public',
-    'app_project/db-offline/app/app/src/main/assets/public'
+                'app_project/db-offline/desktop',
+        'app_project/db-offline/app/app/src/main/assets/public'
 )
 
 # Group 2: permission.js extra targets (3 offline electron/, beyond Group 1)
 $PermissionExtraTargets = @(
-    'app_project/db-offline/desktop_geren/electron',
-    'app_project/db-offline/desktop/electron'
+        'app_project/db-offline/desktop/electron'
 )
 
 # Group 3: calculate-hash.js targets (6 offline directories)
 $CalculateHashTargets = @(
     'app_project/db-offline',
-    'app_project/db-offline/app_geren/app/app/src/main/assets/public',
-    'app_project/db-offline/app/app/src/main/assets/public'
+        'app_project/db-offline/app/app/src/main/assets/public'
 )
 
 # Group 4: license files (3 files)
@@ -82,19 +76,14 @@ $LicenseFiles = @(
 # license targets (4 electron/ + 3 root/license/ + 3 nndroidicense/)
 $LicenseTargets = @(
     'app_project/db-yunduan/cloud_desktop/electron',
-    'app_project/db-yunduan/cloud_desktop_geren/electron',
-    'app_project/db-offline/desktop_geren/electron',
-    'app_project/db-offline/desktop/electron',
-    'app_project/db-offline/desktop_geren/license',
-    'app_project/db-offline/desktop/license',
-    'app_project/db-offline/app_geren/app/app/src/main/assets/public/license',
-    'app_project/db-offline/app/app/src/main/assets/public/license'
+            'app_project/db-offline/desktop/electron',
+        'app_project/db-offline/desktop/license',
+        'app_project/db-offline/app/app/src/main/assets/public/license'
 )
 
 # Group 5: electron/hot-update.js targets (3 offline electron/)
 $HotUpdateTargets = @(
-    'app_project/db-offline/desktop_geren/electron',
-    'app_project/db-offline/desktop/electron'
+        'app_project/db-offline/desktop/electron'
 )
 
 # Group 6: res/xml files (3 XML)
@@ -106,8 +95,7 @@ $ResXmlFiles = @(
 
 # res/xml targets (2 app/res/xml/)
 $ResXmlTargets = @(
-    'app_project/db-offline/app_geren/app/app/src/main/res/xml',
-    'app_project/db-offline/app/app/src/main/res/xml'
+        'app_project/db-offline/app/app/src/main/res/xml'
 )
 
 # Group 7: vendor files
@@ -117,10 +105,8 @@ $VendorFiles = @(
 
 # vendor targets (2 root/vendor/ + 2 app/vendor/)
 $VendorTargets = @(
-    'app_project/db-offline/desktop_geren/vendor',
-    'app_project/db-offline/desktop/vendor',
-    'app_project/db-offline/app_geren/app/app/src/main/assets/public/vendor',
-    'app_project/db-offline/app/app/src/main/assets/public/vendor'
+        'app_project/db-offline/desktop/vendor',
+        'app_project/db-offline/app/app/src/main/assets/public/vendor'
 )
 
 # Group 8: cloud-only modules (cloud-api.js, local-db.js, sync-engine.js)
@@ -132,9 +118,8 @@ $CloudModuleFiles = @(
 )
 
 $CloudModuleTargets = @(
-    'app_project/db-yunduan/cloud_desktop',
-    'app_project/db-yunduan/cloud_desktop_geren'
-)
+    'app_project/db-yunduan/cloud_desktop'
+    )
 
 # ============================================================================
 # Helper: Get SHA256 hash of a file

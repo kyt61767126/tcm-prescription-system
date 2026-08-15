@@ -28,15 +28,12 @@ const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 // APK 文件搜索路径 (Android 工程根目录: app/)
 const APK_PATHS = {
     'dingzhi': path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build', 'outputs', 'apk', 'release'),
-    'geren': path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app_geren', 'app', 'build', 'outputs', 'apk', 'release'),
 };
 
-// 桌面版 exe 搜索路径 (key 与 APK_PATHS 一致, dingzhi/geren 同时含 APK+EXE)
+// 桌面版 exe 搜索路径 (key 与 APK_PATHS 一致, dingzhi 同时含 APK+EXE)
 const EXE_PATHS = {
     'cloud': path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'dist'),
-    'geren-cloud': path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_desktop_geren', 'dist'),
     'dingzhi': path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'dist'),
-    'geren': path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop_geren', 'dist'),
 };
 
 /**

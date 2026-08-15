@@ -20,7 +20,6 @@ const { execSync } = require('child_process');
 // APP 包名映射
 const PACKAGES = {
     'dingzhi': 'com.benneng.pres',
-    'geren': 'com.benneng.pres',
     'cloud_app': 'com.tcm.prescription'
 };
 
@@ -73,7 +72,6 @@ if (pkgArg && PACKAGES[pkgArg]) {
 if (!packageName) {
     console.log('\n未自动检测到已安装的 APP，请指定版本:');
     console.log('  node tools/get-apk-sign-hash.js dingzhi');
-    console.log('  node tools/get-apk-sign-hash.js geren');
     console.log('  node tools/get-apk-sign-hash.js cloud_app');
     process.exit(1);
 }

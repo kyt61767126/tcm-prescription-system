@@ -2,7 +2,7 @@
 #  generate-hot-update.ps1 - Generate hot-update packages for offline apps
 #
 #  Purpose:
-#    Generate version.json + package.zip for each offline version (geren/dingzhi)
+#    Generate version.json + package.zip for each offline version (dingzhi)
 #    Output to app_project/public/hot-update/<version>/
 #    Push to GitHub → Cloudflare Pages auto-deploys → apps check for updates
 #
@@ -15,7 +15,7 @@
 #Requires -Version 5.0
 [CmdletBinding()]
 param(
-    [string]$Version = "",  # geren | dingzhi | "" (all)
+    [string]$Version = "",  # dingzhi | "" (all)
     [string]$VersionNumber = ""  # Custom version number, auto-generated if empty
 )
 
@@ -24,7 +24,7 @@ $ProjectRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Pa
 $CloudHost = "tcm-prescription-system.pages.dev"
 
 # All offline versions
-$AllVersions = @('geren', 'dingzhi')
+$AllVersions = @('dingzhi')
 
 # Files to include in hot-update package (relative to assets/public/)
 $UpdateFiles = @(
@@ -197,7 +197,6 @@ if ($successCount -gt 0) {
     Write-Host "[OK] Hot-update packages generated" -ForegroundColor Green
     Write-Host ""
     Write-Host "Output: app_project/public/hot-update/" -ForegroundColor Cyan
-    Write-Host "  ├── geren/version.json + package.zip" -ForegroundColor Gray
     Write-Host "  └── dingzhi/version.json + package.zip" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Next steps:" -ForegroundColor Cyan

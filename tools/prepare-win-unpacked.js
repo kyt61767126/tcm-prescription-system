@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 
-// Use @electron/asar from the version directory's node_modules, fallback to db-offline/desktop_geren.
+// Use @electron/asar from the version directory's node_modules.
 // Use Module.createRequire() with a sentinel context file so Node honors the package.json
 // "exports" field (not just legacy "main" / index.js).  @electron/asar v4 ships with NO main
 // field (only exports) so require('/abs/path/to/node_modules/@electron/asar') silently fails
@@ -14,7 +14,6 @@ const path = require('path');
 const Module = require('module');
 const candidateRoots = [
   process.cwd(),
-  path.join(__dirname, '..', 'app_project', 'db-offline', 'desktop_geren'),
 ];
 let asarModule;
 let lastErr;

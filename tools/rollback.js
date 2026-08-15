@@ -35,11 +35,6 @@ const CHANNELS = {
         assetPattern: /huikang-dingzhi.*\.exe$/i,
         name: '定制版桌面版'
     },
-    geren: {
-        latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'geren', 'latest.json'),
-        assetPattern: /huikang-geren.*\.exe$/i,
-        name: '个人版桌面版'
-    }
 };
 
 function getRepoInfo() {

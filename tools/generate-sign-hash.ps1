@@ -4,7 +4,7 @@
 
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet('cloud','geren-cloud','dingzhi','geren')]
+    [ValidateSet('cloud','dingzhi')]
     [string]$Version
 )
 
@@ -16,9 +16,7 @@ $rootDir = $PSScriptRoot | Split-Path -Parent  # project root: d:\trae_projects\
 # Decide project directory, target file, and placeholder based on Version
 $verLabel = switch ($Version) {
     'cloud'       { '云端' }
-    'geren-cloud' { '云端个人' }
     'dingzhi'     { '定制' }
-    'geren'       { '个人' }
     default       { $Version }
 }
 
@@ -32,13 +30,6 @@ if ($Version -eq 'cloud') {
     $placeholder = 'EXPECTED_SIGN_HASH'
     $useRecurse = $false
     $apkFilter = '惠康中医-YB.apk'
-} elseif ($Version -eq 'geren-cloud') {
-    $projectDir = Join-Path $rootDir "app_project\db-yunduan"
-    $guardFileName = 'SecurityGuard.java'
-    $guardSearchPath = Join-Path $projectDir "cloud_app_geren\app\src\main\java\com\tcm\prescription"
-    $placeholder = 'EXPECTED_SIGN_HASH'
-    $useRecurse = $false
-    $apkFilter = '惠康中医-YJ.apk'
 } elseif ($Version -eq 'dingzhi') {
     # db-offline merged structure: APK in db-offline/ root, Java in app/app/src/main/java/
     $projectDir = Join-Path $rootDir "app_project\db-offline"
@@ -47,13 +38,6 @@ if ($Version -eq 'cloud') {
     $placeholder = 'EXPECTED_APK_SIGNATURE_SHA256'
     $useRecurse = $false
     $apkFilter = '惠康中医-LJ.apk'
-} elseif ($Version -eq 'geren') {
-    $projectDir = Join-Path $rootDir "app_project\db-offline"
-    $guardFileName = 'LicenseManager.java'
-    $guardSearchPath = Join-Path $projectDir "app_geren\app\src\main\java\com\benneng\pres"
-    $placeholder = 'EXPECTED_APK_SIGNATURE_SHA256'
-    $useRecurse = $false
-    $apkFilter = '惠康中医-LB.apk'
 }
 
 Write-Host ""

@@ -1,8 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <color name="colorPrimary">#c0c0c0</color>
-    <color name="colorPrimaryDark">#808080</color>
-    <color name="colorAccent">#008000</color>
-    <!-- 状态栏背景色：与网页 .top-tabs-left 背景色 #c0c0c0 一致，避免色差 -->
-    <color name="statusBarColor">#c0c0c0</color>
-</resources>

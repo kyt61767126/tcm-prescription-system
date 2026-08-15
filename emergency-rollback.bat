@@ -78,7 +78,6 @@ echo.
 echo Available channels:
 echo cloud - Cloud Desktop
 echo dingzhi - Custom Desktop
-echo geren - Personal Desktop
 echo all - All Desktop
 echo.
 set /p channel="Channel (default=cloud): "
@@ -124,7 +123,7 @@ git push origin main
 
 echo.
 echo [2/2] Rolling back Desktop EXE (all channels)...
-for %%c in (cloud dingzhi geren) do (
+for %%c in (cloud dingzhi) do (
 echo.
 echo Channel: %%c
 node tools/rollback.js %%c 2>nul

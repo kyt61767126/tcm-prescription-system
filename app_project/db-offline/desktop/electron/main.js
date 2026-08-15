@@ -982,7 +982,7 @@ app.whenReady().then(async () => {
     }
 
     // ★ 启动自动更新检查
-    updateNotifier.init('geren');
+    updateNotifier.init('dingzhi');
 
     fse.ensureDirSync(getDownloadsDirectory());
 

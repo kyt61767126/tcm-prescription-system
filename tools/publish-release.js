@@ -51,12 +51,6 @@ const APP_CONFIG = {
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'dist'),
         latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'dingzhi', 'latest.json'),
     },
-    'geren': {
-        apkName: '惠康中医-个人.apk',
-        gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app_geren', 'app', 'build.gradle'),
-        distDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop_geren', 'dist'),
-        latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'geren', 'latest.json'),
-    }
 };
 
 // 从 git credential 读取 GitHub token（无需 gh auth login，无需打开网页）
@@ -454,7 +448,7 @@ function main() {
         }
     }
 
-    const validTargets = ['all', 'apk', 'exe', 'cloud', 'dingzhi', 'geren'];
+    const validTargets = ['all', 'apk', 'exe', 'cloud', 'dingzhi'];
     if (!validTargets.includes(target)) {
         console.error(`[ERROR] 未知 target: ${target}，可选: ${validTargets.join('/')}`);
         process.exit(1);

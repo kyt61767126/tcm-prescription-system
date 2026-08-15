@@ -95,8 +95,8 @@ $ErrorPatterns = @(
     @{
         Category = "BUILD_PATH"
         IssueId = "BUILD_PATH-004"
-        Patterns = @("db-dingzhi", "db-geren", "路径不存在", "Path not found")
-        Solution = "文件夹合并残留。db-dingzhi/db-geren 已合并为 db-offline。更新所有 tools/ 脚本路径引用。详见 docs/pack-issues-knowledge-base.md"
+        Patterns = @("db-dingzhi", "路径不存在", "Path not found")
+        Solution = "文件夹合并残留。db-dingzhi 已合并为 db-offline。更新所有 tools/ 脚本路径引用。详见 docs/pack-issues-knowledge-base.md"
         Severity = "MEDIUM"
     },
     # === BUILD_ENCODING（编码/行尾）===

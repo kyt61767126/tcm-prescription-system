@@ -8,7 +8,7 @@
 //    - license 数据组装（与客户端 license.dat 格式一致）
 //
 //  ★ 签名密钥和 LICENSE_TYPE_CONFIG 必须与客户端保持一致：
-//    - app_project/db-offline/desktop_geren/electron/license-manager.js
+//    - app_project/db-offline/desktop/electron/license-manager.js
 //    - app_project/db-yunduan/cloud_desktop/electron/license-manager.js
 // ============================================================================
 

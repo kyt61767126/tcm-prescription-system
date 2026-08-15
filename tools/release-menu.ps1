@@ -32,13 +32,12 @@ function Invoke-Pack {
 # ============ 单个版本打包（直接调用对应项目脚本，绕过 one-click-pack 菜单）============
 function Invoke-SinglePack {
     param(
-        [string]$Version,   # cloud / dingzhi / geren
+        [string]$Version,   # cloud / dingzhi
         [string]$Mode       # desktop / app / all
     )
     $verLabel = switch ($Version) {
         "cloud"    { "云端" }
         "dingzhi"  { "离线定制" }
-        "geren"    { "离线个人" }
         default    { $Version }
     }
     $modeLabel = switch ($Mode) {
@@ -196,16 +195,14 @@ function Show-VersionMenu {
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host "  [1] 云端版"
         Write-Host "  [2] 离线定制版"
-        Write-Host "  [3] 离线个人版"
-        Write-Host "  [4] 全部3个版本"
+        Write-Host "  [3] 全部2个版本"
         Write-Host "  [0] 返回主菜单"
         Write-Host ""
-        $choice = Read-Host "请选择 [0-4]"
+        $choice = Read-Host "请选择 [0-3]"
         switch ($choice) {
             "1" { return "cloud" }
             "2" { return "dingzhi" }
-            "3" { return "geren" }
-            "4" { return "all" }
+            "3" { return "all" }
             "0" { return "" }
             default { Write-Host "无效选择" -ForegroundColor Red; Start-Sleep -Seconds 1 }
         }
@@ -239,7 +236,7 @@ function Show-PackModeMenu {
 # ============ 执行打包+发布+验证完整流程 ============
 function Invoke-FullFlow {
     param(
-        [string]$Version,   # cloud / dingzhi / geren / all
+        [string]$Version,   # cloud / dingzhi / all
         [string]$Mode       # desktop / app / all
     )
     # Step 1: 打包

@@ -8,7 +8,7 @@
 //
 // 工作原理：
 //   1. 读取 public/hash-manifest.json
-//   2. 遍历每个 appKey (cloud/dingzhi/geren) × type (apk/exe/portable)
+//   2. 遍历每个 appKey (cloud/dingzhi) × type (apk/exe/portable)
 //   3. 对每个 URL 执行 HEAD 请求（HTTP 5 秒超时，自动跟随重定向）
 //   4. 验证 status code 为 200
 //   5. 对 GitHub Release URL 还要验证 Content-Length 与 manifest 中 size 一致

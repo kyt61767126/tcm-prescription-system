@@ -2,13 +2,13 @@
 .SYNOPSIS
     Edit clinic configuration for offline TCM APP/Desktop builds.
 .DESCRIPTION
-    Standalone config editor for db-offline/desktop and db-offline/desktop_geren versions.
+    Standalone config editor for db-offline/desktop version.
     Updates config.json with HMAC-SHA256 signature for security.
     Syncs config.json to Capacitor public/ directory for APP packaging.
 .PARAMETER SkipConfig
     Skip interactive config editing (for automated builds).
 .PARAMETER Version
-    Target version: dingzhi | geren (auto-detected from directory name).
+    Target version: dingzhi.
 .EXAMPLE
     powershell -File edit-config.ps1
     powershell -File edit-config.ps1 -SkipConfig
@@ -27,11 +27,7 @@ $ErrorActionPreference = "Stop"
 
 $scriptDir = $PSScriptRoot
 if (-not $Version) {
-    if ($DesktopDir -match 'geren') {
-        $Version = 'geren'
-    } else {
-        $Version = 'dingzhi'
-    }
+    $Version = 'dingzhi'
 }
 
 $configPath = Join-Path $scriptDir "$DesktopDir\config.json"
