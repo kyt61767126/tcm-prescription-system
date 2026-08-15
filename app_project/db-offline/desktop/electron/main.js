@@ -198,9 +198,10 @@ async function ensureEditionSelected() {
             config = await fse.readJson(configPath);
         }
 
-        // 已有明确的 edition 值，跳过
+        // 已有明确的 edition 值，跳过。
+        // ★ 注意：'custom' 是旧版默认占位值，不代表用户已选择版本，必须触发选择框
         const knownEditions = ['personal', 'clinic', 'cloud_personal', 'cloud_clinic',
-                               'offline_personal', 'offline_clinic', 'clinic_custom', 'custom'];
+                               'offline_personal', 'offline_clinic', 'clinic_custom'];
         if (config.edition && knownEditions.includes(config.edition)) {
             console.log('[Edition] 版本已设置:', config.edition);
             return;
