@@ -278,12 +278,12 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <span class="tpl-label">快捷模板：</span>
                 <button class="tpl-btn" data-tpl="trial7" onclick="applyTemplate('trial7')">试用 · 7天</button>
                 <button class="tpl-btn" data-tpl="trial30" onclick="applyTemplate('trial30')">试用 · 30天</button>
-                <button class="tpl-btn" data-tpl="personal1y" onclick="applyTemplate('personal1y')">个人 · 1年</button>
-                <button class="tpl-btn" data-tpl="personal3y" onclick="applyTemplate('personal3y')">个人 · 3年</button>
-                <button class="tpl-btn" data-tpl="personalForever" onclick="applyTemplate('personalForever')">个人 · 永久</button>
-                <button class="tpl-btn" data-tpl="pro1y" onclick="applyTemplate('pro1y')">专业 · 1年 · 5设备</button>
-                <button class="tpl-btn" data-tpl="pro3y" onclick="applyTemplate('pro3y')">专业 · 3年 · 10设备</button>
-                <button class="tpl-btn" data-tpl="proForever" onclick="applyTemplate('proForever')">专业 · 永久 · 10设备</button>
+                <button class="tpl-btn" data-tpl="personal1y" onclick="applyTemplate('personal1y')">标准 · 1年</button>
+                <button class="tpl-btn" data-tpl="personal3y" onclick="applyTemplate('personal3y')">标准 · 3年</button>
+                <button class="tpl-btn" data-tpl="personalForever" onclick="applyTemplate('personalForever')">标准 · 永久</button>
+                <button class="tpl-btn" data-tpl="pro1y" onclick="applyTemplate('pro1y')">机构 · 1年 · 5设备</button>
+                <button class="tpl-btn" data-tpl="pro3y" onclick="applyTemplate('pro3y')">机构 · 3年 · 10设备</button>
+                <button class="tpl-btn" data-tpl="proForever" onclick="applyTemplate('proForever')">机构 · 永久 · 10设备</button>
                 <span class="tpl-divider"></span>
                 <span id="customTplBar"></span>
                 <button class="tpl-btn tpl-save" onclick="saveCurrentAsTemplate()">💾 存为模板</button>
@@ -736,11 +736,11 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <div class="tpl-bar" style="margin-bottom:8px;">
             <span class="tpl-label">快捷模板：</span>
             <button class="tpl-btn" data-btpl="trial7" onclick="applyBatchTemplate('trial7')">试用 · 7天</button>
-            <button class="tpl-btn" data-btpl="personal1y" onclick="applyBatchTemplate('personal1y')">个人 · 1年</button>
-            <button class="tpl-btn" data-btpl="personal3y" onclick="applyBatchTemplate('personal3y')">个人 · 3年</button>
-            <button class="tpl-btn" data-btpl="personalForever" onclick="applyBatchTemplate('personalForever')">个人 · 永久</button>
-            <button class="tpl-btn" data-btpl="pro1y" onclick="applyBatchTemplate('pro1y')">专业 · 1年 · 5设备</button>
-            <button class="tpl-btn" data-btpl="pro3y" onclick="applyBatchTemplate('pro3y')">专业 · 3年 · 10设备</button>
+            <button class="tpl-btn" data-btpl="personal1y" onclick="applyBatchTemplate('personal1y')">标准 · 1年</button>
+            <button class="tpl-btn" data-btpl="personal3y" onclick="applyBatchTemplate('personal3y')">标准 · 3年</button>
+            <button class="tpl-btn" data-btpl="personalForever" onclick="applyBatchTemplate('personalForever')">标准 · 永久</button>
+            <button class="tpl-btn" data-btpl="pro1y" onclick="applyBatchTemplate('pro1y')">机构 · 1年 · 5设备</button>
+            <button class="tpl-btn" data-btpl="pro3y" onclick="applyBatchTemplate('pro3y')">机构 · 3年 · 10设备</button>
             <button class="tpl-btn tpl-save" onclick="autoMatchBatchVersion()">🤖 智能匹配</button>
         </div>
         <div class="gen-row">
@@ -965,12 +965,12 @@ async function loadClinicNames() {
 const PRESET_TEMPLATES = {
     trial7:           { name: '试用 · 7天',           type: 'trial',    days: 7,     maxDevices: 1  },
     trial30:          { name: '试用 · 30天',          type: 'trial',    days: 30,    maxDevices: 1  },
-    personal1y:       { name: '个人 · 1年',           type: 'personal', days: 365,   maxDevices: 1  },
-    personal3y:       { name: '个人 · 3年',           type: 'personal', days: 1095,  maxDevices: 1  },
-    personalForever:  { name: '个人 · 永久',          type: 'personal', days: 36500, maxDevices: 1  },
-    pro1y:            { name: '专业 · 1年 · 5设备',   type: 'pro',      days: 365,   maxDevices: 5  },
-    pro3y:            { name: '专业 · 3年 · 10设备',  type: 'pro',      days: 1095,  maxDevices: 10 },
-    proForever:       { name: '专业 · 永久 · 10设备', type: 'pro',      days: 36500, maxDevices: 10 }
+    personal1y:       { name: '标准 · 1年',           type: 'personal', days: 365,   maxDevices: 1  },
+    personal3y:       { name: '标准 · 3年',           type: 'personal', days: 1095,  maxDevices: 1  },
+    personalForever:  { name: '标准 · 永久',          type: 'personal', days: 36500, maxDevices: 1  },
+    pro1y:            { name: '机构 · 1年 · 5设备',   type: 'pro',      days: 365,   maxDevices: 5  },
+    pro3y:            { name: '机构 · 3年 · 10设备',  type: 'pro',      days: 1095,  maxDevices: 10 },
+    proForever:       { name: '机构 · 永久 · 10设备', type: 'pro',      days: 36500, maxDevices: 10 }
 };
 
 // 自定义模板存取（localStorage）
