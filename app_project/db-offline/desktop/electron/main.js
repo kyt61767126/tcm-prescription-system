@@ -955,26 +955,20 @@ app.whenReady().then(async () => {
     // ★ 首次启动时将 config.json 从 asar 复制到可写路径
     await ensureWritableConfig();
     
-    // ★ 云端版：不进入试用模式，直接检查 license.dat 是否存在且有效
-    // 云端版需求：无试用、平台管理员一键激活后才可使用
+    // ★ 离线版：License 授权校验（启动时校验）
+    // 离线版流程：无 license 时进入试用模式（默认7天），试用有效直接进登录；
+    // 试用到期且未激活时弹双按钮到期提示（前往激活/退出软件）
+    let licenseResult;
     let _isLicensed = false;
     try {
         const localMachineId = activateManager.getMachineId();
-        // 直接读取 license 文件，跳过试用模式
-        const rawLicense = licenseManager.readLicense(localMachineId);
-        if (rawLicense) {
-            // 有 license 文件，验证其有效性
-            const licenseResult = licenseManager.validateLicense({ localMachineId });
-            _isLicensed = licenseResult.valid;
-            console.log('[Cloud] License 校验结果:', _isLicensed ? '已激活' : '未激活/已过期');
-        } else {
-            // 没有 license 文件，云端版不进入试用模式
-            _isLicensed = false;
-            console.log('[Cloud] 无 license.dat，未激活状态（云端版无试用）');
-        }
+        licenseResult = licenseManager.validateLicense({ localMachineId });
+        _isLicensed = licenseResult.valid;
+        console.log('[License]', licenseResult.type, licenseResult.message);
     } catch (e) {
-        console.warn('[Cloud] License 校验异常:', e.message);
-        _isLicensed = false;
+        console.error('[License] validateLicense exception, fallback to trial:', e.message);
+        licenseResult = { valid: true, type: 'trial', message: '校验异常，进入试用模式' };
+        _isLicensed = true;
     }
 
     // ★ 启动自动更新检查
@@ -1020,18 +1014,13 @@ app.whenReady().then(async () => {
         }
     });
 
-    // ★ 云端版流程：未激活时先弹激活窗口，已激活直接进登录
+    // ★ 离线版流程：license 有效（含试用）直接进登录；试用到期/未激活弹到期提示
     if (!_isLicensed) {
-        console.log('[Cloud] 未激活，先显示激活窗口');
-        createLoginWindow();
-        setTimeout(() => {
-            if (loginWindow && !loginWindow.isDestroyed()) {
-                activateManager.showActivateWindow(loginWindow);
-            }
-        }, 500);
-    } else {
-        createLoginWindow();
+        console.log('[License] 未授权，弹出到期提示（前往激活/退出）');
+        await activateManager.showExpireAlertAndActivate(null, licenseResult.message);
+        return;
     }
+    createLoginWindow();
 
     app.on('activate', () => {
         const allWindows = BrowserWindow.getAllWindows();
