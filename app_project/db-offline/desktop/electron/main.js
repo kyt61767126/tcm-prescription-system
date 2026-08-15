@@ -1823,8 +1823,8 @@ ipcMain.handle('config:update', async (event, updates) => {
 // ===== 打开激活窗口 =====
 ipcMain.handle('showActivationWindow', async () => {
     try {
-        if (activateManager && typeof activateManager.showActivationWindow === 'function') {
-            activateManager.showActivationWindow();
+        if (activateManager && typeof activateManager.showActivateWindow === 'function') {
+            activateManager.showActivateWindow(loginWindow);
             return { success: true };
         }
         // fallback：通过菜单触发
