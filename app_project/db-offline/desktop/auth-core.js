@@ -2018,6 +2018,40 @@
         }
     }
 
+    // ★ 新增（2026-08-15）：向登录界面（loginOverlay）运行时注入“激活软件”入口
+    // 目的：首次注册用户无需登录即可找到激活入口（试用/立即激活），优化激活流程
+    // 约束：仅 APP 端（index-app.html 含 loginOverlay）注入；不改 HTML 源码，运行时动态创建 DOM
+    // 桌面版 login.html 已有“激活软件/管理员激活”链接，此处不重复注入
+    function injectActivateLinkIntoLogin() {
+        try {
+            // 仅离线 APP 端：需存在登录遮罩 + 激活桥接
+            if (!global.electronAPI || !global.electronAPI.activate ||
+                typeof global.electronAPI.activate.show !== 'function') {
+                return;
+            }
+            const overlay = document.getElementById('loginOverlay');
+            if (!overlay) return;
+            // 避免重复注入
+            if (document.getElementById('loginActivateLink')) return;
+
+            // 定位登录按钮区，在其下方插入激活链接
+            const container = overlay.querySelector('.login-buttons');
+            if (!container) return;
+
+            const link = document.createElement('div');
+            link.id = 'loginActivateLink';
+            link.style.cssText = 'text-align:center;margin-top:8px;';
+            link.innerHTML =
+                '<a href="#" style="font-size:11px;color:#667eea;text-decoration:none;" onclick="' +
+                'event.preventDefault();if(window.activateNow){window.activateNow();}return false;' +
+                '">🔒 试用期 / 立即激活</a>';
+            container.parentNode.insertBefore(link, container.nextSibling);
+            console.log('[LicenseCheck] 登录界面已注入激活入口');
+        } catch (e) {
+            console.warn('[LicenseCheck] 注入登录激活入口失败:', e);
+        }
+    }
+
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
     function startLicenseCheck() {
         setTimeout(async () => {
@@ -2026,6 +2060,8 @@
             startFallbackCheck();
             // ★ 新增：向 settingsModal 注入 license 状态显示 + 立即激活按钮
             injectLicenseStatusIntoSettings();
+            // ★ 新增：向登录界面注入激活入口（试用/立即激活）
+            injectActivateLinkIntoLogin();
         }, 2000);
     }
 
