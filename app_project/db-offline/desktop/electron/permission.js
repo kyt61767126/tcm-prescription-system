@@ -7,7 +7,6 @@
 
     const Permission = {
         _edition: null,
-        _appMode: '',
         _config: null,
         _initialized: false,
 
@@ -34,8 +33,7 @@
             }
 
             this._edition = this._config.edition || (global.EDITION) || 'cloud';
-            this._appMode = this._config.appMode || '';
-            console.log('[DBG] Permission initialized, edition:', this._edition, 'appMode:', this._appMode);
+            console.log('[DBG] Permission initialized, edition:', this._edition);
         },
 
         get edition() { return this._edition; },
@@ -48,11 +46,9 @@
         //   LJ = clinic/offline_clinic      离线机构版
         // 旧 key（cloud / offline / clinic_custom）向后兼容
         isCloud() {
-            if (this._appMode === 'cloud') return true;
             return ['cloud', 'cloud_personal', 'cloud_clinic'].includes(this._edition);
         },
         isOffline() {
-            if (this._appMode === 'offline') return true;
             return ['offline', 'personal', 'clinic_custom', 'clinic',
                     'offline_personal', 'offline_clinic'].includes(this._edition);
         },
@@ -60,11 +56,9 @@
         isPersonal() {
             return ['personal', 'cloud_personal', 'offline_personal'].includes(this._edition);
         },
-        // 是否为"机构版（多用户，管理子账号）"：YJ + LJ
-        // ★ 统一 edition 词汇：机构版=clinic_custom，兼容旧值 custom/institution/offline/clinic/cloud_clinic/offline_clinic
+        // 是否为"机构版（多用户，管理子账号）"：YJ + LJ（兼容旧 clinic_custom/offline/clinic）
         isInstitutional() {
-            return ['clinic_custom', 'custom', 'institution', 'offline', 'clinic',
-                    'cloud_clinic', 'offline_clinic'].includes(this._edition);
+            return ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic'].includes(this._edition);
         },
         // 旧 API 兼容：isClinicCustom = isInstitutional
         isClinicCustom() {

@@ -1577,36 +1577,15 @@ function signConfig(config) {
 }
 
 // ============================================================================
-//  版本绑定：由 license 类型推导 config.edition（服务器权威，防篡改切换版本）
-//   license type: personal → personal(标准版/LB)，pro → clinic_custom(机构版/LJ)
-// ============================================================================
-function getEditionFromLicenseType(type) {
-    const t = String(type || '').toLowerCase();
-    return t === 'pro' ? 'clinic_custom' : 'personal';
-}
-
-// ★ 从 license base64 解码出类型（激活时用于版本绑定）
-function getLicenseTypeFromBase64(base64Content) {
-    try {
-        const jsonStr = Buffer.from(String(base64Content || '').trim(), 'base64').toString('utf8');
-        const decoded = JSON.parse(jsonStr);
-        return (decoded && decoded.type) || 'personal';
-    } catch (e) {
-        return '';
-    }
-}
-
-// ============================================================================
 //  ★ P0 修复：统一安装 License（缺失的核心函数）
 //  功能：
 //    1. 写入加密的 license.dat
 //    2. 清除试用期标记（trial.dat）
-//    3. 更新 config.json（clinicName、doctorName、版本edition、管理员用户）
+//    3. 更新 config.json（clinicName、doctorName、管理员用户）
 //    4. 对 config.json 签名
 //  参数：
 //    base64Content - license base64 字符串
-//    options - { machineId, doctorName, phone, password, clinicName }
-//  ★ 版本绑定：config.edition 一律由 license 本身类型推导，不信任本地配置
+//    options - { machineId, doctorName, phone, password, clinicName, edition }
 // ============================================================================
 function installLicense(base64Content, options = {}) {
     try {
@@ -1656,21 +1635,6 @@ function installLicense(base64Content, options = {}) {
         if (doctorName && config.doctorName !== doctorName) {
             config.doctorName = doctorName;
             configChanged = true;
-        }
-
-        // ★ 版本绑定：从 license 本身类型推导并写入 config.edition（服务器权威）
-        try {
-            const licenseType = getLicenseTypeFromBase64(base64Content);
-            if (licenseType) {
-                const expectedEdition = getEditionFromLicenseType(licenseType);
-                if (config.edition !== expectedEdition) {
-                    config.edition = expectedEdition;
-                    configChanged = true;
-                    console.log('[License] 已绑定版本 edition:', expectedEdition, '(license type:', licenseType + ')');
-                }
-            }
-        } catch (e) {
-            console.warn('[License] 版本绑定异常（非致命）:', e.message);
         }
 
         // 创建管理员用户（phone作为用户名）
@@ -1729,43 +1693,6 @@ function installLicense(base64Content, options = {}) {
     }
 }
 
-// ============================================================================
-//  启动时强制版本绑定：存在正式 license 时，确保 config.edition 与 license 版本一致
-//  （防止用户手动改 config.json 的 edition 在标准版/机构版间切换）
-// ============================================================================
-function enforceEditionBinding() {
-    try {
-        const license = readLicense();
-        const licenseType = license && license.type ? String(license.type).toLowerCase() : '';
-        if (!licenseType || licenseType === 'trial') {
-            // 无正式 license（试用中）不干预，edition 由用户在试用时自选
-            return { success: true, bound: false, reason: 'no-licensed-type' };
-        }
-        const expectedEdition = getEditionFromLicenseType(licenseType);
-        const configDir = getWritableDir();
-        const configPath = require('path').join(configDir, 'config.json');
-        let config = {};
-        try {
-            if (fs.existsSync(configPath)) {
-                config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            }
-        } catch (e) {
-            console.warn('[License] enforceEditionBinding 读取 config.json 失败:', e.message);
-        }
-        if (config.edition !== expectedEdition) {
-            config.edition = expectedEdition;
-            signConfig(config);
-            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-            console.log('[License] 启动校验：config.edition 已校正为', expectedEdition);
-            return { success: true, corrected: true, edition: expectedEdition };
-        }
-        return { success: true, bound: true, edition: config.edition || expectedEdition };
-    } catch (e) {
-        console.error('[License] enforceEditionBinding 异常:', e.message);
-        return { success: false, error: e.message };
-    }
-}
-
 module.exports = {
     validateLicense,
     generateLicense,
@@ -1784,9 +1711,6 @@ module.exports = {
     checkLicenseBinding,  // 三因子绑定校验
     getLocalClinicName,   // 从 config.json 读取本地诊所名
     getLocalDoctorName,   // 从 config.json 读取本地医师名
-    // ★ 版本绑定：由 license 类型推导 edition / 启动强制校正
-    getEditionFromLicenseType,
-    enforceEditionBinding,
     verifyConfigIntegrity, // config.json 完整性校验
     // ★ 路径相关（修复 NSIS 安装到 Program Files 无写权限问题）
     isPortableInstall,    // 检测是否为 portable 安装（供 activate.js 决定写入路径）
