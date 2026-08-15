@@ -1,6 +1,6 @@
 {
 	"appId": "com.benneng.pres.dingzhi",
-	"appName": "惠康中医-定制",
+	"appName": "惠康中医-机构",
 	"plugins": {
 		"Preferences": {
 			"enabled": true

@@ -46,7 +46,7 @@ const APP_CONFIG = {
         latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'cloud', 'latest.json'),
     },
     'dingzhi': {
-        apkName: '惠康中医-定制.apk',
+        apkName: '惠康中医-机构.apk',
         gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'dist'),
         latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'dingzhi', 'latest.json'),

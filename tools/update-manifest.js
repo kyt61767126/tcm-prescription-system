@@ -29,7 +29,7 @@ const crypto = require('crypto');
 const CHANNEL_CONFIG = {
     dingzhi: {
         dir: 'app_project/db-offline/desktop',
-        productName: '惠康中医-定制',
+        productName: '惠康中医-机构',
         outputDir: 'dist'
     },
     cloud: {

@@ -37,7 +37,7 @@ const APP_CONFIG = {
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-yunduan', 'cloud_desktop', 'dist'),
     },
     'dingzhi': {
-        apkName: '惠康中医-定制.apk',
+        apkName: '惠康中医-机构.apk',
         gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'dist'),
     },

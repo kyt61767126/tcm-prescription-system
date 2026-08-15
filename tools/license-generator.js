@@ -78,21 +78,21 @@ function parseArgs() {
 
 版本类型默认配置：
   trial    : 30 张/月处方，无高级功能
-  personal : 无限处方，支持数据备份
-  pro      : 无限处方，支持备份+同步+多设备+优先支持
+  personal : 标准版，无限处方，支持数据备份
+  pro      : 机构版，无限处方，支持备份+同步+多设备+优先支持
 
 设备绑定说明：
   同时提供 --machine-id 和 --clinic-name 时，授权文件将绑定到特定设备和诊所，
   复制到其他机器或修改诊所名后授权无效。
 
 示例：
-  # 生成专业版授权（1年）
+  # 生成机构版授权（1年）
   node tools/license-generator.js --user "张三" --days 365 --type "pro"
 
-  # 生成个人版授权（到 2027-12-31）
+  # 生成标准版授权（到 2027-12-31）
   node tools/license-generator.js --user "李四" --expire "2027-12-31" --type "personal"
 
-  # 生成绑定设备的专业版授权
+  # 生成绑定设备的机构版授权
   node tools/license-generator.js --user "王五" --days 365 --type "pro" --machine-id "abc123def456" --clinic-name "惠康中医诊所"
 
   # 生成自定义处方限制的授权

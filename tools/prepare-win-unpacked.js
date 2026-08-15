@@ -45,7 +45,7 @@ const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8').replace(/^\uFEFF/, ''));
 const productName = pkg.build.productName || pkg.name;
 // exe name MUST match productName: electron-builder NSIS shortcut Target is hardcoded
 // to ${productName}.exe. If exe name differs (e.g. pkg.name), shortcut will be broken
-// after installation ("Windows cannot find 惠康中医-个人.exe").
+// after installation ("Windows cannot find 惠康中医-标准.exe").
 const exeName = productName;
 const buildFiles = pkg.build.files || [];
 
