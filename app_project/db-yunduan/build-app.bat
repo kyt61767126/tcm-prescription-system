@@ -118,7 +118,6 @@ echo.
 
 echo [4/10] Stop lingering Gradle processes + clean build cache...
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
-call gradlew.bat --stop >nul 2>&1
 
 if exist "app\build\intermediates\javac" (
     rmdir /S /Q "app\build\intermediates\javac" 2>nul
@@ -140,7 +139,6 @@ goto :clean_done
 :clean_failed
 echo [WARN] gradlew clean failed, force removing build directory...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $p='app\build'; if(Test-Path $p){ try{ Remove-Item -Path $p -Recurse -Force; Write-Host '[OK] build dir force deleted' }catch{ Write-Host '[WARN] Some files locked, waiting 2 seconds retry...'; Start-Sleep -Seconds 2; try{ Remove-Item -Path $p -Recurse -Force; Write-Host '[OK] build dir retry deleted' }catch{ Write-Host '[ERROR] build dir cannot be deleted, please close locked processes'; Write-Host $_.Exception.Message } } }"
-call gradlew.bat --stop >nul 2>&1
 call gradlew.bat clean
 if errorlevel 1 (
     echo [WARN] clean retry failed, continuing incremental build
