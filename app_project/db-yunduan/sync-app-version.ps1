@@ -41,7 +41,7 @@ if ($args.Count -ge 2 -and -not [string]::IsNullOrEmpty($args[1])) {
     $targetDirs = @($args[1])
 } else {
     $targetDirs = @(
-        (Join-Path $cloudDir 'cloud_app'),
+        (Join-Path $cloudDir 'cloud_app')
     )
 }
 
