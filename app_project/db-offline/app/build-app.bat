@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 REM P0: .ps1 BOM
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\fix-ps1-bom.ps1" >nul 2>&1
 title Huikang-TCM Build Tool

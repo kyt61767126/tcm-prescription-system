@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 
 REM P0: .ps1 BOM fix
