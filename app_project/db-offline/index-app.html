@@ -1839,7 +1839,8 @@ let currentUser = null;
             // 机构版：管理员显示"用户"，普通用户显示"改密"
             const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
             if (canManage) {
-                btn2.innerHTML = '👤 用户';
+                // 规范化：桌面机构版显示用户管理，APP机构版显示用户
+                btn2.innerHTML = isApp ? '👤 用户' : '👤 用户管理';
                 btn2.onclick = function() { showUserManageModal(); };
             } else {
                 btn2.innerHTML = changePwdText;
