@@ -10,6 +10,8 @@
   "author": "惠康中医",
   "license": "MIT",
   "devDependencies": {
+    "@electron/asar": "^4.2.1",
+    "archiver": "^7.0.1",
     "asarmor": "^3.0.2",
     "electron": "^35.0.0",
     "electron-builder": "24.13.3"

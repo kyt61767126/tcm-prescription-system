@@ -6,17 +6,30 @@
 const fs = require('fs');
 const path = require('path');
 
-// Use @electron/asar from the version directory's node_modules, fallback to db-offline/desktop_geren
-let asarModule;
-const tryPaths = [
-  path.join(process.cwd(), 'node_modules', '@electron', 'asar'),
-  path.join(__dirname, '..', 'app_project', 'db-offline', 'desktop_geren', 'node_modules', '@electron', 'asar'),
+// Use @electron/asar from the version directory's node_modules, fallback to db-offline/desktop_geren.
+// Use Module.createRequire() with a sentinel context file so Node honors the package.json
+// "exports" field (not just legacy "main" / index.js).  @electron/asar v4 ships with NO main
+// field (only exports) so require('/abs/path/to/node_modules/@electron/asar') silently fails
+// and surfaces as the misleading "not found" error when the module is actually installed.
+const Module = require('module');
+const candidateRoots = [
+  process.cwd(),
+  path.join(__dirname, '..', 'app_project', 'db-offline', 'desktop_geren'),
 ];
-for (const p of tryPaths) {
-  try { asarModule = require(p); break; } catch(e) {}
+let asarModule;
+let lastErr;
+for (const root of candidateRoots) {
+  try {
+    const ctxRequire = Module.createRequire(path.join(root, '_.cjs'));
+    asarModule = ctxRequire(ctxRequire.resolve('@electron/asar'));
+    break;
+  } catch (e) {
+    lastErr = e;
+  }
 }
 if (!asarModule) {
   console.error('ERROR: @electron/asar not found. Please run: npm install @electron/asar --save-dev');
+  if (lastErr) console.error('  underlying error:', lastErr.code, lastErr.message);
   process.exit(1);
 }
 const { createPackage } = asarModule;
