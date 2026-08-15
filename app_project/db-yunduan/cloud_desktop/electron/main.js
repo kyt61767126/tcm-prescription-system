@@ -18,6 +18,8 @@ const fs = require('fs').promises;
 const fse = require('fs-extra');
 const crypto = require('crypto');
 const licenseManager = require('./license-manager');
+const APP_ICON = path.join(__dirname, '..', 'build', 'icon.ico');  // ★ 窗口图标（本能印章），随 app.asar 打包
+app.setAppUserModelId('com.benneng.prescription');  // ★ Windows 任务栏图标关联
 const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
 const activateManager = require('./activate');
@@ -401,6 +403,7 @@ function createMainWindow() {
         autoHideMenuBar: true,
         center: true,
         show: false,
+        icon: APP_ICON,
         webPreferences: getSharedWebPrefs()
     });
 
@@ -807,6 +810,7 @@ function createLoginWindow() {
         autoHideMenuBar: true,
         center: true,
         show: false,
+        icon: APP_ICON,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             contextIsolation: true,

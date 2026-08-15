@@ -1,6 +1,6 @@
 {
   "name": "tcm-prescription-cloud",
-  "version": "1.2.23",
+  "version": "1.2.24",
   "description": "惠康中医-云端",
   "main": "electron/main.js",
   "scripts": {
@@ -47,7 +47,8 @@
       "security-guard.js",
       "cloud-api.js",
       "local-db.js",
-      "sync-engine.js"
+      "sync-engine.js",
+      "build/icon.ico"
     ],
     "win": {
       "target": [
