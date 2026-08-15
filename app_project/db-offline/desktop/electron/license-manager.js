@@ -147,14 +147,6 @@ function getTrialPath() {
 }
 
 // ★ 试用期配置文件路径（与 license.dat 同目录，portable 友好）
-// ★ 2026-08-15 防重复试用：试用拒绝标记文件 + 注册 API
-// 宽限模式：首次创建试用时本地立即生效，异步上报云端；若云端拒绝（次数超限）写入此标记
-function getTrialDeniedPath() {
-    return path.join(app.getPath('userData'), 'trial-denied.dat');
-}
-const TRIAL_REGISTER_API_URL = 'https://tcm-prescription-system.pages.dev/api/trial/register';
-const MAX_TRIALS = 3;
-
 function getTrialConfigPath() {
     try {
         return path.join(getWritableDir(), 'trial-config.json');
@@ -361,60 +353,6 @@ function getHardwareFingerprint() {
         _hardwareFingerprintCache = '';
     }
     return _hardwareFingerprintCache;
-}
-
-// ★ 2026-08-15 防重复试用：异步上报硬件指纹到云端试用注册
-// 宽限模式：网络失败/异常不阻断（fire-and-forget）；仅云端明确拒绝时写标记文件
-// 下一次启动 validateLicense 检测到标记则拒绝试用
-function registerTrial() {
-    try {
-        const hwFp = getHardwareFingerprint();
-        if (!hwFp) return; // 硬件指纹不可用，跳过（无法判重）
-        const body = {
-            hwFp: hwFp,
-            machineId: getMachineId(),
-            productName: '惠康中医',
-            edition: 'offline',
-            appMode: 'desktop'
-        };
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
-        fetch(TRIAL_REGISTER_API_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: controller.signal
-        }).then(r => r.json()).then(res => {
-            clearTimeout(timeout);
-            if (res && res.success && res.allowed === false) {
-                // 云端明确拒绝：写入标记文件，下次启动拒绝试用
-                try { fs.writeFileSync(getTrialDeniedPath(), JSON.stringify({
-                    reason: 'trial_limit_reached',
-                    time: new Date().toISOString(),
-                    trialCount: res.trialCount,
-                    maxTrials: res.maxTrials
-                })); } catch (e) {}
-                console.warn('[License] 云端拒绝试用（次数超限），写入标记:', res);
-            }
-        }).catch(e => {
-            clearTimeout(timeout);
-            console.warn('[License] 试用注册失败（宽限跳过）:', e.message);
-        });
-    } catch (e) {
-        console.warn('[License] 试用注册异常（宽限跳过）:', e.message);
-    }
-}
-
-// ★ 2026-08-15 防重复试用：检查是否存在拒绝标记
-function isTrialDenied() {
-    try {
-        const p = getTrialDeniedPath();
-        if (!fs.existsSync(p)) return false;
-        const data = JSON.parse(fs.readFileSync(p, 'utf8'));
-        return !!(data && data.reason === 'trial_limit_reached');
-    } catch (e) {
-        return false;
-    }
 }
 
 // ★ P3-A 新增：派生 AES-256 密钥（含硬件指纹）
@@ -1292,21 +1230,11 @@ function validateLicense(options) {
     let trial = readTrial();
     const currentTrialDays = getTrialDays();   // ★ 当前配置的试用期天数
     if (!trial) {
-        // ★ 2026-08-15 防重复试用：如被云端拒绝过则不再提供试用
-        if (isTrialDenied()) {
-            return {
-                valid: false,
-                message: '该设备试用次数已达上限，无法继续试用。\n请联系客服购买正式授权。',
-                type: 'trial_limit_reached'
-            };
-        }
         trial = {
             startTime: now,
             expiresAt: now + currentTrialDays * 24 * 60 * 60 * 1000
         };
         writeTrial(trial);
-        // ★ 2026-08-15 宽限模式：本地试用立即生效，异步上报云端（不阻塞）
-        registerTrial();
     } else if (currentTrialDays === 0) {
         // ★ 配置为 0 天时，立即过期（测试用）
         trial.expiresAt = trial.startTime;

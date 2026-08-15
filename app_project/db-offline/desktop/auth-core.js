@@ -2018,88 +2018,43 @@
         }
     }
 
-    // ★ 新增（2026-08-15）：向登录界面（loginOverlay）运行时注入“激活软件”入口
-    // 目的：首次注册用户无需登录即可找到激活入口（试用/立即激活），优化激活流程
-    // 约束：仅 APP 端（index-app.html 含 loginOverlay）注入；不改 HTML 源码，运行时动态创建 DOM
-    // 桌面版 login.html 已有“激活软件/管理员激活”链接，此处不重复注入
+    // ★ 向登录界面（loginOverlay）运行时注入"注册 / 激活"入口（registerEntry 元素）
+    // 目的：首次注册用户无需登录即可在登录页找到"设置诊所信息 / 立即激活"入口
+    // 背景：index.html 已内置 .register-entry CSS 与 handleRegisterEntry()/updateRegisterEntry() 函数，
+    //       但登录框 DOM 中缺少 id=registerEntry 元素，导致入口从未显示。此处运行时动态补建，不改 HTML 源码
+    // 约束：仅 APP 端（Capacitor 环境、含 loginOverlay）注入；云端桌面/网页版无需激活（登录即可使用），不注入
     function injectActivateLinkIntoLogin() {
         try {
-            // 仅离线 APP 端：需存在登录遮罩 + 激活桥接
-            if (!global.electronAPI || !global.electronAPI.activate ||
-                typeof global.electronAPI.activate.show !== 'function') {
-                return;
-            }
+            // 仅 Capacitor(APP) 环境注入
+            const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences);
+            if (!isApp) return;
             const overlay = document.getElementById('loginOverlay');
             if (!overlay) return;
-            // 避免重复注入
-            if (document.getElementById('loginActivateLink')) return;
+            // 若 index.html 已自带 registerEntry，则仅刷新状态，不重复注入
+            if (document.getElementById('registerEntry')) {
+                if (typeof global.updateRegisterEntry === 'function') { try { global.updateRegisterEntry(); } catch (e) {} }
+                return;
+            }
 
-            // 定位登录按钮区，在其下方插入激活链接
+            // 定位登录按钮区，在其下方插入注册/激活入口
             const container = overlay.querySelector('.login-buttons');
             if (!container) return;
 
-            const link = document.createElement('div');
-            link.id = 'loginActivateLink';
-            link.style.cssText = 'text-align:center;margin-top:8px;';
-            link.innerHTML =
-                '<a href="#" style="font-size:11px;color:#667eea;text-decoration:none;" onclick="' +
-                'event.preventDefault();if(window.activateNow){window.activateNow();}return false;' +
-                '">🔒 试用期 / 立即激活</a>';
-            container.parentNode.insertBefore(link, container.nextSibling);
-            console.log('[LicenseCheck] 登录界面已注入激活入口');
-            // ★ 新增（2026-08-15）：注入默认账号密码提示（仅未激活时显示，激活后自动隐藏）
-            injectDefaultCredentialHint(overlay);
-        } catch (e) {
-            console.warn('[LicenseCheck] 注入登录激活入口失败:', e);
-        }
-    }
-
-    // ★ 新增（2026-08-15）：登录界面注入默认账号密码提示
-    // 仅未激活（试用期）时显示，激活后自动隐藏
-    // 不改 HTML 源码，运行时动态注入
-    function injectDefaultCredentialHint(overlay) {
-        try {
-            if (!overlay) return;
-            if (document.getElementById('defaultCredentialHint')) return;
-
-            // 检查 license 状态：已激活则不显示默认账号提示
-            const hasLicenseApi = global.electronAPI && global.electronAPI.license &&
-                typeof global.electronAPI.license.getStatus === 'function';
-            if (hasLicenseApi) {
-                global.electronAPI.license.getStatus().then(function(status) {
-                    if (status && status.valid && status.licenseType !== 'trial') {
-                        // 已激活，不显示提示
-                        return;
-                    }
-                    // 未激活或试用期，显示默认账号提示
-                    doInjectHint(overlay);
-                }).catch(function() {
-                    // 获取状态失败，默认显示提示
-                    doInjectHint(overlay);
-                });
-            } else {
-                // 无 license API（开发环境），直接显示
-                doInjectHint(overlay);
+            const entry = document.createElement('div');
+            entry.className = 'register-entry';
+            entry.id = 'registerEntry';
+            entry.setAttribute('onclick', 'if(window.handleRegisterEntry){handleRegisterEntry()}');
+            entry.innerHTML = '<span class="register-entry-icon">🚀</span>' +
+                '<span class="register-entry-text" id="registerEntryText">首次使用？点击设置诊所信息</span>' +
+                '<span class="register-entry-arrow">›</span>';
+            container.parentNode.insertBefore(entry, container.nextSibling);
+            // 刷新入口状态（激活与否、诊所是否已设置）
+            if (typeof global.updateRegisterEntry === 'function') {
+                try { global.updateRegisterEntry(); } catch (e) {}
             }
+            console.log('[LicenseCheck] 登录界面已注入注册/激活入口');
         } catch (e) {
-            console.warn('[LicenseCheck] 注入默认账号提示失败:', e);
-        }
-    }
-
-    function doInjectHint(overlay) {
-        if (document.getElementById('defaultCredentialHint')) return;
-        var hint = document.createElement('div');
-        hint.id = 'defaultCredentialHint';
-        hint.style.cssText = 'text-align:center;margin-top:6px;font-size:11px;color:#888;background:#f0f7ff;border:1px solid #d0e0f0;border-radius:4px;padding:6px;';
-        hint.innerHTML = '🔑 默认账号：<b>admin</b> 密码：<b>admin</b>（登录后请修改密码）';
-        var loginError = overlay.querySelector('#loginError');
-        if (loginError && loginError.nextSibling) {
-            loginError.parentNode.insertBefore(hint, loginError.nextSibling);
-        } else if (loginError) {
-            loginError.parentNode.appendChild(hint);
-        } else {
-            var footer = overlay.querySelector('.login-footer');
-            if (footer) footer.parentNode.insertBefore(hint, footer);
+            console.warn('[LicenseCheck] 注入登录注册/激活入口失败:', e);
         }
     }
 
@@ -2111,7 +2066,7 @@
             startFallbackCheck();
             // ★ 新增：向 settingsModal 注入 license 状态显示 + 立即激活按钮
             injectLicenseStatusIntoSettings();
-            // ★ 新增：向登录界面注入激活入口（试用/立即激活）
+            // ★ 新增：向登录界面注入激活入口（激活软件 / 管理员激活）
             injectActivateLinkIntoLogin();
         }, 2000);
     }

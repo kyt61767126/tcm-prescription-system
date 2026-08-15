@@ -2018,6 +2018,46 @@
         }
     }
 
+    // ★ 向登录界面（loginOverlay）运行时注入"注册 / 激活"入口（registerEntry 元素）
+    // 目的：首次注册用户无需登录即可在登录页找到"设置诊所信息 / 立即激活"入口
+    // 背景：index.html 已内置 .register-entry CSS 与 handleRegisterEntry()/updateRegisterEntry() 函数，
+    //       但登录框 DOM 中缺少 id=registerEntry 元素，导致入口从未显示。此处运行时动态补建，不改 HTML 源码
+    // 约束：仅 APP 端（Capacitor 环境、含 loginOverlay）注入；云端桌面/网页版无需激活（登录即可使用），不注入
+    function injectActivateLinkIntoLogin() {
+        try {
+            // 仅 Capacitor(APP) 环境注入
+            const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences);
+            if (!isApp) return;
+            const overlay = document.getElementById('loginOverlay');
+            if (!overlay) return;
+            // 若 index.html 已自带 registerEntry，则仅刷新状态，不重复注入
+            if (document.getElementById('registerEntry')) {
+                if (typeof global.updateRegisterEntry === 'function') { try { global.updateRegisterEntry(); } catch (e) {} }
+                return;
+            }
+
+            // 定位登录按钮区，在其下方插入注册/激活入口
+            const container = overlay.querySelector('.login-buttons');
+            if (!container) return;
+
+            const entry = document.createElement('div');
+            entry.className = 'register-entry';
+            entry.id = 'registerEntry';
+            entry.setAttribute('onclick', 'if(window.handleRegisterEntry){handleRegisterEntry()}');
+            entry.innerHTML = '<span class="register-entry-icon">🚀</span>' +
+                '<span class="register-entry-text" id="registerEntryText">首次使用？点击设置诊所信息</span>' +
+                '<span class="register-entry-arrow">›</span>';
+            container.parentNode.insertBefore(entry, container.nextSibling);
+            // 刷新入口状态（激活与否、诊所是否已设置）
+            if (typeof global.updateRegisterEntry === 'function') {
+                try { global.updateRegisterEntry(); } catch (e) {}
+            }
+            console.log('[LicenseCheck] 登录界面已注入注册/激活入口');
+        } catch (e) {
+            console.warn('[LicenseCheck] 注入登录注册/激活入口失败:', e);
+        }
+    }
+
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
     function startLicenseCheck() {
         setTimeout(async () => {
@@ -2026,6 +2066,8 @@
             startFallbackCheck();
             // ★ 新增：向 settingsModal 注入 license 状态显示 + 立即激活按钮
             injectLicenseStatusIntoSettings();
+            // ★ 新增：向登录界面注入激活入口（激活软件 / 管理员激活）
+            injectActivateLinkIntoLogin();
         }, 2000);
     }
 
