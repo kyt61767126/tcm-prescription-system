@@ -41,19 +41,8 @@ if %PRECOMPILE_RC% neq 0 (
 echo [OK] Java pre-compile passed
 echo.
 
-echo [Step A] Build APK - Standard mode...
-set "NO_PAUSE=1"
-call "%PACK_APP_BAT%" standard
-set "TEMP_RC=%errorlevel%"
-set "NO_PAUSE="
-if %TEMP_RC% neq 0 (
-    echo [ERROR] Step A build failed, exit code: %TEMP_RC%
-    pause
-    exit /b %TEMP_RC%
-)
-echo.
-
 echo [Step B] Extract sign hash and inject SecurityGuard.java...
+echo   [INFO] 哈希从 keystore 直接提取（E1 优化：无需先构建 APK，消除 Step A）
 set "NO_PAUSE=1"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%GEN_HASH_PS1%" -Version dingzhi
 set "TEMP_RC=%errorlevel%"

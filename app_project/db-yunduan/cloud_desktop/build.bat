@@ -20,7 +20,7 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] npm installed'"
+echo [OK] npm installed
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[2/9] Check dependencies (node_modules + Electron binary)...'"
@@ -63,14 +63,14 @@ if not exist "node_modules\electron\dist\electron.exe" (
 )
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[3/9] Kill leftover processes...'"
+echo [3/9] Kill leftover processes...
 taskkill /F /IM "HuikangTCM*.exe" >nul 2>&1
 taskkill /F /IM "Huikang*.exe" >nul 2>&1
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Process | Where-Object { try { $_.Path -like '*db-yunduan/cloud_desktop*dist*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Leftover processes cleaned'"
+echo [OK] Leftover processes cleaned
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[4/9] Clean old build artifacts...'"
+echo [4/9] Clean old build artifacts...
 for /f "delims=" %%d in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; try { (Get-Content package.json -Raw | ConvertFrom-Json).build.directories.output } catch { 'dist' }"') do set "OUTPUT_DIR=%%d"
 if "%OUTPUT_DIR%"=="" set "OUTPUT_DIR=dist"
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  Output directory: %OUTPUT_DIR%'"
@@ -108,18 +108,18 @@ powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[6/9] Pre-build security integrity check...'"
+echo [6/9] Pre-build security integrity check...
 echo ============================================
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Security integrity check'"
+echo Security integrity check
 echo ============================================
 node "%~dp0..\..\..\tools\pre-build-check.js" "%CD%"
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[FAILED] Security check failed, aborting build! Please fix package.json files list'"
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Security check passed'"
+echo [OK] Security check passed
 echo.
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Disk space check...'"
+echo Disk space check...
 for /f "delims=" %%d in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; [math]::Round((Get-PSDrive -Name $((Get-Location).Drive.Name)).Free/1GB,2)"') do set "FREE_GB=%%d"
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Free space: %FREE_GB% GB'"
 if "%FREE_GB%"=="" set "FREE_GB=0"
@@ -128,7 +128,7 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Sufficient disk space'"
+echo [OK] Sufficient disk space
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[7/9] Code obfuscation (target=cloud)...'"
@@ -140,7 +140,7 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Code obfuscation complete'"
+echo [OK] Code obfuscation complete
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[8/9] Running build (prepare-win-unpacked + electron-builder)...'"
@@ -154,9 +154,9 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] win-unpacked directory ready'"
+echo [OK] win-unpacked directory ready
 echo.
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Running electron-builder --prepackaged...'"
+echo Running electron-builder --prepackaged...
 REM win-unpacked
 set "WIN_UNPACKED_PATH=dist/win-unpacked"
 if exist "dist\win-unpacked-path.txt" (
@@ -205,14 +205,14 @@ if not "%BUILD_RC%"=="0" (
 )
 if exist "tmp" rmdir /s /q "tmp" 2>nul
 echo.
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring original JavaScript code...'"
+echo Restoring original JavaScript code...
 node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Failed to restore original code'"
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Original code restored'"
+echo [OK] Original code restored
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[9/9] Verify artifacts & finish...'"

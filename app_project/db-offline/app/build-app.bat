@@ -46,7 +46,7 @@ REM Pre-flight check: detect leftover from previous abnormal exit (.build_vcode_
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\pre-flight-check.ps1" -Target %FLAVOR_TARGET% -AppDir "%~dp0app"
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[2/10] Sync files to Android + verify integrity...'"
+echo [2/10] Sync files to Android + verify integrity...
 set "ANDROID_PUBLIC=%~dp0app\src\main\assets\public"
 set "ANDROID_ASSETS=%~dp0app\src\main\assets"
 if not exist "%ANDROID_PUBLIC%" (
@@ -54,7 +54,7 @@ if not exist "%ANDROID_PUBLIC%" (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[1/5] Sync config.json...'"
+echo [1/5] Sync config.json...
 if exist "..\desktop\config.json" (
     copy /Y "..\desktop\config.json" "%ANDROID_PUBLIC%\config.json" >nul
  if errorlevel 1 ( echo [] config.json ) else ( echo [OK] config.json )
@@ -68,13 +68,13 @@ if errorlevel 1 (
     exit /b 1
 )
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] APP index.html synced (5-button top menu, with analytics)'"
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[3/5] Sync vendor/xlsx.full.min.js...'"
+echo [3/5] Sync vendor/xlsx.full.min.js...
 if exist "..\desktop\vendor\xlsx.full.min.js" (
     if not exist "%ANDROID_PUBLIC%\vendor" mkdir "%ANDROID_PUBLIC%\vendor" >nul
     copy /Y "..\desktop\vendor\xlsx.full.min.js" "%ANDROID_PUBLIC%\vendor\xlsx.full.min.js" >nul
  if errorlevel 1 ( echo [] xlsx.full.min.js ) else ( echo [OK] xlsx.full.min.js )
 ) else ( echo [SKIP] vendor/xlsx.full.min.js )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[4/5] Sync core JS modules...'"
+echo [4/5] Sync core JS modules...
 set "MODULES=auth-core.js db-adapter.js debug-logger.js medicine-dict.js patient-archive.js performance-utils.js permission.js prescription-core.js print-utils.js security-guard.js"
 for %%m in (%MODULES%) do (
     if exist "..\desktop\%%m" (
@@ -82,7 +82,7 @@ for %%m in (%MODULES%) do (
  if errorlevel 1 ( echo [] %%m ) else ( echo [OK] %%m )
  ) else ( echo [SKIP] %%m )
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[5/5] Verify video-recorder-inject.js...'"
+echo [5/5] Verify video-recorder-inject.js...
 if exist "%ANDROID_ASSETS%\video-recorder-inject.js" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] video-recorder-inject.js already exists in assets'"
 ) else if exist "..\video-recorder-inject.js" (
@@ -161,7 +161,7 @@ if not exist "app\src\main\assets\video-recorder-inject.js" (
 ) else (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] video-recorder-inject.js ready'"
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Environment check passed'"
+echo [OK] Environment check passed
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Pre-build verification (disk space + source files)...'"
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
@@ -178,7 +178,7 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Verifying keystore integrity...'"
+echo Verifying keystore integrity...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
   "$jks='app\app-release.jks';" ^
@@ -201,15 +201,15 @@ if errorlevel 1 (
 ) else (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Java version patched'"
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Current config:'"
+echo Current config:
 findstr "versionName" "app\build.gradle"
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[5/10] Stop lingering Gradle processes + clean build cache...'"
+echo [5/10] Stop lingering Gradle processes + clean build cache...
 REM kill gradle java daemon
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 call gradlew.bat --stop >nul 2>&1
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Lingering processes cleaned'"
+echo [OK] Lingering processes cleaned
 REM P2-3: TCM_GRADLE_SKIP_CLEAN gradlew clean project_memory
 REM 2026-07-22: javac MainActivity.java
 REM 2026-07-23: assets/merged_assets index.html
@@ -236,20 +236,20 @@ if exist ".gradle\configuration-cache" rmdir /S /Q ".gradle\configuration-cache"
 
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[6/10] Increment versionCode...'"
+echo [6/10] Increment versionCode...
 REM P0-3: build-app.bat
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $f='app\build.gradle'; $c=[System.IO.File]::ReadAllText($f); if($c -match 'versionCode\s+(\d+)'){ $old=[int]$matches[1]; $new=$old+1; $nc=$c -replace 'versionCode\s+\d+', \"versionCode $new\"; [System.IO.File]::WriteAllText($f,$nc,(New-Object System.Text.UTF8Encoding($false))); Set-Content -Path '%~dp0.build_vcode_prev' -Value $old -Encoding ASCII -NoNewline; Write-Host ('  [OK] versionCode: '+$old+' -> '+$new+' (old value saved)') } else { Write-Host '  [WARN] versionCode not found in build.gradle' }"
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[7/10] Code obfuscation (target=%FLAVOR_TARGET%) + Java pre-compile check...'"
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[STAGE:obfuscate] Code obfuscating...'"
+echo [STAGE:obfuscate] Code obfuscating...
 call node "%~dp0..\..\..\tools\obfuscate.js" --target=%FLAVOR_TARGET%
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] JS code obfuscation failed'"
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] JS code obfuscation completed'"
+echo [OK] JS code obfuscation completed
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[STAGE:precompile] Java pre-compile checking (catch compile errors early)...'"
 call gradlew.bat :app:javaPreCompile%FLAVOR_CAP%Release :app:compile%FLAVOR_CAP%ReleaseJavaWithJavac --quiet
 if errorlevel 1 (
@@ -259,7 +259,7 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Java pre-compile check passed'"
+echo [OK] Java pre-compile check passed
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[8/10] Compile signed APK (%FLAVOR_NAME%)...'"
@@ -279,16 +279,16 @@ REM P0-3: versionCode
 if exist "%~dp0.build_vcode_prev" del "%~dp0.build_vcode_prev"
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[9/10] Restore original JavaScript + verify APK artifact...'"
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring JavaScript code...'"
+echo [9/10] Restore original JavaScript + verify APK artifact...
+echo Restoring JavaScript code...
 call node "%~dp0..\..\..\tools\obfuscate.js" restore --target=%FLAVOR_TARGET%
 if errorlevel 1 (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] JS restore failed - may need manual restore: node tools\obfuscate.js restore --target=standard'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] JS restore failed - may need manual restore: node tools\obfuscate.js restore --target=dingzhi'"
 ) else (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] JS restored to original state'"
 )
 echo.
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Locating APK file...'"
+echo Locating APK file...
 set "APK_DIR=app\build\outputs\apk\release"
 set "APK_FILE="
 if exist "%APK_DIR%\app-release.apk" (
@@ -311,7 +311,7 @@ for %%A in ("%APK_FILE%") do (
 )
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Verifying APK signature...'"
+echo Verifying APK signature...
 REM apksigner APK
 set "APKSIGNER="
 if exist "%ANDROID_HOME%\build-tools" (
@@ -342,7 +342,7 @@ if errorlevel 1 (
 )
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Verifying APK contains video-recorder-inject.js...'"
+echo Verifying APK contains video-recorder-inject.js...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.IO.Compression.FileSystem; $apk='%CD%\%APK_FILE%'; $zip=[System.IO.Compression.ZipFile]::OpenRead($apk); $entry=$zip.GetEntry('assets/video-recorder-inject.js'); if(-not $entry){ $zip.Dispose(); Write-Host '[WARN] video-recorder-inject.js not found in APK'; exit 0 }; $sr=New-Object System.IO.StreamReader($entry.Open()); $content=$sr.ReadToEnd(); $sr.Close(); $zip.Dispose(); if(-not($content -match '__nativeBridgeProxy')){ Write-Host '[ERROR] video-recorder-inject.js missing __nativeBridgeProxy fix!'; exit 1 }; if(-not($content -match 'generateFileName')){ Write-Host '[ERROR] video-recorder-inject.js missing generateFileName!'; exit 1 }; Write-Host '[OK] video-recorder-inject.js verification passed ('$content.Length' bytes)'"
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] APK video-recorder-inject.js verification failed!'"
@@ -351,7 +351,7 @@ if errorlevel 1 (
 )
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'APK size sanity check...'"
+echo APK size sanity check...
 for %%A in ("%APK_FILE%") do set "APK_SIZE=%%~zA"
 if %APK_SIZE% LSS 1000000 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] APK size too small: %APK_SIZE% bytes (< 1MB), build may be incomplete'"
@@ -364,7 +364,7 @@ if %APK_SIZE% GTR 10000000 (
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] APK size: %APK_SIZE% bytes'"
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[10/10] Copy APK to output dir + compute SHA-256 + update download page...'"
+echo [10/10] Copy APK to output dir + compute SHA-256 + update download page...
 set "VERSION_STR="
 for /f "tokens=2 delims=:" %%v in ('findstr "versionName" "app\build.gradle"') do (
     set "VERSION_STR=%%v"
@@ -410,7 +410,7 @@ echo.
 REM APK
 for %%F in ("%FINAL_APK%") do set "APK_FULL_PATH=%%~fF"
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Computing SHA-256 hash...'"
+echo Computing SHA-256 hash...
 node "%~dp0..\..\..\shared\calculate-hash.js"
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Hash computation had issues, continuing'"
@@ -427,9 +427,9 @@ if errorlevel 1 (
 echo.
 
 echo ============================================
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'APK 打包完成！'"
+echo APK 打包完成！
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Path: %APK_FULL_PATH%'"
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '此APK已签名，可直接安装'"
+echo 此APK已签名，可直接安装
 echo ============================================
 echo.
 

@@ -18,14 +18,29 @@ const path = require('path');
 
 const projectRoot = path.resolve(__dirname, '..');
 
-// 支持多端 Electron 项目检查（目前仅云端桌面版）
+// 支持多端 Electron 项目检查
+// ★ 第三轮打包优化 S1：补全离线桌面版目标 + 支持按端过滤。
+//   原只有云端，pre-build-check.js 却对离线/云端都无条件调用本工具，
+//   导致：①离线打包被云端 IPC 状态误伤；②离线自身 IPC 从未被检查。
 const targets = [
     {
         name: '云端桌面版',
+        key: 'cloud',
         preload: 'app_project/db-yunduan/cloud_desktop/electron/preload.js',
         main: 'app_project/db-yunduan/cloud_desktop/electron/main.js'
+    },
+    {
+        name: '离线桌面版',
+        key: 'offline',
+        preload: 'app_project/db-offline/desktop/electron/preload.js',
+        main: 'app_project/db-offline/desktop/electron/main.js'
     }
 ];
+
+// 解析目标端：--target=cloud|offline|all（默认 all）
+const _targetArgIdx = process.argv.findIndex(a => a.startsWith('--target='));
+const _targetScope = _targetArgIdx >= 0 ? process.argv[_targetArgIdx].split('=')[1] : 'all';
+const selectedTargets = targets.filter(t => _targetScope === 'all' || t.key === _targetScope);
 
 /**
  * 从文件中提取所有 ipcRenderer.invoke('xxx') 和 ipcRenderer.send('xxx') 调用
@@ -60,7 +75,7 @@ function extractMainHandlers(content) {
 
 let hasError = false;
 
-for (const target of targets) {
+for (const target of selectedTargets) {
     const preloadPath = path.join(projectRoot, target.preload);
     const mainPath = path.join(projectRoot, target.main);
 

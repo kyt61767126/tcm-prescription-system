@@ -7,27 +7,7 @@ set "PACK_APP_BAT=%~dp0build-app.bat"
 set "GEN_HASH_PS1=%~dp0..\..\tools\generate-sign-hash.ps1"
 
 echo ============================================
-echo   Step A: Build APK - Standard mode...
-echo ============================================
-echo.
-
-set "NO_PAUSE=1"
-call "%PACK_APP_BAT%" standard
-set "TEMP_RC=%errorlevel%"
-set "NO_PAUSE="
-if %TEMP_RC% neq 0 (
-    echo.
-    echo [ERROR] Step A build failed, exit code: %TEMP_RC%
-    echo.
-    pause
-    exit /b %TEMP_RC%
-)
-echo.
-echo [OK] Step A completed
-echo.
-
-echo ============================================
-echo   Step B: Extract sign hash...
+echo   Step B: Extract sign hash (from keystore, E1: no Step A needed)...
 echo ============================================
 echo.
 

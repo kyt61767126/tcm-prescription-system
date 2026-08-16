@@ -299,16 +299,7 @@ goto :main
     set "SAVED_NO_PAUSE=%NO_PAUSE%"
     set "NO_PAUSE=1"
 
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step A: First build (standard)...'"
-    call "%BUILD_APP%" standard
-    set "TEMP_RC=%errorlevel%"
-    if not "%TEMP_RC%"=="0" (
-        set "NO_PAUSE=%SAVED_NO_PAUSE%"
-        call :finalize %TEMP_RC% "First build failed"
-        goto :eof
-    )
-
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step B: Extract signature hash...'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step B: Extract signature hash (from keystore, E1: no Step A needed)...'"
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\generate-sign-hash.ps1" -Version cloud 2>nul
 
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step C: Strict rebuild (standard)...'"

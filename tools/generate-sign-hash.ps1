@@ -30,6 +30,7 @@ if ($Version -eq 'cloud') {
     $placeholder = 'EXPECTED_SIGN_HASH'
     $useRecurse = $false
     $apkFilter = '惠康中医-云端.apk'
+    $appRoot = Join-Path $projectDir "cloud_app\app"
 } elseif ($Version -eq 'dingzhi') {
     # db-offline merged structure: APK in db-offline/ root, Java in app/app/src/main/java/
     $projectDir = Join-Path $rootDir "app_project\db-offline"
@@ -38,6 +39,7 @@ if ($Version -eq 'cloud') {
     $placeholder = 'EXPECTED_APK_SIGNATURE_SHA256'
     $useRecurse = $false
     $apkFilter = '惠康中医-本地.apk'
+    $appRoot = Join-Path $projectDir "app\app"
 }
 
 Write-Host ""
@@ -47,26 +49,45 @@ Write-Host "================================================================"
 Write-Host ""
 
 # ------------------------------------------------------------
-# [1/4] Find the latest APK file
+# [1/4] 定位 keystore + 读取 storePassword
 # ------------------------------------------------------------
-Write-Host "[1/4] 查找 APK 文件..."
-$apkFiles = Get-ChildItem -Path $projectDir -Filter $apkFilter -File -ErrorAction SilentlyContinue |
-            Sort-Object LastWriteTime -Descending
-if (-not $apkFiles -or $apkFiles.Count -eq 0) {
-    Write-Host "  [错误] 未找到 APK 文件: $projectDir"
-    Write-Host "  请先运行打包工具生成 APK 后再使用本工具"
+# ★ 第三轮打包优化 E1：改从 keystore 直接提取证书哈希（keytool -list），
+#   而非从已构建 APK 提取（keytool -printcert -jarfile）。
+#   原因：APK 由该 keystore 签名，证书哈希一致；且无需先构建 APK，
+#   从而消除严格模式的 Step A（每次省去一次完整构建，时间减半）。
+Write-Host "[1/4] 定位签名 keystore..."
+$keystorePath = Join-Path $appRoot "app-release.jks"
+if (-not (Test-Path $keystorePath)) {
+    Write-Host "  [错误] 未找到 keystore: $keystorePath"
+    Write-Host "  请先确认 app-release.jks 存在"
     exit 1
 }
-$apkFile = $apkFiles[0]
-$sizeMB = [math]::Round($apkFile.Length / 1MB, 2)
-Write-Host "  [OK] APK 文件: $($apkFile.Name) ($sizeMB MB)"
-Write-Host "  路径: $($apkFile.FullName)"
+Write-Host "  [OK] keystore: $keystorePath"
+
+$storePassword = ""
+$signPropsPath = Join-Path $appRoot "signing.properties"
+if (Test-Path $signPropsPath) {
+    foreach ($line in (Get-Content $signPropsPath -ErrorAction SilentlyContinue)) {
+        if ($line -match '^\s*storePassword\s*=\s*(.+)$') {
+            $storePassword = $matches[1].Trim()
+            break
+        }
+    }
+}
+if (-not $storePassword) {
+    $storePassword = $env:TCM_STORE_PASSWORD
+}
+if (-not $storePassword) {
+    Write-Host "  [错误] 无法获取 keystore 密码（signing.properties 无 storePassword，且未设 TCM_STORE_PASSWORD 环境变量）"
+    exit 1
+}
+Write-Host "  [OK] 已读取 keystore 密码（signing.properties 或环境变量）"
 Write-Host ""
 
 # ------------------------------------------------------------
-# [2/4] Read APK signature SHA-256 via keytool
+# [2/4] 读取 keystore 证书 SHA-256
 # ------------------------------------------------------------
-Write-Host "[2/4] 读取 APK 签名 SHA-256..."
+Write-Host "[2/4] 读取 keystore 证书 SHA-256..."
 
 $keytoolPath = $null
 $cmd = Get-Command keytool -ErrorAction SilentlyContinue
@@ -97,7 +118,7 @@ if (-not $keytoolPath) {
 }
 Write-Host "  使用 keytool: $keytoolPath"
 
-$certOutput = & $keytoolPath -printcert -jarfile $apkFile.FullName 2>&1 | Out-String
+$certOutput = & $keytoolPath -list -v -keystore $keystorePath -storepass $storePassword 2>&1 | Out-String
 $signSha256 = ""
 foreach ($line in $certOutput -split "`n") {
     if ($line -match "SHA256:\s*([0-9A-Fa-f:]+)") {

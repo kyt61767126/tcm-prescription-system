@@ -107,7 +107,7 @@ function Build-Offline {
     Write-Host "  开始: $startTime" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
 
-    $verDir = "$script:RootDir\app_project\db-$Version"
+    $verDir = "$script:RootDir\app_project\db-offline"
 
     # Step 1: Edit config (for all / app modes)
     if ($Target -eq "all" -or $Target -eq "app") {
@@ -249,14 +249,13 @@ while ($true) {
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  惠康中医 - 一键打包工具" -ForegroundColor Cyan
-    Write-Host "  (3版本统一入口 - 桌面+APP 一键搞定)" -ForegroundColor Cyan
+    Write-Host "  (2版本统一入口 - 桌面+APP 一键搞定)" -ForegroundColor Cyan
     Write-Host "  当前: $menuStart" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  [1] 云端版 (桌面+APP)"
     Write-Host "  [2] 离线定制版 (桌面+APP)"
-    Write-Host "  [3] 离线个人版 (桌面+APP)"
-    Write-Host "  [4] 全部3个版本 (耗时较长)"
+    Write-Host "  [3] 全部2个版本 (耗时较长)"
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  --- 更多选项 ---"
@@ -275,7 +274,7 @@ while ($true) {
     switch ($choice) {
         "1" { Build-Cloud -Target "all" }
         "2" { Build-Offline -Version "dingzhi" -Target "all" }
-        "4" { Build-All }
+        "3" { Build-All }
         "5" { Show-PickVersionMenu -Mode "desktop" }
         "6" { Show-PickVersionMenu -Mode "app" }
         "7" { Show-StandaloneUsage }

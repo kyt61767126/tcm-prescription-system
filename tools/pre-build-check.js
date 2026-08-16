@@ -135,17 +135,21 @@ function main() {
     console.log('  [PASS] All JS files covered, safe to build');
     console.log('====================================');
 
-    // ★新增：IPC 一致性检查（仅云端桌面版）
-    // 防止 preload.js 调用的 IPC 在 main.js 中未注册，导致功能静默失效
-    // 历史教训：2026-07-26 曾因 IPC 不匹配导致药物表格和处方历史不显示
+    // ★新增：IPC 一致性检查（按目标端选择对应项目）
+    // ★ 第三轮打包优化 S1：原无条件调用只检查云端，导致离线打包被云端 IPC 状态误伤，
+    //   且离线自身 IPC 从未被检查。现根据项目目录判定目标端，只检查对应端。
+    //   历史教训：2026-07-26 曾因 IPC 不匹配导致药物表格和处方历史不显示
     try {
         const { execSync } = require('child_process');
         console.log('');
         console.log('====================================');
-        console.log('  IPC consistency check (cloud desktop)');
+        console.log('  IPC consistency check');
         console.log('====================================');
         const checkIpcScript = path.join(__dirname, 'check-ipc-consistency.js');
-        execSync('node "' + checkIpcScript + '"' , { stdio: 'inherit' });
+        const normDir = absDir.replace(/\\/g, '/');
+        const ipcTarget = normDir.includes('db-yunduan') ? 'cloud' : 'offline';
+        execSync('node "' + checkIpcScript + '" --target=' + ipcTarget, { stdio: 'inherit' });
+        console.log(`  [OK] IPC consistency check passed (${ipcTarget})`);
     } catch (e) {
         // check-ipc-consistency.js 退出码 1 表示发现不匹配
         console.log('');

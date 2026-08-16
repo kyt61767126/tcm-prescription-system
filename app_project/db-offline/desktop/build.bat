@@ -21,7 +21,7 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] npm installed'"
+echo [OK] npm installed
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[2/9] Check dependencies (node_modules + Electron binary)...'"
@@ -64,16 +64,16 @@ if not exist "node_modules\electron\dist\electron.exe" (
 )
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[3/9] Kill leftover processes...'"
+echo [3/9] Kill leftover processes...
 REM Kill old version processes that may hold locks (ASCII wildcard match)
 taskkill /F /IM "*offline*Setup*.exe" >nul 2>&1
 taskkill /F /IM "*Huikang*.exe" >nul 2>&1
 REM Use PowerShell Get-Process (path-based exact match, ASCII safe) - kills processes from dist/build_output dirs
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Process | Where-Object { try { $_.Path -like '*db-offline\desktop\dist*' -or $_.Path -like '*db-offline\desktop\build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Leftover processes cleaned'"
+echo [OK] Leftover processes cleaned
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[4/9] Configure clinic info...'"
+echo [4/9] Configure clinic info...
 if /i "%1"=="--skip-config" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] --skip-config flag detected, skipping config'"
 ) else (
@@ -81,7 +81,7 @@ if /i "%1"=="--skip-config" (
 )
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[5/9] Clean old build artifacts + auto-bump version...'"
+echo [5/9] Clean old build artifacts + auto-bump version...
 set "OUTPUT_DIR=dist"
 
 set old_count=0
@@ -112,24 +112,24 @@ if exist "%OUTPUT_DIR%" (
         )
     )
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Old artifacts cleaned'"
+echo [OK] Old artifacts cleaned
 echo.
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Auto-bump version (triggers integrity baseline rebuild)...'"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[6/9] Pre-build security integrity check...'"
+echo [6/9] Pre-build security integrity check...
 echo ============================================
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Security integrity check'"
+echo Security integrity check
 echo ============================================
 node "%~dp0..\..\..\tools\pre-build-check.js" "%CD%"
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[FAILED] Security check failed, aborting build! Please fix package.json files list'"
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Security check passed'"
+echo [OK] Security check passed
 echo.
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Disk space check...'"
+echo Disk space check...
 for /f "delims=" %%d in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; [math]::Round((Get-PSDrive -Name $((Get-Location).Drive.Name)).Free/1GB,2)"') do set "FREE_GB=%%d"
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Free space: %FREE_GB% GB'"
 if "%FREE_GB%"=="" set "FREE_GB=0"
@@ -138,19 +138,19 @@ if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Sufficient disk space'"
+echo [OK] Sufficient disk space
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[7/9] Code obfuscation (target=standard, may take 1-2 min)...'"
-node "%~dp0..\..\..\tools\obfuscate.js" --target=standard
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[7/9] Code obfuscation (target=dingzhi, may take 1-2 min)...'"
+node "%~dp0..\..\..\tools\obfuscate.js" --target=dingzhi
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Code obfuscation failed'"
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring original files...'"
-    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=standard >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Code obfuscation complete'"
+echo [OK] Code obfuscation complete
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[8/9] Running build (npm run build + retry on fail)...'"
@@ -193,14 +193,14 @@ if not "%BUILD_RC%"=="0" (
     echo.
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Build failed, see logs above'"
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring original JavaScript code...'"
-    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=standard >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
     if not defined NO_PAUSE pause
     exit /b 1
 )
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[9/9] Verify artifacts & finish...'"
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Artifact integrity verification...'"
+echo Artifact integrity verification...
 set "EXE_FILE="
 for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
 if "%EXE_FILE%"=="" (
@@ -220,15 +220,15 @@ for %%A in ("%EXE_FILE%") do (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] %%~nxA  %%~zA bytes'"
 )
 echo.
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring original JavaScript code...'"
-node "%~dp0..\..\..\tools\obfuscate.js" restore --target=standard
+echo Restoring original JavaScript code...
+node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Failed to restore original code! Source may still be obfuscated.'"
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Please run manually: node "%~dp0..\..\..\tools\obfuscate.js" restore --target=standard'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Please run manually: node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi'
     if not defined NO_PAUSE pause
     exit /b 1
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Original code restored'"
+echo [OK] Original code restored
 echo.
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Output directory: %CD%\%OUTPUT_DIR%'"
 echo ============================================
