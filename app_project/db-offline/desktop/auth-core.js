@@ -2039,36 +2039,33 @@
     // 约束：仅 APP 端（Capacitor 环境、含 loginOverlay）注入；云端桌面/网页版无需激活（登录即可使用），不注入
     function injectActivateLinkIntoLogin() {
         try {
-            // 仅 Capacitor(APP) 环境注入
-            const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences);
+            // 仅 APP 环境注入（兼容 Capacitor 与 Android WebView 两种环境）
+            const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences)
+                || (typeof global.AndroidNative !== 'undefined')
+                || (typeof global.electronAPI !== 'undefined' && global.electronAPI.isAndroidAPP === true);
             if (!isApp) return;
             const overlay = document.getElementById('loginOverlay');
             if (!overlay) return;
-            // 若 index.html 已自带 registerEntry，则仅刷新状态，不重复注入
-            if (document.getElementById('registerEntry')) {
-                if (typeof global.updateRegisterEntry === 'function') { try { global.updateRegisterEntry(); } catch (e) {} }
-                return;
-            }
+            // 已注入过则跳过，避免重复
+            if (document.getElementById('activateLoginEntry')) return;
 
-            // 定位登录按钮区，在其下方插入注册/激活入口
+            // 定位登录按钮区，在其下方插入"试用/激活软件"入口
             const container = overlay.querySelector('.login-buttons');
             if (!container) return;
 
             const entry = document.createElement('div');
-            entry.className = 'register-entry';
-            entry.id = 'registerEntry';
-            entry.setAttribute('onclick', 'if(window.handleRegisterEntry){handleRegisterEntry()}');
-            entry.innerHTML = '<span class="register-entry-icon">🚀</span>' +
-                '<span class="register-entry-text" id="registerEntryText">首次使用？点击设置诊所信息</span>' +
-                '<span class="register-entry-arrow">›</span>';
+            entry.id = 'activateLoginEntry';
+            entry.style.cssText =
+                'text-align:center;margin-top:10px;padding:8px;' +
+                'border:1px dashed #667eea;border-radius:6px;background:#f7f8ff;cursor:pointer;';
+            entry.setAttribute('onclick', 'if(window.activateNow){window.activateNow();}');
+            entry.innerHTML =
+                '<span style="font-size:12px;color:#667eea;font-weight:bold;">🔑 试用 / 激活软件</span>' +
+                '<span style="font-size:10px;color:#999;display:block;margin-top:2px;">未激活？点击进入试用或输入激活码激活</span>';
             container.parentNode.insertBefore(entry, container.nextSibling);
-            // 刷新入口状态（激活与否、诊所是否已设置）
-            if (typeof global.updateRegisterEntry === 'function') {
-                try { global.updateRegisterEntry(); } catch (e) {}
-            }
-            console.log('[LicenseCheck] 登录界面已注入注册/激活入口');
+            console.log('[LicenseCheck] 登录界面已注入试用/激活入口');
         } catch (e) {
-            console.warn('[LicenseCheck] 注入登录注册/激活入口失败:', e);
+            console.warn('[LicenseCheck] 注入登录试用/激活入口失败:', e);
         }
     }
 

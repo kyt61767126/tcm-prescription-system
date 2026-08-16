@@ -634,6 +634,7 @@ public class MainActivity extends BridgeActivity {
             "    activate: {" +
             "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
             "      submit: function(code, user){ return callNativeAsync('activateLicense', {code: code, user: user||''}); }," +
+            "      getMachineId: function(){ return callNativeAsync('getMachineId', {}); }," +
             "      close: function(){ return Promise.resolve({success:true}); }," +
             "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
             "    }" +
@@ -1006,6 +1007,8 @@ public class MainActivity extends BridgeActivity {
                     case "activateLicense":
                         return activateLicense(args.optString("code", ""),
                                 args.optString("user", "")).toString();
+                    case "getMachineId":
+                        return getMachineIdJson().toString();
                     case "verifyOnline":
                         return verifyOnline().toString();
                     case "getActivationRecord":
@@ -1605,6 +1608,17 @@ public class MainActivity extends BridgeActivity {
         private JSONObject getLicenseStatus() {
             try { return getLM().validateLicense(); }
             catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        private JSONObject getMachineIdJson() {
+            try {
+                JSONObject r = new JSONObject();
+                r.put("success", true);
+                r.put("machineId", getLM().getMachineId());
+                return r;
+            } catch (Exception e) {
+                return fail(e.getMessage());
+            }
         }
 
         private JSONObject validateLicense() {
