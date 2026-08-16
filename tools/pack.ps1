@@ -929,206 +929,33 @@ function Build-App {
     # Pre-flight check: 检测上次非正常退出残留（.build_vcode_prev/.bak/configuration-cache/Gradle daemon）
     & "$PSScriptRoot\pre-flight-check.ps1" -Target $Version -AppDir $script:AndroidDir
 
-    # Kill only Gradle daemon processes (not all java processes - preserves IDE etc.)
-    Write-Host "  停止 Gradle daemon 中..." -ForegroundColor Yellow
-    Push-Location $script:AndroidDir
+    # ★ 统一入口：委托 build-app.bat（db-offline\build-app.bat → app\build-app.bat）
+    # 与云端 packaging.ps1 对齐，所有 APP 打包逻辑收敛到 build-app.bat：
+    #   - 选择器配置(SKIP_CONFIG=1 跳过编辑，沿用现有配置)
+    #   - 同步 shared / Android assets
+    #   - 自动递增 versionCode
+    #   - gradlew clean + JS 混淆 + Java 预编译检查 + assembleRelease
+    #   - 自动刷新 APK 签名哈希（SecurityGuard/LicenseManager，普通/严格通用）
+    #   - 复制 APK 到 db-offline 根目录 + 更新下载页
+    $env:NO_PAUSE = '1'
+    $env:SKIP_CONFIG = '1'
     try {
-        # Graceful daemon stop (faster restart than --no-daemon every time)
-        & ".\gradlew.bat" --stop 2>&1 | Out-Null
-    } finally {
-        Pop-Location
-    }
-    Start-Sleep -Milliseconds 500  # reduced from 1s
-
-    # ★ 默认强制 clean 全量构建（解决 Gradle 增量构建缓存导致 Java 修改不生效的问题）
-    # 原因：Gradle 增量构建通过输入哈希判断是否重新编译，但 Android 资源/Manifest/Java
-    #       同时修改时可能漏掉依赖，导致修改不生效（用户反馈状态栏修复打包后无变化）
-    # 开发调试时可设置 TCM_GRADLE_SKIP_CLEAN=1 跳过 clean 加速打包
-    if ($env:TCM_GRADLE_SKIP_CLEAN -eq '1') {
-        Write-Host "  [增量构建] 跳过 clean (TCM_GRADLE_SKIP_CLEAN=1，仅开发调试用)..." -ForegroundColor Cyan
-    } else {
-        Write-Host "  [全量清理] 清理构建缓存（默认强制，确保 Java/资源修改全部生效）..." -ForegroundColor Yellow
-        # 先删除 javac 缓存目录（强制 Java 重新编译，比 gradlew clean 快）
-        $javacCache = "$script:AndroidDir\app\build\intermediates\javac"
-        if (Test-Path $javacCache) {
-            try {
-                Remove-Item -Path $javacCache -Recurse -Force -ErrorAction SilentlyContinue
-                Write-Host "    [OK] 已清理 javac 缓存" -ForegroundColor Green
-            } catch {
-                Write-Host "    [WARN] 清理 javac 缓存失败: $($_.Exception.Message)" -ForegroundColor Yellow
-            }
-        }
-        # ★ 清理 assets 缓存目录（防止 index.html/JS 修改不生效，与 build-app.bat 对齐）
-        $assetsCacheDirs = @(
-            "$script:AndroidDir\app\build\intermediates\assets",
-            "$script:AndroidDir\app\build\intermediates\merged_assets"
-        )
-        foreach ($cacheDir in $assetsCacheDirs) {
-            if (Test-Path $cacheDir) {
-                try {
-                    Remove-Item -Path $cacheDir -Recurse -Force -ErrorAction SilentlyContinue
-                    Write-Host "    [OK] 已清理 $(Split-Path $cacheDir -Leaf)" -ForegroundColor Green
-                } catch {
-                    Write-Host "    [WARN] 清理 $(Split-Path $cacheDir -Leaf) 失败: $($_.Exception.Message)" -ForegroundColor Yellow
-                }
-            }
-        }
-        # 再执行 gradlew clean 全量清理（含资源、依赖缓存）
-        Push-Location $script:AndroidDir
+        Push-Location $script:VersionDir
         try {
-            Invoke-External { & ".\gradlew.bat" clean } "gradlew clean"
-        } finally {
-            Pop-Location
-        }
-    }
-
-    # P1: 混淆 JS 代码（含 Android assets/public，防 APK 内 JS 被直接读取）
-    # ★ 稳定性修复：混淆失败时必须 restore 清理 .bak 残留（与 Build-Desktop 对齐）
-    Write-Log "[STAGE:obfuscate] start - JS 代码混淆（安全加固，含 Android assets）"
-    Write-Host "  混淆 JavaScript 中（含 Android assets）..." -ForegroundColor Yellow
-    $obfuscateOk = $false
-    Push-Location $script:ProjectRoot
-    try {
-        Invoke-External { node "tools\obfuscate.js" --target=$Version } "JS obfuscation for APK"
-        $obfuscateOk = $true
-    } finally {
-        Pop-Location
-        if (-not $obfuscateOk) {
-            Write-Host "  [WARN] 混淆失败，正在 restore 清理 .bak 残留..." -ForegroundColor Yellow
-            Push-Location $script:ProjectRoot
-            try {
-                Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore after obfuscate failure"
-            } catch {
-                Write-Log "[WARN] JS restore failed after obfuscate failure" "WARN"
-            } finally {
-                Pop-Location
-            }
-        }
-    }
-
-    # ★ 举一反三：集中 versionCode restore 到单一 catch 块
-    # 修复前问题：Restore-VersionCode 分散在 3 处（assembleRelease catch / APK not found / copy failed）
-    #           新增步骤若忘记调用 Restore-VersionCode，versionCode 会错误递增
-    # 修复后：用 $versionCodeIncremented 标志 + 单一 catch 块统一处理回滚
-    $versionCodeIncremented = $false
-    try {
-    try {
-        # ★ Java 预编译检查（在 versionCode 递增前执行，避免编译错误导致版本号无效递增）
-        # 原因：@Override 方法在父类不存在等编译错误，若在 versionCode 递增后才发现，
-        #       需要回滚版本号，增加复杂度。预编译检查可提前发现，减少回滚成本。
-        Write-Log "[STAGE:precompile] start - Java 预编译检查"
-        Write-Host "  Java 预编译检查中（提前发现编译错误）..." -ForegroundColor Cyan
-        Push-Location $script:AndroidDir
-        try {
-            Invoke-External { & ".\gradlew.bat" compileReleaseJavaWithJavac --quiet } "Java pre-compile check"
-        } catch {
-            Write-Log "[ERROR] Java 预编译检查失败，终止打包（避免无效递增 versionCode）" "ERROR"
-            throw
-        } finally {
-            Pop-Location
-        }
-
-        # Increment versionCode
-        Increment-VersionCode
-        $versionCodeIncremented = $true
-
-        # Build APK - use daemon for faster subsequent builds
-        Write-Host "  构建签名 APK 中..." -ForegroundColor Yellow
-        Push-Location $script:AndroidDir
-        try {
-            # Using daemon (no --no-daemon) enables 2-3x faster incremental builds
-            # --parallel enables parallel task execution
-            # ★ 速度优化：TCM_GRADLE_SKIP_CLEAN=1 时跳过 --rerun-tasks，启用真正增量构建
-            #   - 默认（全量）：--rerun-tasks 强制重新执行所有任务，确保修改全部生效（最稳）
-            #   - 增量模式：跳过 --rerun-tasks，Gradle 通过输入哈希判断是否重新编译（快 2-3 倍）
-            #   适用场景：仅修改少量 Java/资源文件的开发调试；正式发布必须用全量模式
-            Write-Log "[STAGE:build] start - gradlew assembleRelease 编译 APK"
-            if ($env:TCM_GRADLE_SKIP_CLEAN -eq '1') {
-                Write-Host "  [增量构建] 跳过 --rerun-tasks TCM_GRADLE_SKIP_CLEAN=1" -ForegroundColor Cyan
-                Invoke-External { & ".\gradlew.bat" assembleRelease --parallel } "gradlew assembleRelease incremental"
-            } else {
-                Invoke-External { & ".\gradlew.bat" assembleRelease --parallel --rerun-tasks } "gradlew assembleRelease"
-            }
+            & "$script:VersionDir\build-app.bat"
+            $code = $LASTEXITCODE
         } finally {
             Pop-Location
         }
     } finally {
-        # P1: 无论成功或失败，都恢复原始 JS 代码（防源码污染开发环境）
-        Write-Host "  恢复 JavaScript 中..." -ForegroundColor Yellow
-        Push-Location $script:ProjectRoot
-        try {
-            Invoke-External { node "tools\obfuscate.js" restore --target=$Version } "JS restore"
-        } catch {
-            Write-Log "[WARN] JS restore failed after APK build" "WARN"
-        } finally {
-            Pop-Location
-        }
+        Remove-Item Env:\NO_PAUSE -ErrorAction SilentlyContinue
+        Remove-Item Env:\SKIP_CONFIG -ErrorAction SilentlyContinue
     }
-
-    # Copy APK to version directory with proper naming
-    $apkPath = Get-ChildItem -Path "$script:AndroidDir\app\build\outputs\apk\release" -Filter "*.apk" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($apkPath) {
-        # Read productName from config.json (reference: cloud_app uses "惠康中医-云端")
-        $configPath = "$script:DesktopDir\config.json"
-        $productName = switch ($Version) {
-            'dingzhi' { '惠康中医-LJ' }
-            default   { '惠康中医' }
-        }
-        if (Test-Path $configPath) {
-            try {
-                $config = [System.IO.File]::ReadAllText($configPath, $script:UTF8NoBom) | ConvertFrom-Json
-                if ($config.productName) {
-                    $productName = $config.productName
-                }
-            } catch {
-                Write-Log "[WARN] Failed to read productName from config.json" "WARN"
-            }
-        }
-
-        # Extract versionName from build.gradle
-        $versionName = "1.0"
-        try {
-            $gradleContent = [System.IO.File]::ReadAllText("$script:AndroidDir\app\build.gradle", $script:UTF8NoBom)
-            if ($gradleContent -match 'versionName\s+["'']([^"'']+)["'']') {
-                $versionName = $matches[1]
-            }
-        } catch {
-            Write-Log "[WARN] Failed to read versionName from build.gradle" "WARN"
-        }
-
-        # Build final APK name: 产品名称_版本号.apk
-        Write-Log "[STAGE:verify] start - APK 产物校验与复制"
-        $finalApkName = "$productName.apk"
-        $destPath = "$script:VersionDir\$finalApkName"
-
-        # Copy with verification
-        Copy-Item -Path $apkPath.FullName -Destination $destPath -Force
-        $destFile = Get-Item $destPath -ErrorAction SilentlyContinue
-        if ($destFile -and $destFile.Length -gt 0 -and $destFile.Length -eq $apkPath.Length) {
-            $sizeMB = [math]::Round($apkPath.Length / 1MB, 2)
-            Write-Host ""
-            Write-Host "  ====================================" -ForegroundColor Green
-            Write-Host "  APK 生成成功!" -ForegroundColor Green
-            Write-Host "  ====================================" -ForegroundColor Green
-            Write-Host "  文件:  $finalApkName"
-            Write-Host "  大小:  $sizeMB MB"
-            Write-Host "  路径:  $destPath"
-            Write-Host "  ====================================" -ForegroundColor Green
-            Write-Log "[OK] APK: $finalApkName ($sizeMB MB)"
-        } else {
-            Write-Log "[ERROR] APK copy failed or file is empty/corrupted" "ERROR"
-            throw "APK 复制失败或文件为空/损坏"
-        }
-    } else {
-        throw "输出目录未找到 APK"
+    if ($code -ne 0) {
+        Write-Log "[FAIL] 手机 APP 打包失败（build-app.bat 退出码: $code），详见上方日志" "ERROR"
+        return $code
     }
-    } catch {
-        # ★ 集中 versionCode restore：任何步骤失败时统一回滚（防版本号错误递增）
-        if ($versionCodeIncremented) {
-            Restore-VersionCode
-        }
-        throw
-    }
+    return $code
 }
 
 # ============================================================================
