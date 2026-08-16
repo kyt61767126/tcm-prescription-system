@@ -29,7 +29,7 @@
 //    key: admin_req_index  -> [requestId1, requestId2, ...]
 // ============================================================================
 
-import { getKV, checkRateLimit } from './_lib/license-core.js';
+import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -151,6 +151,15 @@ export async function onRequest(context) {
         }
         if (remark && typeof remark !== 'string' && remark.length > 500) {
             return json({ success: false, error: '备注长度不能超过 500 字符' }, 400);
+        }
+
+        // ★ 设备-版本绑定校验：同一台设备只能提交一个版本
+        // 若该设备已绑定另一版本，则拒绝提交该版本的激活请求
+        if (edition) {
+            const deviceCheck = await checkDeviceVersion(kv, machineId, edition);
+            if (!deviceCheck.ok) {
+                return json({ success: false, error: deviceCheck.error }, 403);
+            }
         }
 
         // 生成请求 ID 并存储

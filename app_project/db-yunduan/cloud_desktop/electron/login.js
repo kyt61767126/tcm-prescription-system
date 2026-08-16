@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  login.js - 登录窗口逻辑（不依赖 nodeIntegration，通过 electronAPI 调用主进程）
 //  统一 localStorage key 前缀为 local_
 //  用户列表与诊所名通过 IPC get-app-config 读取 config.json，不再正则解析 index.html
@@ -292,6 +292,22 @@
                 showError('手机号/用户名或密码错误');
                 return;
             }
+
+            // ★ 严格版本匹配（安全隔离）：账户版本必须与电脑激活版本一致
+            try {
+                const appCfg = await getAppConfig();
+                const machineEdition = (appCfg && appCfg.edition) || '';
+                const machineIsInstitution = ['clinic_custom', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud'].indexOf(machineEdition) >= 0;
+                const accountIsInstitution = (user.role === 'admin');
+                if (machineIsInstitution !== accountIsInstitution) {
+                    if (machineIsInstitution) {
+                        showError('⚠️ 该账户属于【标准版】，不能登录【机构版】电脑。请使用机构版账户登录，或在标准版电脑上使用该账户。');
+                    } else {
+                        showError('⚠️ 该账户属于【机构版】，不能登录【标准版】电脑。请使用标准版账户登录，或在机构版电脑上使用该账户。');
+                    }
+                    return;
+                }
+            } catch (e) { console.warn('[login] 版本匹配校验失败:', e); }
 
             // ★ 优化：批量并行写入 AuthCore 存储
             const userData = { username: user.username, name: user.name, role: user.role || 'user' };

@@ -41,7 +41,8 @@
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
-    generateActivationCode, appendLicenseLog, getDevices, getMaxDevices
+    generateActivationCode, appendLicenseLog, getDevices, getMaxDevices,
+    checkDeviceVersion, setDeviceVersion, versionOf
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -146,6 +147,13 @@ export async function onRequest(context) {
             return json({ success: false, error: '请求记录中缺少 clinicName' }, 400);
         }
 
+        // ★ 设备-版本绑定校验：审核通过前确认设备版本一致
+        // 若该设备已激活另一版本，则拒绝通过该版本的授权请求
+        const deviceCheck = await checkDeviceVersion(kv, record.machineId, type);
+        if (!deviceCheck.ok) {
+            return json({ success: false, error: deviceCheck.error }, 403);
+        }
+
         // 校验 maxDevices（可选，默认 1）
         let parsedMaxDevices = 1;
         if (maxDevices !== undefined && maxDevices !== null) {
@@ -191,6 +199,15 @@ export async function onRequest(context) {
         };
 
         await saveLicense(kv, licenseRecord);
+
+        // ★ 设备-版本绑定：授权成功后绑定设备版本（同一设备只能注册一个版本）
+        try {
+            await setDeviceVersion(kv, record.machineId, versionOf(type), {
+                licenseCode: code,
+                clinicName: clinicName
+            });
+        } catch (e) { console.warn('[DeviceVersion] 绑定失败:', e.message); }
+
         await appendLicenseLog(kv, code, {
             action: 'generate',
             time: licenseRecord.issuedAt,

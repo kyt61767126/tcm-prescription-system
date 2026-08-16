@@ -449,6 +449,74 @@ function getMaxDevices(record) {
 }
 
 // ============================================================================
+//  ★ 设备-版本绑定（同一台设备只能注册一个版本）
+//  需求：同一台电脑/手机只能激活一个版本（标准版 OR 机构版）
+//  一旦设备绑定某版本，另一个版本的激活/提交请求将被拒绝
+//  KV key: device_version:{machineId}
+//  值：{ machineId, version: 'standard'|'institution', licenseCode, clinicName, boundAt }
+// ============================================================================
+const KV_DEVICE_VERSION_PREFIX = 'device_version:';
+const DEVICE_VERSION_LABEL = { 'standard': '标准版', 'institution': '机构版' };
+
+// 判断 license type / edition 属于哪个版本（institution=机构版, standard=标准版）
+// 兼容 type（personal/pro）和 edition（cloud_personal/cloud_clinic/clinic_custom...）多种写法
+function versionOf(typeOrEdition) {
+    const v = String(typeOrEdition || '').toLowerCase();
+    if (['pro', 'institution', 'clinic', 'clinic_custom', 'cloud_clinic', 'offline_clinic', 'institutional'].includes(v)) {
+        return 'institution';
+    }
+    return 'standard';  // personal / trial / cloud_personal / 其他未识别 → 标准版
+}
+
+// 读取设备已绑定版本（返回绑定记录或 null）
+async function getDeviceVersion(kv, machineId) {
+    if (!kv || !machineId) return null;
+    try {
+        return await kv.get(KV_DEVICE_VERSION_PREFIX + machineId, 'json');
+    } catch (e) {
+        console.warn('[DeviceVersion] 读取失败:', e.message);
+        return null;
+    }
+}
+
+// 写入设备版本绑定（保留已有 licenseCode/clinicName）
+async function setDeviceVersion(kv, machineId, version, meta = {}) {
+    if (!kv || !machineId) return;
+    const prev = await getDeviceVersion(kv, machineId);
+    const binding = {
+        machineId: machineId,
+        version: version,
+        licenseCode: meta.licenseCode || (prev && prev.licenseCode) || null,
+        clinicName: meta.clinicName || (prev && prev.clinicName) || null,
+        boundAt: new Date().toISOString()
+    };
+    await kv.put(KV_DEVICE_VERSION_PREFIX + machineId, JSON.stringify(binding));
+    return binding;
+}
+
+// 校验设备版本与目标版本是否一致
+// 返回：{ ok: true, binding } 或 { ok: false, binding, boundLabel, targetLabel, error }
+async function checkDeviceVersion(kv, machineId, targetTypeOrEdition) {
+    const binding = await getDeviceVersion(kv, machineId);
+    if (!binding || !binding.version) {
+        return { ok: true, binding: null };
+    }
+    const targetVersion = versionOf(targetTypeOrEdition);
+    if (binding.version !== targetVersion) {
+        const boundLabel = DEVICE_VERSION_LABEL[binding.version] || binding.version;
+        const targetLabel = DEVICE_VERSION_LABEL[targetVersion] || targetVersion;
+        return {
+            ok: false,
+            binding: binding,
+            boundLabel: boundLabel,
+            targetLabel: targetLabel,
+            error: '该设备已激活【' + boundLabel + '】，不能激活【' + targetLabel + '】。同一台设备只能注册一个版本，请使用【' + boundLabel + '】激活码，或联系客服解除设备版本绑定。'
+        };
+    }
+    return { ok: true, binding: binding };
+}
+
+// ============================================================================
 //  ★ 操作日志（任务5 新增）：记录每个激活码的所有操作历史
 //  KV key: license_log:{code}，值为 JSON 数组
 //  每条记录：{ action, time, ip, operator, detail }
@@ -544,6 +612,11 @@ export {
     checkRateLimit,
     getDevices,        // ★ v4 新增：获取激活码已绑定的设备数组
     getMaxDevices,     // ★ v4 新增：获取激活码的最大设备数
+    // ★ 设备-版本绑定：同一台设备只能注册一个版本
+    versionOf,              // 判断 type/edition 属于机构版还是标准版
+    getDeviceVersion,       // 读取设备已绑定版本
+    setDeviceVersion,       // 写入设备版本绑定
+    checkDeviceVersion,     // 校验设备版本是否与目标版本一致
     // ★ 任务5 新增：操作日志
     appendLicenseLog,  // 追加激活码操作日志
     getLicenseLogs,    // 查询激活码操作日志

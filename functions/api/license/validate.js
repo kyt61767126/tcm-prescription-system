@@ -34,7 +34,8 @@
 import {
     getKV, getLicense, updateLicense, saveLicense,
     buildLicenseData, encodeLicenseBase64, checkRateLimit,
-    getDevices, getMaxDevices, appendLicenseLog
+    getDevices, getMaxDevices, appendLicenseLog,
+    checkDeviceVersion, setDeviceVersion, versionOf
 } from './_lib/license-core.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
@@ -155,6 +156,20 @@ export async function onRequest(context) {
         }
         if (record.status === 'expired') {
             return json({ success: false, error: '激活码已过期' }, 403);
+        }
+
+        // ★ 设备-版本绑定校验：同一台设备只能注册一个版本
+        // 若该设备已激活【标准版】或【机构版】，则拒绝激活另一版本
+        const deviceCheck = await checkDeviceVersion(kv, machineId, record.type);
+        if (!deviceCheck.ok) {
+            await appendLicenseLog(kv, code, {
+                action: 'device-binding-denied',
+                time: new Date().toISOString(),
+                ip: ip,
+                operator: user || record.user || 'unknown',
+                detail: '设备已绑定' + deviceCheck.boundLabel + '，拒绝' + deviceCheck.targetLabel + '激活'
+            });
+            return json({ success: false, error: deviceCheck.error }, 403);
         }
 
         // ★ v3 新增：诊所名绑定校验
@@ -280,6 +295,14 @@ export async function onRequest(context) {
         updates.devices = newDevices;
         updates.maxDevices = maxDevices;
         await updateLicense(kv, code, updates);
+
+        // ★ 设备-版本绑定：激活成功后绑定设备版本（同一设备只能注册一个版本）
+        try {
+            await setDeviceVersion(kv, machineId, versionOf(record.type), {
+                licenseCode: code,
+                clinicName: record.clinicName || clinicName || ''
+            });
+        } catch (e) { console.warn('[DeviceVersion] 绑定失败:', e.message); }
 
         // ★ P0 修复：存储 codeHash → code 映射（供 verify.js 反查真实校验）
         // verify.js 通过 codeHash 反查 code，再查询 license 记录进行真实校验
