@@ -2039,9 +2039,13 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         }
         StringBuilder errs = new StringBuilder();
         // 机器 ID 校验
+        // ★ 第三轮终检 P2 修复：license 含 machineId 但本地获取为空时原会跳过校验，
+        //   现 fail-closed（与桌面版 checkLicenseBinding 修复对齐）
         String licenseMachineId = license.optString("machineId", "");
-        if (!licenseMachineId.isEmpty() && localMachineId != null &&
-                !licenseMachineId.equals(localMachineId)) {
+        boolean localMidEmpty = (localMachineId == null || localMachineId.isEmpty());
+        if (!licenseMachineId.isEmpty() && localMidEmpty) {
+            errs.append("无法获取本机机器标识，授权绑定校验失败（环境异常）\n");
+        } else if (!licenseMachineId.isEmpty() && !licenseMachineId.equals(localMachineId)) {
             errs.append("机器标识不匹配（授权可能从其他设备复制）\n");
         }
         // 诊所名校验
@@ -2067,8 +2071,14 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         try {
             JSONObject cfg = readConfigJSON();
             String sig = cfg.optString("configSignature", "");
-            // 无 configSignature 字段 → 旧版 config.json，跳过校验（兼容性优先）
-            if (sig.isEmpty()) return true;
+            // ★ 第三轮终检 P2 修复：无 configSignature 原返回 true 兜底放行（攻击者删签名
+            //   字段即可绕过完整性校验）→ 改为 fail-closed 返回 false。
+            //   安全性依据：本函数仅在 license 含 licenseBinding（v3+ 激活）时被调用，
+            //   激活同步已保证写签名（含无签名时强制重写，见 activateOnline）。
+            if (sig.isEmpty()) {
+                Log.w(TAG, "config.json 无签名，完整性校验不通过（fail-closed）");
+                return false;
+            }
             String issuedAt = cfg.optString("configIssuedAt", "");
             if (issuedAt.isEmpty()) return false;
             // 签名内容：clinicName|doctorName|edition|configIssuedAt
@@ -2612,7 +2622,10 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                     changed = true;
                 }
                 // ③ 写回filesDir（自动重签名，保持完整性校验通过）
-                if (changed) writeConfigJSON(cfg, true);
+                // ★ 第三轮终检 P2 修复：config 无签名时（旧版升级后重激活且内容无变化）
+                //   也强制重写签名，避免 verifyConfigIntegrity fail-closed 后误拦
+                boolean noSig = cfg.optString("configSignature", "").isEmpty();
+                if (changed || noSig) writeConfigJSON(cfg, true);
             } catch (Exception syncErr) {
                 Log.w(TAG, "激活后同步config失败(不影响激活): " + syncErr.getMessage());
             }

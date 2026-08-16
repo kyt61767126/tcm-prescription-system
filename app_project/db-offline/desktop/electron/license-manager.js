@@ -807,7 +807,14 @@ function readTrial() {
         // 旧格式（XOR + Base64）- 向后兼容
         const json = xorDecrypt(content, TRIAL_KEY);
         if (!json) return null;
-        return JSON.parse(json);
+        // ★ 第三轮终检 P2 修复：旧 XOR 格式（硬编码密钥）可跨机复制，读取成功后
+        //   立即重写为本机 AES 格式（密钥含 machineId），此后旧格式文件不再生效
+        try {
+            const migrated = JSON.parse(json);
+            writeTrial(migrated);
+            console.log('[License] trial 已从旧 XOR 格式迁移为本机 AES 格式');
+            return migrated;
+        } catch (pe) { return null; }
     } catch (e) {
         return null;
     }
@@ -865,7 +872,14 @@ function readLastRun() {
         // 旧格式（XOR + Base64）- 向后兼容
         const json = xorDecrypt(content, LASTRUN_KEY);
         if (!json) return null;
-        return JSON.parse(json);
+        // ★ 第三轮终检 P2 修复：旧 XOR 格式可伪造时间戳绕过回拨检测，读取成功后
+        //   立即重写为本机 AES 格式（与 trial 迁移策略一致）
+        try {
+            const migrated = JSON.parse(json);
+            writeLastRun(migrated);
+            console.log('[License] last-run 已从旧 XOR 格式迁移为本机 AES 格式');
+            return migrated;
+        } catch (pe) { return null; }
     } catch (e) {
         return null;
     }
@@ -959,7 +973,11 @@ function checkLicenseBinding(license, localMachineId) {
     const mismatches = [];
 
     // 机器 ID 校验（核心：防 license.dat 复制到其他机器）
-    if (license.machineId && localMachineId && license.machineId !== localMachineId) {
+    // ★ 第三轮终检 P2 修复：license 含 machineId 但本地获取为空时原会跳过校验
+    //   （getMachineId 失败/被破坏 → 绑定失效）。现 fail-closed：视为不匹配。
+    if (license.machineId && !localMachineId) {
+        mismatches.push('无法获取本机机器标识，授权绑定校验失败（环境异常）');
+    } else if (license.machineId && localMachineId && license.machineId !== localMachineId) {
         mismatches.push('机器标识不匹配（授权可能从其他电脑复制）');
     }
 
@@ -986,11 +1004,30 @@ function checkLicenseBinding(license, localMachineId) {
 // ★ P1-3: 使用 getEffectiveConfigSignKey() 派生密钥（从 license.masterKey 派生，向后兼容）
 function verifyConfigIntegrity() {
     try {
-        const configPath = path.join(getExeDirectory(), 'config.json');
-        if (!fs.existsSync(configPath)) return true;  // 无 config.json 跳过校验（兜底放行）
-        const cfg = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        // 无 configSignature 字段 → 旧版 config.json，跳过校验（兼容性优先）
-        if (!cfg.configSignature) return true;
+        // ★ 第三轮终检 P2 修复（2026-08-16）：
+        //   1. 原只读 exe 目录 config，而 installLicense 写的是 writableDir（NSIS 版= userData），
+        //      路径不一致导致 NSIS 版从未真正校验过签名（exe 目录无签名 → 一直走兜底放行）。
+        //      现优先校验 writableDir（与签名写入一致），exe 目录作兼容兜底（Portable 旧数据）。
+        //   2. 删除两处兜底放行：无 config.json / 无 configSignature 原返回 true，
+        //      攻击者删 config 或删签名字段即可绕过 → 现返回 false。
+        //      安全性依据：本函数仅在 license 含 licenseBinding（v3+ 激活）时被调用，
+        //      v3+ 激活流程 installLicense 必写签名 config，无签名 = 被删/损坏/篡改。
+        const candidatePaths = [
+            path.join(getWritableDir(), 'config.json'),
+            path.join(getExeDirectory(), 'config.json')
+        ];
+        let cfg = null;
+        for (const p of candidatePaths) {
+            try {
+                if (!fs.existsSync(p)) continue;
+                const parsed = JSON.parse(fs.readFileSync(p, 'utf8'));
+                if (parsed && parsed.configSignature) { cfg = parsed; break; }
+            } catch (e) { /* 尝试下一路径 */ }
+        }
+        if (!cfg) {
+            console.warn('[License] config.json 缺失或无签名，完整性校验不通过（fail-closed）');
+            return false;
+        }
         // 必须有 configIssuedAt 才能验签
         if (!cfg.configIssuedAt) return false;
         // 签名内容：clinicName|doctorName|edition|configIssuedAt
@@ -1687,21 +1724,29 @@ function installLicense(base64Content, options = {}) {
         }
 
         // 4. 签名并保存 config.json
-        if (configChanged) {
+        // ★ 第三轮终检 P2 修复：config 无签名时（重激活且内容无变化）也强制签名写入，
+        //   避免 verifyConfigIntegrity fail-closed 后误拦（与 APP 端 activateOnline 对齐）
+        if (configChanged || !config.configSignature) {
             signConfig(config);
-            try {
-                fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-                console.log('[License] config.json 已更新并签名');
-            } catch (writeErr) {
-                // 尝试 fallback 到 userData 目录
-                console.warn('[License] 写入 config.json 失败，尝试 fallback:', writeErr.message);
+            // ★ 第三轮终检 P2 修复：signConfig 失败会返回未签名 config（无 configSignature），
+            //   原样写入会让 verifyConfigIntegrity 走"无签名"分支。现未签名则拒绝写入，
+            //   保留磁盘上的旧签名 config（fail-safe：宁可配置不更新也不破坏完整性链）。
+            if (!config.configSignature) {
+                console.error('[License] signConfig 未生成签名，跳过 config.json 写入（保留原签名配置）');
+            } else {
                 try {
-                    const fallbackPath = require('path').join(app.getPath('userData'), 'config.json');
-                    signConfig(config);
-                    fs.writeFileSync(fallbackPath, JSON.stringify(config, null, 2), 'utf8');
-                    console.log('[License] config.json 已写入 fallback 路径:', fallbackPath);
-                } catch (fbErr) {
-                    console.error('[License] config.json fallback 写入也失败:', fbErr.message);
+                    fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+                    console.log('[License] config.json 已更新并签名');
+                } catch (writeErr) {
+                    // 尝试 fallback 到 userData 目录
+                    console.warn('[License] 写入 config.json 失败，尝试 fallback:', writeErr.message);
+                    try {
+                        const fallbackPath = require('path').join(app.getPath('userData'), 'config.json');
+                        fs.writeFileSync(fallbackPath, JSON.stringify(config, null, 2), 'utf8');
+                        console.log('[License] config.json 已写入 fallback 路径:', fallbackPath);
+                    } catch (fbErr) {
+                        console.error('[License] config.json fallback 写入也失败:', fbErr.message);
+                    }
                 }
             }
         }
@@ -1781,6 +1826,11 @@ function enforceEditionBinding() {
 
         if (corrected) {
             signConfig(config);
+            // ★ 第三轮终检 P2 修复：未生成签名则拒绝写入（与 installLicense 策略一致）
+            if (!config.configSignature) {
+                console.error('[License] signConfig 未生成签名，跳过版本绑定校正写入');
+                return { success: true, corrected: false };
+            }
             fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
             console.log('[License] config.json 版本绑定校正完成，已重新签名');
         }
