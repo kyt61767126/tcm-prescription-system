@@ -2044,7 +2044,11 @@
                         <div class="a">→ 选择离线机构版</div>
                     </div>
                     <div class="decision-item">
-                        <div class="q">☁️ 需要多设备协作？</div>
+                        <div class="q">☁️ 个人医师需要云端同步？</div>
+                        <div class="a">→ 选择云端标准版</div>
+                    </div>
+                    <div class="decision-item">
+                        <div class="q">🏥 诊所需要多设备协作与用户管理？</div>
                         <div class="a">→ 选择云端机构版</div>
                     </div>
                 </div>
@@ -2059,32 +2063,33 @@
                                 <th>功能</th>
                                 <th>离线机构版</th>
                                 <th>离线标准版</th>
+                                <th>云端标准版</th>
                                 <th>云端机构版</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <tr><td>默认账号</td><td>admin/admin<br>（仅此一个）</td><td>admin/admin<br>（仅此一个，不可改）</td><td>需开通</td></tr>
-                            <tr><td>用户模式</td><td>多用户</td><td>单用户</td><td>多用户</td></tr>
-                            <tr><td>医师姓名</td><td class="yes">✅ 可编辑</td><td class="yes">✅ 可编辑</td><td class="yes">✅ 可编辑</td></tr>
-                            <tr><td>诊所名称</td><td class="yes">✅ 可编辑</td><td class="yes">✅ 可编辑</td><td class="yes">✅ 可编辑</td></tr>
-                            <tr><td>修改密码</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td></tr>
-                            <tr><td>试用模式</td><td>7天/30张</td><td>7天/30张</td><td class="no">无试用</td></tr>
-                            <tr><td>数据存储</td><td>本地</td><td>本地</td><td>云端+本地</td></tr>
-                            <tr><td>管理员权限</td><td>本地管理</td><td>本地管理</td><td>云端功能</td></tr>
-                            <tr><td>普通用户权限</td><td>本地</td><td>本地</td><td>本地（离线）</td></tr>
-                            <tr><td>数据备份</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td></tr>
-                            <tr><td>统计分析</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td></tr>
-                            <tr><td>多设备登入</td><td class="no">❌ 仅单机</td><td class="no">❌ 仅单机</td><td class="yes">✅ 云端同步</td></tr>
-                            <tr><td>联网要求</td><td>完全离线</td><td>完全离线</td><td>需联网</td></tr>
-                            <tr style="background:rgba(7,193,96,0.06);"><td style="font-weight:700;">建议零售价</td><td style="font-weight:700;color:#07c160;">￥399 买断</td><td style="font-weight:700;color:#07c160;">￥99 买断</td><td style="font-weight:700;color:#07c160;">￥499/年</td></tr>
-                            <tr><td>授权方式</td><td>永久授权（单机）</td><td>永久授权（单机）</td><td>年费订阅</td></tr>
-                            <tr><td>免费更新期</td><td>购买起1年</td><td>购买起1年</td><td>订阅期内</td></tr>
-                            <tr><td>延保服务</td><td>￥59/年（可选）</td><td>￥19/年（可选）</td><td>含在年费内</td></tr>
+                            <tr><td>默认账号</td><td>admin/admin<br>（仅此一个）</td><td>admin/admin<br>（仅此一个，不可改）</td><td>需开通</td><td>需开通</td></tr>
+                            <tr><td>用户模式</td><td>多用户</td><td>单用户</td><td>单用户</td><td>多用户</td></tr>
+                            <tr><td>医师姓名</td><td class="yes">✅ 可编辑</td><td class="yes">✅ 可编辑</td><td class="yes">✅ 可编辑</td><td class="yes">✅ 可编辑</td></tr>
+                            <tr><td>诊所名称</td><td class="yes">✅ 可编辑</td><td class="yes">✅ 可编辑</td><td class="yes">✅ 可编辑</td><td class="yes">✅ 可编辑</td></tr>
+                            <tr><td>修改密码</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td></tr>
+                            <tr><td>试用模式</td><td>7天/30张</td><td>7天/30张</td><td class="no">无试用</td><td class="no">无试用</td></tr>
+                            <tr><td>数据存储</td><td>本地</td><td>本地</td><td>云端+本地</td><td>云端+本地</td></tr>
+                            <tr><td>管理员权限</td><td>本地管理</td><td>本地管理</td><td>云端功能</td><td>云端功能</td></tr>
+                            <tr><td>普通用户权限</td><td>本地</td><td>本地</td><td>本地（离线）</td><td>本地（离线）</td></tr>
+                            <tr><td>数据备份</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td></tr>
+                            <tr><td>统计分析</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td><td class="yes">✅</td></tr>
+                            <tr><td>多设备登入</td><td class="no">❌ 仅单机</td><td class="no">❌ 仅单机</td><td class="no">❌ 仅单设备</td><td class="yes">✅ 云端同步</td></tr>
+                            <tr><td>联网要求</td><td>完全离线</td><td>完全离线</td><td>需联网</td><td>需联网</td></tr>
+                            <tr style="background:rgba(7,193,96,0.06);"><td style="font-weight:700;">建议零售价</td><td style="font-weight:700;color:#07c160;">￥399 买断</td><td style="font-weight:700;color:#07c160;">￥99 买断</td><td style="font-weight:700;color:#07c160;">￥299/年</td><td style="font-weight:700;color:#07c160;">￥499/年</td></tr>
+                            <tr><td>授权方式</td><td>永久授权（单机）</td><td>永久授权（单机）</td><td>年费订阅</td><td>年费订阅</td></tr>
+                            <tr><td>免费更新期</td><td>购买起1年</td><td>购买起1年</td><td>订阅期内</td><td>订阅期内</td></tr>
+                            <tr><td>延保服务</td><td>￥59/年（可选）</td><td>￥19/年（可选）</td><td>含在年费内</td><td>含在年费内</td></tr>
                         </tbody>
                     </table>
                 </div>
                 <p style="font-size:12px;color:var(--text-secondary);margin-top:12px;line-height:1.6;">
-                    💡 <strong>选择建议：</strong>个人医生选<strong>离线标准版</strong>；固定诊所（多医师，单机使用）选<strong>离线机构版</strong>；需要多设备登入或云端协作选<strong>云端机构版</strong>。<br>
+                    💡 <strong>选择建议：</strong>个人医生选<strong>离线标准版</strong>；固定诊所（多医师，单机使用）选<strong>离线机构版</strong>；需要云端协作选<strong>云端标准版</strong>；需多设备协作与用户管理选<strong>云端机构版</strong>。<br>
                     💰 <strong>买断制优势：</strong>一次付费永久使用，无年费压力。免费更新期结束后仍可继续使用当前版本，不影响日常诊疗。
                 </p>
             </div>
@@ -2232,8 +2237,10 @@
                     <div class="faq-answer-inner">
                         <strong>离线标准版 ￥99（买断）</strong>：一次付费永久使用，适合个人医生<br>
                         <strong>离线机构版 ￥399（买断）</strong>：一次付费永久使用，适合固定诊所多医师<br>
-                        <strong>云端机构版 ￥499/年</strong>：按年付费，适合需要多设备协作的诊所<br>
+                        <strong>云端标准版 ￥299/年</strong>：按年付费，适合个人医师云端同步使用<br>
+                        <strong>云端机构版 ￥499/年</strong>：按年付费，适合需要多设备协作与用户管理的诊所<br>
                         <br>
+                        <strong>云端标准版/云端机构版</strong>为年费订阅，费用含更新维护。<br>
                         <strong>买断版（离线标准版/离线机构版）</strong>包含 <strong>1年免费更新维护</strong>，到期后可选择购买延保服务（离线标准版￥19/年，离线机构版￥59/年）继续获取新版本更新。不购买延保<strong>不影响当前版本使用</strong>，软件可永久运行。<br>
                         <br>
                         <strong>⚠️ 试用满意后再购买：</strong>所有离线版均提供 7 天免费试用（限 30 张处方），请充分测试后再决定购买。
