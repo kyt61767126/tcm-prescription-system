@@ -307,7 +307,6 @@ goto :main
     set "SAVED_NO_PAUSE=%NO_PAUSE%"
     set "NO_PAUSE=1"
 
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Strict rebuild (standard)...'"
     call "%BUILD_APP%" standard
     set "TEMP_RC=%errorlevel%"
 

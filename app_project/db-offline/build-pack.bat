@@ -286,6 +286,8 @@ goto :main
 
     call :log_title "Offline APP Builder (Standard Strict)"
 
+    call :check_node || call :finalize 1 "Node.js check failed"
+
     call :check_java || call :finalize 1 "Java check failed"
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"

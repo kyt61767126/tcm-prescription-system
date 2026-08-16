@@ -100,10 +100,11 @@ function Invoke-SinglePack {
 
     if ($Mode -eq "all" -or $Mode -eq "app") {
         Write-Host ""
-        Write-Host "[APP] 打包 $verLabel 手机 APP..." -ForegroundColor Yellow
+        Write-Host "[APP] 打包 $verLabel 手机 APP (严格模式)..." -ForegroundColor Yellow
         $appBat = "$verDir\build-app.bat"
         if (Test-Path $appBat) {
-            & cmd /c "$appBat" 2>&1 | ForEach-Object { Write-Host $_ }
+            # 与 one-click-pack.ps1 的 app-strict 一致，APP 统一走严格模式（签名哈希+Java混淆+签名校验）
+            & cmd /c "$appBat standard" 2>&1 | ForEach-Object { Write-Host $_ }
             $rc = $LASTEXITCODE
             if ($rc -ne 0) {
                 Write-Host "[ERROR] $verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
