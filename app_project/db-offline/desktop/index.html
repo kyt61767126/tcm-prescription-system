@@ -695,7 +695,7 @@ let currentUser = null;
             var inst = ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic'].indexOf(e) >= 0;
             return inst ? '离线机构版' : '离线标准版';
         }
-        (function() {
+        function applyEditionTags() {
             var label = getEditionTag();
             var tag = document.querySelector('.version-tag');
             if (tag) tag.textContent = '【' + label + '】 V1.0.0';
@@ -703,6 +703,27 @@ let currentUser = null;
             if (et) et.textContent = '【' + label + '】';
             document.title = '惠康中医-' + label;
             console.log('%c惠康中医' + label + ' V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
+        }
+        applyEditionTags();
+
+        // ★ 异步加载 userData 中的 config.json（覆盖 asar 模板默认值，修复激活后版本标签不更新的问题）
+        (function() {
+            if (window.electronAPI && window.electronAPI.getAppConfig) {
+                window.electronAPI.getAppConfig().then(function(r) {
+                    if (r && r.success && r.config) {
+                        var cfg = r.config;
+                        if (cfg.edition && cfg.edition !== CONFIG.edition) {
+                            CONFIG.edition = cfg.edition;
+                            if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
+                            if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
+                            applyEditionTags();
+                            console.log('[CONFIG] 已从 userData 同步配置，版本:', cfg.edition);
+                        }
+                    }
+                }).catch(function(e) {
+                    console.warn('[CONFIG] 异步加载 userData 配置失败:', e.message);
+                });
+            }
         })();
 
         const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
