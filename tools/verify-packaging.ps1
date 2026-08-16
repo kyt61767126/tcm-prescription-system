@@ -1,4 +1,4 @@
-# verify-packaging.ps1 - Verify encoding integrity of packaging files
+﻿# verify-packaging.ps1 - Verify encoding integrity of packaging files
 # Usage: powershell -File tools\verify-packaging.ps1
 # Exit code: 0 = all pass, 1 = issues found
 #
@@ -51,21 +51,37 @@ function Check-Bat {
         $script:pass++
         return
     }
-    # 含非 ASCII 字节：合法场景 = UTF-8 编码 + 脚本内 chcp 65001（cmd 切 UTF-8 代码页显示中文）
-    $utf8 = New-Object System.Text.UTF8Encoding($false, $true)  # throwOnInvalidBytes = true
+    # 含非 ASCII 字节：校验编码在 cmd 下能否正常显示中文
+    $utf8 = New-Object System.Text.UTF8Encoding($false, $true)  # 严格 UTF-8
+    $utf8Ok = $false
     $text = $null
     try {
         $text = $utf8.GetString($bytes)
+        $utf8Ok = $true
     } catch {
-        $text = $null
+        $utf8Ok = $false
     }
-    if ($text -and $text -match 'chcp\s+65001') {
-        Write-Host "  [OK]   $Label : UTF-8 + chcp 65001 (Chinese OK)" -ForegroundColor Green
-        $script:pass++
+    if ($utf8Ok) {
+        # 合法 UTF-8：必须配合 chcp 65001（否则 GBK 代码页下乱码）
+        if ($text -match 'chcp\s+65001') {
+            Write-Host "  [OK]   $Label : UTF-8 + chcp 65001 (Chinese OK)" -ForegroundColor Green
+            $script:pass++
+        } else {
+            Write-Host "  [FAIL] $Label : UTF-8 but no chcp 65001 - Chinese garbles in GBK cmd" -ForegroundColor Red
+            $script:fail++
+        }
     } else {
-        $count = @($nonAscii).Count
-        Write-Host "  [FAIL] $Label : $count non-ASCII bytes but not valid UTF-8 + chcp 65001 (may garble in cmd.exe)" -ForegroundColor Red
-        $script:fail++
+        # 非 UTF-8：cmd 默认 GBK/ANSI 代码页可正常显示（常见合法场景）
+        $gbk = [System.Text.Encoding]::GetEncoding(936, [System.Text.EncoderFallback]::ExceptionFallback, [System.Text.DecoderFallback]::ExceptionFallback)
+        try {
+            $null = $gbk.GetString($bytes)
+            Write-Host "  [OK]   $Label : GBK/ANSI (cmd default codepage, Chinese OK)" -ForegroundColor Green
+            $script:pass++
+        } catch {
+            $count = @($nonAscii).Count
+            Write-Host "  [FAIL] $Label : $count non-ASCII bytes, unknown encoding (may garble)" -ForegroundColor Red
+            $script:fail++
+        }
     }
 }
 
@@ -126,7 +142,7 @@ if ($fail -gt 0) {
     Write-Host "Fix instructions:"
     Write-Host "  .ps1 missing BOM:  powershell -File tools\fix-ps1-bom.ps1"
     Write-Host "  .html has BOM:     powershell -File tools\strip-html-bom.ps1"
-    Write-Host "  .bat non-ASCII:    replace Chinese with English in .bat files"
+    Write-Host "  .bat garble:       save as UTF-8 and ensure first line has 'chcp 65001 >nul'"
     exit 1
 } else {
     Write-Host "[RESULT] PASSED - all encoding checks OK" -ForegroundColor Green
