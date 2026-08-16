@@ -1136,6 +1136,7 @@
             <button class="tab-btn active" data-tab="mobile">📱 手机端</button>
             <button class="tab-btn" data-tab="desktop">💻 桌面端</button>
             <button class="tab-btn" data-tab="web">🌐 网页端</button>
+            <button class="tab-btn" data-tab="register">📝 注册开通</button>
             <button class="tab-btn" data-tab="purchase">🔑 购买激活码</button>
             <button class="tab-btn" data-tab="install">📋 安装说明</button>
             <button class="tab-btn" data-tab="compare">⚖️ 版本对比</button>
@@ -1146,33 +1147,33 @@
         <div class="tab-content active" id="tab-mobile">
             <div class="section-title">
                 <span>📱 手机端 APP</span>
-                <span class="sub">云端机构版 · 离线版</span>
+                <span class="sub">云端统一包 · 本地统一包</span>
             </div>
             <div class="grid-2">
-            <div class="card featured" id="card-YJ-app">
+            <div class="card featured" id="card-cloud-app">
                 <div class="card-title">
                     <span class="icon">☁️</span>
-                    惠康中医 · 云端机构版
+                    惠康中医 · 云端统一包
                     <span class="badge cloud">云端</span>
-                    <span class="status-tag latest" id="tag-YJ-app">最新</span>
+                    <span class="status-tag latest" id="tag-cloud-app">最新</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">版本</span>
-                    <span class="info-value version" id="ver-YJ-app">加载中...</span>
+                    <span class="info-value version" id="ver-cloud-app">加载中...</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">发布日期</span>
-                    <span class="info-value date" id="date-YJ-app">-</span>
+                    <span class="info-value date" id="date-cloud-app">-</span>
                 </div>
                 <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
                 <div class="card-details">
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
-                        <span class="info-value date" id="mtime-YJ-app">-</span>
+                        <span class="info-value date" id="mtime-cloud-app">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">更新说明</span>
-                        <span class="info-value" id="notes-YJ-app">-</span>
+                        <span class="info-value" id="notes-cloud-app">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">适用场景</span>
@@ -1183,104 +1184,51 @@
                         <span class="info-value success">✅ 支持（云端实时同步）</span>
                     </div>
                     <div class="notice notice-cloud">
-                        <span class="icon">⚠️</span>
+                        <span class="icon">💡</span>
                         <div>
-                            <strong>无公开试用：</strong>云端机构版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
-                            <strong>试用建议：</strong>请先下载下方"离线版"体验功能，满意后联系开发者开通云端账户。
+                            <strong>开通方式：</strong>请访问<strong><a href="https://tcm-prescription-system.pages.dev/" target="_blank" style="color:#2563eb;">云端网页端</a></strong>自助注册，或联系管理员通过后台一键创建。<br>
+                            <strong>详细流程：</strong><a href="#" onclick="switchTab('register'); return false;" style="color:#2563eb;">查看注册开通说明 →</a>
                         </div>
                     </div>
                     <div class="hash-box">
                         <div class="hash-label">
                             🔒 SHA-256 校验值（APK）
-                            <button class="hash-copy" onclick="copyHash('hash-YJ-app')">复制</button>
+                            <button class="hash-copy" onclick="copyHash('hash-cloud-app')">复制</button>
                         </div>
-                        <div class="hash-value pending" id="hash-YJ-app">（打包后自动更新）</div>
+                        <div class="hash-value pending" id="hash-cloud-app">（打包后自动更新）</div>
                     </div>
                 </div>
                 <div class="btn-group">
-                    <a href="#" class="download-btn" id="dl-YJ-app">
+                    <a href="#" class="download-btn" id="dl-cloud-app">
                         <span class="icon">⬇️</span>下载 APK（Android）
                     </a>
                 </div>
             </div>
 
-            <div class="card featured" id="card-YB-app">
-                <div class="card-title">
-                    <span class="icon">👤</span>
-                    惠康中医 · 云端标准版
-                    <span class="badge cloud">云端</span>
-                    <span class="badge offline">个人</span>
-                    <span class="status-tag latest" id="tag-YB-app">最新</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">版本</span>
-                    <span class="info-value version" id="ver-YB-app">加载中...</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">更新时间</span>
-                    <span class="info-value date" id="mtime-YB-app">-</span>
-                </div>
-                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
-                <div class="card-details">
-                    <div class="info-row">
-                        <span class="info-label">适用场景</span>
-                        <span class="info-value">个人医生联网使用，云端数据同步，轻量简洁</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">多设备登入</span>
-                        <span class="info-value success">✅ 支持（云端实时同步）</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">功能差异</span>
-                        <span class="info-value">与云端机构版相同，默认以"离线标准版"模式运行（无用户管理、有修改密码）</span>
-                    </div>
-                    <div class="notice notice-cloud">
-                        <span class="icon">ℹ️</span>
-                        <div>
-                            <strong>关于云端标准版：</strong>此版本与"云端机构版"使用同一安装包，仅在服务端以离线标准版模式运行，界面更简洁。<br>
-                            <strong>适合人群：</strong>个人医生、单医师诊所，需要云端数据同步但无需多账户管理功能。<br>
-                            <strong>账户开通：</strong>需联系开发者（平台管理员）开通离线标准版账户后登录使用。
-                        </div>
-                    </div>
-                    <div class="hash-box">
-                        <div class="hash-label">
-                            🔒 SHA-256 校验值（APK）
-                            <button class="hash-copy" onclick="copyHash('hash-YB-app')">复制</button>
-                        </div>
-                        <div class="hash-value pending" id="hash-YB-app">（打包后自动更新）</div>
-                    </div>
-                </div>
-                <div class="btn-group">
-                    <a href="#" class="download-btn" id="dl-YB-app">
-                        <span class="icon">⬇️</span>下载 APK（Android）
-                    </a>
-                </div>
-            </div>
-
-            <div class="card" id="card-LJ-app">
+            <div class="card" id="card-dingzhi">
                 <div class="card-title">
                     <span class="icon">🏥</span>
-                    惠康中医 · 离线机构版
+                    惠康中医 · 本地统一包
                     <span class="badge offline">离线</span>
-                    <span class="status-tag latest" id="tag-LJ-app">最新</span>
+                    <span class="status-tag latest" id="tag-dingzhi">最新</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">版本</span>
-                    <span class="info-value version" id="ver-LJ-app">加载中...</span>
+                    <span class="info-value version" id="ver-dingzhi">加载中...</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">发布日期</span>
-                    <span class="info-value date" id="date-LJ-app">-</span>
+                    <span class="info-value date" id="date-dingzhi">-</span>
                 </div>
                 <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
                 <div class="card-details">
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
-                        <span class="info-value date" id="mtime-LJ-app">-</span>
+                        <span class="info-value date" id="mtime-dingzhi">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">更新说明</span>
-                        <span class="info-value" id="notes-LJ-app">-</span>
+                        <span class="info-value" id="notes-dingzhi">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">适用场景</span>
@@ -1307,79 +1255,18 @@
                     <div class="hash-box">
                         <div class="hash-label">
                             🔒 SHA-256 校验值（APK）
-                            <button class="hash-copy" onclick="copyHash('hash-LJ-app')">复制</button>
+                            <button class="hash-copy" onclick="copyHash('hash-dingzhi')">复制</button>
                         </div>
-                        <div class="hash-value pending" id="hash-LJ-app">（打包后自动更新）</div>
+                        <div class="hash-value pending" id="hash-dingzhi">（打包后自动更新）</div>
                     </div>
                 </div>
                 <div class="btn-group">
-                    <a href="#" class="download-btn secondary" id="dl-LJ-app">
+                    <a href="#" class="download-btn secondary" id="dl-dingzhi">
                         <span class="icon">⬇️</span>下载 APK（Android）
                     </a>
                 </div>
             </div>
 
-            <div class="card" id="card-LB-app">
-                <div class="card-title">
-                    <span class="icon">👤</span>
-                    惠康中医 · 离线标准版
-                    <span class="badge offline">离线</span>
-                    <span class="status-tag latest" id="tag-LB-app">最新</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">版本</span>
-                    <span class="info-value version" id="ver-LB-app">加载中...</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">发布日期</span>
-                    <span class="info-value date" id="date-LB-app">-</span>
-                </div>
-                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
-                <div class="card-details">
-                    <div class="info-row">
-                        <span class="info-label">更新时间</span>
-                        <span class="info-value date" id="mtime-LB-app">-</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">更新说明</span>
-                        <span class="info-value" id="notes-LB-app">-</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">适用场景</span>
-                        <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">多设备登入</span>
-                        <span class="info-value danger">❌ 不支持（仅单机使用）</span>
-                    </div>
-                    <div class="credential-box">
-                        <strong>📝 注册说明：</strong><br>
-                        诊所名称：<span class="cred-pair" onclick="copyText(this)">本能堂中医诊所</span>（基础设置中可修改）<br>
-                        管理员用户名：<span class="cred-pair" onclick="copyText(this)">本能堂</span><br>
-                        默认密码：<span class="cred-pair" onclick="copyText(this)">admin</span><br>
-                        <strong>⚠️ 离线标准版仅一个管理员账号，首次登录后请在基础设置中修改诊所名称和医师姓名！</strong>
-                    </div>
-                    <div class="notice notice-single">
-                        <span class="icon">⚠️</span>
-                        <div>
-                            <strong>仅支持单机使用：</strong>不支持多设备同时登入同一数据源。<br>
-                            <strong>如需多设备登入</strong>，请选择上方<strong>云端机构版</strong>。
-                        </div>
-                    </div>
-                    <div class="hash-box">
-                        <div class="hash-label">
-                            🔒 SHA-256 校验值（APK）
-                            <button class="hash-copy" onclick="copyHash('hash-LB-app')">复制</button>
-                        </div>
-                        <div class="hash-value pending" id="hash-LB-app">（打包后自动更新）</div>
-                    </div>
-                </div>
-                <div class="btn-group">
-                    <a href="#" class="download-btn secondary" id="dl-LB-app">
-                        <span class="icon">⬇️</span>下载 APK（Android）
-                    </a>
-                </div>
-            </div>
             </div>
         </div>
 
@@ -1387,13 +1274,13 @@
         <div class="tab-content" id="tab-desktop">
             <div class="section-title">
                 <span>💻 桌面端程序</span>
-                <span class="sub">云端机构版 <b>YJ</b> 桌面版 · 离线桌面版</span>
+                <span class="sub">云端统一包 · 本地统一包</span>
             </div>
             <div class="grid-2">
-            <div class="card featured" id="card-YJ-desktop">
+            <div class="card featured" id="card-cloud-desktop">
                 <div class="card-title">
                     <span class="icon">☁️</span>
-                    惠康中医 · 云端机构版 <b>YJ</b> 桌面版
+                    惠康中医 · 云端统一包
                     <span class="badge desktop">桌面</span>
                     <span class="badge cloud">云端</span>
                 </div>
@@ -1425,15 +1312,16 @@
                     </div>
                     <div class="credential-box">
                         <strong>📝 注册说明：</strong><br>
-                        诊所名称：注册时填写（基础设置中可修改）<br>
-                        管理员用户名：<span class="cred-pair" onclick="copyText(this)">管理员</span><br>
-                        <strong>⚠️ 云端机构版需联系开发者开通账户，注册时提供诊所名称和管理员姓名即可。</strong>
+                        👉 <a href="#" onclick="switchTab('register'); return false;" style="color:#2563eb;font-weight:bold;">查看完整注册开通流程 →</a><br>
+                        <strong>方式一（推荐）：</strong>云端网页端自助注册，即时获得管理员账号<br>
+                        <strong>方式二：</strong>联系平台管理员在后台一键创建<br>
+                        管理员账号格式：<code>admin_</code> + 诊所简码（如 <code>admin_hkt</code>）
                     </div>
                     <div class="notice notice-cloud">
-                        <span class="icon">⚠️</span>
+                        <span class="icon">💡</span>
                         <div>
-                            <strong>无公开试用：</strong>云端机构版 <b>YJ</b> 桌面版需联系开发者（平台管理员）开通账户后才能登录使用。<br>
-                            <strong>试用建议：</strong>请先下载上方"离线版 APP"体验功能，满意后联系开发者开通云端账户。
+                            <strong>推荐方式：</strong>请直接访问<strong><a href="https://tcm-prescription-system.pages.dev/" target="_blank" style="color:#2563eb;">云端网页端</a></strong>，点击登录页底部「新诊所注册」链接自助开通。<br>
+                            <strong>批量开通：</strong>如需批量开通或企业定制，请联系开发者通过后台管理一键创建。
                         </div>
                     </div>
                     <div class="hash-box">
@@ -1445,39 +1333,39 @@
                     </div>
                 </div>
                 <div class="btn-group">
-                    <a href="#" class="download-btn" id="dl-YJ-desktop">
+                    <a href="#" class="download-btn" id="dl-cloud">
                         <span class="icon">⬇️</span>下载安装版（推荐）
                     </a>
-                    <a href="#" class="download-btn secondary" id="dl-YJ-desktop-portable">
+                    <a href="#" class="download-btn secondary" id="dl-cloud-portable">
                         <span class="icon">📦</span>便携版
                     </a>
                 </div>
             </div>
 
-            <div class="card" id="card-LJ-app-desktop">
+            <div class="card" id="card-dingzhi-desktop">
                 <div class="card-title">
                     <span class="icon">🏥</span>
-                    惠康中医 · 离线机构版 <span style="color:#e65100;">LJ</span> 桌面版
+                    惠康中医 · 本地统一包
                     <span class="badge desktop">桌面</span>
                     <span class="badge offline">离线</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">版本</span>
-                    <span class="info-value version" id="ver-LJ-app-desktop">加载中...</span>
+                    <span class="info-value version" id="ver-dingzhi-desktop">加载中...</span>
                 </div>
                 <div class="info-row">
                     <span class="info-label">发布日期</span>
-                    <span class="info-value date" id="date-LJ-app-desktop">-</span>
+                    <span class="info-value date" id="date-dingzhi-desktop">-</span>
                 </div>
                 <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
                 <div class="card-details">
                     <div class="info-row">
                         <span class="info-label">更新时间</span>
-                        <span class="info-value date" id="mtime-LJ-app-desktop">-</span>
+                        <span class="info-value date" id="mtime-dingzhi-desktop">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">更新说明</span>
-                        <span class="info-value" id="notes-LJ-app-desktop">-</span>
+                        <span class="info-value" id="notes-dingzhi-desktop">-</span>
                     </div>
                     <div class="info-row">
                         <span class="info-label">适用场景</span>
@@ -1498,91 +1386,27 @@
                         <span class="icon">⚠️</span>
                         <div>
                             <strong>仅支持单机使用：</strong>不支持多设备同时登入同一数据源。<br>
-                            <strong>如需多设备登入</strong>，请选择上方<strong>云端机构版 <b>YJ</b> 桌面版</strong>。
+                            <strong>如需多设备登入</strong>，请选择上方<strong>云端桌面版</strong>。
                         </div>
                     </div>
                     <div class="hash-box">
                         <div class="hash-label">
                             🔒 SHA-256 校验值（安装版）
-                            <button class="hash-copy" onclick="copyHash('hash-LJ-app-desktop')">复制</button>
+                            <button class="hash-copy" onclick="copyHash('hash-dingzhi-desktop')">复制</button>
                         </div>
-                        <div class="hash-value pending" id="hash-LJ-app-desktop">（打包后自动更新）</div>
+                        <div class="hash-value pending" id="hash-dingzhi-desktop">（打包后自动更新）</div>
                     </div>
                 </div>
                 <div class="btn-group">
-                    <a href="#" class="download-btn" id="dl-LJ-app-desktop">
+                    <a href="#" class="download-btn" id="dl-dingzhi-desktop">
                         <span class="icon">⬇️</span>下载安装版（推荐）
                     </a>
-                    <a href="#" class="download-btn secondary" id="dl-LJ-app-desktop-portable">
+                    <a href="#" class="download-btn secondary" id="dl-dingzhi-desktop-portable">
                         <span class="icon">📦</span>便携版
                     </a>
                 </div>
             </div>
 
-            <div class="card" id="card-LB-app-desktop">
-                <div class="card-title">
-                    <span class="icon">👤</span>
-                    惠康中医 · 个人桌面版
-                    <span class="badge desktop">桌面</span>
-                    <span class="badge offline">离线</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">版本</span>
-                    <span class="info-value version" id="ver-LB-app-desktop">加载中...</span>
-                </div>
-                <div class="info-row">
-                    <span class="info-label">发布日期</span>
-                    <span class="info-value date" id="date-LB-app-desktop">-</span>
-                </div>
-                <button class="details-toggle" onclick="toggleCardDetails(this)">查看详情</button>
-                <div class="card-details">
-                    <div class="info-row">
-                        <span class="info-label">更新时间</span>
-                        <span class="info-value date" id="mtime-LB-app-desktop">-</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">更新说明</span>
-                        <span class="info-value" id="notes-LB-app-desktop">-</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">适用场景</span>
-                        <span class="info-value">个人医生使用，数据完全离线，轻量简洁</span>
-                    </div>
-                    <div class="info-row">
-                        <span class="info-label">多设备登入</span>
-                        <span class="info-value danger">❌ 不支持（仅单机使用）</span>
-                    </div>
-                    <div class="credential-box">
-                        <strong>📝 注册说明：</strong><br>
-                        诊所名称：<span class="cred-pair" onclick="copyText(this)">本能堂中医诊所</span>（基础设置中可修改）<br>
-                        管理员用户名：<span class="cred-pair" onclick="copyText(this)">本能堂</span><br>
-                        默认密码：<span class="cred-pair" onclick="copyText(this)">admin</span><br>
-                        <strong>⚠️ 离线标准版仅一个管理员账号，首次登录后请在基础设置中修改诊所名称和医师姓名！</strong>
-                    </div>
-                    <div class="notice notice-single">
-                        <span class="icon">⚠️</span>
-                        <div>
-                            <strong>仅支持单机使用：</strong>不支持多设备同时登入同一数据源。<br>
-                            <strong>如需多设备登入</strong>，请选择上方<strong>云端机构版 <b>YJ</b> 桌面版</strong>。
-                        </div>
-                    </div>
-                    <div class="hash-box">
-                        <div class="hash-label">
-                            🔒 SHA-256 校验值（安装版）
-                            <button class="hash-copy" onclick="copyHash('hash-LB-app-desktop')">复制</button>
-                        </div>
-                        <div class="hash-value pending" id="hash-LB-app-desktop">（打包后自动更新）</div>
-                    </div>
-                </div>
-                <div class="btn-group">
-                    <a href="#" class="download-btn" id="dl-LB-app-desktop">
-                        <span class="icon">⬇️</span>下载安装版（推荐）
-                    </a>
-                    <a href="#" class="download-btn secondary" id="dl-LB-app-desktop-portable">
-                        <span class="icon">📦</span>便携版
-                    </a>
-                </div>
-            </div>
             </div>
         </div>
 
@@ -1623,9 +1447,168 @@
                     </div>
                 </div>
                 <div class="btn-group">
-                    <a href="https://admin.huikangzy.com/" target="_blank" rel="noopener noreferrer" class="download-btn success">
+                    <a href="https://tcm-prescription-system.pages.dev/" class="download-btn success">
                         <span class="icon">🚀</span>立即访问
                     </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ Tab: 注册开通 ============ -->
+        <div class="tab-content" id="tab-register">
+            <div class="section-title">
+                <span>📝 云端版注册开通</span>
+                <span class="sub">自助注册 · 即时开通 · 一键管理</span>
+            </div>
+
+            <!-- 🆕 一键激活流程指引 -->
+            <div class="card featured" style="margin-bottom:16px;border:2px solid #10b981;">
+                <div class="card-title">
+                    <span class="icon">🚀</span>
+                    推荐流程：客户端一键激活（最新！）
+                    <span class="badge hot">新</span>
+                </div>
+                <div style="background:#ecfdf5;border-radius:8px;padding:12px;margin-top:10px;">
+                    <div style="font-size:13px;color:#065f46;margin-bottom:10px;line-height:1.6;">
+                        <strong>适用场景：</strong>客户下载APP/桌面端后，在激活窗口选择「管理员激活」模式，填写信息后提交，管理员在后台一键审核通过，客户端自动激活。
+                    </div>
+                    <div style="counter-reset:flow;display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;margin-top:10px;">
+                        <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #10b981;position:relative;">
+                            <div style="position:absolute;top:-8px;left:8px;background:#10b981;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">1</div>
+                            <div style="font-weight:600;color:#065f46;margin-bottom:4px;margin-top:8px;">📥 下载安装</div>
+                            <div style="font-size:12px;color:#64748b;line-height:1.5;">从本页面下载APP/桌面端并安装</div>
+                        </div>
+                        <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #3b82f6;position:relative;">
+                            <div style="position:absolute;top:-8px;left:8px;background:#3b82f6;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">2</div>
+                            <div style="font-weight:600;color:#1e40af;margin-bottom:4px;margin-top:8px;">🔑 选择激活方式</div>
+                            <div style="font-size:12px;color:#64748b;line-height:1.5;">打开软件 → 点击「管理员激活」Tab</div>
+                        </div>
+                        <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #8b5cf6;position:relative;">
+                            <div style="position:absolute;top:-8px;left:8px;background:#8b5cf6;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">3</div>
+                            <div style="font-weight:600;color:#5b21b6;margin-bottom:4px;margin-top:8px;">📝 填写信息提交</div>
+                            <div style="font-size:12px;color:#64748b;line-height:1.5;">诊所名、姓名、手机号+设置密码 → 提交</div>
+                        </div>
+                        <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #f59e0b;position:relative;">
+                            <div style="position:absolute;top:-8px;left:8px;background:#f59e0b;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">4</div>
+                            <div style="font-weight:600;color:#92400e;margin-bottom:4px;margin-top:8px;">⏳ 等待审核</div>
+                            <div style="font-size:12px;color:#64748b;line-height:1.5;">显示「等待管理员激活」界面，每5秒轮询一次</div>
+                        </div>
+                        <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #ef4444;position:relative;">
+                            <div style="position:absolute;top:-8px;left:8px;background:#ef4444;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">5</div>
+                            <div style="font-weight:600;color:#991b1b;margin-bottom:4px;margin-top:8px;">✅ 管理员审核</div>
+                            <div style="font-size:12px;color:#64748b;line-height:1.5;">管理员在后台点击「一键通过」→ 生成激活码</div>
+                        </div>
+                        <div style="background:white;border-radius:8px;padding:10px;border-left:4px solid #10b981;position:relative;">
+                            <div style="position:absolute;top:-8px;left:8px;background:#10b981;color:white;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:bold;">6</div>
+                            <div style="font-weight:600;color:#065f46;margin-bottom:4px;margin-top:8px;">🎉 自动激活完成</div>
+                            <div style="font-size:12px;color:#64748b;line-height:1.5;">客户端5秒内获取license → 自动重启 → 登录使用</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px;padding:8px 12px;background:#fef3c7;border-radius:6px;border:1px solid #fbbf24;font-size:12px;color:#78350f;">
+                        <strong>💡 提示：</strong>管理员激活模式下，<strong>手机号就是登录账号</strong>，密码是您在激活时设置的密码。请妥善保管！
+                    </div>
+                </div>
+                <div class="btn-group" style="margin-top:12px;">
+                    <a href="#" class="download-btn" onclick="switchTab('mobile'); return false;">📱 前往下载APP</a>
+                    <a href="https://tcm-prescription-system.pages.dev/admin/" target="_blank" class="download-btn secondary">⚡ 管理员后台</a>
+                </div>
+            </div>
+
+            <div class="card trial-card" style="margin-bottom:16px;">
+                <div class="card-title">
+                    <span class="icon">🎯</span>
+                    两种注册方式
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+                    <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px;">
+                        <div style="font-weight:bold;color:#03699f;margin-bottom:6px;">🔵 方式一：自助注册（推荐）</div>
+                        <div style="font-size:13px;color:#64748b;line-height:1.6;">
+                            客户自行在云端网页端填写信息，即时获得管理员账号，无需等待。<br>
+                            <a href="https://tcm-prescription-system.pages.dev/" target="_blank" style="color:#2563eb;font-weight:bold;">👉 前往云端网页端注册</a>
+                        </div>
+                    </div>
+                    <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:12px;">
+                        <div style="font-weight:bold;color:#15803d;margin-bottom:6px;">🟢 方式二：后台创建（管理员）</div>
+                        <div style="font-size:13px;color:#64748b;line-height:1.6;">
+                            平台管理员在后台管理页面一键创建诊所和管理员账号，适合批量开通或特殊需求客户。<br>
+                            <a href="https://tcm-prescription-system.pages.dev/admin/" target="_blank" style="color:#16a34a;font-weight:bold;">👉 前往后台管理</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 方式一：自助注册流程 -->
+            <div class="card" style="margin-bottom:16px;">
+                <div class="card-title">
+                    <span class="icon">📝</span>
+                    自助注册流程（客户操作）
+                </div>
+                <div style="padding:14px;line-height:1.8;">
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">1</div>
+                        <div><strong>打开云端网页端</strong>：访问 <code>https://tcm-prescription-system.pages.dev/</code></div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">2</div>
+                        <div><strong>点击「新诊所注册」</strong>：登录页底部的注册链接</div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">3</div>
+                        <div><strong>填写注册信息</strong>：诊所名称、管理员账号（admin_简码）、密码等</div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">4</div>
+                        <div><strong>即时获得账号</strong>：注册成功后自动跳转到登录页，使用管理员账号登录</div>
+                    </div>
+                    <div style="display:flex;align-items:flex-start;gap:10px;">
+                        <div style="background:#2563eb;color:white;border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;font-size:12px;flex-shrink:0;">5</div>
+                        <div><strong>登录并使用</strong>：登录后可创建子账号、管理处方、查看云端数据</div>
+                    </div>
+                </div>
+                <div class="notice notice-cloud" style="margin:0 14px 14px;">
+                    <span class="icon">💡</span>
+                    <div>
+                        <strong>注册规范：</strong><br>
+                        • 管理员账号格式：<code>admin_</code> + 2-12位小写字母/数字（如 <code>admin_hkt</code>）<br>
+                        • 密码要求：至少8位，必须同时包含字母和数字<br>
+                        • 安全限制：每IP每小时限3次注册请求
+                    </div>
+                </div>
+            </div>
+
+            <!-- 方式二：后台一键创建 -->
+            <div class="card">
+                <div class="card-title">
+                    <span class="icon">⚡</span>
+                    后台一键创建（管理员操作）
+                </div>
+                <div style="padding:14px;line-height:1.8;">
+                    <div style="color:#78350f;font-size:13px;margin-bottom:10px;">
+                        平台总管理员登录后台后，可一键为客户创建诊所和管理员账号，适用于以下场景：
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">
+                        <div>✅ 客户不熟悉线上操作</div>
+                        <div>✅ 批量开通多个诊所</div>
+                        <div>✅ 特殊命名需求</div>
+                        <div>✅ 企业定制客户</div>
+                    </div>
+                    <div style="margin-top:14px;padding:12px;background:#f8fafc;border-radius:6px;border:1px solid #e2e8f0;">
+                        <div style="font-weight:bold;margin-bottom:6px;">📋 操作步骤：</div>
+                        <div style="font-size:13px;line-height:1.8;">
+                            1. 登录 <code>/admin/</code> 后台<br>
+                            2. 进入「🏥 诊所管理」Tab<br>
+                            3. 填写诊所名称、管理员账号、密码<br>
+                            4. 点击「创建诊所」→ 一键完成<br>
+                            5. 将账号信息交付客户
+                        </div>
+                    </div>
+                </div>
+                <div class="notice notice-success" style="margin:0 14px 14px;">
+                    <span class="icon">✅</span>
+                    <div>
+                        <strong>一键完成：</strong>创建后自动生成诊所ID、管理员账号、初始密码，客户可立即登录使用。<br>
+                        <strong>安全保障：</strong>所有操作记录审计日志，密码强度自动校验，用户名全局唯一。
+                    </div>
                 </div>
             </div>
         </div>
@@ -1715,7 +1698,8 @@
                         </div>
                         <div class="form-item">
                             <label>联系电话 <span class="req">*</span></label>
-                            <input type="tel" id="custPhone" placeholder="如：13800138000" oninput="updateOrderSummary()">
+                            <input type="tel" id="custPhone" placeholder="11位手机号" oninput="sanitizePhoneInput(this);updateOrderSummary()" maxlength="11" inputmode="numeric">
+                            <div id="custPhoneHint" style="font-size:11px;color:#9ca3af;margin-top:3px;">💡 手机号将用于售后联系和激活凭证</div>
                         </div>
                         <div class="form-item">
                             <label>微信号（选填）</label>
@@ -1827,8 +1811,8 @@
                 <div class="info-row">
                     <span class="info-label">下载入口</span>
                     <span class="info-value">
-                        📱 <a href="#card-YJ-app" onclick="switchTab('mobile','card-YJ-app')">云端机构版 <b>YJ</b> APK</a> ·
-                        💻 <a href="#card-YJ-desktop" onclick="switchTab('desktop','card-YJ-desktop')">云端机构版 <b>YJ</b> 桌面版</a> ·
+                        📱 <a href="#card-cloud-app" onclick="switchTab('mobile','card-cloud-app')">云端机构版 APK</a> ·
+                        💻 <a href="#card-cloud-desktop" onclick="switchTab('desktop','card-cloud-desktop')">云端桌面版</a> ·
                         🌐 <a href="#card-cloud-web" onclick="switchTab('web','card-cloud-web')">云端网页版</a>
                     </span>
                 </div>
@@ -1839,8 +1823,8 @@
                 <div class="info-row">
                     <span class="info-label">下载入口</span>
                     <span class="info-value">
-                        📱 <a href="#card-LJ-app" onclick="switchTab('mobile','card-LJ-app')">离线机构版 <b>LJ</b> APK</a> ·
-                        💻 <a href="#card-LJ-app-desktop" onclick="switchTab('desktop','card-LJ-app-desktop')">离线机构版 <b>LJ</b> 桌面版</a>
+                        📱 <a href="#card-dingzhi" onclick="switchTab('mobile','card-dingzhi')">离线机构版 APK</a> ·
+                        💻 <a href="#card-dingzhi-desktop" onclick="switchTab('desktop','card-dingzhi-desktop')">离线机构版桌面版</a>
                     </span>
                 </div>
                 <div class="info-row">
@@ -1850,8 +1834,8 @@
                 <div class="info-row">
                     <span class="info-label">下载入口</span>
                     <span class="info-value">
-                        📱 <a href="#card-LB-app" onclick="switchTab('mobile','card-LB-app')">离线标准版 <b>LB</b> APK</a> ·
-                        💻 <a href="#card-LB-app-desktop" onclick="switchTab('desktop','card-LB-app-desktop')">离线标准版 <b>LB</b> 桌面版</a>
+                        📱 <a href="#card-dingzhi" onclick="switchTab('mobile','card-dingzhi')">本地统一包 APK</a> ·
+                        💻 <a href="#card-dingzhi-desktop" onclick="switchTab('desktop','card-dingzhi-desktop')">本地统一包桌面版</a>
                     </span>
                 </div>
                 <p style="font-size:12px;color:var(--text-secondary);margin-top:10px;line-height:1.6;">
@@ -1909,7 +1893,7 @@
                         <li>双击 exe 直接运行，无需安装</li>
                         <li>建议右键"发送到 → 桌面快捷方式"方便日常启动</li>
                     </ol>
-                    <div class="step-title" style="margin-top:10px;">☁️ 云端机构版 <b>YJ</b> 桌面版登录</div>
+                    <div class="step-title" style="margin-top:10px;">☁️ 云端桌面版登录</div>
                     <ol class="install-steps">
                         <li>需先联系开发者开通云端账户</li>
                         <li>使用收到的账户信息登录，数据云端同步</li>
@@ -2080,7 +2064,7 @@
                                 <th>离线机构版</th>
                                 <th>离线标准版</th>
                                 <th>云端标准版</th>
-<th>云端机构版</th>
+                                <th>云端机构版</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -2124,8 +2108,23 @@
                 </div>
                 <div class="faq-answer">
                     <div class="faq-answer-inner">
-                        <strong>离线标准版 <b>LB</b> / 离线机构版 <b>LJ</b></strong>：提供 7 天免费试用（处方 30 张上限），到期后自动切换为「只读模式」（已开处方不删除，可随时查看/导出/打印，规则1硬性保障）。<br>
-                        <strong>云端标准版 <b>YB</b> / 云端机构版 <b>YJ</b></strong> 均不提供公开试用。规则1：云端全程无 7 天试用，仅离线版（<b>LB</b> 标准版 / <b>LJ</b> 机构版）有 7 天试用，到期后只读不删数据。
+                        <strong>离线版（离线机构版/离线标准版）</strong>提供 7 天免费试用（限 30 张处方），下载安装后即可使用，无需任何账户注册。<br>
+                        <strong>云端机构版</strong>不提供公开试用。如需体验云端功能，请先下载离线版试用，满意后通过自助注册开通云端账户。
+                    </div>
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-question" onclick="toggleFaq(this)">
+                    <span>📝 云端机构版如何注册开通？</span>
+                    <span class="arrow">▼</span>
+                </div>
+                <div class="faq-answer">
+                    <div class="faq-answer-inner">
+                        <strong>方式一（推荐）：自助注册</strong><br>
+                        访问 <a href="https://tcm-prescription-system.pages.dev/" target="_blank" style="color:#2563eb;">云端网页端</a>，点击登录页底部「新诊所注册」链接，填写诊所名称和管理员信息后即时获得账号。<br><br>
+                        <strong>方式二：后台创建</strong><br>
+                        联系平台管理员在后台管理页面（/admin/）一键创建诊所和管理员账号。<br><br>
+                        <strong>详细流程</strong>请查看本页面「<a href="#" onclick="switchTab('register'); return false;" style="color:#2563eb;">📝 注册开通</a>」Tab。
                     </div>
                 </div>
             </div>
@@ -2239,8 +2238,9 @@
                         <strong>离线标准版 ￥99（买断）</strong>：一次付费永久使用，适合个人医生<br>
                         <strong>离线机构版 ￥399（买断）</strong>：一次付费永久使用，适合固定诊所多医师<br>
                         <strong>云端标准版 ￥299/年</strong>：按年付费，适合个人医师云端同步使用<br>
-                        <strong>云端机构版 ￥499/年</strong>：按年付费，适合需要多设备协作的诊所<br>
+                        <strong>云端机构版 ￥499/年</strong>：按年付费，适合需要多设备协作与用户管理的诊所<br>
                         <br>
+                        <strong>云端标准版/云端机构版</strong>为年费订阅，费用含更新维护。<br>
                         <strong>买断版（离线标准版/离线机构版）</strong>包含 <strong>1年免费更新维护</strong>，到期后可选择购买延保服务（离线标准版￥19/年，离线机构版￥59/年）继续获取新版本更新。不购买延保<strong>不影响当前版本使用</strong>，软件可永久运行。<br>
                         <br>
                         <strong>⚠️ 试用满意后再购买：</strong>所有离线版均提供 7 天免费试用（限 30 张处方），请充分测试后再决定购买。
@@ -2527,11 +2527,7 @@
                        String(now.getHours()).padStart(2, '0') +
                        String(now.getMinutes()).padStart(2, '0');
             const rand = Math.random().toString(36).substring(2, 8).toUpperCase();
-            const versionMap = {
-  'LB-app': 'LB', 'LJ-app': 'LJ', 'YB-app': 'YB', 'YJ-app': 'YJ',
-  'LB-desktop': 'LB', 'LJ-desktop': 'LJ', 'YJ-desktop': 'YJ',
-  geren: 'LB', dingzhi: 'LJ', cloud: 'YJ'
-};
+            const versionMap = { geren: 'GR', dingzhi: 'DZ', cloud: 'CL' };
             const prefix = versionMap[selectedVersion.key] || 'XX';
             orderInfo.number = 'BNZC-' + prefix + '-' + ts + '-' + rand;
             orderInfo.version = selectedVersion.name;
@@ -2544,6 +2540,24 @@
             document.getElementById('orderTime').textContent = orderInfo.time;
             document.getElementById('orderNumberRepeat').textContent = orderInfo.number;
             updateOrderSummary();  // 生成订单后立即更新汇总文本
+        }
+
+        // ★ 手机号输入格式化（仅允许数字，最多11位，实时校验）
+        function sanitizePhoneInput(input) {
+            input.value = (input.value || '').replace(/[^\d]/g, '').slice(0, 11);
+            const hint = document.getElementById('custPhoneHint');
+            if (!hint) return;
+            const phone = input.value;
+            if (!phone) {
+                hint.textContent = '💡 手机号将用于售后联系和激活凭证';
+                hint.style.color = '#9ca3af';
+            } else if (!/^1[3-9]\d{9}$/.test(phone)) {
+                hint.textContent = '⚠ 请输入正确的11位手机号';
+                hint.style.color = '#ef4444';
+            } else {
+                hint.textContent = '✓ 手机号格式正确';
+                hint.style.color = '#10b981';
+            }
         }
 
         // ★ 实时更新结构化订单汇总文本
@@ -2705,17 +2719,8 @@
         const versions = {
             'cloud': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'desktop' },
             'cloud-app': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'app' },
-            'LJ-desktop': { jsonUrl: BASE + '/updates/clinic/latest.json', type: 'desktop' },
-  'LB-desktop': { jsonUrl: BASE + '/updates/personal/latest.json', type: 'desktop' },
-  'YJ-desktop': { jsonUrl: BASE + '/updates/cloud_clinic/latest.json', type: 'desktop' },
-  'dingzhi-desktop': { jsonUrl: BASE + '/updates/clinic/latest.json', type: 'desktop' },
-  'LJ-app': { jsonUrl: BASE + '/updates/clinic/latest.json', type: 'app' },
-  'LB-app': { jsonUrl: BASE + '/updates/personal/latest.json', type: 'app' },
-  'YJ-app': { jsonUrl: BASE + '/updates/cloud_clinic/latest.json', type: 'app' },
-  'YB-app': { jsonUrl: BASE + '/updates/cloud_personal/latest.json', type: 'app' },
-  'dingzhi': { jsonUrl: BASE + '/updates/clinic/latest.json', type: 'app' },
-            'geren-desktop': { jsonUrl: BASE + '/updates/geren/latest.json', type: 'desktop' },
-            'geren': { jsonUrl: BASE + '/updates/geren/latest.json', type: 'app' }
+            'dingzhi-desktop': { jsonUrl: BASE + '/updates/dingzhi/latest.json', type: 'desktop' },
+            'dingzhi': { jsonUrl: BASE + '/updates/dingzhi/latest.json', type: 'app' },
         };
 
         // 安全下载：先验证文件存在再跳转
@@ -2836,7 +2841,7 @@
                     } catch(e) { return '-'; }
                 }
 
-                ['YJ-app', 'YB-app', 'LJ-app', 'LB-app'].forEach(key => {
+                ['cloud-app', 'dingzhi'].forEach(key => {
                     const manifestKey = key === 'cloud-app' ? 'cloud' : key;
                     const hashEl = document.getElementById('hash-' + key);
                     const data = manifest[manifestKey] && manifest[manifestKey].apk;
@@ -2854,20 +2859,9 @@
                     if (mtimeEl && data && data.updateTime) {
                         mtimeEl.textContent = fmtUpdateTime(data.updateTime);
                     }
-                    // 云端标准版无 latest.json，从 manifest 显示版本
-                    if (key === 'geren-cloud') {
-                        const verEl = document.getElementById('ver-' + key);
-                        if (verEl && data && data.version) {
-                            verEl.textContent = 'v' + data.version;
-                        } else if (verEl) {
-                            verEl.textContent = 'v1.0';
-                        }
-                    }
                 });
-                ['YJ-desktop', 'LJ-desktop', 'LB-desktop'].forEach(key => {
-                    const manifestKey = ({'LJ-desktop':'clinic','LB-desktop':'personal','YJ-desktop':'cloud_clinic','dingzhi-desktop':'clinic'}[key]) || key === 'dingzhi' ? 'clinic' : key
-                                      : key === 'geren-desktop' ? 'geren'
-                                      : key;
+                ['cloud', 'dingzhi-desktop'].forEach(key => {
+                    const manifestKey = key === 'dingzhi-desktop' ? 'dingzhi' : key;
                     const hashEl = document.getElementById('hash-' + key);
                     const data = manifest[manifestKey] && manifest[manifestKey].exe;
                     if (hashEl && data && data.sha256) {

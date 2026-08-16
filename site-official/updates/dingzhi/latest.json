@@ -1,9 +1,9 @@
 {
-    "version": "1.0.0",
-    "releaseDate": "2026-07-26",
-    "releaseNotes": "初始版本",
-    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.07.26-2313/huikang-dingzhi-setup-1.0.0.exe",
-    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.07.26-2313/huikang-dingzhi-1.0.0.exe",
+    "version": "1.0.18",
+    "releaseDate": "2026-08-16",
+    "releaseNotes": "版本标签按edition动态显示（标准版/机构版），统一安装包版本选择优化，打包命名规范化",
+    "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v1.0.18/huikang-offline-setup-1.0.18.exe",
+    "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v1.0.18/huikang-offline-1.0.18.exe",
     "forceUpdate": false,
     "minVersion": "1.0.0",
     "rolloutPercentage": 100

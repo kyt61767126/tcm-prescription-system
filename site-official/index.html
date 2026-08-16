@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>惠康中医诊所管理系统 — 官方网站</title>
-<meta name="description" content="惠康中医诊所管理系统：舌脉照相、智能开方、离线可用、云端同步、4 版本专业分发（YB 云端标准版 / YJ 云端机构版 / LB 离线标准版 / LJ 离线机构版）。">
+<meta name="description" content="惠康中医诊所管理系统：舌脉照相、智能开方、离线可用、云端同步、统一安装包（本地统一包 / 云端统一包，标准版/机构版由激活码决定）。">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;color:#2c3e50;background:#f7fafc;line-height:1.7}
@@ -44,11 +44,11 @@ a{color:inherit;text-decoration:none}
 <section class="hero">
   <h1>惠康中医 · 诊所管理系统</h1>
   <p>舌脉照相留档 · 智能开方 · 处方打印导出<br>
-     本地隐私优先（舌脉照绝不入云）· 云端处方同步 · 4 版本专业分发</p>
+     本地隐私优先（舌脉照绝不入云）· 云端处方同步 · 本地/云端统一包</p>
   <div class="cta">
     <a class="btn btn-primary" href="download.html">📦 立即下载</a>
     <a class="btn btn-secondary" href="https://tcm-prescription-system.pages.dev/" target="_blank">🌐 云端版登录/注册</a>
-    <a class="btn btn-secondary" href="#editions">查看 4 版本对比</a>
+    <a class="btn btn-secondary" href="#editions">查看 2 统一包对比</a>
   </div>
 </section>
 
@@ -69,52 +69,30 @@ a{color:inherit;text-decoration:none}
     <div class="f-card"><div class="icon">☁️</div><h3>云端同步</h3><p>云端版本跨设备查看处方；离线版本单机完全可用，断网不影响。</p></div>
   </div>
 
-  <h2 class="section-title" id="editions">4 版本选择（规则1 精简版）</h2>
-  <p class="section-sub">云端无 7 天试用；离线版提供 7 天免费试用，到期后<u>只读不删</u>数据</p>
+  <h2 class="section-title" id="editions">2 统一包（规则1 精简版）</h2>
+  <p class="section-sub">安装包合并为「本地」与「云端」2 个统一包，标准版/机构版由激活码在运行时决定。云端无 7 天试用；离线版提供 7 天免费试用，到期后<u>只读不删</u>数据</p>
   <div class="editions">
-    <div class="ed ed-yb">
-      <span class="badge badge-yb">YB 云端标准版</span>
-      <h3>单人医师 / 小型诊所</h3>
-      <p class="tagline">云端处方同步，只有管理员账户，不建子账号。</p>
-      <ul>
-        <li>云同步文字处方（多端查看）</li>
-        <li>单管理员（规则4，无子账号）</li>
-        <li>舌脉照只存本地设备</li>
-      </ul>
-      <p class="trial">规则1：<b>云端 YB 无 7 天试用</b>。开通账户请联系开发者。</p>
-    </div>
-    <div class="ed ed-yj">
-      <span class="badge badge-yj">YJ 云端机构版</span>
-      <h3>连锁 / 多医师机构</h3>
-      <p class="tagline">管理员增删子账号，子账号仅能开方。支持自助注册开通。</p>
-      <ul>
-        <li>子账号管理 + 权限分配</li>
-        <li>全部处方集中管理审计</li>
-        <li>自助注册 → 即时开通管理员账号</li>
-      </ul>
-      <p class="trial">规则1：<b>云端 YJ 无 7 天试用</b>。可在云端登录页点击「新诊所注册」自助开通。</p>
-    </div>
     <div class="ed ed-lb">
-      <span class="badge badge-lb">LB 离线标准版</span>
-      <h3>独立医师单机版</h3>
-      <p class="tagline">完全离线、单账号、本地 100% 数据主权。</p>
+      <span class="badge badge-lb">本地统一包（离线）</span>
+      <h3>完全离线 · 单机数据主权</h3>
+      <p class="tagline">数据 100% 保存在本地，断网完全可用。激活码决定标准版/机构版。</p>
       <ul>
-        <li>单账号（规则4）</li>
-        <li>舌脉照/处方全部本地保存</li>
+        <li>标准版：单账号，舌脉照/处方全部本地保存</li>
+        <li>机构版：本地多用户账户管理，子账号仅能开方</li>
         <li>支持 .dat 离线激活文件</li>
       </ul>
       <p class="trial">规则1：7 天免费试用（处方 30 张）→ 到期 <b>只读不删</b>。</p>
     </div>
-    <div class="ed ed-lj">
-      <span class="badge badge-lj">LJ 离线机构版</span>
-      <h3>诊所多用户局域网</h3>
-      <p class="tagline">本地多用户账户管理，完全断网可用。</p>
+    <div class="ed ed-yj">
+      <span class="badge badge-yj">云端统一包（云端）</span>
+      <h3>云端同步 · 多设备协作</h3>
+      <p class="tagline">跨设备查看处方，满足联网诊所需求。激活码决定标准版/机构版。</p>
       <ul>
-        <li>本地管理员 + 子账号</li>
-        <li>权限：子账号仅开方</li>
-        <li>本地 SQLite 数据库，不联网</li>
+        <li>标准版：单人医师，云端处方同步，无子账号</li>
+        <li>机构版：子账号管理 + 权限分配，自助注册开通</li>
+        <li>舌脉照只存本地设备，不上传云端</li>
       </ul>
-      <p class="trial">规则1：7 天免费试用（处方 30 张）→ 到期 <b>只读不删</b>。</p>
+      <p class="trial">规则1：<b>云端无 7 天试用</b>。可在云端登录页点击「新诊所注册」开通。</p>
     </div>
   </div>
 </div>
