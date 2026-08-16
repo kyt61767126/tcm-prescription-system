@@ -74,7 +74,9 @@ echo [OK] Leftover processes cleaned
 echo.
 
 echo [4/9] Configure clinic info...
-if /i "%1"=="--skip-config" (
+if defined SKIP_CONFIG (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] SKIP_CONFIG env detected, skipping config'"
+) else if /i "%1"=="--skip-config" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] --skip-config flag detected, skipping config'"
 ) else (
     powershell -ExecutionPolicy Bypass -File "..\edit-config.ps1" -DesktopDir desktop -AppDir app

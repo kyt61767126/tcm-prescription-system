@@ -109,26 +109,28 @@ function Build-Offline {
 
     $verDir = "$script:RootDir\app_project\db-offline"
 
-    # Step 1: Edit config (for all / app modes)
+    # 离线版直接使用 config.json 默认值（XXX中医诊所/XXX医生），不弹配置编辑窗口
+    # 设置 SKIP_CONFIG=1，使桌面 build.bat 与 APP build-app.bat 整轮跳过后台配置编辑
+    $env:SKIP_CONFIG = "1"
+
+    # Step 1: Edit config (for all / app modes) - 跳过后台配置编辑，仅同步 config.json 到 Capacitor
     if ($Target -eq "all" -or $Target -eq "app") {
         Write-Host ""
         if ($Target -eq "all") {
-            Write-Host "[Step 1/3] 编辑配置信息..." -ForegroundColor Yellow
+            Write-Host "[Step 1/3] 同步默认配置 (跳过编辑)..." -ForegroundColor Yellow
         } else {
-            Write-Host "[Step 1/2] 编辑配置信息..." -ForegroundColor Yellow
+            Write-Host "[Step 1/2] 同步默认配置 (跳过编辑)..." -ForegroundColor Yellow
         }
         Push-Location $verDir
         try {
-            & powershell -NoProfile -ExecutionPolicy Bypass -File "edit-config.ps1"
+            & powershell -NoProfile -ExecutionPolicy Bypass -File "edit-config.ps1" -SkipConfig
             $rc = $LASTEXITCODE
         } finally {
             Pop-Location
         }
         if ($rc -ne 0) {
             Write-Host ""
-            Write-Host "[ERROR] 配置信息编辑失败，退出码: $rc" -ForegroundColor Red
-            pause
-            return
+            Write-Host "[WARN] 配置同步出现警告(继续打包)，退出码: $rc" -ForegroundColor Yellow
         }
     }
 
@@ -266,7 +268,7 @@ while ($true) {
     Write-Host "  菜单说明:"
     Write-Host "  - 桌面程序: 各版本目录\dist\*.exe"
     Write-Host "  - APP 输出: 各版本目录\*.apk"
-    Write-Host "  - 离线版会弹出配置编辑 (诊所名/医生等)"
+    Write-Host "  - 离线版默认使用配置(XXX中医诊所/XXX)直接打包, 不弹配置编辑"
     Write-Host "  - 全部打包全自动顺序执行"
     Write-Host "  - 耗时统计会在结束时显示"
     Write-Host "--------------------------------------------"

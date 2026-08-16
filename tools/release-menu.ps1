@@ -62,19 +62,22 @@ function Invoke-SinglePack {
         return 1
     }
 
-    # 离线版需要先编辑配置
+    # 离线版使用 config.json 默认值（XXX中医诊所/XXX医生），跳过配置编辑窗口
+    # 设置 SKIP_CONFIG=1，使桌面 build.bat 与 APP build-app.bat 整轮跳过后台配置编辑
+    if ($Version -ne "cloud") { $env:SKIP_CONFIG = "1" }
+
+    # 离线版同步默认配置（跳过交互编辑）
     if ($Version -ne "cloud" -and ($Mode -eq "all" -or $Mode -eq "app")) {
         Write-Host ""
-        Write-Host "[配置] 编辑 $verLabel 版配置信息..." -ForegroundColor Yellow
+        Write-Host "[配置] 同步 $verLabel 版默认配置 (跳过编辑)..." -ForegroundColor Yellow
         Push-Location $verDir
         try {
-            & powershell -NoProfile -ExecutionPolicy Bypass -File "edit-config.ps1"
+            & powershell -NoProfile -ExecutionPolicy Bypass -File "edit-config.ps1" -SkipConfig
         } finally {
             Pop-Location
         }
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "[ERROR] 配置编辑失败" -ForegroundColor Red
-            return $LASTEXITCODE
+            Write-Host "[WARN] 配置同步出现警告(继续打包)" -ForegroundColor Yellow
         }
     }
 
