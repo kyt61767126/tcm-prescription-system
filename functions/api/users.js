@@ -52,6 +52,11 @@ function json(data, status = 200, request = null) {
 const LOGIN_MAX_FAILURES = 5;
 const LOGIN_LOCK_TTL = 15 * 60; // 15 分钟（秒）
 
+// ★ P1-6 防登录枚举：哑验证参数（格式与真实 PBKDF2 哈希一致，SHA-256 输出 64 个十六进制字符）
+//   用户不存在/数据不完整时用它执行一次等代价的 PBKDF2 验证，对齐响应时间，防时序攻击
+const DUMMY_PASSWORD_HASH = 'pbkdf2$100000$' + '0'.repeat(64);
+const DUMMY_SALT = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+
 async function recordLoginFailure(kv, username) {
     const key = 'login_fail:' + username;
     const count = parseInt(await kv.get(key) || '0', 10) + 1;
@@ -173,10 +178,8 @@ function sanitizeUser(user, clinicId, clinicName, clinicStatus) {
 // ★ 支持手机号/用户名双模式登录：username 参数可传手机号或用户名
 // 搜索策略：先匹配 username 字段，再匹配 phone 字段
 // 返回值：{ user, clinicId, clinicName, clinicStatus, error }
-//   - 成功：返回 user 信息
-//   - 失败：返回 { user: null, error: { code, message } }
-//     - USER_NOT_FOUND: 用户不存在
-//     - CLINIC_DISABLED: 诊所已被禁用
+//   - 成功：返回 user 信息（诊所被禁用时 clinicStatus='disabled'，由登录分支在密码验证后再拒绝）
+//   - 失败：返回 { user: null, error: { code: 'USER_NOT_FOUND', message } }
 async function findUserForLogin(kv, username) {
     if (!username) return { user: null, error: { code: 'USER_NOT_FOUND', message: '用户不存在' } };
     const trimmed = String(username).trim();
@@ -243,14 +246,16 @@ async function findUserForLogin(kv, username) {
     }
 
     // 用户存在但所在诊所被禁用
+    // ★ P1-6 修复：原实现返回 user:null + CLINIC_DISABLED error，登录分支在密码验证前
+    //   即返回该错误，攻击者无需密码即可探测用户名是否存在。
+    //   现返回完整用户结构（clinicStatus='disabled'），由登录分支在密码验证成功后再拒绝。
     if (foundInDisabledClinic) {
         return {
-            user: null,
-            error: {
-                code: 'CLINIC_DISABLED',
-                message: `该账户所在诊所「${foundInDisabledClinic.clinicName}」已被停用，请联系管理员`,
-                clinicName: foundInDisabledClinic.clinicName
-            }
+            user: foundInDisabledClinic.user,
+            clinicId: foundInDisabledClinic.clinicId,
+            clinicName: foundInDisabledClinic.clinicName,
+            clinicStatus: 'disabled',
+            error: null
         };
     }
 
@@ -588,71 +593,69 @@ export async function onRequest(context) {
             }
 
             const found = await findUserForLogin(kv, username);
-            
-            // 处理查找结果
-            if (!found || !found.user) {
-                const error = found?.error || { code: 'USER_NOT_FOUND', message: '用户不存在' };
-                
-                // 诊所被禁用的特殊提示
-                if (error.code === 'CLINIC_DISABLED') {
-                    console.error('[登录失败] 诊所被禁用:', username, error.message);
-                    await writeAuditLog(kv, null, username, 'unknown', 'login_failed', 'clinic_disabled', context.request, { clinicName: error.clinicName });
-                    return json({ 
-                        success: false, 
-                        error: error.message,
-                        code: 'CLINIC_DISABLED',
-                        clinicName: error.clinicName
-                    }, 403, context.request);
-                }
-                
-                // 用户不存在
-                console.error('[登录失败] 用户不存在:', username);
-                const failCount = await recordLoginFailure(kv, username);
-                await writeAuditLog(kv, null, username, 'unknown', 'login_failed', 'user_not_found', context.request, { failCount });
-                return json({ 
-                    success: false, 
-                    error: '手机号/用户名不存在，请检查账号是否正确', 
-                    code: 'USER_NOT_FOUND' 
-                }, 401, context.request);
-            }
+            const { user, clinicId, clinicName, clinicStatus } = found || {};
 
-            const { user, clinicId, clinicName, clinicStatus } = found;
+            // ★ P1-6 防登录枚举：无论用户是否存在，统一走相同的密码验证流程并返回一致响应，
+            //   防止攻击者通过错误码/错误消息/响应时间差异探测有效用户名。
+            //   - 用户不存在或数据不完整：用哑哈希执行等代价 PBKDF2 验证后返回 WRONG_PASSWORD
+            //   - CLINIC_DISABLED / INVALID_ROLE 检查后移至密码验证成功之后
+            const userFound = !!(found && found.user);
+            const hasPasswordData = !!(user && user.passwordHash && user.salt);
+            const ok = await verifyPassword(
+                password,
+                hasPasswordData ? user.passwordHash : DUMMY_PASSWORD_HASH,
+                hasPasswordData ? user.salt : DUMMY_SALT
+            );
 
-            // 检查用户角色是否有效
-            if (!user.role || !['platform_admin', 'clinic_admin', 'doctor'].includes(user.role)) {
-                console.error('[登录失败] 用户角色无效:', username, user.role);
-                return json({ 
-                    success: false, 
-                    error: '用户角色无效，请联系管理员', 
-                    code: 'INVALID_ROLE' 
-                }, 401, context.request);
-            }
-
-            if (!user.passwordHash || !user.salt) {
-                console.error('[登录失败] 用户数据不完整，缺少 passwordHash 或 salt:', username);
-                return json({ 
-                    success: false, 
-                    error: '用户尚未设置密码，请联系管理员重置密码', 
-                    code: 'NO_PASSWORD' 
-                }, 401, context.request);
-            }
-
-            const ok = await verifyPassword(password, user.passwordHash, user.salt);
             if (!ok) {
-                console.error('[登录失败] 密码验证失败:', username);
+                // 服务端日志与审计仍区分场景（便于安全追溯），但对客户端响应完全一致
+                console.error('[登录失败]', userFound ? '密码错误:' : '用户不存在或凭据无效:', username);
                 const failCount = await recordLoginFailure(kv, username);
-                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'wrong_password', context.request, { failCount });
+                await writeAuditLog(
+                    kv,
+                    clinicId || null,
+                    username,
+                    userFound ? (user.role || 'unknown') : 'unknown',
+                    'login_failed',
+                    userFound ? 'wrong_password' : 'user_not_found',
+                    context.request,
+                    { failCount }
+                );
                 const remaining = Math.max(0, LOGIN_MAX_FAILURES - failCount);
                 const errorMsg = remaining > 0
                     ? `密码错误，剩余尝试次数：${remaining} 次（${failCount}/${LOGIN_MAX_FAILURES}）`
                     : '密码错误次数过多，账户已被锁定 15 分钟，请稍后再试';
                 const status = remaining > 0 ? 401 : 423;
-                return json({ 
-                    success: false, 
-                    error: errorMsg, 
+                return json({
+                    success: false,
+                    error: errorMsg,
                     code: remaining > 0 ? 'WRONG_PASSWORD' : 'ACCOUNT_LOCKED',
                     remainingAttempts: remaining
                 }, status, context.request);
+            }
+
+            // ===== 以下检查仅在密码验证成功后执行（P1-6：防止免密码探测用户名） =====
+
+            // 诊所被禁用（原在密码验证前直接返回，构成用户名枚举向量）
+            if (clinicStatus === 'disabled') {
+                console.error('[登录失败] 诊所被禁用:', username, clinicName);
+                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_disabled', context.request, { clinicName });
+                return json({
+                    success: false,
+                    error: '诊所已被禁用，请联系平台管理员',
+                    code: 'CLINIC_DISABLED',
+                    clinicName: clinicName
+                }, 403, context.request);
+            }
+
+            // 用户角色是否有效
+            if (!user.role || !['platform_admin', 'clinic_admin', 'doctor'].includes(user.role)) {
+                console.error('[登录失败] 用户角色无效:', username, user.role);
+                return json({
+                    success: false,
+                    error: '用户角色无效，请联系管理员',
+                    code: 'INVALID_ROLE'
+                }, 401, context.request);
             }
 
             // P0-11 自动升级：检测旧 SHA-256 哈希，登录成功后自动升级为 PBKDF2

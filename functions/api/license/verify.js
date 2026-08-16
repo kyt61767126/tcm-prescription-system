@@ -30,7 +30,7 @@
 //    - ★ P0 修复：真实查询 KV 验证 license 是否存在/有效（不再假验证）
 // ============================================================================
 
-import { getLicense, getDevices } from './_lib/license-core.js';
+import { getDevices } from './_lib/license-core.js';
 
 const VERIFY_RATE_LIMIT_PER_MIN = 10;
 
@@ -62,10 +62,22 @@ function corsHeaders(request) {
 
 export async function onRequestPost({ request, env }) {
     try {
+        // ★ P1-1 修复：原代码直接使用 kv，但 wrangler.toml 只绑定 KV，
+        //   生产环境 kv 为 undefined，首次 .get() 即抛 TypeError → 全部请求 500。
+        //   现按标准链解析（与 license-core.js getKV() 一致），无任何 KV 绑定时返回 503。
+        const kv = env?.KV || env?.TCM_PRESCRIPTION_KV || env?.['tcm-prescription-kv'] || env?.['TCM-PRESCRIPTION-KV'] || env?.TCM_KV || env?.PRESCRIPTION_KV || env?.LICENSE_KV;
+        if (!kv) {
+            console.error('[verify] 无可用 KV 绑定（KV/TCM_PRESCRIPTION_KV/LICENSE_KV 均缺失）');
+            return new Response(JSON.stringify({
+                success: false,
+                error: '服务暂不可用，请稍后再试'
+            }), { status: 503, headers: corsHeaders(request) });
+        }
+
         // 速率限制
         const clientIP = request.headers.get('CF-Connecting-IP') || 'unknown';
         const rateLimitKey = `verify_rate:${clientIP}`;
-        const rateLimitCount = parseInt(await env.LICENSE_KV.get(rateLimitKey) || '0', 10);
+        const rateLimitCount = parseInt(await kv.get(rateLimitKey) || '0', 10);
         if (rateLimitCount >= VERIFY_RATE_LIMIT_PER_MIN) {
             return new Response(JSON.stringify({
                 success: false,
@@ -73,7 +85,7 @@ export async function onRequestPost({ request, env }) {
             }), { status: 429, headers: corsHeaders(request) });
         }
         // 更新速率限制计数（60秒过期）
-        await env.LICENSE_KV.put(rateLimitKey, String(rateLimitCount + 1), { expirationTtl: 60 });
+        await kv.put(rateLimitKey, String(rateLimitCount + 1), { expirationTtl: 60 });
 
         // 解析请求体
         const body = await request.json();
@@ -97,14 +109,14 @@ export async function onRequestPost({ request, env }) {
 
         // 方式1：直接用 code 查询（新客户端优先传 code）
         if (code && typeof code === 'string') {
-            licenseRecord = await env.LICENSE_KV.get(`license:${code}`, 'json');
+            licenseRecord = await kv.get(`license:${code}`, 'json');
         }
 
         // 方式2：用 codeHash 反查 code（validate.js 激活时存储映射）
         if (!licenseRecord && codeHash && codeHash.length === 64) {
-            resolvedCode = await env.LICENSE_KV.get(`codehash:${codeHash}`);
+            resolvedCode = await kv.get(`codehash:${codeHash}`);
             if (resolvedCode) {
-                licenseRecord = await env.LICENSE_KV.get(`license:${resolvedCode}`, 'json');
+                licenseRecord = await kv.get(`license:${resolvedCode}`, 'json');
             }
         }
 
@@ -123,7 +135,7 @@ export async function onRequestPost({ request, env }) {
                     timestamp: new Date(now).toISOString(),
                     warning: 'license_not_found_in_kv'  // 标记无法真实校验
                 };
-                await env.LICENSE_KV.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
+                await kv.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
             }
 
             // 向后兼容：返回 success（旧激活码无映射时不阻断）
@@ -164,7 +176,7 @@ export async function onRequestPost({ request, env }) {
                     timestamp: new Date(now).toISOString(),
                     security: 'device_mismatch'  // 标记设备不匹配（潜在盗版）
                 };
-                await env.LICENSE_KV.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
+                await kv.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
             }
             return new Response(JSON.stringify({
                 success: false,
@@ -185,7 +197,7 @@ export async function onRequestPost({ request, env }) {
                 verifiedCode: resolvedCode ? resolvedCode.substring(0, 12) + '...' : 'unknown'  // 记录已验证的激活码前缀
             };
             // 保留最近30天的验证日志
-            await env.LICENSE_KV.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
+            await kv.put(logKey, JSON.stringify(logData), { expirationTtl: 30 * 24 * 60 * 60 });
         }
 
         // 返回验证成功（已通过真实校验）
@@ -196,9 +208,11 @@ export async function onRequestPost({ request, env }) {
         }), { status: 200, headers: corsHeaders(request) });
 
     } catch (e) {
+        // P2 修复：错误详情仅记服务端日志，不向客户端泄露内部实现
+        console.error('[verify] 服务器错误:', e && e.message, e);
         return new Response(JSON.stringify({
             success: false,
-            error: '服务器错误: ' + (e.message || String(e))
+            error: '服务器内部错误，请稍后再试'
         }), { status: 500, headers: corsHeaders(request) });
     }
 }
