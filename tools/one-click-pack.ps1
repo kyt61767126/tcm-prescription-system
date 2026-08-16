@@ -208,7 +208,7 @@ function Show-PickVersionMenu {
         Write-Host "  请选择版本 - 打$modeLabel" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host "  [1] 云端版"
-        Write-Host "  [2] 离线定制版"
+        Write-Host "  [2] 本地版"
         Write-Host "  [0] 返回主菜单"
         $choice = Read-Host "请选择"
         switch ($choice) {
@@ -231,7 +231,7 @@ function Show-StandaloneUsage {
     Write-Host "    build-app.bat          打包手机APP"
     Write-Host "    pack-app-strict.bat    严格模式APP"
     Write-Host ""
-    Write-Host "  离线定制版 (app_project/db-offline):" -ForegroundColor Yellow
+    Write-Host "  本地版 (app_project/db-offline):" -ForegroundColor Yellow
     Write-Host "    pack-desktop.bat       打包桌面版"
     Write-Host "    build-app.bat          打包手机APP"
     Write-Host "    pack-app-strict.bat    严格模式APP"
@@ -254,7 +254,7 @@ while ($true) {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
     Write-Host "  [1] 云端版 (桌面+APP)"
-    Write-Host "  [2] 离线定制版 (桌面+APP)"
+    Write-Host "  [2] 本地版 (桌面+APP)"
     Write-Host "  [3] 全部2个版本 (耗时较长)"
     Write-Host "  [0] 退出"
     Write-Host ""

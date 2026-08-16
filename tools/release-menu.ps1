@@ -1,4 +1,4 @@
-﻿# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
+# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
 # 用 PowerShell 替代 release-all.bat，避免 .bat 中文 GBK 编码问题
 # 支持选择单个版本（云端/定制/个人 × 桌面/APP/全部）进行发布
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -194,7 +194,7 @@ function Show-VersionMenu {
         Write-Host "  选择版本 - $actionLabel" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host "  [1] 云端版"
-        Write-Host "  [2] 离线定制版"
+        Write-Host "  [2] 本地版"
         Write-Host "  [3] 全部2个版本"
         Write-Host "  [0] 返回主菜单"
         Write-Host ""
