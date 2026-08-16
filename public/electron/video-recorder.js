@@ -28,6 +28,16 @@
 (function () {
     'use strict';
 
+    // ★ 原生APP环境检测（云端APP）：由 MainActivity 注入的 video-recorder-inject.js
+    // 提供增强版（分片上传/分片下载）录像拍照与 electronAPI shim。
+    // 此处必须立刻跳过且不设置 __videoRecorderInjected 标志，避免抢占该标志后
+    // 导致原生增强版脚本 return 不执行（否则大视频走简单版 saveVideoFile，
+    // base64 JSON 参数超 Android Binder 1MB 限制 → 视频文件损坏 → 播放失败）。
+    if ((typeof AndroidNative !== 'undefined') ||
+        (window.electronAPI && window.electronAPI.isAndroidAPP)) {
+        return;
+    }
+
     if (window.__videoRecorderInjected) return;
     window.__videoRecorderInjected = true;
 

@@ -674,7 +674,7 @@
 <script src="security-guard.js"></script>
 <!-- ★ 双重保障：通过 <script> 标签加载 video-recorder.js，防止 main.js injectVideoRecorder 注入失败 -->
 <!-- IIFE 有 window.__videoRecorderInjected 防重复检查，不会与 main.js 注入冲突 -->
-<script src="electron/video-recorder.js?v=20260817c"></script>
+<script src="electron/video-recorder.js?v=20260817d"></script>
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
 window.EDITION = 'clinic_custom';
