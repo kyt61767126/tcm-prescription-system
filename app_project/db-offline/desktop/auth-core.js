@@ -1376,6 +1376,56 @@
         }
     }
 
+    // ★ 试用期强制标准版（2026-08-16）：APP/桌面端离线试用统一为标准版（单用户·改密）
+    // 依据：离线版本默认试用标准版，试用期内 config.edition 强制为 personal，隐藏用户管理
+    // 与桌面版 main.js ensureTrialStandardEdition() 行为一致；正式激活后由激活重启重新加载真实 edition
+    async function enforceTrialPersonalEdition() {
+        try {
+            if (!global.electronAPI || !global.electronAPI.license ||
+                typeof global.electronAPI.license.getStatus !== 'function') {
+                return false;
+            }
+            const status = await global.electronAPI.license.getStatus();
+            const licenseType = (status && (status.licenseType || status.type)) || '';
+            if (licenseType !== 'trial') return false;
+            // 试用：强制 CONFIG.edition = personal（标准版）
+            if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition !== 'personal') {
+                CONFIG.edition = 'personal';
+                console.log('[Trial] 试用期校正 CONFIG.edition -> personal');
+            }
+            renderTrialStandardVersion();
+            return true;
+        } catch (e) {
+            console.warn('[Trial] 标准版校正异常（非致命）:', e.message);
+            return false;
+        }
+    }
+
+    // ★ 试用期强制标准版后，刷新版本标签与按钮显示
+    function renderTrialStandardVersion() {
+        try {
+            const label = '【离线标准版】 V1.0.0';
+            const tag = document.querySelector('.version-tag');
+            if (tag && tag.textContent && tag.textContent.indexOf('标准版') < 0) {
+                tag.textContent = label;
+            }
+            const hints = document.querySelectorAll('.tab-hint');
+            hints.forEach(function(h) {
+                const spans = h.querySelectorAll('span');
+                spans.forEach(function(s) {
+                    if (s.textContent && (s.textContent.indexOf('本地') >= 0 || s.textContent.indexOf('离线') >= 0)) {
+                        s.textContent = label;
+                    }
+                });
+            });
+            // 刷新用户显示与底部按钮（若已登录）
+            if (typeof global.updateUserDisplay === 'function') global.updateUserDisplay();
+            if (typeof global.updateMobileActionButtons === 'function') global.updateMobileActionButtons();
+        } catch (e) {
+            console.warn('[Trial] 标准版界面刷新失败:', e);
+        }
+    }
+
     async function checkLicenseAndShowActivate() {
         try {
             // 检查 license API 是否存在（APP 端无 window.electronAPI 时自动跳过）
@@ -1390,6 +1440,8 @@
                 // ★ 兼容逻辑：授权有效时清除失效标志
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ 试用期强制标准版（单用户·改密）
+                await enforceTrialPersonalEdition();
                 // ★ P1-7 心跳验证：异步执行，不阻断使用（24小时验证一次，7天离线锁定）
                 performHeartbeatCheck();
                 // ★ P1-1 在线验证：如果需要在线验证，自动触发（不阻断使用）
@@ -1519,6 +1571,7 @@
                 global.__licenseActivating = false;
                 if (modalResult.trial) {
                     // ★ 立即试用：进入 7 天试用（默认标准版）
+                    await enforceTrialPersonalEdition();
                     await showHtmlAlert('✅ 已进入试用模式（免费7天 · 标准版）\n\n试用期内可正常使用，到期后请在激活窗口输入激活码激活正式授权。');
                 } else {
                     console.log('[LicenseCheck] 用户取消激活');
