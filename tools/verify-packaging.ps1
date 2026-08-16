@@ -128,7 +128,7 @@ foreach ($bf in $toolsBat) {
     $rel = $bf.FullName.Substring($root.Length + 1)
     Check-Bat -Path $bf.FullName -Label $rel
 }
-# 根目录 bat（入口脚本：一键打包.bat / release-all.bat / publish.bat / check-interface.bat 等）
+# 根目录 bat（入口脚本：一键打包.bat / 一键发布.bat / check-interface.bat 等）
 $rootBat = Get-ChildItem -Path $root -Filter '*.bat' -File -ErrorAction SilentlyContinue
 foreach ($bf in $rootBat) {
     Check-Bat -Path $bf.FullName -Label $bf.Name

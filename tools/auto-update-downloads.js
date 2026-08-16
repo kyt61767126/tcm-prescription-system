@@ -162,7 +162,7 @@ function pushToGitHub() {
         console.log('[auto-update] ★ APK文件已更新到 public/downloads/，但未自动推送');
         console.log('[auto-update] 请验证APK功能后，手动执行发布:');
         console.log('  1. 测试APK安装包是否正常');
-        console.log('  2. release-all.bat （统一发布EXE+APK+manifest）');
+        console.log('  2. 一键发布.bat （统一发布EXE+APK+manifest）');
         console.log('  3. 或手动推送: git add public/downloads/ public/hash-manifest.json && git commit && git push');
         console.log('');
         return;
