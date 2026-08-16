@@ -1,4 +1,4 @@
-<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-云端标准版</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+﻿<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob: data:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><title>惠康中医-云端标准版</title><style>* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         input[type="number"]::-webkit-inner-spin-button,
         input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
         input[type="number"] { -moz-appearance: textfield; }
@@ -696,7 +696,7 @@ let currentUser = null;
         window.__APP_VERSION__ = '2026-07-29-v1';
 
         // 版本标签统一显示 V1.0.0（与软著申请版本号一致）
-        (function() {
+        function applyEditionTags() {
             var label = getEditionTag();
             var tag = document.querySelector('.version-tag');
             if (tag) tag.textContent = '【' + label + '】 V1.0.0';
@@ -704,7 +704,29 @@ let currentUser = null;
             if (et) et.textContent = '【' + label + '】';
             document.title = '惠康中医-' + label;
             console.log('%c惠康中医' + label + ' V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
+        }
+        applyEditionTags();
+
+        // ★ 异步加载 userData 中的 config.json（覆盖 asar 模板默认值，修复激活后版本标签不更新的问题）
+        (function() {
+            if (window.electronAPI && window.electronAPI.getAppConfig) {
+                window.electronAPI.getAppConfig().then(function(r) {
+                    if (r && r.success && r.config) {
+                        var cfg = r.config;
+                        if (cfg.edition && cfg.edition !== CONFIG.edition) {
+                            CONFIG.edition = cfg.edition;
+                            if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
+                            if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
+                            applyEditionTags();
+                            console.log('[CONFIG] 已从 userData 同步配置，版本:', cfg.edition);
+                        }
+                    }
+                }).catch(function(e) {
+                    console.warn('[CONFIG] 异步加载 userData 配置失败:', e.message);
+                });
+            }
         })();
+        // END 版本标签
 
         const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
 
