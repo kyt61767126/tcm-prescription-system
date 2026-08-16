@@ -1426,28 +1426,47 @@
     // ========================================================================
 // 9. 初始化（仅注入 shim，样式懒加载，按钮由 React ActionBar 渲染）
 // ========================================================================
-function init() {
-    console.log(__VR_LOG_PREFIX + ' 录像拍照脚本开始初始化');
-
-    var nativeBridge = window.AndroidNative;
-    if (!nativeBridge) {
-        console.warn(__VR_LOG_PREFIX + ' AndroidNative 桥接未找到，等待500ms重试');
-        setTimeout(init, 500);
-        return;
+// 云端APP专属：隐藏历史栏顶部拍照/录像按钮
+    // 规范21.1：APP端历史栏隐藏这两个按钮（底部快捷操作栏 mobileActionBar 已有拍照/录像入口，避免重复）
+    // 仅云端APP注入本脚本，云端网页版/云端桌面版不注入，按钮保持显示不受影响
+    // 注意：云端APP从 https://tcm-prescription-system.pages.dev/ 加载页面（public/index.html），
+    // 页面源文件同时服务网页版不能直接隐藏，只能在此注入脚本中动态隐藏
+    function hideHistoryMediaButtons() {
+        try {
+            var ids = ['photoCaptureBtn', 'videoRecBtn'];
+            for (var i = 0; i < ids.length; i++) {
+                var btn = document.getElementById(ids[i]);
+                if (btn && btn.style.display !== 'none') btn.style.display = 'none';
+            }
+        } catch (e) { /* 忽略隐藏失败，不影响主流程 */ }
     }
 
-    console.log(__VR_LOG_PREFIX + ' AndroidNative 桥接已找到，开始注入 shim');
+    function init() {
+        console.log(__VR_LOG_PREFIX + ' 录像拍照脚本开始初始化');
 
-    var shimSuccess = injectElectronAPIShim();
-    if (!shimSuccess) {
-        console.error(__VR_LOG_PREFIX + ' electronAPI shim 注入失败');
-        setTimeout(init, 1000);
-        return;
+        var nativeBridge = window.AndroidNative;
+        if (!nativeBridge) {
+            console.warn(__VR_LOG_PREFIX + ' AndroidNative 桥接未找到，等待500ms重试');
+            setTimeout(init, 500);
+            return;
+        }
+
+        console.log(__VR_LOG_PREFIX + ' AndroidNative 桥接已找到，开始注入 shim');
+
+        var shimSuccess = injectElectronAPIShim();
+        if (!shimSuccess) {
+            console.error(__VR_LOG_PREFIX + ' electronAPI shim 注入失败');
+            setTimeout(init, 1000);
+            return;
+        }
+
+        // 隐藏历史栏拍照/录像按钮（立即+多次延迟，覆盖DOM晚就绪和页面动态刷新场景）
+        hideHistoryMediaButtons();
+        [500, 1500, 3000].forEach(function (t) { setTimeout(hideHistoryMediaButtons, t); });
+
+        // 样式懒加载：移到 openRecordingOverlay / openPhotoOverlay 内首次调用时注入
+        console.log(__VR_LOG_PREFIX + ' 录像拍照脚本初始化完成（样式延迟到首次打开overlay时注入）');
     }
-
-    // 样式懒加载：移到 openRecordingOverlay / openPhotoOverlay 内首次调用时注入
-    console.log(__VR_LOG_PREFIX + ' 录像拍照脚本初始化完成（样式延迟到首次打开overlay时注入）');
-}
 
 function tryInit() {
     try {

@@ -1948,9 +1948,12 @@ public class MainActivity extends BridgeActivity {
                 String[] newPrefixes = {safeNewName + "_" + safeNewNo, safeNewNo + "_" + safeNewName};
                 JSONArray renamedFiles = new JSONArray();
                 int renamed = 0;
+                // ★ 使用 getAllMediaDirs() 遍历所有媒体目录（新旧目录+兜底目录），与 findMediaFiles 一致
+                // 否则旧目录（本能中医处方）或兜底目录中的文件无法重命名绑定患者姓名
                 for (int i = 0; i < oldPrefixes.length; i++) {
-                    renamed += renameFilesInDir(getImageDir(), oldPrefixes[i], newPrefixes[i], renamedFiles);
-                    renamed += renameFilesInDir(getVideoDir(), oldPrefixes[i], newPrefixes[i], renamedFiles);
+                    for (File dir : getAllMediaDirs()) {
+                        renamed += renameFilesInDir(dir, oldPrefixes[i], newPrefixes[i], renamedFiles);
+                    }
                 }
                 JSONObject result = new JSONObject();
                 result.put("success", true);
