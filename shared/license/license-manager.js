@@ -808,6 +808,14 @@ function readTrial() {
     }
 }
 
+// ★ P0-5 修复：原子写入（先写 .tmp 再 rename），防止断电/崩溃导致 license/trial/last-run 文件半写损坏
+//    （半写损坏会让合法用户 validateLicense 失败被拒登，需重新激活）
+function atomicWriteFileSync(filePath, content) {
+    const tmpPath = filePath + '.tmp';
+    fs.writeFileSync(tmpPath, content, 'utf8');
+    fs.renameSync(tmpPath, filePath);
+}
+
 function writeTrial(data) {
     try {
         const trialPath = getTrialPath();
@@ -817,14 +825,14 @@ function writeTrial(data) {
         if (actualMachineId) {
             const encrypted = encryptTrialContent(json, actualMachineId);
             if (encrypted) {
-                fs.writeFileSync(trialPath, encrypted, 'utf8');
+                atomicWriteFileSync(trialPath, encrypted);
                 return;
             }
         }
         // 回退到 XOR 加密（仅当 machineId 不可用时）
         console.warn('[License] machineId 不可用，trial 回退到 XOR 加密');
         const encrypted = xorEncrypt(json, TRIAL_KEY);
-        fs.writeFileSync(trialPath, encrypted, 'utf8');
+        atomicWriteFileSync(trialPath, encrypted);
     } catch (e) {
         console.error('[License] 写入 trial 文件失败:', e.message);
     }
@@ -867,14 +875,14 @@ function writeLastRun(data) {
         if (actualMachineId) {
             const encrypted = encryptLastRunContent(json, actualMachineId);
             if (encrypted) {
-                fs.writeFileSync(lastRunPath, encrypted, 'utf8');
+                atomicWriteFileSync(lastRunPath, encrypted);
                 return;
             }
         }
         // 回退到 XOR 加密（仅当 machineId 不可用时）
         console.warn('[License] machineId 不可用，last-run 回退到 XOR 加密');
         const encrypted = xorEncrypt(json, LASTRUN_KEY);
-        fs.writeFileSync(lastRunPath, encrypted, 'utf8');
+        atomicWriteFileSync(lastRunPath, encrypted);
     } catch (e) {
         console.error('[License] 写入 last-run 文件失败:', e.message);
     }
@@ -1314,13 +1322,14 @@ function writeLicenseContent(base64Content, machineId) {
         // 加密并写入
         const encrypted = encryptLicenseContent(jsonStr, actualMachineId);
         try {
-            fs.writeFileSync(licensePath, encrypted, 'utf8');
+            // ★ P0-5 修复：原子写入，防止断电/崩溃导致 license.dat 半写损坏
+            atomicWriteFileSync(licensePath, encrypted);
             return { success: true, path: licensePath };
         } catch (writeErr) {
             // ★ 写入失败时尝试 fallback 到 userData 目录（防御性兜底）
             console.warn('[License] 主路径写入失败，尝试 userData 兜底:', writeErr.message);
             const fallbackPath = path.join(app.getPath('userData'), 'license.dat');
-            fs.writeFileSync(fallbackPath, encrypted, 'utf8');
+            atomicWriteFileSync(fallbackPath, encrypted);
             console.log('[License] license.dat 已写入兜底路径:', fallbackPath);
             return { success: true, path: fallbackPath };
         }
