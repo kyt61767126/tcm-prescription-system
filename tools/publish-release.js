@@ -46,7 +46,7 @@ const APP_CONFIG = {
         latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'cloud', 'latest.json'),
     },
     'dingzhi': {
-        apkName: '惠康中医-机构.apk',
+        apkName: '惠康中医-本地.apk',
         gradlePath: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'app', 'app', 'build.gradle'),
         distDir: path.join(PROJECT_ROOT, 'app_project', 'db-offline', 'desktop', 'dist'),
         latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'dingzhi', 'latest.json'),
@@ -193,6 +193,9 @@ function scanFiles(target) {
                 for (const exe of exes) {
                     const exePath = path.join(config.distDir, exe);
                     const isSetup = /\bSetup\b/.test(exe);
+                    // exe/portable 版本取自文件名（如 "惠康中医-云端 Setup 1.2.36.exe" → 1.2.36）
+                    // 不能取 build.gradle versionName（软著固定 1.0.0，与桌面版版本号不同）
+                    const versionMatch = exe.match(/(\d+\.\d+\.\d+)/);
                     files.push({
                         appKey: key,
                         type: isSetup ? 'exe' : 'portable',
@@ -200,7 +203,7 @@ function scanFiles(target) {
                         name: exe,
                         size: getFileSize(exePath),
                         sha256: calculateSHA256(exePath),
-                        version: readVersionName(config.gradlePath)
+                        version: versionMatch ? versionMatch[1] : readVersionName(config.gradlePath)
                     });
                 }
             }
@@ -699,17 +702,11 @@ function main() {
                     latest.version = vm[1];
                     latest.releaseDate = now.substring(0, 10);
                 }
-                // ★ P0优化：写入SHA256供客户端校验
-                try {
-                    const exePath = uploaded.file.localPath;
-                    if (exePath && fs.existsSync(exePath)) {
-                        const fileBuffer = fs.readFileSync(exePath);
-                        latest.sha256 = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-                        console.log('  [SHA256] ' + key + ': ' + latest.sha256.substring(0, 16) + '...');
-                    }
-                } catch (e) {
-                    console.warn('  [WARN] SHA256计算失败: ' + e.message);
-                }
+                // 注意：这里不写 latest.sha256！
+                // 客户端 update-notifier.js 用单个 sha256 校验实际下载文件，
+                // 但 url(安装版) 与 portableUrl(便携版) 是两个不同文件，单一哈希无法同时匹配。
+                // 写错会误报"校验失败"并删除下载文件（宁可漏检不可误报）。
+                // 哈希展示请用 hash-manifest.json（下载页 SHA-256 栏）。
             }
             // ★ P2优化：自动生成变更日志
             if (autoNotes) {

@@ -6,6 +6,5 @@
     "portableUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.08.17/huikang-dingzhi-1.0.22.exe",
     "forceUpdate": false,
     "minVersion": "1.0.0",
-    "rolloutPercentage": 100,
-    "sha256": "6d34d2d5bacfcbbb8f55f914d3cee03021b93ec27ecf348ff8b03a7574747c43"
+    "rolloutPercentage": 100
 }
