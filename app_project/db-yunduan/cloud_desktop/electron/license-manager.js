@@ -1736,7 +1736,77 @@ function installLicense(base64Content, options = {}) {
     }
 }
 
+// ============================================================================
+//  ★ 版本绑定校正：存在正式 license 时，强制使 config.edition 与激活码版本一致
+//  同一台设备只能注册一个版本。若 config.edition 与 license 版本不一致
+//  则自动校正 edition 与用户角色：
+//    机构版 → edition=cloud_clinic/clinic，用户角色=admin
+//    标准版 → edition=cloud_personal/personal，用户角色=user
+//  返回：{ success, corrected, edition, from, to }
+// ============================================================================
+function enforceEditionBinding() {
+    try {
+        const license = readLicense();
+        if (!license || !license.type) {
+            return { success: true, corrected: false };  // 无正式 license，无需校正
+        }
+        const type = String(license.type || '').toLowerCase();
+        const isInstitution = (type === 'pro' || type === 'institution');
+        if (!isInstitution && type !== 'personal' && type !== 'standard') {
+            return { success: true, corrected: false };  // 无法识别的版本，跳过
+        }
+
+        const configDir = getWritableDir();
+        const configPath = require('path').join(configDir, 'config.json');
+        if (!fs.existsSync(configPath)) {
+            return { success: true, corrected: false };
+        }
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+        const isCloud = (config.appMode === 'cloud') ||
+                        ['cloud', 'cloud_personal', 'cloud_clinic'].includes(config.edition);
+
+        let targetEdition;
+        if (isInstitution) {
+            targetEdition = isCloud ? 'cloud_clinic' : 'clinic';
+        } else {
+            targetEdition = isCloud ? 'cloud_personal' : 'personal';
+        }
+
+        let corrected = false;
+        const from = config.edition;
+        if (config.edition !== targetEdition) {
+            config.edition = targetEdition;
+            corrected = true;
+            console.log('[License] 版本绑定校正 edition:', from, '->', targetEdition);
+        }
+
+        const targetRole = isInstitution ? 'admin' : 'user';
+        if (Array.isArray(config.users) && config.users.length > 0) {
+            for (const u of config.users) {
+                if (u && u.role && u.role !== targetRole) {
+                    console.log('[License] 版本绑定校正用户角色:', u.username, u.role, '->', targetRole);
+                    u.role = targetRole;
+                    corrected = true;
+                }
+            }
+        }
+
+        if (corrected) {
+            signConfig(config);
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            console.log('[License] config.json 版本绑定校正完成，已重新签名');
+        }
+
+        return { success: true, corrected: corrected, from: from, to: config.edition };
+    } catch (e) {
+        console.warn('[License] enforceEditionBinding 异常（非致命）:', e.message);
+        return { success: false, corrected: false, error: e.message };
+    }
+}
+
 module.exports = {
+    enforceEditionBinding,  // 启动时校正 config.edition 与激活码版本一致
     normalizeEdition,
     validateLicense,
     generateLicense,
