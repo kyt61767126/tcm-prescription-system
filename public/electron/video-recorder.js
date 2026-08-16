@@ -1215,6 +1215,9 @@
     }
 
     window.findMediaFilesWeb = findMediaInDB;
+    // ★ 网页端写库入口：供 index.html 生成"处方签图片"时也存入 IndexedDB，
+    // 与照片/录像同一张表，历史处方媒体查看器才能查到并展示"处方签"（修复云端网页处方签不显示）
+    window.addMediaFileWeb = saveMediaToDB;
 
     function getCurrentPrescriptionInfo() {
         var patientName = '';
