@@ -68,6 +68,23 @@ export async function onRequest(context) {
         // 保存备份
         await kv.put(backupKey, JSON.stringify(backupData));
 
+        // ★ P2-F 修复：备份保留策略——仅保留最近 N 份，删除更旧的（防 KV 无限膨胀）
+        //   backupKey 含日期+毫秒时间戳，字典序即时间序（13位毫秒戳在可见未来等长）
+        const BACKUP_RETENTION = 5;
+        const existingBackups = allKeyNames.filter(name => name.startsWith('kv_backup_')).sort();
+        // allKeyNames 为写入前快照（不含本次 backupKey），故保留位 +1 给新备份
+        const toDelete = existingBackups.slice(0, Math.max(0, existingBackups.length - BACKUP_RETENTION + 1));
+        let deletedOldBackups = 0;
+        for (const oldKey of toDelete) {
+            if (oldKey === backupKey) continue;  // 安全兜底：绝不删本次备份
+            try {
+                await kv.delete(oldKey);
+                deletedOldBackups++;
+            } catch (delErr) {
+                console.error('[backup] 旧备份删除失败:', oldKey, delErr && delErr.message);
+            }
+        }
+
         // 返回成功响应
         return new Response(JSON.stringify({
             success: true,
@@ -77,6 +94,8 @@ export async function onRequest(context) {
             totalKeysInKV: allKeyNames.length,
             skippedBackupKeys: allKeyNames.length - dataKeyNames.length,
             skippedNullValues: skippedNull,
+            deletedOldBackups: deletedOldBackups,
+            backupRetention: BACKUP_RETENTION,
             timestamp: backupData.timestamp
         }), {
             status: 200,

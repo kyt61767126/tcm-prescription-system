@@ -262,6 +262,6 @@ export async function onRequest(context) {
 
     } catch (error) {
         console.error('Admin approve error:', error);
-        return json({ success: false, error: error.message || 'Internal server error' }, 500);
+        return json({ success: false, error: '服务器内部错误，请稍后再试' }, 500);
     }
 }

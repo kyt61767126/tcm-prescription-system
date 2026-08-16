@@ -225,7 +225,9 @@ export async function onRequest(context) {
             try {
                 body = await context.request.json();
             } catch (error) {
-                return json({ success: false, error: 'Failed to parse request body: ' + error.message }, 400);
+                // ★ P2-D 修复：解析错误详情仅记服务端日志，客户端返回通用提示
+                console.error('[prescriptions] 请求体解析失败:', error && error.message);
+                return json({ success: false, error: '请求数据格式错误，请稍后再试' }, 400, context.request);
             }
 
             if (!body.prescription) {
@@ -379,6 +381,6 @@ export async function onRequest(context) {
 
     } catch (error) {
         console.error('Prescriptions API error:', error);
-        return json({ success: false, error: error.message || 'Internal server error' }, 500);
+        return json({ success: false, error: '服务器内部错误，请稍后再试' }, 500);
     }
 }
