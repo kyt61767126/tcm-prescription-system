@@ -23,8 +23,6 @@ app.setAppUserModelId('com.benneng.prescription');  // ★ Windows 任务栏图�
 const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
 const activateManager = require('./activate');
-const updateNotifier = require('./update-notifier');
-const hotUpdate = require('./hot-update');
 
 let mainWindow;
 let loginWindow;
@@ -637,16 +635,8 @@ function createMainWindow() {
         } catch(e) { console.warn('[过滤toast] 注入失败:', e.message); }
     });
 
-    // ★ 热更新：优先加载热更新目录的 index.html，fallback 到打包文件
-    const hotUpdatePath = hotUpdate.getHotUpdateIndexPath(app);
-    if (hotUpdatePath) {
-        console.log('[HotUpdate] 使用热更新版本:', hotUpdatePath);
-        mainWindow.loadFile(hotUpdatePath);
-    } else {
-        mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
-    }
-    // 异步检查并下载更新（下次启动生效）
-    hotUpdate.checkAndDownloadUpdate(app, 'dingzhi');
+    // ★ 直接加载打包的 index.html（已移除热更新机制，页面始终以打包文件为准）
+    mainWindow.loadFile(path.join(__dirname, '..', 'index.html'));
 
     // ★ 安全：拦截 window.open 防止钓鱼攻击
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1170,9 +1160,6 @@ app.whenReady().then(async () => {
             console.warn('[Trial] 试用登记异常（非致命，继续试用）:', e.message);
         }
     }
-
-    // ★ 启动自动更新检查
-    updateNotifier.init('dingzhi');
 
     fse.ensureDirSync(getDownloadsDirectory());
 
