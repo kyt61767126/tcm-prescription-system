@@ -192,7 +192,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     // ★ 2026-08-15 防重复试用：试用注册 API（硬件指纹判重）
     private static final String TRIAL_REGISTER_API_URL = "https://tcm-prescription-system.pages.dev/api/trial/register";
     // ★ 试用次数阈值（与后端 MAX_TRIALS 一致）
-    private static final int MAX_TRIALS = 3;
+    private static final int MAX_TRIALS = 1;   // 2026-08-16：一个设备一次试用（防卸载重装刷试用）
     private static final int ACTIVATE_TIMEOUT_MS = 15000;
 
     // ★ P1-1 在线验证阈值

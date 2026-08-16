@@ -1517,7 +1517,12 @@
 
             if (modalResult.cancelled || !modalResult.code || !modalResult.code.trim()) {
                 global.__licenseActivating = false;
-                console.log('[LicenseCheck] 用户取消激活');
+                if (modalResult.trial) {
+                    // ★ 立即试用：进入 7 天试用（默认标准版）
+                    await showHtmlAlert('✅ 已进入试用模式（免费7天 · 标准版）\n\n试用期内可正常使用，到期后请在激活窗口输入激活码激活正式授权。');
+                } else {
+                    console.log('[LicenseCheck] 用户取消激活');
+                }
                 return;
             }
 
@@ -1723,7 +1728,9 @@
                 '<div style="display:flex;gap:10px;">' +
                     '<button id="activateCancelBtn" style="flex:1;padding:12px;font-size:15px;border:1px solid #ddd;border-radius:8px;color:#666;background:white;cursor:pointer;">取消</button>' +
                     '<button id="activateSubmitBtn" style="flex:1;padding:12px;font-size:15px;border:none;border-radius:8px;color:white;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);cursor:pointer;font-weight:bold;">立即激活</button>' +
-                '</div>';
+                '</div>' +
+                // ★ 立即试用（2026-08-16）：不激活直接进入 7 天试用（默认标准版）
+                '<button id="activateTrialBtn" style="width:100%;margin-top:10px;padding:12px;font-size:15px;border:1px solid #4caf50;border-radius:8px;color:#4caf50;background:#f0f9eb;cursor:pointer;font-weight:bold;">⏳ 立即试用（免费7天 · 标准版）</button>'
 
             // 注入 spinner 动画 keyframes（仅注入一次）
             if (!document.getElementById('activateSpinKeyframes')) {
@@ -1742,6 +1749,7 @@
             const copyMachineIdBtn = card.querySelector('#copyMachineIdBtn');
             const loadingBox = card.querySelector('#activateLoadingBox');
             const copyContactBtns = card.querySelectorAll('.copyContactBtn');
+            const trialBtn = card.querySelector('#activateTrialBtn');
 
             // ★ 移除 cancelAutofill 调用：cancelAutofill 反而触发 Autofill 凭据提示弹窗
             // ("本能中医处方系统"大图标窗口)
@@ -1816,6 +1824,12 @@
             });
 
             submitBtn.addEventListener('click', submitCode);
+
+            // ★ 立即试用（2026-08-16）：关闭激活窗口，进入 7 天试用（默认标准版）
+            trialBtn.addEventListener('click', function() {
+                cleanup();
+                resolve({ code: '', cancelled: true, trial: true });
+            });
 
             // 点击遮罩关闭
             overlay.addEventListener('click', function(e) {
