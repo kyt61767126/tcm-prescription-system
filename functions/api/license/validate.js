@@ -172,6 +172,17 @@ export async function onRequest(context) {
             return json({ success: false, error: deviceCheck.error }, 403);
         }
 
+        // ★ 版本升级：标准版→机构版，记录升级日志（审计留痕）
+        if (deviceCheck.upgrade) {
+            await appendLicenseLog(kv, code, {
+                action: 'version-upgrade',
+                time: new Date().toISOString(),
+                ip: ip,
+                operator: user || record.user || 'unknown',
+                detail: '设备从【标准版】升级到【机构版】, machineId=' + machineId.substring(0, 8) + '...'
+            });
+        }
+
         // ★ v3 新增：诊所名绑定校验
         // 仅当激活码生成时已绑定 clinicName 时才校验（向后兼容旧激活码）
         if (record.clinicName) {

@@ -552,18 +552,27 @@ async function checkDeviceVersion(kv, machineId, targetTypeOrEdition) {
         return { ok: true, binding: null };
     }
     const targetVersion = versionOf(targetTypeOrEdition);
-    if (binding.version !== targetVersion) {
-        const boundLabel = DEVICE_VERSION_LABEL[binding.version] || binding.version;
-        const targetLabel = DEVICE_VERSION_LABEL[targetVersion] || targetVersion;
-        return {
-            ok: false,
-            binding: binding,
-            boundLabel: boundLabel,
-            targetLabel: targetLabel,
-            error: '该设备已激活【' + boundLabel + '】，不能激活【' + targetLabel + '】。同一台设备只能注册一个版本，请使用【' + boundLabel + '】激活码，或联系客服解除设备版本绑定。'
-        };
+    if (binding.version === targetVersion) {
+        return { ok: true, binding: binding };
     }
-    return { ok: true, binding: binding };
+    // ★ 版本升级：允许"标准版 → 机构版"单向升级（客户加购升级版本）
+    // 客户用机构版激活码在已绑定标准版的设备上激活，视为授权升级
+    if (binding.version === 'standard' && targetVersion === 'institution') {
+        return { ok: true, binding: binding, upgrade: true, from: 'standard', to: 'institution' };
+    }
+    // 其余情况（含"机构版 → 标准版"降级）拒绝
+    const boundLabel = DEVICE_VERSION_LABEL[binding.version] || binding.version;
+    const targetLabel = DEVICE_VERSION_LABEL[targetVersion] || targetVersion;
+    return {
+        ok: false,
+        binding: binding,
+        boundLabel: boundLabel,
+        targetLabel: targetLabel,
+        error: '该设备已激活【' + boundLabel + '】，不能激活【' + targetLabel + '】。'
+            + (boundLabel === '机构版'
+                ? '【机构版】为最高版本，不支持降级为标准版。如需调整，请联系客服。'
+                : '同一台设备只能注册一个版本。如需从【标准版】升级到【机构版】，请使用【机构版】激活码在软件内重新激活。')
+    };
 }
 
 // ============================================================================
