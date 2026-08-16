@@ -1,4 +1,4 @@
-﻿# one-click-pack.ps1 - One-click packaging tool for all 4 versions
+# one-click-pack.ps1 - One-click packaging tool for all 4 versions
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -226,14 +226,14 @@ function Show-StandaloneUsage {
     Write-Host "  各版本独立打包入口" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "  云端版 (app_project):" -ForegroundColor Yellow
+    Write-Host "  云端版 (app_project/db-yunduan):" -ForegroundColor Yellow
     Write-Host "    pack-desktop.bat       打包桌面版"
-    Write-Host "    pack-app.bat           打包手机APP"
+    Write-Host "    build-app.bat          打包手机APP"
     Write-Host "    pack-app-strict.bat    严格模式APP"
     Write-Host ""
-    Write-Host "  离线定制版 (db-offline/desktop):" -ForegroundColor Yellow
+    Write-Host "  离线定制版 (app_project/db-offline):" -ForegroundColor Yellow
     Write-Host "    pack-desktop.bat       打包桌面版"
-    Write-Host "    pack-app.bat           打包手机APP"
+    Write-Host "    build-app.bat          打包手机APP"
     Write-Host "    pack-app-strict.bat    严格模式APP"
     Write-Host ""
     Write-Host "  提示: 直接双击对应目录下的 bat 文件即可" -ForegroundColor DarkGray
