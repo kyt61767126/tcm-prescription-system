@@ -232,13 +232,14 @@ goto :main
 
     call :check_file "cloud_desktop\build.bat" "%BUILD_BAT%" || call :finalize 1 "Script not found"
 
+    set "SAVED_NO_PAUSE=%NO_PAUSE%"
     set "NO_PAUSE=1"
 
     call "%BUILD_BAT%"
 
     set "TEMP_RC=%errorlevel%"
 
-    set "NO_PAUSE="
+    set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
     call :finalize %TEMP_RC% "云端桌面版（统一版）打包完成" "EXE: %~dp0cloud_desktop\dist\惠康中医-云端 Setup *.exe" "EXE: %~dp0cloud_desktop\dist\惠康中医-云端 *.exe (portable)"
 

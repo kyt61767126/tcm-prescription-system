@@ -22,7 +22,8 @@ function Invoke-BatFile {
     param(
         [string]$BatPath,
         [string]$WorkDir,
-        [string]$Context = "external command"
+        [string]$Context = "external command",
+        [string]$Arguments = ""
     )
     if (-not (Test-Path $BatPath)) {
         Write-Host "[ERROR] File not found: $BatPath" -ForegroundColor Red
@@ -30,7 +31,7 @@ function Invoke-BatFile {
     }
     Push-Location $WorkDir
     try {
-        & cmd /c "$BatPath" 2>&1 | ForEach-Object {
+        & cmd /c "$BatPath $Arguments" 2>&1 | ForEach-Object {
             if ($_ -is [System.Management.Automation.ErrorRecord]) {
                 Write-Host $_.Exception.Message -ForegroundColor Yellow
             } else {
@@ -71,8 +72,8 @@ function Build-Cloud {
 
     if ($Target -eq "all" -or $Target -eq "app") {
         Write-Host ""
-        Write-Host "[Step 2/2] 打包云端手机 APP..." -ForegroundColor Yellow
-        $rc = Invoke-BatFile "$script:RootDir\app_project\db-yunduan\build-app.bat" "$script:RootDir\app_project\db-yunduan" "cloud app build"
+        Write-Host "[Step 2/2] 打包云端手机 APP (严格模式)..." -ForegroundColor Yellow
+        $rc = Invoke-BatFile "$script:RootDir\app_project\db-yunduan\build-pack.bat" "$script:RootDir\app_project\db-yunduan" "cloud app build" "app-strict"
         if ($rc -ne 0) {
             Write-Host ""
             Write-Host "[ERROR] 云端APP打包失败，退出码: $rc" -ForegroundColor Red
@@ -159,11 +160,11 @@ function Build-Offline {
     if ($Target -eq "all" -or $Target -eq "app") {
         Write-Host ""
         if ($Target -eq "all") {
-            Write-Host "[Step 3/3] 打包离线$verLabel 手机 APP..." -ForegroundColor Yellow
+            Write-Host "[Step 3/3] 打包离线${verLabel} 手机 APP (严格模式)..." -ForegroundColor Yellow
         } else {
-            Write-Host "[Step 2/2] 打包离线$verLabel 手机 APP..." -ForegroundColor Yellow
+            Write-Host "[Step 2/2] 打包离线${verLabel} 手机 APP (严格模式)..." -ForegroundColor Yellow
         }
-        $rc = Invoke-BatFile "$verDir\build-app.bat" $verDir "offline $verLabel app build"
+        $rc = Invoke-BatFile "$verDir\build-pack.bat" $verDir "offline $verLabel app build" "app-strict"
         if ($rc -ne 0) {
             Write-Host ""
             Write-Host "[ERROR] 离线$verLabel APP打包失败，退出码: $rc" -ForegroundColor Red
@@ -273,7 +274,7 @@ while ($true) {
     Write-Host "  - 桌面程序: 各版本目录\dist\*.exe"
     Write-Host "  - APP 输出: 各版本目录\*.apk"
     Write-Host "  - 离线版默认使用配置(XXX中医诊所/XXX)直接打包, 不弹配置编辑"
-    Write-Host "  - 全部打包全自动顺序执行"
+    Write-Host "  - 全部打包全自动顺序执行, 手机APP默认严格模式(签名校验+混淆)"
     Write-Host "  - 耗时统计会在结束时显示"
     Write-Host "--------------------------------------------"
     $choice = Read-Host "请选择 [0-7]"

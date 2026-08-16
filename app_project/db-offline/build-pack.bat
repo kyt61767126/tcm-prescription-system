@@ -232,13 +232,14 @@ goto :main
 
     call :check_file "desktop\build.bat" "%BUILD_BAT%" || call :finalize 1 "Script not found"
 
+    set "SAVED_NO_PAUSE=%NO_PAUSE%"
     set "NO_PAUSE=1"
 
     call "%BUILD_BAT%"
 
     set "TEMP_RC=%errorlevel%"
 
-    set "NO_PAUSE="
+    set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
     call :finalize %TEMP_RC% "离线桌面版（统一版）打包完成" "EXE: %~dp0desktop\dist\惠康中医-本地 Setup *.exe" "EXE: %~dp0desktop\dist\惠康中医-本地 *.exe (portable)"
 
@@ -266,13 +267,14 @@ goto :main
 
     call :check_file "app\build-app.bat" "%CAP_DIR%\build-app.bat" || call :finalize 1 "Script not found"
 
+    set "SAVED_NO_PAUSE=%NO_PAUSE%"
     set "NO_PAUSE=1"
 
     call "%CAP_DIR%\build-app.bat" standard
 
     set "TEMP_RC=%errorlevel%"
 
-    set "NO_PAUSE="
+    set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
     call :finalize %TEMP_RC% "离线APP（统一版）打包完成" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
 
@@ -300,13 +302,14 @@ goto :main
 
     call :check_file "app\pack-app-strict.bat" "%CAP_DIR%\pack-app-strict.bat" || call :finalize 1 "Script not found"
 
+    set "SAVED_NO_PAUSE=%NO_PAUSE%"
     set "NO_PAUSE=1"
 
     call "%CAP_DIR%\pack-app-strict.bat"
 
     set "TEMP_RC=%errorlevel%"
 
-    set "NO_PAUSE="
+    set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
     call :finalize %TEMP_RC% "离线APP（标准严格版）打包完成" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
 
