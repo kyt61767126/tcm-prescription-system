@@ -182,6 +182,11 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     // ★ P1-2 激活码水印记录文件（追溯盗版泄露源）
     private static final String ACTIVATION_RECORD_FILE = "activation-record.dat";
     private static final String ACTIVATION_RECORD_KEY = "bnzc_activation_v1";
+    // ★ 第三轮终检 P1-3 新增：两个状态文件的 AES 加密格式前缀（与 TRIAL1:/LASTRUN1: 机制一致）
+    private static final String VERIFYSTATE_ENC_PREFIX = "VSTATE1:";
+    private static final String ACTREC_ENC_PREFIX = "ACTREC1:";
+    // ★ 第三轮终检 P1-2 新增：试用期天数 HMAC 签名 key（防 root 直接改 license_config.xml 明文延长试用）
+    private static final String PREF_KEY_TRIAL_DAYS_SIG = "trial_days_sig";
     // ★ APP版可写 config.json 路径（filesDir 副本，首次从 assets 复制，激活后可修改 clinicName/doctorName）
     private static final String CONFIG_FILE = "config.json";
 
@@ -1546,20 +1551,48 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         }
     }
 
+    // ★ 第三轮终检 P1-2 修复：trial_days 明文存储于 SharedPreferences 可被 root 直接篡改
+    //   （改为 365 + 删 trial.dat = 365 天试用）。现读取时必须通过 HMAC 签名校验
+    //   （machineId 绑定，签名不匹配/缺失一律回退默认 7 天）。
+    //   setTrialDays（JS 桥接合法配置路径）写入时自动计算签名，正常配置流程不受影响。
+    private String computeTrialDaysSignature(int days) {
+        try {
+            String mid = getMachineId();
+            String msg = (mid == null ? "" : mid) + "|" + days + "|trialdays";
+            javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
+            mac.init(new SecretKeySpec(LICENSE_HMAC_KEY.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
+            byte[] out = mac.doFinal(msg.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : out) sb.append(String.format("%02x", b));
+            return sb.toString();
+        } catch (Exception e) {
+            Log.e(TAG, "计算试用期签名失败", e);
+            return null;
+        }
+    }
+
     // ★ 获取试用期天数（可配置，默认 7 天，测试时可设为 0 天立即触发激活）
     // 与桌面版 license-manager.js getTrialDays() 对应（桌面版用 trial-config.json）
     public int getTrialDays() {
         try {
             SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
             int days = prefs.getInt(PREF_KEY_TRIAL_DAYS, -1);
-            if (days >= 0 && days <= 365) return days;
+            if (days >= 0 && days <= 365) {
+                // ★ P1-2 修复：签名校验，不通过（明文被篡改/旧版无签名）回退默认值
+                String expectSig = computeTrialDaysSignature(days);
+                String savedSig = prefs.getString(PREF_KEY_TRIAL_DAYS_SIG, "");
+                if (expectSig != null && expectSig.equals(savedSig)) {
+                    return days;
+                }
+                Log.w(TAG, "试用期配置签名校验失败（可能被篡改），回退默认 " + DEFAULT_TRIAL_DAYS + " 天");
+            }
         } catch (Exception e) {
             Log.e(TAG, "读取试用期天数失败", e);
         }
         return DEFAULT_TRIAL_DAYS;
     }
 
-    // ★ 设置试用期天数（持久化到 SharedPreferences，重启后生效）
+    // ★ 设置试用期天数（持久化到 SharedPreferences，含 HMAC 签名，重启后生效）
     public JSONObject setTrialDays(int days) {
         JSONObject result = new JSONObject();
         try {
@@ -1568,9 +1601,16 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                 result.put("error", "试用期天数必须在 0-365 之间");
                 return result;
             }
+            String sig = computeTrialDaysSignature(days);
+            if (sig == null) {
+                result.put("success", false);
+                result.put("error", "签名计算失败，无法设置试用期");
+                return result;
+            }
             SharedPreferences prefs = context.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE);
             SharedPreferences.Editor editor = prefs.edit();
             editor.putInt(PREF_KEY_TRIAL_DAYS, days);
+            editor.putString(PREF_KEY_TRIAL_DAYS_SIG, sig);
             editor.apply();
             result.put("success", true);
             result.put("trialDays", days);
@@ -1684,15 +1724,41 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     //  独立于 license.dat，不影响签名验证
     //  字段：lastOnlineVerify(时间戳), prescriptionsSinceVerify(处方计数)
     // ========================================================================
+    // ★ 第三轮终检 P1-3 修复：verify-state.dat 从 XOR 混淆升级为 AES-256-CBC
+    //   原格式可被伪造（反编译拿到硬编码 XOR 密钥后可把 lastOnlineVerify 改为当前时间、
+    //   prescriptionsSinceVerify 清零，永久避开 90 天在线验证降级）。
+    //   密钥从 machineId+硬件指纹派生（与 trial/last-run 机制一致）；
+    //   旧 XOR 格式仍可读（向后兼容存量安装），读取成功后立即以 AES 重新保存完成迁移。
+    private SecretKeySpec deriveVerifyStateKey(String machineId) {
+        try {
+            String hwFp = getHardwareFingerprint();
+            String combined = (machineId == null ? "" : machineId) + (hwFp == null ? "" : hwFp) + LICENSE_HMAC_KEY + ":vstate";
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private JSONObject readVerifyState() {
         try {
             File f = getFile(VERIFY_STATE_FILE);
             if (!f.exists()) return new JSONObject();
             byte[] bytes = readFileBytes(f);
             String content = new String(bytes, StandardCharsets.UTF_8).trim();
-            String json = xorDecrypt(content, VERIFY_STATE_KEY);
+            String json = null;
+            boolean legacy = false;
+            if (content.startsWith(VERIFYSTATE_ENC_PREFIX)) {
+                json = tryDecryptAes(content.substring(VERIFYSTATE_ENC_PREFIX.length()), deriveVerifyStateKey(getMachineId()));
+            } else {
+                // 旧格式（XOR + Base64）- 向后兼容
+                json = xorDecrypt(content, VERIFY_STATE_KEY);
+                legacy = (json != null);
+            }
             if (json == null) return new JSONObject();
-            return new JSONObject(json);
+            JSONObject state = new JSONObject(json);
+            if (legacy) writeVerifyState(state);  // 立即迁移为 AES 格式
+            return state;
         } catch (Exception e) {
             return new JSONObject();
         }
@@ -1701,7 +1767,14 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     private void writeVerifyState(JSONObject state) {
         try {
             File f = getFile(VERIFY_STATE_FILE);
-            String encrypted = xorEncrypt(state.toString(), VERIFY_STATE_KEY);
+            String jsonStr = state.toString();
+            String mid = getMachineId();
+            String encrypted = (mid != null && !mid.isEmpty())
+                    ? aesEncrypt(jsonStr, deriveVerifyStateKey(mid), VERIFYSTATE_ENC_PREFIX) : null;
+            if (encrypted == null) {
+                Log.w(TAG, "machineId 不可用，verify-state 回退到 XOR 加密");
+                encrypted = xorEncrypt(jsonStr, VERIFY_STATE_KEY);
+            }
             try (FileOutputStream fos = new FileOutputStream(f)) {
                 fos.write(encrypted.getBytes(StandardCharsets.UTF_8));
                 fos.flush();
@@ -1770,6 +1843,10 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             JSONObject verifyState = new JSONObject();
             verifyState.put("lastOnlineVerify", System.currentTimeMillis());
             verifyState.put("prescriptionsSinceVerify", 0);
+            // ★ 第三轮终检 P1-1 修复：记录服务器时间基准（verify.js 返回毫秒时间戳），
+            //   用于检测本地时钟回拨（删 last-run.dat + 改系统时间续命）
+            long serverTimeMs = respJson.optLong("verifyTime", 0);
+            if (serverTimeMs > 0) verifyState.put("lastServerTime", serverTimeMs);
             writeVerifyState(verifyState);
 
             JSONObject r = new JSONObject();
@@ -1796,15 +1873,39 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     //  字段：codeHash(SHA256), activateTime(时间戳), machineId
     //  用途：发现盗版时读取 codeHash 反查源激活码 → 定位泄露用户
     // ========================================================================
+    // ★ 第三轮终检 P1-3 修复：activation-record.dat 同步升级 AES-256-CBC
+    //   （原 XOR 可被伪造清除/篡改激活水印，machineId+硬件指纹派生密钥防跨机复制；
+    //    旧 XOR 格式向后兼容读取，成功后立即迁移保存）
+    private SecretKeySpec deriveActivationRecordKey(String machineId) {
+        try {
+            String hwFp = getHardwareFingerprint();
+            String combined = (machineId == null ? "" : machineId) + (hwFp == null ? "" : hwFp) + LICENSE_HMAC_KEY + ":actrec";
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return new SecretKeySpec(md.digest(combined.getBytes(StandardCharsets.UTF_8)), "AES");
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private JSONObject readActivationRecord() {
         try {
             File f = getFile(ACTIVATION_RECORD_FILE);
             if (!f.exists()) return new JSONObject();
             byte[] bytes = readFileBytes(f);
             String content = new String(bytes, StandardCharsets.UTF_8).trim();
-            String json = xorDecrypt(content, ACTIVATION_RECORD_KEY);
+            String json = null;
+            boolean legacy = false;
+            if (content.startsWith(ACTREC_ENC_PREFIX)) {
+                json = tryDecryptAes(content.substring(ACTREC_ENC_PREFIX.length()), deriveActivationRecordKey(getMachineId()));
+            } else {
+                // 旧格式（XOR + Base64）- 向后兼容
+                json = xorDecrypt(content, ACTIVATION_RECORD_KEY);
+                legacy = (json != null);
+            }
             if (json == null) return new JSONObject();
-            return new JSONObject(json);
+            JSONObject record = new JSONObject(json);
+            if (legacy) writeActivationRecord(record);  // 立即迁移为 AES 格式
+            return record;
         } catch (Exception e) {
             return new JSONObject();
         }
@@ -1813,7 +1914,14 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     private void writeActivationRecord(JSONObject record) {
         try {
             File f = getFile(ACTIVATION_RECORD_FILE);
-            String encrypted = xorEncrypt(record.toString(), ACTIVATION_RECORD_KEY);
+            String jsonStr = record.toString();
+            String mid = getMachineId();
+            String encrypted = (mid != null && !mid.isEmpty())
+                    ? aesEncrypt(jsonStr, deriveActivationRecordKey(mid), ACTREC_ENC_PREFIX) : null;
+            if (encrypted == null) {
+                Log.w(TAG, "machineId 不可用，activation-record 回退到 XOR 加密");
+                encrypted = xorEncrypt(jsonStr, ACTIVATION_RECORD_KEY);
+            }
             try (FileOutputStream fos = new FileOutputStream(f)) {
                 fos.write(encrypted.getBytes(StandardCharsets.UTF_8));
                 fos.flush();
@@ -2110,6 +2218,18 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             localMachineId = getMachineId();
         }
         long now = System.currentTimeMillis();
+        // ★ 第三轮终检 P1-1 修复：服务器时间基准——本地时间比最近一次服务器时间慢 1 天以上
+        //   （可能删 last-run.dat 后回拨系统时钟续命）时，所有时间判定改用服务器基准，
+        //   保证授权到期/在线验证周期/试用到期不被时钟回拨绕过。
+        //   不做硬性锁定（避免服务器与设备正常钟差导致付费用户误伤），仅校正判定基准。
+        long effectiveNow = now;
+        try {
+            long lastServerTime = readVerifyState().optLong("lastServerTime", 0);
+            if (lastServerTime > 0 && now < lastServerTime - TIME_TAMPER_THRESHOLD) {
+                Log.w(TAG, "本地时间落后服务器基准超过1天（疑似时钟回拨），时间判定改用服务器基准");
+                effectiveNow = lastServerTime;
+            }
+        } catch (Exception ignored) {}
         // ★ 修复 2026-07-27：添加诊断日志，帮助定位激活后重启仍显示试用模式的问题
         File licenseFile = getFile(LICENSE_FILE);
         Log.d(TAG, "validateLicense: machineId=" + localMachineId +
@@ -2196,7 +2316,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                     return failValidation("授权文件格式错误，请联系客服。", "invalid");
                 }
 
-                if (now > expiresAtMs) {
+                if (effectiveNow > expiresAtMs) {
                     JSONObject r = failValidation(
                             "授权已过期。\n用户：" + license.optString("user", "") +
                                     "\n到期时间：" + expiresAtStr + "\n请联系客服续费。",
@@ -2207,17 +2327,17 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
 
                 // license 有效
                 writeLastRun(now);
-                long remainingDays = (long) Math.ceil((expiresAtMs - now) / (24.0 * 60 * 60 * 1000));
+                long remainingDays = (long) Math.ceil((expiresAtMs - effectiveNow) / (24.0 * 60 * 60 * 1000));
 
                 // ★ P1-1 在线授权验证：定期要求在线验证，防止离线破解后永久使用
                 JSONObject verifyState = readVerifyState();
                 long lastVerify = verifyState.optLong("lastOnlineVerify", 0);
                 int prescriptionsSinceVerify = verifyState.optInt("prescriptionsSinceVerify", 0);
-                long daysSinceVerify = (now - lastVerify) / (24 * 60 * 60 * 1000);
+                long daysSinceVerify = (effectiveNow - lastVerify) / (24 * 60 * 60 * 1000);
 
                 if (lastVerify == 0) {
                     // 首次运行（刚激活或从旧版升级），初始化验证状态
-                    verifyState.put("lastOnlineVerify", now);
+                    verifyState.put("lastOnlineVerify", effectiveNow);
                     verifyState.put("prescriptionsSinceVerify", 0);
                     writeVerifyState(verifyState);
                     lastVerify = now;
@@ -2316,7 +2436,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             if (trialExpiresAtMs == 0) {
                 trialExpiresAtMs = trial.optLong("startTime", now) + (long) currentTrialDays * 24 * 60 * 60 * 1000;
             }
-            if (now > trialExpiresAtMs) {
+            if (effectiveNow > trialExpiresAtMs) {
                 JSONObject r = failValidation(
                         "试用期已到期（" + currentTrialDays + " 天）。\n请联系客服购买正式授权。",
                         "trial_expired");
@@ -2326,7 +2446,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
 
             // 试用有效
             writeLastRun(now);
-            long remainingDays = (long) Math.ceil((trialExpiresAtMs - now) / (24.0 * 60 * 60 * 1000));
+            long remainingDays = (long) Math.ceil((trialExpiresAtMs - effectiveNow) / (24.0 * 60 * 60 * 1000));
             JSONObject r = new JSONObject();
             r.put("valid", true);
             r.put("message", "试用模式（剩余 " + remainingDays + " 天）\n请联系客服购买正式授权。");
@@ -2510,6 +2630,9 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                 JSONObject vs = new JSONObject();
                 vs.put("lastOnlineVerify", System.currentTimeMillis());
                 vs.put("prescriptionsSinceVerify", 0);
+                // ★ 第三轮终检 P1-1 修复：激活响应含 verifyTime 则记录服务器时间基准
+                long actServerTime = respJson.optLong("verifyTime", 0);
+                if (actServerTime > 0) vs.put("lastServerTime", actServerTime);
                 writeVerifyState(vs);
             } catch (Exception ve) {
                 Log.w(TAG, "初始化验证状态失败(不影响激活)", ve);
@@ -2673,6 +2796,17 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             // 无 license，试用模式
             return TRIAL_MAX_PRESCRIPTIONS;
         }
+        // ★ 第三轮终检 P1 修复：readLicense 只解密不验签，maxPrescriptions 字段可被篡改
+        //   （与桌面版 prescription-counter.js 修复对齐），验签失败按试用限制处理
+        try {
+            if (!verifySignature(license)) {
+                Log.w(TAG, "license 验签失败，处方上限按试用限制处理");
+                return TRIAL_MAX_PRESCRIPTIONS;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "license 验签异常，处方上限按试用限制处理: " + e.getMessage());
+            return TRIAL_MAX_PRESCRIPTIONS;
+        }
         JSONObject normalized = normalizeLicense(license);
         if (normalized == null) return TRIAL_MAX_PRESCRIPTIONS;
         return normalized.optInt("maxPrescriptions", 0);
@@ -2697,13 +2831,14 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             }
             return r;
         } catch (Exception e) {
-            // 异常时默认放行（避免阻塞用户正常操作）
+            // ★ 第三轮终检修复：授权执行点异常时 fail-closed（与桌面版 IPC 修复对齐），
+            //   按试用限制拒绝，避免构造异常（如损坏 count 文件）绕过处方上限
             try {
                 JSONObject r = new JSONObject();
-                r.put("allowed", true);
+                r.put("allowed", false);
                 r.put("current", 0);
-                r.put("max", 0);
-                r.put("remaining", -1);
+                r.put("max", TRIAL_MAX_PRESCRIPTIONS);
+                r.put("remaining", 0);
                 r.put("error", e.getMessage());
                 return r;
             } catch (Exception e2) {
