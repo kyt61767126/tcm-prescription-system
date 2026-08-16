@@ -41,7 +41,8 @@ dist/assets/
 *.tar.gz
 # 允许 public/downloads/ 目录下的下载文件（供 Cloudflare Pages 使用）
 !public/downloads/
-!public/downloads/*
+!public/downloads/*.apk
+# 桌面版 exe>25MB 超 Cloudflare Pages 单文件上限，入库会导致部署失败，保持忽略
 
 # 一次性修复脚本（防止误入库）
 fix*.js
