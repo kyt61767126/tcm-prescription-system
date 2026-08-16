@@ -1587,41 +1587,6 @@ function signConfig(config) {
 //    base64Content - license base64 字符串
 //    options - { machineId, doctorName, phone, password, clinicName, edition }
 // ============================================================================
-// ============================================================================
-//  ★ 版本规范化：将激活窗口/API传入的edition映射为config.json标准值
-//  ★ 同时确定用户角色：机构版=admin，标准版=user
-// ============================================================================
-function normalizeEdition(rawEdition, existingConfig) {
-    const raw = (rawEdition || '').toLowerCase();
-    const isCloud = (existingConfig && existingConfig.appMode === 'cloud') ||
-                    ['cloud', 'cloud_personal', 'cloud_clinic'].includes(existingConfig && existingConfig.edition);
-
-    // 标准版（个人/标准）
-    if (raw === 'personal' || raw === 'standard') {
-        return {
-            edition: isCloud ? 'cloud_personal' : 'personal',
-            role: 'user',
-            isInstitutional: false
-        };
-    }
-    // 机构版（机构/专业/诊所）
-    if (raw === 'institution' || raw === 'pro' || raw === 'clinic' || raw === 'clinic_custom') {
-        return {
-            edition: isCloud ? 'cloud_clinic' : 'clinic',
-            role: 'admin',
-            isInstitutional: true
-        };
-    }
-    // 默认：保持现有edition或机构版
-    const fallbackEdition = (existingConfig && existingConfig.edition) || (isCloud ? 'cloud_clinic' : 'clinic');
-    const fallbackIsInst = ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic'].includes(fallbackEdition);
-    return {
-        edition: fallbackEdition,
-        role: fallbackIsInst ? 'admin' : 'user',
-        isInstitutional: fallbackIsInst
-    };
-}
-
 function installLicense(base64Content, options = {}) {
     try {
         const actualMachineId = options.machineId || getMachineId();
@@ -1656,14 +1621,6 @@ function installLicense(base64Content, options = {}) {
         }
 
         let configChanged = false;
-
-        // ★ 版本规范化：根据激活时选择的版本设置 config.edition
-        const editionInfo = normalizeEdition(options.edition, config);
-        if (editionInfo.edition && config.edition !== editionInfo.edition) {
-            config.edition = editionInfo.edition;
-            configChanged = true;
-            console.log('[License] 版本已设置:', editionInfo.edition);
-        }
 
         // 更新诊所名
         if (options.clinicName && config.clinicName !== options.clinicName) {
@@ -1700,11 +1657,11 @@ function installLicense(base64Content, options = {}) {
                     passwordHash: passwordHash,
                     salt: PASSWORD_SALT,
                     name: doctorName || phone,
-                    role: editionInfo.role,
+                    role: 'admin',
                     createdAt: new Date().toISOString()
                 });
                 configChanged = true;
-                console.log('[License] 已创建' + (editionInfo.isInstitutional ? '管理员' : '普通用户') + '账户:', phone);
+                console.log('[License] 已创建管理员账户:', phone);
             }
         }
 
@@ -1736,78 +1693,7 @@ function installLicense(base64Content, options = {}) {
     }
 }
 
-// ============================================================================
-//  ★ 版本绑定校正：存在正式 license 时，强制使 config.edition 与激活码版本一致
-//  同一台设备只能注册一个版本。若 config.edition 与 license 版本不一致
-//  则自动校正 edition 与用户角色：
-//    机构版 → edition=cloud_clinic/clinic，用户角色=admin
-//    标准版 → edition=cloud_personal/personal，用户角色=user
-//  返回：{ success, corrected, edition, from, to }
-// ============================================================================
-function enforceEditionBinding() {
-    try {
-        const license = readLicense();
-        if (!license || !license.type) {
-            return { success: true, corrected: false };  // 无正式 license，无需校正
-        }
-        const type = String(license.type || '').toLowerCase();
-        const isInstitution = (type === 'pro' || type === 'institution');
-        if (!isInstitution && type !== 'personal' && type !== 'standard') {
-            return { success: true, corrected: false };  // 无法识别的版本，跳过
-        }
-
-        const configDir = getWritableDir();
-        const configPath = require('path').join(configDir, 'config.json');
-        if (!fs.existsSync(configPath)) {
-            return { success: true, corrected: false };
-        }
-        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-
-        const isCloud = (config.appMode === 'cloud') ||
-                        ['cloud', 'cloud_personal', 'cloud_clinic'].includes(config.edition);
-
-        let targetEdition;
-        if (isInstitution) {
-            targetEdition = isCloud ? 'cloud_clinic' : 'clinic';
-        } else {
-            targetEdition = isCloud ? 'cloud_personal' : 'personal';
-        }
-
-        let corrected = false;
-        const from = config.edition;
-        if (config.edition !== targetEdition) {
-            config.edition = targetEdition;
-            corrected = true;
-            console.log('[License] 版本绑定校正 edition:', from, '->', targetEdition);
-        }
-
-        const targetRole = isInstitution ? 'admin' : 'user';
-        if (Array.isArray(config.users) && config.users.length > 0) {
-            for (const u of config.users) {
-                if (u && u.role && u.role !== targetRole) {
-                    console.log('[License] 版本绑定校正用户角色:', u.username, u.role, '->', targetRole);
-                    u.role = targetRole;
-                    corrected = true;
-                }
-            }
-        }
-
-        if (corrected) {
-            signConfig(config);
-            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
-            console.log('[License] config.json 版本绑定校正完成，已重新签名');
-        }
-
-        return { success: true, corrected: corrected, from: from, to: config.edition };
-    } catch (e) {
-        console.warn('[License] enforceEditionBinding 异常（非致命）:', e.message);
-        return { success: false, corrected: false, error: e.message };
-    }
-}
-
 module.exports = {
-    enforceEditionBinding,  // 启动时校正 config.edition 与激活码版本一致
-    normalizeEdition,
     validateLicense,
     generateLicense,
     readLicense,
