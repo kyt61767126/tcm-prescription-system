@@ -1180,13 +1180,18 @@
                         if (!r || !r.patientName) return false;
                         var matchPatient = cleanPatient && r.patientName.indexOf(cleanPatient) >= 0;
                         var matchNo = cleanNo && r.prescriptionNo && r.prescriptionNo.indexOf(cleanNo) >= 0;
-                        if (matchPatient && matchNo) return true;
-                        if (matchPatient && !cleanNo) return true;
-                        // ★ 网页版先拍照后录入姓名场景：拍照时姓名为空存为 unknown，
-                        // 但编号框有值已记录；仅按编号匹配即可命中
-                        if (matchNo) return true;
+                        // 精确命中：姓名+编号 或 仅编号（先拍照后录姓名、编号已记录场景）
+                        if (cleanNo) return matchNo;
+                        if (cleanPatient) return matchPatient;
                         return false;
                     });
+                    // ★ 兜底：按编号无结果时改为仅按姓名匹配（先拍照后填编号场景，
+                    // IndexedDB 里该条号码为空，只凭姓名也应能被历史处方找到；与APP端一致）
+                    if (results.length === 0 && cleanPatient) {
+                        results = all.filter(function (r) {
+                            return r && r.patientName && r.patientName.indexOf(cleanPatient) >= 0;
+                        });
+                    }
                     results.sort(function (a, b) {
                         return (b.timestamp || 0) - (a.timestamp || 0);
                     });

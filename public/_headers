@@ -23,6 +23,11 @@
 # 静态资源：长缓存
 /*.js
   Cache-Control: public, max-age=86400
+
+# 媒体录像/拍照脚本：禁止长缓存（必须在部署后立即生效，
+# 否则 CDN 边缘仍回退旧版脚本，导致云端网页版录像照片无法保存/查看）
+/electron/video-recorder.js
+  Cache-Control: public, max-age=0, must-revalidate
 /*.css
   Cache-Control: public, max-age=86400
 /*.png
