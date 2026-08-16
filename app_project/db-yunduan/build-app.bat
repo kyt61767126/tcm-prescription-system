@@ -86,6 +86,14 @@ REM Pre-flight check
 powershell -NoProfile -ExecutionPolicy Bypass -File "%CLOUD_DIR%\..\..\tools\pre-flight-check.ps1" -Target cloud -AppDir "%ANDROID_DIR%"
 echo.
 
+echo [1.5/10] Refresh APK signature hash (normal/strict common, auto anti-repack)...
+echo   从 keystore 提取当前证书哈希并注入 SecurityGuard.java, 普通模式也启用签名校验
+powershell -NoProfile -ExecutionPolicy Bypass -File "%CLOUD_DIR%\..\..\tools\generate-sign-hash.ps1" -Version cloud 2>nul
+if errorlevel 1 (
+    echo   [WARN] 签名哈希刷新失败，使用当前已编译哈希继续（不影响构建）
+)
+echo.
+
 echo [2/10] Patch Capacitor Java version (21 -^> 17) + sync shared files...
 call node "%CLOUD_DIR%\..\..\tools\patch-java-version.js" "%CLOUD_DIR%\.."
 if errorlevel 1 (

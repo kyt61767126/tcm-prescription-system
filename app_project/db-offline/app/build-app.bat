@@ -46,6 +46,14 @@ REM Pre-flight check: detect leftover from previous abnormal exit (.build_vcode_
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\pre-flight-check.ps1" -Target %FLAVOR_TARGET% -AppDir "%~dp0app"
 echo.
 
+echo [1.5/10] Refresh APK signature hash (normal/strict common, auto anti-repack)...
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  从 keystore 提取当前证书哈希并注入 LicenseManager.java, 普通模式也启用签名校验'"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\generate-sign-hash.ps1" -Version dingzhi 2>nul
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [WARN] 签名哈希刷新失败，使用当前已编译哈希继续（不影响构建）' -ForegroundColor Yellow"
+)
+echo.
+
 echo [2/10] Sync files to Android + verify integrity...
 set "ANDROID_PUBLIC=%~dp0app\src\main\assets\public"
 set "ANDROID_ASSETS=%~dp0app\src\main\assets"
