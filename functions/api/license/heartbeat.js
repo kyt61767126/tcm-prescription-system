@@ -101,7 +101,7 @@ export async function onRequest(context) {
         // 速率限制：每 IP 每小时 30 次
         const ip = getClientIP(context);
         const rateOk = await checkRateLimit(kv, `hb_${ip}`, 30);
-        if (!rateOk) {
+        if (!rateOk.allowed) {
             return json({ success: false, error: '请求过于频繁，请稍后再试' }, 429);
         }
 
@@ -160,10 +160,11 @@ export async function onRequest(context) {
             }
         }
 
-        // 设备绑定检查
+        // 设备绑定检查（devices 是对象数组 [{machineId,...}]，需遍历匹配）
         const devices = getDevices(record);
         const maxDevices = getMaxDevices(record);
-        if (devices && Array.isArray(devices) && !devices.includes(machineId)) {
+        const deviceMatched = Array.isArray(devices) && devices.some(d => d.machineId === machineId);
+        if (!deviceMatched) {
             // 设备不匹配
             if (devices.length >= maxDevices) {
                 return json({
@@ -190,13 +191,13 @@ export async function onRequest(context) {
                 // 7 天内已记录过心跳，跳过日志
             } else {
                 try {
-                    await appendLicenseLog(kv, code, 'heartbeat', `IP:${ip} machine:${machineId.substring(0, 8)}`);
+                    await appendLicenseLog(kv, code, { action: 'heartbeat', ip, detail: `machine:${machineId.substring(0, 8)}` });
                     await updateLicense(kv, code, { lastHeartbeat: serverTime });
                 } catch(e) {}
             }
         } else {
             try {
-                await appendLicenseLog(kv, code, 'heartbeat', `IP:${ip} machine:${machineId.substring(0, 8)}`);
+                await appendLicenseLog(kv, code, { action: 'heartbeat', ip, detail: `machine:${machineId.substring(0, 8)}` });
                 await updateLicense(kv, code, { lastHeartbeat: serverTime });
             } catch(e) {}
         }

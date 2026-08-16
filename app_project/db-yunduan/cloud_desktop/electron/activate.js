@@ -15,7 +15,7 @@
 //    5. 提示激活成功 → 重启应用
 // ============================================================================
 
-const { BrowserWindow, app, dialog } = require('electron');
+const { BrowserWindow, app, dialog, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -311,6 +311,34 @@ function getAdminRequestIdPath() {
     }
 }
 
+// ★ 敏感信息安全存储（P0修复：管理员密码不再明文落盘）
+// 使用 Electron safeStorage（Windows: DPAPI / macOS: Keychain / Linux: kwallet/gnome-libsecret）
+// 加密绑定当前用户，重启后仍可解密；加密不可用时丢弃密码（不写明文），由用户后续通过注册向导创建管理员账户
+function encryptSensitive(value) {
+    if (!value) return '';
+    try {
+        if (safeStorage && safeStorage.isEncryptionAvailable()) {
+            return 'ENC:' + safeStorage.encryptString(value).toString('base64');
+        }
+        console.warn('[Admin] safeStorage 不可用，敏感信息不落盘');
+    } catch (e) {
+        console.warn('[Admin] 加密失败:', e.message);
+    }
+    return '';
+}
+
+function decryptSensitive(enc) {
+    if (!enc || typeof enc !== 'string') return '';
+    try {
+        if (enc.startsWith('ENC:') && safeStorage && safeStorage.isEncryptionAvailable()) {
+            return safeStorage.decryptString(Buffer.from(enc.slice(4), 'base64'));
+        }
+    } catch (e) {
+        console.warn('[Admin] 解密失败:', e.message);
+    }
+    return '';
+}
+
 function saveAdminRequestId(requestId, clinicName, adminName, phone, password, edition) {
     try {
         const data = {
@@ -318,9 +346,9 @@ function saveAdminRequestId(requestId, clinicName, adminName, phone, password, e
             clinicName: clinicName || '',
             adminName: adminName || '',
             phone: phone || '',
-            password: password || '',  // ★ 本地保存密码，激活通过后用于创建管理员账户
+            password: encryptSensitive(password || ''),  // ★ 加密存储，避免明文落盘
+            savedAt: new Date().toISOString(),
             edition: edition || '',  // ★ 保存版本选择
-            savedAt: new Date().toISOString()
         };
         fs.writeFileSync(getAdminRequestIdPath(), JSON.stringify(data), 'utf8');
         console.log('[Admin] requestId 已保存:', requestId);
@@ -468,7 +496,7 @@ async function saveLicense(licenseBase64) {
                     savedClinicName = adminReq.clinicName || '';
                     savedAdminName = adminReq.adminName || '';
                     savedPhone = adminReq.phone || '';
-                    savedPassword = adminReq.password || '';
+                    savedPassword = decryptSensitive(adminReq.password || '');
                     savedEdition = adminReq.edition || '';  // ★ 读取用户选择的版本
                 }
             }

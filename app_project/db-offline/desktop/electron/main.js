@@ -1118,9 +1118,17 @@ app.whenReady().then(async () => {
         _isLicensed = licenseResult.valid;
         console.log('[License]', licenseResult.type, licenseResult.message);
     } catch (e) {
-        console.error('[License] validateLicense exception, fallback to trial:', e.message);
-        licenseResult = { valid: true, type: 'trial', message: '校验异常，进入试用模式' };
-        _isLicensed = true;
+        // ★ P0修复：异常时拒绝启动（禁止降级为无限试用）
+        // 原逻辑：异常降级为 {valid:true, type:'trial'}，且发生在下方 denied 检查之前，
+        // 攻击者损坏 trial.dat 触发异常 + 断网即可绕过试用次数限制无限试用。
+        // 现改为拒绝启动并引导重新激活（重新激活会重建 license.dat/trial.dat）。
+        console.error('[License] validateLicense exception:', e.message);
+        licenseResult = {
+            valid: false,
+            type: 'license_error',
+            message: '激活信息校验异常，请重新激活软件。'
+        };
+        _isLicensed = false;
     }
 
     // ★ 版本绑定：存在正式 license 时强制校正 config.edition 与激活码版本一致
