@@ -454,6 +454,30 @@ export async function onRequest(context) {
                 return json({ success: false, error: '请提供用户名和密码' }, 400);
             }
 
+            // P0-7 修复：IP 限流（3次/小时，与注册一致），防止部署窗口期被抢注/暴力探测
+            const bootstrapKey = 'bootstrap_ip:' + (context.request.headers.get('CF-Connecting-IP') || 'unknown');
+            const bootstrapCount = parseInt(await kv.get(bootstrapKey) || '0', 10) + 1;
+            if (bootstrapCount === 1) {
+                await kv.put(bootstrapKey, '1', { expirationTtl: 60 * 60 });
+            } else {
+                await kv.put(bootstrapKey, String(bootstrapCount), { expirationTtl: 60 * 60 });
+            }
+            if (bootstrapCount > 3) {
+                await writeAuditLog(kv, null, 'anonymous', 'unknown', 'bootstrap_rate_limited', bootstrapKey, context.request);
+                return json({ success: false, error: '请求过于频繁，请稍后再试' }, 429);
+            }
+
+            // P0-7 修复：密码强度校验（与注册一致：8-128位，含字母和数字）
+            if (password.length < 8) {
+                return json({ success: false, error: '密码至少8位' }, 400);
+            }
+            if (password.length > 128) {
+                return json({ success: false, error: '密码过长（最多128位）' }, 400);
+            }
+            if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+                return json({ success: false, error: '密码必须同时包含字母和数字' }, 400);
+            }
+
             const existingAdmins = await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json');
             if (existingAdmins && existingAdmins.length > 0) {
                 return json({ success: false, error: '平台管理员已初始化，该接口已关闭' }, 403);
@@ -480,11 +504,31 @@ export async function onRequest(context) {
 
         // ===== 重置平台管理员密码 POST /users?action=reset-platform-admin =====
         // 仅当 system:platform_admins 已有管理员时可用，用于重置密码
+        // ★ P0-1 修复：原实现无任何认证，任何人可直接重置平台管理员密码接管系统。
+        //   现要求：必须由已认证的 platform_admin 发起（Bearer token），且新密码需满足强度要求。
         if (method === 'POST' && url.searchParams.get('action') === 'reset-platform-admin') {
             const body = await context.request.json().catch(() => ({}));
             const { username, password, name } = body;
             if (!username || !password) {
                 return json({ success: false, error: '请提供用户名和新密码' }, 400);
+            }
+
+            // P0-1：认证——必须是已登录的 platform_admin
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser) {
+                return json({ success: false, error: '未认证，请先以平台管理员身份登录' }, 401);
+            }
+            if (authUser.role !== ROLE_PLATFORM_ADMIN) {
+                await writeAuditLog(kv, null, authUser.username, authUser.role, 'reset_platform_admin_denied', username, context.request);
+                return json({ success: false, error: '无权限：仅平台管理员可重置管理员密码' }, 403);
+            }
+
+            // P0-1：新密码强度校验（与注册一致）
+            if (password.length < 8 || password.length > 128) {
+                return json({ success: false, error: '密码长度需在 8-128 位之间' }, 400);
+            }
+            if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+                return json({ success: false, error: '密码必须同时包含字母和数字' }, 400);
             }
 
             const existingAdmins = await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json');
@@ -504,6 +548,9 @@ export async function onRequest(context) {
             existingAdmins[adminIdx].updatedAt = getNowISO();
 
             await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(existingAdmins));
+            // P0-1：审计日志 + 撤销该管理员的所有旧 token
+            await writeAuditLog(kv, null, authUser.username, authUser.role, 'reset_platform_admin', username, context.request);
+            try { await revokeAllUserTokens(kv, username); } catch (e) { console.error('revokeAllUserTokens error:', e); }
             return json({ success: true, message: '平台管理员密码已重置', admin: sanitizeUser(existingAdmins[adminIdx], null, null) });
         }
 

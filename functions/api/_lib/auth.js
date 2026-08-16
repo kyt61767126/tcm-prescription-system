@@ -167,7 +167,15 @@ export async function signToken(payload, env, ttlMs = null) {
     const envTtlHours = env?.AUTH_TOKEN_TTL_HOURS ? parseFloat(env.AUTH_TOKEN_TTL_HOURS) : null;
     const effectiveTtl = ttlMs !== null ? ttlMs : (envTtlHours ? envTtlHours * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000);
     const expireAt = Date.now() + effectiveTtl;
-    const tokenPayload = { u: payload.username, r: payload.role, c: payload.clinicId || null, e: expireAt };
+    // P0-2 修复：签发时写入用户 token version（纳入签名），使 revokeAllUserTokens 真正生效
+    const kvForVer = env?.KV || env?.TCM_PRESCRIPTION_KV;
+    let tokenVersion = 0;
+    if (kvForVer) {
+        try {
+            tokenVersion = parseInt(await kvForVer.get('user_token_version:' + payload.username) || '0', 10) || 0;
+        } catch (e) { /* KV 读取失败按 v=0 继续（不影响正常登录） */ }
+    }
+    const tokenPayload = { u: payload.username, r: payload.role, c: payload.clinicId || null, e: expireAt, v: tokenVersion };
     const payloadStr = JSON.stringify(tokenPayload);
     const sig = await hmacSign(payloadStr, secret);
     const fullPayload = { ...tokenPayload, s: sig };
@@ -187,12 +195,26 @@ export async function verifyToken(token, env) {
         if (Date.now() > payload.e) return null;
 
         const secret = getSecret(env);
-        const expectedSig = await hmacSign(JSON.stringify({ u: payload.u, r: payload.r, c: payload.c, e: payload.e }), secret);
+        // P0-2 修复：新 token 签名覆盖 v 字段；旧 token（无 v）按旧算法校验以保持兼容
+        const sigBody = payload.v !== undefined
+            ? { u: payload.u, r: payload.r, c: payload.c, e: payload.e, v: payload.v }
+            : { u: payload.u, r: payload.r, c: payload.c, e: payload.e };
+        const expectedSig = await hmacSign(JSON.stringify(sigBody), secret);
         if (expectedSig !== payload.s) return null;
 
         // P1-3：检查 Token 黑名单
         const kv = env?.KV || env?.TCM_PRESCRIPTION_KV;
         if (kv) {
+            // P0-2 修复：检查用户 token version（revokeAllUserTokens 递增后，旧版本 token 全部失效）
+            try {
+                const tokenVersion = payload.v || 0;
+                const currentVersion = parseInt(await kv.get('user_token_version:' + payload.u) || '0', 10) || 0;
+                if (tokenVersion < currentVersion) {
+                    console.warn('[安全] 已撤销版本(v' + tokenVersion + '<v' + currentVersion + ')的 Token 被拒绝:', payload.u);
+                    return null;
+                }
+            } catch (e) { /* KV 读取失败放行（避免故障时全站不可用） */ }
+
             const tokenHash = await sha256(token);
             const revoked = await kv.get(KV_TOKEN_REVOKED_PREFIX + tokenHash);
             if (revoked) {

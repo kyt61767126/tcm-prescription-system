@@ -265,14 +265,34 @@ function showActivateWindow(parentWindow) {
         if (inExpireAlertFlow) return;
         try {
             const localMachineId = getMachineId();
-            const licenseResult = licenseManager.validateLicense({ localMachineId });
-            if (!licenseResult.valid) {
+            // ★ P0-3 修复：改用 readLicense（只读不写），不再调用 validateLicense——
+            //   validateLicense 在无 license 时会自动创建 trial.dat 并返回 {valid:true,type:'trial'}，
+            //   等于给"云端无试用"设计开了后门（与 main.js license:get-status 的 P1 修复保持一致）
+            const lic = licenseManager.readLicense(localMachineId);
+            let stillValid = !!lic;
+            if (stillValid && lic.expiresAt) {
+                stillValid = new Date(lic.expiresAt) > new Date();
+            }
+            if (!stillValid) {
                 // ★ 优化：未激活时关闭激活窗口，给parent窗口一个提示但不再强弹窗口
                 console.log('[Activate] 用户关闭激活窗口（未激活），不再强弹出期提示（避免死循环）');
                 // 如果有父窗口，把父窗口前置，提示用户稍后可从登录页重新打开激活窗口
                 if (parentWindow && !parentWindow.isDestroyed()) {
                     parentWindow.show();
                     parentWindow.focus();
+                } else {
+                    // ★ P0-4 修复：无父窗口（启动时直接弹激活窗）且未激活时，退出应用避免空白桌面
+                    // （与离线版 activate.js 行为对齐）
+                    console.log('[Activate] 无父窗口且未激活，提示后退出应用');
+                    try {
+                        dialog.showMessageBoxSync({
+                            type: 'warning',
+                            title: '未激活',
+                            message: '软件尚未激活，下次启动时仍可重新激活。软件即将退出。',
+                            buttons: ['退出']
+                        });
+                    } catch (e) { /* 忽略 */ }
+                    app.exit(0);
                 }
             }
         } catch (e) {
