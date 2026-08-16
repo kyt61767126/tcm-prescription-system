@@ -497,6 +497,25 @@ async function saveLicense(licenseBase64) {
     }
 }
 
+// ============================================================================
+//  ★ 立即试用（2026-08-16）：不激活直接进入 7 天试用（默认标准版）
+//  试用默认标准版；试用已到期/被服务端锁定则返回错误
+// ============================================================================
+async function startTrial() {
+    try {
+        const localMachineId = getMachineId();
+        const status = licenseManager.validateLicense({ localMachineId });
+        if (!status.valid) {
+            return { success: false, error: status.message || '无法进入试用' };
+        }
+        // 关闭激活窗口，让主进程走试用登录流程（edition 已在启动时固定为标准版）
+        closeActivateWindow();
+        return { success: true, message: '已进入试用模式（免费7天 · 标准版）' };
+    } catch (e) {
+        return { success: false, error: e.message };
+    }
+}
+
 // ★ 取消管理员激活请求
 async function cancelAdminRequest(requestId) {
     try {
@@ -516,6 +535,7 @@ async function cancelAdminRequest(requestId) {
 
 module.exports = {
     getMachineId,
+    startTrial,
     activateOnline,
     showActivateWindow,
     showExpireAlertAndActivate,

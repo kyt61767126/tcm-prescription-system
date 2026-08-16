@@ -335,6 +335,9 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
         </div>
     </div>
 
+    <!-- ★ 立即试用（2026-08-16）：不激活直接进入 7 天试用（默认标准版） -->
+    <button class="btn btn-secondary" id="startTrialBtn" style="margin-top:4px;">⏳ 立即试用（免费7天 · 标准版）</button>
+
     <!-- Tab 切换 + 内容（版本选择后显示） -->
     <div id="tabContainer" style="display:none;">
     <div class="tabs">
@@ -1173,6 +1176,29 @@ document.addEventListener('keydown', e => {
 // Clear invalid class on input
 document.querySelectorAll('input').forEach(input => {
     input.addEventListener('input', () => input.classList.remove('invalid'));
+});
+
+// ============ 立即试用（2026-08-16） ============
+document.getElementById('startTrialBtn').addEventListener('click', async () => {
+    hideGlobalError();
+    const btn = document.getElementById('startTrialBtn');
+    const original = '⏳ 立即试用（免费7天 · 标准版）';
+    btn.disabled = true;
+    btn.textContent = '正在进入试用...';
+    try {
+        const r = await window.electronAPI.activate.startTrial();
+        if (r && r.success) {
+            window.electronAPI.activate.close();
+        } else {
+            showGlobalError((r && r.error) || '进入试用失败');
+            btn.disabled = false;
+            btn.textContent = original;
+        }
+    } catch (e) {
+        showGlobalError('进入试用失败：' + e.message);
+        btn.disabled = false;
+        btn.textContent = original;
+    }
 });
 </script>
 </body>

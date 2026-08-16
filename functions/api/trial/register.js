@@ -21,7 +21,7 @@
 //      "success": true,
 //      "allowed": true/false,        // 是否允许试用
 //      "trialCount": 2,              // 该硬件指纹已试用次数
-//      "maxTrials": 3,               // 允许的最大试用次数
+//      "maxTrials": 1,               // 允许的最大试用次数
 //      "trialDays": 7,               // 试用天数
 //      "serverTime": "2026-01-01T00:00:00Z"
 //    }
@@ -54,7 +54,8 @@ const ALLOWED_ORIGINS = [
 let _currentRequest = null;
 
 // ★ 试用次数阈值（可调）
-const MAX_TRIALS = 3;
+// 2026-08-16：调整为 1 → 一个设备只有一次试用机会（防卸载重装刷试用）
+const MAX_TRIALS = 1;
 // ★ 试用天数（与客户端 LICENSE_TYPE_CONFIG.trial 一致）
 const TRIAL_DAYS = 7;
 

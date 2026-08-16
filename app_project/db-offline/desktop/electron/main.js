@@ -199,7 +199,7 @@ async function ensureEditionSelected() {
         }
 
         // 已有明确的 edition 值，跳过。
-        // ★ 注意：'custom' 是旧版默认占位值，不代表用户已选择版本，必须触发选择框
+        // ★ 注意：'custom' 是旧版默认占位值，不代表用户已选择版本
         const knownEditions = ['personal', 'clinic', 'cloud_personal', 'cloud_clinic',
                                'offline_personal', 'offline_clinic', 'clinic_custom'];
         if (config.edition && knownEditions.includes(config.edition)) {
@@ -207,49 +207,127 @@ async function ensureEditionSelected() {
             return;
         }
 
-        // 首次启动：弹出版本选择对话框
-        console.log('[Edition] 首次启动，显示版本选择对话框');
-        const { dialog } = require('electron');
-        const choice = dialog.showMessageBoxSync({
-            type: 'question',
-            title: '选择版本',
-            message: '欢迎使用惠康中医诊所管理系统',
-            detail: '请选择您要使用的版本：',
-            buttons: ['标准版（个人诊所·单用户）', '机构版（多人机构·多用户管理）'],
-            defaultId: 0,
-            cancelId: 0,
-            noLink: true
-        });
+        // ★ 2026-08-16：统一安装包下，无正式 license（试用）默认标准版，不再弹版本选择框。
+        //   正式激活后由 enforceEditionBinding 校正 edition 与激活码版本一致。
+        let hasLicense = false;
+        try { hasLicense = !!licenseManager.readLicense(); } catch (e) { hasLicense = false; }
 
-        const isInstitutional = (choice === 1);
-        const newEdition = isInstitutional ? 'clinic' : 'personal';
-        const newRole = isInstitutional ? 'admin' : 'user';
-
-        console.log('[Edition] 用户选择:', isInstitutional ? '机构版' : '标准版');
-
-        // 更新 config.edition
-        config.edition = newEdition;
-
-        // 调整默认用户角色
-        if (Array.isArray(config.users)) {
-            for (const u of config.users) {
-                if (u.role === 'admin' && !isInstitutional) {
-                    u.role = 'user';
-                    console.log('[Edition] 用户', u.username, '角色已调整为 user');
-                } else if (u.role === 'user' && isInstitutional) {
-                    u.role = 'admin';
-                    console.log('[Edition] 用户', u.username, '角色已调整为 admin');
+        if (!hasLicense) {
+            // 试用期固定标准版（personal）
+            config.edition = 'personal';
+            if (Array.isArray(config.users)) {
+                for (const u of config.users) {
+                    if (u && u.role === 'admin') {
+                        u.role = 'user';
+                        console.log('[Edition] 用户', u.username, '角色已调整为 user（试用标准版）');
+                    }
                 }
             }
+            licenseManager.signConfig(config);
+            await fse.writeJson(configPath, config, { spaces: 2 });
+            console.log('[Edition] 无授权，试用默认标准版（personal）');
+            return;
         }
 
-        // 签名并保存
-        licenseManager.signConfig(config);
-        await fse.writeJson(configPath, config, { spaces: 2 });
-        console.log('[Edition] 版本选择已保存:', newEdition);
+        // 有正式 license：由 enforceEditionBinding 在启动时校正，这里不弹框
+        console.log('[Edition] 已存在授权，版本由 enforceEditionBinding 校正');
     } catch (e) {
         console.error('[Edition] 版本选择失败:', e.message);
         // 失败不阻塞启动，使用默认配置
+    }
+}
+
+// ============================================================================
+//  ★ 试用固定标准版 + 服务端一次性试用登记（防卸载重装刷试用）
+//  试用期固定为「标准版」（edition=personal），机构版只能通过正式激活获得。
+// ============================================================================
+function getTrialDeniedPath() {
+    try {
+        return require('path').join(licenseManager.getWritableDir(), 'trial-denied.dat');
+    } catch (e) {
+        return require('path').join(app.getPath('userData'), 'trial-denied.dat');
+    }
+}
+function isTrialDenied() {
+    try { return require('fs').existsSync(getTrialDeniedPath()); } catch (e) { return false; }
+}
+function writeTrialDeniedMarker() {
+    try { require('fs').writeFileSync(getTrialDeniedPath(), String(Date.now()), 'utf8'); } catch (e) {}
+}
+
+// 试用期强制 config.edition=personal（标准版），用户角色=user
+async function ensureTrialStandardEdition() {
+    try {
+        const fsSync = require('fs');
+        const configPath = getWritableConfigPath();
+        if (!fsSync.existsSync(configPath)) return false;
+        const config = JSON.parse(fsSync.readFileSync(configPath, 'utf8'));
+        let changed = false;
+        if (config.edition !== 'personal') {
+            console.log('[Trial] 试用期校正 edition:', config.edition, '->', 'personal');
+            config.edition = 'personal';
+            changed = true;
+        }
+        if (Array.isArray(config.users)) {
+            for (const u of config.users) {
+                if (u && u.role && u.role !== 'user') {
+                    console.log('[Trial] 试用期校正用户角色:', u.username, u.role, '->', 'user');
+                    u.role = 'user';
+                    changed = true;
+                }
+            }
+        }
+        if (changed) {
+            licenseManager.signConfig(config);
+            fsSync.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        }
+        return true;
+    } catch (e) {
+        console.warn('[Trial] 试用期标准版校正异常（非致命）:', e.message);
+        return false;
+    }
+}
+
+// 服务端一次性试用登记：POST /api/trial/register
+// 返回：{ allowed:true } 允许；{ denied:true, message } 次数超限；{ offline:true } 无网宽限本地试用
+const TRIAL_REGISTER_API = 'https://tcm-prescription-system.pages.dev/api/trial/register';
+async function registerTrialWithServer() {
+    try {
+        const hwFp = (licenseManager.getHardwareFingerprint && licenseManager.getHardwareFingerprint()) || '';
+        if (!hwFp) return { allowed: true, offline: true };
+        const machineId = (activateManager && activateManager.getMachineId) ? activateManager.getMachineId() : '';
+        let cfg = {};
+        try { cfg = JSON.parse(require('fs').readFileSync(getWritableConfigPath(), 'utf8')); } catch (e) {}
+        const body = {
+            hwFp,
+            machineId,
+            productName: cfg.productName || '惠康中医',
+            edition: 'personal',
+            appMode: cfg.appMode || 'offline'
+        };
+        const fetchPromise = async () => {
+            const controller = new AbortController();
+            const t = setTimeout(() => controller.abort(), 4000);
+            try {
+                const res = await fetch(TRIAL_REGISTER_API, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal: controller.signal
+                });
+                return await res.json();
+            } finally { clearTimeout(t); }
+        };
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT')), 5000));
+        const data = await Promise.race([fetchPromise(), timeoutPromise]);
+        if (data && data.success && data.allowed === false) {
+            return { denied: true, message: data.message || '该设备试用次数已达上限，请激活正式版' };
+        }
+        return { allowed: true, trialCount: data && data.trialCount };
+    } catch (e) {
+        // 无网/服务异常 → 宽限本地试用，联网后下次启动自动补报
+        console.warn('[Trial] 试用登记失败（宽限本地试用）:', e.message);
+        return { allowed: true, offline: true };
     }
 }
 
@@ -1055,6 +1133,36 @@ app.whenReady().then(async () => {
         console.warn('[License] 启动版本绑定校验失败（非致命）:', e.message);
     }
 
+    // ★ 试用固定标准版 + 服务端一次试用登记（防卸载重装刷试用）
+    if (licenseResult && licenseResult.type === 'trial' && _isLicensed) {
+        try {
+            await ensureTrialStandardEdition();
+            if (isTrialDenied()) {
+                console.warn('[Trial] 本机试用资格已被服务端锁定');
+                licenseResult = {
+                    valid: false,
+                    message: '该设备已完成一次试用且已过期，请激活正式版。',
+                    type: 'trial_limit_reached'
+                };
+                _isLicensed = false;
+            } else {
+                const reg = await registerTrialWithServer();
+                if (reg && reg.denied) {
+                    writeTrialDeniedMarker();
+                    console.warn('[Trial] 服务端判定试用次数超限，已锁定本机试用');
+                    licenseResult = {
+                        valid: false,
+                        message: reg.message || '该设备试用次数已达上限，请激活正式版',
+                        type: 'trial_limit_reached'
+                    };
+                    _isLicensed = false;
+                }
+            }
+        } catch (e) {
+            console.warn('[Trial] 试用登记异常（非致命，继续试用）:', e.message);
+        }
+    }
+
     // ★ 启动自动更新检查
     updateNotifier.init('dingzhi');
 
@@ -1411,6 +1519,15 @@ ipcMain.handle('license:get-trial-days', () => {
         return { success: true, trialDays: licenseManager.getTrialDays() };
     } catch (e) {
         return { success: false, trialDays: 7, error: String(e) };
+    }
+});
+
+// ★ 立即试用（2026-08-16）：激活窗口「立即试用」按钮 → 进入 7 天试用（默认标准版）
+ipcMain.handle('license:start-trial', () => {
+    try {
+        return activateManager.startTrial();
+    } catch (e) {
+        return { success: false, error: e.message };
     }
 });
 
