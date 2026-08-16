@@ -496,6 +496,35 @@ async function setDeviceVersion(kv, machineId, version, meta = {}) {
     return binding;
 }
 
+// 解除设备-版本绑定（客服在后端管理，用于客户换机/降级/紧急调整）
+async function removeDeviceVersion(kv, machineId) {
+    if (!kv || !machineId) return false;
+    try {
+        await kv.delete(KV_DEVICE_VERSION_PREFIX + machineId);
+        console.log('[DeviceVersion] 已解除设备版本绑定:', machineId);
+        return true;
+    } catch (e) {
+        console.warn('[DeviceVersion] 解除绑定失败:', e.message);
+        return false;
+    }
+}
+
+// 列出所有设备-版本绑定（供后台管理查看，最多返回 limit 条）
+async function listDeviceVersions(kv, limit = 200) {
+    if (!kv) return [];
+    const out = [];
+    try {
+        const list = await kv.list({ prefix: KV_DEVICE_VERSION_PREFIX, limit });
+        for (const k of list.keys) {
+            const v = await kv.get(k.name, 'json');
+            if (v) out.push(v);
+        }
+    } catch (e) {
+        console.warn('[DeviceVersion] 列表读取失败:', e.message);
+    }
+    return out;
+}
+
 // ============================================================================
 //  ★ 测试机白名单：标记为测试机的设备仅放开"一设备一版本"绑定校验，
 //    使其可自由测试标准版/机构版的注册激活流程；客户设备不受影响，仍严格一机一版本
@@ -675,6 +704,8 @@ export {
     versionOf,              // 判断 type/edition 属于机构版还是标准版
     getDeviceVersion,       // 读取设备已绑定版本
     setDeviceVersion,       // 写入设备版本绑定
+    removeDeviceVersion,    // 解除设备版本绑定（客服后台管理）
+    listDeviceVersions,     // 列出所有设备版本绑定
     checkDeviceVersion,     // 校验设备版本是否与目标版本一致
     isTestMachine,          // 判断设备是否在测试机白名单
     setTestMachine,         // 标记测试机

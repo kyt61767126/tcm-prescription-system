@@ -257,6 +257,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <button class="tab-btn" data-tab="Clinics" onclick="switchTab('Clinics')">🏥 诊所管理</button>
             <button class="tab-btn" data-tab="Users" onclick="switchTab('Users')">👥 用户管理</button>
             <button class="tab-btn" data-tab="TestMachine" onclick="switchTab('TestMachine')">🖥 测试机管理</button>
+            <button class="tab-btn" data-tab="DeviceVersion" onclick="switchTab('DeviceVersion')">🔓 设备绑定</button>
         </div>
 
         <!-- 激活码管理标签页（原有内容） -->
@@ -431,6 +432,37 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     </thead>
                     <tbody id="testMachineListBody">
                         <tr><td colspan="4" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div id="tabDeviceVersion" class="tab-content">
+            <div id="deviceVersionAlert" class="alert"></div>
+            <h2>设备版本绑定管理</h2>
+            <p style="color:#606266;font-size:13px;line-height:1.8;">
+                查询/解除某台设备的<b>版本绑定</b>。解除后该设备可重新激活<b>任意版本</b>，
+                用于客户<b>换机、降级、紧急调整</b>等场景。<br>
+                <span style="color:#e67e22;font-weight:600;">操作仅限总管理员，解除前请二次确认。</span>
+            </p>
+            <div class="filter-bar">
+                <input type="text" id="deviceVersionQueryInput" placeholder="输入机器码查询（32位十六进制）" style="flex:2;min-width:260px;font-family:Courier New,monospace;">
+                <button class="btn btn-sm" onclick="queryDeviceBinding()">查询绑定</button>
+                <button class="btn btn-sm" onclick="loadDeviceBindings()">刷新全部绑定</button>
+            </div>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>机器码</th>
+                            <th>绑定版本</th>
+                            <th>激活码</th>
+                            <th>诊所</th>
+                            <th>绑定时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="deviceVersionListBody">
+                        <tr><td colspan="6" class="loading">加载中...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -2003,6 +2035,100 @@ function switchTab(tabName) {
     else if (tabName === 'License') loadList();
     else if (tabName === 'AdminActivate') loadAdminActivateList();
     else if (tabName === 'TestMachine') loadTestMachines();
+    else if (tabName === 'DeviceVersion') loadDeviceBindings();
+}
+
+// ===== ★ 设备版本绑定管理 =====
+async function loadDeviceBindings() {
+    const tbody = document.getElementById('deviceVersionListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" class="loading">加载中...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + '/license/admin-device-version', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'list' })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '加载失败');
+        const bindings = data.bindings || [];
+        const alertEl = document.getElementById('deviceVersionAlert');
+        if (alertEl) alertEl.style.display = 'none';
+        if (bindings.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" class="loading">暂无设备版本绑定</td></tr>';
+            return;
+        }
+        tbody.innerHTML = bindings.map((b) =>
+            '<tr>' +
+            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(b.machineId || '-') + '</td>' +
+            '<td>' + escapeHtml(b.versionLabel || b.version || '-') + '</td>' +
+            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(b.licenseCode || '-') + '</td>' +
+            '<td>' + escapeHtml(b.clinicName || '-') + '</td>' +
+            '<td>' + escapeHtml(b.boundAt || '-') + '</td>' +
+            '<td><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button></td>' +
+            '</tr>'
+        ).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" class="loading" style="color:#ff4d4f;">' + escapeHtml(e.message) + '</td></tr>';
+    }
+}
+
+async function queryDeviceBinding() {
+    const machineId = document.getElementById('deviceVersionQueryInput').value.trim();
+    const alertEl = document.getElementById('deviceVersionAlert');
+    const tbody = document.getElementById('deviceVersionListBody');
+    if (!machineId) {
+        alertEl.className = 'alert alert-error'; alertEl.style.display = 'block';
+        alertEl.textContent = '请输入机器码'; return;
+    }
+    try {
+        const res = await fetch(API_BASE + '/license/admin-device-version', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'query', machineId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '查询失败');
+        if (!data.found) {
+            alertEl.className = 'alert'; alertEl.style.display = 'block';
+            alertEl.textContent = '该设备暂无版本绑定记录，可正常激活任意版本。';
+            tbody.innerHTML = '<tr><td colspan="6" class="loading">无绑定记录</td></tr>';
+            return;
+        }
+        alertEl.style.display = 'none';
+        const b = data.binding;
+        tbody.innerHTML =
+            '<tr>' +
+            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(b.machineId || '-') + '</td>' +
+            '<td>' + escapeHtml(b.versionLabel || '-') + '</td>' +
+            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(b.licenseCode || '-') + '</td>' +
+            '<td>' + escapeHtml(b.clinicName || '-') + '</td>' +
+            '<td>' + escapeHtml(b.boundAt || '-') + '</td>' +
+            '<td><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button></td>' +
+            '</tr>';
+    } catch (e) {
+        alertEl.className = 'alert alert-error'; alertEl.style.display = 'block';
+        alertEl.textContent = '⚠️ ' + e.message;
+    }
+}
+
+async function unbindDeviceBinding(machineId) {
+    if (!confirm('确认解除该设备的版本绑定？\n机器码：' + machineId + '\n解除后该设备可重新激活任意版本（标准版/机构版）。')) return;
+    try {
+        const res = await fetch(API_BASE + '/license/admin-device-version', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'unbind', machineId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '解除失败');
+        const alertEl = document.getElementById('deviceVersionAlert');
+        alertEl.className = 'alert alert-success'; alertEl.style.display = 'block';
+        alertEl.textContent = '✅ 已解除该设备版本绑定' + (data.previous ? '（原绑定：' + data.previous + '）' : '') + '。该设备可重新激活任意版本。';
+        loadDeviceBindings();
+    } catch (e) {
+        alert('⚠️ ' + e.message);
+    }
 }
 
 // ===== ★ 测试机管理 =====
