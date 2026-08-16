@@ -149,6 +149,15 @@
         $('clinicName').textContent = name || '本能堂中医诊所';
     }
 
+    // ★ 统一安装包：登录窗口版本标签按 config.edition 动态显示（离线标准版/离线机构版）
+    function applyEditionTag(config) {
+        var tag = document.querySelector('.version-tag');
+        if (!tag) return;
+        var e = (config && config.edition) || '';
+        var inst = ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic'].indexOf(e) >= 0;
+        tag.textContent = '【' + (inst ? '离线机构版' : '离线标准版') + '】';
+    }
+
     let _users = [];
 
     function initLoginInput(config) {
@@ -383,6 +392,7 @@
         // ★ 主动清理历史遗留用户（在渲染登录界面之前）
         cleanLegacyUsers();
         loadClinicName(config);
+        applyEditionTag(config);
         initLoginInput(config);
         initLoginPermissions();
         // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码
