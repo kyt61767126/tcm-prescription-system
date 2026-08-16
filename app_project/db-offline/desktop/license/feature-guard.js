@@ -67,10 +67,22 @@ function checkFeature(featureName) {
 }
 
 // 获取当前 license 可用的所有功能列表
+// ★ 第三轮终检 P1 修复（2026-08-16）：readLicense 只解密不验签，features 字段
+//   可被篡改伪造功能列表。现使用前必须 verifySignature，验签失败返回空列表
+//   （fail-closed；hasFeature/checkFeature 本就验签，此处对齐）。
 function getAvailableFeatures() {
     const license = licenseManager.readLicense();
     if (!license) {
         // 试用模式
+        return [];
+    }
+    try {
+        if (typeof licenseManager.verifySignature === 'function' && !licenseManager.verifySignature(license)) {
+            console.warn('[FeatureGuard] license 验签失败，功能列表返回空');
+            return [];
+        }
+    } catch (e) {
+        console.warn('[FeatureGuard] license 验签异常，功能列表返回空:', e.message);
         return [];
     }
     const normalized = licenseManager.normalizeLicense(license);

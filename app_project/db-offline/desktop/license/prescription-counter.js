@@ -194,10 +194,22 @@ function getCount(monthKey) {
 }
 
 // 获取当前 license 的处方限制（0 = 无限）
+// ★ 第三轮终检 P1 修复（2026-08-16）：readLicense 只解密不验签，maxPrescriptions
+//   字段可被篡改（如改为 0=无限）。现使用前必须 verifySignature，验签失败
+//   或无 license 一律按试用限制处理（fail-closed）。
 function getMaxPrescriptions() {
     const license = licenseManager.readLicense();
     if (!license) {
         // 无 license，试用模式
+        return licenseManager.LICENSE_TYPE_CONFIG.trial.maxPrescriptions;
+    }
+    try {
+        if (typeof licenseManager.verifySignature === 'function' && !licenseManager.verifySignature(license)) {
+            console.warn('[PrescriptionCounter] license 验签失败，按试用限制处理');
+            return licenseManager.LICENSE_TYPE_CONFIG.trial.maxPrescriptions;
+        }
+    } catch (e) {
+        console.warn('[PrescriptionCounter] license 验签异常，按试用限制处理:', e.message);
         return licenseManager.LICENSE_TYPE_CONFIG.trial.maxPrescriptions;
     }
     const normalized = licenseManager.normalizeLicense(license);

@@ -597,12 +597,17 @@ function verifySignature(data) {
 
     // ★ 任务2 新增：v5 ECDSA 签名优先校验
     // 如果 license 包含 signatureV5 字段且配置了 ECDSA 公钥，优先用非对称验签
-    // 失败则 fallback 到 HMAC v3/v2/v1（向后兼容旧 license）
+    // ★ 第三轮终检 P1 修复（2026-08-16）：验签失败直接拒绝（fail-closed）。
+    //   license 含 signatureV5 说明由 v5 云端签发，验签失败 = 字段被篡改后
+    //   重算了对称 HMAC（需反编译拿硬编码密钥）。若降级到 HMAC 会让非对称
+    //   验签保护形同虚设。旧版 license（无 signatureV5 字段）不受影响。
     if (data.signatureV5 && ECDSA_VERIFY_PUBLIC_KEY_PEM) {
         if (verifyECDSASignature(data)) {
             return true;
         }
-        console.warn('[License] v5 ECDSA 验签失败，降级为 HMAC');
+        console.warn('[License] v5 ECDSA 验签失败，拒绝该 license（fail-closed）');
+        setLicenseDataContext(null);
+        return false;
     }
 
     // ★ P1-3 新增：如果 license 含 masterKey 字段，必须使用 masterKey 派生密钥验签
@@ -1375,12 +1380,17 @@ let _heartbeatTimer = null;
 let _heartbeatRetryCount = 0;
 
 async function checkLicenseRevocation(machineId) {
+    // ★ 第三轮终检 P1 修复（2026-08-16）：Node fetch(undici) 不识别 timeout 选项，
+    //   原写法会挂起至 OS TCP 超时（可达数分钟），心跳检测被卡死。
+    //   改用 AbortController + setTimeout（与 registerTrialWithServer 相同模式）。
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 15000);
     try {
         const response = await fetch(HEARTBEAT_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ machineId: machineId || getMachineId() }),
-            timeout: 15000
+            signal: controller.signal
         });
 
         if (!response.ok) {
@@ -1394,6 +1404,8 @@ async function checkLicenseRevocation(machineId) {
     } catch (e) {
         console.warn('[Heartbeat] 心跳检测异常:', e.message);
         return null;
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 
@@ -1702,7 +1714,86 @@ function installLicense(base64Content, options = {}) {
     }
 }
 
+// ============================================================================
+//  ★ 版本绑定校正：存在正式 license 时，强制使 config.edition 与激活码版本一致
+//  同一台设备只能注册一个版本。若 config.edition 与 license 版本不一致
+//  则自动校正 edition 与用户角色：
+//    机构版 → edition=cloud_clinic/clinic，用户角色=admin
+//    标准版 → edition=cloud_personal/personal，用户角色=user
+//  ★ 第三轮终检 P0 修复（2026-08-16）：本函数曾于 a1665523 只实现在 cloud_desktop
+//    副本，未进入 shared 事实源，随后被 CI 同步覆盖删除（副本漂移事故）。
+//    现恢复到事实源，并新增签名校验：license 验签失败时不得用于校正
+//    （防止伪造 license.type=pro 提权 admin 角色）。
+//  返回：{ success, corrected, edition, from, to }
+// ============================================================================
+function enforceEditionBinding() {
+    try {
+        const license = readLicense();
+        if (!license || !license.type) {
+            return { success: true, corrected: false };  // 无正式 license，无需校正
+        }
+        // ★ 安全加固：仅信任验签通过的 license（防伪造 type 提权）
+        if (!verifySignature(license)) {
+            console.warn('[License] enforceEditionBinding: license 验签失败，跳过版本校正');
+            return { success: true, corrected: false };
+        }
+        const type = String(license.type || '').toLowerCase();
+        const isInstitution = (type === 'pro' || type === 'institution');
+        if (!isInstitution && type !== 'personal' && type !== 'standard') {
+            return { success: true, corrected: false };  // 无法识别的版本，跳过
+        }
+
+        const configDir = getWritableDir();
+        const configPath = require('path').join(configDir, 'config.json');
+        if (!fs.existsSync(configPath)) {
+            return { success: true, corrected: false };
+        }
+        const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+
+        const isCloud = (config.appMode === 'cloud') ||
+                        ['cloud', 'cloud_personal', 'cloud_clinic'].includes(config.edition);
+
+        let targetEdition;
+        if (isInstitution) {
+            targetEdition = isCloud ? 'cloud_clinic' : 'clinic';
+        } else {
+            targetEdition = isCloud ? 'cloud_personal' : 'personal';
+        }
+
+        let corrected = false;
+        const from = config.edition;
+        if (config.edition !== targetEdition) {
+            config.edition = targetEdition;
+            corrected = true;
+            console.log('[License] 版本绑定校正 edition:', from, '->', targetEdition);
+        }
+
+        const targetRole = isInstitution ? 'admin' : 'user';
+        if (Array.isArray(config.users) && config.users.length > 0) {
+            for (const u of config.users) {
+                if (u && u.role && u.role !== targetRole) {
+                    console.log('[License] 版本绑定校正用户角色:', u.username, u.role, '->', targetRole);
+                    u.role = targetRole;
+                    corrected = true;
+                }
+            }
+        }
+
+        if (corrected) {
+            signConfig(config);
+            fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+            console.log('[License] config.json 版本绑定校正完成，已重新签名');
+        }
+
+        return { success: true, corrected: corrected, from: from, to: config.edition };
+    } catch (e) {
+        console.warn('[License] enforceEditionBinding 异常（非致命）:', e.message);
+        return { success: false, corrected: false, error: e.message };
+    }
+}
+
 module.exports = {
+    enforceEditionBinding,  // ★ 启动时校正 config.edition 与激活码版本一致（main.js 调用）
     validateLicense,
     generateLicense,
     readLicense,
@@ -1753,5 +1844,8 @@ module.exports = {
     getCachedActivationTicket,
     // ★ P0 修复：config签名 + license统一安装
     signConfig,
-    installLicense
+    installLicense,
+    // ★ 第三轮终检 P1 修复：导出验签函数，供 prescription-counter / feature-guard
+    //   在使用 license 字段前校验签名（堵住 readLicense 不验签的旁路）
+    verifySignature
 };

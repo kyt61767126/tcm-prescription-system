@@ -1143,12 +1143,13 @@ ipcMain.handle('license:select-offline-file', async (event) => {
 });
 
 // ★ v2: 处方数量限制 IPC
+// ★ 第三轮终检 P1 修复（2026-08-16）：授权执行点异常时 fail-closed（原放行可绕过 30 张限制）
 ipcMain.handle('license:can-prescribe', () => {
     try {
         return prescriptionCounter.canPrescribe();
     } catch (e) {
         console.error('[IPC] can-prescribe 异常:', e);
-        return { allowed: true, current: 0, max: 0, remaining: -1 };  // 出错时放行，避免阻塞用户
+        return { allowed: false, current: 0, max: 30, remaining: 0, error: '处方数校验异常，请重启软件' };
     }
 });
 
@@ -1177,7 +1178,8 @@ ipcMain.handle('license:get-prescription-status', () => {
         return prescriptionCounter.getStatus();
     } catch (e) {
         console.error('[IPC] get-prescription-status 异常:', e);
-        return { current: 0, max: 0, remaining: -1, licenseType: 'unknown', month: '' };
+        // ★ 第三轮终检 P1 修复：max:0 在 UI 表示"无限"，异常时按试用限制显示（fail-closed）
+        return { current: 0, max: 30, remaining: 30, licenseType: 'trial', month: '' };
     }
 });
 
@@ -1187,7 +1189,8 @@ ipcMain.handle('license:check-feature', (event, featureName) => {
         return featureGuard.checkFeature(featureName);
     } catch (e) {
         console.error('[IPC] check-feature 异常:', e);
-        return { allowed: true, message: '功能可用（校验异常，默认放行）', feature: featureName };
+        // ★ 第三轮终检 P1 修复：授权执行点异常时拒绝（fail-closed）
+        return { allowed: false, message: '功能校验异常，请重启软件后再试', feature: featureName };
     }
 });
 
