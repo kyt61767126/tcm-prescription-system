@@ -2444,18 +2444,33 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                         //
                         // 时序：window.print()异步打开系统打印对话框，onafterprint在对话框关闭后触发。
                         //   等待onafterprint后再safeResolve，避免在用户还在操作打印对话框时关闭窗口。
-                        // ★ 彻底修复字体偏大（window.print()方案无效，改用单一来源方案）
-                        // 移除CSS @page size（替换1已处理）+ webContents.print pageSize唯一控制纸张
-                        // 不设margins，CSS @page margin:0唯一控制边距
-                        // 两个维度都单一来源，彻底消除fit-to-page缩放
+                        // ★ 默认打印机(1020) + A5 静默直出（2026-08-06）
+                        //   自动匹配系统打印机名称含"1020"的打印机 → silent:true静默直出，不弹对话框
+                        //   匹配失败 → silent:false回退弹对话框（用户手动选择）
+                        let defaultPrinter = null;
+                        try {
+                            const printers = await printWin.webContents.getPrintersAsync();
+                            defaultPrinter = printers.find(p => p.name && p.name.indexOf('1020') !== -1) || null;
+                            if (defaultPrinter) {
+                                console.log('[print] 自动匹配到默认打印机:', defaultPrinter.name);
+                            } else {
+                                console.warn('[print] 未找到含"1020"的打印机，回退手动选择; 可用打印机:', printers.map(p => p.name).join(', '));
+                            }
+                        } catch (e) {
+                            console.error('[print] 获取打印机列表失败:', e);
+                        }
                         await new Promise((resolvePrint) => {
-                            printWin.webContents.print({
-                                silent: false,
+                            const printOptions = {
+                                silent: !!defaultPrinter,
                                 printBackground: true,
                                 pageSize: 'A5',
                                 landscape: isLandscape,
                                 margins: { marginType: 'none' }
-                            }, (success, failureReason) => {
+                            };
+                            if (defaultPrinter) {
+                                printOptions.deviceName = defaultPrinter.name;
+                            }
+                            printWin.webContents.print(printOptions, (success, failureReason) => {
                                 if (!success && failureReason) {
                                     console.error('[print] 打印失败:', failureReason);
                                 }
