@@ -251,6 +251,8 @@ goto :main
 
     call :log_title "Offline APP Builder (Unified)"
 
+    call :check_node || call :finalize 1 "Node.js check failed"
+
     call :check_java || call :finalize 1 "Java check failed"
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
@@ -302,12 +304,12 @@ goto :main
 
     set "CAP_DIR=%~dp0app"
 
-    call :check_file "app\pack-app-strict.bat" "%CAP_DIR%\pack-app-strict.bat" || call :finalize 1 "Script not found"
+    call :check_file "app\build-app.bat" "%CAP_DIR%\build-app.bat" || call :finalize 1 "Script not found"
 
     set "SAVED_NO_PAUSE=%NO_PAUSE%"
     set "NO_PAUSE=1"
 
-    call "%CAP_DIR%\pack-app-strict.bat"
+    call "%CAP_DIR%\build-app.bat" standard
 
     set "TEMP_RC=%errorlevel%"
 

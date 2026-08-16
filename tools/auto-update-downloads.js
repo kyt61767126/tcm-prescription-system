@@ -60,19 +60,22 @@ function findApkFile(dir) {
 }
 
 function readVersionFromGradle(appDir) {
-    try {
-        // Android 工程根目录: appDir/app/app/build.gradle
-        const gradlePath = path.join(appDir, 'app', 'app', 'build.gradle');
-        if (!fs.existsSync(gradlePath)) return '';
-        const content = fs.readFileSync(gradlePath, 'utf8');
-        const nameMatch = content.match(/versionName\s+"([^"]+)"/);
-        if (nameMatch) return nameMatch[1];
-        const match = content.match(/versionCode\s+(\d+)/);
-        if (match) return match[1];
-        return '';
-    } catch (e) {
-        return '';
+    // 依次尝试候选路径（离线工程 appDir/app/app/build.gradle；云端工程 appDir/app/build.gradle）
+    const candidates = [
+        path.join(appDir, 'app', 'app', 'build.gradle'),
+        path.join(appDir, 'app', 'build.gradle')
+    ];
+    for (const gradlePath of candidates) {
+        try {
+            if (!fs.existsSync(gradlePath)) continue;
+            const content = fs.readFileSync(gradlePath, 'utf8');
+            const nameMatch = content.match(/versionName\s+"([^"]+)"/);
+            if (nameMatch) return nameMatch[1];
+            const match = content.match(/versionCode\s+(\d+)/);
+            if (match) return match[1];
+        } catch (e) { /* 该路径不可读，尝试下一个 */ }
     }
+    return '';
 }
 
 function updateDownloads(target) {

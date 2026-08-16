@@ -2690,6 +2690,12 @@
         // 7. 下载逻辑（保留原有逻辑）
         // =====================================================================
         const BASE = 'https://tcm-prescription-system.pages.dev';
+        // 将相对下载路径转换为绝对 URL（兼容根相对路径与完整 URL）
+        function absDownloadUrl(url) {
+            if (!url) return url;
+            if (/^https?:\/\//i.test(url)) return url;
+            return BASE + (url.charAt(0) === '/' ? url : '/' + url);
+        }
         const versions = {
             'cloud': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'desktop' },
             'cloud-app': { jsonUrl: BASE + '/updates/cloud/latest.json', type: 'app' },
@@ -2823,10 +2829,10 @@
                         hashEl.textContent = data.sha256;
                         hashEl.classList.remove('pending');
                         const dlEl = document.getElementById('dl-' + key);
-                        if (dlEl && data.url) {
-                            dlEl.setAttribute('href', data.url);
-                            dlEl.classList.remove('disabled');
-                        }
+                    if (dlEl && data.url) {
+                        dlEl.setAttribute('href', absDownloadUrl(data.url));
+                        dlEl.classList.remove('disabled');
+                    }
                     }
                     // 显示更新时间（精确到小时）
                     const mtimeEl = document.getElementById('mtime-' + key);
