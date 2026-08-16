@@ -1376,6 +1376,56 @@
         }
     }
 
+    // ★ 试用期强制标准版（2026-08-16）：APP/桌面端离线试用统一为标准版（单用户·改密）
+    // 依据：离线版本默认试用标准版，试用期内 config.edition 强制为 personal，隐藏用户管理
+    // 与桌面版 main.js ensureTrialStandardEdition() 行为一致；正式激活后由激活重启重新加载真实 edition
+    async function enforceTrialPersonalEdition() {
+        try {
+            if (!global.electronAPI || !global.electronAPI.license ||
+                typeof global.electronAPI.license.getStatus !== 'function') {
+                return false;
+            }
+            const status = await global.electronAPI.license.getStatus();
+            const licenseType = (status && (status.licenseType || status.type)) || '';
+            if (licenseType !== 'trial') return false;
+            // 试用：强制 CONFIG.edition = personal（标准版）
+            if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition !== 'personal') {
+                CONFIG.edition = 'personal';
+                console.log('[Trial] 试用期校正 CONFIG.edition -> personal');
+            }
+            renderTrialStandardVersion();
+            return true;
+        } catch (e) {
+            console.warn('[Trial] 标准版校正异常（非致命）:', e.message);
+            return false;
+        }
+    }
+
+    // ★ 试用期强制标准版后，刷新版本标签与按钮显示
+    function renderTrialStandardVersion() {
+        try {
+            const label = '【离线标准版】 V1.0.0';
+            const tag = document.querySelector('.version-tag');
+            if (tag && tag.textContent && tag.textContent.indexOf('标准版') < 0) {
+                tag.textContent = label;
+            }
+            const hints = document.querySelectorAll('.tab-hint');
+            hints.forEach(function(h) {
+                const spans = h.querySelectorAll('span');
+                spans.forEach(function(s) {
+                    if (s.textContent && (s.textContent.indexOf('本地') >= 0 || s.textContent.indexOf('离线') >= 0)) {
+                        s.textContent = label;
+                    }
+                });
+            });
+            // 刷新用户显示与底部按钮（若已登录）
+            if (typeof global.updateUserDisplay === 'function') global.updateUserDisplay();
+            if (typeof global.updateMobileActionButtons === 'function') global.updateMobileActionButtons();
+        } catch (e) {
+            console.warn('[Trial] 标准版界面刷新失败:', e);
+        }
+    }
+
     async function checkLicenseAndShowActivate() {
         try {
             // 检查 license API 是否存在（APP 端无 window.electronAPI 时自动跳过）
@@ -1390,6 +1440,8 @@
                 // ★ 兼容逻辑：授权有效时清除失效标志
                 global.__licenseExpired = false;
                 global.__licenseActivating = false;
+                // ★ 试用期强制标准版（单用户·改密）
+                await enforceTrialPersonalEdition();
                 // ★ P1-7 心跳验证：异步执行，不阻断使用（24小时验证一次，7天离线锁定）
                 performHeartbeatCheck();
                 // ★ P1-1 在线验证：如果需要在线验证，自动触发（不阻断使用）
@@ -1517,7 +1569,13 @@
 
             if (modalResult.cancelled || !modalResult.code || !modalResult.code.trim()) {
                 global.__licenseActivating = false;
-                console.log('[LicenseCheck] 用户取消激活');
+                if (modalResult.trial) {
+                    // ★ 立即试用：进入 7 天试用（默认标准版）
+                    await enforceTrialPersonalEdition();
+                    await showHtmlAlert('✅ 已进入试用模式（免费7天 · 标准版）\n\n试用期内可正常使用，到期后请在激活窗口输入激活码激活正式授权。');
+                } else {
+                    console.log('[LicenseCheck] 用户取消激活');
+                }
                 return;
             }
 
@@ -1723,7 +1781,9 @@
                 '<div style="display:flex;gap:10px;">' +
                     '<button id="activateCancelBtn" style="flex:1;padding:12px;font-size:15px;border:1px solid #ddd;border-radius:8px;color:#666;background:white;cursor:pointer;">取消</button>' +
                     '<button id="activateSubmitBtn" style="flex:1;padding:12px;font-size:15px;border:none;border-radius:8px;color:white;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);cursor:pointer;font-weight:bold;">立即激活</button>' +
-                '</div>';
+                '</div>' +
+                // ★ 立即试用（2026-08-16）：不激活直接进入 7 天试用（默认标准版）
+                '<button id="activateTrialBtn" style="width:100%;margin-top:10px;padding:12px;font-size:15px;border:1px solid #4caf50;border-radius:8px;color:#4caf50;background:#f0f9eb;cursor:pointer;font-weight:bold;">⏳ 立即试用（免费7天 · 标准版）</button>'
 
             // 注入 spinner 动画 keyframes（仅注入一次）
             if (!document.getElementById('activateSpinKeyframes')) {
@@ -1742,6 +1802,7 @@
             const copyMachineIdBtn = card.querySelector('#copyMachineIdBtn');
             const loadingBox = card.querySelector('#activateLoadingBox');
             const copyContactBtns = card.querySelectorAll('.copyContactBtn');
+            const trialBtn = card.querySelector('#activateTrialBtn');
 
             // ★ 移除 cancelAutofill 调用：cancelAutofill 反而触发 Autofill 凭据提示弹窗
             // ("本能中医处方系统"大图标窗口)
@@ -1816,6 +1877,12 @@
             });
 
             submitBtn.addEventListener('click', submitCode);
+
+            // ★ 立即试用（2026-08-16）：关闭激活窗口，进入 7 天试用（默认标准版）
+            trialBtn.addEventListener('click', function() {
+                cleanup();
+                resolve({ code: '', cancelled: true, trial: true });
+            });
 
             // 点击遮罩关闭
             overlay.addEventListener('click', function(e) {
@@ -2018,6 +2085,43 @@
         }
     }
 
+    // ★ 向登录界面（loginOverlay）运行时注入"注册 / 激活"入口（registerEntry 元素）
+    // 目的：首次注册用户无需登录即可在登录页找到"设置诊所信息 / 立即激活"入口
+    // 背景：index.html 已内置 .register-entry CSS 与 handleRegisterEntry()/updateRegisterEntry() 函数，
+    //       但登录框 DOM 中缺少 id=registerEntry 元素，导致入口从未显示。此处运行时动态补建，不改 HTML 源码
+    // 约束：仅 APP 端（Capacitor 环境、含 loginOverlay）注入；云端桌面/网页版无需激活（登录即可使用），不注入
+    function injectActivateLinkIntoLogin() {
+        try {
+            // 仅 APP 环境注入（兼容 Capacitor 与 Android WebView 两种环境）
+            const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences)
+                || (typeof global.AndroidNative !== 'undefined')
+                || (typeof global.electronAPI !== 'undefined' && global.electronAPI.isAndroidAPP === true);
+            if (!isApp) return;
+            const overlay = document.getElementById('loginOverlay');
+            if (!overlay) return;
+            // 已注入过则跳过，避免重复
+            if (document.getElementById('activateLoginEntry')) return;
+
+            // 定位登录按钮区，在其下方插入"试用/激活软件"入口
+            const container = overlay.querySelector('.login-buttons');
+            if (!container) return;
+
+            const entry = document.createElement('div');
+            entry.id = 'activateLoginEntry';
+            entry.style.cssText =
+                'text-align:center;margin-top:10px;padding:8px;' +
+                'border:1px dashed #667eea;border-radius:6px;background:#f7f8ff;cursor:pointer;';
+            entry.setAttribute('onclick', 'if(window.activateNow){window.activateNow();}');
+            entry.innerHTML =
+                '<span style="font-size:12px;color:#667eea;font-weight:bold;">🔑 试用 / 激活软件</span>' +
+                '<span style="font-size:10px;color:#999;display:block;margin-top:2px;">未激活？点击进入试用或输入激活码激活</span>';
+            container.parentNode.insertBefore(entry, container.nextSibling);
+            console.log('[LicenseCheck] 登录界面已注入试用/激活入口');
+        } catch (e) {
+            console.warn('[LicenseCheck] 注入登录试用/激活入口失败:', e);
+        }
+    }
+
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
     function startLicenseCheck() {
         setTimeout(async () => {
@@ -2026,6 +2130,8 @@
             startFallbackCheck();
             // ★ 新增：向 settingsModal 注入 license 状态显示 + 立即激活按钮
             injectLicenseStatusIntoSettings();
+            // ★ 新增：向登录界面注入激活入口（激活软件 / 管理员激活）
+            injectActivateLinkIntoLogin();
         }, 2000);
     }
 
