@@ -5,10 +5,14 @@
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
 
-$script:RootDir = $PSScriptRoot | Split-Path -Parent | Split-Path -Parent
-if (-not (Test-Path $script:RootDir)) {
-    $script:RootDir = Split-Path $PSScriptRoot -Parent
+# 脚本位于 <仓库根>\tools\，仓库根 = $PSScriptRoot 的上级
+$script:RootDir = Split-Path $PSScriptRoot -Parent
+# 若该层无 app_project（脚本被移动/复制），向上找包含 app_project 的目录
+$probe = $script:RootDir
+while ($probe -and -not (Test-Path (Join-Path $probe "app_project"))) {
+    $probe = Split-Path $probe -Parent
 }
+if ($probe) { $script:RootDir = $probe }
 
 # Set NO_PAUSE=1 so child build.bat / build-app.bat don't pause at end
 $env:NO_PAUSE = '1'
