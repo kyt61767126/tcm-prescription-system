@@ -1,4 +1,5 @@
 import { parseAuthHeader, isPlatformAdmin } from './_lib/auth.js';
+import { getKV } from './_lib/kv.js';
 
 export async function onRequest(context) {
     const url = new URL(context.request.url);
@@ -33,11 +34,22 @@ export async function onRequest(context) {
     }
     
     try {
-        const kv = context.env.TCM_PRESCRIPTION_KV;
-        
+        // ★ P2-A 修复：原 context.env.TCM_PRESCRIPTION_KV 未绑定导致 500，改用 _lib/kv.js 标准解析链
+        const kv = getKV(context);
+        if (!kv) {
+            console.error('[restore] 无可用 KV 绑定');
+            return new Response(JSON.stringify({
+                success: false,
+                error: '服务暂不可用，请稍后再试'
+            }), {
+                status: 503,
+                headers: { 'Content-Type': 'application/json' }
+            });
+        }
+
         // 获取备份数据
         const backupData = await kv.get(backupKey, 'json');
-        
+
         if (!backupData) {
             return new Response(JSON.stringify({
                 success: false,
@@ -47,7 +59,7 @@ export async function onRequest(context) {
                 headers: { 'Content-Type': 'application/json' }
             });
         }
-        
+
         if (!backupData.keys || typeof backupData.keys !== 'object') {
             return new Response(JSON.stringify({
                 success: false,
@@ -57,23 +69,28 @@ export async function onRequest(context) {
                 headers: { 'Content-Type': 'application/json' }
             });
         }
-        
+
         // 恢复所有数据
+        // ★ P2-C 修复：跳过备份 key 本身（旧备份可能包含 kv_backup_*，恢复会套娃写入）
+        //   跳过 null 值（恢复无意义且会覆盖为 "null" 字符串）
         let restoredCount = 0;
+        let skippedCount = 0;
         const errors = [];
-        
+
         for (const [key, value] of Object.entries(backupData.keys)) {
+            if (key.startsWith('kv_backup_') || value === null || value === undefined) {
+                skippedCount++;
+                continue;
+            }
             try {
                 await kv.put(key, JSON.stringify(value));
                 restoredCount++;
             } catch (error) {
-                errors.push({
-                    key: key,
-                    error: error.message
-                });
+                console.error('[restore] 单key恢复失败:', key, error && error.message);
+                errors.push({ key: key });
             }
         }
-        
+
         // 返回恢复结果
         return new Response(JSON.stringify({
             success: true,
@@ -81,18 +98,20 @@ export async function onRequest(context) {
             backupKey: backupKey,
             backupTimestamp: backupData.timestamp,
             restoredCount: restoredCount,
+            skippedCount: skippedCount,
             errorCount: errors.length,
             errors: errors.length > 0 ? errors : undefined
         }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' }
         });
-        
+
     } catch (error) {
-        console.error('Restore error:', error);
+        // ★ P2-D 修复：错误详情仅记服务端日志，不向客户端泄露内部实现
+        console.error('[restore] 服务器错误:', error && error.message, error);
         return new Response(JSON.stringify({
             success: false,
-            error: error.message || 'Restore failed'
+            error: '恢复失败，请稍后再试'
         }), {
             status: 500,
             headers: { 'Content-Type': 'application/json' }

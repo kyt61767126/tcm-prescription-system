@@ -10,6 +10,9 @@
 //
 // 安全密钥来自环境变量 AUTH_SECRET，请在 Cloudflare Pages 后台配置。
 
+// ★ P2-B 统一：KV 绑定解析单一事实源（禁止内联解析链）
+import { getKV } from './kv.js';
+
 export const ROLE_PLATFORM_ADMIN = 'platform_admin';
 export const ROLE_CLINIC_ADMIN = 'clinic_admin';
 export const ROLE_DOCTOR = 'doctor';
@@ -168,7 +171,8 @@ export async function signToken(payload, env, ttlMs = null) {
     const effectiveTtl = ttlMs !== null ? ttlMs : (envTtlHours ? envTtlHours * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000);
     const expireAt = Date.now() + effectiveTtl;
     // P0-2 修复：签发时写入用户 token version（纳入签名），使 revokeAllUserTokens 真正生效
-    const kvForVer = env?.KV || env?.TCM_PRESCRIPTION_KV;
+    // ★ P2-B 统一：KV 绑定解析改用 _lib/kv.js 单一事实源
+    const kvForVer = getKV(env);
     let tokenVersion = 0;
     if (kvForVer) {
         try {
@@ -202,8 +206,8 @@ export async function verifyToken(token, env) {
         const expectedSig = await hmacSign(JSON.stringify(sigBody), secret);
         if (expectedSig !== payload.s) return null;
 
-        // P1-3：检查 Token 黑名单
-        const kv = env?.KV || env?.TCM_PRESCRIPTION_KV;
+        // P1-3：检查 Token 黑名单（★ P2-B 统一：getKV 单一事实源）
+        const kv = getKV(env);
         if (kv) {
             // P0-2 修复：检查用户 token version（revokeAllUserTokens 递增后，旧版本 token 全部失效）
             try {
@@ -237,7 +241,7 @@ export async function verifyToken(token, env) {
 // P1-3：撤销 Token（登出/改密时调用）
 export async function revokeToken(token, env) {
     try {
-        const kv = env?.KV || env?.TCM_PRESCRIPTION_KV;
+        const kv = getKV(env);  // ★ P2-B 统一：单一事实源
         if (!kv || !token) return false;
         const tokenHash = await sha256(token);
         // 黑名单保留 8 天（略长于 Token 7 天 TTL）

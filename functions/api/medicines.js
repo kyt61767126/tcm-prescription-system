@@ -1,4 +1,5 @@
 import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin, KV_SYSTEM_PLATFORM_MEDICINES } from './_lib/auth.js';
+import { getKV } from './_lib/kv.js';
 
 // P1-6 安全增强：CORS 白名单
 function corsHeaders(request) {
@@ -28,14 +29,7 @@ function json(data, status = 200, request = null) {
     return new Response(JSON.stringify(data), { status, headers: corsHeaders(request) });
 }
 
-function getKV(context) {
-    return context.env.KV ||
-           context.env.TCM_PRESCRIPTION_KV ||
-           context.env['tcm-prescription-kv'] ||
-           context.env['TCM-PRESCRIPTION-KV'] ||
-           context.env.TCM_KV ||
-           context.env.PRESCRIPTION_KV;
-}
+// ★ P2-B 统一：getKV 改用 _lib/kv.js 单一事实源（顶部 import）
 
 function getDefaultMedicines() {
     return [

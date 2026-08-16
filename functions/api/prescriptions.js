@@ -1,4 +1,5 @@
 import { parseAuthHeader, isPlatformAdmin, isClinicAdmin, isAdmin } from './_lib/auth.js';
+import { getKV } from './_lib/kv.js';
 
 // P1-6 安全增强：CORS 白名单（与 users.js 一致）
 function getAllowedOrigins() {
@@ -63,14 +64,7 @@ async function writeAuditLog(kv, clinicId, username, role, action, target, reque
     }
 }
 
-function getKV(context) {
-    return context.env.KV ||
-           context.env.TCM_PRESCRIPTION_KV ||
-           context.env['tcm-prescription-kv'] ||
-           context.env['TCM-PRESCRIPTION-KV'] ||
-           context.env.TCM_KV ||
-           context.env.PRESCRIPTION_KV;
-}
+// ★ P2-B 统一：getKV 改用 _lib/kv.js 单一事实源（顶部 import）
 
 // 获取东八区当前时间
 function getBeijingTime() {

@@ -1,3 +1,4 @@
+import { getKV } from './_lib/kv.js';
 import {
     parseAuthHeader, hashPassword, verifyPassword, signToken,
     isPlatformAdmin, isClinicAdmin, isAdmin, isLegacyPasswordHash,
@@ -123,14 +124,7 @@ async function writeAuditLog(kv, clinicId, username, role, action, target, reque
     }
 }
 
-function getKV(context) {
-    return context.env.KV ||
-           context.env.TCM_PRESCRIPTION_KV ||
-           context.env['tcm-prescription-kv'] ||
-           context.env['TCM-PRESCRIPTION-KV'] ||
-           context.env.TCM_KV ||
-           context.env.PRESCRIPTION_KV;
-}
+// ★ P2-B 统一：getKV 改用 _lib/kv.js 单一事实源（顶部 import）
 
 function generateId(prefix) {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';

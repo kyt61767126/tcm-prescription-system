@@ -31,6 +31,7 @@
 // ============================================================================
 
 import { getDevices } from './_lib/license-core.js';
+import { getKV } from '../_lib/kv.js';
 
 const VERIFY_RATE_LIMIT_PER_MIN = 10;
 
@@ -62,10 +63,9 @@ function corsHeaders(request) {
 
 export async function onRequestPost({ request, env }) {
     try {
-        // ★ P1-1 修复：原代码直接使用 kv，但 wrangler.toml 只绑定 KV，
-        //   生产环境 kv 为 undefined，首次 .get() 即抛 TypeError → 全部请求 500。
-        //   现按标准链解析（与 license-core.js getKV() 一致），无任何 KV 绑定时返回 503。
-        const kv = env?.KV || env?.TCM_PRESCRIPTION_KV || env?.['tcm-prescription-kv'] || env?.['TCM-PRESCRIPTION-KV'] || env?.TCM_KV || env?.PRESCRIPTION_KV || env?.LICENSE_KV;
+        // ★ P1-1 修复 + P2-B 统一：KV 绑定解析改用 _lib/kv.js 单一事实源
+        //   （原 env.LICENSE_KV 未绑定导致 500，见 kv.js 头注释）
+        const kv = getKV(env);
         if (!kv) {
             console.error('[verify] 无可用 KV 绑定（KV/TCM_PRESCRIPTION_KV/LICENSE_KV 均缺失）');
             return new Response(JSON.stringify({

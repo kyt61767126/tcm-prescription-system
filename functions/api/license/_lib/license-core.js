@@ -12,6 +12,9 @@
 //    - app_project/db-yunduan/cloud_desktop/electron/license-manager.js
 // ============================================================================
 
+// ★ P2-B 统一：KV 绑定解析改用单一事实源 _lib/kv.js（本文件 getKV 仅再导出，供既有 8 个导入方使用）
+import { getKV } from '../../_lib/kv.js';
+
 // ★ 必须与客户端 license-manager.js 中的 LICENSE_HMAC_KEY 保持一致
 // 优先从环境变量读取（Cloudflare Secrets），硬编码作为默认值（向后兼容）
 // ★ P1-3 优化：如果配置了 LICENSE_MASTER_KEY，使用 masterKey 派生 HMAC 密钥
@@ -341,14 +344,7 @@ function encodeLicenseBase64(data) {
 // ============================================================================
 //  KV 存储操作
 // ============================================================================
-function getKV(context) {
-    return context.env.KV ||
-           context.env.TCM_PRESCRIPTION_KV ||
-           context.env['tcm-prescription-kv'] ||
-           context.env['TCM-PRESCRIPTION-KV'] ||
-           context.env.TCM_KV ||
-           context.env.PRESCRIPTION_KV;
-}
+// getKV 已统一至 ../../_lib/kv.js（P2-B），此处由顶部 import 提供并在文件尾再导出
 
 // 保存激活码到 KV
 async function saveLicense(kv, record) {
