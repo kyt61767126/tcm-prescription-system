@@ -149,7 +149,7 @@ export async function onRequest(context) {
         if (!machineId || typeof machineId !== 'string' || machineId.length < 8) {
             return json({ success: false, error: '机器 ID 无效，请重启软件后重试' }, 400);
         }
-        if (remark && typeof remark !== 'string' && remark.length > 500) {
+        if (remark && (typeof remark !== 'string' || remark.length > 500)) {
             return json({ success: false, error: '备注长度不能超过 500 字符' }, 400);
         }
 

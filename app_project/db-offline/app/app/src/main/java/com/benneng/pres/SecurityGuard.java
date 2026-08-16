@@ -26,8 +26,11 @@ public class SecurityGuard {
     private static final String TAG = "SecurityGuard";
 
     // ★ APK 签名校验（防反编译重打包）
+    // ★ 离线版说明：此字段由 generate-sign-hash.ps1 设计为"dingzhi 版注入 LicenseManager.java 的
+    //   EXPECTED_APK_SIGNATURE_SHA256"，本 SecurityGuard 的签名校验留空禁用（避免与打包脚本重复维护
+    //   导致 hash 过时误拦正常用户）。离线APP的签名校验由 LicenseManager.java 承担。
     // 留空则跳过校验；填入发布签名的 SHA-256 指纹（小写无冒号）后启用
-    // 由 generate-sign-hash.ps1 自动注入
+    // 由 generate-sign-hash.ps1 自动注入（cloud 版注入本文件）
     private static final String EXPECTED_SIGN_HASH = "";
 
     // ★ 安全检测开关

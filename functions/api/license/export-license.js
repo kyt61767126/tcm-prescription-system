@@ -33,7 +33,7 @@
 //    - 两者底层均调用 buildLicenseData + encodeLicenseBase64，license 内容完全等价
 // ============================================================================
 
-import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
+import { parseAuthHeader, isPlatformAdmin, constantTimeEqual } from '../_lib/auth.js';
 import {
     getKV, getLicense, updateLicense,
     buildLicenseData, encodeLicenseBase64,
@@ -86,7 +86,8 @@ async function authenticate(context) {
     const exportSecret = context.env.LICENSE_EXPORT_SECRET;
     if (exportSecret) {
         const providedSecret = context.request.headers.get('X-Export-Secret');
-        if (providedSecret && providedSecret === exportSecret) {
+        // ★ P1修复：改用常量时间比较，防止时序攻击
+        if (providedSecret && constantTimeEqual(providedSecret, exportSecret)) {
             return { ok: true, operator: 'export-secret', method: 'secret' };
         }
     }
@@ -185,6 +186,23 @@ export async function onRequest(context) {
 
         if (record.status === 'used' && !existingDevice) {
             if (devices.length >= maxDevices) {
+                // ★ P1修复：换机解绑二次校验（与 validate.js 一致）
+                // 仅当新设备 user 与 license 原始绑定 user 一致时才允许自动解绑，
+                // 防止客服持密钥用任意 machineId 换机挤掉合法用户
+                const originalUser = record.user || record.username || '';
+                if (user && originalUser && user !== originalUser) {
+                    await appendLicenseLog(kv, code, {
+                        action: 'unbind-denied',
+                        time: new Date().toISOString(),
+                        ip: ip,
+                        operator: auth.operator,
+                        detail: `[export] 拒绝换机：新设备 user='${user}' 与授权 user='${originalUser}' 不一致`
+                    });
+                    return json({
+                        success: false,
+                        error: '设备数已达上限，且用户名与授权用户不匹配，请联系客服处理换机'
+                    }, 403);
+                }
                 // 换机模式：自动解绑最旧设备
                 const oldestDevice = devices[0];
                 await appendLicenseLog(kv, code, {

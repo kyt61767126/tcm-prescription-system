@@ -273,6 +273,19 @@ function showActivateWindow(parentWindow) {
                 if (parentWindow && !parentWindow.isDestroyed()) {
                     parentWindow.show();
                     parentWindow.focus();
+                } else {
+                    // ★ P1修复：无父窗口（启动时直接弹激活窗）且未激活时，退出应用避免空白桌面
+                    // 此时无任何可操作窗口，用户关闭激活窗=暂不激活，直接退出，下次启动仍可重新激活
+                    console.log('[Activate] 无父窗口且未激活，提示后退出应用');
+                    try {
+                        dialog.showMessageBoxSync({
+                            type: 'warning',
+                            title: '未激活',
+                            message: '软件尚未激活，下次启动时仍可重新激活。软件即将退出。',
+                            buttons: ['退出']
+                        });
+                    } catch (e) { /* 忽略 */ }
+                    app.exit(0);
                 }
             }
         } catch (e) {

@@ -1067,12 +1067,31 @@ app.whenReady().then(async () => {
 
 // ★ License 授权相关 IPC
 ipcMain.handle('license:get-status', () => {
-    // ★ v3 新增：传入 localMachineId 用于绑定校验
+    // ★ P1修复：云端桌面版无试用期，改用 readLicense 判断，不再调用 validateLicense
+    // 原逻辑：validateLicense() 在无 license 时会创建 trial.dat 并返回 {valid:true,type:'trial'}，
+    // 导致云端桌面版（无试用设计）在边界场景（关闭激活窗口后）被间接触发试用状态。
     try {
         const localMachineId = activateManager.getMachineId();
-        return licenseManager.validateLicense({ localMachineId });
+        const lic = licenseManager.readLicense(localMachineId);
+        if (!lic) {
+            return { valid: false, licenseType: 'none', message: '请激活后使用' };
+        }
+        // 计算剩余天数
+        let remainingDays = -1;  // -1 表示永久授权
+        if (lic.expiresAt) {
+            const exp = new Date(lic.expiresAt);
+            remainingDays = Math.ceil((exp - new Date()) / (24 * 60 * 60 * 1000));
+            if (remainingDays < 0) remainingDays = 0;
+        }
+        return {
+            valid: true,
+            licenseType: lic.type || 'licensed',
+            remainingDays,
+            message: '已激活'
+        };
     } catch (e) {
-        return licenseManager.validateLicense();
+        console.error('[IPC] get-status 异常:', e);
+        return { valid: false, licenseType: 'none', message: '激活信息异常' };
     }
 });
 

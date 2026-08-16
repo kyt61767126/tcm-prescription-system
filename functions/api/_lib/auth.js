@@ -130,7 +130,7 @@ export async function verifyPassword(password, passwordHash, salt) {
 }
 
 // 常量时间字符串比较，防止时序攻击
-function constantTimeEqual(a, b) {
+export function constantTimeEqual(a, b) {
     if (typeof a !== 'string' || typeof b !== 'string') return false;
     if (a.length !== b.length) return false;
     let result = 0;
