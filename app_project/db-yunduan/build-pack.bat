@@ -263,13 +263,20 @@ goto :main
 
     )
 
-    set "PACK_PS1=%~dp0packaging.ps1"
+    set "BUILD_APP=%~dp0build-app.bat"
 
-    call :check_file "packaging.ps1" "%PACK_PS1%" || call :finalize 1 "packaging.ps1 not found"
+    call :check_file "build-app.bat" "%BUILD_APP%" || call :finalize 1 "Script not found"
 
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%PACK_PS1%" -AutoApp
+    set "SAVED_NO_PAUSE=%NO_PAUSE%"
+    set "NO_PAUSE=1"
 
-    call :finalize %errorlevel% "云端APP（统一版）打包完成" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
+    call "%BUILD_APP%"
+
+    set "TEMP_RC=%errorlevel%"
+
+    set "NO_PAUSE=%SAVED_NO_PAUSE%"
+
+    call :finalize %TEMP_RC% "云端APP（普通模式）打包完成" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
 
     goto :eof
 
@@ -300,16 +307,13 @@ goto :main
     set "SAVED_NO_PAUSE=%NO_PAUSE%"
     set "NO_PAUSE=1"
 
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step B: Extract signature hash (from keystore, E1: no Step A needed)...'"
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\generate-sign-hash.ps1" -Version cloud 2>nul
-
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Step C: Strict rebuild (standard)...'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Strict rebuild (standard)...'"
     call "%BUILD_APP%" standard
     set "TEMP_RC=%errorlevel%"
 
     set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
-    call :finalize %TEMP_RC% "云端APP（标准严格版）打包完成" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
+    call :finalize %TEMP_RC% "云端APP（严格模式）打包完成" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
 
     goto :eof
 

@@ -5,70 +5,32 @@ cd /d "%~dp0"
 
 REM ============================================================
 REM pack-app-strict.bat - Offline APP Standard (Strict)
-REM Process: Step A (Build Standard) -> Step B (Sign Hash) -> Step C (Strict Rebuild)
+REM 严格模式：直接调用 build-app.bat standard
+REM build-app.bat 内置 签名哈希刷新 + Java层混淆 + 签名校验，
+REM 严格模式下哈希刷新失败会强制中断，防止重打包签名不匹配
 REM ============================================================
 
-set "PROJECT_DIR=%~dp0"
 set "PACK_APP_BAT=%~dp0build-app.bat"
-set "GEN_HASH_PS1=%~dp0..\..\..\tools\generate-sign-hash.ps1"
-
-echo ============================================
-echo   Huikang TCM Offline APP (Standard Strict)
-echo ============================================
-echo.
 
 if not exist "%PACK_APP_BAT%" (
     echo [ERROR] build-app.bat not found
     pause
     exit /b 1
 )
-if not exist "%GEN_HASH_PS1%" (
-    echo [ERROR] generate-sign-hash.ps1 not found
-    pause
-    exit /b 1
-)
 
-echo [Step 0] Java pre-compile check...
-pushd "%PROJECT_DIR%"
-call gradlew.bat :app:javaPreCompileRelease :app:compileReleaseJavaWithJavac --quiet 2>&1
-set "PRECOMPILE_RC=%errorlevel%"
-popd
-if %PRECOMPILE_RC% neq 0 (
-    echo [ERROR] Java pre-compile check failed
-    pause
-    exit /b 1
-)
-echo [OK] Java pre-compile passed
-echo.
-
-echo [Step B] Extract sign hash and inject SecurityGuard.java...
-echo   [INFO] 哈希从 keystore 直接提取（E1 优化：无需先构建 APK，消除 Step A）
 set "SAVED_NO_PAUSE=%NO_PAUSE%"
-set "NO_PAUSE=1"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%GEN_HASH_PS1%" -Version dingzhi
-set "TEMP_RC=%errorlevel%"
-set "NO_PAUSE=%SAVED_NO_PAUSE%"
-if %TEMP_RC% neq 0 (
-    echo [ERROR] Step B sign hash extraction failed, exit code: %TEMP_RC%
-    pause
-    exit /b %TEMP_RC%
-)
-echo.
-
-echo [Step C] Rebuild APK - Strict mode (Standard)...
-echo   [INFO] Skip manual --stop (build-app.bat handles it)
 set "NO_PAUSE=1"
 call "%PACK_APP_BAT%" standard
 set "TEMP_RC=%errorlevel%"
 set "NO_PAUSE=%SAVED_NO_PAUSE%"
 if %TEMP_RC% neq 0 (
-    echo [ERROR] Step C rebuild failed, exit code: %TEMP_RC%
+    echo [ERROR] Build failed, exit code: %TEMP_RC%
     pause
     exit /b %TEMP_RC%
 )
 
 echo.
-echo [OK] 离线APP（标准严格版）打包完成
+echo [OK] 离线APP（严格模式）打包完成
 echo      APK: 惠康中医-本地.apk
 echo.
 if not defined NO_PAUSE pause

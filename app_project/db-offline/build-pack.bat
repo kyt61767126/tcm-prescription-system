@@ -270,13 +270,13 @@ goto :main
     set "SAVED_NO_PAUSE=%NO_PAUSE%"
     set "NO_PAUSE=1"
 
-    call "%CAP_DIR%\build-app.bat" standard
+    call "%CAP_DIR%\build-app.bat"
 
     set "TEMP_RC=%errorlevel%"
 
     set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
-    call :finalize %TEMP_RC% "离线APP（统一版）打包完成" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
+    call :finalize %TEMP_RC% "离线APP（普通模式）打包完成" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
 
     goto :eof
 

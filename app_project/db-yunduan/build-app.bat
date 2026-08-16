@@ -7,6 +7,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\fix-ps1-bo
 
 title Huikang-TCM Build Tool
 
+REM 模式识别：standard = 严格模式（哈希失败强制中断），无参 = 普通模式
+REM 两者均启用签名哈希刷新 + Java 层混淆 + 签名校验；strict 额外对哈希失败做强校验
+set "STRICT_MODE="
+set "MODE_LABEL=普通模式"
+if /i "%~1"=="standard" (
+    set "STRICT_MODE=1"
+    set "MODE_LABEL=严格模式"
+)
+
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
 REM 统一安装包：单 APK，标准版/机构版由运行时激活码决定（合并 8 包 → 4 包）
@@ -19,6 +28,7 @@ set "APK_DIR=app\build\outputs\apk\release"
 
 echo ============================================
 echo   Huikang TCM Cloud APP Builder (%FLAVOR_NAME%)
+echo   打包模式: %MODE_LABEL%
 echo   版本类型: %FLAVOR%
 echo   Start: %BUILD_START_TIME%
 echo ============================================
@@ -90,6 +100,11 @@ echo [1.5/10] Refresh APK signature hash (normal/strict common, auto anti-repack
 echo   从 keystore 提取当前证书哈希并注入 SecurityGuard.java, 普通模式也启用签名校验
 powershell -NoProfile -ExecutionPolicy Bypass -File "%CLOUD_DIR%\..\..\tools\generate-sign-hash.ps1" -Version cloud 2>nul
 if errorlevel 1 (
+    if defined STRICT_MODE (
+        echo   [ERROR] 严格模式签名哈希刷新失败，终止打包（防止签名哈希不匹配被拦截）
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
     echo   [WARN] 签名哈希刷新失败，使用当前已编译哈希继续（不影响构建）
 )
 echo.

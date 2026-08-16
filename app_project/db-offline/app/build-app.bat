@@ -4,6 +4,15 @@ REM P0: .ps1 BOM
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\fix-ps1-bom.ps1" >nul 2>&1
 title Huikang-TCM Build Tool
 
+REM 模式识别：standard = 严格模式（哈希失败强制中断），无参 = 普通模式
+REM 两者均启用签名哈希刷新 + Java 层混淆 + 签名校验；strict 额外对哈希失败做强校验
+set "STRICT_MODE="
+set "MODE_LABEL=普通模式"
+if /i "%~1"=="standard" (
+    set "STRICT_MODE=1"
+    set "MODE_LABEL=严格模式"
+)
+
 REM
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
@@ -18,6 +27,7 @@ set "APK_DIR=app\build\outputs\apk\release"
 
 echo ============================================
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Huikang TCM Offline APP Build Tool (%FLAVOR_NAME%)'"
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '打包模式: %MODE_LABEL%'"
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Flavor: %FLAVOR%'"
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Start: %BUILD_START_TIME%'"
 echo ============================================
@@ -50,6 +60,11 @@ echo [1.5/10] Refresh APK signature hash (normal/strict common, auto anti-repack
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  从 keystore 提取当前证书哈希并注入 LicenseManager.java, 普通模式也启用签名校验'"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\generate-sign-hash.ps1" -Version dingzhi 2>nul
 if errorlevel 1 (
+    if defined STRICT_MODE (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [ERROR] 严格模式签名哈希刷新失败，终止打包（防止签名哈希不匹配被拦截）' -ForegroundColor Red"
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [WARN] 签名哈希刷新失败，使用当前已编译哈希继续（不影响构建）' -ForegroundColor Yellow"
 )
 echo.

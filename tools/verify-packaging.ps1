@@ -1,11 +1,11 @@
-﻿# verify-packaging.ps1 - Verify encoding integrity of packaging files
+# verify-packaging.ps1 - Verify encoding integrity of packaging files
 # Usage: powershell -File tools\verify-packaging.ps1
 # Exit code: 0 = all pass, 1 = issues found
 #
 # Checks:
 #   1. .ps1 files MUST have UTF-8 BOM (PowerShell 5.x reads as GBK without BOM)
 #   2. index.html files MUST NOT have BOM (browser misreads as char -> white screen)
-#   3. .bat files MUST be ASCII-only (cmd.exe reads as GBK, Chinese -> garbled)
+#   3. .bat files MUST be ASCII-only, OR UTF-8 + chcp 65001 (valid Chinese display)
 #   4. .gradle files MUST NOT have BOM (Gradle warning, usually harmless but clean)
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -41,18 +41,31 @@ function Check-Bom {
     }
 }
 
-function Check-Ascii {
+function Check-Bat {
     param([string]$Path, [string]$Label)
     if (-not (Test-Path $Path)) { return }
     $bytes = [System.IO.File]::ReadAllBytes($Path)
     $nonAscii = $bytes | Where-Object { $_ -gt 127 }
-    if ($nonAscii) {
-        $count = $nonAscii.Count
-        Write-Host "  [FAIL] $Label : $count non-ASCII bytes (Chinese will be garbled in cmd.exe)" -ForegroundColor Red
-        $script:fail++
-    } else {
+    if (-not $nonAscii) {
         Write-Host "  [OK]   $Label : ASCII-only" -ForegroundColor Green
         $script:pass++
+        return
+    }
+    # 含非 ASCII 字节：合法场景 = UTF-8 编码 + 脚本内 chcp 65001（cmd 切 UTF-8 代码页显示中文）
+    $utf8 = New-Object System.Text.UTF8Encoding($false, $true)  # throwOnInvalidBytes = true
+    $text = $null
+    try {
+        $text = $utf8.GetString($bytes)
+    } catch {
+        $text = $null
+    }
+    if ($text -and $text -match 'chcp\s+65001') {
+        Write-Host "  [OK]   $Label : UTF-8 + chcp 65001 (Chinese OK)" -ForegroundColor Green
+        $script:pass++
+    } else {
+        $count = @($nonAscii).Count
+        Write-Host "  [FAIL] $Label : $count non-ASCII bytes but not valid UTF-8 + chcp 65001 (may garble in cmd.exe)" -ForegroundColor Red
+        $script:fail++
     }
 }
 
@@ -79,24 +92,25 @@ Write-Host ""
 Write-Host "[Check 2] index.html files (MUST NOT have BOM - causes white screen)"
 $htmlFiles = @(
     'app_project\db-offline\desktop\index.html',
-    'app_project\db-offline\app\app\app\src\main\assets\public\index.html',
+    'app_project\db-offline\app\app\src\main\assets\public\index.html',
     'public\index.html',
-    'app_project\db-yunduan/cloud_desktop\index.html'
+    'app_project\db-yunduan\cloud_desktop\index.html',
+    'app_project\db-yunduan\cloud_app\app\src\main\assets\public\index.html'
 )
 foreach ($f in $htmlFiles) { Check-Bom -Path $f -ShouldHaveBom $false -Label $f }
 Write-Host ""
 
-# --- Check 3: .bat files MUST be ASCII-only ---
-Write-Host "[Check 3] .bat files (MUST be ASCII-only - cmd.exe reads as GBK)"
+# --- Check 3: .bat files MUST be ASCII-only, OR UTF-8 + chcp 65001 ---
+Write-Host "[Check 3] .bat files (ASCII-only, or UTF-8 + chcp 65001 for Chinese)"
 $batFiles = Get-ChildItem -Path 'app_project' -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.Name -ne 'gradlew.bat' }
 foreach ($bf in $batFiles) {
     $rel = $bf.FullName.Substring($root.Length + 1)
-    Check-Ascii -Path $bf.FullName -Label $rel
+    Check-Bat -Path $bf.FullName -Label $rel
 }
-$cloudBat = Get-ChildItem -Path 'app_project' -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.Name -ne 'gradlew.bat' }
-foreach ($bf in $cloudBat) {
+$toolsBat = Get-ChildItem -Path 'tools' -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' }
+foreach ($bf in $toolsBat) {
     $rel = $bf.FullName.Substring($root.Length + 1)
-    Check-Ascii -Path $bf.FullName -Label $rel
+    Check-Bat -Path $bf.FullName -Label $rel
 }
 Write-Host ""
 

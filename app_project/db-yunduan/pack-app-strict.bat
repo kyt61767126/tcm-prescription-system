@@ -4,30 +4,9 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 set "PACK_APP_BAT=%~dp0build-app.bat"
-set "GEN_HASH_PS1=%~dp0..\..\tools\generate-sign-hash.ps1"
 
 echo ============================================
-echo   Step B: Extract sign hash (from keystore, E1: no Step A needed)...
-echo ============================================
-echo.
-
-set "NO_PAUSE=1"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%GEN_HASH_PS1%" -Version cloud
-set "TEMP_RC=%errorlevel%"
-set "NO_PAUSE="
-if %TEMP_RC% neq 0 (
-    echo.
-    echo [ERROR] Step B sign hash failed, exit code: %TEMP_RC%
-    echo.
-    pause
-    exit /b %TEMP_RC%
-)
-echo.
-echo [OK] Step B completed
-echo.
-
-echo ============================================
-echo   Step C: Rebuild APK - Strict mode...
+echo   Cloud APP Builder (Standard Strict)
 echo ============================================
 echo.
 
@@ -37,14 +16,14 @@ set "TEMP_RC=%errorlevel%"
 set "NO_PAUSE="
 if %TEMP_RC% neq 0 (
     echo.
-    echo [ERROR] Step C rebuild failed, exit code: %TEMP_RC%
+    echo [ERROR] Build failed, exit code: %TEMP_RC%
     echo.
     pause
     exit /b %TEMP_RC%
 )
 echo.
 echo ============================================
-echo   [OK] 云端APP（标准严格版）打包完成
+echo   [OK] 云端APP（严格模式）打包完成
 echo   APK: 惠康中医-云端.apk
 echo ============================================
 echo.
