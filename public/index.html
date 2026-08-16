@@ -4124,7 +4124,8 @@ let currentUser = null;
                         name: f.name,
                         type: f.type || (f.name.includes('video') ? 'video' : 'image'),
                         size: f.size || 0,
-                        lastModified: f.lastModified || ''
+                        lastModified: f.lastModified || '',
+                        path: f.path || ''
                     }));
                     const updatedRecord = { ...savedRecord, mediaFiles };
                     await savePrescriptionToDB(updatedRecord);
@@ -4154,7 +4155,29 @@ let currentUser = null;
             try {
                 const result = await searchFn(patientName, prescriptionNo, createdAt || '');
                 if (!result.success || !result.files || result.files.length === 0) {
-                    content.innerHTML = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件</div>';
+                    // ★ 兜底：原生扫描未找到时，使用处方记录中保存的媒体文件元数据（collectAndUpdateMediaFiles 写入）
+                    // 覆盖场景：文件名绑定异常/扫描遗漏，但保存处方时已成功收集过文件列表
+                    let fallbackFiles = [];
+                    try {
+                        const rec = prescriptionHistory.find(p => p.patientName === patientName && String(p.prescriptionNo || '') === String(prescriptionNo || ''));
+                        if (rec && Array.isArray(rec.mediaFiles) && rec.mediaFiles.length > 0) {
+                            // APP端必须有本地path才能读取文件；网页端用无path元数据或http地址
+                            fallbackFiles = rec.mediaFiles.filter(m => isWeb ? (!m.path || m.path.startsWith('http')) : !!m.path);
+                        }
+                    } catch (e) { /* 忽略兜底查询异常 */ }
+                    if (fallbackFiles.length > 0) {
+                        window.__currentMediaFiles = fallbackFiles;
+                        window.__currentMediaIndex = 0;
+                        window.__mediaIsWeb = isWeb;
+                        renderMediaViewerSingle(0);
+                        return;
+                    }
+                    // 显示诊断信息（扫描目录与文件样例），便于定位"文件已保存但查不到"类问题
+                    let diagHtml = '<div style="text-align:center;padding:20px;color:#999;">未找到相关拍照或录像文件</div>';
+                    if (result && result.debug) {
+                        diagHtml += '<div style="text-align:left;padding:8px 12px;font-size:10px;color:#bbb;word-break:break-all;max-height:120px;overflow:auto;border-top:1px dashed #555;">' + escapeHtml(String(result.debug)).replace(/\n/g, '<br>') + '</div>';
+                    }
+                    content.innerHTML = diagHtml;
                     return;
                 }
                 const sorted = result.files.sort((a,b) => {

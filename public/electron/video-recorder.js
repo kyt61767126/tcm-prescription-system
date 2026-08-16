@@ -530,12 +530,18 @@
 
             console.log('[视频录制] 视频数据读取成功，大小: ' + (arrayBuffer.byteLength / 1024 / 1024).toFixed(2) + ' MB');
 
-            var result = await window.electronAPI.saveVideoFile(arrayBuffer, fileName);
+            var result;
+            if (window.electronAPI && window.electronAPI.saveVideoFile) {
+                result = await window.electronAPI.saveVideoFile(arrayBuffer, fileName);
+            } else {
+                // ★ 网页版（纯浏览器）：无本地文件系统，仅存 IndexedDB（blob），随处方记录在网页端查看
+                result = { success: true, fileName: fileName };
+            }
 
             if (result.success) {
                 var savePath = result.directory || result.filePath || '';
                 setStatus('视频已保存：' + (result.fileName || fileName), 'success');
-                showToast('视频已保存到：' + savePath);
+                showToast(savePath ? '视频已保存到：' + savePath : '视频已保存（浏览器存储）');
                 var videoInfo = getCurrentPrescriptionInfo();
                 saveMediaToDB({
                     patientName: videoInfo.patientName || 'unknown',
@@ -926,7 +932,14 @@
             for (let i = 0; i < capturedPhotos.length; i++) {
                 const dataUrl = capturedPhotos[i];
                 const fileName = generateFileName('photo', photoTypes[i]);
-                const result = await window.electronAPI.savePrescriptionImage(dataUrl, fileName);
+                var result;
+                if (window.electronAPI && window.electronAPI.savePrescriptionImage) {
+                    result = await window.electronAPI.savePrescriptionImage(dataUrl, fileName);
+                } else {
+                    // ★ 网页版（纯浏览器，无 electronAPI/AndroidNative）：无本地文件系统，
+                    // 跳过本地保存，仅存 IndexedDB（dataUrl），随处方记录在网页端查看
+                    result = { success: true };
+                }
 
                 if (result.success) {
                     successCount++;
@@ -1169,6 +1182,9 @@
                         var matchNo = cleanNo && r.prescriptionNo && r.prescriptionNo.indexOf(cleanNo) >= 0;
                         if (matchPatient && matchNo) return true;
                         if (matchPatient && !cleanNo) return true;
+                        // ★ 网页版先拍照后录入姓名场景：拍照时姓名为空存为 unknown，
+                        // 但编号框有值已记录；仅按编号匹配即可命中
+                        if (matchNo) return true;
                         return false;
                     });
                     results.sort(function (a, b) {

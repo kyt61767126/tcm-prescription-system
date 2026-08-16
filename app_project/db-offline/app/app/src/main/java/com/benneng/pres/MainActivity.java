@@ -1797,6 +1797,27 @@ public class MainActivity extends BridgeActivity {
                     }
                 }
 
+                // ★ 回退2：按"姓名+时间"仍未找到时，按处方编号匹配（不限时间）
+                // 场景：先拍照后录入姓名时，文件名暂用最近患者名/unknown，若重命名未执行/失败，
+                // 文件名中的编号（拍照时编号框的值）仍与处方编号一致，按编号仍可命中
+                if (files.length() == 0 && !safeNo.isEmpty()) {
+                    for (File dir : allDirs) {
+                        if (dir != null && dir.exists()) {
+                            scanDirForMediaByNameOnly(dir, safeNo, files, foundPaths);
+                        }
+                    }
+                }
+
+                // ★ 回退3：按编号仍未找到时，按患者姓名匹配（不限时间）
+                // 场景：编号异常/为空，但文件名已绑定患者姓名
+                if (files.length() == 0) {
+                    for (File dir : allDirs) {
+                        if (dir != null && dir.exists()) {
+                            scanDirForMediaByNameOnly(dir, safeName, files, foundPaths);
+                        }
+                    }
+                }
+
                 StringBuilder debug = new StringBuilder();
                 debug.append("prefix1=").append(prefix1);
                 debug.append(" | prefix2=").append(prefix2);
@@ -1869,6 +1890,35 @@ public class MainActivity extends BridgeActivity {
                         fileObj.put("type", fileName.endsWith(".webm") || fileName.endsWith(".mp4") ? "video" : "image");
                         fileObj.put("size", f.length());
                         fileObj.put("lastModified", lastMod);
+                        files.put(fileObj);
+                    } catch (Exception e) {
+                        Log.e(TAG, "添加文件信息失败: " + fileName, e);
+                    }
+                }
+            }
+        }
+
+        // ★ 仅按关键词匹配文件名（不限时间），供回退2/回退3使用
+        private void scanDirForMediaByNameOnly(File dir, String keyword, JSONArray files, java.util.Set<String> foundPaths) {
+            if (dir == null || !dir.exists() || keyword == null || keyword.isEmpty()) return;
+            File[] children = dir.listFiles();
+            if (children == null) return;
+            for (File f : children) {
+                if (f.isDirectory()) {
+                    scanDirForMediaByNameOnly(f, keyword, files, foundPaths);
+                } else {
+                    String fileName = f.getName();
+                    if (!fileName.contains(keyword)) continue;
+                    String filePath = f.getAbsolutePath();
+                    if (foundPaths.contains(filePath)) continue;
+                    foundPaths.add(filePath);
+                    try {
+                        JSONObject fileObj = new JSONObject();
+                        fileObj.put("name", fileName);
+                        fileObj.put("path", filePath);
+                        fileObj.put("type", fileName.endsWith(".webm") || fileName.endsWith(".mp4") ? "video" : "image");
+                        fileObj.put("size", f.length());
+                        fileObj.put("lastModified", f.lastModified());
                         files.put(fileObj);
                     } catch (Exception e) {
                         Log.e(TAG, "添加文件信息失败: " + fileName, e);
