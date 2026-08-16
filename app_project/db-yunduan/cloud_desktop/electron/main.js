@@ -2279,32 +2279,17 @@ ipcMain.handle('print-prescription', async (event, html, orientation) => {
                         //
                         // 时序：window.print()异步打开系统打印对话框，onafterprint在对话框关闭后触发。
                         //   等待onafterprint后再safeResolve，避免在用户还在操作打印对话框时关闭窗口。
-                        // ★ 默认打印机(1020) + A5 静默直出（2026-08-06）
-                        //   自动匹配系统打印机名称含"1020"的打印机 → silent:true静默直出，不弹对话框
-                        //   匹配失败 → silent:false回退弹对话框（用户手动选择）
-                        let defaultPrinter = null;
-                        try {
-                            const printers = await printWin.webContents.getPrintersAsync();
-                            defaultPrinter = printers.find(p => p.name && p.name.indexOf('1020') !== -1) || null;
-                            if (defaultPrinter) {
-                                console.log('[print] 自动匹配到默认打印机:', defaultPrinter.name);
-                            } else {
-                                console.warn('[print] 未找到含"1020"的打印机，回退手动选择; 可用打印机:', printers.map(p => p.name).join(', '));
-                            }
-                        } catch (e) {
-                            console.error('[print] 获取打印机列表失败:', e);
-                        }
+                        // ★ 默认纸张A5 + 手动选打印机（2026-08-17）
+                        //   客户端打印机不固定，不做自动匹配；始终弹打印对话框由用户手动选择打印机，
+                        //   pageSize:'A5' 作为对话框默认纸张，无需每次手动切换纸张
                         await new Promise((resolvePrint) => {
                             const printOptions = {
-                                silent: !!defaultPrinter,
+                                silent: false,
                                 printBackground: true,
                                 pageSize: 'A5',
                                 landscape: isLandscape,
                                 margins: { marginType: 'none' }
                             };
-                            if (defaultPrinter) {
-                                printOptions.deviceName = defaultPrinter.name;
-                            }
                             printWin.webContents.print(printOptions, (success, failureReason) => {
                                 if (!success && failureReason) {
                                     console.error('[print] 打印失败:', failureReason);
