@@ -482,6 +482,8 @@ async function getDeviceVersion(kv, machineId) {
 // 写入设备版本绑定（保留已有 licenseCode/clinicName）
 async function setDeviceVersion(kv, machineId, version, meta = {}) {
     if (!kv || !machineId) return;
+    // 测试机不持久化版本绑定，允许自由切换标准版/机构版
+    if (await isTestMachine(kv, machineId)) return;
     const prev = await getDeviceVersion(kv, machineId);
     const binding = {
         machineId: machineId,
@@ -494,9 +496,57 @@ async function setDeviceVersion(kv, machineId, version, meta = {}) {
     return binding;
 }
 
+// ============================================================================
+//  ★ 测试机白名单：标记为测试机的设备仅放开"一设备一版本"绑定校验，
+//    使其可自由测试标准版/机构版的注册激活流程；客户设备不受影响，仍严格一机一版本
+//  KV key: test_machine:{machineId} → { machineId, note, addedAt }
+// ============================================================================
+const KV_TEST_MACHINE_PREFIX = 'test_machine:';
+
+async function isTestMachine(kv, machineId) {
+    if (!kv || !machineId) return false;
+    try {
+        return await kv.get(KV_TEST_MACHINE_PREFIX + machineId) !== null;
+    } catch (e) {
+        console.warn('[TestMachine] 读取失败:', e.message);
+        return false;
+    }
+}
+
+async function setTestMachine(kv, machineId, note) {
+    if (!kv || !machineId) return null;
+    const rec = { machineId: machineId, note: note || '', addedAt: new Date().toISOString() };
+    await kv.put(KV_TEST_MACHINE_PREFIX + machineId, JSON.stringify(rec));
+    return rec;
+}
+
+async function removeTestMachine(kv, machineId) {
+    if (!kv || !machineId) return;
+    await kv.delete(KV_TEST_MACHINE_PREFIX + machineId);
+}
+
+async function listTestMachines(kv) {
+    if (!kv) return [];
+    const out = [];
+    try {
+        const list = await kv.list({ prefix: KV_TEST_MACHINE_PREFIX });
+        for (const k of list.keys) {
+            const v = await kv.get(k.name, 'json');
+            if (v) out.push(v);
+        }
+    } catch (e) {
+        console.warn('[TestMachine] 列表读取失败:', e.message);
+    }
+    return out;
+}
+
 // 校验设备版本与目标版本是否一致
 // 返回：{ ok: true, binding } 或 { ok: false, binding, boundLabel, targetLabel, error }
 async function checkDeviceVersion(kv, machineId, targetTypeOrEdition) {
+    // 测试机白名单：仅放开"一设备一版本"绑定校验，其余安全校验照旧
+    if (await isTestMachine(kv, machineId)) {
+        return { ok: true, binding: null, testMachine: true };
+    }
     const binding = await getDeviceVersion(kv, machineId);
     if (!binding || !binding.version) {
         return { ok: true, binding: null };
@@ -617,6 +667,10 @@ export {
     getDeviceVersion,       // 读取设备已绑定版本
     setDeviceVersion,       // 写入设备版本绑定
     checkDeviceVersion,     // 校验设备版本是否与目标版本一致
+    isTestMachine,          // 判断设备是否在测试机白名单
+    setTestMachine,         // 标记测试机
+    removeTestMachine,      // 取消测试机
+    listTestMachines,       // 列出测试机
     // ★ 任务5 新增：操作日志
     appendLicenseLog,  // 追加激活码操作日志
     getLicenseLogs,    // 查询激活码操作日志
