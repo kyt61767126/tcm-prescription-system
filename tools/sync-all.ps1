@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  sync-all.ps1 - Unified sync script for all shared modules
 #
 #  Purpose:
@@ -31,9 +31,15 @@ $SharedDir = Join-Path $ProjectRoot 'shared'
 #       (PowerShell on Windows and Linux both accept / as separator)
 # ============================================================================
 
-# Group 1: 10 business JS files (cloud + offline)
+# Group 1: 9 business JS files (cloud + offline)
+# ★ 2026-08-16: auth-core.js REMOVED from this group.
+#   Root cause of the 2026-08 drift: auth-core.js has TWO content versions
+#   (offline=trial+heartbeat / cloud=validate), and this single-source group
+#   pushed the cloud copy from shared/ onto OFFLINE targets, silently
+#   removing trial-enforced-standard-edition logic.
+#   auth-core.js is now managed ONLY by tools/sync-auth-core.ps1
+#   (dual fact source: shared/auth-core/offline.js + cloud.js).
 $BusinessJsFiles = @(
-    'auth-core.js',
     'db-adapter.js',
     'debug-logger.js',
     'medicine-dict.js',
@@ -229,8 +235,8 @@ if (-not (Test-Path $SharedDir)) {
 
 $allInSync = $true
 
-# Group 1: 10 business JS -> 10 directories
-$result = Sync-Group -GroupName 'Business JS (10 files -> 10 dirs)' -Files $BusinessJsFiles -Targets $BusinessJsTargets -VerifyOnly $VerifyOnly
+# Group 1: 9 business JS -> directories (auth-core.js managed by sync-auth-core.ps1)
+$result = Sync-Group -GroupName 'Business JS (9 files -> dirs)' -Files $BusinessJsFiles -Targets $BusinessJsTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

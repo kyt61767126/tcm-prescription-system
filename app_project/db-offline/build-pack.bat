@@ -218,6 +218,16 @@ goto :main
 
     call :check_node || call :finalize 1 "Node.js check failed"
 
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
+
+    if errorlevel 1 (
+
+        call :finalize 1 "auth-core.js sync failed - aborting build"
+
+        goto :eof
+
+    )
+
     set "BUILD_BAT=%~dp0desktop\build.bat"
 
     call :check_file "desktop\build.bat" "%BUILD_BAT%" || call :finalize 1 "Script not found"
@@ -242,6 +252,16 @@ goto :main
 
     call :check_java || call :finalize 1 "Java check failed"
 
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
+
+    if errorlevel 1 (
+
+        call :finalize 1 "auth-core.js sync failed - aborting build"
+
+        goto :eof
+
+    )
+
     set "CAP_DIR=%~dp0app"
 
     call :check_file "app\build-app.bat" "%CAP_DIR%\build-app.bat" || call :finalize 1 "Script not found"
@@ -265,6 +285,16 @@ goto :main
     call :log_title "Offline APP Builder (Standard Strict)"
 
     call :check_java || call :finalize 1 "Java check failed"
+
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
+
+    if errorlevel 1 (
+
+        call :finalize 1 "auth-core.js sync failed - aborting build"
+
+        goto :eof
+
+    )
 
     set "CAP_DIR=%~dp0app"
 

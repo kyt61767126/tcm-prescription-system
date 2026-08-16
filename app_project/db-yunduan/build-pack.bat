@@ -218,6 +218,16 @@ goto :main
 
     call :check_node || call :finalize 1 "Node.js check failed"
 
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
+
+    if errorlevel 1 (
+
+        call :finalize 1 "auth-core.js sync failed - aborting build"
+
+        goto :eof
+
+    )
+
     set "BUILD_BAT=%~dp0cloud_desktop\build.bat"
 
     call :check_file "cloud_desktop\build.bat" "%BUILD_BAT%" || call :finalize 1 "Script not found"
@@ -242,6 +252,16 @@ goto :main
 
     call :check_node || call :finalize 1 "Node.js check failed"
 
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
+
+    if errorlevel 1 (
+
+        call :finalize 1 "auth-core.js sync failed - aborting build"
+
+        goto :eof
+
+    )
+
     set "PACK_PS1=%~dp0packaging.ps1"
 
     call :check_file "packaging.ps1" "%PACK_PS1%" || call :finalize 1 "packaging.ps1 not found"
@@ -261,6 +281,16 @@ goto :main
     call :check_node || call :finalize 1 "Node.js check failed"
 
     call :check_java || call :finalize 1 "Java check failed"
+
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
+
+    if errorlevel 1 (
+
+        call :finalize 1 "auth-core.js sync failed - aborting build"
+
+        goto :eof
+
+    )
 
     set "BUILD_APP=%~dp0build-app.bat"
 
