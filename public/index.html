@@ -1353,6 +1353,7 @@ let currentUser = null;
                             }
                             try { await loadData(); } catch(e) { console.warn('loadData失败:', e); }
                             refreshUserInterface();
+                            if (typeof window.refreshVersionTags === 'function') window.refreshVersionTags();
                             if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
                             if (window.electronAPI && window.electronAPI.loginSuccess) {
                                 try { await window.electronAPI.loginSuccess(user); } catch (e) {}
@@ -1411,6 +1412,7 @@ let currentUser = null;
 
                     await loadData();
                     refreshUserInterface();
+                    if (typeof window.refreshVersionTags === 'function') window.refreshVersionTags();
                     if (typeof updatePrescriptionPaper === 'function') updatePrescriptionPaper();
 
                     
@@ -1510,6 +1512,24 @@ let currentUser = null;
                 enforceStandardEditionButtons('after-applyEditionTags');
             }
         }
+        // ★ 2026-08-18 登录成功后按部署权威 edition 刷新版本标签（云端标准版/云端机构版）
+        //   云端版版本按部署配置区分（网页版=标准版、桌面版config.json=机构版），user 对象无 edition 字段
+        window.refreshVersionTags = function() {
+            try {
+                var ed = '';
+                if (window.Permission && Permission._edition) ed = String(Permission._edition);
+                if (!ed && typeof CONFIG !== 'undefined' && CONFIG) ed = String(CONFIG.edition || '');
+                if (!ed) ed = String(window.EDITION || '');
+                if (typeof CONFIG !== 'undefined' && CONFIG && ed) CONFIG.edition = ed;
+                if (typeof CONFIG !== 'undefined' && CONFIG && ed) {
+                    var instArr = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'];
+                    var isInst = instArr.indexOf(String(ed)) >= 0;
+                    CONFIG.versionLabel = isInst ? '云端机构版' : '云端标准版';
+                }
+                if (typeof applyEditionTags === 'function') applyEditionTags();
+                if (ed && typeof window.applyLoginTheme === 'function') window.applyLoginTheme(ed);
+            } catch (e) { console.warn('refreshVersionTags失败:', e); }
+        };
         // 根据版本切换登录界面主题
         window.applyLoginTheme = function(edition) {
             const root = document.documentElement;
@@ -2172,6 +2192,20 @@ let currentUser = null;
                     || (['personal', 'offline_personal'].indexOf(configEdition) >= 0)
                     || (globalEdition === 'personal' || globalEdition === 'offline_personal')
                     || domMarker;
+
+                // ★ 2026-08-18 云端机构版保护：部署配置明确为机构版时，禁止被软判据（含 DOM 锚点）误判为标准版。
+                //   仅离线桌面权威模式（IS_DESKTOP_LOCAL=true）可强制；云端版（网页/APP_MODE=cloud）机构版配置一律放行。
+                var isInstitutionalDeploy = false;
+                try {
+                    var instDeploy = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'];
+                    if (instDeploy.indexOf(String(configEdition)) >= 0 || instDeploy.indexOf(String(globalEdition)) >= 0) {
+                        isInstitutionalDeploy = true;
+                    }
+                } catch (_) {}
+                if (isInstitutionalDeploy && !IS_DESKTOP_LOCAL) {
+                    if (typeof console !== 'undefined' && console.log) console.log('[EnforceStandard] 云端机构版部署，跳过标准版强制 | reason=' + (reason || 'unknown') + ' | edition=' + (configEdition || globalEdition));
+                    return;
+                }
 
                 // ─── 【Setup 权威强制模式】IS_DESKTOP_LOCAL=true → 不论软判据，一律强制执行！ ───
                 var mustEnforce = IS_DESKTOP_LOCAL || isStandardSoft;
