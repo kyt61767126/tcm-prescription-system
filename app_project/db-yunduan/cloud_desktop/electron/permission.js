@@ -110,8 +110,37 @@
         // 所有角色判断都通过 AuthCore 的 isAdmin/isClinicAdmin/isPlatformAdmin
         // 确保离线版 admin 和云端版 clinic_admin 行为一致
 
+        // ============================================================================
+        // ★★★ 2026-08-17 Setup 1.0.38 根治【刀5：Permission 内部标准版硬守护】
+        //  就算外部 enforceStandardEditionButtons 还没执行（时序问题），这里直接在 shouldShow 开头硬判：
+        //    如果 CONFIG.edition=personal / window.EDITION=personal / window.PRODUCT_NAME=惠康中医-本地 / DOM锚点存在
+        //    → 一律按"离线标准版（单用户=改密必现/用户管理必隐）"直接返回，不再判断 _edition 内部状态！
+        // ============================================================================
+        _isStandardEditionForced() {
+            try {
+                // 判据1：CONFIG/WINDOW.EDITION 是 personal
+                var cfgEd = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ? String(CONFIG.edition) : '';
+                var winEd = String(global.EDITION || '');
+                if (['personal','offline_personal'].indexOf(cfgEd) >= 0) return true;
+                if (['personal','offline_personal'].indexOf(winEd) >= 0) return true;
+
+                // 判据2：权威产品名=惠康中医-本地
+                var cfgProd = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.productName) ? String(CONFIG.productName) : '';
+                var winProd = String(global.PRODUCT_NAME || '');
+                if (cfgProd === '惠康中医-本地' || winProd === '惠康中医-本地') return true;
+
+                // 判据3：DOM权威锚点（HTML硬编码，JS全挂也能查到）
+                try {
+                    if (global.document && document.getElementById && document.getElementById('_force_standard_edition_marker_')) return true;
+                } catch(_) {}
+            } catch(_) {}
+            return false;
+        },
+
         // 是否可以管理用户（仅机构版可管理子账号；标准版/单用户一律不可）
         canManageUsersByRole(user) {
+            // ★ 标准版强制守护：一律不可管理用户（隐藏用户管理按钮）
+            if (this._isStandardEditionForced()) return false;
             if (!this.isInstitutional()) return false;
             if (!user) return false;
             if (global.AuthCore && global.AuthCore.isClinicAdmin) {
@@ -125,6 +154,8 @@
         // 非机构版（标准版/单用户）所有账号均可修改密码；
         // 机构版仅普通用户可修改密码，管理员使用账户管理（不显示修改密码）。
         canChangePassword(user) {
+            // ★ 标准版强制守护：所有角色一律允许修改密码（显示改密按钮）
+            if (this._isStandardEditionForced()) return true;
             if (!this.isInstitutional()) return true; // 标准版/单用户允许改密
             if (!user) return false;
             // 非个人版：管理员不显示修改密码（由账户管理覆盖），普通用户显示修改密码
