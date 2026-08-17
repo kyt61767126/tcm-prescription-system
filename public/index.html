@@ -145,7 +145,7 @@
         .modal-footer { padding: 10px 15px; background: #e0e0e0; display: flex; justify-content: flex-end; gap: 10px; border-top: 2px solid #808080; }
         .close-btn { font-size: 24px; cursor: pointer; line-height: 1; }
         .login-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--login-gradient); display: flex; visibility: visible; justify-content: center; align-items: center; z-index: 9999; }
-        .login-container { width: 260px; background: rgba(255, 255, 255, 0.97); border-radius: 16px; box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35); overflow: hidden; position: relative; backdrop-filter: blur(10px); }
+        .login-container { width: 240px; background: rgba(255, 255, 255, 0.97); border-radius: 16px; box-shadow: 0 25px 70px rgba(0, 0, 0, 0.35); overflow: hidden; position: relative; backdrop-filter: blur(10px); }
         .bg-decoration { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: url('data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 400"%3E%3Cdefs%3E%3Cpattern id="grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse"%3E%3Cpath d="M 24 0 L 0 0 0 24" fill="none" stroke="%236366f1" stroke-width="0.5" opacity="0.1"/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill="url(%23grid)" width="320" height="400"/%3E%3C/svg%3E'); pointer-events: none; z-index: 0; opacity: 0.5; }
         .header-section { position: relative; z-index: 1; padding: 24px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; background: var(--login-header-gradient); }
         .login-logo { width: 48px; height: 48px; background: rgba(255,255,255,0.2); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 28px; backdrop-filter: blur(5px); }
@@ -1341,6 +1341,7 @@ let currentUser = null;
                             }
                             const loginData = { user: user, loginTime: Date.now() };
                             localStorage.setItem('user_login_data', JSON.stringify(loginData));
+                            saveRememberedUser(username);
                             document.getElementById('loginOverlay').style.display = 'none';
                             document.querySelector('.main-container').style.display = 'flex';
                             updateUserDisplay();
@@ -1393,6 +1394,7 @@ let currentUser = null;
                         loginTime: Date.now()
                     };
                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
+                    saveRememberedUser(username);
                     
                     
                     document.getElementById('loginOverlay').style.display = 'none';
@@ -1470,6 +1472,172 @@ let currentUser = null;
                 }
             }
         };
+
+        // ★★★ 记住用户名（与离线APP/桌面副本行为统一）：登录成功保存，打开登录框回填，下拉快速选择
+        async function loadRememberedUsers() {
+            try {
+                const LEGACY_REMEMBERED = ['doctor1', 'doctor2', '张医生', '李医生', '张大夫', 'hkt'];
+                try {
+                    const raw = localStorage.getItem('local_rememberedUsers');
+                    if (raw) {
+                        const parsed = JSON.parse(raw);
+                        const arr = Array.isArray(parsed) ? parsed : [parsed];
+                        const filtered = arr.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
+                        if (filtered.length !== arr.length) {
+                            if (filtered.length > 0) {
+                                localStorage.setItem('local_rememberedUsers', JSON.stringify(filtered));
+                            } else {
+                                localStorage.removeItem('local_rememberedUsers');
+                            }
+                            console.log('[login] 已清理 local_rememberedUsers 历史遗留:', arr.length, '->', filtered.length);
+                        }
+                    }
+                    const rememberedSingle = localStorage.getItem('local_rememberedUsername');
+                    if (rememberedSingle && LEGACY_REMEMBERED.includes(rememberedSingle)) {
+                        localStorage.removeItem('local_rememberedUsername');
+                        console.log('[login] 已清理 local_rememberedUsername 历史遗留:', rememberedSingle);
+                    }
+                } catch(e) { console.warn('[login] 清理 rememberedUsers 失败:', e); }
+                // 优先使用 AuthCore（统一存储适配器）
+                if (window.AuthCore && AuthCore.loadRememberedUsers) {
+                    try {
+                        const authList = await AuthCore.loadRememberedUsers();
+                        if (Array.isArray(authList) && authList.length > 0) {
+                            const stringUsernames = authList.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
+                            if (stringUsernames.length > 0) {
+                                renderRememberedUsers(stringUsernames);
+                                document.getElementById('loginUsername').value = stringUsernames[0];
+                                localStorage.setItem('local_rememberedUsers', JSON.stringify(stringUsernames));
+                                localStorage.setItem('local_rememberedUsername', stringUsernames[0]);
+                                return;
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('AuthCore.loadRememberedUsers 失败，回退到 localStorage:', e);
+                    }
+                }
+                // 回退：从 localStorage 读取
+                const localList = localStorage.getItem('local_rememberedUsers');
+                if (localList) {
+                    try {
+                        const parsed = JSON.parse(localList);
+                        let usernames = [];
+                        if (Array.isArray(parsed)) {
+                            usernames = parsed;
+                        } else if (typeof parsed === 'string') {
+                            usernames = [parsed];
+                        }
+                        const stringUsernames = usernames.map(u => String(u).trim()).filter(u => u && !LEGACY_REMEMBERED.includes(u));
+                        if (stringUsernames.length > 0) {
+                            renderRememberedUsers(stringUsernames);
+                            document.getElementById('loginUsername').value = stringUsernames[0];
+                            return;
+                        }
+                    } catch (e) {
+                        console.warn('解析本地记住的用户名失败:', e);
+                    }
+                }
+                const localUsername = localStorage.getItem('local_rememberedUsername');
+                if (localUsername) {
+                    const singleList = [localUsername];
+                    renderRememberedUsers(singleList);
+                    document.getElementById('loginUsername').value = localUsername;
+                    localStorage.setItem('local_rememberedUsers', JSON.stringify(singleList));
+                }
+            } catch (e) {
+                console.warn('loadRememberedUsers error:', e);
+            }
+        }
+
+        function renderRememberedUsers(usernames) {
+            const btn = document.getElementById('usernameDropdownBtn');
+            const menu = document.getElementById('usernameDropdownMenu');
+            if (!btn || !menu) return;
+
+            if (usernames.length === 0) {
+                btn.style.display = 'none';
+                menu.style.display = 'none';
+                return;
+            }
+
+            btn.style.display = 'flex';
+            btn.textContent = '▼(' + usernames.length + ')';
+            menu.innerHTML = '';
+
+            // 构建 username → name 映射，下拉菜单显示中文医师姓名
+            const users = getUsers();
+            const nameMap = {};
+            users.forEach(u => { nameMap[u.username] = u.name || u.username; });
+
+            usernames.forEach(username => {
+                const item = document.createElement('div');
+                const displayName = nameMap[username] || (typeof username === 'object' ? (username.name || username.username) : username);
+                const loginValue = typeof username === 'object' ? username.username : username;
+                item.textContent = displayName;
+                item.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    document.getElementById('loginUsername').value = loginValue;
+                    document.getElementById('loginPassword').focus();
+                    menu.classList.remove('show');
+                });
+                menu.appendChild(item);
+            });
+
+            btn.onclick = function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                menu.classList.toggle('show');
+            };
+        }
+
+        function toggleUsernameDropdown() {
+            const menu = document.getElementById('usernameDropdownMenu');
+            if (menu) {
+                menu.classList.toggle('show');
+            }
+        }
+
+        document.addEventListener('click', function(e) {
+            const menu = document.getElementById('usernameDropdownMenu');
+            const btn = document.getElementById('usernameDropdownBtn');
+            if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.classList.remove('show');
+            }
+        });
+
+        async function saveRememberedUser(username) {
+            if (window.AuthCore) { try { await AuthCore.saveRememberedUser(username); const r = await AuthCore.loadRememberedUsers(); if (typeof renderRememberedUsers === 'function') renderRememberedUsers(r); if (Array.isArray(r) && r.length > 0) { localStorage.setItem('local_rememberedUsers', JSON.stringify(r)); localStorage.setItem('local_rememberedUsername', String(username).trim()); } return; } catch(e) { console.warn('AuthCore.saveRememberedUser 失败，回退到 localStorage:', e); } }
+            try {
+                const cleanUsername = String(username).trim();
+                if (!cleanUsername) return;
+
+                let remembered = [];
+                const localList = localStorage.getItem('local_rememberedUsers');
+                if (localList) {
+                    try {
+                        const parsed = JSON.parse(localList);
+                        if (Array.isArray(parsed)) {
+                            remembered = parsed;
+                        } else if (typeof parsed === 'string') {
+                            remembered = [parsed];
+                        }
+                    } catch (e) {
+                        console.warn('解析本地记住的用户名失败:', e);
+                    }
+                }
+
+                remembered = remembered.filter(u => String(u).toLowerCase() !== cleanUsername.toLowerCase());
+                remembered.unshift(cleanUsername);
+                if (remembered.length > 5) remembered = remembered.slice(0, 5);
+
+                localStorage.setItem('local_rememberedUsername', cleanUsername);
+                localStorage.setItem('local_rememberedUsers', JSON.stringify(remembered));
+                renderRememberedUsers(remembered);
+            } catch (e) {
+                console.warn('保存记住的用户名失败:', e);
+                localStorage.setItem('local_rememberedUsername', String(username).trim());
+            }
+        }
 
         // 云端版本分类：根据实际注册的 edition 判断标准版/机构版
         // 标准版（个人/单用户）：personal / cloud_personal / offline_personal / standard / clinic_standard
@@ -1561,6 +1729,8 @@ let currentUser = null;
                 if (clinicNameEl2 && (_savedClinicName || (CONFIG && CONFIG.clinicName))) {
                     clinicNameEl2.textContent = _savedClinicName || CONFIG.clinicName;
                 }
+                // 记住用户名：回填最近登录账号 + 下拉快速选择（与离线/桌面副本行为统一）
+                if (typeof loadRememberedUsers === 'function') try { loadRememberedUsers(); } catch(_) {}
             } catch(e) {
                 console.warn('初始化登录界面失败:', e);
             }

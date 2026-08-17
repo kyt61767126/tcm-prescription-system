@@ -95,9 +95,6 @@ lint/tmp/
 # Cordova plugins for Capacitor
 capacitor-cordova-android-plugins
 
-# Copied web assets
-app/src/main/assets/public
-
 # Generated Config files
 # NOTE: 离线版本手动维护 capacitor.config.json，需提交到 git（不使用 npx cap sync）
 # app/src/main/assets/capacitor.config.json
