@@ -23,6 +23,7 @@ app.setAppUserModelId('com.benneng.prescription');  // ★ Windows 任务栏图�
 const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
 const activateManager = require('./activate');
+const selfCheck = require('./self-check');  // ★ P0-③ exe 签名/完整性自校验（非阻塞，仅记录）
 
 let mainWindow;
 let loginWindow;
@@ -1091,6 +1092,9 @@ async function verifyCodeIntegrity() {
 }
 
 app.whenReady().then(async () => {
+    // ★ P0-③ exe 签名/完整性自校验（非阻塞，仅记录，不影响启动流程）
+    selfCheck.runSelfCheck();
+
     // ★ 首次启动时将 config.json 从 asar 复制到可写路径
     await ensureWritableConfig();
 
