@@ -117,6 +117,7 @@
         canChangePassword(user) {
             if (!this.isInstitutional()) return true; // 标准版/单用户允许改密
             if (!user) return false;
+            // 非个人版：管理员不显示修改密码（由账户管理覆盖），普通用户显示修改密码
             if (global.AuthCore && global.AuthCore.isClinicAdmin) {
                 return !global.AuthCore.isClinicAdmin(user);
             }

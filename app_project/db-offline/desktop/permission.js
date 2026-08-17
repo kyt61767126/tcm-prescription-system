@@ -101,8 +101,6 @@
         // 确保离线版 admin 和云端版 clinic_admin 行为一致
 
         // 是否可以管理用户（仅机构版可管理子账号；标准版/单用户一律不可）
-        // ★ 2026-08-17 修复：以「非机构版」作为标准判定，避免历史 edition 值
-        //   （custom/offline 等）未被 isPersonal 识别时，按钮显示与试用规则不一致。
         canManageUsersByRole(user) {
             if (!this.isInstitutional()) return false;
             if (!user) return false;
@@ -119,6 +117,7 @@
         canChangePassword(user) {
             if (!this.isInstitutional()) return true; // 标准版/单用户允许改密
             if (!user) return false;
+            // 非个人版：管理员不显示修改密码（由账户管理覆盖），普通用户显示修改密码
             if (global.AuthCore && global.AuthCore.isClinicAdmin) {
                 return !global.AuthCore.isClinicAdmin(user);
             }
