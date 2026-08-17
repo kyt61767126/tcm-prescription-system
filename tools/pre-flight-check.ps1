@@ -60,6 +60,9 @@ if ($Target -ne "") {
         foreach ($dir in $checkDirs) {
             $fullDir = Join-Path $projectRoot $dir
             if (Test-Path $fullDir) {
+                # 仅匹配 obfuscate.js 实际生成的 .bak 备份（restore 只认 .bak）
+                # 注：不使用 *.bak* 泛匹配，避免误报其他工具的 .bak_v2 等备份残留
+                #    （此类误报无法被 obfuscate restore 清理，只会产生误导性告警）
                 $bakFiles = Get-ChildItem $fullDir -Filter "*.bak" -File -ErrorAction SilentlyContinue
                 if ($bakFiles) {
                     $hasBak = $true

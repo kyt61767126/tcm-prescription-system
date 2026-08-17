@@ -144,6 +144,10 @@ if errorlevel 1 (
 echo [OK] Sufficient disk space
 echo.
 
+REM 预防性检查：清理上次非正常退出（Ctrl+C/崩溃）留下的 .build_vcode_prev / .bak / dist_old 等残留
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\pre-flight-check.ps1" -Target dingzhi -DesktopDir "%~dp0"
+echo.
+
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[7/9] Code obfuscation (target=dingzhi, may take 1-2 min)...'"
 node "%~dp0..\..\..\tools\obfuscate.js" --target=dingzhi
 if errorlevel 1 (
