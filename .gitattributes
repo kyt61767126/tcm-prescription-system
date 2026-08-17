@@ -1,0 +1,92 @@
+# ============================================================================
+# .gitattributes — 全局换行符规范（根治 LF/CRLF 混用导致的"假改动"）
+#
+# 约定：
+#   1. 仓库内一律以 LF 存储（Git 标准行为）
+#   2. 源代码/文本文件检出到工作区固定为 LF（跨平台一致，不再受 core.autocrlf 影响，
+#      杜绝 Windows 下工作区 CRLF/LF 混用产生无意义 diff）
+#   3. Windows 批处理 .bat/.cmd 检出到工作区强制 CRLF —— cmd.exe 对纯 LF 脚本的
+#      goto/label、多行 if/for 解析存在兼容性问题，必须 CRLF
+#   4. 二进制文件（APK/图片/证书/文档/压缩包等）一律 binary，禁止任何换行符转换，
+#      避免文件损坏或校验哈希变动
+# ============================================================================
+
+# 默认基线：文本文件启用归一化（仓库统一 LF，未列出的文本文件按平台原生换行检出）
+* text=auto
+
+# ---- 源代码 / 文本文件：工作区与仓库统一 LF ----
+*.js           text eol=lf
+*.mjs          text eol=lf
+*.cjs          text eol=lf
+*.ts           text eol=lf
+*.html         text eol=lf
+*.css          text eol=lf
+*.scss         text eol=lf
+*.json         text eol=lf
+*.json5        text eol=lf
+*.md           text eol=lf
+*.xml          text eol=lf
+*.yml          text eol=lf
+*.yaml         text eol=lf
+*.gradle       text eol=lf
+*.java         text eol=lf
+*.kt           text eol=lf
+*.cpp          text eol=lf
+*.c            text eol=lf
+*.h            text eol=lf
+*.sh           text eol=lf
+*.sql          text eol=lf
+*.toml         text eol=lf
+*.ini          text eol=lf
+*.properties   text eol=lf
+*.npmrc        text eol=lf
+*.nsh          text eol=lf
+*.pro          text eol=lf
+*.txt          text eol=lf
+*.svg          text eol=lf
+*.editorconfig text eol=lf
+.gitignore     text eol=lf
+.gitattributes text eol=lf
+
+# ---- Windows 批处理：工作区强制 CRLF（cmd.exe 兼容） ----
+*.bat          text eol=crlf
+*.cmd          text eol=crlf
+
+# ---- 二进制：禁止任何换行符处理 ----
+*.apk          binary
+*.jar          binary
+*.aar          binary
+*.png          binary
+*.jpg          binary
+*.jpeg         binary
+*.gif          binary
+*.webp         binary
+*.bmp          binary
+*.ico          binary
+*.icns         binary
+*.cer          binary
+*.crt          binary
+*.p12          binary
+*.jks          binary
+*.keystore     binary
+*.docx         binary
+*.xlsx         binary
+*.pptx         binary
+*.zip          binary
+*.7z           binary
+*.rar          binary
+*.gz           binary
+*.exe          binary
+*.dll          binary
+*.so           binary
+*.dylib        binary
+*.ttf          binary
+*.woff         binary
+*.woff2        binary
+*.pdf          binary
+*.dat          binary
+*.db           binary
+*.sqlite       binary
+*.mp3          binary
+*.mp4          binary
+*.wav          binary
