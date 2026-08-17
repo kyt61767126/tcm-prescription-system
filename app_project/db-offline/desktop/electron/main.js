@@ -197,13 +197,23 @@ async function ensureEditionSelected() {
             config = await fse.readJson(configPath);
         }
 
-        // 已有明确的 edition 值，跳过。
+        // 已有明确的 edition 值。
         // ★ 注意：'custom' 是旧版默认占位值，不代表用户已选择版本
+        // ★ 2026-08-17 关键修复：机构版=正式激活才能使用；无授权（试用/过期/未激活）一律视作标准版，
+        //   即使旧 edition 已知是 clinic_custom 等机构版值，也必须强制校正为 personal，
+        //   防止旧安装包残留机构版 config 导致 顶部标签 vs Permission 双源不一致、改密按钮不显示。
         const knownEditions = ['personal', 'clinic', 'cloud_personal', 'cloud_clinic',
                                'offline_personal', 'offline_clinic', 'clinic_custom'];
         if (config.edition && knownEditions.includes(config.edition)) {
-            console.log('[Edition] 版本已设置:', config.edition);
-            return;
+            // ★ 关键：仅当已正式授权时跳过校正；无授权一律强制标准版
+            let alreadyLicensed = false;
+            try { alreadyLicensed = !!licenseManager.readLicense(); } catch (e) { alreadyLicensed = false; }
+            if (alreadyLicensed) {
+                console.log('[Edition] 已正式授权，保留当前版本:', config.edition);
+                return;
+            }
+            // 未授权：即便 edition 已知也进入下方，强制校正为标准版
+            console.log('[Edition] 已知 edition=', config.edition, '但未授权，仍强制校正为标准版');
         }
 
         // ★ 2026-08-16：统一安装包下，无正式 license（试用）默认标准版，不再弹版本选择框。
@@ -1135,6 +1145,16 @@ app.whenReady().then(async () => {
         console.warn('[License] 启动版本绑定校验失败（非致命）:', e.message);
     }
 
+    // ★ 2026-08-17关键修复：任何未授权状态（试用/过期/未激活/异常）都强制校正为标准版
+    //   （机构版仅在正式激活后生效）防止旧安装包残留的机构版 edition 与实际试用状态不一致
+    if (licenseResult && !_isLicensed) {
+        try {
+            await ensureTrialStandardEdition();
+        } catch (e) {
+            console.warn('[Trial] 未授权状态下标准版校正异常（非致命）:', e.message);
+        }
+    }
+
     // ★ 试用固定标准版 + 服务端一次试用登记（防卸载重装刷试用）
     if (licenseResult && licenseResult.type === 'trial' && _isLicensed) {
         try {
@@ -1957,13 +1977,29 @@ ipcMain.handle('get-app-config', async () => {
     const defaults = {
         clinicName: '本能堂中医诊所',
         doctorName: '本能堂',
-        edition: 'clinic_custom',
-        productName: '惠康中医-LJ'
+        // ★ 2026-08-17：统一安装包默认 edition 改为 personal（离线标准版），
+        //   机构版仅限正式激活后由 enforceEditionBinding 校正为 custom/clinic_custom；
+        //   避免未授权态默认机构版导致试用 admin 缺【修改密码】按钮。
+        edition: 'personal',
+        productName: '惠康中医-本地'
     };
     try {
         const configPath = getWritableConfigPath();
         if (await fse.pathExists(configPath)) {
             const cfg = await fse.readJson(configPath);
+            // ★ P3-预防重装：账号独立备份 刷新+回填
+            // 每次读取配置时把当前账号备份到 users-backup.json；
+            // 若 config 的 users 被清除，则从备份回填，避免原账号密码无法登入。
+            try {
+                if (Array.isArray(cfg.users) && cfg.users.length > 0) {
+                    licenseManager.backupUserAccounts(cfg);
+                } else {
+                    const backedUsers = licenseManager.loadUserAccountBackup();
+                    if (backedUsers.length > 0) cfg.users = backedUsers;
+                }
+            } catch (e) {
+                console.warn('账号备份刷新失败（非致命）:', e.message);
+            }
             return { success: true, config: { ...defaults, ...cfg } };
         }
     } catch (e) {

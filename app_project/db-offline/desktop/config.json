@@ -1,19 +1,19 @@
 {
-    "clinicName":  "XXX中医诊所",
-    "doctorName":  "XXX",
-    "edition":  "custom",
-    "appMode":  "offline",
-    "maxUsers":  10,
-    "productName":  "惠康中医-本地",
-    "versionLabel":  "离线版",
-    "users":  [
-                  {
-                      "username":  "admin",
-                      "password":  "2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b",
-                      "name":  "管理员",
-                      "role":  "admin"
-                  }
-              ],
-    "configIssuedAt":  "2026-08-15T02:12:40.1756379Z",
-    "configSignature":  "f620f5d91387ecf1510d49ca6a079dccbcf70e430b146c3df86447fc361dffc4"
+  "clinicName": "XXX中医诊所",
+  "doctorName": "XXX",
+  "edition": "personal",
+  "appMode": "offline",
+  "maxUsers": 1,
+  "productName": "惠康中医-本地",
+  "versionLabel": "离线标准版",
+  "users": [
+    {
+      "username": "admin",
+      "password": "2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b",
+      "name": "管理员",
+      "role": "user"
+    }
+  ],
+  "configIssuedAt": "2026-08-17T08:48:00.493Z",
+  "configSignature": "7cf44f6fd45519c38ce03ec1d84f1296ca789e521df86315fa1822c2e7135a09"
 }

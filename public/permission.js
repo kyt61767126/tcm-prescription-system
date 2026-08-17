@@ -33,6 +33,13 @@
             }
 
             this._edition = this._config.edition || (global.EDITION) || 'cloud';
+            // ★ 2026-08-17 关键修复：双源 edition 漂移防护（详细见 shared/permission.js 注释）
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition !== this._edition) {
+                    CONFIG.edition = this._edition;
+                    console.log('[DBG] Permission synced CONFIG.edition ->', this._edition);
+                }
+            } catch (_) {}
             console.log('[DBG] Permission initialized, edition:', this._edition);
         },
 
