@@ -2020,6 +2020,30 @@ ipcMain.handle('get-app-config', async () => {
                 console.warn('[Config] license校验兜底失败（非致命，保守走标准版）:', e.message);
                 merged.edition = 'personal';
             }
+
+            // ★★★ 2026-08-17 产品级永久绑定（根治"再次出现"！）：本Setup名=「惠康中医-本地」= 离线标准版
+            //   无论激活码是否 valid、无论 license.type 是 pro/institution/personal、
+            //   无论 userData/config.json 历史残留的 edition=clinic_custom、
+            //   无论 enforceEditionBinding 如何校正：
+            //   → merged.edition 永远强制 = personal（标准版）
+            //   → 所有 admin/clinic_admin 角色永远强制降级为 user（标准版永久单用户！）
+            //   这是 Setup 产品级契约："惠康中医-本地"永远是离线标准版，绝不能出现机构版行为！
+            if (true) {
+                merged.edition = 'personal';
+                let downgradedCount = 0;
+                if (Array.isArray(merged.users)) {
+                    for (const u of merged.users) {
+                        if (u && (u.role === 'admin' || u.role === 'clinic_admin')) {
+                            u.role = 'user';
+                            downgradedCount++;
+                        }
+                    }
+                }
+                // 产品名也强制对齐（防止config里改了productName）
+                merged.productName = '惠康中医-本地';
+                console.log('[Config] 产品级永久绑定生效：惠康中医-本地=离线标准版(personal)。admin降级数=' + downgradedCount);
+            }
+
             return { success: true, config: merged };
         }
     } catch (e) {

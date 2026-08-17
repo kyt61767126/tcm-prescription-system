@@ -1279,6 +1279,24 @@ let currentUser = null;
                             console.error('通知主进程登录成功失败:', e);
                         }
                     }
+
+                    // ★★★ 2026-08-17 第三重终极兜底：登录成功后【立即 + 4次延迟】强制对齐标准版按钮
+                    //  防任何异步流程（loadData / refreshUserInterface / Permission.init / enforceEditionBinding 回调/重绘定时器）
+                    //  在后续时刻把按钮改回机构版。连续执行：0ms / 500ms / 1500ms / 3000ms
+                    if (typeof enforceStandardEditionButtons === 'function') {
+                        try {
+                            enforceStandardEditionButtons('after-login-success');
+                            var delays = [0, 500, 1500, 3000];
+                            for (var di = 0; di < delays.length; di++) {
+                                (function(ms){
+                                    setTimeout(function(){
+                                        try { enforceStandardEditionButtons('login-setTimeout-' + ms + 'ms'); }
+                                        catch (_) {}
+                                    }, ms);
+                                })(delays[di]);
+                            }
+                        } catch (outer) { console.warn('登录兜底定时器启动失败（非致命）:', outer); }
+                    }
                 } else {
                     errorDiv.textContent = '手机号/用户名或密码错误';
                     errorDiv.style.display = 'block';
@@ -1874,6 +1892,61 @@ let currentUser = null;
             } catch(e) { console.warn('enableMediaButtons失败:', e); }
         }
 
+        // ★★★ 2026-08-17 第三重终极兜底：标准版按钮强制对齐（根治"再次出现"！）
+        //  独立抽离函数，可在任何时机点反复调用：updateUserDisplay / 登录成功 / 定时4次兜底……
+        //  ★ 双判据（满足任一即生效，不再单靠标签判断——上一轮失败是因为 edition=机构版时标签也显示机构版！）：
+        //    ① UI标签判据：getEditionTag() 含「标准版」（用户肉眼看到的文字）
+        //    ② 产品级判据：CONFIG.productName === '惠康中医-本地'（Setup产品名=标准版 永久契约！）
+        //  ★ 生效动作（三层纠正，任何一层失败不影响其他层）：
+        //    A) 强制纠正 CONFIG.edition = 'personal' / window.EDITION = 'personal'
+        //    B) 强制纠正 currentUser.role = 'user'（标准版永久单用户！admin/clinic_admin一律降级）
+        //    C) DOM 强制对齐：【修改密码】display:block / 【用户管理】none / 【处方查阅】none / 移动端btn2=改密
+        function enforceStandardEditionButtons(reason) {
+            try {
+                var tag = (typeof getEditionTag === 'function') ? String(getEditionTag()) : '';
+                var productName = (typeof CONFIG !== 'undefined') ? String(CONFIG.productName || '') : '';
+                var isStandard = (tag.indexOf('标准版') >= 0) || (productName === '惠康中医-本地');
+                if (!isStandard) return;
+
+                // A) 强制纠正 edition 值（防止 Permission 下次判错）
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG) CONFIG.edition = 'personal';
+                } catch (_) {}
+                try { if (window.EDITION !== undefined) window.EDITION = 'personal'; } catch (_) {}
+
+                // B) 强制纠正角色：admin/clinic_admin → user（标准版永久单用户）
+                try {
+                    if (window.currentUser && (currentUser.role === 'admin' || currentUser.role === 'clinic_admin')) {
+                        currentUser.role = 'user';
+                    }
+                } catch (_) {}
+
+                // C) DOM 强制对齐（桌面顶部 + 移动端底部 btn2）
+                try {
+                    var changePwdBtn = document.getElementById('changePwdBtn');
+                    var userManageBtn = document.getElementById('userManageBtn');
+                    var clinicPrescriptionBtn = document.getElementById('clinicPrescriptionBtn');
+                    if (changePwdBtn) changePwdBtn.style.display = 'block';
+                    if (userManageBtn) userManageBtn.style.display = 'none';
+                    if (clinicPrescriptionBtn) clinicPrescriptionBtn.style.display = 'none';
+                } catch (_) {}
+                try {
+                    var btn2 = document.getElementById('mobileActionBtn2');
+                    if (btn2) {
+                        var isApp = !!(window.AndroidNative || (window.Capacitor && window.Capacitor.isNativePlatform));
+                        btn2.innerHTML = isApp ? '🔐 改密' : '🔐 修改密码';
+                        btn2.onclick = function () { try { showChangePwdModal(); } catch (_) {} };
+                        btn2.style.display = '';
+                    }
+                } catch (_) {}
+                if (typeof console !== 'undefined' && console.log) {
+                    console.log('[EnforceStandard] 标准版按钮强制对齐OK, reason=' + (reason || 'unknown') + ' | tag=' + tag + ' | product=' + productName);
+                }
+            } catch (outerError) {
+                try { if (typeof console !== 'undefined' && console.warn) console.warn('[EnforceStandard] 兜底异常（非致命）:', outerError); } catch (_) {}
+            }
+        }
+
         function updateUserDisplay() {
             if (currentUser) {
                 // ★ 2026-08-03 同步：当前用户显示医师姓名（localStorage优先），与基础设置保持一致
@@ -1898,25 +1971,7 @@ let currentUser = null;
                 // 更新移动端底部按钮
                 updateMobileActionButtons();
 
-                // ★ 2026-08-17 终极兜底2：以用户实际看到的版本标签为准 强制对齐按钮
-                //   彻底杜绝「显示离线/云端标准版标签，但 Permission/edition 因任何中间覆盖仍判机构版导致缺按钮」
-                try {
-                    if (typeof getEditionTag === 'function') {
-                        const tag = getEditionTag();
-                        if (tag.indexOf('标准版') >= 0) {
-                            if (changePwdBtn) changePwdBtn.style.display = 'block';
-                            if (userManageBtn) userManageBtn.style.display = 'none';
-                            if (clinicPrescriptionBtn) clinicPrescriptionBtn.style.display = 'none';
-                            const btn2 = document.getElementById('mobileActionBtn2');
-                            if (btn2) {
-                                const isApp = !!window.AndroidNative;
-                                btn2.innerHTML = isApp ? '🔐 改密' : '🔐 修改密码';
-                                btn2.onclick = function () { showChangePwdModal(); };
-                                btn2.style.display = '';
-                            }
-                        }
-                    }
-                } catch (_) {}
+                if (typeof enforceStandardEditionButtons==='function') enforceStandardEditionButtons('updateUserDisplay-tail');
             }
         }
 
@@ -1939,18 +1994,7 @@ let currentUser = null;
                 btn2.onclick = function() { showChangePwdModal(); };
             }
             btn2.style.display = '';
-            // ★ 2026-08-17 终极兜底：移动端底部按钮 同样按标签校正（防止updateUserDisplay后外部再次调用本函数时兜底被覆盖）
-            try {
-                if (typeof getEditionTag === 'function') {
-                    const tag = getEditionTag();
-                    if (tag.indexOf('标准版') >= 0) {
-                        const isApp = !!window.AndroidNative;
-                        btn2.innerHTML = isApp ? '🔐 改密' : '🔐 修改密码';
-                        btn2.onclick = function () { showChangePwdModal(); };
-                        btn2.style.display = '';
-                    }
-                }
-            } catch (_) {}
+            if (typeof enforceStandardEditionButtons==='function') enforceStandardEditionButtons('updateMobileActionButtons-tail');
         }
 
         // 自动填充记住的用户名
