@@ -1,8 +1,12 @@
 ﻿# ============================================================================
 #  sync-app-version.ps1
-#  从 cloud_desktop/index.html 读取 __APP_VERSION__，自动注入到
-#  cloud_app 的 MainActivity.EXPECTED_APP_VERSION，
-#  避免版本号不同步导致每次启动清缓存
+#  ★ 2026-08-17 根治版本号回滚问题：真源改为 public/index.html（不再是 cloud_desktop）
+#  从 <repo_root>/public/index.html（云端版本唯一真源）读取 __APP_VERSION__，
+#  双向同步到：
+#    1) cloud_app 的 MainActivity.EXPECTED_APP_VERSION（APK内置版本号）
+#    2) cloud_desktop/index.html 的 __APP_VERSION__（云端桌面版）
+#  保证三要素：APK内置 = 云端网页 = 桌面版本号 完全一致，杜绝打包时回滚覆盖。
+#  打包前还会被 verify-app-version-consistency.ps1 再次强制预检不通过则终止。
 #
 #  用法:
 #    powershell -NoProfile -ExecutionPolicy Bypass -File sync-app-version.ps1 <cloud_dir> [android_dir]
@@ -20,23 +24,48 @@ if ($args.Count -lt 1) {
     exit 1
 }
 
-$cloudDir  = $args[0]
-$indexFile = Join-Path $cloudDir 'cloud_desktop\index.html'
+$cloudDir   = $args[0]
+# ★ 真源：repo 根目录下的 public/index.html（Cloudflare Pages 实际部署的文件）
+#   cloud_desktop/index.html 只是桌面版本地副本，不再作为真源（之前回滚的根因）
+$repoRoot   = Split-Path (Split-Path $cloudDir -Parent) -Parent
+$publicHtml = Join-Path $repoRoot 'public\index.html'
+$desktopHtml = Join-Path $cloudDir 'cloud_desktop\index.html'
 
-if (-not (Test-Path $indexFile)) {
-    Write-Host "  [WARN] index.html not found: $indexFile"
-    exit 0
+# --- 1. 从真源 public/index.html 读取版本号 ---
+if (-not (Test-Path $publicHtml)) {
+    Write-Host "  [ERROR] ★版本号真源不存在: $publicHtml"
+    Write-Host "         请确认 public/index.html 位置，已放弃以 cloud_desktop 作为真源（防回滚）"
+    exit 1
 }
-
-$idx = Get-Content $indexFile -Raw -Encoding UTF8
+$idx = Get-Content $publicHtml -Raw -Encoding UTF8
 if ($idx -match "__APP_VERSION__\s*=\s*'([^']+)'") {
     $ver = $matches[1]
+    Write-Host "  [OK] 从版本真源 public/index.html 读取版本号: $ver"
 } else {
-    Write-Host "  [WARN] __APP_VERSION__ not found in index.html"
-    exit 0
+    Write-Host "  [ERROR] public/index.html 中未找到 __APP_VERSION__，打包终止！"
+    exit 1
 }
 
-# 目标 APP 目录列表：未指定 android_dir 时同步两个 APP
+# --- 2. 把版本号写回 cloud_desktop/index.html（保证桌面端副本也同步）---
+if (Test-Path $desktopHtml) {
+    $d = Get-Content $desktopHtml -Raw -Encoding UTF8
+    $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+    if ($d -match "__APP_VERSION__\s*=\s*'([^']+)'") {
+        $oldVer = $matches[1]
+        if ($oldVer -ne $ver) {
+            Write-Host "  [WARN] cloud_desktop/index.html 版本号=$oldVer 与真源不一致，强制覆盖为 $ver（之前会因此反向回滚！）"
+            $newD = $d -replace "__APP_VERSION__\s*=\s*'[^']+'", "__APP_VERSION__ = '$ver'"
+            [System.IO.File]::WriteAllText($desktopHtml, $newD, $utf8NoBom)
+            Write-Host "  [OK] cloud_desktop/index.html 已同步为 $ver"
+        } else {
+            Write-Host "  [OK] cloud_desktop/index.html 已一致：$ver"
+        }
+    } else {
+        Write-Host "  [WARN] cloud_desktop/index.html 未找到 __APP_VERSION__，跳过同步"
+    }
+}
+
+# --- 3. 写入 cloud_app 的 MainActivity.EXPECTED_APP_VERSION ---
 if ($args.Count -ge 2 -and -not [string]::IsNullOrEmpty($args[1])) {
     $targetDirs = @($args[1])
 } else {
@@ -45,7 +74,7 @@ if ($args.Count -ge 2 -and -not [string]::IsNullOrEmpty($args[1])) {
     )
 }
 
-$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+$utf8NoBom2 = New-Object System.Text.UTF8Encoding $false
 $pattern = 'EXPECTED_APP_VERSION\s*=\s*"[^"]*"'
 $replacement = 'EXPECTED_APP_VERSION = "' + $ver + '"'
 
@@ -60,11 +89,11 @@ foreach ($androidDir in $targetDirs) {
     $new = $c -replace $pattern, $replacement
 
     if ($new -ne $c) {
-        [System.IO.File]::WriteAllText($mainFile, $new, $utf8NoBom)
+        [System.IO.File]::WriteAllText($mainFile, $new, $utf8NoBom2)
         $appName = Split-Path $androidDir -Leaf
         Write-Host "  [OK] $appName MainActivity.EXPECTED_APP_VERSION = $ver"
     } else {
         $appName = Split-Path $androidDir -Leaf
-        Write-Host "  [SKIP] $appName already in sync"
+        Write-Host "  [OK] $appName already in sync ($ver)"
     }
 }

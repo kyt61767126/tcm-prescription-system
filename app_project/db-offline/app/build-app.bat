@@ -38,8 +38,21 @@ cd /d "%~dp0"
 set "SCRIPT_DIR=%~dp0"
 set "OFFLINE_DIR=%SCRIPT_DIR:~0,-1%"
 for %%I in ("%OFFLINE_DIR%\..") do set "OFFLINE_DIR=%%~fI"
+for %%I in ("%OFFLINE_DIR%\..\..") do set "REPO_ROOT=%%~fI"
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[1/10] Configure clinic info (Flavor: %FLAVOR%)...'"
+REM ★ 2026-08-17 新增：版本号一致性预检（举一反三杜绝离线APP版本不一致）
+REM 打包前检查：index-app.html __APP_VERSION__ = desktop/index.html __APP_VERSION__
+REM 任何不一致直接 exit 1 终止打包
+echo [0/10] ★ 版本号一致性预检（离线APP组）...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\verify-app-version-consistency.ps1" -Target offline -RepoRoot "%REPO_ROOT%"
+if errorlevel 1 (
+    echo [FATAL] 版本号不一致，打包已终止！请根据上方提示修复后重新运行
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo.
+
+powershell -NoProfile -Command "[Console::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[1/10] Configure clinic info (Flavor: %FLAVOR%)...']"
 if defined SKIP_CONFIG (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] --skip-config argument detected, skipping config'"
 ) else (

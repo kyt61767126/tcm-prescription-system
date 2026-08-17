@@ -38,6 +38,19 @@ REM --- Path setup (use absolute paths, no relative) ---
 set "SCRIPT_DIR=%~dp0"
 set "CLOUD_DIR=%SCRIPT_DIR:~0,-1%"
 set "ANDROID_DIR=%CLOUD_DIR%\cloud_app"
+for %%I in ("%CLOUD_DIR%\..\..") do set "REPO_ROOT=%%~fI"
+
+REM ★ 2026-08-17 新增：版本号一致性预检（举一反三杜绝回滚覆盖）
+REM 打包前检查三要素：public/__APP_VERSION__ = cloud_desktop/__APP_VERSION__ = MainActivity.EXPECTED_APP_VERSION
+REM 任何不一致直接 exit 1 终止打包，防止带病上线后用户反馈"问题依旧"
+echo [0/10] ★ 版本号一致性预检（杜绝打包后版本号反向回滚）...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\verify-app-version-consistency.ps1" -Target cloud -RepoRoot "%REPO_ROOT%"
+if errorlevel 1 (
+    echo [FATAL] 版本号不一致，打包已终止！请根据上方提示修复后重新运行
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo.
 
 if not exist "%ANDROID_DIR%\gradlew.bat" (
     echo [ERROR] cloud_app directory not found: %ANDROID_DIR%
