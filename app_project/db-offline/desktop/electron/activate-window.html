@@ -356,45 +356,47 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
             <div class="progress-line" id="progressLine"></div>
             <div class="progress-step" data-step="2">
                 <div class="dot">2</div>
-                <div class="label">设置密码</div>
+                <div class="label">确认密码</div>
             </div>
         </div>
 
         <!-- Step 1: 基础信息 -->
         <div id="step1" class="slide-in">
             <div class="form-group">
-                <label>诊所名称 <span class="req">*</span></label>
+                <label>诊所名称 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（必填）</span></label>
                 <input type="text" id="clinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false">
+                <div class="field-hint">💡 必填，请填写您的诊所名称</div>
             </div>
             <div class="form-group">
-                <label>管理员/医师姓名 <span class="req">*</span></label>
+                <label>管理员/医师姓名 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（必填）</span></label>
                 <input type="text" id="adminName" placeholder="如：王医生" autocomplete="off" spellcheck="false">
+                <div class="field-hint">💡 必填，请填写管理员/医师姓名</div>
             </div>
             <div class="form-group">
                 <label>联系电话 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（将作为登录账号）</span></label>
                 <input type="text" id="phone" placeholder="如：13800138000" autocomplete="off" spellcheck="false" inputmode="numeric" maxlength="11">
-                <div class="field-hint" id="phoneHint">💡 11位手机号，激活后用手机号+密码登录</div>
+                <div class="field-hint" id="phoneHint">💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）</div>
             </div>
             <div class="form-group">
                 <label>备注（可选）</label>
                 <input type="text" id="remark" placeholder="如：需要几个账号" autocomplete="off" maxlength="100">
             </div>
-            <button class="btn" id="toStep2Btn">下一步：设置密码 →</button>
+            <button class="btn" id="toStep2Btn">下一步：确认密码（可留空=默认 admin）→</button>
         </div>
 
         <!-- Step 2: 密码 -->
         <div id="step2" style="display:none;">
             <div class="form-group">
-                <label>登录密码 <span class="req">*</span></label>
-                <input type="password" id="password" placeholder="至少8位，包含字母和数字" autocomplete="new-password" maxlength="32">
+                <label>登录密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（可留空＝默认 admin）</span></label>
+                <input type="password" id="password" placeholder="留空则用默认密码 admin（登入后请修改）" autocomplete="new-password" maxlength="32">
                 <div class="pwd-strength" id="pwdStrength">
                     <div class="bar"></div><div class="bar"></div><div class="bar"></div>
                 </div>
-                <div class="field-hint" id="pwdHint">💡 激活后用此密码登录，建议保存到安全位置</div>
+                <div class="field-hint" id="pwdHint">💡 留空则默认密码为 admin（登入后请在设置中自行修改密码）</div>
             </div>
             <div class="form-group">
-                <label>确认密码 <span class="req">*</span></label>
-                <input type="password" id="password2" placeholder="再次输入密码" autocomplete="new-password" maxlength="32">
+                <label>确认密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（自定义时需再输一次）</span></label>
+                <input type="password" id="password2" placeholder="自定义密码时再次输入" autocomplete="new-password" maxlength="32">
                 <div class="field-hint" id="pwd2Hint"></div>
             </div>
             <div class="form-nav">
@@ -443,7 +445,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <div class="desc" id="successDesc">管理员已通过您的激活申请<br>软件即将自动重启，请使用手机号+密码登录</div>
                 <div class="info-row">
                     <div>✅ 账号：<b id="successPhone">--</b></div>
-                    <div>✅ 密码：<b style="color:#2e7d32;">（您设置的密码）</b></div>
+                    <div>✅ 密码：<b style="color:#2e7d32;">（默认 admin，登入后请自行修改）</b></div>
                 </div>
                 <div class="status-text" style="background:#fff; color:#2e7d32;" id="restartCountdown">🔄 3 秒后自动重启...</div>
                 <button class="btn btn-success" id="restartNowBtn" style="margin-top:10px;">立即重启 →</button>
@@ -471,7 +473,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
             <div class="progress-line" id="progressLineCode"></div>
             <div class="progress-step" data-step="2">
                 <div class="dot">2</div>
-                <div class="label">设置密码</div>
+                <div class="label">确认密码</div>
             </div>
         </div>
 
@@ -483,34 +485,36 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <div class="field-hint">💡 激活码格式为 BNZC-XXXX-XXXX-XXXX-XXXX</div>
             </div>
             <div class="form-group">
-                <label>诊所名称 <span class="req">*</span></label>
+                <label>诊所名称 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（必填）</span></label>
                 <input type="text" id="codeClinicName" placeholder="如：惠康中医诊所" autocomplete="off">
+                <div class="field-hint">💡 必填，请填写您的诊所名称</div>
             </div>
             <div class="form-group">
-                <label>管理员/医师姓名 <span class="req">*</span></label>
+                <label>管理员/医师姓名 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（必填）</span></label>
                 <input type="text" id="codeAdminName" placeholder="如：王医生" autocomplete="off">
+                <div class="field-hint">💡 必填，请填写管理员/医师姓名</div>
             </div>
             <div class="form-group">
                 <label>联系电话 <span class="req">*</span> <span style="font-size:11px;color:#909399;font-weight:normal;">（将作为登录账号）</span></label>
                 <input type="text" id="codePhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11">
-                <div class="field-hint" id="codePhoneHint">💡 11位手机号，激活后用手机号+密码登录</div>
+                <div class="field-hint" id="codePhoneHint">💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）</div>
             </div>
-            <button class="btn" id="codeToStep2Btn">下一步：设置密码 →</button>
+            <button class="btn" id="codeToStep2Btn">下一步：确认密码（可留空=默认 admin）→</button>
         </div>
 
         <!-- Step 2: 密码 -->
         <div id="codeStep2" style="display:none;">
             <div class="form-group">
-                <label>登录密码 <span class="req">*</span></label>
-                <input type="password" id="codePassword" placeholder="至少8位，包含字母和数字" autocomplete="new-password" maxlength="32">
+                <label>登录密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（可留空＝默认 admin）</span></label>
+                <input type="password" id="codePassword" placeholder="留空则用默认密码 admin（登入后请修改）" autocomplete="new-password" maxlength="32">
                 <div class="pwd-strength" id="codePwdStrength">
                     <div class="bar"></div><div class="bar"></div><div class="bar"></div>
                 </div>
-                <div class="field-hint" id="codePwdHint">💡 激活后用此密码登录，建议保存到安全位置</div>
+                <div class="field-hint" id="codePwdHint">💡 留空则默认密码为 admin（登入后请在设置中自行修改密码）</div>
             </div>
             <div class="form-group">
-                <label>确认密码 <span class="req">*</span></label>
-                <input type="password" id="codePassword2" placeholder="再次输入密码" autocomplete="new-password" maxlength="32">
+                <label>确认密码 <span style="font-size:11px;color:#909399;font-weight:normal;">（自定义时需再输一次）</span></label>
+                <input type="password" id="codePassword2" placeholder="自定义密码时再次输入" autocomplete="new-password" maxlength="32">
                 <div class="field-hint" id="codePwd2Hint"></div>
             </div>
             <div class="form-nav">
@@ -731,7 +735,7 @@ document.getElementById('phone').addEventListener('input', e => {
     state.phone = e.target.value;
     const hint = document.getElementById('phoneHint');
     if (!state.phone) {
-        hint.textContent = '💡 11位手机号，激活后用手机号+密码登录';
+        hint.textContent = '💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）';
         hint.className = 'field-hint';
     } else if (!V.PHONE_RE.test(state.phone)) {
         hint.textContent = '⚠ 请输入正确的11位手机号';
@@ -797,10 +801,10 @@ document.getElementById('password').addEventListener('input', e => {
     bar.className = 'pwd-strength ' + (strength === 0 ? '' : strength === 1 ? 'weak' : strength === 2 ? 'medium' : 'strong');
     const hint = document.getElementById('pwdHint');
     if (!pwd) {
-        hint.textContent = '💡 激活后用此密码登录，建议保存到安全位置';
+        hint.textContent = '💡 留空则默认密码为 admin（登入后请在设置中自行修改密码）';
         hint.className = 'field-hint';
     } else if (strength < 2) {
-        hint.textContent = '⚠ 密码强度不足：至少8位，需包含字母和数字';
+        hint.textContent = '⚠ 若自定义密码，需至少8位且包含字母和数字';
         hint.className = 'field-hint error';
     } else if (strength === 2) {
         hint.textContent = '✓ 密码强度：中等';
@@ -833,17 +837,21 @@ function validateAdminPassword2() {
 // Submit admin request
 document.getElementById('submitBtn').addEventListener('click', async () => {
     hideGlobalError();
-    const pwd = state.password;
-    const pwd2 = document.getElementById('password2').value;
+    // ★ 默认密码 admin（2026-08-17）：密码留空则用 admin，登入后自行修改
+    const pwdRaw = state.password;
+    const pwd = (pwdRaw && pwdRaw.trim()) ? pwdRaw.trim() : 'admin';
+    const pwd2 = (document.getElementById('password2').value || '').trim();
+    state.password = pwd;
 
-    // Validate password
+    // Validate password（仅自定义密码时校验）
     let firstErr = null;
-    if (!pwd) firstErr = { msg: '请设置登录密码', id: 'password' };
-    else if (pwd.length < 8) firstErr = { msg: '密码至少8位', id: 'password' };
-    else if (!/[a-zA-Z]/.test(pwd)) firstErr = { msg: '密码需包含字母', id: 'password' };
-    else if (!/\d/.test(pwd)) firstErr = { msg: '密码需包含数字', id: 'password' };
-    else if (!pwd2) firstErr = { msg: '请再次输入密码', id: 'password2' };
-    else if (pwd !== pwd2) firstErr = { msg: '两次密码输入不一致', id: 'password2' };
+    if (pwd !== 'admin') {
+        if (pwd.length < 8) firstErr = { msg: '若自定义密码，需至少8位', id: 'password' };
+        else if (!/[a-zA-Z]/.test(pwd)) firstErr = { msg: '若自定义密码，需包含字母', id: 'password' };
+        else if (!/\d/.test(pwd)) firstErr = { msg: '若自定义密码，需包含数字', id: 'password' };
+        else if (!pwd2) firstErr = { msg: '请再次输入自定义密码', id: 'password2' };
+        else if (pwd !== pwd2) firstErr = { msg: '两次密码输入不一致', id: 'password2' };
+    }
 
     if (firstErr) { showFieldError(firstErr.id, firstErr.msg); return; }
 
@@ -935,8 +943,8 @@ async function saveAndRestart(license, phone) {
 function showSuccess(phone, isCodeMode) {
     document.getElementById('successPhone').textContent = phone || state.phone || codeState.phone;
     document.getElementById('successDesc').innerHTML = isCodeMode
-        ? '激活码验证成功<br>软件即将自动重启，请使用手机号+密码登录'
-        : '管理员已通过您的激活申请<br>软件即将自动重启，请使用手机号+密码登录';
+        ? '激活码验证成功<br>软件即将自动重启，请使用手机号登录<br>密码为默认 admin（登入后请自行修改）'
+        : '管理员已通过您的激活申请<br>软件即将自动重启，请使用手机号登录<br>密码为默认 admin（登入后请自行修改）';
     showAdminPanel('success');
     // Auto restart in 3s
     let secs = 3;
@@ -1058,10 +1066,10 @@ document.getElementById('codePassword').addEventListener('input', e => {
     bar.className = 'pwd-strength ' + (strength === 0 ? '' : strength === 1 ? 'weak' : strength === 2 ? 'medium' : 'strong');
     const hint = document.getElementById('codePwdHint');
     if (!pwd) {
-        hint.textContent = '💡 激活后用此密码登录，建议保存到安全位置';
+        hint.textContent = '💡 留空则默认密码为 admin（登入后请在设置中自行修改密码）';
         hint.className = 'field-hint';
     } else if (strength < 2) {
-        hint.textContent = '⚠ 密码强度不足：至少8位，需包含字母和数字';
+        hint.textContent = '⚠ 若自定义密码，需至少8位且包含字母和数字';
         hint.className = 'field-hint error';
     } else if (strength === 2) {
         hint.textContent = '✓ 密码强度：中等';
@@ -1099,16 +1107,20 @@ document.getElementById('codePassword2').addEventListener('keydown', e => {
 document.getElementById('codeSubmitBtn').addEventListener('click', async () => {
     hideGlobalError();
     const code = document.getElementById('activationCode').value.trim();
-    const pwd = codeState.password;
-    const pwd2 = document.getElementById('codePassword2').value;
+    // ★ 默认密码 admin（2026-08-17）：密码留空则用 admin，登入后自行修改
+    const pwdRaw = codeState.password;
+    const pwd = (pwdRaw && pwdRaw.trim()) ? pwdRaw.trim() : 'admin';
+    const pwd2 = (document.getElementById('codePassword2').value || '').trim();
+    codeState.password = pwd;
 
     let firstErr = null;
-    if (!pwd) firstErr = { msg: '请设置登录密码', id: 'codePassword' };
-    else if (pwd.length < 8) firstErr = { msg: '密码至少8位', id: 'codePassword' };
-    else if (!/[a-zA-Z]/.test(pwd)) firstErr = { msg: '密码需包含字母', id: 'codePassword' };
-    else if (!/\d/.test(pwd)) firstErr = { msg: '密码需包含数字', id: 'codePassword' };
-    else if (!pwd2) firstErr = { msg: '请再次输入密码', id: 'codePassword2' };
-    else if (pwd !== pwd2) firstErr = { msg: '两次密码输入不一致', id: 'codePassword2' };
+    if (pwd !== 'admin') {
+        if (pwd.length < 8) firstErr = { msg: '若自定义密码，需至少8位', id: 'codePassword' };
+        else if (!/[a-zA-Z]/.test(pwd)) firstErr = { msg: '若自定义密码，需包含字母', id: 'codePassword' };
+        else if (!/\d/.test(pwd)) firstErr = { msg: '若自定义密码，需包含数字', id: 'codePassword' };
+        else if (!pwd2) firstErr = { msg: '请再次输入自定义密码', id: 'codePassword2' };
+        else if (pwd !== pwd2) firstErr = { msg: '两次密码输入不一致', id: 'codePassword2' };
+    }
 
     if (firstErr) { showFieldError(firstErr.id, firstErr.msg); return; }
 

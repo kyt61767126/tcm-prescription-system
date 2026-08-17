@@ -633,7 +633,7 @@ public class MainActivity extends BridgeActivity {
             "    }," +
             "    activate: {" +
             "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
-            "      submit: function(code, user){ return callNativeAsync('activateLicense', {code: code, user: user||''}); }," +
+            "      submit: function(code, user, password){ return callNativeAsync('activateLicense', {code: code, user: user||'', password: password||'admin'}); }," +
             "      getMachineId: function(){ return callNativeAsync('getMachineId', {}); }," +
             "      close: function(){ return Promise.resolve({success:true}); }," +
             "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
@@ -1006,7 +1006,8 @@ public class MainActivity extends BridgeActivity {
                         return validateLicense().toString();
                     case "activateLicense":
                         return activateLicense(args.optString("code", ""),
-                                args.optString("user", "")).toString();
+                                args.optString("user", ""),
+                                args.optString("password", "admin")).toString();
                     case "getMachineId":
                         return getMachineIdJson().toString();
                     case "verifyOnline":
@@ -1626,10 +1627,22 @@ public class MainActivity extends BridgeActivity {
             catch (Exception e) { return fail(e.getMessage()); }
         }
 
-        private JSONObject activateLicense(String code, String user) {
+        private JSONObject activateLicense(String code, String user, String password) {
             try {
                 String machineId = getLM().getMachineId();
-                JSONObject result = getLM().activateOnline(code, machineId, user != null ? user : "");
+                // ★ 解析"姓名/手机号"：手机号作为登录账号，姓名作为显示名
+                String raw = user != null ? user.trim() : "";
+                String phone = "";
+                int phoneStart = -1;
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("1[3-9]\\d{9}").matcher(raw);
+                if (m.find()) {
+                    phone = m.group();
+                    phoneStart = m.start();
+                }
+                String name = (phoneStart >= 0) ? raw.substring(0, phoneStart) : raw;
+                name = name.replaceAll("[/\\-\\s]+$", "").trim();
+                String loginUsername = phone.isEmpty() ? raw : phone;
+                JSONObject result = getLM().activateOnline(code, machineId, name, "", password, loginUsername, phone);
                 // ★ 修复 2026-07-27：激活成功后立即验证 license.dat 是否可正确读取
                 // 这样可以在激活时就发现问题，而不是等用户重启后才发现问题
                 if (result != null && result.optBoolean("success", false)) {

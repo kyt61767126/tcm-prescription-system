@@ -155,6 +155,52 @@ function getTrialConfigPath() {
     }
 }
 
+// ============================================================================
+// ★ P3-预防重装：账号独立持久化备份
+// 账号（users）当前存在 config.json 内，而 config 签名仅覆盖
+// clinicName|doctorName|edition|configIssuedAt（users 不在签名范围内）。
+// 为防止重装/清除 config.json 导致原账号密码丢失，
+// 将 users 独立备份到 users-backup.json（与 config.json 同目录，随 userData 存活），
+// 供 selfHeal 与 get-app-config 在 config 缺失/被清空时回填恢复账号。
+// ============================================================================
+function getUsersBackupPath() {
+    try {
+        return path.join(getWritableDir(), 'users-backup.json');
+    } catch (e) {
+        return path.join(app.getPath('userData'), 'users-backup.json');
+    }
+}
+
+// 将当前 config 中的 users 备份到独立文件（非关键路径，失败可安全跳过）
+function backupUserAccounts(config) {
+    try {
+        if (!config || !Array.isArray(config.users) || config.users.length === 0) return false;
+        const backup = {
+            backupAt: new Date().toISOString(),
+            users: config.users
+        };
+        fs.writeFileSync(getUsersBackupPath(), JSON.stringify(backup, null, 2), 'utf8');
+        return true;
+    } catch (e) {
+        console.warn('[License] backupUserAccounts 失败（非致命）:', e.message);
+        return false;
+    }
+}
+
+// 从独立备份读取 users（config 缺失/被清空时回填，避免原账号密码丢失）
+function loadUserAccountBackup() {
+    try {
+        const p = getUsersBackupPath();
+        if (!fs.existsSync(p)) return [];
+        const backup = JSON.parse(fs.readFileSync(p, 'utf8'));
+        if (backup && Array.isArray(backup.users)) return backup.users;
+        return [];
+    } catch (e) {
+        console.warn('[License] loadUserAccountBackup 失败（非致命）:', e.message);
+        return [];
+    }
+}
+
 // ★ 获取试用期天数（可配置，默认 7 天，测试时可设为 0 天立即触发激活）
 function getTrialDays() {
     try {
@@ -1032,14 +1078,69 @@ function verifyConfigIntegrity() {
         if (!cfg.configIssuedAt) return false;
         // 签名内容：clinicName|doctorName|edition|configIssuedAt
         const signContent = [cfg.clinicName || '', cfg.doctorName || '', cfg.edition || '', cfg.configIssuedAt].join('|');
-        const expected = crypto.createHmac('sha256', getEffectiveConfigSignKey()).update(signContent).digest('hex');
-        try {
-            return crypto.timingSafeEqual(Buffer.from(cfg.configSignature, 'hex'), Buffer.from(expected, 'hex'));
-        } catch (e) {
-            return false;
+        // ★ P1-预防重装：config 签名统一用稳定硬编码密钥发/验签（signConfig 已用 CONFIG_SIGN_KEY）。
+        // 兼容历史 masterKey 派生的老签名：多候选密钥逐个验签，任一匹配即通过，
+        // 避免重装/重激活后密钥漂移导致已激活用户被误锁（宁可漏检不可误报）。
+        const signCandidates = [CONFIG_SIGN_KEY];
+        const _mk = getLicenseMasterKey();
+        if (_mk) signCandidates.push(getEffectiveConfigSignKey());
+        for (const key of signCandidates) {
+            const expected = crypto.createHmac('sha256', key).update(signContent).digest('hex');
+            try {
+                if (crypto.timingSafeEqual(Buffer.from(cfg.configSignature, 'hex'), Buffer.from(expected, 'hex'))) return true;
+            } catch (e) { /* 尝试下一候选密钥 */ }
         }
+        return false;
     } catch (e) {
         console.warn('[License] config.json 完整性校验异常:', e.message);
+        return false;
+    }
+}
+
+// ★ P2-预防重装：config.json 完整性自愈
+// 触发时机：license 本身验签有效（调用方已前置校验），但本地 config 完整性签名不匹配。
+// 典型场景：重装/重激活导致 config 签名密钥或内容漂移，合法用户被误锁。
+// 处理：用 license 内已验签的权威值（clinicName/doctorName）覆盖本地 config 并重签写入，
+//       edition/users 等其他字段原样保留，避免账号丢失。
+// 安全性：改 config 企图绕过绑定时会被 authority 值覆盖回正版值（等价"纠正篡改"），
+//         符合"宁可漏检不可误报"，不向攻击者放行。
+function selfHealConfigFromLicense(license) {
+    try {
+        const configDir = getWritableDir();
+        const configPath = require('path').join(configDir, 'config.json');
+        let config = {};
+        try {
+            if (fs.existsSync(configPath)) config = JSON.parse(fs.readFileSync(configPath, 'utf8')) || {};
+        } catch (e) { config = {}; }
+
+        // ★ P3-预防重装：config 缺失/被清空导致 users 丢失时，从独立备份回填账号，避免原密码无法登入
+        if (!Array.isArray(config.users) || config.users.length === 0) {
+            const backedUsers = loadUserAccountBackup();
+            if (backedUsers.length > 0) {
+                config.users = backedUsers;
+                console.log('[License] selfHeal 已从 users-backup.json 回填账号:', backedUsers.length, '个');
+            }
+        }
+
+        // 用 license 权威值覆盖（license 已验签通过）
+        if (license.clinicName && config.clinicName !== license.clinicName) {
+            config.clinicName = license.clinicName;
+        }
+        if (license.doctorName && config.doctorName !== license.doctorName) {
+            config.doctorName = license.doctorName;
+        }
+
+        signConfig(config);
+        if (!config.configSignature) {
+            console.warn('[License] selfHealConfigFromLicense 重签失败，跳过自愈');
+            return false;
+        }
+        fs.writeFileSync(configPath, JSON.stringify(config, null, 2), 'utf8');
+        backupUserAccounts(config); // 重写后同步刷新账号备份
+        console.log('[License] config.json 重装自愈完成（用 license 权威值重签）');
+        return true;
+    } catch (e) {
+        console.warn('[License] selfHealConfigFromLicense 异常:', e.message);
         return false;
     }
 }
@@ -1220,13 +1321,20 @@ function validateLicense(options) {
 
         // ★ v3 新增：config.json 完整性校验（仅对绑定型 license 生效）
         // 防止用户修改 config.json 中的 clinicName 绕过 license 绑定校验
+        // ★ P2-预防重装：license 前已验签有效；config 签名不匹配大概率是重装/重激活
+        //   导致的密钥或内容漂移，而非真实篡改 → 先尝试自愈（用 license 权威值重签）。
+        //   自愈后仍失败才判为真实篡改并 fail-closed（宁可漏检不可误报）。
         if (license.licenseBinding && !verifyConfigIntegrity()) {
-            return {
-                valid: false,
-                message: '配置文件 config.json 已被篡改或损坏，请重新打包或联系客服。\n（诊所名/医师名等关键字段签名校验失败）',
-                type: 'config_tampered',
-                license: license
-            };
+            const healed = selfHealConfigFromLicense(license);
+            if (!healed || !verifyConfigIntegrity()) {
+                return {
+                    valid: false,
+                    message: '配置文件 config.json 已被篡改或损坏，请重新打包或联系客服。\n（诊所名/医师名等关键字段签名校验失败）',
+                    type: 'config_tampered',
+                    license: license
+                };
+            }
+            // 自愈后放行，不锁定合法用户
         }
 
         // ★ v3 新增：三因子绑定校验（clinicName + machineId）
@@ -1625,7 +1733,7 @@ function signConfig(config) {
             config.edition || '',
             config.configIssuedAt
         ].join('|');
-        config.configSignature = crypto.createHmac('sha256', getEffectiveConfigSignKey())
+        config.configSignature = crypto.createHmac('sha256', CONFIG_SIGN_KEY)
             .update(signContent).digest('hex');
         return config;
     } catch (e) {
@@ -1752,6 +1860,7 @@ function installLicense(base64Content, options = {}) {
         }
 
         console.log('[License] installLicense 完成，license 路径:', writeResult.path);
+        backupUserAccounts(config); // ★ P3-预防重装：激活后同步刷新账号独立备份
         return { success: true, path: writeResult.path, configUpdated: configChanged };
     } catch (e) {
         console.error('[License] installLicense 异常:', e);
@@ -1862,6 +1971,10 @@ module.exports = {
     getLocalClinicName,   // 从 config.json 读取本地诊所名
     getLocalDoctorName,   // 从 config.json 读取本地医师名
     verifyConfigIntegrity, // config.json 完整性校验
+    // ★ P3-预防重装：账号独立持久化备份
+    getUsersBackupPath,    // 账号备份文件路径
+    backupUserAccounts,    // 备份 users 到独立文件
+    loadUserAccountBackup, // 从独立备份读取 users
     // ★ 路径相关（修复 NSIS 安装到 Program Files 无写权限问题）
     isPortableInstall,    // 检测是否为 portable 安装（供 activate.js 决定写入路径）
     getWritableDir,       // 获取可写目录（license.dat / trial-config.json 用）

@@ -2538,6 +2538,24 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         return activateOnline(code, machineId, user, null);
     }
 
+    // ★ 2026-08-17 激活流程改「用户名(姓名/手机号)+默认密码admin」：
+    //   该 7 参重载在激活成功后，自动创建登录账号（手机号为登录账号，密码可留空=admin）
+    public JSONObject activateOnline(String code, String machineId, String user, String clinicName,
+                                     String password, String loginUsername, String phone) {
+        JSONObject result = activateOnline(code, machineId, user, clinicName);
+        if (result != null && result.optBoolean("success", false)) {
+            // 创建/确保登录账号：使用用户名/手机号 + 默认密码 admin，登入后用户自行修改密码
+            try {
+                String effPwd = (password == null || password.isEmpty()) ? "admin" : password;
+                String login = (loginUsername == null || loginUsername.isEmpty()) ? user : loginUsername;
+                syncCreateActivationUser(login, phone, effPwd, user);
+            } catch (Exception ue) {
+                Log.w(TAG, "创建激活登录账号失败(不影响激活): " + ue.getMessage());
+            }
+        }
+        return result;
+    }
+
     public JSONObject activateOnline(String code, String machineId, String user, String clinicName) {
         HttpURLConnection conn = null;
         try {
@@ -2787,6 +2805,38 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             if (changed) writeConfigJSON(cfg, true);
         } catch (Exception e) {
             Log.w(TAG, "同步版本信息失败(不影响激活): " + e.getMessage());
+        }
+    }
+
+    // ★ 2026-08-17 激活流程改「用户名(姓名/手机号)+默认密码admin」：
+    //   激活成功后自动创建登录账号；已存在同名账号则跳过；密码明文存储，登入时前端自动兼容并升级
+    private void syncCreateActivationUser(String username, String phone, String password, String name) {
+        if (username == null || username.isEmpty()) return;
+        try {
+            JSONObject cfg = readConfigJSON();
+            org.json.JSONArray users = cfg.optJSONArray("users");
+            if (users == null) {
+                users = new org.json.JSONArray();
+                cfg.put("users", users);
+            }
+            boolean exists = false;
+            for (int i = 0; i < users.length(); i++) {
+                org.json.JSONObject u = users.optJSONObject(i);
+                if (u != null && username.equals(u.optString("username", ""))) { exists = true; break; }
+            }
+            if (exists) return;
+            org.json.JSONObject nu = new org.json.JSONObject();
+            nu.put("username", username);
+            if (phone != null && !phone.isEmpty()) nu.put("phone", phone);
+            // ★ 明文存储默认密码，登录时自动兼容并升级（避免 Java 端哈希与前端不一致）
+            nu.put("password", (password == null || password.isEmpty()) ? "admin" : password);
+            nu.put("name", (name == null || name.isEmpty()) ? username : name);
+            nu.put("role", "admin");
+            users.put(nu);
+            Log.i(TAG, "激活登录账号创建: username=" + username + " name=" + name);
+            writeConfigJSON(cfg, true);
+        } catch (Exception ex) {
+            Log.w(TAG, "创建登录账号异常(不影响激活): " + ex.getMessage());
         }
     }
 

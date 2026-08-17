@@ -1799,6 +1799,19 @@ ipcMain.handle('get-app-config', async () => {
         const configPath = getWritableConfigPath();
         if (await fse.pathExists(configPath)) {
             const cfg = await fse.readJson(configPath);
+            // ★ P3-预防重装：账号独立备份 刷新+回填
+            // 每次读取配置时把当前账号备份到 users-backup.json；
+            // 若 config 的 users 被清除，则从备份回填，避免原账号密码无法登入。
+            try {
+                if (Array.isArray(cfg.users) && cfg.users.length > 0) {
+                    licenseManager.backupUserAccounts(cfg);
+                } else {
+                    const backedUsers = licenseManager.loadUserAccountBackup();
+                    if (backedUsers.length > 0) cfg.users = backedUsers;
+                }
+            } catch (e) {
+                console.warn('账号备份刷新失败（非致命）:', e.message);
+            }
             return { success: true, config: { ...defaults, ...cfg } };
         }
     } catch (e) {

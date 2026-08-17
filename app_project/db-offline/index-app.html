@@ -1817,6 +1817,27 @@ let currentUser = null;
 
                 // 更新移动端底部按钮
                 updateMobileActionButtons();
+
+                // ★ 2026-08-17 终极兜底2：以用户实际看到的版本标签为准 强制对齐按钮
+                //   彻底杜绝「显示离线/云端标准版标签，但 Permission/edition 因任何中间覆盖仍判机构版导致缺按钮」
+                try {
+                    if (typeof getEditionTag === 'function') {
+                        const tag = getEditionTag();
+                        if (tag.indexOf('标准版') >= 0) {
+                            if (changePwdBtn) changePwdBtn.style.display = 'block';
+                            if (userManageBtn) userManageBtn.style.display = 'none';
+                            if (clinicPrescriptionBtn) clinicPrescriptionBtn.style.display = 'none';
+                            const btn2 = document.getElementById('mobileActionBtn2');
+                            if (btn2) {
+                                const isApp = !!window.AndroidNative;
+                                btn2.innerHTML = isApp ? '🔐 改密' : '🔐 修改密码';
+                                btn2.onclick = function () { showChangePwdModal(); };
+                                btn2.style.display = '';
+                            }
+                        }
+                    }
+                } catch (_) {}
+
             }
         }
 
@@ -1847,6 +1868,18 @@ let currentUser = null;
                 btn2.onclick = function() { showChangePwdModal(); };
             }
             btn2.style.display = '';
+            // ★ 2026-08-17 终极兜底：移动端底部按钮 同样按标签校正（防止updateUserDisplay后外部再次调用本函数时兜底被覆盖）
+            try {
+                if (typeof getEditionTag === 'function') {
+                    const tag = getEditionTag();
+                    if (tag.indexOf('标准版') >= 0) {
+                        const isApp = !!window.AndroidNative;
+                        btn2.innerHTML = isApp ? '🔐 改密' : '🔐 修改密码';
+                        btn2.onclick = function () { showChangePwdModal(); };
+                        btn2.style.display = '';
+                    }
+                }
+            } catch (_) {}
         }
 
         // 自动填充记住的用户名

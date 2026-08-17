@@ -2000,7 +2000,27 @@ ipcMain.handle('get-app-config', async () => {
             } catch (e) {
                 console.warn('账号备份刷新失败（非致命）:', e.message);
             }
-            return { success: true, config: { ...defaults, ...cfg } };
+            let merged = { ...defaults, ...cfg };
+            // ★ 2026-08-17 终极兜底1：渲染进程IPC读到的版本必须与授权状态严格一致
+            //   任何未授权(过期/异常/试用/空) → 强制返回标准版(personal) + 管理员降级为user
+            //   杜绝 enforceEditionBinding / 旧 edition 残留 造成的 "标签标准版但改密按钮不显示"
+            try {
+                const mid = (activateManager && activateManager.getMachineId) ? activateManager.getMachineId() : '';
+                const lic = licenseManager.validateLicense({ localMachineId: mid });
+                if (!lic || !lic.valid) {
+                    merged.edition = 'personal';
+                    if (Array.isArray(merged.users)) {
+                        for (const u of merged.users) {
+                            if (u && (u.role === 'admin' || u.role === 'clinic_admin')) u.role = 'user';
+                        }
+                    }
+                    console.log('[Config] 未授权(含试用)兜底：强制返回标准版 edition=personal');
+                }
+            } catch (e) {
+                console.warn('[Config] license校验兜底失败（非致命，保守走标准版）:', e.message);
+                merged.edition = 'personal';
+            }
+            return { success: true, config: merged };
         }
     } catch (e) {
         console.error('读取 config.json 失败:', e);
