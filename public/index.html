@@ -2379,6 +2379,8 @@ let currentUser = null;
                         console.warn('[loadData] localStorage 降级读取失败:', lsErr);
                     }
                     if (fallbackPrescriptions.length > 0 || !Array.isArray(prescriptionHistory) || prescriptionHistory.length === 0) {
+                        // ★ 硬性删除标记过滤：localStorage 兜底降级时也剔除已删除的处方
+                        fallbackPrescriptions = filterOutDeleted(fallbackPrescriptions);
                         prescriptionHistory = fallbackPrescriptions;
                     }
                 }
@@ -4571,6 +4573,8 @@ let currentUser = null;
 
             // ★ 修复"删除处方后刷新再次出现"：同步软删除到云端（非阻塞，失败不影响本地删除）
             try { deletePrescriptionFromCloud(id); } catch (e) { console.warn('[云端删除] 同步失败:', e); }
+            // ★ 硬性删除标记：即使云端删除未及时生效/失败，本机刷新也不会让该处方再现
+            addDeletedRxId(id);
 
             // 更新内存数组
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
@@ -4652,7 +4656,7 @@ let currentUser = null;
             try {
                 const delKey = 'deletedRxIds_' + (currentUser ? currentUser.username : 'default');
                 const deletedIds = JSON.parse(localStorage.getItem(delKey) || '[]');
-                const newDeletedIds = deletedIds.filter(did => did !== id);
+                const newDeletedIds = deletedIds.filter(did => String(did) !== String(id));
                 localStorage.setItem(delKey, JSON.stringify(newDeletedIds));
             } catch(e) { console.warn('移除删除标记失败:', e); }
             const newBin = bin.filter(r => r.id !== id);
@@ -4958,6 +4962,34 @@ let currentUser = null;
                 signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
             });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        }
+
+        // ★ 硬性删除标记（tombstone）：保证删除后无论云端同步是否成功、是否被合并/回退缓存恢复，
+        // 刷新后都不会"闪现"重现。key 复用 restoreFromRecycleBin 已有的 deletedRxIds_<user>
+        function getDeletedRxIds() {
+            try {
+                const k = 'deletedRxIds_' + (currentUser ? currentUser.username : 'default');
+                const v = JSON.parse(localStorage.getItem(k) || '[]');
+                return Array.isArray(v) ? v : [];
+            } catch(e) { return []; }
+        }
+        function addDeletedRxId(id) {
+            try {
+                if (id == null) return;
+                const k = 'deletedRxIds_' + (currentUser ? currentUser.username : 'default');
+                const ids = JSON.parse(localStorage.getItem(k) || '[]');
+                const arr = Array.isArray(ids) ? ids.map(String) : [];
+                const s = String(id);
+                if (arr.indexOf(s) === -1) {
+                    arr.push(s);
+                    localStorage.setItem(k, JSON.stringify(arr));
+                }
+            } catch(e) { console.warn('添加删除标记失败:', e); }
+        }
+        function filterOutDeleted(list) {
+            const set = {};
+            getDeletedRxIds().forEach(id => { set[String(id)] = true; });
+            return Array.isArray(list) ? list.filter(p => p && !set[String(p.id)]) : list;
         }
 
         async function savePrescription() {
@@ -6500,6 +6532,8 @@ let currentUser = null;
 
             // ★ 修复"删除病历后刷新再次出现"：同步软删除到云端（非阻塞，失败不影响本地删除）
             try { deletePrescriptionFromCloud(id); } catch (e) { console.warn('[云端删除] 同步失败:', e); }
+            // ★ 硬性删除标记：即使云端删除未及时生效/失败，本机刷新也不会让该病历再现
+            addDeletedRxId(id);
 
             // 更新内存数组
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
@@ -6546,6 +6580,8 @@ let currentUser = null;
                                     }
                                 }
                             } catch(e) { console.warn('[getAllUserPrescriptions] 合并本地未同步处方失败:', e); }
+                            // ★ 硬性删除标记过滤：合并后剔除本机已删除的处方，防止删除后刷新"闪现"重现
+                            allPrescriptions = filterOutDeleted(allPrescriptions);
                             // 云端数据正确，清空旧的乱码缓存再写入（合并后结果）
                             try { await clearPrescriptionsDB(); } catch(e) {}
                             try { localStorage.setItem('all_prescription_list', JSON.stringify(allPrescriptions)); } catch(e) {}
@@ -6662,6 +6698,9 @@ let currentUser = null;
                 const timeB = b.createdAt ? new Date(b.createdAt).getTime() : (b.id || 0);
                 return timeB - timeA;
             });
+
+            // ★ 硬性删除标记过滤（兜底）：无论来自云端/本地/回退缓存，已删除处方一律不返回
+            allPrescriptions = filterOutDeleted(allPrescriptions);
 
             return allPrescriptions;
         }
