@@ -33,13 +33,16 @@
             }
 
             this._edition = this._config.edition || (global.EDITION) || 'cloud';
-            // ★ 2026-08-17 关键修复：双源 edition 漂移防护（详细见 shared/permission.js 注释）
+            // ★ 2026-08-17 关键修复：双源 edition 漂移防护
+            //   CONFIG 由同步 XHR 从 asar/config.json 加载，本 Permission 由 electronAPI / localStorage 解析，
+            //   可能不一致 → 顶部版本标签 vs 权限判断分道扬镳，造成「显示离线标准版但改密按钮缺失」。
+            //   解析后强制回写，让 getEditionTag / updateUserDisplay 永远读取同一个 edition。
             try {
                 if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition !== this._edition) {
                     CONFIG.edition = this._edition;
                     console.log('[DBG] Permission synced CONFIG.edition ->', this._edition);
                 }
-            } catch (_) {}
+            } catch (_) { /* ignore non-render env */ }
             console.log('[DBG] Permission initialized, edition:', this._edition);
         },
 
