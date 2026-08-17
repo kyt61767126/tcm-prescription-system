@@ -1343,51 +1343,127 @@ let currentUser = null;
             }
         }
 
-        window.handleLogout = async function() {
-            // ★ 修复 2026-07-28：无论 APP/桌面/网页端，退出时都先清除 localStorage 登录态
-            // 防止 APP 退出后重新打开时 localStorage 残留 isLoggedIn 导致自动登录
+                window.handleLogout = async function() {
             try {
-                localStorage.removeItem('currentUser');
-                localStorage.removeItem('isLoggedIn');
-                localStorage.removeItem('user_login_data');
-                localStorage.removeItem('auth:isLoggedIn');
-                localStorage.removeItem('auth:currentUser');
-                localStorage.removeItem('auth:loginData');
-            } catch(e) {}
+                // ★ 2026-08-17 终极兜底：手机APP/云端APP底部退出按钮点击无反应 — 杜绝 6 副本不一致 + 静默抛错中断 + 重复点击视觉无变化
+                // 修复点1：最外层 try/catch（任何内部抛错至少保证登录遮罩显示，不会"点击没反应"）
+                // 修复点2：APP(Capacitor)/云端特有 localStorage KEYS 同步清（之前仅清离线）
+                // 修复点3：prescriptionHistory/__historyFullList 先判 undefined 再赋值，防 ReferenceError 中断
+                // 修复点4：登录overlay已显示时，二次点击"退出" = 真实 exitApp 关闭应用（给用户桌面级反馈，不再"原地不动"）
+                // 修复点5：公共副本补齐 loadRememberedUsers() + 标准版用户名回填，与离线APP/根模板一致
+                try {
+                    const KEYS = ['currentUser','isLoggedIn','user_login_data','auth:isLoggedIn','auth:currentUser','auth:loginData','cloud_isLoggedIn','cloud_currentUser'];
+                    for (const k of KEYS) try { localStorage.removeItem(k); } catch(_) {}
+                    if (window.sessionStorage) try { sessionStorage.clear(); } catch(_) {}
+                } catch(_) {}
 
-            if (window.electronAPI && window.electronAPI.quitApp) {
-                await window.electronAPI.quitApp();
-            } else {
-                currentUser = null;
-                // ★修复"重新登入后历史处方不显示"：退出时必须清空 prescriptionHistory 和 UI，
-                // 防止 loadData 失败时 catch 块保留上一用户数据被 filterPrescriptionsByPermission 过滤为空
-                prescriptionHistory = [];
-                if (typeof __historyFullList !== 'undefined') __historyFullList = [];
-                if (typeof renderHistoryList === 'function') {
-                    try { renderHistoryList([]); } catch(e) { console.warn('退出时清空历史列表失败:', e); }
+                if (window.electronAPI && typeof window.electronAPI.quitApp === 'function') {
+                    try { await window.electronAPI.quitApp(); return; } catch(_) {}
                 }
+
+                currentUser = null;
+                try {
+                    if (typeof prescriptionHistory !== 'undefined') prescriptionHistory = [];
+                    if (typeof __historyFullList !== 'undefined') __historyFullList = [];
+                    if (typeof renderHistoryList === 'function') try { renderHistoryList([]); } catch(_) {}
+                } catch(_) {}
+
                 const overlay = document.getElementById('loginOverlay');
                 if (overlay) {
-                    overlay.style.display = 'flex';
-                    loadRememberedUsers();
-                    // ★ 标准版：退出登录后同步 loginUsername 为最新的 CONFIG.doctorName
-                    if (CONFIG.edition === 'personal' && CONFIG.doctorName) {
-                        const userInput = document.getElementById('loginUsername');
-                        if (userInput) userInput.value = CONFIG.doctorName;
+                    const isShowing = overlay.style.display === 'flex' || (getComputedStyle(overlay) || {}).display === 'flex';
+                    if (isShowing) {
+                        // 登录遮罩本来就显示，用户又点"退出" = 真实退出APP/关闭窗口（移动端桌面级反馈）
+                        if (typeof showToast === 'function') try { showToast('已退出登录，正在关闭应用...'); } catch(_) {}
+                        setTimeout(() => { if (typeof exitApp === 'function') try { exitApp(); } catch(_) {} }, 250);
+                        return;
                     }
+                    overlay.style.display = 'flex';
+                    if (typeof loadRememberedUsers === 'function') try { loadRememberedUsers(); } catch(_) {}
+                    try {
+                        if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition === 'personal' && CONFIG.doctorName) {
+                            const inp = document.getElementById('loginUsername');
+                            if (inp) inp.value = CONFIG.doctorName;
+                        }
+                    } catch(_) {}
+                    if (typeof showToast === 'function') try { showToast('已退出登录'); } catch(_) {}
                 }
+            } catch (e) {
+                console.error('[handleLogout] 兜底异常:', e);
+                try {
+                    const overlay = document.getElementById('loginOverlay');
+                    if (overlay) overlay.style.display = 'flex';
+                    if (typeof showToast === 'function') showToast('已退出登录');
+                } catch(_) {}
             }
         };
 
-        window.exitApp = function() {
-            if (window.AndroidNative && window.AndroidNative.quitApp) {
-                window.AndroidNative.quitApp();
-            } else if (window.electronAPI && window.electronAPI.quitApp) {
-                window.electronAPI.quitApp();
-            } else {
-                window.close();
+                window.exitApp = function() {
+            try {
+                // ★ 2026-08-17 终极兜底：exitApp 四平台适配 + 全链路 try/catch 杜绝静默失败
+                // 优先级：AndroidNative (离线APP JSB) > Capacitor.Plugins.App.exitApp (云端APP Capacitor) > electronAPI (桌面) > window.close
+                if (window.AndroidNative && typeof window.AndroidNative.quitApp === 'function') {
+                    try { window.AndroidNative.quitApp(); return; } catch(_) {}
+                }
+                if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.App && typeof window.Capacitor.Plugins.App.exitApp === 'function') {
+                    try { window.Capacitor.Plugins.App.exitApp(); return; } catch(_) {}
+                }
+                if (window.electronAPI && typeof window.electronAPI.quitApp === 'function') {
+                    try { window.electronAPI.quitApp(); return; } catch(_) {}
+                }
+                try { window.close(); } catch(_) {}
+            } catch (e) {
+                console.error('[exitApp] 兜底异常:', e);
             }
         };
+
+        // ★ 2026-08-17 手机端 mobile-nav 退出按钮双重绑定：防内联onclick被清空/重建DOM后"点击没反应"
+        //   - 首次DOM就绪绑定一次
+        //   - 3秒后再绑定一次（防动态重建mobile-nav时丢失绑定）
+        //   - 事件绑定与内联onclick并存（addEventListener 不会覆盖 onclick，两者都触发=安全）
+        (function () {
+            function bindNavLogoutBtn() {
+                try {
+                    const items = document.querySelectorAll('.mobile-nav-item');
+                    items.forEach(function (el) {
+                        try {
+                            const t = (el.textContent || '').replace(/[\s\u3000]/g,'');
+                            const attr = el.getAttribute('onclick') || '';
+                            const isLogout = (t.indexOf('退出') >= 0 && t.indexOf('设置') < 0) || t.indexOf('🚪') >= 0 || attr.indexOf('handleLogout') >= 0;
+                            if (isLogout && !el.__navLogoutBound) {
+                                el.__navLogoutBound = true;
+                                el.addEventListener('click', function () {
+                                    if (typeof handleLogout === 'function') try { handleLogout(); } catch(_) {}
+                                });
+                                // 兜底：若原onclick丢失，补回来
+                                if (!attr || attr.indexOf('handleLogout') < 0) {
+                                    el.setAttribute('onclick', 'if(typeof handleLogout==="function")handleLogout();');
+                                }
+                            }
+                        } catch(_) {}
+                    });
+                    // PC端顶部【退出登录】tab-item 也同样做双重绑定兜底（防止 onclick 被清空）
+                    const tabLogout = document.querySelector('.top-tabs .tab-item[onclick*="handleLogout"]') || (function(){
+                        const tabs = document.querySelectorAll('.top-tabs .tab-item');
+                        for (let i = 0; i < tabs.length; i++) if ((tabs[i].textContent || '').indexOf('退出登录') >= 0) return tabs[i];
+                        return null;
+                    })();
+                    if (tabLogout && !tabLogout.__pcNavLogoutBound) {
+                        tabLogout.__pcNavLogoutBound = true;
+                        tabLogout.addEventListener('click', function () { if (typeof handleLogout==='function') try { handleLogout(); } catch(_) {} });
+                        const attr = tabLogout.getAttribute('onclick') || '';
+                        if (!attr || attr.indexOf('handleLogout') < 0) tabLogout.setAttribute('onclick', 'if(typeof handleLogout==="function")handleLogout();');
+                    }
+                } catch(_) {}
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', bindNavLogoutBtn);
+            } else {
+                bindNavLogoutBtn();
+            }
+            setTimeout(bindNavLogoutBtn, 3000);
+            setTimeout(bindNavLogoutBtn, 10000);
+        })();
+
 
         async function refreshUserInterface() {
             const presNo = await generatePrescriptionNo();
