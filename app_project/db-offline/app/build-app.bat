@@ -20,7 +20,7 @@ REM 统一安装包：单 APK，标准版/机构版由运行时激活码决定�
 set "FLAVOR_TARGET=dingzhi"
 set "FLAVOR_NAME="
 set "FLAVOR_CAP="
-set "APK_NAME=惠康中医-本地"
+set "APK_NAME=惠康中医本地"
 set "ASSEMBLE_TASK=:app:assembleRelease"
 set "APK_DIR=app\build\outputs\apk\release"
 

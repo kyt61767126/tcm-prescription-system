@@ -9,7 +9,7 @@
     "build:win": "electron-builder --win",
     "build:win:portable": "electron-builder --win portable"
   },
-  "author": "惠康堂",
+  "author": "惠康中医",
   "license": "MIT",
   "devDependencies": {
     "asarmor": "^3.0.2",

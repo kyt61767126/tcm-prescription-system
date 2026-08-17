@@ -22,7 +22,7 @@ REM 统一安装包：单 APK，标准版/机构版由运行时激活码决定�
 set "FLAVOR="
 set "FLAVOR_NAME="
 set "FLAVOR_CAP="
-set "APK_NAME=惠康中医-云端"
+set "APK_NAME=惠康中医云端"
 set "ASSEMBLE_TASK=:app:assembleRelease"
 set "APK_DIR=app\build\outputs\apk\release"
 
