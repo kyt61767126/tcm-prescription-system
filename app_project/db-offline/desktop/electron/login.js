@@ -177,7 +177,6 @@
         }
         
         if (usernameToFill) {
-            input.value = usernameToFill;
             // ★ 解析预填账号对应的医师姓名（优先用户记录 name，回退基础设置 doctorName）
             let doctorName = '';
             try {
@@ -192,20 +191,18 @@
             } catch (e) { /* ignore */ }
 
             localStorage.setItem(KEY_REMEMBER_USER, usernameToFill);
-            // 用户名下方展示对应医师姓名，便于识别该账号归属于谁
-            try {
-                const dnEl = document.getElementById('loginDoctorName');
-                if (dnEl) {
-                    if (doctorName) {
-                        dnEl.textContent = '👤 医师：' + doctorName;
-                        dnEl.style.display = 'block';
-                    } else {
-                        dnEl.style.display = 'none';
-                    }
-                }
-            } catch (e) {}
-            // 绿色成功反馈：提示用户账号已预填（带医师姓名）
-            showGreenHint(`✓ 账号已预填：${usernameToFill}${doctorName ? '(' + doctorName + ')' : ''}，请输入密码登录`);
+            // 用户名输入框本身直接显示医师姓名；真实用户名存 dataset 供登录时映射
+            if (doctorName) {
+                input.value = doctorName;
+                input.dataset.realLogin = usernameToFill;
+                input.dataset.displayName = doctorName;
+                try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
+                showGreenHint(`✓ 账号已预填：${doctorName}，请输入密码登录`);
+            } else {
+                input.value = usernameToFill;
+                try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
+                showGreenHint(`✓ 账号已预填：${usernameToFill}，请输入密码登录`);
+            }
             // 自动聚焦到密码框
             setTimeout(() => {
                 const pwd = $('loginPassword');
@@ -284,7 +281,12 @@
         hideGreenHint();
         // ★ 优化：防重复提交
         if (_loginInFlight) return;
-        const username = $('loginUsername').value.trim();
+        // ★ 若输入框显示的是医师姓名（未改动），映射回真实登录用户名再认证
+        const _loginInput = $('loginUsername');
+        let username = _loginInput.value.trim();
+        if (_loginInput.dataset && _loginInput.dataset.realLogin && _loginInput.dataset.displayName && username === _loginInput.dataset.displayName) {
+            username = _loginInput.dataset.realLogin;
+        }
         const password = $('loginPassword').value;
         if (!username) { showError('请输入手机号/用户名'); return; }
         if (!password) { showError('请输入密码'); return; }
