@@ -196,7 +196,7 @@
         <div class="header-section">
             <div class="login-logo" id="loginLogo">🏛️</div>
             <span class="system-title">惠康中医诊所管理系统</span>
-            <span class="version-tag" id="loginVersionTag">【机构版】</span>
+            <span class="version-tag" id="loginVersionTag">【云端机构版】</span>
             <div class="version-features" id="loginVersionFeatures">多用户管理 · 权限控制 · 数据统计</div>
         </div>
         <div class="main-content">
@@ -250,12 +250,12 @@
             if (edition === 'standard' || edition === 'clinic_standard') {
                 root.classList.add('edition-standard');
                 if (logoEl) logoEl.textContent = '🏥';
-                if (tagEl) tagEl.textContent = '【标准版】';
+                if (tagEl) tagEl.textContent = '【云端标准版】';
                 if (featuresEl) featuresEl.textContent = '基础诊疗 · 处方管理 · 数据统计';
             } else {
                 root.classList.remove('edition-standard');
                 if (logoEl) logoEl.textContent = '🏛️';
-                if (tagEl) tagEl.textContent = '【机构版】';
+                if (tagEl) tagEl.textContent = '【云端机构版】';
                 if (featuresEl) featuresEl.textContent = '多用户管理 · 权限控制 · 数据统计';
             }
         }

@@ -708,7 +708,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="login-logo" id="loginLogo">🏛️</div><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag" id="loginVersionTag">【机构版】</div><div class="version-features" id="loginVersionFeatures">多用户管理 · 权限控制 · 数据统计</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>手机号/用户名:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入手机号或用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="login-logo" id="loginLogo">🏛️</div><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag" id="loginVersionTag">【云端机构版】</div><div class="version-features" id="loginVersionFeatures">多用户管理 · 权限控制 · 数据统计</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>手机号/用户名:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入手机号或用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -3444,12 +3444,12 @@ if (window.Permission) {
             if (edition === 'standard' || edition === 'clinic_standard') {
                 root.classList.add('edition-standard');
                 if (logoEl) logoEl.textContent = '🏥';
-                if (tagEl) tagEl.textContent = '【标准版】';
+                if (tagEl) tagEl.textContent = '【云端标准版】';
                 if (featuresEl) featuresEl.textContent = '基础诊疗 · 处方管理 · 数据统计';
             } else {
                 root.classList.remove('edition-standard');
                 if (logoEl) logoEl.textContent = '🏛️';
-                if (tagEl) tagEl.textContent = '【机构版】';
+                if (tagEl) tagEl.textContent = '【云端机构版】';
                 if (featuresEl) featuresEl.textContent = '多用户管理 · 权限控制 · 数据统计';
             }
         };
