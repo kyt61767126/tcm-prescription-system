@@ -1041,7 +1041,9 @@ let currentUser = null;
                 case 'prescription':
                     leftPanel.style.display = 'flex';
                     leftPanel.style.flexDirection = 'column';
-                    
+                    // ★ 恢复快捷操作栏显示：内联 display='' 交还给媒体查询 CSS 控制，
+                    // 否则切回门诊 tab 后 '录像/拍照/保存/清空/改密' 按钮被永久隐藏（底部按钮缺失）
+                    if (mobileActionBar) mobileActionBar.style.display = '';
                     break;
                 case 'history':
                     // 检查是否有历史病历，没有则不显示
@@ -4087,6 +4089,9 @@ let currentUser = null;
         let __historyFullList = [];
 
         function renderHistoryList(list) {
+            // ★ 渲染入口强制剔除已删除处方（tombstone 兜底）：无论数据来自云端/本地/备份/缓存，
+            // 只要在 deletedRxIds_<user> 删除标记中，就一律不渲染，杜绝"删除后刷新闪现重现"
+            if (typeof filterOutDeleted === 'function') list = filterOutDeleted(list);
             const el = DOM_CACHE.historyList || document.getElementById('historyList');
             if (!el) return;
             __historyFullList = Array.isArray(list) ? list : [];
@@ -6500,6 +6505,8 @@ let currentUser = null;
         }
 
         function renderCaseList(list) {
+            // ★ 渲染入口强制剔除已删除病历（tombstone 兜底），杜绝删除后再次显示
+            if (typeof filterOutDeleted === 'function') list = filterOutDeleted(list);
             const listEl = document.getElementById('caseList');
             listEl.innerHTML = list.map((p,i) =>`<div style="padding:10px;border-bottom:1px solid #d0d0d0;cursor:pointer;" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;"><div><div style="font-weight:bold;">${escapeHtml(p.patientName)}</div><div style="font-size:11px;color:#666;">${escapeHtml(p.date)} | ${escapeHtml(p.diagnosis || '无诊断')}</div></div><div style="text-align:right;"><div style="font-weight:bold;color:#8b0000;">¥${p.totalAmount || 0}</div><button class="small-btn" onclick="event.stopPropagation();deleteCase(${p.id})">删除</button></div></div></div>`).join('') || '<div style="text-align:center;padding:20px;color:#999;">暂无病历记录</div>';
         }

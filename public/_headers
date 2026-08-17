@@ -13,6 +13,10 @@
   # 防止 XSS Auditor（旧版浏览器）
   X-XSS-Protection: 1; mode=block
 
+# 页面 HTML（含内联脚本）：始终重新校验，避免浏览器/WebView 缓存旧版导致修复不生效
+/index.html
+  Cache-Control: no-cache, must-revalidate
+
 # API 接口：添加缓存控制
 /api/*
   # 防止缓存敏感 API 响应
