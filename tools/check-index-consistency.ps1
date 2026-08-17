@@ -44,7 +44,20 @@ $markers = @(
     'syncPrescriptionToCloud',      # 云端保存处方同步（2026-08-17 修复"刷新消失"）
     'savePrescriptionToDB',
     'getAllUserPrescriptions',
-    'savePrescription'
+    'savePrescription',
+    # ── 删除过滤·渲染兜底（2026-08-17 修复"删除后闪现重现"）────────────
+    'filterOutDeleted',             # 删除标记过滤函数（tombstone 核心）
+    'renderHistoryList',            # 历史处方渲染入口（强制过滤已删除记录）
+    # ── 移动端操作页面按钮布局保护（2026-08-17）────────────────────────
+    # 规范：云端 web/桌面/APP 三端移动端底部操作栏按钮集必须完全一致
+    #       （录像/拍照/保存/清空/改密），任何一端缺失即校验失败，禁止发布/打包。
+    # 陷阱：禁用以 style.display='none' 内联样式覆盖媒体查询CSS后不恢复的做法——
+    #       切回"门诊"标签时必须恢复操作栏显示（switchMobileTab 内实现）。
+    'switchMobileTab',              # 移动端标签切换（含操作栏显示恢复逻辑）
+    'mobileActionBar',              # 移动端快捷操作栏容器
+    'openRecordingOverlay',         # 底部按钮：录像
+    'openPhotoOverlay',             # 底部按钮：拍照
+    'showChangePwdModal'            # 底部按钮：改密
 )
 
 $sourcePath = Join-Path $root $Source
