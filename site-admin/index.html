@@ -204,6 +204,17 @@
         .login-btn.cancel { background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%); color: #555; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
         .login-btn.cancel:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15); }
         .login-footer { text-align: center; margin-top: 12px; font-size: 10px; color: #999; }
+        .password-input-wrapper { position: relative; flex: 1; }
+        .password-input-wrapper input { width: 100%; padding-right: 38px; box-sizing: border-box; transition: border-color 0.2s; }
+        .password-toggle-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #999; font-size: 15px; border-radius: 6px; transition: all 0.25s ease; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .password-toggle-btn:hover { background: #f0f0f0; color: #667eea; transform: translateY(-50%) scale(1.08); }
+        .password-toggle-btn:active { transform: translateY(-50%) scale(0.95); }
+        .password-toggle-btn.visible { color: #667eea; background: rgba(102,126,234,0.1); }
+        .password-toggle-btn:focus-visible { outline: 2px solid #667eea; outline-offset: 2px; }
+        .login-security { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 8px; font-size: 10px; color: #aaa; }
+        .login-security-icon { color: #22c55e; }
+        .copyright { text-align: center; margin-top: 12px; font-size: 10px; color: #bbb; }
+        .copyright-version { text-align: center; font-size: 10px; color: #ccc; margin-top: 4px; }
         .login-error { color: #dc2626; font-size: 11px; text-align: center; margin-top: 12px; padding: 8px; background: #fff5f5; border-radius: 4px; border: 1px solid #fcc; display: none; }
         .clinic-info { text-align: center; padding: 12px; background: var(--login-accent-light); border: 1px solid rgba(0,0,0,0.05); border-radius: 10px; margin-bottom: 20px; }
         .clinic-info-name { font-size: 14px; font-weight: bold; color: var(--login-accent); }
@@ -708,7 +719,7 @@
     <!-- XLSX 库改为按需加载（loadXLSX 函数在导入 Excel 时动态加载），避免 881KB 阻塞首屏渲染 -->
 </head>
 <body>
-    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="login-logo" id="loginLogo">🏛️</div><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag" id="loginVersionTag">【云端机构版】</div><div class="version-features" id="loginVersionFeatures">多用户管理 · 权限控制 · 数据统计</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>手机号/用户名:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入手机号或用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser" checked><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div>
+    <div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag" id="loginVersionTag">【云端机构版】</div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name" id="loginClinicName">本能堂中医诊所</div></div><div class="login-field"><label>手机号/用户名:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入手机号或用户名" onkeypress="if(event.key==='Enter')handleLogin()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><div class="password-input-wrapper"><input type="password" id="loginPassword" onkeypress="if(event.key==='Enter')handleLogin()"><button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility()" title="显示/隐藏密码">👁️</button></div></div><div class="login-buttons"><button class="login-btn" id="loginBtn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-security"><span class="login-security-icon">🛡️</span><span>安全登录 · 数据加密保护</span></div><div class="login-footer">微信号: hktzy1688 | 版本: V1.0.0</div><div class="copyright">© 2026 惠康中医 · 保留所有权利</div></div></div></div></div>
 
     <!-- 注册功能已封禁：账号只能由管理员在云端创建，禁止自助注册 -->
 
@@ -3262,7 +3273,6 @@ if (window.Permission) {
                             if (stringUsernames.length > 0) {
                                 renderRememberedUsers(stringUsernames);
                                 document.getElementById('loginUsername').value = stringUsernames[0];
-                                document.getElementById('rememberUser').checked = true;
                                 // 同步到 cloud_rememberedUsers 作为备份
                                 await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(stringUsernames));
                                 await asyncStorage.set('cloud_rememberedUsername', stringUsernames[0]);
@@ -3291,7 +3301,6 @@ if (window.Permission) {
                         if (stringUsernames.length > 0) {
                             renderRememberedUsers(stringUsernames);
                             document.getElementById('loginUsername').value = stringUsernames[0];
-                            document.getElementById('rememberUser').checked = true;
                             return;
                         }
                     } catch (e) {
@@ -3303,7 +3312,6 @@ if (window.Permission) {
                     const singleList = [localUsername];
                     renderRememberedUsers(singleList);
                     document.getElementById('loginUsername').value = localUsername;
-                    document.getElementById('rememberUser').checked = true;
                     await asyncStorage.set('cloud_rememberedUsers', JSON.stringify(singleList));
                 }
             } catch (e) {
@@ -3434,23 +3442,37 @@ if (window.Permission) {
             }
         }
 
+        // 切换密码可见性（统一登录框规范）
+        window.togglePasswordVisibility = function() {
+            const pwdInput = document.getElementById('loginPassword');
+            const toggleBtn = document.querySelector('.password-toggle-btn');
+            if (!pwdInput) return;
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                if (toggleBtn) {
+                    toggleBtn.textContent = '🙈';
+                    toggleBtn.classList.add('visible');
+                }
+            } else {
+                pwdInput.type = 'password';
+                if (toggleBtn) {
+                    toggleBtn.textContent = '👁️';
+                    toggleBtn.classList.remove('visible');
+                }
+            }
+        };
+
         // 根据版本切换登录界面主题
         window.applyLoginTheme = function(edition) {
             const root = document.documentElement;
-            const logoEl = document.getElementById('loginLogo');
             const tagEl = document.getElementById('loginVersionTag');
-            const featuresEl = document.getElementById('loginVersionFeatures');
 
             if (edition === 'standard' || edition === 'clinic_standard') {
                 root.classList.add('edition-standard');
-                if (logoEl) logoEl.textContent = '🏥';
                 if (tagEl) tagEl.textContent = '【云端标准版】';
-                if (featuresEl) featuresEl.textContent = '基础诊疗 · 处方管理 · 数据统计';
             } else {
                 root.classList.remove('edition-standard');
-                if (logoEl) logoEl.textContent = '🏛️';
                 if (tagEl) tagEl.textContent = '【云端机构版】';
-                if (featuresEl) featuresEl.textContent = '多用户管理 · 权限控制 · 数据统计';
             }
         };
 
@@ -3533,14 +3555,8 @@ if (window.Permission) {
                     if (_dnEl) _dnEl.value = user.name;
                 }
                 
-                // 保存记住用户
-                const rememberUser = document.getElementById('rememberUser').checked;
-                if (rememberUser) {
-                    console.log('[DEBUG] 开始保存记住的用户名:', username, '用户角色:', user.role);
-                    await saveRememberedUser(username, user.name);
-                } else {
-                    await asyncStorage.set('cloud_rememberedUsername', '');
-                }
+                // ★ 统一规范：始终记住最近登录的用户名（密码仍需每次手动输入）
+                await saveRememberedUser(username, user.name);
                 
                 // 清除处方缓存，确保新用户获取自己的数据
                 DataCache.invalidate('prescriptions');

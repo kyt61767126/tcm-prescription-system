@@ -187,6 +187,16 @@
             font-size: 10px;
             color: #999;
         }
+        .password-input-wrapper { position: relative; flex: 1; }
+        .password-input-wrapper input { width: 100%; padding-right: 38px; box-sizing: border-box; transition: border-color 0.2s; }
+        .password-toggle-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #999; font-size: 15px; border-radius: 6px; transition: all 0.25s ease; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .password-toggle-btn:hover { background: #f0f0f0; color: var(--login-accent); transform: translateY(-50%) scale(1.08); }
+        .password-toggle-btn:active { transform: translateY(-50%) scale(0.95); }
+        .password-toggle-btn.visible { color: var(--login-accent); background: var(--login-accent-light); }
+        .password-toggle-btn:focus-visible { outline: 2px solid var(--login-accent); outline-offset: 2px; }
+        .login-security { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 8px; font-size: 10px; color: #aaa; }
+        .login-security-icon { color: #22c55e; }
+        .copyright { text-align: center; margin-top: 12px; font-size: 10px; color: #bbb; }
     </style>
     <script src="auth-core.js"></script>
 </head>
@@ -194,10 +204,8 @@
     <div class="login-container">
         <div class="bg-decoration"></div>
         <div class="header-section">
-            <div class="login-logo" id="loginLogo">🏛️</div>
             <span class="system-title">惠康中医诊所管理系统</span>
             <span class="version-tag" id="loginVersionTag">【云端机构版】</span>
-            <div class="version-features" id="loginVersionFeatures">多用户管理 · 权限控制 · 数据统计</div>
         </div>
         <div class="main-content">
             <div class="login-box">
@@ -208,22 +216,19 @@
                 </div>
                 <div class="login-field">
                     <label>密码</label>
-                    <input type="password" id="loginPassword" placeholder="请输入密码">
-                </div>
-                <div class="remember-me">
-                    <input type="checkbox" id="rememberUser">
-                    <label for="rememberUser">记住用户</label>
-                </div>
-                <div class="login-field remember-me" id="rememberPasswordContainer" style="display:none;">
-                    <input type="checkbox" id="rememberPassword">
-                    <label for="rememberPassword">记住密码</label>
+                    <div class="password-input-wrapper">
+                        <input type="password" id="loginPassword" placeholder="请输入密码">
+                        <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility()" title="显示/隐藏密码">👁️</button>
+                    </div>
                 </div>
                 <div class="login-buttons">
                     <button class="login-btn" onclick="handleLogin()">确定</button>
                     <button class="login-btn cancel" onclick="handleCancel()">取消</button>
                 </div>
                 <div id="loginError" class="login-error"></div>
-                <div class="login-footer">微信号: hktzy1688</div>
+                <div class="login-security"><span class="login-security-icon">🛡️</span><span>安全登录 · 数据加密保护</span></div>
+                <div class="login-footer">微信号: hktzy1688 | 版本: V1.0.0</div>
+                <div class="copyright">© 2026 惠康中医 · 保留所有权利</div>
             </div>
         </div>
     </div>
@@ -241,24 +246,18 @@
         }
 
         // 根据版本切换登录界面主题
-        function applyLoginTheme(edition) {
+        window.applyLoginTheme = function(edition) {
             const root = document.documentElement;
-            const logoEl = document.getElementById('loginLogo');
             const tagEl = document.getElementById('loginVersionTag');
-            const featuresEl = document.getElementById('loginVersionFeatures');
 
             if (edition === 'standard' || edition === 'clinic_standard') {
                 root.classList.add('edition-standard');
-                if (logoEl) logoEl.textContent = '🏥';
                 if (tagEl) tagEl.textContent = '【云端标准版】';
-                if (featuresEl) featuresEl.textContent = '基础诊疗 · 处方管理 · 数据统计';
             } else {
                 root.classList.remove('edition-standard');
-                if (logoEl) logoEl.textContent = '🏛️';
                 if (tagEl) tagEl.textContent = '【云端机构版】';
-                if (featuresEl) featuresEl.textContent = '多用户管理 · 权限控制 · 数据统计';
             }
-        }
+        };
 
         // 初始化登录界面
         function initLoginUI() {
@@ -432,36 +431,18 @@
                 }
                 sessionStorage.setItem('currentUser', userStr);
 
-                // 记住用户名
-                const rememberUser = document.getElementById('rememberUser');
-                if (rememberUser && rememberUser.checked) {
-                    if (window.AuthCore && AuthCore.saveRememberedUser) {
-                        await AuthCore.saveRememberedUser(username);
-                    } else {
-                        localStorage.setItem('auth:rememberedUsername', username);
-                    }
-                }
-
-                // 记住密码（P0-2: 优先 safeStorage 系统级加密）
-                const rememberPassword = document.getElementById('rememberPassword');
-                if (rememberPassword && rememberPassword.checked) {
-                    if (window.AuthCore && AuthCore.encryptPassword) {
-                        const encryptedPwd = await AuthCore.encryptPassword(password);
-                        if (encryptedPwd) {
-                            localStorage.setItem('auth:savedPassword', encryptedPwd);
-                        } else {
-                            console.warn('[auth] 密码加密失败，已拒绝保存密码');
-                            localStorage.removeItem('auth:savedPassword');
-                            rememberPassword.checked = false;
-                        }
-                    } else {
-                        console.warn('[auth] AuthCore.encryptPassword 不可用，已拒绝保存密码');
-                        localStorage.removeItem('auth:savedPassword');
-                        rememberPassword.checked = false;
-                    }
+                // ★ 统一规范：始终记住最近登录的用户名（密码仍需每次手动输入）
+                if (window.AuthCore && AuthCore.saveRememberedUser) {
+                    await AuthCore.saveRememberedUser(username);
                 } else {
-                    localStorage.removeItem('auth:savedPassword');
+                    localStorage.setItem('auth:rememberedUsername', username);
                 }
+                localStorage.setItem('lastUsername', username);
+
+                // P3-3: 移除"记住密码"功能（2026-08-08，规则5：每次手动输密码）
+                // 清除历史遗留的记住密码，强制用户每次手动输入
+                localStorage.removeItem('auth:savedPassword');
+
                 ipcRenderer.invoke('login-success', user);
             } catch (e) {
                 console.error('[login] handleLogin 异常:', e);
@@ -509,36 +490,28 @@
         function handleCancel() {
             ipcRenderer.invoke('login-cancel');
         }
+
+        // ★ 密码显示/隐藏切换（统一登录框规范）
+        window.togglePasswordVisibility = function() {
+            const pwdInput = document.getElementById('loginPassword');
+            const toggleBtn = document.querySelector('.password-toggle-btn');
+            if (!pwdInput) return;
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                if (toggleBtn) { toggleBtn.textContent = '🙈'; toggleBtn.classList.add('visible'); }
+            } else {
+                pwdInput.type = 'password';
+                if (toggleBtn) { toggleBtn.textContent = '👁️'; toggleBtn.classList.remove('visible'); }
+            }
+        };
         
         document.addEventListener('DOMContentLoaded', async () => {
             initLoginUI();
             await initLoginDropdown();
             initLoginPermissions();
-            let savedPassword = localStorage.getItem('auth:savedPassword');
-            if (savedPassword) {
-                if (window.AuthCore && AuthCore.decryptPassword &&
-                    (savedPassword.startsWith('SAFE:') || savedPassword.startsWith('PWDv1:') || savedPassword.startsWith('PWDv2:'))) {
-                    try {
-                        const decrypted = await AuthCore.decryptPassword(savedPassword);
-                        if (decrypted) {
-                            savedPassword = decrypted;
-                        } else {
-                            console.warn('[auth] 保存的密码解密失败，请重新输入');
-                            localStorage.removeItem('auth:savedPassword');
-                            savedPassword = '';
-                        }
-                    } catch (e) {
-                        console.warn('[auth] 解密保存密码异常:', e);
-                        localStorage.removeItem('auth:savedPassword');
-                        savedPassword = '';
-                    }
-                }
-                if (savedPassword) {
-                    document.getElementById('loginPassword').value = savedPassword;
-                    const rememberPassword = document.getElementById('rememberPassword');
-                    if (rememberPassword) rememberPassword.checked = true;
-                }
-            }
+            // P3-3: 移除"记住密码"功能（2026-08-08，规则5：每次手动输密码）
+            // 清除历史遗留的记住密码，强制用户每次手动输入
+            localStorage.removeItem('auth:savedPassword');
             document.getElementById('loginPassword').addEventListener('keyup', (e) => {
                 if (e.key === 'Enter') {
                     handleLogin();

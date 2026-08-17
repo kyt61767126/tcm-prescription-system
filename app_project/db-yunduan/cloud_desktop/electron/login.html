@@ -193,6 +193,17 @@
             font-size: 8px;
             color: #999;
         }
+        .password-input-wrapper { position: relative; flex: 1; }
+        .password-input-wrapper input { width: 100%; padding-right: 38px; box-sizing: border-box; transition: border-color 0.2s; }
+        .password-toggle-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #999; font-size: 15px; border-radius: 6px; transition: all 0.25s ease; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .password-toggle-btn:hover { background: #f0f0f0; color: #667eea; transform: translateY(-50%) scale(1.08); }
+        .password-toggle-btn:active { transform: translateY(-50%) scale(0.95); }
+        .password-toggle-btn.visible { color: #667eea; background: rgba(102,126,234,0.1); }
+        .password-toggle-btn:focus-visible { outline: 2px solid #667eea; outline-offset: 2px; }
+        .login-security { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 8px; font-size: 10px; color: #aaa; }
+        .login-security-icon { color: #22c55e; }
+        .copyright { text-align: center; margin-top: 12px; font-size: 10px; color: #bbb; }
+        .copyright-version { text-align: center; font-size: 10px; color: #ccc; margin-top: 4px; }
         /* 首次配置向导 */
         .wizard-overlay {
             position: fixed;
@@ -305,7 +316,7 @@
         <div class="bg-decoration"></div>
         <div class="header-section">
             <span class="system-title">惠康中医诊所管理系统</span>
-            <span class="version-tag">【云端标准版】</span>
+            <span class="version-tag">【云端机构版】</span>
         </div>
         <div class="main-content">
             <div class="login-box">
@@ -319,21 +330,17 @@
                 </div>
                 <div class="login-field">
                     <label>密码</label>
-                    <input type="password" id="loginPassword" placeholder="请输入密码">
-                </div>
-                <div class="login-field remember-me">
-                    <input type="checkbox" id="rememberUser">
-                    <label for="rememberUser">记住用户</label>
-                </div>
-                <div class="login-field remember-me" id="rememberPasswordContainer" style="display:none;">
-                    <input type="checkbox" id="rememberPassword">
-                    <label for="rememberPassword">记住密码</label>
+                    <div class="password-input-wrapper">
+                        <input type="password" id="loginPassword" placeholder="请输入密码">
+                        <button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility()" title="显示/隐藏密码">👁️</button>
+                    </div>
                 </div>
                 <div class="login-buttons">
                     <button class="login-btn" id="btnOk" type="button">确定</button>
                     <button class="login-btn cancel" id="btnCancel" type="button">取消</button>
                 </div>
                 <div id="loginError" class="login-error"></div>
+                <div class="login-security"><span class="login-security-icon">🛡️</span><span>安全登录 · 数据加密保护</span></div>
                 <!-- ★ 激活入口：未激活用户可点击此处打开激活窗口 -->
                 <div style="text-align:center;margin-top:8px;">
                     <a href="#" id="activateLink" onclick="openActivationWindow();return false;" style="font-size:9px;color:#667eea;text-decoration:none;">激活软件 / 管理员激活</a>
@@ -341,8 +348,9 @@
             </div>
         </div>
         <div class="footer-section">
-            <span>微信号: hktzy1688</span>
+            <span>微信号: hktzy1688 | 版本: V1.0.0</span>
         </div>
+        <div class="copyright">© 2026 惠康中医 · 保留所有权利</div>
     </div>
 
     <!-- 首次配置向导 -->

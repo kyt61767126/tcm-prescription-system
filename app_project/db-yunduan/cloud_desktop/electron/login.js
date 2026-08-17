@@ -153,7 +153,7 @@
         var tag = document.querySelector('.version-tag');
         if (!tag) return;
         var e = (config && config.edition) || '';
-        var inst = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic'].indexOf(e) >= 0;
+        var inst = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'].indexOf(e) >= 0;
         tag.textContent = '【' + (inst ? '云端机构版' : '云端标准版') + '】';
     }
 
@@ -172,7 +172,6 @@
         } else if (users.length === 1 && users[0].username) {
             // ★ 刚激活成功：只有一个管理员账户时自动预填（一键激活场景）
             usernameToFill = users[0].username;
-            $('rememberUser').checked = true;
         }
         
         if (usernameToFill) {
@@ -297,7 +296,7 @@
             try {
                 const appCfg = await getAppConfig();
                 const machineEdition = (appCfg && appCfg.edition) || '';
-                const machineIsInstitution = ['clinic_custom', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud'].indexOf(machineEdition) >= 0;
+                const machineIsInstitution = ['clinic_custom', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud', 'institution'].indexOf(machineEdition) >= 0;
                 const accountIsInstitution = (user.role === 'admin');
                 if (machineIsInstitution !== accountIsInstitution) {
                     if (machineIsInstitution) {
@@ -326,22 +325,12 @@
             localStorage.setItem('currentUser', userDataStr);
             localStorage.setItem('isLoggedIn', 'true');
 
-            const remember = $('rememberUser').checked;
-            if (remember) {
-                localStorage.setItem(KEY_REMEMBER_USER, user.username);
-            } else {
-                localStorage.removeItem(KEY_REMEMBER_USER);
-            }
+            // ★ 统一规范：始终记住最近登录的用户名（密码仍需每次手动输入）
+            localStorage.setItem(KEY_REMEMBER_USER, user.username);
 
             // P3-3: 移除"记住密码"功能（2026-08-08，规则5：每次手动输密码）
             // 清除历史遗留的记住密码，强制用户每次手动输入
             localStorage.removeItem('auth:savedPassword');
-            const rememberPassword = document.getElementById('rememberPassword');
-            if (rememberPassword) {
-                rememberPassword.checked = false;
-                rememberPassword.disabled = true;
-                rememberPassword.title = '安全升级：为保护账户安全，不再支持记住密码';
-            }
 
             // ★ 同步用户列表到 localStorage（供 index.html 主界面读取）
             try {
@@ -413,12 +402,6 @@
         // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码
         localStorage.removeItem('auth:savedPassword');
         $('loginPassword').value = '';
-        const rememberPassword = document.getElementById('rememberPassword');
-        if (rememberPassword) {
-            rememberPassword.checked = false;
-            rememberPassword.disabled = true;
-            rememberPassword.title = '安全升级：为保护账户安全，不再支持记住密码';
-        }
         $('btnOk').addEventListener('click', handleLogin);
         $('btnCancel').addEventListener('click', handleCancel);
         // ★ 优化：密码框回车直接登录，用户名框回车跳密码框
@@ -915,6 +898,20 @@
         indicator.innerHTML = '强度：<b>' + label + '</b>' + (score < 3 ? '（需≥8位+字母+数字）' : '');
         validateWizardStep2();
     }
+
+    // ★ 密码显示/隐藏切换（统一登录框规范）
+    window.togglePasswordVisibility = function() {
+        const pwdInput = document.getElementById('loginPassword');
+        const toggleBtn = document.querySelector('.password-toggle-btn');
+        if (!pwdInput) return;
+        if (pwdInput.type === 'password') {
+            pwdInput.type = 'text';
+            if (toggleBtn) { toggleBtn.textContent = '🙈'; toggleBtn.classList.add('visible'); }
+        } else {
+            pwdInput.type = 'password';
+            if (toggleBtn) { toggleBtn.textContent = '👁️'; toggleBtn.classList.remove('visible'); }
+        }
+    };
 
     // ★ 将 HTML onclick 内联事件引用的函数暴露到全局作用域
     // login.js 使用 IIFE 包装，内部函数默认无法被 HTML onclick 访问

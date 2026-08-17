@@ -151,6 +151,17 @@
         .login-btn.cancel { background: linear-gradient(135deg, #e0e0e0 0%, #bdbdbd 100%); color: #555; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
         .login-btn.cancel:hover { box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15); }
         .login-footer { text-align: center; margin-top: 12px; font-size: 10px; color: #999; }
+        .password-input-wrapper { position: relative; flex: 1; }
+        .password-input-wrapper input { width: 100%; padding-right: 38px; box-sizing: border-box; transition: border-color 0.2s; }
+        .password-toggle-btn { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 30px; height: 30px; border: none; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #999; font-size: 15px; border-radius: 6px; transition: all 0.25s ease; user-select: none; -webkit-tap-highlight-color: transparent; }
+        .password-toggle-btn:hover { background: #f0f0f0; color: #667eea; transform: translateY(-50%) scale(1.08); }
+        .password-toggle-btn:active { transform: translateY(-50%) scale(0.95); }
+        .password-toggle-btn.visible { color: #667eea; background: rgba(102,126,234,0.1); }
+        .password-toggle-btn:focus-visible { outline: 2px solid #667eea; outline-offset: 2px; }
+        .login-security { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 8px; font-size: 10px; color: #aaa; }
+        .login-security-icon { color: #22c55e; }
+        .copyright { text-align: center; margin-top: 12px; font-size: 10px; color: #bbb; }
+        .copyright-version { text-align: center; font-size: 10px; color: #ccc; margin-top: 4px; }
         .login-error { color: #dc2626; font-size: 11px; text-align: center; margin-top: 12px; padding: 8px; background: #fff5f5; border-radius: 4px; border: 1px solid #fcc; display: none; }
         .clinic-info { text-align: center; padding: 12px; background: linear-gradient(135deg, #fff5f5 0%, #ffeaea 100%); border: 1px solid #ffcccc; border-radius: 6px; margin-bottom: 20px; }
         .clinic-info-name { font-size: 14px; font-weight: bold; color: #8b0000; }
@@ -613,11 +624,13 @@
             }
         }
         </style><!-- xlsx 库按需加载：首次使用 Excel 导入时由 loadXlsxLibrary() 动态加载 vendor/xlsx.full.min.js；未放置时 Excel 导入功能不可用，其他功能不受影响 -->
-</head><body><div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【本地】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name">本能堂中医诊所</div></div><div class="login-field"><label>手机号/用户名:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入手机号或用户名" onkeypress="if(event.key==='Enter')document.getElementById('loginPassword').focus()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"></div><div class="login-field remember-me"><input type="checkbox" id="rememberUser"><label for="rememberUser">记住用户</label></div><div class="login-buttons"><button class="login-btn" onclick="handleLogin()">确定</button><button class="login-btn" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-footer">微信号: hktzy1688</div></div></div></div></div><div id="changePwdModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>修改密码</span><span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span></div><div class="modal-body"><div class="form-group"><label>原密码</label><input type="password" id="oldPwd" placeholder="请输入原密码"></div><div class="form-group"><label>新密码</label><input type="password" id="newPwd" placeholder="请输入新密码"></div><div class="form-group"><label>确认新密码</label><input type="password" id="confirmNewPwd" placeholder="请再次输入新密码"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('changePwdModal')">取消</button><button class="action-btn primary" onclick="handleChangePassword()">修改</button></div></div></div><div id="userManageModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>用户管理</span><span class="close-btn" onclick="closeModal('userManageModal')">&times;</span></div><div class="modal-body"><div id="userList" class="user-list"></div><div class="form-group" style="margin-top:15px;"><label>添加新用户</label><input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音"><input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;"><input type="text" id="newUserName" placeholder="医师姓名（必填，中文真实姓名）" style="margin-top:5px;"><select id="newUserRole" style="margin-top:5px;width:100%;padding:5px;"><option value="user">普通用户</option><option value="admin">管理员</option></select><select id="newUserType" style="margin-top:5px;width:100%;padding:5px;"><option value="production">正式用户</option><option value="test">测试用户</option></select></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('userManageModal')">关闭</button><button class="action-btn primary" onclick="handleAddUser()">添加用户</button></div></div></div><div class="top-tabs"><div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div><div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div><div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div><div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div><div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div><div class="tab-item" id="userManageBtn" onclick="showUserManageModal()" style="display:none;">【用户管理】</div><div class="tab-item" onclick="showHelp()">【系统帮助】</div><div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div><div class="tab-item" id="changePwdBtn" style="display:none;" onclick="showChangePwdModal()">【修改密码】</div><div class="tab-hint">当前用户:<span style="color:#008000;font-weight:bold;" id="userDisplayName"></span>|<span style="color:#008000;font-weight:bold;">【本地】</span></div></div><div class="main-container"><div class="left-panel"><div class="top-tabs-left"><div class="tab-left-item active" style="flex:1;text-align:center;">填资料</div><button class="action-btn" onclick="saveAsFormula()" style="flex:1;padding:2px 8px;font-size:12px;">存验方</button><button class="action-btn" onclick="showModal('analyticsModal')" style="flex:1;padding:2px 8px;font-size:12px;">统计</button><button class="action-btn" onclick="printPrescription('portrait')" style="flex:1;padding:2px 8px;font-size:12px;">纵向打印</button><button class="action-btn" onclick="printPrescription('landscape')" style="flex:1;padding:2px 8px;font-size:12px;">横向打印</button></div><div class="patient-section"><div class="patient-row"><span class="patient-label">门诊</span><input type="text" id="prescriptionNo" class="patient-input name-input" readonly><span class="patient-label">性别</span><select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()"><option value="男">男</option><option value="女">女</option></select><span class="patient-label">日期</span><input type="text" id="visitDate" class="patient-input small" readonly></div><div class="patient-row"><span class="patient-label">姓名</span><input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off"><span class="patient-label">年龄</span><input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()"><span class="patient-label">电话</span><input type="text" id="patientPhone" class="patient-input small"></div><div class="patient-row"><span class="patient-label">统计</span><input type="text" id="clinicNo" class="patient-input xx-small" readonly><span class="patient-label">住址</span><input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;"></div></div><div class="symptom-section"><div class="history-tabs"><div class="history-tab active">病史症状</div><div class="history-tab">修改病史</div></div><textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea></div><div class="diagnosis-section"><div class="patient-row"><span class="patient-label">诊断</span><input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()"><span class="patient-label">剂数</span><input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')"><span style="font-size:13px;margin-right:8px;">剂</span><span class="patient-label">医师</span><input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;"></div></div><div class="action-buttons-section"><div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;"><span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span><span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span></div></div><div class="medicine-section"><div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">提示: 在简码栏输入简码，在药名栏输入药名</div><div class="medicine-table-container"><table class="medicine-table" id="prescriptionTable"><thead><tr><th style="width:25px;">#</th><th style="width:45px;">简码</th><th style="width:90px;">药物</th><th style="width:40px;">数量</th><th style="width:30px;">单位</th><th style="width:40px;">单价</th><th style="width:45px;">合计</th><th style="width:30px;">删</th></tr></thead><tbody id="prescriptionBody"></tbody></table></div><div class="medicine-search-dropdown" id="medicineSearchDropdown"></div></div></div><div class="center-panel"><div class="prescription-paper" id="prescriptionPaper"><div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div><div class="prescription-title">处 方 笺</div><div class="prescription-info"><div>姓名:<span id="paperName"></span></div><div>性别:<span id="paperGender"></span></div><div>年龄:<span id="paperAge"></span>岁</div><div>科别:中医科</div><div>门诊号:<span id="paperClinicNo"></span></div><div>日期:<span id="paperDate"></span></div></div><div style="margin-bottom:8px; line-height:1.5;"><span>病史症状:<span id="paperMedicalHistory"></span></span><div style="border-bottom:1px solid #000; margin-top:8px;"></div></div><div style="margin-bottom:3px;"><span>诊断:<span id="paperDiagnosis"></span></span><div style="border-bottom:1px solid #000; margin-top:2px;"></div></div><div class="prescription-grid" style="margin-top:3px;"><div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;"><div class="rp-mark">RP</div><div></div><div class="dose-count"><span id="paperDoseCount">7</span>剂</div></div><div id="prescriptionLines"></div></div><div class="prescription-footer" style="margin-top:3px;"><div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌生冷辛辣</div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr;"><div class="signature-item">医师: <span id="paperDoctor"></span></div><div class="signature-item">金额:</div><div class="signature-item">审核:</div></div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:4px;"><div class="signature-item">调配:</div><div class="signature-item">核对:</div><div class="signature-item">发药:</div></div></div></div></div><div class="right-panel"><div class="history-header"><span>处方历史</span><div style="display:flex;gap:16px;align-items:center;padding-right:4px;"><button class="history-refresh-btn" onclick="refreshHistory()" title="刷新历史处方" style="font-size:16px;padding:8px 10px;min-width:40px;min-height:36px;">🔄</button><button id="photoCaptureBtn" class="video-rec-btn" onclick="event.preventDefault();if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中')" style="display:none;background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="拍照">📷</button><button id="videoRecBtn" class="video-rec-btn" onclick="event.preventDefault();if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中')" style="display:none;background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="录像">🎥</button><button onclick="showRecycleBin()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="回收站">🗑️</button></div></div><div class="history-list" id="historyList"><div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div></div></div></div><div class="bottom-bar"></div><!-- 移动端底部导航 --><div class="mobile-nav" id="mobileNav"><div class="mobile-nav-items"><div class="mobile-nav-item active" onclick="switchMobileTab('prescription')"><span class="mobile-nav-icon">📝</span><span>处方</span></div><div class="mobile-nav-item" onclick="switchMobileTab('history')"><span class="mobile-nav-icon">📋</span><span>历史</span></div><div class="mobile-nav-item" onclick="switchMobileTab('preview')"><span class="mobile-nav-icon">📄</span><span>预览</span></div><div class="mobile-nav-item" onclick="showModal('medicineModal')"><span class="mobile-nav-icon">💊</span><span>药品</span></div><div class="mobile-nav-item" onclick="showModal('settingsModal')"><span class="mobile-nav-icon">⚙️</span><span>设置</span></div><div class="mobile-nav-item" onclick="if(typeof exitAppWithLogout==='function')exitAppWithLogout();else if(typeof handleLogout==='function')handleLogout();" style="color:var(--danger-color);"><span class="mobile-nav-icon">🚪</span><span>退出</span></div></div></div><!-- 移动端快捷操作栏 --><div class="mobile-action-bar" id="mobileActionBar"><div class="action-buttons"><button class="action-btn" style="flex:1;" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button><button class="action-btn" style="flex:1;" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button><button class="action-btn primary" style="flex:1;" onclick="savePrescription()">💾 保存</button><button class="action-btn" style="flex:1;" onclick="clearPrescription()">🗑️ 清空</button><button class="action-btn" style="flex:1;" id="mobileActionBtn2" onclick="showChangePwdModal()">🔐 改密</button></div></div><div class="modal" id="settingsModal"><div class="modal-content"><div class="modal-header"><h3>F1 基础设置</h3><span class="close-btn" onclick="closeModal('settingsModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;"><label>诊所名称:</label><input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>医师姓名:</label><input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>诊疗费:</label><input type="number" id="defaultRegFee" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>默认剂数:</label><input type="number" id="defaultDose" style="width:100%;padding:6px;margin-top:4px;"></div><div id="autoStartSection" style="margin-bottom:12px;display:none;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoStart" style="width:18px;height:18px;">开机自动启动（仅管理员）</label><div style="font-size:11px;color:#666;margin-top:4px;">勾选后，系统将在电脑开机时自动启动</div></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 统计分析</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js"></script><script src="permission.js"></script><script src="debug-logger.js"></script><script src="print-utils.js"></script><script src="medicine-dict.js"></script><!-- ★ 已移除 db-adapter.js 引用：避免与 index.html 的 openDB(DB_VERSION=3) 版本冲突导致IndexedDB操作失败 --><!-- <script src="db-adapter.js"></script> --><script src="performance-utils.js"></script><script src="prescription-core.js"></script><script src="patient-archive.js"></script>
+</head><body><div id="loginOverlay" class="login-overlay" style="display: flex;"><div class="login-container"><div class="bg-decoration"></div><div class="header-section"><div class="system-title">惠康中医诊所管理系统</div><div class="version-tag">【本地】</div></div><div class="main-content"><div class="login-box"><div class="clinic-info"><div class="clinic-info-name">本能堂中医诊所</div></div><div class="login-field"><label>手机号/用户名:</label><div class="username-input-wrapper"><input type="text" id="loginUsername" placeholder="请输入手机号或用户名" onkeypress="if(event.key==='Enter')document.getElementById('loginPassword').focus()"><button id="usernameDropdownBtn" class="username-dropdown-btn" onclick="toggleUsernameDropdown()" style="display:none;">▼</button><div id="usernameDropdownMenu" class="username-dropdown-menu"></div></div></div><div class="login-field"><label>密码:</label><div class="password-input-wrapper"><input type="password" id="loginPassword" autocomplete="new-password" onkeypress="if(event.key==='Enter')handleLogin()"><button type="button" class="password-toggle-btn" onclick="togglePasswordVisibility()" title="显示/隐藏密码">👁️</button></div></div><div class="login-buttons"><button class="login-btn" id="loginBtn" onclick="handleLogin()">确定</button><button class="login-btn cancel" onclick="exitApp()">取消</button></div><div id="loginError" class="login-error"></div><div class="login-security"><span class="login-security-icon">🛡️</span><span>安全登录 · 数据加密保护</span></div><div class="login-footer">微信号: hktzy1688 | 版本: V1.0.0</div><div class="copyright">© 2026 惠康中医 · 保留所有权利</div></div></div></div></div><div id="changePwdModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>修改密码</span><span class="close-btn" onclick="closeModal('changePwdModal')">&times;</span></div><div class="modal-body"><div class="form-group"><label>原密码</label><input type="password" id="oldPwd" placeholder="请输入原密码"></div><div class="form-group"><label>新密码</label><input type="password" id="newPwd" placeholder="请输入新密码"></div><div class="form-group"><label>确认新密码</label><input type="password" id="confirmNewPwd" placeholder="请再次输入新密码"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('changePwdModal')">取消</button><button class="action-btn primary" onclick="handleChangePassword()">修改</button></div></div></div><div id="userManageModal" class="modal"><div class="modal-content user-modal-content"><div class="modal-header"><span>用户管理</span><span class="close-btn" onclick="closeModal('userManageModal')">&times;</span></div><div class="modal-body"><div id="userList" class="user-list"></div><div class="form-group" style="margin-top:15px;"><label>添加新用户</label><input type="text" id="newUserUsername" placeholder="登录账号，建议英文或拼音"><input type="password" id="newUserPassword" placeholder="密码" style="margin-top:5px;"><input type="text" id="newUserName" placeholder="医师姓名（必填，中文真实姓名）" style="margin-top:5px;"><select id="newUserRole" style="margin-top:5px;width:100%;padding:5px;"><option value="user">普通用户</option><option value="admin">管理员</option></select><select id="newUserType" style="margin-top:5px;width:100%;padding:5px;"><option value="production">正式用户</option><option value="test">测试用户</option></select></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('userManageModal')">关闭</button><button class="action-btn primary" onclick="handleAddUser()">添加用户</button></div></div></div><div class="top-tabs"><div class="tab-item" onclick="showModal('settingsModal')">【基础设置】</div><div class="tab-item" onclick="showModal('caseModal')">【病例管理】</div><div class="tab-item" onclick="showModal('medicineModal')">【药品管理】</div><div class="tab-item" onclick="showModal('formulaModal')">【验方设置】</div><div class="tab-item" onclick="showModal('analyticsModal')">【统计分析】</div><div class="tab-item" id="userManageBtn" onclick="showUserManageModal()" style="display:none;">【用户管理】</div><div class="tab-item" onclick="showHelp()">【系统帮助】</div><div class="tab-item" style="background:#ffdddd;color:#8b0000;" onclick="handleLogout()">【退出登录】</div><div class="tab-item" id="changePwdBtn" style="display:none;" onclick="showChangePwdModal()">【修改密码】</div><div class="tab-hint">当前用户:<span style="color:#008000;font-weight:bold;" id="userDisplayName"></span>|<span style="color:#008000;font-weight:bold;">【本地】</span></div></div><div class="main-container"><div class="left-panel"><div class="top-tabs-left"><div class="tab-left-item active" style="flex:1;text-align:center;">填资料</div><button class="action-btn" onclick="saveAsFormula()" style="flex:1;padding:2px 8px;font-size:12px;">存验方</button><button class="action-btn" onclick="showModal('analyticsModal')" style="flex:1;padding:2px 8px;font-size:12px;">统计</button><button class="action-btn" onclick="printPrescription('portrait')" style="flex:1;padding:2px 8px;font-size:12px;">纵向打印</button><button class="action-btn" onclick="printPrescription('landscape')" style="flex:1;padding:2px 8px;font-size:12px;">横向打印</button></div><div class="patient-section"><div class="patient-row"><span class="patient-label">门诊</span><input type="text" id="prescriptionNo" class="patient-input name-input" readonly><span class="patient-label">性别</span><select id="patientGender" class="patient-input x-small" onclick="toggleGender()" onchange="markGenderManual();updatePrescriptionPaper()"><option value="男">男</option><option value="女">女</option></select><span class="patient-label">日期</span><input type="text" id="visitDate" class="patient-input small" readonly></div><div class="patient-row"><span class="patient-label">姓名</span><input type="text" id="patientName" class="patient-input name-input" onkeyup="searchPatientsQuick(event);updatePrescriptionPaper();smartMatchGender(this.value)" onfocus="showSideHistory()" autocomplete="off"><span class="patient-label">年龄</span><input type="text" id="patientAge" class="patient-input x-small" onkeyup="updatePrescriptionPaper()"><span class="patient-label">电话</span><input type="text" id="patientPhone" class="patient-input small"></div><div class="patient-row"><span class="patient-label">统计</span><input type="text" id="clinicNo" class="patient-input xx-small" readonly><span class="patient-label">住址</span><input type="text" id="patientAddress" class="patient-input" style="flex: 1.2;"></div></div><div class="symptom-section"><div class="history-tabs"><div class="history-tab active">病史症状</div><div class="history-tab">修改病史</div></div><textarea id="medicalHistory" class="symptom-textarea" onkeyup="updatePrescriptionPaper()"></textarea></div><div class="diagnosis-section"><div class="patient-row"><span class="patient-label">诊断</span><input type="text" id="diagnosis" class="patient-input" style="flex: 1; min-width: 60px;" onkeyup="updatePrescriptionPaper()"><span class="patient-label">剂数</span><input type="number" id="doseCountInput3" value="7" style="width:50px;padding:3px;font-size:14px;text-align:center;" oninput="syncDoseInputs('doseCountInput3')"><span style="font-size:13px;margin-right:8px;">剂</span><span class="patient-label">医师</span><input type="text" id="doctorName" class="patient-input x-small" onkeyup="updatePrescriptionPaper()" style="width: 55px; min-width: 55px;"></div></div><div class="action-buttons-section"><div style="display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:3px 5px;overflow-x:auto;"><span style="font-size:11px;white-space:nowrap;">每剂:<span id="perDosePrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">药费:<span id="totalPrice2" style="color:red;font-weight:bold;">0.00</span>元</span><span style="font-size:11px;white-space:nowrap;">诊疗<input type="number" id="registrationFee2" value="0" style="width:45px;padding:2px;font-size:12px;" oninput="syncRegistrationFee('registrationFee2')">元</span><span style="font-size:12px;font-weight:bold;white-space:nowrap;">总计:<span id="grandTotal2" style="color:red;font-weight:bold;">0.00</span>元</span></div></div><div class="medicine-section"><div style="background:#d0d0d0;padding:3px 8px;font-size:10px;border-bottom:1px solid #808080;">提示: 在简码栏输入简码，在药名栏输入药名</div><div class="medicine-table-container"><table class="medicine-table" id="prescriptionTable"><thead><tr><th style="width:25px;">#</th><th style="width:45px;">简码</th><th style="width:90px;">药物</th><th style="width:40px;">数量</th><th style="width:30px;">单位</th><th style="width:40px;">单价</th><th style="width:45px;">合计</th><th style="width:30px;">删</th></tr></thead><tbody id="prescriptionBody"></tbody></table></div><div class="medicine-search-dropdown" id="medicineSearchDropdown"></div></div></div><div class="center-panel"><div class="prescription-paper" id="prescriptionPaper"><div class="clinic-name" id="clinicNameDisplay">本能堂中医诊所</div><div class="prescription-title">处 方 笺</div><div class="prescription-info"><div>姓名:<span id="paperName"></span></div><div>性别:<span id="paperGender"></span></div><div>年龄:<span id="paperAge"></span>岁</div><div>科别:中医科</div><div>门诊号:<span id="paperClinicNo"></span></div><div>日期:<span id="paperDate"></span></div></div><div style="margin-bottom:8px; line-height:1.5;"><span>病史症状:<span id="paperMedicalHistory"></span></span><div style="border-bottom:1px solid #000; margin-top:8px;"></div></div><div style="margin-bottom:3px;"><span>诊断:<span id="paperDiagnosis"></span></span><div style="border-bottom:1px solid #000; margin-top:2px;"></div></div><div class="prescription-grid" style="margin-top:3px;"><div class="prescription-line" style="border-bottom:1px solid #000; display:flex; justify-content:space-between; align-items:center;"><div class="rp-mark">RP</div><div></div><div class="dose-count"><span id="paperDoseCount">7</span>剂</div></div><div id="prescriptionLines"></div></div><div class="prescription-footer" style="margin-top:3px;"><div class="usage-text">用法：水煎服，每日 1 剂，早晚分温服，忌生冷辛辣</div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr;"><div class="signature-item">医师: <span id="paperDoctor"></span></div><div class="signature-item">金额:</div><div class="signature-item">审核:</div></div><div class="signature-grid" style="grid-template-columns: 1fr 1fr 1fr; margin-top:4px;"><div class="signature-item">调配:</div><div class="signature-item">核对:</div><div class="signature-item">发药:</div></div></div></div></div><div class="right-panel"><div class="history-header"><span>处方历史</span><div style="display:flex;gap:16px;align-items:center;padding-right:4px;"><button class="history-refresh-btn" onclick="refreshHistory()" title="刷新历史处方" style="font-size:16px;padding:8px 10px;min-width:40px;min-height:36px;">🔄</button><button id="photoCaptureBtn" class="video-rec-btn" onclick="event.preventDefault();if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中')" style="display:none;background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="拍照">📷</button><button id="videoRecBtn" class="video-rec-btn" onclick="event.preventDefault();if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中')" style="display:none;background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="录像">🎥</button><button onclick="showRecycleBin()" style="background:none;border:none;color:white;font-size:16px;cursor:pointer;padding:8px 10px;min-width:40px;min-height:36px;" title="回收站">🗑️</button></div></div><div class="history-list" id="historyList"><div style="text-align:center;color:#999;padding:20px;font-size:11px;">请输入患者姓名</div></div></div></div><div class="bottom-bar"></div><!-- 移动端底部导航 --><div class="mobile-nav" id="mobileNav"><div class="mobile-nav-items"><div class="mobile-nav-item active" onclick="switchMobileTab('prescription')"><span class="mobile-nav-icon">📝</span><span>处方</span></div><div class="mobile-nav-item" onclick="switchMobileTab('history')"><span class="mobile-nav-icon">📋</span><span>历史</span></div><div class="mobile-nav-item" onclick="switchMobileTab('preview')"><span class="mobile-nav-icon">📄</span><span>预览</span></div><div class="mobile-nav-item" onclick="showModal('medicineModal')"><span class="mobile-nav-icon">💊</span><span>药品</span></div><div class="mobile-nav-item" onclick="showModal('settingsModal')"><span class="mobile-nav-icon">⚙️</span><span>设置</span></div><div class="mobile-nav-item" onclick="if(typeof exitAppWithLogout==='function')exitAppWithLogout();else if(typeof handleLogout==='function')handleLogout();" style="color:var(--danger-color);"><span class="mobile-nav-icon">🚪</span><span>退出</span></div></div></div><!-- 移动端快捷操作栏 --><div class="mobile-action-bar" id="mobileActionBar"><div class="action-buttons"><button class="action-btn" style="flex:1;" onclick="if(window.openRecordingOverlay)window.openRecordingOverlay();else alert('录像功能加载中，请稍候')">🎥 录像</button><button class="action-btn" style="flex:1;" onclick="if(window.openPhotoOverlay)window.openPhotoOverlay();else alert('拍照功能加载中，请稍候')">📷 拍照</button><button class="action-btn primary" style="flex:1;" onclick="savePrescription()">💾 保存</button><button class="action-btn" style="flex:1;" onclick="clearPrescription()">🗑️ 清空</button><button class="action-btn" style="flex:1;" id="mobileActionBtn2" onclick="showChangePwdModal()">🔐 改密</button></div></div><div class="modal" id="settingsModal"><div class="modal-content"><div class="modal-header"><h3>F1 基础设置</h3><span class="close-btn" onclick="closeModal('settingsModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;"><label>诊所名称:</label><input type="text" id="clinicName" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>医师姓名:</label><input type="text" id="defaultDoctor" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>诊疗费:</label><input type="number" id="defaultRegFee" style="width:100%;padding:6px;margin-top:4px;"></div><div style="margin-bottom:12px;"><label>默认剂数:</label><input type="number" id="defaultDose" style="width:100%;padding:6px;margin-top:4px;"></div><div id="autoStartSection" style="margin-bottom:12px;display:none;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="autoStart" style="width:18px;height:18px;">开机自动启动（仅管理员）</label><div style="font-size:11px;color:#666;margin-top:4px;">勾选后，系统将在电脑开机时自动启动</div></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('settingsModal')">取消</button><button class="action-btn primary" onclick="saveSettings()">保存</button></div></div></div><div class="modal" id="syndromeModal"><div class="modal-content"><div class="modal-header"><h3>Alt+1 中医辨证选方</h3><span class="close-btn" onclick="closeModal('syndromeModal')">&times;</span></div><div class="modal-body"><div id="syndromeList" style="display:flex;flex-direction:column;gap:8px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('syndromeModal')">关闭</button></div></div></div><div class="modal" id="medicineModal"><div class="modal-content"><div class="modal-header"><h3>F2 药品管理</h3><span class="close-btn" onclick="closeModal('medicineModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;flex-wrap:wrap;"><input type="text" id="medicineSearch" placeholder="搜索药品" style="flex:1;min-width:150px;padding:6px;" oninput="renderMedicineListDebounced()"><button class="action-btn" onclick="showAddMedicineForm()">新增药品</button><button class="action-btn" onclick="exportMedicines()">导出药品</button><button class="action-btn" onclick="document.getElementById('importMedicineFile').click()">导入药品</button><button class="action-btn" style="background:#ff6b6b;color:white;" onclick="clearMedicineLibrary()">清空药物库</button><input type="file" id="importMedicineFile" accept=".csv,.json,.xlsx,.xls" style="display:none;" onchange="importMedicines(event)"></div><div id="medicineList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('medicineModal')">关闭</button></div></div></div><div class="modal" id="formulaModal"><div class="modal-content"><div class="modal-header"><h3>F3 验方设置</h3><span class="close-btn" onclick="closeModal('formulaModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;display:flex;gap:8px;"><input type="text" id="formulaSearch" placeholder="搜索验方" style="flex:1;padding:6px;"><button class="action-btn" onclick="showAddFormulaForm()">新增验方</button></div><div id="formulaList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('formulaModal')">关闭</button></div></div></div><div class="modal" id="caseModal"><div class="modal-content"><div class="modal-header"><h3>病例管理</h3><span class="close-btn" onclick="closeModal('caseModal')">&times;</span></div><div class="modal-body"><div style="margin-bottom:12px;padding:10px;background:#f0f0f0;"><div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;"><input type="text" id="caseNameSearch" placeholder="患者姓名"><input type="date" id="caseDateStart"><input type="date" id="caseDateEnd"></div><div style="margin-top:8px;display:flex;gap:8px;"><button class="action-btn" onclick="searchCases()">搜索</button><button class="action-btn" onclick="resetCaseSearch()">重置</button></div></div><div id="caseList" style="overflow:auto;max-height:350px;"></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('caseModal')">关闭</button></div></div></div><div class="modal" id="analyticsModal"><div class="modal-content" style="max-width:1100px;width:95%;max-height:90vh;"><div class="modal-header"><h3>📊 统计分析</h3><span class="close-btn" onclick="closeModal('analyticsModal')">&times;</span></div><div class="modal-body"><div style="display:flex;gap:15px;flex-wrap:wrap;margin-bottom:15px;"><div><label>统计范围:</label><select id="analyticsRange" onchange="refreshAnalytics()"><option value="today">今日</option><option value="week">本周</option><option value="month" selected>本月</option><option value="quarter">本季度</option><option value="year">本年</option><option value="all">全部</option></select></div><div><label>就诊次数筛选:</label><select id="visitCountFilter" onchange="refreshAnalytics()"><option value="all">全部</option><option value="1">1诊</option><option value="2">2诊</option><option value="3">3诊</option><option value="4">4诊及以上</option></select></div><div><label>排序:</label><select id="analyticsSort" onchange="refreshAnalytics()"><option value="visitCount-desc">就诊次数(降序)</option><option value="visitCount-asc">就诊次数(升序)</option><option value="lastVisit-desc">最近就诊(降序)</option><option value="lastVisit-asc">最近就诊(升序)</option></select></div><button class="action-btn" onclick="refreshAnalytics()" style="margin-top:20px;">🔄 刷新数据</button></div><div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:20px;"><div style="background:#e8f5e9;border:1px solid #4caf50;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#4caf50;" id="statTotalPatients">-</div><div style="font-size:12px;color:#666;">总就诊人数</div></div><div style="background:#fff3e0;border:1px solid #ff9800;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#ff9800;" id="statNewPatients">-</div><div style="font-size:12px;color:#666;">初诊人数</div></div><div style="background:#e3f2fd;border:1px solid #2196f3;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#2196f3;" id="statReturnPatients">-</div><div style="font-size:12px;color:#666;">复诊人数</div></div><div style="background:#fce4ec;border:1px solid #e91e63;border-radius:8px;padding:12px;text-align:center;"><div style="font-size:28px;font-weight:bold;color:#e91e63;" id="statReturnRate">-</div><div style="font-size:12px;color:#666;">复诊率</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px;"><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📈 就诊趋势</h4><canvas id="visitTrendChart" height="200"></canvas></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">🩺 病种分布</h4><canvas id="diseaseChart" height="200"></canvas></div></div><div style="background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;"><h4 style="color:#333;">💊 常用药材 Top 10</h4><button class="action-btn" onclick="exportStats()" style="font-size:12px;padding:4px 8px;">导出报表</button></div><canvas id="medicineChart" height="200"></canvas></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">👥 患者就诊列表</h4><div style="max-height:300px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:8px;text-align:left;">患者姓名</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">就诊次数</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">初诊日期</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">最近就诊</th><th style="border:1px solid #ddd;padding:8px;text-align:center;">操作</th></tr></thead><tbody id="patientVisitList"><tr><td colspan="5" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div><div style="margin-top:20px;background:#fff;border:1px solid #ddd;border-radius:8px;padding:15px;"><h4 style="margin-bottom:12px;color:#333;">📅 月度统计报表</h4><div style="max-height:250px;overflow:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:#f5f5f5;"><th style="border:1px solid #ddd;padding:6px;text-align:center;">月份</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">门诊人次</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总收入</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总诊疗费</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总成本</th><th style="border:1px solid #ddd;padding:6px;text-align:right;">总利润</th><th style="border:1px solid #ddd;padding:6px;text-align:center;">总剂数</th></tr></thead><tbody id="monthlyStatsTable"><tr><td colspan="7" style="text-align:center;padding:20px;color:#999;">暂无数据</td></tr></tbody></table></div></div></div><div style="margin-top:20px;padding-top:15px;border-top:2px solid #008000;"><h4 style="margin-bottom:10px;">🗄️ 数据管理</h4><div style="display:flex;gap:10px;flex-wrap:wrap;"><button class="action-btn" onclick="exportData()" style="background:#4CAF50;color:white;">💾 一键备份</button><button class="action-btn" onclick="importData()" style="background:#2196F3;color:white;">📂 恢复数据</button><button class="action-btn" onclick="clearAllData()" style="background:#f44336;color:white;">🗑️ 清空数据</button></div></div><div class="modal-footer"><button class="action-btn" onclick="closeModal('analyticsModal')">关闭</button></div></div></div><script src="auth-core.js"></script><script src="permission.js"></script><script src="debug-logger.js"></script><script src="print-utils.js"></script><script src="medicine-dict.js"></script><!-- ★ 已移除 db-adapter.js 引用：避免与 index.html 的 openDB(DB_VERSION=3) 版本冲突导致IndexedDB操作失败 --><!-- <script src="db-adapter.js"></script> --><script src="performance-utils.js"></script><script src="prescription-core.js"></script><script src="patient-archive.js"></script>
 <script src="security-guard.js"></script>
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
-window.EDITION = 'offline';
+// ★★★ 2026-08-17 【Setup 1.0.38 根治刀1-A】：惠康中医-本地 = 永久离线标准版（personal），绝不再用 offline/clinic_custom 默认值！
+window.EDITION = 'personal';
+window.PRODUCT_NAME = '惠康中医-本地';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
 // ★ 修复 2026-07-28：APP 端启动时主动清除所有登录态（纵深防御），确保每次打开都必须手动登录
 // 使用 location.href 检测 APP（此时 electronAPI 尚未注入，无法用 isAndroidAPP）
@@ -641,11 +654,24 @@ try {
 if (window.Permission) {
     Permission.init().then(function() {
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', function() { Permission.applyRuntimePermissions(); });
+            document.addEventListener('DOMContentLoaded', function() {
+                Permission.applyRuntimePermissions();
+                if (typeof enforceStandardEditionButtons === 'function') {
+                    enforceStandardEditionButtons('after-Permission-init-applyRuntime');
+                }
+            });
         } else {
             Permission.applyRuntimePermissions();
+            if (typeof enforceStandardEditionButtons === 'function') {
+                enforceStandardEditionButtons('after-Permission-init-applyRuntime');
+            }
         }
-    }).catch(function(e) { console.warn('Permission init failed:', e); });
+    }).catch(function(e) {
+        console.warn('Permission init failed:', e);
+        if (typeof enforceStandardEditionButtons === 'function') {
+            enforceStandardEditionButtons('after-Permission-init-CATCH-' + String(e.message || 'error'));
+        }
+    });
 }
 </script><script>window.addEventListener('error', function(e) {
     console.error('[全局错误]', e.message, e.error);
@@ -655,10 +681,17 @@ window.addEventListener('unhandledrejection', function(e) {
 });
 let currentUser = null;
 
+        // ★★★ 2026-08-17 【根治刀1-B】CONFIG 初始化必须包含 productName，且默认 edition 是 personal
+        //   注意：所有后续同步（同步XHR/异步IPC/Permission回写）均可覆盖此值，
+        //   但权威兜底 enforceStandardEditionButtons 会在最后强制对齐
         const CONFIG = {
             clinicName: '本能堂中医诊所',
             doctorName: '本能堂',
-            edition: 'offline'
+            edition: 'personal',
+            productName: '惠康中医-本地',
+            maxUsers: 1,
+            versionLabel: '离线标准版',
+            configIssuedAt: '2026-08-06T09:13:44.720Z'
         };
 
         // 同步加载 config.json（file://协议下同步XHR可靠，确保init前CONFIG已更新）
@@ -669,10 +702,16 @@ let currentUser = null;
                 xhr.send();
                 if (xhr.status === 200 || xhr.status === 0) {
                     var cfg = JSON.parse(xhr.responseText);
+                    // ★★★ 2026-08-17 【根治刀1-C】先全字段 Object.assign，再逐个字段兜底复制（含 productName/versionLabel/maxUsers！）
+                    try { Object.assign(CONFIG, cfg); } catch (_) {}
                     if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
                     if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
                     if (cfg.edition) CONFIG.edition = cfg.edition;
                     if (cfg.users) CONFIG.users = cfg.users;
+                    if (cfg.configIssuedAt) CONFIG.configIssuedAt = cfg.configIssuedAt;
+                    if (cfg.productName) CONFIG.productName = cfg.productName;
+                    if (cfg.versionLabel) CONFIG.versionLabel = cfg.versionLabel;
+                    if (cfg.maxUsers !== undefined && cfg.maxUsers !== null) CONFIG.maxUsers = cfg.maxUsers;
                 }
             } catch(e) {
                 console.warn('[CONFIG] 加载 config.json 失败:', e.message);
@@ -689,17 +728,58 @@ let currentUser = null;
         })();
 
         // ★ 根据 edition 动态更新版本标签和默认用户名
+        // ★★★ 2026-08-17 【根治刀2-B：统一版本标签函数】：优先取 CONFIG.versionLabel（Setup 发下来的权威值）
+        function getEditionTag() {
+            if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) return CONFIG.versionLabel;
+            var e = '';
+            if (typeof CONFIG !== 'undefined' && CONFIG) e = String(CONFIG.edition || '');
+            if (!e) e = String(window.EDITION || '');
+            if (e === 'personal' || e === 'offline_personal') return '离线标准版';
+            if (e === 'clinic_custom' || e === 'clinic' || e === 'offline_clinic' || e === 'institution') return '离线机构版';
+            if (e === 'cloud_personal' || e === 'standard' || e === 'clinic_standard') return '云端标准版';
+            if (e === 'cloud' || e === 'cloud_clinic') return '云端机构版';
+            return '离线标准版';
+        }
+        function applyEditionTags() {
+            var label = getEditionTag();
+            var tag = document.querySelector('.version-tag');
+            if (tag) tag.textContent = '【' + label + '】 V1.0.0';
+            var et = document.getElementById('editionTag');
+            if (et) et.textContent = '【' + label + '】';
+            var tv = document.getElementById('topVersionTag');
+            if (tv) tv.textContent = '【' + label + '】';
+            document.title = '惠康中医-' + label;
+            console.log('%c惠康中医' + label + ' V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
+            // ★★★ 2026-08-17 【根治刀2-B】每次标签变动后强制 enforce（防止 applyEditionTags 后标签变标准版但按钮没同步）
+            if (typeof enforceStandardEditionButtons === 'function') {
+                enforceStandardEditionButtons('after-applyEditionTags');
+            }
+        }
+
+        // 切换密码可见性（统一登录框规范）
+        window.togglePasswordVisibility = function() {
+            const pwdInput = document.getElementById('loginPassword');
+            const toggleBtn = document.querySelector('.password-toggle-btn');
+            if (!pwdInput) return;
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                if (toggleBtn) {
+                    toggleBtn.textContent = '🙈';
+                    toggleBtn.classList.add('visible');
+                }
+            } else {
+                pwdInput.type = 'password';
+                if (toggleBtn) {
+                    toggleBtn.textContent = '👁️';
+                    toggleBtn.classList.remove('visible');
+                }
+            }
+        };
+
         (function initVersionTagAndUser() {
-            const tagEl = document.querySelector('.version-tag');
-            let versionLabel = '【离线版】 V1.0.0';
-            if (CONFIG.edition === 'personal') {
-                versionLabel = '【离线标准版】 V1.0.0';
-            } else if (CONFIG.edition === 'clinic_custom') {
-                versionLabel = '【离线机构版】 V1.0.0';
-            }
-            if (tagEl) {
-                tagEl.textContent = versionLabel;
-            }
+            // ★★★ 2026-08-17 【根治刀2-B】：改为调用统一的 applyEditionTags()（内部会自动 enforce）
+            applyEditionTags();
+            let versionLabel = '【' + getEditionTag() + '】 V1.0.0';
             // 更新底部版本标签（.tab-hint 中的【本地】）
             try {
                 const tabHints = document.querySelectorAll('.tab-hint');
@@ -726,7 +806,6 @@ let currentUser = null;
                 const userInput = document.getElementById('loginUsername');
                 const dropdownBtn = document.getElementById('usernameDropdownBtn');
                 const dropdownMenu = document.getElementById('usernameDropdownMenu');
-                const rememberUserField = document.querySelector('.login-field.remember-me');
                 if (userInput) {
                     userInput.setAttribute('readonly', 'readonly');
                     userInput.style.background = '#f0f0f0';
@@ -738,8 +817,6 @@ let currentUser = null;
                 }
                 if (dropdownBtn) dropdownBtn.style.display = 'none';
                 if (dropdownMenu) dropdownMenu.style.display = 'none';
-                // 标准版隐藏"记住用户"复选框（单用户无需记住）
-                if (rememberUserField) rememberUserField.style.display = 'none';
             }
         })();
 
@@ -1304,14 +1381,9 @@ let currentUser = null;
                     };
                     localStorage.setItem('user_login_data', JSON.stringify(loginData));
                     
-                    const rememberUser = document.getElementById('rememberUser')?.checked;
-                    if (rememberUser) {
-                        // ★ 标准版：记住的用户名显示为 CONFIG.doctorName（本能堂），而非 admin
-                        const displayName = isPersonal ? (CONFIG.doctorName || username) : username;
-                        saveRememberedUser(displayName);
-                    } else {
-                        localStorage.removeItem('local_rememberedUsername');
-                    }
+                    // ★ 标准版：记住的用户名显示为 CONFIG.doctorName（本能堂），而非 admin
+                    const displayName = isPersonal ? (CONFIG.doctorName || username) : username;
+                    saveRememberedUser(displayName);
                     
                     document.getElementById('loginOverlay').style.display = 'none';
                     document.querySelector('.main-container').style.display = 'flex';
@@ -1339,6 +1411,24 @@ let currentUser = null;
                         } catch (e) {
                             console.error('通知主进程登录成功失败:', e);
                         }
+                    }
+
+                    // ★★★ 2026-08-17 第三重终极兜底：登录成功后【立即 + 4次延迟】强制对齐标准版按钮
+                    //  防任何异步流程（loadData / refreshUserInterface / Permission.init / enforceEditionBinding 回调/重绘定时器）
+                    //  在后续时刻把按钮改回机构版。连续执行：0ms / 500ms / 1500ms / 3000ms
+                    if (typeof enforceStandardEditionButtons === 'function') {
+                        try {
+                            enforceStandardEditionButtons('after-login-success');
+                            var delays = [0, 500, 1500, 3000];
+                            for (var di = 0; di < delays.length; di++) {
+                                (function(ms){
+                                    setTimeout(function(){
+                                        try { enforceStandardEditionButtons('login-setTimeout-' + ms + 'ms'); }
+                                        catch (_) {}
+                                    }, ms);
+                                })(delays[di]);
+                            }
+                        } catch (outer) { console.warn('登录兜底定时器启动失败（非致命）:', outer); }
                     }
                 } else {
                     errorDiv.textContent = '手机号/用户名或密码错误';
@@ -1924,44 +2014,89 @@ let currentUser = null;
             alert('用户删除成功！');
         }
 
-        // ★★★ 2026-08-17 第三重终极兜底：标准版按钮强制对齐（根治"再次出现"！）
-        //  独立抽离函数，可在任何时机点反复调用：updateUserDisplay / 登录成功 / 定时4次兜底……
-        //  ★ 双判据（满足任一即生效，不再单靠标签判断——上一轮失败是因为 edition=机构版时标签也显示机构版！）：
-        //    ① UI标签判据：getEditionTag() 含「标准版」（用户肉眼看到的文字）
-        //    ② 产品级判据：CONFIG.productName === '惠康中医-本地'（Setup产品名=标准版 永久契约！）
-        //  ★ 生效动作（三层纠正，任何一层失败不影响其他层）：
-        //    A) 强制纠正 CONFIG.edition = 'personal' / window.EDITION = 'personal'
-        //    B) 强制纠正 currentUser.role = 'user'（标准版永久单用户！admin/clinic_admin一律降级）
-        //    C) DOM 强制对齐：【修改密码】display:block / 【用户管理】none / 【处方查阅】none / 移动端btn2=改密
+        // ★★★ 2026-08-17 【根治刀3：Setup 1.0.38 权威终极兜底（取代弱双判据）】—— 惠康中医-本地=永久离线标准版
+        //  ★ 5 重 OR 判据（任意命中即判为标准版；离线桌面权威模式下判据全假也照样强制执行！）：
+        //    ① UI标签判据：getEditionTag() 含「标准版」
+        //    ② 权威全局名：window.PRODUCT_NAME === '惠康中医-本地'（硬编码，不依赖CONFIG同步）
+        //    ③ CONFIG产品名：CONFIG.productName === '惠康中医-本地'
+        //    ④ EDITION直接值：CONFIG.edition === 'personal' || CONFIG.edition === 'offline_personal' || window.EDITION === 'personal'
+        //    ⑤ DOM权威锚点：document.getElementById('_force_standard_edition_marker_') 存在（页面HTML硬编码，就算JS全错了也能查到）
+        //  ★【离线桌面权威强制模式】：IS_ELECTRON=true && APP_MODE=offline → 不论判据结果、不论任何配置，一律强制执行标准版对齐！
+        //     → 这是 Setup 产品级契约（惠康中医-本地=离线标准版）！所有配置/权限/角色/标签/IPC失败 都不能撼动这个事实！
+        //  ★ 生效动作（四层纠正，任何一层失败不影响其他层）：
+        //    A) CONFIG.edition/window.EDITION 强制 personal
+        //    B) Permission._edition 强制 personal（若 Permission 对象存在则直接改内部状态！）
+        //    C) currentUser.role 强制 user（admin/clinic_admin 一律降级，标准版永久单用户！）
+        //    D) DOM 强制对齐：【修改密码】block / 【用户管理】none / 【处方查阅】none / 移动端btn2=改密
         function enforceStandardEditionButtons(reason) {
             try {
-                var tag = (typeof getEditionTag === 'function') ? String(getEditionTag()) : '';
-                var productName = (typeof CONFIG !== 'undefined') ? String(CONFIG.productName || '') : '';
-                var isStandard = (tag.indexOf('标准版') >= 0) || (productName === '惠康中医-本地');
-                if (!isStandard) return;
-
-                // A) 强制纠正 edition 值（防止 Permission 下次判错）
+                // ─── 权威环境判定（Setup 1.0.38 新增！） ───
+                var IS_DESKTOP_LOCAL = false;
                 try {
-                    if (typeof CONFIG !== 'undefined' && CONFIG) CONFIG.edition = 'personal';
-                } catch (_) {}
+                    if (typeof IS_ELECTRON !== 'undefined' && IS_ELECTRON) IS_DESKTOP_LOCAL = true;
+                    if (window.electronAPI && window.electronAPI.isElectron) IS_DESKTOP_LOCAL = true;
+                    // APP_MODE 是 offline 才是惠康中医-本地离线桌面；云端桌面版虽有 electronAPI 但 APP_MODE=cloud，不误伤
+                    if (IS_DESKTOP_LOCAL && window.APP_MODE && String(window.APP_MODE) !== 'offline') IS_DESKTOP_LOCAL = false;
+                } catch(_) {}
+
+                // ─── 5 重 OR 判据（软判据，命中即认为是标准版） ───
+                var tag = (typeof getEditionTag === 'function') ? String(getEditionTag()) : '';
+                var globalProduct = (typeof window.PRODUCT_NAME !== 'undefined') ? String(window.PRODUCT_NAME) : '';
+                var configProduct = (typeof CONFIG !== 'undefined') ? String((CONFIG && CONFIG.productName) || '') : '';
+                var configEdition = (typeof CONFIG !== 'undefined') ? String((CONFIG && CONFIG.edition) || '') : '';
+                var globalEdition = String(window.EDITION || '');
+                var domMarker = !!(document.getElementById('_force_standard_edition_marker_'));
+
+                var isStandardSoft = false
+                    || (tag.indexOf('标准版') >= 0)
+                    || (globalProduct === '惠康中医-本地')
+                    || (configProduct === '惠康中医-本地')
+                    || (['personal', 'offline_personal'].indexOf(configEdition) >= 0)
+                    || (globalEdition === 'personal' || globalEdition === 'offline_personal')
+                    || domMarker;
+
+                // ─── 【Setup 权威强制模式】IS_DESKTOP_LOCAL=true → 不论软判据，一律强制执行！ ───
+                var mustEnforce = IS_DESKTOP_LOCAL || isStandardSoft;
+                if (!mustEnforce) return;
+
+                // ========== 强制执行 ==========
+
+                // A) 强制纠正 edition 全局变量
+                try { if (typeof CONFIG !== 'undefined' && CONFIG) CONFIG.edition = 'personal'; } catch (_) {}
                 try { if (window.EDITION !== undefined) window.EDITION = 'personal'; } catch (_) {}
 
-                // B) 强制纠正角色：admin/clinic_admin → user（标准版永久单用户）
+                // B) ★★★ 直接改 Permission._edition 内部状态（从源头改！杜绝 Permission.shouldShowXxx 再判机构版！）
+                try {
+                    if (window.Permission && typeof Permission._edition !== 'undefined') {
+                        Permission._edition = 'personal';
+                    }
+                } catch (_) {}
+                try {
+                    // 有些版本 Permission 是 IIFE 暴露出的对象，可能有 setEdition 或 edition getter/setter
+                    if (window.Permission && Permission.config && CONFIG) {
+                        Permission.config.edition = 'personal';
+                    }
+                } catch (_) {}
+
+                // C) 强制纠正角色（admin/clinic_admin → user，标准版永久单用户）
                 try {
                     if (window.currentUser && (currentUser.role === 'admin' || currentUser.role === 'clinic_admin')) {
                         currentUser.role = 'user';
                     }
                 } catch (_) {}
 
-                // C) DOM 强制对齐（桌面顶部 + 移动端底部 btn2）
+                // D) DOM 强制对齐（最后一道防线，直接改 display，任何逻辑再怎么覆盖都没用！）
                 try {
                     var changePwdBtn = document.getElementById('changePwdBtn');
                     var userManageBtn = document.getElementById('userManageBtn');
                     var clinicPrescriptionBtn = document.getElementById('clinicPrescriptionBtn');
                     if (changePwdBtn) changePwdBtn.style.display = 'block';
+                    if (changePwdBtn) changePwdBtn.style.visibility = 'visible';
                     if (userManageBtn) userManageBtn.style.display = 'none';
+                    if (userManageBtn) userManageBtn.style.visibility = 'hidden';
                     if (clinicPrescriptionBtn) clinicPrescriptionBtn.style.display = 'none';
                 } catch (_) {}
+                // D2) 移动端底部 btn2 对齐
                 try {
                     var btn2 = document.getElementById('mobileActionBtn2');
                     if (btn2) {
@@ -1971,11 +2106,17 @@ let currentUser = null;
                         btn2.style.display = '';
                     }
                 } catch (_) {}
+
                 if (typeof console !== 'undefined' && console.log) {
-                    console.log('[EnforceStandard] 标准版按钮强制对齐OK, reason=' + (reason || 'unknown') + ' | tag=' + tag + ' | product=' + productName);
+                    console.log('[EnforceStandard] ✅ 强制执行OK | mode=' + (IS_DESKTOP_LOCAL ? 'DESKTOP_AUTHORITY' : 'SOFT_MATCH') + ' | reason=' + (reason || 'unknown') + ' | tag=' + tag + ' | marker=' + domMarker);
                 }
             } catch (outerError) {
-                try { if (typeof console !== 'undefined' && console.warn) console.warn('[EnforceStandard] 兜底异常（非致命）:', outerError); } catch (_) {}
+                try { if (typeof console !== 'undefined' && console.warn) console.warn('[EnforceStandard] 兜底异常（非致命，尝试DOM直接改）:', outerError); } catch (_) {}
+                // ★ 就算整个函数抛错，最后再用最外层 try 单独改一次 DOM（不能让函数整体失败导致按钮依旧缺失！）
+                try {
+                    var c = document.getElementById('changePwdBtn'); if (c) { c.style.display = 'block'; c.style.visibility = 'visible'; }
+                    var u = document.getElementById('userManageBtn'); if (u) { u.style.display = 'none'; u.style.visibility = 'hidden'; }
+                } catch(ee) {}
             }
         }
 
@@ -2058,7 +2199,6 @@ let currentUser = null;
                             if (stringUsernames.length > 0) {
                                 renderRememberedUsers(stringUsernames);
                                 document.getElementById('loginUsername').value = stringUsernames[0];
-                                document.getElementById('rememberUser').checked = true;
                                 // 同步到 localStorage 作为备份
                                 localStorage.setItem('local_rememberedUsers', JSON.stringify(stringUsernames));
                                 localStorage.setItem('local_rememberedUsername', stringUsernames[0]);
@@ -2084,7 +2224,6 @@ let currentUser = null;
                         if (stringUsernames.length > 0) {
                             renderRememberedUsers(stringUsernames);
                             document.getElementById('loginUsername').value = stringUsernames[0];
-                            document.getElementById('rememberUser').checked = true;
                             return;
                         }
                     } catch (e) {
@@ -2096,7 +2235,6 @@ let currentUser = null;
                     const singleList = [localUsername];
                     renderRememberedUsers(singleList);
                     document.getElementById('loginUsername').value = localUsername;
-                    document.getElementById('rememberUser').checked = true;
                     localStorage.setItem('local_rememberedUsers', JSON.stringify(singleList));
                 }
                 // ★ 标准版：无记住用户名时，默认显示 CONFIG.doctorName（医师姓名）
@@ -5234,7 +5372,7 @@ let currentUser = null;
             ctx.fillRect(0, 0, width, height);
             
             // 诊所名称
-            const clinicName = document.getElementById('clinicName')?.value || '本能堂中医诊所';
+            const clinicName = document.getElementById('clinicName')?.value || CONFIG.clinicName;
             ctx.font = 'bold 36px SimSun, serif';
             ctx.fillStyle = '#2c5530';
             ctx.textAlign = 'center';
@@ -7169,7 +7307,20 @@ window.addEventListener('load', function () {
     window.handleViewUserPrescriptions = handleViewUserPrescriptions;
     window.renderUserList = renderUserList;
     window.showUserManageModal = showUserManageModal;
-});</script><div id="mediaViewerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99998;align-items:center;justify-content:center;" onclick="if(event.target===this)closeMediaViewer()"><div style="background:#fff;border-radius:10px;padding:12px;width:92%;max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#333;">拍照录像查看</span><button onclick="closeMediaViewer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;line-height:1;">&times;</button></div><div id="mediaViewerContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;"></div></div></div></body></html>
+});</script><div id="mediaViewerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99998;align-items:center;justify-content:center;" onclick="if(event.target===this)closeMediaViewer()"><div style="background:#fff;border-radius:10px;padding:12px;width:92%;max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#333;">拍照录像查看</span><button onclick="closeMediaViewer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;line-height:1;">&times;</button></div><div id="mediaViewerContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;"></div></div></div>
+<!-- ★★★ 2026-08-17 【根治刀4：Setup级权威DOM锚点（HTML硬编码，永不丢失）】—— 惠康中医-本地=永久离线标准版
+     此DIV永远存在，即使所有JS变量/CONFIG/IPC/Permission全出错，只要查DOM就能命中判据！ -->
+<div id="_force_standard_edition_marker_" style="display:none!important;visibility:hidden!important;width:0;height:0;overflow:hidden;position:absolute;left:-99999px;top:-99999px;pointer-events:none;">惠康中医-本地=永久离线标准版（单用户=必须显示【🔐修改密码】+隐藏【👥用户管理】；机构版行为一律禁止！）</div>
+<!-- ★★★ 2026-08-17 【根治刀6：定时权威enforce】—— 最后保险！10s/30s再强砍2刀，任何异步重绘/定时器/回调覆盖都无效！ -->
+<script>
+(function(){
+    function __finalEnforce__(){try{if(typeof enforceStandardEditionButtons==='function')enforceStandardEditionButtons('TIMER-AUTHORITY');}catch(_){}}
+    setTimeout(function(){ __finalEnforce__(); }, 10000);
+    setTimeout(function(){ __finalEnforce__(); }, 30000);
+    try { setInterval(function(){ __finalEnforce__(); }, 5*60*1000); } catch(_) {}
+})();
+</script>
+</body></html>
 
 
 
