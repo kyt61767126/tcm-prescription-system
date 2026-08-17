@@ -1344,7 +1344,15 @@ let currentUser = null;
                 window.exitApp = function() {
             try {
                 // ★ 2026-08-17 终极兜底：exitApp 四平台适配 + 全链路 try/catch 杜绝静默失败
-                // 优先级：AndroidNative (离线APP JSB) > Capacitor.Plugins.App.exitApp (云端APP Capacitor) > electronAPI (桌面) > window.close
+                // 优先级（修正）：AndroidAppExit(云端APP 真关APP) > AndroidNative(离线APP JSB) > Capacitor > electronAPI > window.close
+                // ★ 2026-08-17 补丁② 【第零优先级】云端APP AndroidAppExit.exit() 专用桥接（MainActivity@405 显式@JavascriptInterface注入）
+                //   经验教训：必须显式核对 MainActivity 所有 addJavascriptInterface 的名称/方法名，
+                //   "以为 AndroidNative.quitApp 存在"是幻觉——云端APP真正能 finishAndRemoveTask 到桌面的只有这个！
+                if (window.AndroidAppExit && typeof window.AndroidAppExit.exit === 'function') {
+                    try { window.AndroidAppExit.exit(); return; } catch(_) {}
+                }
+                // 原 优先级1：AndroidNative (离线APP JSB — 若有 quitApp 则调用)
+                //  优先级2：AndroidNative (离线APP JSB — 若有 quitApp 则调用)
                 if (window.AndroidNative && typeof window.AndroidNative.quitApp === 'function') {
                     try { window.AndroidNative.quitApp(); return; } catch(_) {}
                 }
