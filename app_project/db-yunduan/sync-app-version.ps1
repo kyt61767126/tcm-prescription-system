@@ -24,10 +24,26 @@ if ($args.Count -lt 1) {
     exit 1
 }
 
-$cloudDir   = $args[0]
+$cloudDirRaw = $args[0]
+# ★ 规范化：相对路径(.\)、末尾反斜杠一律转成绝对路径，防止后续 Split-Path/Resolve-Path 边界出错
+try {
+    if (-not (Test-Path $cloudDirRaw)) {
+        Write-Host "[ERROR] cloud_dir not found: $cloudDirRaw"
+        exit 1
+    }
+    $cloudDir = (Resolve-Path -Path $cloudDirRaw -ErrorAction Stop).Path
+} catch {
+    Write-Host "[ERROR] cloud_dir resolve failed: $cloudDirRaw ($_)"
+    exit 1
+}
+
 # ★ 真源：repo 根目录下的 public/index.html（Cloudflare Pages 实际部署的文件）
 #   cloud_desktop/index.html 只是桌面版本地副本，不再作为真源（之前回滚的根因）
-$repoRoot   = Split-Path (Split-Path $cloudDir -Parent) -Parent
+#   db-yunduan 路径层级：<repo_root>\app_project\db-yunduan → 向上 2 级 = repo_root
+$repoRootUp = Join-Path $cloudDir '..\..'
+$repoRoot = (Resolve-Path -Path $repoRootUp -ErrorAction Stop).Path
+Write-Host "  [INFO] cloud_dir  = $cloudDir"
+Write-Host "  [INFO] repo_root = $repoRoot"
 $publicHtml = Join-Path $repoRoot 'public\index.html'
 $desktopHtml = Join-Path $cloudDir 'cloud_desktop\index.html'
 
