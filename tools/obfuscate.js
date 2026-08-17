@@ -56,16 +56,29 @@ const OBFUSCATOR_CONFIG = {
     stringArray: true,
     stringArrayEncoding: ['base64'],
     stringArrayThreshold: 0.5,
-    // 字符串数组包装：stringArray 禁用后无效，保留默认值
-    stringArrayWrappersCount: 1,
-    stringArrayWrappersChainedCalls: false,
+    // ★P1-4（2026-08-17）字符串数组更深变形，全部为语义无损项：
+    //   callsTransform=字符串数组在数组内再取再写(调用图更复杂)；shuffle/rotate=数组
+    //   洗牌+旋转，需还原函数重组读取；wrappersChainedCalls=包装器链式调用、count 增加
+    //   包装层，显著提高静态恢复难度。还原逻辑由 obfuscator 生成，运行时与原值一致。
+    stringArrayCallsTransform: true,
+    stringArrayShuffle: true,
+    stringArrayRotate: true,
+    stringArrayWrappersChainedCalls: true,
+    stringArrayWrappersCount: 2,
     identifierNamesGenerator: 'mangled',
     transformObjectKeys: false,
     unicodeEscapeSequence: false,
+    // ★P1-4（2026-08-17）数字字面量转为算术表达式，静态分析不易直接读常量
+    numbersToExpressions: true,
     // 不重命名全局变量，避免全局引用冲突
     renameGlobals: false,
     // 禁用 console 输出，增加反调试难度
     disableConsoleOutput: true,
+    // ★P1-4（2026-08-17）反调试：阻止打开 DevTools 时正常使用；
+    //    interval=0 仅首载挂载，不周期性触发暂停，正常用户(无 DevTools)完全无感，
+    //    满足"宁可漏检不可误报、不允许闪退"红线
+    debugProtection: true,
+    debugProtectionInterval: 0,
     // 防格式化：抵抗代码 beautifier 还原（依赖 compact: true）
     selfDefending: true,
     // 保留注释中的版权信息
