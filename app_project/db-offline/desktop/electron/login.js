@@ -184,7 +184,7 @@
             const isTrialDefault = !rememberedUser && users.length === 1;
             try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
             if (doctorName) {
-                const shown = '医师/' + doctorName;
+                const shown = doctorName;
                 input.value = shown;
                 input.dataset.realLogin = usernameToFill; // 真实登录用户名（admin 或 手机号）
                 input.dataset.displayName = shown;        // 登录时若未改动，映射回真实用户名认证
