@@ -672,6 +672,21 @@ async function checkRateLimit(kv, ip, maxPerHour = 5) {
     return { allowed: true, current: current + 1, max: maxPerHour };
 }
 
+// ★ P0-1 安全补强：激活码级短时频控（防对单一合法激活码做换机试探/暴力爆破）
+// 与 checkRateLimit（按 IP）不同，本函数按激活码维度限流，用于 validate.js 等
+// 客户端激活入口。KV key 使用激活码大写（license:{code} 已含同样信息，无额外暴露）
+async function checkCodeRateLimit(kv, code, maxPerHour = 5) {
+    const normalized = String(code || '').toUpperCase();
+    if (!normalized) return { allowed: false, current: 0, max: maxPerHour };
+    const key = `ratelimit:code:${normalized}:${Math.floor(Date.now() / (60 * 60 * 1000))}`;
+    const current = parseInt(await kv.get(key) || '0', 10);
+    if (current >= maxPerHour) {
+        return { allowed: false, current, max: maxPerHour };
+    }
+    await kv.put(key, String(current + 1), { expirationTtl: 3600 });
+    return { allowed: true, current: current + 1, max: maxPerHour };
+}
+
 // ============================================================================
 //  导出
 // ============================================================================
@@ -694,6 +709,7 @@ export {
     listLicenses,
     sanitizeRecord,
     checkRateLimit,
+    checkCodeRateLimit,  // ★ P0-1 新增：激活码级短时频控
     getDevices,        // ★ v4 新增：获取激活码已绑定的设备数组
     getMaxDevices,     // ★ v4 新增：获取激活码的最大设备数
     // ★ 设备-版本绑定：同一台设备只能注册一个版本

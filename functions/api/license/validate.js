@@ -131,6 +131,16 @@ export async function onRequest(context) {
         if (!isValidCodeFormat(code)) {
             return json({ success: false, error: '激活码格式错误' }, 400);
         }
+        // ★ P0-1 安全补强：激活码级短时频控（防对单一合法激活码做换机试探/暴力爆破）
+        // 与上面的 IP 限流（每 IP 每小时 20 次）叠加，从"激活码"维度再限一层
+        const codeRate = await checkCodeRateLimit(kv, code, 5);
+        if (!codeRate.allowed) {
+            return json({
+                success: false,
+                error: '该激活码校验过于频繁，请 1 小时后再试（每小时限 5 次）',
+                rateLimited: true
+            }, 429);
+        }
         // ★ v3 新增：clinicName 长度/字符校验
         if (clinicName !== undefined && clinicName !== null && clinicName !== '') {
             if (typeof clinicName !== 'string') {
