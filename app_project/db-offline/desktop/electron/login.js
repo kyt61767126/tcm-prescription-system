@@ -177,30 +177,25 @@
         }
         
         if (usernameToFill) {
-            // ★ 解析预填账号对应的医师姓名（优先用户记录 name，回退基础设置 doctorName）
-            let doctorName = '';
-            try {
-                const trimmedFill = String(usernameToFill).trim();
-                const matchedUser = users.find(u => u.username === trimmedFill) ||
-                    users.find(u => String((u.phone || '') + '').trim() === trimmedFill);
-                if (matchedUser && matchedUser.name && matchedUser.name !== trimmedFill) {
-                    doctorName = matchedUser.name;
-                } else if (config && config.doctorName && String(config.doctorName) !== trimmedFill) {
-                    doctorName = config.doctorName;
-                }
-            } catch (e) { /* ignore */ }
-
             localStorage.setItem(KEY_REMEMBER_USER, usernameToFill);
-            // 用户名输入框本身直接显示医师姓名；真实用户名存 dataset 供登录时映射
+            // ★ 用户名框显示“医师/<医师名>”（医师名取基础设置 doctorName，打包内置默认 XXX）
+            const doctorName = (config && config.doctorName) ? String(config.doctorName) : '';
+            // 新装试用默认（未记住用户 + 单账户）→ 密码框默认 admin，便于直接试用
+            const isTrialDefault = !rememberedUser && users.length === 1;
+            try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
             if (doctorName) {
-                input.value = doctorName;
-                input.dataset.realLogin = usernameToFill;
-                input.dataset.displayName = doctorName;
-                try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
-                showGreenHint(`✓ 账号已预填：${doctorName}，请输入密码登录`);
+                const shown = '医师/' + doctorName;
+                input.value = shown;
+                input.dataset.realLogin = usernameToFill; // 真实登录用户名（admin 或 手机号）
+                input.dataset.displayName = shown;        // 登录时若未改动，映射回真实用户名认证
+                if (isTrialDefault && usernameToFill === 'admin') {
+                    try { const pwdEl = $('loginPassword'); if (pwdEl && !pwdEl.value) pwdEl.value = 'admin'; } catch (e) {}
+                    showGreenHint(`✓ 试用账号已预填：${shown}，密码默认 admin，可直接登录`);
+                } else {
+                    showGreenHint(`✓ 账号已预填：${shown}，请输入密码登录`);
+                }
             } else {
                 input.value = usernameToFill;
-                try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
                 showGreenHint(`✓ 账号已预填：${usernameToFill}，请输入密码登录`);
             }
             // 自动聚焦到密码框
