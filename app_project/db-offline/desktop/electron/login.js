@@ -178,9 +178,34 @@
         
         if (usernameToFill) {
             input.value = usernameToFill;
+            // ★ 解析预填账号对应的医师姓名（优先用户记录 name，回退基础设置 doctorName）
+            let doctorName = '';
+            try {
+                const trimmedFill = String(usernameToFill).trim();
+                const matchedUser = users.find(u => u.username === trimmedFill) ||
+                    users.find(u => String((u.phone || '') + '').trim() === trimmedFill);
+                if (matchedUser && matchedUser.name && matchedUser.name !== trimmedFill) {
+                    doctorName = matchedUser.name;
+                } else if (config && config.doctorName && String(config.doctorName) !== trimmedFill) {
+                    doctorName = config.doctorName;
+                }
+            } catch (e) { /* ignore */ }
+
             localStorage.setItem(KEY_REMEMBER_USER, usernameToFill);
-            // 绿色成功反馈：提示用户账号已预填
-            showGreenHint(`✓ 账号已预填：${usernameToFill}，请输入密码登录`);
+            // 用户名下方展示对应医师姓名，便于识别该账号归属于谁
+            try {
+                const dnEl = document.getElementById('loginDoctorName');
+                if (dnEl) {
+                    if (doctorName) {
+                        dnEl.textContent = '👤 医师：' + doctorName;
+                        dnEl.style.display = 'block';
+                    } else {
+                        dnEl.style.display = 'none';
+                    }
+                }
+            } catch (e) {}
+            // 绿色成功反馈：提示用户账号已预填（带医师姓名）
+            showGreenHint(`✓ 账号已预填：${usernameToFill}${doctorName ? '(' + doctorName + ')' : ''}，请输入密码登录`);
             // 自动聚焦到密码框
             setTimeout(() => {
                 const pwd = $('loginPassword');
