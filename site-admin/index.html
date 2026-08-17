@@ -2498,8 +2498,8 @@ if (window.Permission) {
                     if (prescriptionHistory.length < beforeFilter) {
                         console.log(`刷新时过滤掉 ${beforeFilter - prescriptionHistory.length} 条已删除处方`);
                         // 重新发送删除请求，确保云端最终一致（await 等待全部完成，避免并发丢失）
-                        const deletedIds = getDeletedPrescriptionIds();
-                        const stillAlive = cloudResult.data.filter(p => deletedIds.includes(p.id));
+                        const deletedSet = getDeletedPrescriptionIdSet();
+                        const stillAlive = cloudResult.data.filter(p => deletedSet[String(p.id)]);
                         if (stillAlive.length > 0) {
                             try {
                                 await Promise.all(stillAlive.map(p => deletePrescriptionFromCloud(p.id).catch(() => {})));
@@ -4939,7 +4939,8 @@ if (window.Permission) {
             DataCache.invalidate('prescriptions');
 
             // 直接从本地数组中移除被删除的处方（更可靠，避免依赖云端返回）
-            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            // ★ 用字符串比较，避免数字/字符串类型不一致导致删除项残留
+            prescriptionHistory = prescriptionHistory.filter(p => String(p.id) !== String(id));
 
             // 保存到localStorage，防止刷新后从备份恢复已删除的处方
             savePrescriptionHistory();
@@ -5045,10 +5046,10 @@ if (window.Permission) {
             try {
                 var delKey = 'deletedRxIds_' + (currentUser ? currentUser.username : 'default');
                 var deletedIds = JSON.parse(localStorage.getItem(delKey) || '[]');
-                var newDeletedIds = deletedIds.filter(function(did) { return did !== id; });
+                var newDeletedIds = deletedIds.filter(function(did) { return String(did) !== String(id); });
                 localStorage.setItem(delKey, JSON.stringify(newDeletedIds));
             } catch(e) { console.warn('移除删除标记失败:', e); }
-            var newBin = bin.filter(function(r) { return r.id !== id; });
+            var newBin = bin.filter(function(r) { return String(r.id) !== String(id); });
             saveRecycleBin(newBin);
             savePrescriptionHistory();
             DataCache.invalidate('prescriptions');
@@ -5209,8 +5210,8 @@ if (window.Permission) {
                     if (prescriptionHistory.length < beforeFilterLoad) {
                         console.log(`loadData 过滤掉 ${beforeFilterLoad - prescriptionHistory.length} 条已删除处方`);
                         // 后台重新发送删除请求，确保云端最终一致
-                        const deletedIdsLoad = getDeletedPrescriptionIds();
-                        const stillAliveLoad = cloudResult.data.filter(p => deletedIdsLoad.includes(p.id));
+                        const deletedSetLoad = getDeletedPrescriptionIdSet();
+                        const stillAliveLoad = cloudResult.data.filter(p => deletedSetLoad[String(p.id)]);
                         if (stillAliveLoad.length > 0) {
                             Promise.all(stillAliveLoad.map(p => deletePrescriptionFromCloud(p.id).catch(() => {})))
                                 .catch(() => {});
@@ -8079,16 +8080,26 @@ IconFile=${scriptPath}`;
         function getDeletedPrescriptionIds() {
             try {
                 const key = 'deletedRxIds_' + (currentUser ? currentUser.username : 'default');
-                return JSON.parse(localStorage.getItem(key) || '[]');
+                const raw = JSON.parse(localStorage.getItem(key) || '[]');
+                // ★ 统一转为字符串，避免数字/字符串类型不一致导致过滤失效（闪现复现）
+                return Array.isArray(raw) ? raw.map(String) : [];
             } catch(e) { return []; }
+        }
+
+        // 获取已删除 ID 的字符串集合（用于快速比对，兼容数字/字符串）
+        function getDeletedPrescriptionIdSet() {
+            const set = {};
+            getDeletedPrescriptionIds().forEach(id => { set[id] = true; });
+            return set;
         }
 
         function markPrescriptionDeleted(id) {
             try {
                 const key = 'deletedRxIds_' + (currentUser ? currentUser.username : 'default');
                 const ids = getDeletedPrescriptionIds();
-                if (!ids.includes(id)) {
-                    ids.push(id);
+                const s = String(id);
+                if (!ids.includes(s)) {
+                    ids.push(s);
                     // 最多保留500条，避免无限增长
                     if (ids.length > 500) ids.splice(0, ids.length - 500);
                     localStorage.setItem(key, JSON.stringify(ids));
@@ -8098,9 +8109,9 @@ IconFile=${scriptPath}`;
 
         function filterDeletedPrescriptions(list) {
             if (!list || !list.length) return list;
-            const deletedIds = getDeletedPrescriptionIds();
-            if (!deletedIds.length) return list;
-            return list.filter(p => !deletedIds.includes(p.id));
+            const set = getDeletedPrescriptionIdSet();
+            if (Object.keys(set).length === 0) return list;
+            return list.filter(p => p && !set[String(p.id)]);
         }
         function saveDailyCounter() {
             try { setUserItem('dailyCounter', dailyCounter); } catch(e) { console.warn('保存日计数器失败:', e); }
@@ -9840,7 +9851,7 @@ IconFile=${scriptPath}`;
             DataCache.invalidate('prescriptions');
 
             // 直接从本地数组中移除被删除的处方（更可靠）
-            prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
+            prescriptionHistory = prescriptionHistory.filter(p => String(p.id) !== String(id));
 
             // 保存到localStorage
             savePrescriptionHistory();
