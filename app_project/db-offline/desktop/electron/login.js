@@ -178,25 +178,18 @@
         
         if (usernameToFill) {
             localStorage.setItem(KEY_REMEMBER_USER, usernameToFill);
-            // ★ 用户名框显示“医师/<医师名>”（医师名取基础设置 doctorName，打包内置默认 XXX）
+            // ★ 用户名框直接预填【真实可登录账户】(admin 或 手机号)，
+            //   避免“显示医师名却必须用 admin 登录”的困惑；医师名放绿色提示供识别
+            input.value = usernameToFill;
             const doctorName = (config && config.doctorName) ? String(config.doctorName) : '';
-            // 新装试用默认（未记住用户 + 单账户）→ 密码框默认 admin，便于直接试用
+            // 新装试用默认（未记住用户 + 单账户 admin）→ 密码框默认 admin，便于直接试用
             const isTrialDefault = !rememberedUser && users.length === 1;
             try { const dnEl = document.getElementById('loginDoctorName'); if (dnEl) dnEl.style.display = 'none'; } catch (e) {}
-            if (doctorName) {
-                const shown = doctorName;
-                input.value = shown;
-                input.dataset.realLogin = usernameToFill; // 真实登录用户名（admin 或 手机号）
-                input.dataset.displayName = shown;        // 登录时若未改动，映射回真实用户名认证
-                if (isTrialDefault && usernameToFill === 'admin') {
-                    try { const pwdEl = $('loginPassword'); if (pwdEl && !pwdEl.value) pwdEl.value = 'admin'; } catch (e) {}
-                    showGreenHint(`✓ 试用账号已预填：${shown}，密码默认 admin，可直接登录`);
-                } else {
-                    showGreenHint(`✓ 账号已预填：${shown}，请输入密码登录`);
-                }
+            if (isTrialDefault && usernameToFill === 'admin') {
+                try { const pwdEl = $('loginPassword'); if (pwdEl && !pwdEl.value) pwdEl.value = 'admin'; } catch (e) {}
+                showGreenHint(`✓ 账号已预填：${usernameToFill}${doctorName ? '（医师：' + doctorName + '）' : ''}，密码默认 admin，可直接登录`);
             } else {
-                input.value = usernameToFill;
-                showGreenHint(`✓ 账号已预填：${usernameToFill}，请输入密码登录`);
+                showGreenHint(`✓ 账号已预填：${usernameToFill}${doctorName ? '（医师：' + doctorName + '）' : ''}，请输入密码登录`);
             }
             // 自动聚焦到密码框
             setTimeout(() => {
