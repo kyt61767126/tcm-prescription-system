@@ -29,7 +29,7 @@ if ($Version -eq 'cloud') {
     $guardSearchPath = Join-Path $projectDir "cloud_app\app\src\main\java\com\tcm\prescription"
     $placeholder = 'EXPECTED_SIGN_HASH'
     $useRecurse = $false
-    $apkFilter = '惠康中医云端.apk'
+    $apkFilter = '惠康中医-云端.apk'
     $appRoot = Join-Path $projectDir "cloud_app\app"
 } elseif ($Version -eq 'dingzhi') {
     # db-offline merged structure: APK in db-offline/ root, Java in app/app/src/main/java/
@@ -38,7 +38,7 @@ if ($Version -eq 'cloud') {
     $guardSearchPath = Join-Path $projectDir "app\app\src\main\java\com\benneng\pres"
     $placeholder = 'EXPECTED_APK_SIGNATURE_SHA256'
     $useRecurse = $false
-    $apkFilter = '惠康中医本地.apk'
+    $apkFilter = '惠康中医-本地.apk'
     $appRoot = Join-Path $projectDir "app\app"
 }
 
