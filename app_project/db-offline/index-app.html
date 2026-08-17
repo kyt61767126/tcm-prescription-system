@@ -5252,7 +5252,7 @@ let currentUser = null;
             ctx.fillRect(0, 0, width, height);
             
             // 诊所名称
-            const clinicName = document.getElementById('clinicName')?.value || '本能堂中医诊所';
+            const clinicName = document.getElementById('clinicName')?.value || CONFIG.clinicName;
             ctx.font = 'bold 36px SimSun, serif';
             ctx.fillStyle = '#2c5530';
             ctx.textAlign = 'center';

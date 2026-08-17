@@ -47,6 +47,14 @@ echo [0/10] Version consistency precheck (offline APP group)...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\verify-app-version-consistency.ps1" -Target offline -RepoRoot "%REPO_ROOT%"
 if errorlevel 1 exit /b 1
 echo.
+
+REM ★ 2026-08-17 新增：诊所名/医师名硬编码反模式扫描（举一反三预防）
+REM 禁止运行期回退值写死"本能堂"字面量 / 禁止config版本变化时清空用户诊所名。
+REM 任何违规直接 exit 1 终止打包，防止登录框/处方PDF回显过时诊所名的bug复发。
+echo [0.5/10] Hardcoded clinic-name anti-pattern scan (prevent regression)...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\verify-no-hardcoded-clinic.ps1" -RepoRoot "%REPO_ROOT%"
+if errorlevel 1 exit /b 1
+echo.
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[1/10] Configure clinic info (Flavor: %FLAVOR%)...'"
 if defined SKIP_CONFIG (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] --skip-config argument detected, skipping config'"

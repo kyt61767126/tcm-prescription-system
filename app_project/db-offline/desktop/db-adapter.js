@@ -1,1 +1,613 @@
-const bl=h;(function(a,b){const bo={a:0x19f,b:0x1b6,d:0x188,e:0x1e0,f:0x1b5,i:0x1c0,j:0x19d},ad=h,ae=h,d=a();while(!![]){try{const e=parseInt(ad(0x1a1))/(-0x581*0x3+0xd*-0x2c7+0x349f)*(parseInt(ad(0x18f))/(-0x316*-0x7+-0xc*0xe2+-0xb00))+parseInt(ad(0x1c3))/(-0xfb7+0x1d18+-0xd5e)*(-parseInt(ae(0x1a8))/(-0x4*0x3ad+-0x1927+0x3b*0xad))+-parseInt(ad(bo.a))/(0x289+-0x35+-0xc5*0x3)+parseInt(ae(bo.b))/(0x118d+0x17cd+-0x2954)*(parseInt(ad(bo.d))/(-0x3d5+-0x123e*0x1+0x161a))+-parseInt(ae(bo.e))/(0x2b*0x1+-0x14b8+0x1495)+parseInt(ad(bo.f))/(-0xa0f+0xd53+-0x1*0x33b)*(-parseInt(ae(bo.i))/(-0x1*-0xfb7+-0x1cbe+0xd11))+-parseInt(ad(0x1ed))/(0x17*0xb2+-0x70f*0x4+0x275*0x5)*(-parseInt(ad(bo.j))/(-0x1342+-0x24a7+-0xbf*-0x4b));if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(g,0x17c4d+0x1f*0x17e3+-0x2c475),function(i){const cq={a:0x1eb,b:0x18e,d:0x1c5},co={a:0x1e7,b:0x1e6},ch={a:0x1e4},cg={a:0x1d9,b:0x1c8,d:0x1ab},ce={a:0x1e7,b:0x1e6,d:0x1e6,e:0x1bf,f:0x1ec,i:0x1bc,j:0x1d1,k:0x178},cc={a:0x1d9,b:0x1df,d:0x17a,e:0x1ca,f:0x1c4,i:0x1c1,j:0x1de},ca={a:0x1cc,b:0x194,d:0x1e5,e:0x193},c9={a:0x1bf},c8={a:0x1dd},c7={a:0x1c2,b:0x199},c6={a:0x1c2,b:0x1cb,d:0x199},c4={a:0x1bf},c2={a:0x1bf},c1={a:0x1b2,b:0x197},bW={a:0x190},bV={a:0x1e5},bG={a:0x186,b:0x1ef,d:0x19c,e:0x19a,f:0x17b},bF={a:0x1ab},by={a:0x192},bt={a:0x1ba},aq=h,ar=h,j=(function(){let X=!![];return function(Y,Z){const a0=X?function(){if(Z){const a1=Z['apply'](Y,arguments);return Z=null,a1;}}:function(){};return X=![],a0;};}()),k=j(this,function(){const af=h,ag=h;if(k[af(0x189)]()[ag(bt.a)]()[af(0x191)]('\x0a')!==-(-0x1e54+0x241*-0x6+0x2bdb))return;return k[ag(0x1ba)]()[ag(0x18a)]('(((.+)+)+)+$')['toString']()['constructor'](k)[af(0x18a)](ag(0x181));});k();const l=(function(){let X=!![];return function(Y,Z){const a0=X?function(){if(Z){const a1=Z['apply'](Y,arguments);return Z=null,a1;}}:function(){};return X=![],a0;};}());(function(){l(this,function(){const ah=h,ai=h,X=new RegExp(ah(0x1b4)),Y=new RegExp(ai(0x18b),'i'),Z=c(ai(by.a));!X['test'](Z+ah(0x187))||!Y['test'](Z+ah(0x1c6))?Z('0'):c();})();}());const m=(function(){let X=!![];return function(Y,Z){const a0=X?function(){if(Z){const a1=Z['apply'](Y,arguments);return Z=null,a1;}}:function(){};return X=![],a0;};}()),n=m(this,function(){const al=h,am=h,X=function(){const aj=h,ak=h;let a1;try{a1=Function(aj(0x1cd)+aj(0x183)+');')();}catch(a2){a1=window;}return a1;},Y=X(),Z=Y['console']=Y['console']||{},a0=[al(0x1a7),'warn','info',am(bF.a),am(0x17f),al(0x1be),'trace'];for(let a1=-0x2197+-0x20a7+0x423e;a1<a0[am(0x1e6)];a1++){const a2=m['constructor']['prototype']['bind'](m),a3=a0[a1],a4=Z[a3]||a2;a2[am(0x1d6)]=m['bind'](m),a2['toString']=a4['toString']['bind'](a4),Z[a3]=a2;}});n();'use strict';let o=null;function p(){const an=h,ao=h;if(o)return o;if(typeof i['APP_MODE']==='string'&&i[an(0x186)])return o=i[ao(bG.a)],o;if(typeof i['CLOUD_API_BASE']!=='undefined'&&i['CLOUD_API_BASE'])return o='cloud',o;if(typeof i[an(bG.b)]!==an(bG.d)&&i['location'][ao(bG.e)]){if(i['location'][an(0x19a)]['includes'](an(bG.f))||i['location']['hostname'][ao(0x1ad)]('cloud'))return o='cloud',o;}return o=ao(0x1c9),o;}function q(){const ap=h;return p()===ap(0x1d9);}const r=aq(0x17d),s=0x2709*0x1+0x1*-0xd1f+-0x19e8,t=aq(0x1d4),u='settings',v=aq(cq.a),w=aq(0x1a2),x=typeof i['CLOUD_API_BASE']!==aq(0x19c)&&i[aq(0x1ea)]||typeof CLOUD_API_BASE_OVERRIDE!==ar(0x19c)&&CLOUD_API_BASE_OVERRIDE||'https://tcm-prescription-system.pages.dev/api';let y=null,z=null;function A(){const bL={a:0x1dc},bK={a:0x1ab},bI={a:0x179,b:0x1b0,d:0x1db};if(y)return Promise['resolve'](y);if(z)return z;return z=new Promise((X,Y)=>{const as=h,at=h;try{if(typeof indexedDB==='undefined'){Y(new Error(as(0x1b7)));return;}const Z=indexedDB['open'](r,s);Z[as(bL.a)]=function(a0){const au=as,av=as,a1=a0[au(bI.a)][au(bI.b)];!a1[av(0x1da)]['contains'](t)&&a1[av(0x18c)](t,{'keyPath':'id'}),!a1['objectStoreNames'][au(bI.d)](u)&&a1['createObjectStore'](u,{'keyPath':au(0x1ee)});},Z['onsuccess']=function(a0){const aw=at;y=a0[aw(0x179)]['result'],X(y);},Z['onerror']=function(a0){const ax=at,ay=at;console[ax(bK.a)](ay(0x1ac),a0['target']['error']),Y(a0['target']['error']);};}catch(a0){Y(a0);}}),z;}function B(X,Y){const az=aq;return A()[az(0x1d5)](Z=>{const aA=az,aB=az,a0=Z[aA(0x1e8)]([X],Y);return a0[aB(0x184)](X);});}function C(X){return new Promise((Y,Z)=>{const aC=h,aD=h;X[aC(0x1d7)]=()=>Y(X['result']),X[aD(0x1a4)]=()=>Z(X[aD(0x1ab)]);});}async function D(X){const aE=ar,Y=await B(t,'readwrite');await C(Y[aE(0x182)](X));}async function E(X){const Y=await A();return new Promise((Z,a0)=>{const aF=h,aG=h,a1=Y['transaction']([t],aF(0x17e)),a2=a1[aF(0x184)](t);for(const a3 of X)a2['put'](a3);a1[aF(0x1e3)]=()=>Z(),a1[aG(0x1a4)]=()=>a0(a1['error']);});}async function F(X){const Y=await B(t,'readwrite');await C(Y['delete'](X));}async function G(){const aH=ar,aI=ar;try{const X=await B(t,'readonly'),Y=await C(X[aH(0x198)]());return Y||[];}catch(Z){return console[aH(bV.a)]('[DbAdapter]\x20IndexedDB\x20读取失败:',Z),[];}}async function H(){const aJ=aq,aK=aq,X=await B(t,aJ(0x17e));await C(X[aJ(bW.a)]());}async function I(X){const aL=aq,aM=aq;try{const Y=await B(u,aL(0x1aa)),Z=await C(Y[aM(0x1b8)](X));return Z?Z[aM(0x1cf)]:null;}catch(a0){return null;}}async function J(X,Y){const aN=ar,Z=await B(u,'readwrite');await C(Z[aN(0x182)]({'key':X,'value':Y}));}function K(X){try{return i['localStorage']?i['localStorage']['getItem'](X):null;}catch(Y){return null;}}function L(X,Y){const aO=aq,aP=aq;try{if(i['localStorage'])i['localStorage'][aO(0x196)](X,Y);}catch(Z){console['warn'](aP(0x1d8),Z);}}function M(X){const aQ=aq,aR=aq;try{if(i[aQ(c1.a)])i['localStorage'][aR(c1.b)](X);}catch(Y){}}function N(){const aS=ar,aT=ar,X=K(v);if(!X)return[];try{const Y=JSON[aS(c2.a)](X);return Array[aT(0x1e7)](Y)?Y:[];}catch(Z){return[];}}function O(X){L(v,JSON['stringify'](X));}function P(){const aU=ar,X=K(w);if(!X)return[];try{const Y=JSON[aU(c4.a)](X);return Array['isArray'](Y)?Y:[];}catch(Z){return[];}}function Q(X){const aV=aq,Y=P(),Z=String(X);if(!Y['includes'](Z)){Y['push'](Z);if(Y['length']>0x1206+-0x3*-0x117+-0x1357)Y['shift']();L(w,JSON[aV(0x1de)](Y));}}function R(){const aW=aq,aX=aq;return!!(i['electronAPI']&&i[aW(c6.a)][aW(c6.b)]&&i['electronAPI'][aW(c6.d)]);}async function S(X){const aY=ar,aZ=ar;if(!R())return null;try{const Y=await i[aY(c7.a)][aZ(c7.b)](X);if(Y&&Y[aZ(0x1e9)]&&Y[aY(0x1c4)]!==null)return typeof Y['data']==='string'?Y[aY(0x1c4)]:JSON['stringify'](Y[aZ(0x1c4)]);}catch(Z){}return null;}async function T(X,Y){const b0=ar;if(!R())return![];try{if(i['electronAPI']['saveUserData'])return await i['electronAPI'][b0(c8.a)](X,Y),!![];}catch(Z){}return![];}function U(){const b1=ar,b2=ar;try{const X=i['sessionStorage']&&i['sessionStorage']['getItem'](b1(0x19b));if(X){const Z=JSON[b1(c9.a)](X);return Z&&Z['token']?Z['token']:null;}const Y=i['localStorage']&&i['localStorage']['getItem']('auth:currentUser');if(Y){const a0=JSON['parse'](Y);return a0&&a0['token']?a0['token']:null;}}catch(a1){}return null;}async function V(X,Y){const b3=aq,b4=aq;if(typeof i[b3(0x1b3)]===b3(0x1bb)){const a0=X[b4(0x1a5)](b4(ca.a))?X:x+X;return await i[b3(0x1b3)](a0,Y);}Y=Y||{},Y['headers']=Y[b3(0x185)]||{},Y['headers']['Content-Type']=b4(0x1e1);const Z=U();if(Z)Y['headers'][b3(ca.b)]='Bearer\x20'+Z;try{const a1=await fetch(x+X,Y);return!a1['ok']&&console[b4(ca.d)](b4(0x1d2)+a1['status']),await a1['json']();}catch(a2){return console[b4(ca.d)](b3(ca.e),a2),{'success':![],'error':a2[b4(0x180)],'offline':!![]};}}const W={async 'init'(){try{await A();}catch(X){}return this;},async 'savePrescription'(X,Y){const b5=aq,b6=aq;Y=Y||{};if(Y[b5(cc.a)]===undefined)Y['cloud']=q();const Z=new Date()[b5(cc.b)](),a0={...X,'id':X['id']||Date[b6(0x1ae)](),'createdAt':X['createdAt']||Z,'updatedAt':Z,'createdBy':X['createdBy']||Y[b6(0x1a0)]||b5(cc.d),'userRole':X['userRole']||Y['userRole'],'isAdmin':X['isAdmin']!==undefined?X[b5(0x1af)]:Y['isAdmin']};if(Y[b6(0x1d9)]){const a1=await V('/prescriptions',{'method':'POST','body':JSON['stringify']({'prescription':a0})});if(a1&&a1['success']){if(a1['savedPrescription'])try{await D(a1[b6(cc.e)]);}catch(a2){}return{'success':!![],'savedPrescription':a1['savedPrescription'],'data':a1[b5(cc.f)]};}console['warn']('[DbAdapter]\x20云端保存失败，降级到本地:',a1&&a1[b6(0x1ab)]);}try{await D(a0);}catch(a3){console['warn']('[DbAdapter]\x20IndexedDB\x20保存失败，降级到\x20localStorage:',a3);const a4=N(),a5=a4[b5(0x1ce)](a6=>String(a6['id'])===String(a0['id']));if(a5>=0x718+-0x4e9*0x5+0x1175)a4[a5]=a0;else a4['unshift'](a0);O(a4);}if(R())try{const a6=await this[b5(cc.i)]();await T(v,JSON[b5(cc.j)](a6));}catch(a7){}return{'success':!![],'savedPrescription':a0,'offline':!Y['cloud']};},async 'getAllPrescriptions'(X){const cd={a:0x195},b7=aq,b8=aq;X=X||{};if(X['cloud']===undefined)X['cloud']=q();let Y=[];if(X['cloud']){const Z=await V('/prescriptions',{'method':b7(0x1b9)});Z&&Z['success']&&Array[b7(ce.a)](Z['data'])&&(Y=Z['data']);}Y[b7(ce.b)]===0x2*-0x99f+-0x4d*-0x2+0x12a4&&(Y=await G());if(Y[b7(ce.d)]===0x1*-0xd06+-0xb*-0xdd+-0x7*-0x81){Y=N();if(Y['length']>-0x788+0xc1*0xa+-0x2)try{await E(Y);}catch(a0){}}if(Y['length']===-0x1c63+-0x1d2a+0x1*0x398d){const a1=await I(v);if(a1){const a2=typeof a1==='string'?JSON[b8(ce.e)](a1):a1;if(Array[b8(0x1e7)](a2)){Y=a2,O(Y);try{await E(Y);}catch(a3){}}}}if(Y[b7(0x1e6)]===0x11*0x24+-0x130b+-0x1*-0x10a7&&R()){const a4=await S(v);if(a4)try{const a5=typeof a4===b7(ce.f)?JSON['parse'](a4):a4;if(Array[b7(ce.a)](a5)){Y=a5,O(Y);try{await E(Y);}catch(a6){}}}catch(a7){}}X['filterUsername']&&(Y=Y['filter'](a8=>a8[b8(0x1a3)]===X['filterUsername']));if(!X[b7(ce.i)]){const a8=P();a8[b8(ce.b)]>-0x1359+0xae9+-0xc*-0xb4&&(Y=Y[b7(ce.j)](a9=>!a8['includes'](String(a9['id']))));}return Y[b8(ce.k)]((a9,aa)=>{const b9=b8,ba=b8,ab=a9[b9(cd.a)]?new Date(a9[ba(cd.a)])['getTime']():a9['id']||-0x1*0x254d+-0x1854+0x3da1,ac=aa[ba(0x195)]?new Date(aa[ba(cd.a)])['getTime']():aa['id']||0x731+0x8f7+-0x1028;return ac-ab;}),Y;},async 'getPrescriptionById'(X){const bb=ar;try{const Z=await B(t,bb(0x1aa)),a0=await C(Z['get'](X));if(a0)return a0;}catch(a1){}const Y=N();return Y['find'](a2=>String(a2['id'])===String(X))||null;},async 'deletePrescription'(X,Y){const bc=aq,bd=aq;Y=Y||{};if(Y[bc(cg.a)]===undefined)Y[bc(0x1d9)]=q();const Z=String(X);if(Y['cloud']){const a2=Y['permanent']?'&permanent=true':'',a3=await V(bd(cg.b)+Z+a2,{'method':'DELETE'});if(a3&&a3[bc(0x1e9)]){try{await F(X);}catch(a4){}return{'success':!![],'softDeleted':!Y[bd(0x1a9)]};}console['warn']('[DbAdapter]\x20云端删除失败，降级到本地:',a3&&a3[bd(cg.d)]);}try{await F(X);}catch(a5){}const a0=N(),a1=a0['filter'](a6=>String(a6['id'])!==Z);return O(a1),!Y['permanent']&&Q(X),{'success':!![],'offline':!![]};},async 'saveAllPrescriptions'(X,Y){const be=aq,bf=aq;Y=Y||{};if(Y['cloud']===undefined)Y['cloud']=q();if(!Array['isArray'](X))X=[X];if(Y[be(0x1d9)]){const Z=await V(be(0x1a6),{'method':bf(ch.a),'body':JSON['stringify']({'prescription':X})});if(Z&&Z['success'])return{'success':!![],'data':Z['data']};}try{await E(X);}catch(a0){}return O(X),{'success':!![],'offline':!Y['cloud']};},async 'clearAllPrescriptions'(){try{await H();}catch(X){}return M(v),{'success':!![]};},async 'getSetting'(X){let Y=await I(X);if(Y!==null&&Y!==undefined)return Y;return K(X);},async 'setSetting'(X,Y){const bg=aq;try{await J(X,Y);}catch(a0){}const Z=typeof Y===bg(0x1ec)?Y:JSON['stringify'](Y);L(X,Z);if(R())await T(X,Z);},'getDeletedIds'(){return P();},'addDeletedId'(X){Q(X);},'clearDeletedIds'(){M(w);},async 'migrateFromLegacyStorage'(){const bh=ar,bi=ar,X=await G();if(X[bh(0x1e6)]>0x1c1*0xd+-0x5e6+-0x10e7)return 0xdf*0x2b+0x2705*0x1+-0x4c7a;let Y=N();if(Y[bi(0x1e6)]===-0x2350+0x5*0x6cd+-0x43*-0x5){const Z=await I(v);if(Z){const a0=typeof Z==='string'?JSON['parse'](Z):Z;if(Array[bh(co.a)](a0))Y=a0;}}if(Y[bi(co.b)]===0x3cf+0x22d5+-0x26a4&&R()){const a1=await S(v);if(a1)try{const a2=typeof a1==='string'?JSON['parse'](a1):a1;if(Array[bi(0x1e7)](a2))Y=a2;}catch(a3){}}if(Y['length']>-0x1bf6+-0x1ae6+0x36dc){try{await E(Y);}catch(a4){}return O(Y),Y['length'];}return-0xc22*-0x1+-0x4*-0x559+-0x2186;},async 'diagnose'(){const bj=ar,bk=ar,X={'appMode':p(),'indexedDB':![],'localStorage':![],'electron':![],'cloud':![],'cloudModule':typeof i['cloudFetch']==='function','prescriptionCount':0x0};try{await A(),X[bj(0x1d0)]=!![];}catch(Y){}return X['localStorage']=!!i['localStorage'],X['electron']=R(),X['prescriptionCount']=(await this[bj(0x1c1)]())['length'],X;}};i['DbAdapter']=W,i[ar(cq.b)][aq(0x18d)]=p,i['DbAdapter'][ar(cq.d)]=q,typeof window!=='undefined'&&W['init']()[aq(0x1d3)](X=>console['warn'](aq(0x1b1),X));}(typeof window!==bl(0x19c)?window:typeof globalThis!=='undefined'?globalThis:this));function h(a,b){a=a-(0xb*-0x245+-0x11f8+0x1b*0x1a5);const c=g();let d=c[a];if(h['ypFSiz']===undefined){var e=function(l){const m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let n='',o='',p=n+e,q=(''+function(){return 0x38*0x5+-0xbdf*0x2+0x16a6;})['indexOf']('\x0a')!==-(-0xc1*0x33+0x22c5+0x3af);for(let r=-0x14b5+-0x1b*0x12f+0x118e*0x3,s,t,u=0x11e7+0x1*0x59b+-0x1782;t=l['charAt'](u++);~t&&(s=r%(0x457+-0xe5*0x9+0x3ba)?s*(0x257+-0x1d06+0x3d9*0x7)+t:t,r++%(0x82a+0x163+-0x989))?n+=q||p['charCodeAt'](u+(0xd*0xbb+0x480+-0x3*0x4a7))-(-0x788+0xc1*0xa+0x8)!==-0x1c63+-0x1d2a+0x1*0x398d?String['fromCharCode'](0x11*0x24+-0x130b+-0x1*-0x11a6&s>>(-(-0x1359+0xae9+-0x2*-0x439)*r&-0x1*0x254d+-0x1854+0x3da7)):r:0x731+0x8f7+-0x1028){t=m['indexOf'](t);}for(let v=0x1c1*0xd+-0x5e6+-0x10e7,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](0xdf*0x2b+0x2705*0x1+-0x4c6a))['slice'](-(-0x2350+0x5*0x6cd+-0x151*-0x1));}return decodeURIComponent(o);};h['hcVcRe']=e,h['SXNMzl']={},h['ypFSiz']=!![];}const f=c[0x3cf+0x22d5+-0x26a4],i=a+f,j=h['SXNMzl'][i];if(!j){const k=function(l){this['oidxPt']=l,this['zZyItw']=[-0x1bf6+-0x1ae6+0x36dd,-0xc22*-0x1+-0x4*-0x559+-0x2186,0xba*-0xb+-0x745*0x1+0xf43],this['CHyGne']=function(){return'newState';},this['iAqwah']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['qmYSMY']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['zetPLk']=function(){const l=new RegExp(this['iAqwah']+this['qmYSMY']),m=l['test'](this['CHyGne']['toString']())?--this['zZyItw'][-0x174a+0x8d*0x27+0x1d0]:--this['zZyItw'][0x2*-0xd4+-0xf7b+0x1*0x1123];return this['hZVxzZ'](m);},k['prototype']['hZVxzZ']=function(l){if(!Boolean(~l))return l;return this['NbwexX'](this['oidxPt']);},k['prototype']['NbwexX']=function(l){for(let m=-0x15*0x43+-0x3*0x80b+0x1da0,n=this['zZyItw']['length'];m<n;m++){this['zZyItw']['push'](Math['round'](Math['random']())),n=this['zZyItw']['length'];}return l(this['zZyItw'][-0x2695+0x9da+-0x1cbb*-0x1]);},(''+function(){return 0x3a*-0x8d+-0x2b1*-0xd+0x30b*-0x1;})['indexOf']('\x0a')===-(0x25a5*-0x1+0x4b5+-0xafb*-0x3)&&new k(h)['zetPLk'](),d=h['hcVcRe'](d),h['SXNMzl'][i]=d;}else d=j;return d;}function c(a){const cu={a:0x1ec,b:0x1bd,d:0x1e2,e:0x19e,f:0x17c};function b(d){const bm=h,bn=h;if(typeof d===bm(cu.a))return function(e){}[bn(0x1e2)]('while\x20(true)\x20{}')['apply']('counter');else(''+d/d)['length']!==0xba*-0xb+-0x745*0x1+0xf44||d%(-0x174a+0x8d*0x27+0x1e3)===0x2*-0xd4+-0xf7b+0x1*0x1123?function(){return!![];}[bm(0x1e2)]('debu'+'gger')[bm(0x1c7)](bm(cu.b)):function(){return![];}[bm(cu.d)](bm(cu.e)+'gger')['apply'](bm(cu.f));b(++d);}try{if(a)return b;else b(-0x15*0x43+-0x3*0x80b+0x1da0);}catch(d){}}function g(){const cw=['ndK2mJbcyMnZu1m','CgvYBwfUzw50','CMvHzg9UBhK','zxjYB3i','w0rIqwrHChrLCL0Gsw5KzxHLzercioAjK+w8GowKSEI0PtO','Aw5JBhvKzxm','BM93','Axnbzg1PBG','CMvZDwX0','w0rIqwrHChrLCL0G6iEQ5yQO5yID5AEl5yYw5AsX6lsLoG','Bg9JywXtDg9YywDL','y2XVDwrgzxrJAa','zNvUy3rPB24GkLWOicPCkq','mtu1mZC4n0vxvvbzEq','nZm3nZa2Eg90vejR','sw5KzxHLzercig5VDcbHDMfPBgfIBgu','z2v0','r0vu','Dg9tDhjPBMC','zNvUy3rPB24','Aw5JBhvKzurLBgv0zwq','ywn0Aw9U','DgfIBgu','CgfYC2u','mtbvDhnTv3C','z2v0qwXSuhjLC2nYAxb0Aw9UCW','zwXLy3rYB25bueK','mJDYvhPwCgm','zgf0yq','AxndBg91ze1Vzgu','Aw5WDxq','y2fSBa','l3bYzxnJCMLWDgLVBNm/Awq9','B2zMBgLUzq','C2f2zwrqCMvZy3jPChrPB24','AxnfBgvJDhjVBG','Ahr0Ca','CMv0DxjUicHMDw5JDgLVBIGPia','zMLUzeLUzgv4','DMfSDwu','Aw5KzxHLzerc','zMLSDgvY','w0rIqwrHChrLCL0G5lQr56UViefqssbivfrqia','y2f0y2G','ChjLC2nYAxb0Aw9UCW','DgHLBG','x19WCM90B19F','B25ZDwnJzxnZ','w0rIqwrHChrLCL0GBg9JywXtDg9YywDLiowgMEwfPEwKSEI0PtO','y2XVDwq','B2jQzwn0u3rVCMvoyw1LCW','y29UDgfPBNm','B251CgDYywrLBMvLzgvK','C2f2zvvZzxjeyxrH','C3rYAw5NAwz5','Dg9ju09tDhjPBMC','mtq1nJa1nNf0tLrsDa','yxbWBgLJyxrPB24VANnVBG','y29UC3rYDwn0B3i','B25JB21WBgv0zq','ue9tva','D2fYBG','BgvUz3rO','AxnbCNjHEq','DhjHBNnHy3rPB24','C3vJy2vZCW','q0XpvurFqvbjx0jbu0u','ywXSx3bYzxnJCMLWDgLVBL9SAxn0','C3rYAw5N','mZa3mZryqxPfvuS','A2v5','Bg9JyxrPB24','C29YDa','DgfYz2v0','Dw5RBM93BG','CgfNzxmUzgv2','C3rHDgvpyMPLy3q','uhjLC2nYAxb0Aw9Urei','CMvHzhDYAxrL','zxHJzxb0Aw9U','BwvZC2fNzq','kcGOlISPkYKRksSK','Chv0','E30Uy29UC3rYDwn0B3iOiNjLDhvYBIb0AgLZiIKOicK','B2jQzwn0u3rVCMu','AgvHzgvYCW','qvbqx01preu','y2HHAw4','n0HqCgv3rq','yMLUza','C2vHCMnO','xcTCkYaQkd86w2eTEKeTwL8KxvSWltLHlxPblvPFjf0Qkq','y3jLyxrLt2jQzwn0u3rVCMu','z2v0qxbWtw9Kzq','rgjbzgfWDgvY','mtreyNbKue4','y2XLyxi','Aw5KzxHpzG','Aw5PDa','w0rIqwrHChrLCL0G5lQr56UViefqssdOR7FMSylLPlhOTku6','qxv0Ag9YAxPHDgLVBG','y3jLyxrLzef0','C2v0sxrLBq','CMvTB3zLsxrLBq','z2v0qwXS','z2v0vxnLCKrHDge','Ag9ZDg5HBwu','yxv0AdPJDxjYzw50vxnLCG','Dw5KzwzPBMvK','mJqYnfLIBNPOsa','zgvIDq','odqZnJGWvMLtvxPX','DxnLCM5HBwu','nZyWn0fNEw11yW','zgvSzxrLzf9WCMvZy3jPChrPB25FAwrZ','y3jLyxrLzej5','B25LCNjVCG','C3rHCNrZv2L0Aa','l3bYzxnJCMLWDgLVBNm','Bg9N'];g=function(){return cw;};return g();}
+// ============================================================================
+// db-adapter.js — 数据库统一适配器模块（v2.0 增强版）
+// 统一封装 IndexedDB / localStorage / Electron文件系统 / 云端API 的 CRUD 操作
+// 消除 8 个 index.html 中的数据库访问重复代码
+// ============================================================================
+// 设计原则：
+//   1. 渐进增强：按优先级尝试 IndexedDB → localStorage → Electron → Cloud API
+//   2. 向后兼容：保留原有函数签名，旧代码可继续工作
+//   3. 数据结构统一：处方对象字段标准化（id/prescriptionNo/outpatientNo/createdAt/...）
+//   4. 错误降级：任一存储层失败自动降级到下一层，不抛出致命错误
+//   5. ★v2.0 模式感知：自动检测 appMode（offline/cloud），无需手动传 options.cloud
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    // ==================== 模式检测（v2.0 新增） ====================
+    // 优先级：window.APP_MODE > config.json > URL 检测 > 默认 offline
+    let _appMode = null;
+    function detectAppMode() {
+        if (_appMode) return _appMode;
+        // 1. 直接设置的 window.APP_MODE
+        if (typeof global.APP_MODE === 'string' && global.APP_MODE) {
+            _appMode = global.APP_MODE;
+            return _appMode;
+        }
+        // 2. 检测云端模块是否已加载（cloud-api.js 定义了 window.CLOUD_API_BASE）
+        if (typeof global.CLOUD_API_BASE !== 'undefined' && global.CLOUD_API_BASE) {
+            _appMode = 'cloud';
+            return _appMode;
+        }
+        // 3. URL 检测（云端域名）
+        if (typeof global.location !== 'undefined' && global.location.hostname) {
+            if (global.location.hostname.includes('pages.dev') ||
+                global.location.hostname.includes('cloud')) {
+                _appMode = 'cloud';
+                return _appMode;
+            }
+        }
+        // 4. 默认离线模式
+        _appMode = 'offline';
+        return _appMode;
+    }
+
+    function isCloudMode() {
+        return detectAppMode() === 'cloud';
+    }
+
+    // ==================== 常量 ====================
+    const DB_NAME = 'PrescriptionDB';
+    const DB_VERSION = 2;
+    const STORE_PRESCRIPTIONS = 'prescriptions';
+    const STORE_SETTINGS = 'settings';
+    const LS_KEY_PRESCRIPTIONS = 'all_prescription_list';
+    const LS_KEY_DELETED_IDS = 'deleted_prescription_ids';
+    const CLOUD_API_BASE = (typeof global.CLOUD_API_BASE !== 'undefined' && global.CLOUD_API_BASE)
+        || (typeof CLOUD_API_BASE_OVERRIDE !== 'undefined' && CLOUD_API_BASE_OVERRIDE)
+        || 'https://tcm-prescription-system.pages.dev/api';
+
+    let _db = null;
+    let _initPromise = null;
+
+    // ==================== IndexedDB 层 ====================
+
+    function _openDB() {
+        if (_db) return Promise.resolve(_db);
+        if (_initPromise) return _initPromise;
+        _initPromise = new Promise((resolve, reject) => {
+            try {
+                if (typeof indexedDB === 'undefined') {
+                    reject(new Error('IndexedDB not available'));
+                    return;
+                }
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onupgradeneeded = function (event) {
+                    const database = event.target.result;
+                    if (!database.objectStoreNames.contains(STORE_PRESCRIPTIONS)) {
+                        database.createObjectStore(STORE_PRESCRIPTIONS, { keyPath: 'id' });
+                    }
+                    if (!database.objectStoreNames.contains(STORE_SETTINGS)) {
+                        database.createObjectStore(STORE_SETTINGS, { keyPath: 'key' });
+                    }
+                };
+                request.onsuccess = function (event) {
+                    _db = event.target.result;
+                    resolve(_db);
+                };
+                request.onerror = function (event) {
+                    console.error('[DbAdapter] IndexedDB 打开失败:', event.target.error);
+                    reject(event.target.error);
+                };
+            } catch (e) {
+                reject(e);
+            }
+        });
+        return _initPromise;
+    }
+
+    function _tx(storeName, mode) {
+        return _openDB().then(db => {
+            const transaction = db.transaction([storeName], mode);
+            return transaction.objectStore(storeName);
+        });
+    }
+
+    function _wrapRequest(request) {
+        return new Promise((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    // IndexedDB: 处方单条保存
+    async function _idbPutPrescription(record) {
+        const store = await _tx(STORE_PRESCRIPTIONS, 'readwrite');
+        await _wrapRequest(store.put(record));
+    }
+
+    // IndexedDB: 批量保存
+    async function _idbPutAllPrescriptions(records) {
+        const db = await _openDB();
+        return new Promise((resolve, reject) => {
+            const transaction = db.transaction([STORE_PRESCRIPTIONS], 'readwrite');
+            const store = transaction.objectStore(STORE_PRESCRIPTIONS);
+            for (const r of records) store.put(r);
+            transaction.oncomplete = () => resolve();
+            transaction.onerror = () => reject(transaction.error);
+        });
+    }
+
+    // IndexedDB: 单条删除
+    async function _idbDeletePrescription(id) {
+        const store = await _tx(STORE_PRESCRIPTIONS, 'readwrite');
+        await _wrapRequest(store.delete(id));
+    }
+
+    // IndexedDB: 获取全部处方
+    async function _idbGetAllPrescriptions() {
+        try {
+            const store = await _tx(STORE_PRESCRIPTIONS, 'readonly');
+            const result = await _wrapRequest(store.getAll());
+            return result || [];
+        } catch (e) {
+            console.warn('[DbAdapter] IndexedDB 读取失败:', e);
+            return [];
+        }
+    }
+
+    // IndexedDB: 清空处方
+    async function _idbClearPrescriptions() {
+        const store = await _tx(STORE_PRESCRIPTIONS, 'readwrite');
+        await _wrapRequest(store.clear());
+    }
+
+    // IndexedDB: settings 读写
+    async function _idbGetSetting(key) {
+        try {
+            const store = await _tx(STORE_SETTINGS, 'readonly');
+            const result = await _wrapRequest(store.get(key));
+            return result ? result.value : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function _idbPutSetting(key, value) {
+        const store = await _tx(STORE_SETTINGS, 'readwrite');
+        await _wrapRequest(store.put({ key, value }));
+    }
+
+    // ==================== localStorage 层 ====================
+
+    function _lsGet(key) {
+        try { return global.localStorage ? global.localStorage.getItem(key) : null; }
+        catch (e) { return null; }
+    }
+
+    function _lsSet(key, value) {
+        try { if (global.localStorage) global.localStorage.setItem(key, value); }
+        catch (e) { console.warn('[DbAdapter] localStorage 写入失败:', e); }
+    }
+
+    function _lsRemove(key) {
+        try { if (global.localStorage) global.localStorage.removeItem(key); }
+        catch (e) { /* 忽略 */ }
+    }
+
+    function _lsGetPrescriptions() {
+        const raw = _lsGet(LS_KEY_PRESCRIPTIONS);
+        if (!raw) return [];
+        try {
+            const data = JSON.parse(raw);
+            return Array.isArray(data) ? data : [];
+        } catch (e) { return []; }
+    }
+
+    function _lsSetPrescriptions(arr) {
+        _lsSet(LS_KEY_PRESCRIPTIONS, JSON.stringify(arr));
+    }
+
+    function _lsGetDeletedIds() {
+        const raw = _lsGet(LS_KEY_DELETED_IDS);
+        if (!raw) return [];
+        try {
+            const data = JSON.parse(raw);
+            return Array.isArray(data) ? data : [];
+        } catch (e) { return []; }
+    }
+
+    function _lsAddDeletedId(id) {
+        const ids = _lsGetDeletedIds();
+        const idStr = String(id);
+        if (!ids.includes(idStr)) {
+            ids.push(idStr);
+            if (ids.length > 500) ids.shift();
+            _lsSet(LS_KEY_DELETED_IDS, JSON.stringify(ids));
+        }
+    }
+
+    // ==================== Electron 文件系统层 ====================
+
+    function _hasElectron() {
+        return !!(global.electronAPI && global.electronAPI.isElectron && global.electronAPI.getUserData);
+    }
+
+    async function _electronGet(key) {
+        if (!_hasElectron()) return null;
+        try {
+            const result = await global.electronAPI.getUserData(key);
+            if (result && result.success && result.data !== null) {
+                return typeof result.data === 'string' ? result.data : JSON.stringify(result.data);
+            }
+        } catch (e) { /* 忽略 */ }
+        return null;
+    }
+
+    async function _electronSet(key, value) {
+        if (!_hasElectron()) return false;
+        try {
+            if (global.electronAPI.saveUserData) {
+                await global.electronAPI.saveUserData(key, value);
+                return true;
+            }
+        } catch (e) { /* 忽略 */ }
+        return false;
+    }
+
+    // ==================== 云端 API 层 ====================
+
+    function _getAuthToken() {
+        // 从 sessionStorage/localStorage 读取登录 token
+        try {
+            const session = global.sessionStorage && global.sessionStorage.getItem('auth:currentUser');
+            if (session) {
+                const user = JSON.parse(session);
+                return user && user.token ? user.token : null;
+            }
+            const local = global.localStorage && global.localStorage.getItem('auth:currentUser');
+            if (local) {
+                const user = JSON.parse(local);
+                return user && user.token ? user.token : null;
+            }
+        } catch (e) { /* 忽略 */ }
+        return null;
+    }
+
+    // ★v2.0 优先使用已加载的 window.cloudFetch（带认证、超时、401处理）
+    async function _cloudFetch(path, options) {
+        // 优先使用 cloud-api.js 的 cloudFetch（功能更完整）
+        if (typeof global.cloudFetch === 'function') {
+            const url = path.startsWith('http') ? path : CLOUD_API_BASE + path;
+            return await global.cloudFetch(url, options);
+        }
+        // 降级：自行实现简单版本
+        options = options || {};
+        options.headers = options.headers || {};
+        options.headers['Content-Type'] = 'application/json';
+        const token = _getAuthToken();
+        if (token) options.headers['Authorization'] = 'Bearer ' + token;
+        try {
+            const response = await fetch(CLOUD_API_BASE + path, options);
+            if (!response.ok) {
+                console.warn('[DbAdapter] 云端 API HTTP ' + response.status);
+            }
+            return await response.json();
+        } catch (e) {
+            console.warn('[DbAdapter] 云端 API 请求失败:', e);
+            return { success: false, error: e.message, offline: true };
+        }
+    }
+
+    // ==================== 统一 CRUD 接口 ====================
+
+    const DbAdapter = {
+        // 初始化（幂等，可重复调用）
+        async init() {
+            try { await _openDB(); } catch (e) { /* IndexedDB 不可用时降级 */ }
+            return this;
+        },
+
+        // === 处方 CRUD ===
+
+        // 保存单条处方（自动判断云端/离线）
+        // options: { cloud: true/false, username, userRole, isAdmin }
+        // ★v2.0: 若未指定 cloud，自动检测 appMode
+        async savePrescription(record, options) {
+            options = options || {};
+            if (options.cloud === undefined) options.cloud = isCloudMode();
+            const now = new Date().toISOString();
+            const normalized = {
+                ...record,
+                id: record.id || Date.now(),
+                createdAt: record.createdAt || now,
+                updatedAt: now,
+                createdBy: record.createdBy || options.username || 'unknown',
+                userRole: record.userRole || options.userRole,
+                isAdmin: record.isAdmin !== undefined ? record.isAdmin : options.isAdmin
+            };
+
+            // 云端模式：优先提交到云端 API
+            if (options.cloud) {
+                const result = await _cloudFetch('/prescriptions', {
+                    method: 'POST',
+                    body: JSON.stringify({ prescription: normalized })
+                });
+                if (result && result.success) {
+                    // 同步到本地 IndexedDB 缓存
+                    if (result.savedPrescription) {
+                        try { await _idbPutPrescription(result.savedPrescription); } catch (e) { /* 忽略 */ }
+                    }
+                    return { success: true, savedPrescription: result.savedPrescription, data: result.data };
+                }
+                // 云端失败：降级到本地（离线保存）
+                console.warn('[DbAdapter] 云端保存失败，降级到本地:', result && result.error);
+            }
+
+            // 离线模式或云端降级：写入 IndexedDB
+            try {
+                await _idbPutPrescription(normalized);
+            } catch (e) {
+                // IndexedDB 失败：降级到 localStorage
+                console.warn('[DbAdapter] IndexedDB 保存失败，降级到 localStorage:', e);
+                const all = _lsGetPrescriptions();
+                const idx = all.findIndex(p => String(p.id) === String(normalized.id));
+                if (idx >= 0) all[idx] = normalized;
+                else all.unshift(normalized);
+                _lsSetPrescriptions(all);
+            }
+
+            // Electron 文件系统备份
+            if (_hasElectron()) {
+                try {
+                    const all = await this.getAllPrescriptions();
+                    await _electronSet(LS_KEY_PRESCRIPTIONS, JSON.stringify(all));
+                } catch (e) { /* 忽略 */ }
+            }
+
+            return { success: true, savedPrescription: normalized, offline: !options.cloud };
+        },
+
+        // 获取全部处方（按时间倒序）
+        // options: { filterUsername, cloud, includeDeleted }
+        // ★v2.0: 若未指定 cloud，自动检测 appMode
+        async getAllPrescriptions(options) {
+            options = options || {};
+            if (options.cloud === undefined) options.cloud = isCloudMode();
+            let result = [];
+
+            // 云端模式
+            if (options.cloud) {
+                const resp = await _cloudFetch('/prescriptions', { method: 'GET' });
+                if (resp && resp.success && Array.isArray(resp.data)) {
+                    result = resp.data;
+                }
+            }
+
+            // 离线模式或云端失败：从 IndexedDB 读取
+            if (result.length === 0) {
+                result = await _idbGetAllPrescriptions();
+            }
+
+            // 数据迁移：IndexedDB 空时从 localStorage 迁移
+            if (result.length === 0) {
+                result = _lsGetPrescriptions();
+                if (result.length > 0) {
+                    try { await _idbPutAllPrescriptions(result); } catch (e) { /* 忽略 */ }
+                }
+            }
+
+            // 降级：IndexedDB settings store
+            if (result.length === 0) {
+                const dbData = await _idbGetSetting(LS_KEY_PRESCRIPTIONS);
+                if (dbData) {
+                    const data = typeof dbData === 'string' ? JSON.parse(dbData) : dbData;
+                    if (Array.isArray(data)) {
+                        result = data;
+                        _lsSetPrescriptions(result);
+                        try { await _idbPutAllPrescriptions(result); } catch (e) { /* 忽略 */ }
+                    }
+                }
+            }
+
+            // 降级：Electron 文件系统
+            if (result.length === 0 && _hasElectron()) {
+                const rawData = await _electronGet(LS_KEY_PRESCRIPTIONS);
+                if (rawData) {
+                    try {
+                        const data = typeof rawData === 'string' ? JSON.parse(rawData) : rawData;
+                        if (Array.isArray(data)) {
+                            result = data;
+                            _lsSetPrescriptions(result);
+                            try { await _idbPutAllPrescriptions(result); } catch (e) { /* 忽略 */ }
+                        }
+                    } catch (e) { /* 忽略 */ }
+                }
+            }
+
+            // 按用户名过滤
+            if (options.filterUsername) {
+                result = result.filter(p => p.createdBy === options.filterUsername);
+            }
+
+            // 过滤已删除的处方 ID
+            if (!options.includeDeleted) {
+                const deletedIds = _lsGetDeletedIds();
+                if (deletedIds.length > 0) {
+                    result = result.filter(p => !deletedIds.includes(String(p.id)));
+                }
+            }
+
+            // 按时间倒序排序（最新在上）
+            result.sort((a, b) => {
+                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : (a.id || 0);
+                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : (b.id || 0);
+                return timeB - timeA;
+            });
+
+            return result;
+        },
+
+        // 按 ID 获取单条处方
+        async getPrescriptionById(id) {
+            try {
+                const store = await _tx(STORE_PRESCRIPTIONS, 'readonly');
+                const result = await _wrapRequest(store.get(id));
+                if (result) return result;
+            } catch (e) { /* 降级 */ }
+            // 降级到 localStorage
+            const all = _lsGetPrescriptions();
+            return all.find(p => String(p.id) === String(id)) || null;
+        },
+
+        // 删除处方
+        // options: { cloud, permanent, username, isAdmin }
+        // ★v2.0: 若未指定 cloud，自动检测 appMode
+        async deletePrescription(id, options) {
+            options = options || {};
+            if (options.cloud === undefined) options.cloud = isCloudMode();
+            const idStr = String(id);
+
+            // 云端模式
+            if (options.cloud) {
+                const permanentParam = options.permanent ? '&permanent=true' : '';
+                const result = await _cloudFetch('/prescriptions?id=' + idStr + permanentParam, {
+                    method: 'DELETE'
+                });
+                if (result && result.success) {
+                    // 云端删除成功，同步删除本地缓存
+                    try { await _idbDeletePrescription(id); } catch (e) { /* 忽略 */ }
+                    return { success: true, softDeleted: !options.permanent };
+                }
+                console.warn('[DbAdapter] 云端删除失败，降级到本地:', result && result.error);
+            }
+
+            // 本地删除
+            try { await _idbDeletePrescription(id); } catch (e) { /* 忽略 */ }
+
+            // 同步 localStorage
+            const all = _lsGetPrescriptions();
+            const filtered = all.filter(p => String(p.id) !== idStr);
+            _lsSetPrescriptions(filtered);
+
+            // 记录已删除 ID（防止云端重载时复活）
+            if (!options.permanent) {
+                _lsAddDeletedId(id);
+            }
+
+            return { success: true, offline: true };
+        },
+
+        // 批量保存处方
+        // ★v2.0: 若未指定 cloud，自动检测 appMode
+        async saveAllPrescriptions(records, options) {
+            options = options || {};
+            if (options.cloud === undefined) options.cloud = isCloudMode();
+            if (!Array.isArray(records)) records = [records];
+
+            // 云端模式
+            if (options.cloud) {
+                const result = await _cloudFetch('/prescriptions', {
+                    method: 'POST',
+                    body: JSON.stringify({ prescription: records })
+                });
+                if (result && result.success) {
+                    return { success: true, data: result.data };
+                }
+            }
+
+            // 本地批量保存
+            try { await _idbPutAllPrescriptions(records); } catch (e) { /* 忽略 */ }
+            _lsSetPrescriptions(records);
+
+            return { success: true, offline: !options.cloud };
+        },
+
+        // 清空所有处方（危险操作）
+        async clearAllPrescriptions() {
+            try { await _idbClearPrescriptions(); } catch (e) { /* 忽略 */ }
+            _lsRemove(LS_KEY_PRESCRIPTIONS);
+            return { success: true };
+        },
+
+        // === Settings CRUD ===
+
+        async getSetting(key) {
+            // 优先 IndexedDB settings store
+            let value = await _idbGetSetting(key);
+            if (value !== null && value !== undefined) return value;
+            // 降级 localStorage
+            return _lsGet(key);
+        },
+
+        async setSetting(key, value) {
+            // 同时写入 IndexedDB + localStorage + Electron
+            try { await _idbPutSetting(key, value); } catch (e) { /* 忽略 */ }
+            const strValue = typeof value === 'string' ? value : JSON.stringify(value);
+            _lsSet(key, strValue);
+            if (_hasElectron()) await _electronSet(key, strValue);
+        },
+
+        // === 已删除 ID 管理 ===
+
+        getDeletedIds() { return _lsGetDeletedIds(); },
+        addDeletedId(id) { _lsAddDeletedId(id); },
+        clearDeletedIds() { _lsRemove(LS_KEY_DELETED_IDS); },
+
+        // === 数据迁移辅助 ===
+
+        // 从旧 localStorage 键迁移到处方 store
+        async migrateFromLegacyStorage() {
+            const existing = await _idbGetAllPrescriptions();
+            if (existing.length > 0) return 0;
+
+            let migrated = _lsGetPrescriptions();
+            if (migrated.length === 0) {
+                const dbData = await _idbGetSetting(LS_KEY_PRESCRIPTIONS);
+                if (dbData) {
+                    const data = typeof dbData === 'string' ? JSON.parse(dbData) : dbData;
+                    if (Array.isArray(data)) migrated = data;
+                }
+            }
+            if (migrated.length === 0 && _hasElectron()) {
+                const raw = await _electronGet(LS_KEY_PRESCRIPTIONS);
+                if (raw) {
+                    try {
+                        const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+                        if (Array.isArray(data)) migrated = data;
+                    } catch (e) { /* 忽略 */ }
+                }
+            }
+
+            if (migrated.length > 0) {
+                try { await _idbPutAllPrescriptions(migrated); } catch (e) { /* 忽略 */ }
+                _lsSetPrescriptions(migrated);
+                return migrated.length;
+            }
+            return 0;
+        },
+
+        // === 存储状态诊断 ===
+
+        async diagnose() {
+            const status = {
+                appMode: detectAppMode(),  // ★v2.0 新增
+                indexedDB: false,
+                localStorage: false,
+                electron: false,
+                cloud: false,
+                cloudModule: typeof global.cloudFetch === 'function',  // ★v2.0 新增
+                prescriptionCount: 0
+            };
+            try {
+                await _openDB();
+                status.indexedDB = true;
+            } catch (e) { /* IndexedDB 不可用 */ }
+            status.localStorage = !!global.localStorage;
+            status.electron = _hasElectron();
+            status.prescriptionCount = (await this.getAllPrescriptions()).length;
+            return status;
+        }
+    };
+
+    // ==================== 导出 ====================
+    global.DbAdapter = DbAdapter;
+    // ★v2.0 暴露模式检测函数
+    global.DbAdapter.getAppMode = detectAppMode;
+    global.DbAdapter.isCloudMode = isCloudMode;
+
+    // 自动初始化（异步，不阻塞）
+    if (typeof window !== 'undefined') {
+        DbAdapter.init().catch(e => console.warn('[DbAdapter] 自动初始化失败:', e));
+    }
+
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

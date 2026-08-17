@@ -146,7 +146,7 @@
 
     function loadClinicName(config) {
         const name = localStorage.getItem(KEY_CLINIC_NAME) || config.clinicName;
-        $('clinicName').textContent = name || '本能堂中医诊所';
+        $('clinicName').textContent = name;
     }
 
     // ★ 统一安装包：登录窗口版本标签按 config.edition 动态显示（离线标准版/离线机构版）

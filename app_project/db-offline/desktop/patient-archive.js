@@ -1,1 +1,321 @@
-const aH=h;function g(){const bC=['nJqWndy3DNrUzwDU','mty5mJq4mwrcs1D2wq','z2v0tw9UDgG','zg9ZywDL','zgLZzwfZzxm','Dg90ywXjBMnVBwu','nevlDg1gyq','mtKZnJC1ofbUwgH1yG','kcGOlISPkYKRksSK','BgvUz3rO','zMLYC3rwAxnPDa','Dg90ywXszwDgzwu','z2v0rNvSBfLLyxi','5Asn6k+k546hla','yMLUza','Dg9tDhjPBMC','mtaYmZCXzfjqy3ri','C2vHCMnO','ChvZAa','BwvKAwnPBMvZ','zw50CMLLCW','5yID6k+k5lQ65PwWla','y29UC3rYDwn0B3i','mtbttwLyvLK','Dg90ywXdB3n0','zNjVBq','D2fYBG','yxbWBhK','Bw9UDgG','CMvNAxn0CMf0Aw9UrMvL','y3jLyxrLzef0','EMGTq04','C3rHDgvpyMPLy3q','zgvIDq','DMfSDwvZ','DMLZAxrZ','C2v0','C29YDa','57UF6k6H5PE26zE0la','otiWA3n3B3fh','AxrLBxm','5BcX6k+k5Oc76yEpla','BMfTzq','x19WCM90B19F','C2XPy2u','Dg9KyxK','55Ef56EnloASOEAvSaO','A2v5CW','Dw5KzwzPBMvK','zMLSDgvY','C3rYAw5N','y291BNq','BNvTyMvY','Cgf0AwvUDe5HBwu','Aw5PDa','z2DLCG','y29ZDfbYAwnL','zNvUy3rPB24GkLWOicPCkq','y2fSBa','zM9YrwfJAa','BgfZDfzPC2L0','DMLZAxrdB3vUDa','55Ef56En5yIg5BIdcG','AxnbCNjHEq','zg9ZzunVDw50','z2v0','Dg90ywXbBw91BNq','DgvZDa','zgf0zq','jqOk','CxvHCNrLCG','mJC4mtLpvNHouvO','BwvKAwnPBMvoyw1L','Dg90ywXqCM9MAxq','mta2mda3me5Srgj5Ca','mLrLDM5mwG','ChjPy2u','zgLHz25VC2LZ','BwfW','odiWnJy5m0PRufv1wa'];g=function(){return bC;};return g();}function h(a,b){a=a-(-0x2620+-0x1bec+0x2192*0x2);const c=g();let d=c[a];if(h['ucZOkm']===undefined){var e=function(l){const m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';let n='',o='',p=n+e,q=(''+function(){return-0x6*0x9d+-0xa97+-0xd*-0x119;})['indexOf']('\x0a')!==-(-0x61*-0x15+0x223*-0x11+0x1*0x1c5f);for(let r=0x136a+0x215*-0x12+0x1210,s,t,u=-0x160*0x2+-0x88*-0x1d+-0xca8;t=l['charAt'](u++);~t&&(s=r%(-0x15*-0x1e+0xd69*0x1+-0xfdb)?s*(0x2288+0x142d+-0x3675)+t:t,r++%(0xf*-0x189+-0x1cd3+0x33de))?n+=q||p['charCodeAt'](u+(0xddb+0x1ccd+-0x154f*0x2))-(0x179+0x41*0x85+-0x2334)!==0x136e+0x1cfd+0x14f*-0x25?String['fromCharCode'](0x2319+-0x17cc+-0xa4e&s>>(-(0x18f4+-0x9*-0x430+-0x3ea2)*r&-0x5+0x1*-0xac9+-0xc*-0xe7)):r:-0x2b*0xd1+-0x412+0x272d){t=m['indexOf'](t);}for(let v=0xf7+-0x65f+0x568,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](0x2622+0x2418+0xb*-0x6be))['slice'](-(-0x8*-0x100+-0x71*0x1b+0x1*0x3ed));}return decodeURIComponent(o);};h['dimleu']=e,h['GXIksx']={},h['ucZOkm']=!![];}const f=c[-0x2f3*-0x7+0x2b7+-0x4ac*0x5],i=a+f,j=h['GXIksx'][i];if(!j){const k=function(l){this['OkgTDP']=l,this['hEbrYG']=[0x57c+-0xb55+0x5da,-0x2*-0xf87+0x174d+0x5*-0xadf,-0x1841+0x15de+0x263*0x1],this['SLMeRk']=function(){return'newState';},this['OHEKEe']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['KlFRIa']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['yopKGm']=function(){const l=new RegExp(this['OHEKEe']+this['KlFRIa']),m=l['test'](this['SLMeRk']['toString']())?--this['hEbrYG'][0xe6a+-0x12*-0x1de+-0x3005]:--this['hEbrYG'][0x16*0x122+-0xad*-0x2c+-0x36a8];return this['XPQAfi'](m);},k['prototype']['XPQAfi']=function(l){if(!Boolean(~l))return l;return this['TXzCJg'](this['OkgTDP']);},k['prototype']['TXzCJg']=function(l){for(let m=0x17ab+-0x5*0x199+-0xfae,n=this['hEbrYG']['length'];m<n;m++){this['hEbrYG']['push'](Math['round'](Math['random']())),n=this['hEbrYG']['length'];}return l(this['hEbrYG'][-0x245*-0x4+0x5d*-0x4a+-0x1*-0x11ce]);},(''+function(){return 0x2*0x100a+0x16b0+-0x36c4;})['indexOf']('\x0a')===-(-0xfb*0x11+0x125e+-0x1b2)&&new k(h)['yopKGm'](),d=h['dimleu'](d),h['GXIksx'][i]=d;}else d=j;return d;}(function(a,b){const aK={a:0x122,b:0x143},N=h,O=h,d=a();while(!![]){try{const e=-parseInt(N(0x12c))/(-0x2c3*-0xd+0x146f+-0x3855)+-parseInt(N(0x167))/(-0x1486+-0x1*-0x1f37+-0xaaf)*(-parseInt(N(0x11c))/(0x1*-0xb41+0x1b4b+-0x1007))+-parseInt(O(aK.a))/(0x7fa+0x176b+0x115*-0x1d)*(parseInt(O(0x166))/(0x43c*0x8+-0x3*0x819+-0x990))+-parseInt(N(0x123))/(0x1d5b+-0x1*0x15b5+0x1e8*-0x4)+parseInt(N(0x11d))/(-0x2*0x17c+0x2c*0xa+0x3*0x6d)+parseInt(N(aK.b))/(0x955+-0x1*-0x2489+-0x2dd6)*(-parseInt(O(0x163))/(-0x18ca+0x238c+-0x131*0x9))+-parseInt(N(0x133))/(0xb8a*-0x3+0x1*-0xd42+-0x1*-0x2fea)*(-parseInt(O(0x11b))/(-0x184c+0x1*-0x26db+0x3f32));if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(g,0x3cd*-0x10f+-0xb4a6*-0x2+-0x1*-0x5cbeb),function(i){const bv={a:0x120,b:0x12f,d:0x145,e:0x161,f:0x15a},bq={a:0x150},bn={a:0x157,b:0x13e,d:0x141},bl={a:0x134},bk={a:0x13f,b:0x127,d:0x139,e:0x15c,f:0x15b,i:0x157},bh={a:0x157,b:0x14b,d:0x141},be={a:0x130,b:0x11a},bb={a:0x144,b:0x157},b9={a:0x15b,b:0x130,d:0x11a},b6={a:0x140,b:0x15d},b5={a:0x135,b:0x130},b4={a:0x125,b:0x126,d:0x158},b3={a:0x13a,b:0x13f,d:0x158},b2={a:0x149,b:0x11e,d:0x138,e:0x128,f:0x14d},b1={a:0x160},b0={a:0x136,b:0x147,d:0x12a},aP={a:0x12b,b:0x12d,d:0x12d},j=(function(){let y=!![];return function(z,A){const B=y?function(){if(A){const C=A['apply'](z,arguments);return A=null,C;}}:function(){};return y=![],B;};}()),k=j(this,function(){const P=h,Q=h;if(k[P(0x12a)]()[Q(aP.a)]()['indexOf']('\x0a')!==-(-0xc0b+-0x61*-0x15+0x15d*0x3))return;return k[Q(aP.a)]()[P(aP.b)](P(0x124))[P(0x12b)]()[Q(0x132)](k)[P(aP.d)]('(((.+)+)+)+$');});k();const l=(function(){let y=!![];return function(z,A){const aQ={a:0x137},B=y?function(){const R=h;if(A){const C=A[R(aQ.a)](z,arguments);return A=null,C;}}:function(){};return y=![],B;};}());(function(){const aU={a:0x15f};l(this,function(){const S=h,T=h,y=new RegExp(S(0x155)),z=new RegExp('\x5c+\x5c+\x20*(?:[a-zA-Z_$][0-9a-zA-Z_$]*)','i'),A=c(S(0x152));!y['test'](A+'chain')||!z[T(aU.a)](A+'input')?A('0'):c();})();}());const m=(function(){let y=!![];return function(z,A){const B=y?function(){const U=h;if(A){const C=A[U(0x137)](z,arguments);return A=null,C;}}:function(){};return y=![],B;};}()),n=m(this,function(){const V=h,W=h;let y;try{const B=Function('return\x20(function()\x20'+'{}.constructor(\x22return\x20this\x22)(\x20)'+');');y=B();}catch(C){y=window;}const z=y['console']=y['console']||{},A=['log',V(b0.a),'info','error','exception','table','trace'];for(let D=-0x22f7*-0x1+0xea+0x343*-0xb;D<A[W(0x125)];D++){const E=m['constructor']['prototype'][V(0x12a)](m),F=A[D],G=z[F]||E;E[V(b0.b)]=m['bind'](m),E['toString']=G['toString'][W(b0.d)](G),z[F]=E;}});n();'use strict';function o(y,z){const X=h,Y=h;if(!Array['isArray'](y))return[];const A=new Date();let B=new Date(0x11ff*-0x2+-0x2c0+-0x5ce*-0x8,0x3*-0xc7c+0x276+0xbaa*0x3,-0x56d*0x2+0x2288+-0x17ad);switch(z){case X(b2.a):B=new Date(A['getFullYear'](),A[Y(b2.b)](),A['getDate']());break;case'week':B=new Date(A['getTime']()-(0xf*-0x189+-0x1cd3+0x33e1)*(0xddb+0x1ccd+-0x718*0x6)*(0x179+0x41*0x85+-0x2302)*(0x136e+0x1cfd+0x9a3*-0x5)*(0x2319+-0x17cc+-0x765));break;case Y(b2.d):B=new Date(A[Y(0x128)](),A['getMonth'](),0x18f4+-0x9*-0x430+-0x3ea3);break;case Y(0x162):{const C=Math['floor'](A[X(b2.b)]()/(-0x5+0x1*-0xac9+-0x3*-0x39b));B=new Date(A[X(b2.e)](),C*(-0x2b*0xd1+-0x412+0x2730),0xf7+-0x65f+0x569);break;}case'year':B=new Date(A['getFullYear'](),0x2622+0x2418+0x3*-0x18be,-0x8*-0x100+-0x71*0x1b+0x1*0x3ec);break;case'all':default:break;}return y[Y(b2.f)](function(D){const Z=Y,a0=Y,E=new Date(D[Z(0x13a)]||D[Z(b1.a)]||-0x2f3*-0x7+0x2b7+-0x4ac*0x5);return E>=B;});}function p(y){const a1=h,a4=h,z=Array['isArray'](y)?y:[],A=new Map();return z[a1(0x157)](function(B){const a2=a1,a3=a1,C=B[a2(0x151)]||'未知';!A['has'](C)&&A['set'](C,{'visits':[],'firstVisit':null,'lastVisit':null});const D=A['get'](C),E=new Date(B[a3(b3.a)]||B['date']||0x57c+-0xb55+0x5d9);D[a2(b3.b)][a3(0x12e)](E),(!D[a3(0x126)]||E<D['firstVisit'])&&(D[a3(0x126)]=E),(!D['lastVisit']||E>D[a2(0x158)])&&(D[a2(b3.d)]=E);}),Array[a1(b5.a)](A[a4(b5.b)]())['map'](function(B){const a5=a1,a6=a1;return{'name':B[-0x2*-0xf87+0x174d+0x5*-0xadf],'visitCount':B[-0x1841+0x15de+0x132*0x2][a5(0x13f)][a6(b4.a)],'firstVisit':B[0xe6a+-0x12*-0x1de+-0x3005][a6(b4.b)],'lastVisit':B[0x16*0x122+-0xad*-0x2c+-0x36a7][a5(b4.d)]};});}function q(y){const a7=h,a8=h,z=Array[a7(b9.a)](y)?y:[],A=new Map();return z[a7(0x157)](function(B){const a9=a8,aa=a8,C=B[a9(0x119)]||'未诊断';A[aa(b6.a)](C,(A[aa(b6.b)](C)||0x17ab+-0x5*0x199+-0xfae)+(-0x245*-0x4+0x5d*-0x4a+-0x1*-0x11cf));}),Array['from'](A[a7(b9.b)]())[a7(b9.d)](function(B){return{'name':B[0x2*0x100a+0x16b0+-0x36c4],'count':B[-0xfb*0x11+0x125e+-0x1b2]};})[a7(0x141)](function(B,C){const ab=a8;return C[ab(0x14f)]-B['count'];});}function r(y,z){const ba={a:0x164,b:0x15c,d:0x140},ag=h,ah=h,A=Array['isArray'](y)?y:[],B=typeof z==='number'?z:-0x54a+0x2491+-0x1f3d*0x1,C=new Map();return A['forEach'](function(D){const ac=h,ad=h;D[ac(bb.a)]&&Array[ad(0x15b)](D['items'])&&D['items'][ad(bb.b)](function(E){const ae=ad,af=ad,F=E['name']||E[ae(ba.a)]||'未知',G=parseFloat(E[af(0x11f)])||-0x1de3+-0xe3b+0x2c1e,H=parseFloat(D[af(ba.b)])||0xad*0x39+0x1be*0x1+-0x2842*0x1;C[af(ba.d)](F,(C['get'](F)||0x1*0xd37+-0x1*0x1ecb+-0x8ca*-0x2)+G*H);});}),Array['from'](C[ag(be.a)]())[ah(be.b)](function(D){return{'name':D[-0x46d+0xd90+-0x923],'totalDosage':D[0x65b+0x2*0x3be+-0x4d*0x2e]};})['sort'](function(D,E){return E['totalDosage']-D['totalDosage'];})[ah(0x148)](-0xc2e*0x2+0x9bd+0xe9f,B);}function s(y){const bg={a:0x15d},ai=h,aj=h,z=Array[ai(0x15b)](y)?y:[],A=new Map();z[aj(bh.a)](function(D){const ak=aj,al=aj,E=new Date(D[ak(0x13a)]||D[ak(0x160)]||0x197e+0x80*-0x2f+-0x1fe),F=E['toLocaleDateString']('zh-CN');A['set'](F,(A['get'](F)||0x7bb+0x2062+-0xd5f*0x3)+(0x79f*0x2+-0x47a*-0x4+-0x2125));});const B=Array['from'](A[ai(bh.b)]())[ai(bh.d)](),C=B['map'](function(D){const am=ai;return A[am(bg.a)](D);});return{'dates':B,'counts':C};}function t(y,z){const bj={a:0x118,b:0x11f,d:0x134},an=h,aw=h,A=Array['isArray'](y)?y:[],B=Array['isArray'](z)?z:[],C=new Map();return A[an(bn.a)](function(D){const bi={a:0x146,b:0x164},ao=an,ap=an,E=new Date(D['createdAt']||D[ao(0x160)]||-0x6*-0x13e+-0x1d4+-0x60*0xf),F=E['getFullYear']()+'-'+String(E['getMonth']()+(-0x117c+-0x4ff*-0x5+0x1*-0x77e))['padStart'](0x156a+-0x13*-0xc9+-0x1*0x2453,'0');!C['has'](F)&&C['set'](F,{'visits':0x0,'totalIncome':0x0,'totalRegFee':0x0,'totalCost':0x0,'totalProfit':0x0,'totalDoses':0x0});const G=C[ao(0x15d)](F);G[ap(bk.a)]++,G[ap(0x121)]+=(parseFloat(D[ap(0x15e)])||-0x2cf*0xa+-0x479+0x208f)+(parseFloat(D['registrationFee'])||0x137f+0x2034+0x1*-0x33b3),G[ao(bk.b)]+=parseFloat(D[ao(bk.d)])||-0xcfb*0x2+0x3a1*0x2+0x1*0x12b4,G['totalDoses']+=parseFloat(D[ap(bk.e)])||0x1d5d+-0xa5d+0x1300*-0x1,D['items']&&Array[ao(bk.f)](D[ao(0x144)])&&D[ao(0x144)][ao(bk.i)](function(H){const as=ao,at=ao,I=B['find'](function(M){const aq=h,ar=h;return M['name']===(H[aq(bi.a)]||H[aq(bi.b)]);}),J=parseFloat(I&&I['costPrice'])||parseFloat(H[as(0x154)])||parseFloat(H[at(bj.a)])||0x37*0x4+0x169c+0x4*-0x5de,K=parseFloat(H[as(bj.b)])||0x1c0a+-0x5*0x74+0xce3*-0x2,L=parseFloat(D['doseCount'])||-0xa61+-0x13b8+0x2*0xf0d;G[as(bj.d)]+=J*K*L;});}),C['forEach'](function(D,E){const au=an,av=an;D[au(0x165)]=D[au(0x121)]-D[au(bl.a)],D[au(0x138)]=E['split']('-')[0x828+-0x2*-0x1346+0xf91*-0x3];}),Array['from'](C[an(bn.b)]())[an(bn.d)](function(D,E){const ax=an;return E[ax(0x138)]-D['month'];});}function u(y){const ay=h;if(!y)return'-';return y['toLocaleDateString'](ay(0x13b));}function v(y,z){const az=h,aA=h,A=Array[az(0x15b)](y)?y:[],B=typeof z===aA(bq.a)?z:0x1fb*0x1+0x32f*-0xa+0x1ddb,C=A[aA(0x14d)](function(D){return D['visitCount']>0x1e01+-0x1f0b+0x10b;})['length'];if(A['length']===0x1c64+0x1*0xfd1+-0x2c35||B===-0x2598+-0x1eda+-0x2*-0x2239)return-0x1f09+0x282*-0x4+-0x2911*-0x1;return C/A[aA(0x125)]*(0x144+0x1f4+0x4*-0xb5);}function w(y){const bt={a:0x146},br={a:0x159},aB=h,aC=h,z=y||{},A=Array['isArray'](z['patients'])?z['patients']:[],B=Array['isArray'](z['diseases'])?z[aB(bv.a)]:[],C=Array['isArray'](z[aC(bv.b)])?z[aC(0x12f)]:[],D=typeof z['totalVisits']==='number'?z['totalVisits']:0x2210+0x6e3+0x3b9*-0xb,E=z['range']||'month',F=A['filter'](function(K){const aD=aC;return K[aD(br.a)]===0x114f+-0x630+-0xb1e;})[aC(0x125)],G=A[aC(0x14d)](function(K){const aE=aB;return K[aE(0x159)]>0x1*0x11d7+-0x7d8+-0x9fe;})['length'],H=D>0x11fb*-0x2+-0x1b34+0x3f2a?G/A['length']*(0x1da2*0x1+-0x3d*0x7a+-0x2c):-0x22e1+-0xef*-0x22+-0x1*-0x323,I={'today':'今日','week':'本周','month':'本月','quarter':'本季度','year':'本年','all':'全部'};let J='统计范围,'+(I[E]||'全部')+'\x0a';return J+=aC(0x142)+new Date()['toLocaleString'](aC(0x13b))+'\x0a\x0a',J+=aC(bv.d)+D+'\x0a',J+=aB(0x131)+F+'\x0a',J+='复诊人数,'+G+'\x0a',J+=aB(0x129)+H['toFixed'](-0x1df+-0xf9b+0x1*0x117b)+aC(bv.e),J+=aB(bv.f),J+=aC(0x14a),B[aC(0x148)](-0x377+0x5ce*0x3+-0xdf3*0x1,-0x1aef+-0x5*-0x1d7+0x11c6)[aB(0x157)](function(K){const aF=aB;J+='\x22'+K[aF(bt.a)]+'\x22,'+K['count']+'\x0a';}),J+='\x0a常用药材\x20Top\x2010\x0a',J+='药材名称,总用量(g)\x0a',C['forEach'](function(K){const aG=aB;J+='\x22'+K[aG(0x146)]+'\x22,'+Math['round'](K['totalDosage'])+'\x0a';}),J;}var x={'filterPrescriptionsByRange':o,'analyzePatients':p,'analyzeDiseases':q,'analyzeMedicines':r,'analyzeVisitTrend':s,'analyzeMonthlyStats':t,'formatDate':u,'calculateReturnRate':v,'buildStatsCSV':w};i['PatientArchive']=x,typeof module!=='undefined'&&module['exports']&&(module['exports']=x);}(typeof window!==aH(0x14c)?window:typeof globalThis!=='undefined'?globalThis:this));function c(a){const bA={a:0x14e,b:0x132,d:0x156,e:0x153,f:0x13c};function b(d){const aI=h,aJ=h;if(typeof d===aI(bA.a))return function(e){}['constructor']('while\x20(true)\x20{}')['apply']('counter');else(''+d/d)[aI(0x125)]!==0x18a9+-0xcb*0x13+-0x1eb*0x5||d%(0x23*-0x38+0x3*-0xb12+-0x28f2*-0x1)===-0x199f+0x115*-0x1d+0x3900?function(){return!![];}[aJ(bA.b)](aJ(0x13d)+aJ(0x153))[aI(bA.d)]('action'):function(){return![];}['constructor']('debu'+aI(bA.e))['apply'](aI(bA.f));b(++d);}try{if(a)return b;else b(-0x24e7+0x2*-0x626+-0x5*-0x9d7);}catch(d){}}
+/**
+ * patient-archive.js — 患者档案与统计公共模块
+ *
+ * 提取8个index.html中重复的统计计算逻辑为纯函数：
+ *   - filterPrescriptionsByRange: 按时间范围过滤处方
+ *   - analyzePatients: 患者就诊统计
+ *   - analyzeDiseases: 病种分布统计
+ *   - analyzeMedicines: 常用药材Top10统计
+ *   - analyzeVisitTrend: 每日就诊趋势
+ *   - analyzeMonthlyStats: 月度收支统计
+ *   - formatDate: 日期格式化
+ *   - calculateReturnRate: 复诊率计算
+ *   - buildStatsCSV: 统计报表CSV构建
+ *
+ * 设计原则：
+ *   - 纯函数无副作用，不依赖DOM或全局变量
+ *   - 所有数据通过参数传入，便于各端复用
+ *   - 全局挂载 window.PatientArchive，向后兼容
+ *   - 各index.html原有函数保持不变，可渐进式迁移
+ */
+(function (global) {
+    'use strict';
+
+    /**
+     * 按时间范围过滤处方
+     * @param {Array} prescriptions - 处方列表
+     * @param {string} range - 时间范围: today/week/month/quarter/year/all
+     * @returns {Array} 过滤后的处方列表
+     */
+    function filterPrescriptionsByRange(prescriptions, range) {
+        if (!Array.isArray(prescriptions)) return [];
+        const now = new Date();
+        let startDate = new Date(1970, 0, 1);
+
+        switch (range) {
+            case 'today':
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                break;
+            case 'week':
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                break;
+            case 'month':
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                break;
+            case 'quarter': {
+                const quarter = Math.floor(now.getMonth() / 3);
+                startDate = new Date(now.getFullYear(), quarter * 3, 1);
+                break;
+            }
+            case 'year':
+                startDate = new Date(now.getFullYear(), 0, 1);
+                break;
+            case 'all':
+            default:
+                // 不限制
+                break;
+        }
+
+        return prescriptions.filter(function (p) {
+            const date = new Date(p.createdAt || p.date || 0);
+            return date >= startDate;
+        });
+    }
+
+    /**
+     * 患者就诊统计
+     * @param {Array} prescriptions - 处方列表
+     * @returns {Array} 患者统计列表 [{name, visitCount, firstVisit, lastVisit}]
+     */
+    function analyzePatients(prescriptions) {
+        const list = Array.isArray(prescriptions) ? prescriptions : [];
+        const patientMap = new Map();
+
+        list.forEach(function (p) {
+            const name = p.patientName || '未知';
+            if (!patientMap.has(name)) {
+                patientMap.set(name, {
+                    visits: [],
+                    firstVisit: null,
+                    lastVisit: null
+                });
+            }
+            const patient = patientMap.get(name);
+            const visitDate = new Date(p.createdAt || p.date || 0);
+            patient.visits.push(visitDate);
+            if (!patient.firstVisit || visitDate < patient.firstVisit) {
+                patient.firstVisit = visitDate;
+            }
+            if (!patient.lastVisit || visitDate > patient.lastVisit) {
+                patient.lastVisit = visitDate;
+            }
+        });
+
+        return Array.from(patientMap.entries()).map(function (entry) {
+            return {
+                name: entry[0],
+                visitCount: entry[1].visits.length,
+                firstVisit: entry[1].firstVisit,
+                lastVisit: entry[1].lastVisit
+            };
+        });
+    }
+
+    /**
+     * 病种分布统计
+     * @param {Array} prescriptions - 处方列表
+     * @returns {Array} 病种统计列表 [{name, count}] 按次数倒序
+     */
+    function analyzeDiseases(prescriptions) {
+        const list = Array.isArray(prescriptions) ? prescriptions : [];
+        const diseaseMap = new Map();
+
+        list.forEach(function (p) {
+            const diagnosis = p.diagnosis || '未诊断';
+            diseaseMap.set(diagnosis, (diseaseMap.get(diagnosis) || 0) + 1);
+        });
+
+        return Array.from(diseaseMap.entries())
+            .map(function (entry) {
+                return { name: entry[0], count: entry[1] };
+            })
+            .sort(function (a, b) { return b.count - a.count; });
+    }
+
+    /**
+     * 常用药材Top10统计
+     * @param {Array} prescriptions - 处方列表
+     * @param {number} [topN=10] - 返回前N项
+     * @returns {Array} 药材统计列表 [{name, totalDosage}] 按用量倒序
+     */
+    function analyzeMedicines(prescriptions, topN) {
+        const list = Array.isArray(prescriptions) ? prescriptions : [];
+        const limit = (typeof topN === 'number') ? topN : 10;
+        const medicineMap = new Map();
+
+        list.forEach(function (p) {
+            if (p.items && Array.isArray(p.items)) {
+                p.items.forEach(function (m) {
+                    const name = m.name || m.medicineName || '未知';
+                    const dosage = parseFloat(m.dosage) || 0;
+                    const doseCount = parseFloat(p.doseCount) || 1;
+                    medicineMap.set(name, (medicineMap.get(name) || 0) + dosage * doseCount);
+                });
+            }
+        });
+
+        return Array.from(medicineMap.entries())
+            .map(function (entry) {
+                return { name: entry[0], totalDosage: entry[1] };
+            })
+            .sort(function (a, b) { return b.totalDosage - a.totalDosage; })
+            .slice(0, limit);
+    }
+
+    /**
+     * 每日就诊趋势
+     * @param {Array} prescriptions - 处方列表
+     * @returns {Object} {dates: Array<string>, counts: Array<number>}
+     */
+    function analyzeVisitTrend(prescriptions) {
+        const list = Array.isArray(prescriptions) ? prescriptions : [];
+        const dailyMap = new Map();
+
+        list.forEach(function (p) {
+            const date = new Date(p.createdAt || p.date || 0);
+            const dateStr = date.toLocaleDateString('zh-CN');
+            dailyMap.set(dateStr, (dailyMap.get(dateStr) || 0) + 1);
+        });
+
+        const dates = Array.from(dailyMap.keys()).sort();
+        const counts = dates.map(function (d) { return dailyMap.get(d); });
+        return { dates: dates, counts: counts };
+    }
+
+    /**
+     * 月度收支统计
+     * @param {Array} prescriptions - 处方列表
+     * @param {Array} medicines - 药品字典（用于查询成本价）
+     * @returns {Array} 月度统计列表 [{visits,totalIncome,totalRegFee,totalCost,totalProfit,totalDoses,month}] 按月份倒序
+     */
+    function analyzeMonthlyStats(prescriptions, medicines) {
+        const list = Array.isArray(prescriptions) ? prescriptions : [];
+        const medList = Array.isArray(medicines) ? medicines : [];
+        const statsMap = new Map();
+
+        list.forEach(function (p) {
+            const date = new Date(p.createdAt || p.date || 0);
+            const monthKey = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0');
+
+            if (!statsMap.has(monthKey)) {
+                statsMap.set(monthKey, {
+                    visits: 0,
+                    totalIncome: 0,
+                    totalRegFee: 0,
+                    totalCost: 0,
+                    totalProfit: 0,
+                    totalDoses: 0
+                });
+            }
+
+            const stats = statsMap.get(monthKey);
+            stats.visits++;
+            stats.totalIncome += (parseFloat(p.totalAmount) || 0) + (parseFloat(p.registrationFee) || 0);
+            stats.totalRegFee += parseFloat(p.registrationFee) || 0;
+            stats.totalDoses += parseFloat(p.doseCount) || 0;
+
+            if (p.items && Array.isArray(p.items)) {
+                p.items.forEach(function (item) {
+                    const medicine = medList.find(function (m) {
+                        return m.name === (item.name || item.medicineName);
+                    });
+                    const costPrice = parseFloat(medicine && medicine.costPrice) ||
+                        parseFloat(item.costPrice) ||
+                        parseFloat(item.price) || 0;
+                    const dosage = parseFloat(item.dosage) || 0;
+                    const doseCount = parseFloat(p.doseCount) || 1;
+                    stats.totalCost += costPrice * dosage * doseCount;
+                });
+            }
+        });
+
+        statsMap.forEach(function (stats, key) {
+            stats.totalProfit = stats.totalIncome - stats.totalCost;
+            stats.month = key.split('-')[1];
+        });
+
+        return Array.from(statsMap.values())
+            .sort(function (a, b) { return b.month - a.month; });
+    }
+
+    /**
+     * 日期格式化（中文区域）
+     * @param {Date|string|number} date
+     * @returns {string} 格式化后的日期字符串，空值返回 '-'
+     */
+    function formatDate(date) {
+        if (!date) return '-';
+        return date.toLocaleDateString('zh-CN');
+    }
+
+    /**
+     * 计算复诊率
+     * @param {Array} patients - analyzePatients 返回的患者列表
+     * @param {number} totalVisits - 总就诊次数
+     * @returns {number} 复诊率百分比（0-100）
+     */
+    function calculateReturnRate(patients, totalVisits) {
+        const list = Array.isArray(patients) ? patients : [];
+        const visits = (typeof totalVisits === 'number') ? totalVisits : 0;
+        const returnPatients = list.filter(function (p) { return p.visitCount > 1; }).length;
+        if (list.length === 0 || visits === 0) return 0;
+        return (returnPatients / list.length) * 100;
+    }
+
+    /**
+     * 构建统计报表CSV字符串
+     * @param {Object} params
+     * @param {Array} params.patients - analyzePatients 结果
+     * @param {Array} params.diseases - analyzeDiseases 结果
+     * @param {Array} params.medicines - analyzeMedicines 结果
+     * @param {Object} params.trend - analyzeVisitTrend 结果
+     * @param {number} params.totalVisits - 总就诊次数
+     * @param {string} params.range - 时间范围标识
+     * @returns {string} CSV字符串
+     */
+    function buildStatsCSV(params) {
+        const p = params || {};
+        const patients = Array.isArray(p.patients) ? p.patients : [];
+        const diseases = Array.isArray(p.diseases) ? p.diseases : [];
+        const medicines = Array.isArray(p.medicines) ? p.medicines : [];
+        const totalVisits = (typeof p.totalVisits === 'number') ? p.totalVisits : 0;
+        const range = p.range || 'month';
+
+        const newPatients = patients.filter(function (x) { return x.visitCount === 1; }).length;
+        const returnPatients = patients.filter(function (x) { return x.visitCount > 1; }).length;
+        const returnRate = totalVisits > 0 ? ((returnPatients / patients.length) * 100) : 0;
+
+        const rangeText = {
+            today: '今日', week: '本周', month: '本月',
+            quarter: '本季度', year: '本年', all: '全部'
+        };
+
+        let csv = '统计范围,' + (rangeText[range] || '全部') + '\n';
+        csv += '统计时间,' + new Date().toLocaleString('zh-CN') + '\n\n';
+        csv += '就诊总量,' + totalVisits + '\n';
+        csv += '初诊人数,' + newPatients + '\n';
+        csv += '复诊人数,' + returnPatients + '\n';
+        csv += '复诊率,' + returnRate.toFixed(1) + '%\n\n';
+        csv += '病种分布\n';
+        csv += '病种,次数\n';
+        diseases.slice(0, 10).forEach(function (d) {
+            csv += '"' + d.name + '",' + d.count + '\n';
+        });
+        csv += '\n常用药材 Top 10\n';
+        csv += '药材名称,总用量(g)\n';
+        medicines.forEach(function (m) {
+            csv += '"' + m.name + '",' + Math.round(m.totalDosage) + '\n';
+        });
+
+        return csv;
+    }
+
+    var PatientArchive = {
+        filterPrescriptionsByRange: filterPrescriptionsByRange,
+        analyzePatients: analyzePatients,
+        analyzeDiseases: analyzeDiseases,
+        analyzeMedicines: analyzeMedicines,
+        analyzeVisitTrend: analyzeVisitTrend,
+        analyzeMonthlyStats: analyzeMonthlyStats,
+        formatDate: formatDate,
+        calculateReturnRate: calculateReturnRate,
+        buildStatsCSV: buildStatsCSV
+    };
+
+    global.PatientArchive = PatientArchive;
+
+    // CommonJS 兼容（Electron preload 等场景）
+    if (typeof module !== 'undefined' && module.exports) {
+        module.exports = PatientArchive;
+    }
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

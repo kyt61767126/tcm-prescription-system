@@ -1,1 +1,541 @@
-(function(a,b){var b2={a:0x12a,b:0xf9,d:0x13f,e:0x143,f:0x145,i:0x102},U=h,V=h,d=a();while(!![]){try{var e=parseInt(U(0x15a))/(0x1a7f+-0x6d9*0x1+-0x2f*0x6b)*(parseInt(V(0x168))/(0x2173+-0x991+0x17e0*-0x1))+parseInt(U(b2.a))/(0xc78+0x1053*0x2+-0x2d1b)*(-parseInt(U(b2.b))/(0x10*0xa+0x2*0xf5e+0x1d8*-0x11))+parseInt(U(0x11e))/(0x57*-0x41+0xbe4*0x1+-0x368*-0x3)+parseInt(U(b2.d))/(0x1*0x27a+-0x5f5+0x381)*(parseInt(V(b2.e))/(0x1fcb*-0x1+-0xe*0x151+-0xc0*-0x43))+parseInt(U(b2.f))/(-0x119*0x1d+0xfb7+-0x813*-0x2)+-parseInt(V(0xff))/(0xefd+0x1796+-0x268a)*(parseInt(V(0x108))/(-0x75a*-0x1+0x2705*-0x1+0x1fb5))+-parseInt(U(0x142))/(-0x111e*0x1+0x4f*0x47+0x10*-0x4c)*(parseInt(U(b2.i))/(-0x1066+-0x6d0*-0x2+0x2d2));if(e===b)break;else d['push'](d['shift']());}catch(f){d['push'](d['shift']());}}}(g,-0x1*-0x12ec03+-0xda0ec+0x4abd4),function(a){var c9={a:0x167},c8={a:0x16c,b:0xf5,d:0x10e,e:0x16c},bW={a:0xf3,b:0x129,d:0x148,e:0x161,f:0x158,i:0x14b,j:0x14d,k:0x165},bO={a:0xee,b:0x15e,d:0x10c,e:0x11f,f:0x12d,i:0x147,j:0x169,k:0x119,l:0xf2,m:0x138,n:0x147,o:0x147,p:0x10a},bN={a:0x156,b:0x14a,d:0x16c,e:0x10e},bH={a:0x106},bG={a:0x106,b:0x14c},bE={a:0x12c,b:0x126,d:0x11a},bD={a:0x103},bB={a:0x103,b:0x155,d:0xfb},bv={a:0x113,b:0x124,d:0x137,e:0x16d,f:0x12f,i:0x152,j:0x137,k:0x112,l:0x14f},bu={a:0x154,b:0x13d},bo={a:0x101},aY=h,aZ=h,e=(function(){var A=!![];return function(B,C){var D=A?function(){if(C){var E=C['apply'](B,arguments);return C=null,E;}}:function(){};return A=![],D;};}()),i=(function(){var A=!![];return function(B,C){var D=A?function(){if(C){var E=C['apply'](B,arguments);return C=null,E;}}:function(){};return A=![],D;};}()),j=(function(){var A=!![];return function(B,C){var D=A?function(){var W=h;if(C){var E=C[W(0x13b)](B,arguments);return C=null,E;}}:function(){};return A=![],D;};}());'use strict';function k(A,B){var X=h;let C=null;const D=function(){const E=this,F=arguments;if(C)clearTimeout(C);C=setTimeout(()=>{A['apply'](E,F),C=null;},B||-0x1*-0xd2+-0x5d2+0x5c8);};return D[X(0xf8)]=function(){C&&(clearTimeout(C),C=null);},D['flush']=function(){var Y=X;C&&(clearTimeout(C),A[Y(0x13b)](this,arguments),C=null);},D;}function l(A,B){var bl={a:0x106};let C=0x15c*0x8+0x15a7+-0x2087,D=null;return function(){var Z=h,a0=h;const E=this,F=arguments,G=Date[Z(bl.a)](),H=B-(G-C);if(H<=0x313*0x6+-0x12b1+-0x3*-0x15)D&&(clearTimeout(D),D=null),C=G,A[Z(0x13b)](E,F);else!D&&(D=setTimeout(()=>{C=Date['now'](),D=null,A['apply'](E,F);},H));};}function m(A,B){var a1=h;if(typeof a[a1(0x153)]==='function')return a['requestIdleCallback'](A,B||{'timeout':0x3e8});return setTimeout(A,-0x20e*0x1+-0x248f+0x5*0x7c3);}function n(A){var a2=h,a3=h;typeof a[a2(0x135)]===a2(bo.a)?a['cancelIdleCallback'](A):clearTimeout(A);}function o(A){var br={a:0xfc,b:0xfe},bp={a:0x10f,b:0x137,d:0x137,e:0x141,f:0x13d,i:0x13c,j:0x160,k:0x160},a4=h,a5=h;const B=Object['assign']({'container':null,'itemHeight':0x32,'bufferSize':0x5,'render':()=>document[a4(0x152)](a4(0x12f)),'onScroll':null},A);if(!B['container'])return console[a4(bv.a)](a4(bv.b)),null;const C={'data':[],'scrollTop':0x0,'visibleCount':0x0,'renderTimer':null},D=B['container'];D[a5(bv.d)][a5(bv.e)]='auto',D[a4(bv.d)][a5(0x112)]='relative';const E=document[a5(0x152)](a5(bv.f));E['style']['position']='relative',D['appendChild'](E);const F=document[a5(bv.i)](a4(0x12f));F[a4(bv.j)][a5(bv.k)]=a4(0x114),F['style']['top']='0',F['style'][a4(0x130)]='0',F['style'][a4(bv.l)]='0',E[a4(0x11a)](F);function G(){var a6=a4,a7=a4;const I=D['clientHeight'];C['visibleCount']=Math['ceil'](I/B['itemHeight'])+B['bufferSize']*(0x10d1+-0x25a3+-0xac*-0x1f);const J=Math['max'](-0x2*0xb4e+-0x1*0xd98+0x2434,Math['floor'](C['scrollTop']/B['itemHeight'])-B['bufferSize']),K=Math['min'](C[a6(0xfc)]['length'],J+C[a6(bp.a)]);E[a6(bp.b)]['height']=C[a7(0xfc)][a6(0x103)]*B['itemHeight']+'px',F[a6(bp.d)]['transform']='translateY('+J*B[a7(bp.e)]+a7(0x115),F[a7(bp.f)]='';for(let L=J;L<K;L++){const M=B['render'](C['data'][L],L);M&&(M['style']['height']=B['itemHeight']+'px',M['style'][a7(bp.i)]='border-box',F[a6(0x11a)](M));}if(B[a6(bp.j)])B[a6(bp.k)](J,K);}function H(){var a8=a4,a9=a4;C['scrollTop']=D['scrollTop'];if(C[a8(0xed)])cancelAnimationFrame(C['renderTimer']);C[a8(0xed)]=requestAnimationFrame(G);}return D[a4(0x16c)](a4(0x154),l(H,0x121*0x20+0x14cd+-0x38dd),{'passive':!![]}),{'setData'(I){var aa=a5,ab=a5;C[aa(br.a)]=I||[],C[aa(br.b)]=D[aa(0xfe)]=-0xe96+0x1bbb+-0xd25,G();},'refresh'(){G();},'scrollToIndex'(I){var ac=a5,ad=a5;D[ac(0xfe)]=I*B[ad(0x141)];},'destroy'(){var ae=a5,af=a5;D['removeEventListener'](ae(bu.a),H),D[ae(bu.b)]='';}};}let p=null;function q(A){var ag=h;if(!A)return;if(p)p['observe'](A);else{const B=A['getAttribute'](ag(0x162));if(B)A['src']=B;}}function r(A){var ah=h,ai=h;if(!A||!A[ah(bB.a)])return;if(!(ah(bB.b)in a)){A[ah(bB.d)](B=>{var aj=ah;const C=B[aj(0x15d)]('data-src');if(C)B['src']=C;});return;}!p&&(p=new IntersectionObserver(B=>{var by={a:0x16b,b:0x15d,d:0x162,e:0x140};B['forEach'](C=>{var ak=h,al=h;if(C['isIntersecting']){const D=C[ak(by.a)],E=D[al(by.b)](ak(by.d));E&&(D[al(by.e)]=E,D[ak(0x111)]('data-src')),p[ak(0xf4)](D);}});},{'rootMargin':'50px\x200px','threshold':0.01})),A['forEach'](B=>{B['getAttribute']('data-src')&&p['observe'](B);});}function s(A,B,C){var am=h,an=h;if(!A||!B||!B[am(bD.a)])return;const D=document['createDocumentFragment']();B[an(0xfb)](E=>{var ao=an;const F=C(E);if(F)D[ao(0x11a)](F);}),A['appendChild'](D);}function t(A,B){m(()=>{var ap=h,aq=h;try{const C=document[ap(0x152)](ap(bE.a));C['rel']=aq(bE.b),C[ap(0x125)]=A,C['as']=B||aq(0x13e),document['head'][aq(bE.d)](C);}catch(D){}});}function u(A,B){var ar=h,as=h;const C=performance['now'](),D=B(),E=performance[ar(bG.a)]()-C;return E>0x1*0x206+-0x4*0x6d0+0x194a&&console[ar(0x14e)](as(bG.b)+A+':\x20'+E['toFixed'](0x8e+-0x913+0x3b*0x25)+'ms'),D;}async function v(A,B){var at=h,au=h;const C=performance['now']();try{return await B();}finally{const D=performance[at(bH.a)]()-C;D>-0x25db*0x1+0x1ec2+-0x8d*-0xd&&console['log']('[Perf]\x20'+A+':\x20'+D[au(0x105)](-0x219e+0x14aa+0xcf6)+'ms');}}const w={'debounce':k,'throttle':l,'runIdle':m,'cancelIdle':n,'createVirtualScroller':o,'lazyImage':q,'observeLazyImages':r,'batchAppend':s,'prefetch':t,'measure':u,'measureAsync':v};a['PerfUtils']=w;function x(){var bL={a:0x137},bI={a:0x128,b:0xfa,d:0x117,e:0x137},av=h,aA=h;return;if(window['innerWidth']>=0x1e1*-0x11+0x25c7*0x1+-0x2d5)return;var A=document['getElementById'](av(bN.a));if(!A){setTimeout(x,-0x1f85*0x1+0x18f9+0x880);return;}function B(){var aw=av,ax=av;if(A[aw(0x137)]['display']!==ax(0x15b))return;var D=document['activeElement'];if(!D||D[ax(bI.a)]!==aw(0x118))return;var E=D['getBoundingClientRect'](),F=window[aw(0x107)],G=window['visualViewport']?window[ax(0x10e)][ax(bI.b)]:F,H;F-G<-0xfa5+0x1*-0x185a+0x2831?H=F*(0xf8*-0x12+0x1c08+-0xa98+0.6):H=G;var I=H-E['bottom'],J=E['top'],K=0x48c+-0x2488+0x20f6*0x1;if(I<-0x22*0xdd+0x34a*-0x5+0x2e44&&J>I){var L=Math[ax(bI.d)](J-(-0x8*0xfd+0x93f+0x153*-0x1),K);A[ax(0x137)][aw(0x10d)]=Math[aw(0x120)](0x5e5*-0x3+0x21a*0x12+-0x1425,E[ax(0x10d)]-L-(0x1*0x29b+-0xe74+0x1*0xbdb))+'px',A[aw(bI.e)][aw(0x116)]=L+'px';}else{var M=Math['min'](Math[aw(0x120)](I-(0x23ac+-0xf*0x139+-0x1151),0x22a0+0x2b7+-0x251b),K);A['style']['top']=E['bottom']+(-0xe1b+0x1fc5+-0x11a8*0x1)+'px',A['style']['maxHeight']=M+'px';}}var C=new MutationObserver(function(D){D['forEach'](function(E){var ay=h,az=h;E['attributeName']===ay(0x137)&&A[az(0x137)][ay(0x127)]==='block'&&(setTimeout(B,-0xa8b*0x2+-0x2*0x6c5+0x22aa),setTimeout(B,0x195d+0xd2d+-0x101*0x26),setTimeout(B,0x1b74+-0x23dd+0x995*0x1));});});C[aA(bN.b)](A,{'attributes':!![],'attributeFilter':['style']}),window[av(bN.d)](aA(0x136),function(){var aB=av,aC=av;A[aB(bL.a)]['display']===aB(0x15b)&&(setTimeout(B,0xda6+0x91*-0x27+0x8a3),setTimeout(B,-0x1191+0x1930+-0x6d7));}),window['visualViewport']&&window[av(bN.e)][aA(bN.d)]('resize',function(){var aD=av;A['style']['display']===aD(0x15b)&&(setTimeout(B,-0xb9*0x28+-0x1a85+0x378b),setTimeout(B,0x17*-0x107+0x1fe2+-0x97*0xd));});}function y(){var bP={a:0xf1,b:0x159},aE=h,aH=h;if(window[aE(0x12e)]>=0x1da0+-0x41*-0x5b+-0x31ba)return;function A(E){var aF=aE,aG=aE;if(!E||E[aF(0x128)]!=='INPUT'&&E['tagName']!==aG(0x139))return;if(E['__bnAutocompleteOff'])return;E[aF(0x150)]=!![],E[aF(0x15e)](aG(0x122),aF(bO.a)),E[aF(bO.b)](aG(0xfd),aF(0xee)),E['setAttribute']('autocapitalize',aF(0xee)),E['setAttribute'](aF(bO.d),aG(bO.e));var F=E[aF(0x15d)](aG(0x123))||'',G=E['getAttribute']('id')||'',H=E[aG(0xf6)]||'';if(F===aG(bO.f)||G['indexOf']('Age')>=-0x1*0x164a+-0x23e4+0x3a2e||G[aF(bO.i)]('age')>=0x201a*-0x1+-0x2*0x378+0x270a||G['indexOf'](aF(bO.j))>=0x1*0x1b56+0x1b*-0x135+0x541*0x1||G[aG(bO.i)]('fee')>=0x1c1b+-0x31*-0xb8+0xd*-0x4df||G['indexOf'](aG(bO.k))>=-0x1d61+0x10a2+0xcbf||G['indexOf'](aG(bO.l))>=-0x1a08+0x26*0x43+-0x80b*-0x2||G['indexOf'](aF(0xf7))>=-0x8f6*0x3+-0x2f*0x11+0x1*0x1e01||G['indexOf'](aF(bO.m))>=0x879+-0xf6d*-0x1+-0x1*0x17e6)E[aG(0x15e)]('inputmode','numeric');else{if(F==='tel'||G[aF(bO.n)](aG(0x13a))>=0x15b4+-0x27*0xb0+0x1b4*0x3||G[aF(bO.o)](aF(bO.p))>=-0x1a89*0x1+0x39*-0x1+0x1ac2)E['setAttribute']('inputmode','tel');else F===aF(0x144)&&E['setAttribute']('inputmode','search');}}var B=document[aE(0x159)](aH(0x12b));for(var C=0x1*0x9b1+-0x6c8+-0x95*0x5;C<B[aE(0x103)];C++){A(B[C]);}var D=new MutationObserver(function(E){E['forEach'](function(F){var aI=h,aJ=h;if(F[aI(bP.a)])for(var G=0x48b*0x7+0x19b1+-0x42*0xdf;G<F['addedNodes'][aI(0x103)];G++){var H=F[aI(0xf1)][G];if(H['nodeType']===-0x210b+0x156b+-0xba1*-0x1){A(H);var I=H[aI(bP.b)]('input,textarea');for(var J=0x10*0x101+0x2028+-0x1*0x3038;J<I['length'];J++){A(I[J]);}}}});});D[aE(0x14a)](document['body']||document['documentElement'],{'childList':!![],'subtree':!![]});}function z(){var c2={a:0x104},c1={a:0x118,b:0x149},bV={a:0x16a,b:0x15c,d:0x10b},bT={a:0xef,b:0x134,d:0x146},bS={a:0x166},aS=h,aV=h,A=e(this,function(){var aK=h,aL=h;if(A[aK(0x121)]()[aK(bS.a)]()[aL(0x147)]('\x0a')!==-(0x241f*-0x1+-0x7f2*-0x4+-0x4*-0x116))return;return A[aL(bS.a)]()['search']('(((.+)+)+)+$')['toString']()['constructor'](A)[aK(0x151)]('(((.+)+)+)+$');});A(),(function(){i(this,function(){var aM=h,aN=h,F=new RegExp(aM(0x16e)),G=new RegExp(aM(bT.a),'i'),H=c(aM(0x164));!F['test'](H+aM(bT.b))||!G[aM(bT.d)](H+aM(0x132))?H('0'):c();})();}());var B=j(this,function(){var aO=h,aP=h,F;try{var G=Function('return\x20(function()\x20'+'{}.constructor(\x22return\x20this\x22)(\x20)'+');');F=G();}catch(N){F=window;}var H=F['console']=F[aO(0x133)]||{},I=['log','warn',aP(bV.a),'error','exception',aP(0x131),'trace'];for(var J=0x89*0x19+0x6a1*-0x1+-0x18*0x48;J<I[aP(0x103)];J++){var K=j[aO(bV.b)][aO(bV.d)]['bind'](j),L=I[J],M=H[L]||K;K['__proto__']=j['bind'](j),K['toString']=M['toString']['bind'](M),H[L]=K;}});B();if(window['innerWidth']>=-0x57*-0x8+-0xc77+0xcc0)return;var C=null;function D(F){var aQ=h,aR=h;if(!F)return;try{var G=window[aQ(0x10e)]?window['visualViewport']['height']:window['innerHeight'],H=0xb3*0x26+-0x86b+-0xb*0x1a1;F[aQ(bW.a)]({'block':aQ(bW.b),'behavior':aR(bW.d)});var I=F['closest']?F[aQ(0x11b)](aQ(bW.e)):null;if(I){var J=F['getBoundingClientRect'](),K=I[aR(bW.f)](),L=G;if(J[aQ(0x163)]>L-H){var M=J['top']+J['height']/(0x624+-0x75b+0x139)-K['top'],N=K['height']/(-0x2045+-0x29b*-0x2+0xd*0x215),O=M-N;if(Math['abs'](O)>-0xfd+0x52*0x2+0x5e){var P=I['scrollTop']+O,Q=I[aR(bW.i)]-I[aQ(bW.j)];if(P<-0x1cfd+-0x90*0xc+0x23bd)P=-0x13f5+0x1e7f*-0x1+0x1*0x3274;if(P>Q)P=Q;try{I[aR(bW.k)]({'top':P,'behavior':'smooth'});}catch(R){I['scrollTop']=P;}}}}}catch(S){try{F[aR(0xf3)](![]);}catch(T){}}}document[aS(c8.a)]('focusin',function(F){var aT=aS,aU=aS,G=F['target'];if(!G)return;if(G['tagName']!==aT(c1.a)&&G['tagName']!==aU(0x139)&&G['tagName']!==aT(c1.b))return;var H=G['closest']?G['closest']('.medicine-table'):null;if(!H)return;C=G,setTimeout(function(){D(G);},0x1*-0x216e+0x1116*0x1+0x10bc),setTimeout(function(){D(G);},0x4b*0x59+-0x1*-0x2535+0xf*-0x424),setTimeout(function(){D(G);},-0x2580+0xb1*-0x9+0x2dad),setTimeout(function(){D(G);},-0x16c*0x16+0x1351+0x1*0xf17);},!![]),document['addEventListener'](aS(c8.b),function(){setTimeout(function(){var aW=h,aX=h;(!document[aW(c2.a)]||document['activeElement']===document[aX(0x110)])&&(C=null);},-0x12b3+0x1bb+-0xca*-0x16);},!![]);function E(){C&&(setTimeout(function(){D(C);},0x3b7*-0x6+0x6d3*-0x2+-0xa*-0x39d),setTimeout(function(){D(C);},-0x2276+-0x53*0xe+0x27c8),setTimeout(function(){D(C);},0x1c78+-0x93a+0x92*-0x1f));}window[aV(c8.d)]&&(window[aS(c8.d)][aV(c8.e)]('resize',E),window[aS(c8.d)][aV(0x16c)]('scroll',E));}document['readyState']===aY(0x11c)?(document['addEventListener'](aY(c9.a),z),document['addEventListener']('DOMContentLoaded',x),document['addEventListener']('DOMContentLoaded',y)):(z(),x(),y());}(typeof window!=='undefined'?window:typeof globalThis!=='undefined'?globalThis:this));function h(a,b){a=a-(-0xbe3*-0x3+0x7ce+0xf2*-0x2d);var c=g();var d=c[a];if(h['gpcJLA']===undefined){var e=function(l){var m='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+/=';var n='',o='',p=n+e,q=(''+function(){return-0x55d*0x5+-0xae4+-0x1*-0x25b5;})['indexOf']('\x0a')!==-(0x1338+-0x1d3+0x6a*-0x2a);for(var r=0x1b31+0x1e02+-0x9*0x65b,s,t,u=0x8af+-0x2*-0xb29+-0x1f01;t=l['charAt'](u++);~t&&(s=r%(-0x248f+0x23df+0xa*0x12)?s*(0x10d1+-0x25a3+-0xba*-0x1d)+t:t,r++%(-0x2*0xb4e+-0x1*0xd98+0x2438))?n+=q||p['charCodeAt'](u+(0x121*0x20+0x14cd+-0x38e3))-(-0xe96+0x1bbb+-0xd1b)!==0x1*0x206+-0x4*0x6d0+0x193a?String['fromCharCode'](0x8e+-0x913+0x57*0x1c&s>>(-(-0x25db*0x1+0x1ec2+-0x6b*-0x11)*r&-0x219e+0x14aa+0xcfa)):r:0x1e1*-0x11+0x25c7*0x1+-0x5d6){t=m['indexOf'](t);}for(var v=-0x1f85*0x1+0x18f9+0x68c,w=n['length'];v<w;v++){o+='%'+('00'+n['charCodeAt'](v)['toString'](-0xfa5+0x1*-0x185a+0x280f))['slice'](-(0xf8*-0x12+0x1c08+-0xa96));}return decodeURIComponent(o);};h['tlUNRO']=e,h['ydIGaZ']={},h['gpcJLA']=!![];}var f=c[0x48c+-0x2488+0xffe*0x2],i=a+f,j=h['ydIGaZ'][i];if(!j){var k=function(l){this['kdLUqN']=l,this['CVqyjI']=[-0x22*0xdd+0x34a*-0x5+0x2dcd,-0x8*0xfd+0x93f+0x157*-0x1,0x5e5*-0x3+0x21a*0x12+-0x1425],this['whuJHh']=function(){return'newState';},this['aAQfWv']='\x5c\x77\x2b\x20\x2a\x5c\x28\x5c\x29\x20\x2a\x7b\x5c\x77\x2b\x20\x2a',this['pKGXeb']='\x5b\x27\x7c\x22\x5d\x2e\x2b\x5b\x27\x7c\x22\x5d\x3b\x3f\x20\x2a\x7d';};k['prototype']['rLMDIC']=function(){var l=new RegExp(this['aAQfWv']+this['pKGXeb']),m=l['test'](this['whuJHh']['toString']())?--this['CVqyjI'][0x1*0x29b+-0xe74+0x2*0x5ed]:--this['CVqyjI'][0x23ac+-0xf*0x139+-0x1155];return this['gjGNHM'](m);},k['prototype']['gjGNHM']=function(l){if(!Boolean(~l))return l;return this['clYBuB'](this['kdLUqN']);},k['prototype']['clYBuB']=function(l){for(var m=0x22a0+0x2b7+-0x2557,n=this['CVqyjI']['length'];m<n;m++){this['CVqyjI']['push'](Math['round'](Math['random']())),n=this['CVqyjI']['length'];}return l(this['CVqyjI'][-0xe1b+0x1fc5+-0x11aa*0x1]);},(''+function(){return-0xa8b*0x2+-0x2*0x6c5+0x22a0;})['indexOf']('\x0a')===-(0x195d+0xd2d+-0x7b5*0x5)&&new k(h)['rLMDIC'](),d=h['tlUNRO'](d),h['ydIGaZ'][i]=d;}else d=j;return d;}function c(a){var cd={a:0x15c,b:0x13b,d:0x100,e:0x15c,f:0x15f};function b(d){var b0=h,b1=h;if(typeof d===b0(0xf0))return function(e){}[b0(cd.a)](b0(0x157))[b1(cd.b)]('counter');else(''+d/d)['length']!==-0x1100+0x1*-0x80f+-0x1910*-0x1||d%(-0x1a71+0xe*0xd+0x19cf)===-0x12e9*0x1+0x15fd+-0x314?function(){return!![];}['constructor'](b0(0x15f)+b1(0x11d))[b1(cd.d)]('action'):function(){return![];}[b1(cd.e)](b0(cd.f)+'gger')['apply'](b1(0x109));b(++d);}try{if(a)return b;else b(0x17e9+-0x18ed+0x104);}catch(d){}}function g(){var cf=['y29UC29Szq','y2HHAw4','y2fUy2vSswrSzunHBgXIywnR','CMvZAxPL','C3r5Bgu','q291BNq','vevyvefsrue','ugHVBMu','yxbWBhK','yM94u2L6Aw5N','Aw5Uzxjive1m','zMv0y2G','mZzkBuPxv08','C3jJ','AxrLBuHLAwDODa','mte3n1LcAwLNsG','ntq3odqXvKvZA3L4','Dgv4Da','nJq2mZe2ohfKDwztyW','DgvZDa','Aw5KzxHpzG','C21VB3rO','u0vmrunu','B2jZzxj2zq','C2nYB2XSsgvPz2H0','w1bLCMzDia','y2XPzw50sgvPz2H0','Bg9N','CMLNAhq','x19IBKf1Dg9JB21WBgv0zu9MzG','C2vHCMnO','y3jLyxrLrwXLBwvUDa','CMvXDwvZDeLKBgvdywXSyMfJAW','C2nYB2XS','sw50zxjZzwn0Aw9Ut2jZzxj2zxi','BwvKAwnPBMvtzwfYy2HeCM9Wzg93BG','D2HPBguGkhrYDwuPihT9','z2v0qM91BMrPBMDdBgLLBNrszwn0','CxvLCNLtzwXLy3rVCKfSBa','mZeZodu2AfzQuNvi','yMXVy2S','y29UC3rYDwn0B3i','z2v0qxr0CMLIDxrL','C2v0qxr0CMLIDxrL','zgvIDq','B25ty3jVBgW','lM1LzgLJAw5LlxrHyMXLlwnVBNrHAw5LCG','zgf0ys1ZCMm','yM90Dg9T','Aw5PDa','C2nYB2XSvg8','Dg9tDhjPBMC','re9nq29UDgvUDeXVywrLza','ogrdz2rgrW','rMvL','Aw5MBW','DgfYz2v0','ywrKrxzLBNrmAxn0zw5LCG','B3zLCMzSB3Dz','zNvUy3rPB24GkLWOicPCkq','CMvUzgvYvgLTzxi','B2zM','xcTCkYaQkd86w2eTEKeTwL8KxvSWltLHlxPblvPFjf0Qkq','C3rYAw5N','ywrKzwroB2rLCW','zg9Zzq','C2nYB2XSsw50B1zPzxC','Dw5VyNnLCNzL','zM9JDxnVDxq','y2XHC3noyw1L','rg9Zzq','y2fUy2vS','mtq0Bu56ELDm','AgvPz2H0','zM9YrwfJAa','zgf0yq','yxv0B2nVCNjLy3q','C2nYB2XSvg9W','mZm1mdG4ourKrNnpqG','y2fSBa','zNvUy3rPB24','mtqYndy0thPVzfHP','BgvUz3rO','ywn0AxzLrwXLBwvUDa','Dg9gAxHLza','BM93','Aw5UzxjizwLNAhq','mZbbwuHltM4','C3rHDgvpyMPLy3q','CgHVBMu','ChjVDg90ExbL','C3bLBgXJAgvJAW','Dg9W','DMLZDwfSvMLLD3bVCNq','DMLZAwjSzunVDw50','yM9KEq','CMvTB3zLqxr0CMLIDxrL','Cg9ZAxrPB24','D2fYBG','ywjZB2X1Dgu','ChGP','Bwf4sgvPz2H0','BwLU','su5qvvq','y2XPBMLJtM8','yxbWzw5Kq2HPBgq','y2XVC2vZDa','Bg9HzgLUzW','z2DLCG','ndqYndy4mhjvz0fAta','zMfSC2u','Bwf4','yMLUza','yxv0B2nVBxbSzxrL','DhLWzq','w1bLCMzvDgLSC10Gy3jLyxrLvMLYDhvHBfnJCM9SBgvYoIbJB250ywLUzxiGAxmGCMvXDwLYzwq','AhjLzG','ChjLzMv0y2G','zgLZCgXHEq','DgfNtMfTzq','y2vUDgvY','mZe0nJfxEeTRrNa','Aw5WDxqSDgv4DgfYzwe','BgLUAW','BNvTyMvY','Aw5UzxjxAwr0Aa','zgL2','BgvMDa','DgfIBgu','Aw5WDxq'];g=function(){return cf;};return g();}
+// ============================================================================
+// performance-utils.js — 性能优化工具模块
+// 提供防抖/节流、空闲回调、虚拟滚动辅助、图片懒加载等工具
+// 各端可渐进式采用，不破坏现有逻辑
+// ============================================================================
+(function (global) {
+    'use strict';
+
+    // ==================== 防抖 (Debounce) ====================
+    // 延迟执行，适合搜索输入、窗口 resize 等高频事件
+    function debounce(fn, wait) {
+        let timer = null;
+        const debounced = function () {
+            const ctx = this, args = arguments;
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(() => {
+                fn.apply(ctx, args);
+                timer = null;
+            }, wait || 200);
+        };
+        debounced.cancel = function () {
+            if (timer) { clearTimeout(timer); timer = null; }
+        };
+        debounced.flush = function () {
+            if (timer) {
+                clearTimeout(timer);
+                fn.apply(this, arguments);
+                timer = null;
+            }
+        };
+        return debounced;
+    }
+
+    // ==================== 节流 (Throttle) ====================
+    // 固定频率执行，适合滚动、拖拽等持续事件
+    function throttle(fn, wait) {
+        let lastTime = 0;
+        let timer = null;
+        return function () {
+            const ctx = this, args = arguments;
+            const now = Date.now();
+            const remaining = wait - (now - lastTime);
+            if (remaining <= 0) {
+                if (timer) { clearTimeout(timer); timer = null; }
+                lastTime = now;
+                fn.apply(ctx, args);
+            } else if (!timer) {
+                timer = setTimeout(() => {
+                    lastTime = Date.now();
+                    timer = null;
+                    fn.apply(ctx, args);
+                }, remaining);
+            }
+        };
+    }
+
+    // ==================== 空闲回调 (requestIdleCallback) ====================
+    // 低优先级任务延后到浏览器空闲时执行，不阻塞用户交互
+    function runIdle(fn, options) {
+        if (typeof global.requestIdleCallback === 'function') {
+            return global.requestIdleCallback(fn, options || { timeout: 1000 });
+        }
+        // 降级：setTimeout 50ms 后执行
+        return setTimeout(fn, 50);
+    }
+
+    function cancelIdle(id) {
+        if (typeof global.cancelIdleCallback === 'function') {
+            global.cancelIdleCallback(id);
+        } else {
+            clearTimeout(id);
+        }
+    }
+
+    // ==================== 简单虚拟滚动辅助 ====================
+    // 适用于长列表（历史处方、药品库等），只渲染可视区域+缓冲区
+    // 用法：
+    //   const vs = PerfUtils.createVirtualScroller({
+    //     container: document.getElementById('list'),
+    //     itemHeight: 60,          // 单项高度
+    //     bufferSize: 5,           // 上下缓冲项数
+    //     render: (item, index) => {  // 返回 HTMLElement
+    //       const el = document.createElement('div');
+    //       el.textContent = item.name;
+    //       return el;
+    //     }
+    //   });
+    //   vs.setData(allItems);
+    function createVirtualScroller(options) {
+        const config = Object.assign({
+            container: null,
+            itemHeight: 50,
+            bufferSize: 5,
+            render: () => document.createElement('div'),
+            onScroll: null
+        }, options);
+
+        if (!config.container) {
+            console.warn('[PerfUtils] createVirtualScroller: container is required');
+            return null;
+        }
+
+        const state = {
+            data: [],
+            scrollTop: 0,
+            visibleCount: 0,
+            renderTimer: null
+        };
+
+        // 创建内部 DOM 结构
+        const viewport = config.container;
+        viewport.style.overflowY = 'auto';
+        viewport.style.position = 'relative';
+
+        const spacer = document.createElement('div');
+        spacer.style.position = 'relative';
+        viewport.appendChild(spacer);
+
+        const content = document.createElement('div');
+        content.style.position = 'absolute';
+        content.style.top = '0';
+        content.style.left = '0';
+        content.style.right = '0';
+        spacer.appendChild(content);
+
+        function render() {
+            const containerHeight = viewport.clientHeight;
+            state.visibleCount = Math.ceil(containerHeight / config.itemHeight) + config.bufferSize * 2;
+            const startIndex = Math.max(0, Math.floor(state.scrollTop / config.itemHeight) - config.bufferSize);
+            const endIndex = Math.min(state.data.length, startIndex + state.visibleCount);
+
+            // 设置总高度撑开滚动条
+            spacer.style.height = (state.data.length * config.itemHeight) + 'px';
+
+            // 设置内容偏移
+            content.style.transform = 'translateY(' + (startIndex * config.itemHeight) + 'px)';
+
+            // 渲染可视项
+            content.innerHTML = '';
+            for (let i = startIndex; i < endIndex; i++) {
+                const el = config.render(state.data[i], i);
+                if (el) {
+                    el.style.height = config.itemHeight + 'px';
+                    el.style.boxSizing = 'border-box';
+                    content.appendChild(el);
+                }
+            }
+
+            if (config.onScroll) config.onScroll(startIndex, endIndex);
+        }
+
+        function onScroll() {
+            state.scrollTop = viewport.scrollTop;
+            if (state.renderTimer) cancelAnimationFrame(state.renderTimer);
+            state.renderTimer = requestAnimationFrame(render);
+        }
+
+        viewport.addEventListener('scroll', throttle(onScroll, 16), { passive: true });
+
+        return {
+            setData(items) {
+                state.data = items || [];
+                state.scrollTop = viewport.scrollTop = 0;
+                render();
+            },
+            refresh() { render(); },
+            scrollToIndex(index) {
+                viewport.scrollTop = index * config.itemHeight;
+            },
+            destroy() {
+                viewport.removeEventListener('scroll', onScroll);
+                viewport.innerHTML = '';
+            }
+        };
+    }
+
+    // ==================== 图片懒加载 (Lazy Image) ====================
+    // 使用 IntersectionObserver 按需加载图片，减少首屏网络请求
+    // 用法：
+    //   PerfUtils.lazyImage(imgElement);  // img 的 data-src 设置真实 URL
+    //   或 <img data-src="real.jpg" class="lazy">
+    //   PerfUtils.observeLazyImages(document.querySelectorAll('img.lazy'));
+    let _lazyObserver = null;
+
+    function lazyImage(img) {
+        if (!img) return;
+        if (_lazyObserver) {
+            _lazyObserver.observe(img);
+        } else {
+            // 降级：直接加载
+            const src = img.getAttribute('data-src');
+            if (src) img.src = src;
+        }
+    }
+
+    function observeLazyImages(images) {
+        if (!images || !images.length) return;
+
+        if (!('IntersectionObserver' in global)) {
+            // 降级：全部直接加载
+            images.forEach(img => {
+                const src = img.getAttribute('data-src');
+                if (src) img.src = src;
+            });
+            return;
+        }
+
+        if (!_lazyObserver) {
+            _lazyObserver = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        const img = entry.target;
+                        const src = img.getAttribute('data-src');
+                        if (src) {
+                            img.src = src;
+                            img.removeAttribute('data-src');
+                        }
+                        _lazyObserver.unobserve(img);
+                    }
+                });
+            }, {
+                rootMargin: '50px 0px',  // 提前 50px 加载
+                threshold: 0.01
+            });
+        }
+
+        images.forEach(img => {
+            if (img.getAttribute('data-src')) {
+                _lazyObserver.observe(img);
+            }
+        });
+    }
+
+    // ==================== DOM 批量更新 ====================
+    // 使用 DocumentFragment 批量插入 DOM，减少重排
+    // 用法：PerfUtils.batchAppend(container, items, (item) => createElement)
+    function batchAppend(container, items, createElement) {
+        if (!container || !items || !items.length) return;
+        const fragment = document.createDocumentFragment();
+        items.forEach(item => {
+            const el = createElement(item);
+            if (el) fragment.appendChild(el);
+        });
+        container.appendChild(fragment);
+    }
+
+    // ==================== 资源预加载 ====================
+    // 空闲时预加载关键资源（如药品库 JSON）
+    function prefetch(url, as) {
+        runIdle(() => {
+            try {
+                const link = document.createElement('link');
+                link.rel = 'prefetch';
+                link.href = url;
+                link.as = as || 'fetch';
+                document.head.appendChild(link);
+            } catch (e) { /* 忽略 */ }
+        });
+    }
+
+    // ==================== 执行耗时测量 ====================
+    // 简单的性能测量工具
+    function measure(name, fn) {
+        const start = performance.now();
+        const result = fn();
+        const duration = performance.now() - start;
+        if (duration > 16) {  // 超过一帧才记录
+            console.log('[Perf] ' + name + ': ' + duration.toFixed(2) + 'ms');
+        }
+        return result;
+    }
+
+    async function measureAsync(name, fn) {
+        const start = performance.now();
+        try {
+            return await fn();
+        } finally {
+            const duration = performance.now() - start;
+            if (duration > 16) {
+                console.log('[Perf] ' + name + ': ' + duration.toFixed(2) + 'ms');
+            }
+        }
+    }
+
+    // ==================== 导出 ====================
+    const PerfUtils = {
+        debounce,
+        throttle,
+        runIdle,
+        cancelIdle,
+        createVirtualScroller,
+        lazyImage,
+        observeLazyImages,
+        batchAppend,
+        prefetch,
+        measure,
+        measureAsync
+    };
+
+    global.PerfUtils = PerfUtils;
+
+    // ==================== 药物候选框防键盘遮挡 ====================
+    // 问题：showSearchDropdown 将候选框固定显示在输入框下方，键盘弹出时下方空间不足被遮挡
+    // 修复：监听候选框显示，动态判断上方/下方空间，空间不足时显示在输入框上方
+    function setupDropdownKeyboardFix() {
+        // ★ 已禁用：此函数会动态重新定位候选框到上方，与云端APP行为不一致
+        // 云端APP没有此函数，候选框始终在输入框下方显示（CSS max-height: 180px 控制高度）
+        return;
+        if (window.innerWidth >= 769) return;
+
+        var dropdown = document.getElementById('medicineSearchDropdown');
+        if (!dropdown) {
+            setTimeout(setupDropdownKeyboardFix, 500);
+            return;
+        }
+
+        function repositionDropdown() {
+            if (dropdown.style.display !== 'block') return;
+            var activeEl = document.activeElement;
+            if (!activeEl || activeEl.tagName !== 'INPUT') return;
+
+            var rect = activeEl.getBoundingClientRect();
+            var winHeight = window.innerHeight;
+            var vvHeight = window.visualViewport ? window.visualViewport.height : winHeight;
+
+            // adjustResize 模式：visualViewport.height = innerHeight = 实际可视高度
+            // adjustPan 模式：visualViewport.height 仍=屏幕高度，需估算
+            var visibleHeight;
+            if (winHeight - vvHeight < 50) {
+                // adjustPan 模式：visualViewport 未检测到键盘，保守估算（键盘占40%）
+                visibleHeight = winHeight * 0.6;
+            } else {
+                // adjustResize 模式：使用实际可视高度
+                visibleHeight = vvHeight;
+            }
+
+            var availableBelow = visibleHeight - rect.bottom;
+            var availableAbove = rect.top;
+            var dropdownMaxHeight = 250;
+
+            // 下方空间不足且上方空间更大时，候选框显示在输入框上方
+            if (availableBelow < 120 && availableAbove > availableBelow) {
+                var aboveHeight = Math.min(availableAbove - 4, dropdownMaxHeight);
+                dropdown.style.top = Math.max(0, rect.top - aboveHeight - 2) + 'px';
+                dropdown.style.maxHeight = aboveHeight + 'px';
+            } else {
+                // 下方显示，限制最大高度不超过可用空间
+                var belowHeight = Math.min(Math.max(availableBelow - 4, 60), dropdownMaxHeight);
+                dropdown.style.top = (rect.bottom + 2) + 'px';
+                dropdown.style.maxHeight = belowHeight + 'px';
+            }
+        }
+
+        // 监听候选框 style 变化（showSearchDropdown 设置 display=block 时触发）
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) {
+                if (m.attributeName === 'style' && dropdown.style.display === 'block') {
+                    setTimeout(repositionDropdown, 10);
+                    setTimeout(repositionDropdown, 100);
+                    setTimeout(repositionDropdown, 300);
+                }
+            });
+        });
+        observer.observe(dropdown, { attributes: true, attributeFilter: ['style'] });
+
+        // 键盘弹出/收起时重新定位（adjustResize 模式下 innerHeight 变化）
+        window.addEventListener('resize', function() {
+            if (dropdown.style.display === 'block') {
+                setTimeout(repositionDropdown, 50);
+                setTimeout(repositionDropdown, 200);
+            }
+        });
+
+        // visualViewport 变化时重新定位
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', function() {
+                if (dropdown.style.display === 'block') {
+                    setTimeout(repositionDropdown, 30);
+                    setTimeout(repositionDropdown, 150);
+                }
+            });
+        }
+    }
+
+    // ==================== 全局禁用输入法候选词 ====================
+    // 问题：搜狗输入法个人词典记住了旧应用名"本能中医处方系统"，在所有输入框弹出候选词
+    // autocomplete="off" 无法阻止输入法候选词，必须设置 inputmode 切换输入法模式
+    // 修复：为不同输入框设置合适的 inputmode，切换到数字/电话/search 模式，阻止文本候选词
+    function setupInputAutocompleteOff() {
+        if (window.innerWidth >= 769) return;
+
+        function setOff(el) {
+            if (!el || el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') return;
+            if (el.__bnAutocompleteOff) return;
+            el.__bnAutocompleteOff = true;
+            el.setAttribute('autocomplete', 'off');
+            el.setAttribute('autocorrect', 'off');
+            el.setAttribute('autocapitalize', 'off');
+            el.setAttribute('spellcheck', 'false');
+
+            var type = el.getAttribute('type') || '';
+            var id = el.getAttribute('id') || '';
+            var className = el.className || '';
+
+            if (type === 'number' || id.indexOf('Age') >= 0 || id.indexOf('age') >= 0 ||
+                id.indexOf('Fee') >= 0 || id.indexOf('fee') >= 0 || id.indexOf('clinicNo') >= 0 ||
+                id.indexOf('dose') >= 0 || id.indexOf('Dose') >= 0 || id.indexOf('Count') >= 0) {
+                el.setAttribute('inputmode', 'numeric');
+            } else if (type === 'tel' || id.indexOf('Phone') >= 0 || id.indexOf('phone') >= 0) {
+                el.setAttribute('inputmode', 'tel');
+            } else if (type === 'text') {
+                el.setAttribute('inputmode', 'search');
+            }
+        }
+
+        var inputs = document.querySelectorAll('input,textarea');
+        for (var i = 0; i < inputs.length; i++) {
+            setOff(inputs[i]);
+        }
+
+        var observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(m) {
+                if (m.addedNodes) {
+                    for (var i = 0; i < m.addedNodes.length; i++) {
+                        var node = m.addedNodes[i];
+                        if (node.nodeType === 1) {
+                            setOff(node);
+                            var children = node.querySelectorAll('input,textarea');
+                            for (var j = 0; j < children.length; j++) {
+                                setOff(children[j]);
+                            }
+                        }
+                    }
+                }
+            });
+        });
+        observer.observe(document.body || document.documentElement, { childList: true, subtree: true });
+    }
+
+    // ==================== 移动端键盘遮挡修复 ====================
+    // adjustNothing 模式下：键盘弹出时WebView高度不变（无重绘闪现），系统不平移（操作快）
+    // JS通过visualViewport.height检测键盘高度，手动滚动焦点元素到可视区域
+    function setupMobileKeyboardScroll() {
+        // 仅在移动端（窄屏）启用，桌面端不需要
+        if (window.innerWidth >= 769) return;
+
+        var lastFocusedInput = null;
+
+        // 滚动焦点元素到可见区域中央（使用visualViewport.height适配adjustNothing模式）
+        function doScroll(target) {
+            if (!target) return;
+            try {
+                // 使用visualViewport.height作为可视区域高度（adjustNothing下键盘弹出时变小）
+                var vvH = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+                var safeMargin = 60;
+
+                target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                // 同时调整容器内部滚动（确保焦点行完全可见）
+                var container = target.closest ? target.closest('.medicine-table-container') : null;
+                if (container) {
+                    var targetRect = target.getBoundingClientRect();
+                    var containerRect = container.getBoundingClientRect();
+                    var vh = vvH; // adjustNothing模式：使用visualViewport高度
+                    if (targetRect.bottom > vh - safeMargin) {
+                        var targetCenterInContainer = targetRect.top + targetRect.height / 2 - containerRect.top;
+                        var containerCenter = containerRect.height / 2;
+                        var scrollDelta = targetCenterInContainer - containerCenter;
+                        if (Math.abs(scrollDelta) > 5) {
+                            var newTop = container.scrollTop + scrollDelta;
+                            var maxScroll = container.scrollHeight - container.clientHeight;
+                            if (newTop < 0) newTop = 0;
+                            if (newTop > maxScroll) newTop = maxScroll;
+                            try {
+                                container.scrollTo({ top: newTop, behavior: 'smooth' });
+                            } catch(e) {
+                                container.scrollTop = newTop;
+                            }
+                        }
+                    }
+                }
+            } catch(err) {
+                try { target.scrollIntoView(false); } catch(e2) {}
+            }
+        }
+
+        // 监听 focusin 事件（捕获阶段，确保最早收到）
+        document.addEventListener('focusin', function(e) {
+            var target = e.target;
+            if (!target) return;
+            if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA' && target.tagName !== 'SELECT') return;
+
+            // 检查是否在 medicine-table 内（药物输入表格）
+            var table = target.closest ? target.closest('.medicine-table') : null;
+            if (!table) return;
+
+            lastFocusedInput = target;
+
+            // 多次尝试滚动，适配不同设备的键盘弹出速度
+            setTimeout(function() { doScroll(target); }, 100);
+            setTimeout(function() { doScroll(target); }, 300);
+            setTimeout(function() { doScroll(target); }, 500);
+            setTimeout(function() { doScroll(target); }, 800);
+        }, true);
+
+        // 监听 focusout 清除 lastFocusedInput（延迟清除避免快速切换丢失）
+        document.addEventListener('focusout', function() {
+            setTimeout(function() {
+                if (!document.activeElement || document.activeElement === document.body) {
+                    lastFocusedInput = null;
+                }
+            }, 100);
+        }, true);
+
+        // visualViewport.resize 事件触发时重新滚动（键盘弹出/收起时会触发）
+        function onViewportChange() {
+            if (lastFocusedInput) {
+                setTimeout(function() { doScroll(lastFocusedInput); }, 50);
+                setTimeout(function() { doScroll(lastFocusedInput); }, 200);
+                setTimeout(function() { doScroll(lastFocusedInput); }, 400);
+            }
+        }
+
+        // Visual Viewport API（现代浏览器）- 键盘弹出时会触发
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', onViewportChange);
+            window.visualViewport.addEventListener('scroll', onViewportChange);
+        }
+    }
+
+    // 自动初始化
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupMobileKeyboardScroll);
+        document.addEventListener('DOMContentLoaded', setupDropdownKeyboardFix);
+        document.addEventListener('DOMContentLoaded', setupInputAutocompleteOff);
+    } else {
+        setupMobileKeyboardScroll();
+        setupDropdownKeyboardFix();
+        setupInputAutocompleteOff();
+    }
+
+})(typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : this));

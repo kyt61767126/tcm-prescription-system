@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 //  login.js - 登录窗口逻辑（不依赖 nodeIntegration，通过 electronAPI 调用主进程）
 //  统一 localStorage key 前缀为 local_
 //  用户列表与诊所名通过 IPC get-app-config 读取 config.json，不再正则解析 index.html
@@ -146,7 +146,7 @@
 
     function loadClinicName(config) {
         const name = localStorage.getItem(KEY_CLINIC_NAME) || config.clinicName;
-        $('clinicName').textContent = name || '本能堂中医诊所';
+        $('clinicName').textContent = name;
     }
 
     function applyEditionTag(config) {

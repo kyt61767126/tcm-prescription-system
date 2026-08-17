@@ -6098,7 +6098,7 @@ if (window.Permission) {
             // 批量读取本地存储配置，减少重复读取
             // 诊所名称优先从用户存储读取，未登录时从全局存储读取
             const config = {
-                clinicName: currentUser?.clinicName || getUserItem('clinicName') || localStorage.getItem('global_clinicName') || '本能堂中医诊所',
+                clinicName: currentUser?.clinicName || getUserItem('clinicName') || localStorage.getItem('global_clinicName') || ((typeof CONFIG !== 'undefined' && CONFIG.clinicName) || '本能堂中医诊所'),
                 defaultRegFee: getUserItem('defaultRegFee') || '0',
                 defaultDose: getUserItem('defaultDose') || '7',
                 clinicDoctor: currentUser?.name || currentUser?.username || getUserItem('clinicDoctor') || '',
@@ -7719,7 +7719,7 @@ if (window.Permission) {
             ctx.fillRect(0, 0, width, height);
             
             // 诊所名称
-            const clinicName = document.getElementById('clinicName')?.value || '本能堂中医诊所';
+            const clinicName = document.getElementById('clinicName')?.value || ((typeof CONFIG !== 'undefined' && CONFIG.clinicName) || '本能堂中医诊所');
             ctx.font = 'bold 36px SimSun, serif';
             ctx.fillStyle = '#2c5530';
             ctx.textAlign = 'center';
