@@ -435,7 +435,14 @@
         initLoginPermissions();
         // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码
         localStorage.removeItem('auth:savedPassword');
-        $('loginPassword').value = '';
+        // ★ 例外：新装试用默认（仅 admin 单账户、未记住用户）密码框预填 admin，供直接试用
+        const _trialDefaultAdmin = Array.isArray(_users) && _users.length === 1 && _users[0].username === 'admin' &&
+            !localStorage.getItem(KEY_REMEMBER_USER);
+        if (_trialDefaultAdmin) {
+            $('loginPassword').value = 'admin';
+        } else {
+            $('loginPassword').value = '';
+        }
         const rememberPassword = document.getElementById('rememberPassword');
         if (rememberPassword) {
             rememberPassword.checked = false;
