@@ -4569,6 +4569,9 @@ let currentUser = null;
             // P7: 单条从 prescriptions store 删除
             await deletePrescriptionFromDB(id);
 
+            // ★ 修复"删除处方后刷新再次出现"：同步软删除到云端（非阻塞，失败不影响本地删除）
+            try { deletePrescriptionFromCloud(id); } catch (e) { console.warn('[云端删除] 同步失败:', e); }
+
             // 更新内存数组
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             // ★ 优化3：审计日志 - 处方删除
@@ -4937,6 +4940,24 @@ let currentUser = null;
                 } catch (e) { console.warn('[云端同步] 编号回写失败:', e); }
             }
             return data;
+        }
+
+        // ★ 修复"删除处方后刷新再次出现"：同步软删除到云端 API（非阻塞）
+        // 无 token（本地/离线用户）直接跳过；不支持云端同步时仅记日志，不影响本地删除
+        async function deletePrescriptionFromCloud(id) {
+            let token = '';
+            try { token = window.__FORCE_CLOUD_TOKEN__ || ''; } catch(e) {}
+            if (!token) { try { const u = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); token = u.token || ''; } catch(e) {} }
+            if (!token) { try { const u = JSON.parse(localStorage.getItem('currentUser') || '{}'); token = u.token || ''; } catch(e) {} }
+            if (!token) { try { token = localStorage.getItem('authToken') || ''; } catch(e) {} }
+            if (!token) return;
+            if (typeof window.CLOUD_API_BASE === 'undefined' || !window.CLOUD_API_BASE) return;
+            const resp = await fetch(window.CLOUD_API_BASE + '/prescriptions?id=' + encodeURIComponent(id), {
+                method: 'DELETE',
+                headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+            });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
         }
 
         async function savePrescription() {
@@ -6477,6 +6498,9 @@ let currentUser = null;
             // P7: 单条从 prescriptions store 删除
             await deletePrescriptionFromDB(id);
 
+            // ★ 修复"删除病历后刷新再次出现"：同步软删除到云端（非阻塞，失败不影响本地删除）
+            try { deletePrescriptionFromCloud(id); } catch (e) { console.warn('[云端删除] 同步失败:', e); }
+
             // 更新内存数组
             prescriptionHistory = prescriptionHistory.filter(p => p.id !== id);
             // ★ 优化3：审计日志 - 病历删除
@@ -6510,11 +6534,23 @@ let currentUser = null;
                         const arr = Array.isArray(data) ? data : (data.data || data.prescriptions || []);
                         if (Array.isArray(arr) && arr.length > 0) {
                             allPrescriptions = arr;
-                            // 云端数据正确，清空旧的乱码缓存再写入
+                            // ★ 修复"保存后刷新消失"：合并而非覆盖——保留本地已保存但云端尚未同步的处方
+                            try {
+                                const localList = await getAllPrescriptionsFromDB();
+                                if (Array.isArray(localList) && localList.length > 0) {
+                                    const cloudIds = {};
+                                    arr.forEach(function(p) { if (p && p.id != null) cloudIds[String(p.id)] = true; });
+                                    const localMerged = localList.filter(function(p) { return p && p.id != null && !cloudIds[String(p.id)]; });
+                                    if (localMerged.length > 0) {
+                                        allPrescriptions = localMerged.concat(arr);
+                                    }
+                                }
+                            } catch(e) { console.warn('[getAllUserPrescriptions] 合并本地未同步处方失败:', e); }
+                            // 云端数据正确，清空旧的乱码缓存再写入（合并后结果）
                             try { await clearPrescriptionsDB(); } catch(e) {}
-                            try { localStorage.setItem('all_prescription_list', JSON.stringify(arr)); } catch(e) {}
-                            try { await saveAllPrescriptionsToDB(arr); } catch(e) {}
-                            console.log('[getAllUserPrescriptions] ✅ 云端API返回 '+arr.length+' 条正确数据，已清空旧缓存并写入');
+                            try { localStorage.setItem('all_prescription_list', JSON.stringify(allPrescriptions)); } catch(e) {}
+                            try { await saveAllPrescriptionsToDB(allPrescriptions); } catch(e) {}
+                            console.log('[getAllUserPrescriptions] ✅ 云端API返回 '+arr.length+' 条，合并本地未同步 '+ (allPrescriptions.length - arr.length) +' 条，已写入');
                         }
                     }
                 }
