@@ -1,4 +1,4 @@
-# fix-release-bat.ps1 - 生成纯英文 CRLF 行尾的一键发布.bat
+﻿# fix-release-bat.ps1 - 生成纯英文 CRLF 行尾的一键发布.bat
 # 解决 .bat 中文 GBK 乱码和 LF 行尾导致的 cmd.exe 解析错误
 
 $batPath = Join-Path (Split-Path $PSScriptRoot -Parent) "一键发布.bat"

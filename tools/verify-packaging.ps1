@@ -135,6 +135,27 @@ foreach ($bf in $rootBat) {
 }
 Write-Host ""
 
+# --- Check 4: 云端 index.html 副本关键逻辑一致性（防止"改一处漏其余"）---
+# ★ 2026-08-17：云端 index.html 多副本（public线上/cloud_desktop桌面/cloud_app APP兜底），
+#   关键业务逻辑只改基准未同步副本，会导致"这端好了那端又出问题"。发布前强制校验。
+Write-Host "[Check 4] 云端 index.html 副本逻辑一致性（基准 public/index.html）"
+$consistencyExit = $null
+try {
+    & powershell -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'check-index-consistency.ps1')
+    $consistencyExit = $LASTEXITCODE
+} catch {
+    Write-Host "  [FAIL] check-index-consistency.ps1 执行异常: $_" -ForegroundColor Red
+    $consistencyExit = 1
+}
+if ($consistencyExit -ne 0) {
+    Write-Host "  [FAIL] 云端 index.html 副本逻辑不一致，禁止发布！" -ForegroundColor Red
+    $script:fail++
+} else {
+    Write-Host "  [OK]   云端 index.html 副本逻辑一致" -ForegroundColor Green
+    $script:pass++
+}
+Write-Host ""
+
 # --- Summary ---
 Write-Host "========================================"
 Write-Host "  Summary: $pass OK / $fail FAIL / $warn WARN"
