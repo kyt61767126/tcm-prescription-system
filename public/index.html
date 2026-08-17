@@ -4904,6 +4904,41 @@ let currentUser = null;
             }
         }
 
+        // ★ 修复"云端保存处方刷新后消失"：云端用户保存时同步到云端 API
+        // 无 token（本地/离线用户）直接跳过，不阻塞本地保存流程
+        async function syncPrescriptionToCloud(record) {
+            if (!currentUser || !currentUser.username) return;
+            let token = '';
+            try { token = window.__FORCE_CLOUD_TOKEN__ || ''; } catch(e) {}
+            if (!token) { try { const u = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); token = u.token || ''; } catch(e) {} }
+            if (!token) { try { const u = JSON.parse(localStorage.getItem('currentUser') || '{}'); token = u.token || ''; } catch(e) {} }
+            if (!token) { try { token = localStorage.getItem('authToken') || ''; } catch(e) {} }
+            if (!token) return;
+            if (typeof window.CLOUD_API_BASE === 'undefined' || !window.CLOUD_API_BASE) return;
+
+            const resp = await fetch(window.CLOUD_API_BASE + '/prescriptions', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prescription: record }),
+                signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+            });
+            if (!resp.ok) {
+                const errText = await resp.text().catch(function() { return ''; });
+                throw new Error('HTTP ' + resp.status + (errText ? ' ' + errText : ''));
+            }
+            const data = await resp.json();
+            // 服务端可能重新生成处方编号，回写本地记录保持两端一致
+            if (data && data.savedPrescription && data.savedPrescription.prescriptionNo &&
+                data.savedPrescription.prescriptionNo !== record.prescriptionNo) {
+                try {
+                    record.prescriptionNo = data.savedPrescription.prescriptionNo;
+                    record.outpatientNo = data.savedPrescription.outpatientNo || data.savedPrescription.prescriptionNo;
+                    await savePrescriptionToDB(record);
+                } catch (e) { console.warn('[云端同步] 编号回写失败:', e); }
+            }
+            return data;
+        }
+
         async function savePrescription() {
             // ★安全防护：关键 API 校验，防止绕过登录直接调用
             if (!currentUser || !currentUser.username) {
@@ -4995,6 +5030,16 @@ let currentUser = null;
                 console.error('[保存失败] 处方写入数据库失败:', dbErr);
                 alert('处方保存失败：' + (dbErr.message || '数据库写入错误') + '\n请重试或联系技术支持。');
                 return;
+            }
+
+            // ★ 修复"云端保存处方刷新后消失"：云端用户同步到云端 API
+            // 非阻塞执行，不延迟"保存成功"的UI响应；本地已保存，云端失败不影响本次保存
+            try {
+                syncPrescriptionToCloud(record).catch(function (cloudErr) {
+                    console.warn('[云端同步] 处方同步云端失败（本地已保存）:', cloudErr && cloudErr.message);
+                });
+            } catch (cloudErr) {
+                console.warn('[云端同步] 处方同步云端失败（本地已保存）:', cloudErr && cloudErr.message);
             }
 
             // 更新内存数组（会话内查询源，按权限保持一致）
