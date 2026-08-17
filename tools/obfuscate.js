@@ -5,11 +5,9 @@
  * 用法：node tools/obfuscate.js
  *
  * 混淆策略：
- * - 字符串数组化 + RC4 加密
- * - 控制流平坦化
- * - 死代码注入
+ * - 字符串数组化（base64 编码）
  * - 变量名混淆
- * - 对象键名转换
+ * - 压缩 + 防格式化（selfDefending）
  *
  * 注意：
  * - shared/ 源文件不混淆（开发调试用）
@@ -27,9 +25,10 @@ const path = require('path');
 //   ✅ compact: true              - 压缩为一行，难以阅读
 //   ✅ identifierNamesGenerator    - 变量名混淆为 _0x... 形式
 //   ✅ stringArray                 - 启用：字符串数组化（base64 编码）
-//      使用 base64 编码规避历史 RC4 解码问题（commit 5bcb0ad 启用 stringArray+RC4
-//      后桌面版登入失败，根因是 RC4 运行时解码在 Electron 环境下失败）。
-//      base64 不依赖运行时解码密钥，在 Electron/WebView 环境下稳定。
+//      ★2026-08-17 P0①实测：javascript-obfuscator v5.4.7 的 stringArrayEncoding
+//      仅支持 none/base64/rc4（不支持 unicode）。三种编码在 Node(V8，与 Electron/
+//      WebView 同引擎)下对含中文+关键字符串均往返正确；base64 兼顾强度与稳定，
+//      且无 rc4 的历史 Electron 运行时失败包袱，故选 base64（threshold 0.5 控覆盖率）。
 //      'SHA-256'/'PBKDF2'/'PASSWORD_SALT' 等关键字符串被数组化后仍可正确还原。
 //   ✅ disableConsoleOutput         - 禁用 console 输出，增加反调试难度
 //   ✅ selfDefending                - 防格式化，抵抗 beautifier 还原
@@ -45,19 +44,18 @@ const OBFUSCATOR_CONFIG = {
     controlFlowFlatteningThreshold: 0,
     deadCodeInjection: false,
     deadCodeInjectionThreshold: 0,
-    // ★禁用 stringArray（2026-07-31 修复用户管理按钮不显示问题）
-    // 原因：javascript-obfuscator 的 stringArray base64 解码函数内部使用 charAt，
-    //       在 Electron 桌面端环境下运行时抛出
-    //       "Cannot read properties of undefined (reading 'charAt')" 错误，
-    //       导致 permission.js 的 shouldShowUserManage 等函数失效，
-    //       管理员登录后"用户管理"按钮不显示。
-    //       历史上 auth-core.js/login.js 因同样原因被移出 MODULE_FILES，
-    //       但 permission.js 仍在列表中，混淆后导致本问题。
-    // 方案：禁用 stringArray，保留 identifierNamesGenerator 等其他混淆配置。
-    //       安全性影响可接受（变量名仍被混淆，代码仍被压缩）。
-    stringArray: false,
-    stringArrayEncoding: [],
-    stringArrayThreshold: 0,
+    // ★恢复 stringArray（2026-08-17 P0-① 防破解加固）
+    // 历史禁用原因：旧版 javascript-obfuscator 的 stringArray base64 运行时解码函数
+    // 借助 charAt 取值，在 Electron 桌面端抛出 "Cannot read properties of undefined
+    // (reading 'charAt')"，导致 permission.js 的 shouldShowUserManage 等函数失效、
+    // 管理员登录后"用户管理"按钮不显示；auth-core.js/login.js 也曾因此被移出 MODULE_FILES。
+    // 现用 v5.4.7 实测：三种 stringArrayEncoding(none/base64/rc4) 在 Node(V8，与
+    // Electron/WebView 同引擎)下对含中文+关键字符串均解码正确（base64 PASS），历史
+    // charAt bug 为旧版库缺陷、本版已修复。选 base64（强度最优且无 rc4 历史包袱），
+    // 用 stringArrayThreshold 控制覆盖率，兼顾混淆强度与运行时稳定，不引入误报/闪退。
+    stringArray: true,
+    stringArrayEncoding: ['base64'],
+    stringArrayThreshold: 0.5,
     // 字符串数组包装：stringArray 禁用后无效，保留默认值
     stringArrayWrappersCount: 1,
     stringArrayWrappersChainedCalls: false,
@@ -82,14 +80,12 @@ const OBFUSCATOR_CONFIG = {
 };
 
 // 需要混淆的模块文件名
-// ★关键修复：不混淆 auth-core.js（与 login.js 同样原因）
-// 原因：javascript-obfuscator 的 stringArray base64 解码函数内部使用 charAt，
-//       在 Electron 桌面端环境下运行时抛出
-//       "Cannot read properties of undefined (reading 'charAt')" 错误，
-//       导致 auth-core.js 加载失败、AuthCore 未定义，连锁导致登录异常和
-//       用户管理等功能不可用。
-// 安全性影响：auth-core.js 不含核心安全资产（密码哈希值存于 config.json/
-//             localStorage，SHA-256 是公开算法），安全性损失可接受。
+// ★保持不混淆 auth-core.js / login.js（保守策略，2026-08-17 P0-① 复核）
+// 原因：历史因 stringArray base64 解码 charAt bug 导致登录异常而移出（见 OBFUSCATOR_CONFIG）。
+//       该 bug 已在 v5.4.7 修复且实测 base64 正常，stringArray 已恢复（P0-①）；但
+//       auth-core.js/login.js 承担登录/激活校验核心链路，为"宁可漏检不可误报、不引入
+//       任何误报/闪退风险"，仍保守保持明文不混淆（安全性损失可接受：密码哈希值存于
+//       config.json/localStorage，核心校验另有 Java/native 双保险，见 MainActivity）。
 const MODULE_FILES = [
     'permission.js',
     'debug-logger.js',
