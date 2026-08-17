@@ -1540,10 +1540,12 @@ let currentUser = null;
                 const edition = (CONFIG && CONFIG.edition) || 'institution';
                 window.applyLoginTheme(edition);
                 
-                // 更新诊所名称
-                const clinicNameEl = document.getElementById('loginClinicName');
-                if (clinicNameEl && CONFIG && CONFIG.clinicName) {
-                    clinicNameEl.textContent = CONFIG.clinicName;
+                // 更新诊所名称：用户基础设置保存的 local_clinicName 优先，无则用 CONFIG 动态默认
+                // ★ 2026-08-17 举一反三：登录框必须跟随基础设置，禁止只回显 CONFIG 默认值
+                const clinicNameEl2 = document.getElementById('loginClinicName');
+                const _savedClinicName = localStorage.getItem('local_clinicName');
+                if (clinicNameEl2 && (_savedClinicName || (CONFIG && CONFIG.clinicName))) {
+                    clinicNameEl2.textContent = _savedClinicName || CONFIG.clinicName;
                 }
             } catch(e) {
                 console.warn('初始化登录界面失败:', e);
