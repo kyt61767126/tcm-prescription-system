@@ -571,6 +571,23 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                 Log.e(TAG, "APK 签名校验：未找到签名");
                 return false;
             }
+            // ★ P0-NDK：优先走 NDK 原生校验（SHA-256+常量时间比对下沉到 .so）
+            //   native 不可用时回退到下方 Java 实现，绝不因 .so 加载失败闪退
+            if (NativeGuard.isAvailable()) {
+                boolean nativeAllPass = true;
+                for (android.content.pm.Signature sig : signatures) {
+                    if (!NativeGuard.verifyApkSignature(
+                            sig.toByteArray(), EXPECTED_APK_SIGNATURE_SHA256)) {
+                        nativeAllPass = false;
+                        break;
+                    }
+                }
+                if (nativeAllPass) {
+                    return true;
+                }
+                Log.e(TAG, "APK 签名校验：NDK 指纹不匹配 expected=" + EXPECTED_APK_SIGNATURE_SHA256);
+                return false;
+            }
             for (android.content.pm.Signature sig : signatures) {
                 MessageDigest md = MessageDigest.getInstance("SHA-256");
                 byte[] digest = md.digest(sig.toByteArray());

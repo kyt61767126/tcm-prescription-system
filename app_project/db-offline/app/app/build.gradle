@@ -18,6 +18,13 @@ if (signingPropertiesFile.exists()) {
 android {
     namespace = "com.benneng.pres"
     compileSdk = rootProject.ext.compileSdkVersion
+    ndkVersion = "28.2.13676358"
+    externalNativeBuild {
+        cmake {
+            path file("src/main/cpp/CMakeLists.txt")
+            version "3.22.1"
+        }
+    }
     signingConfigs {
         release {
             storeFile file(signingProperties['storeFile'])
@@ -40,7 +47,7 @@ android {
         applicationId "com.benneng.pres.dingzhi"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 104
+        versionCode 105
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

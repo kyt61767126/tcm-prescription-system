@@ -449,6 +449,8 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
 
     /**
      * APK 签名校验：比对当前 APK 签名的 SHA-256 与 EXPECTED_SIGN_HASH
+     * P0-NDK（2026-08-17）：签名校验最易被逆向的关键逻辑（SHA-256 + 常量时间比对）
+     *                     优先下沉到 libsecurityguard.so 原生层；.so 不可用时回退 Java 实现。
      * P1-A5 升级：优先使用 GET_SIGNING_CERTIFICATES（API 28+）支持 v2/v3 签名方案，
      *            旧版本回退到 GET_SIGNATURES（仅支持 v1）
      */
@@ -463,6 +465,19 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
                 Log.w(TAG, "签名校验：未获取到 APK 签名");
                 return false;
             }
+
+            // ★ P0-NDK：优先走 NDK 原生 SHA-256 + 常量时间比对
+            if (NativeGuard.isAvailable()) {
+                for (Signature sig : signatures) {
+                    if (NativeGuard.verifyApkSignature(sig.toByteArray(), EXPECTED_SIGN_HASH)) {
+                        return true;
+                    }
+                    Log.w(TAG, "签名校验：NDK 指纹不匹配 expected=" + EXPECTED_SIGN_HASH);
+                }
+                return false;
+            }
+
+            // 回退：原 Java 实现（native 不可用时降级，绝不闪退）
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             for (Signature sig : signatures) {
                 byte[] hash = md.digest(sig.toByteArray());
@@ -474,7 +489,7 @@ private static final String EXPECTED_SIGN_HASH = "e5b2e4b3aac9de292b71e8d3c1643d
                 if (EXPECTED_SIGN_HASH.equalsIgnoreCase(currentHash)) {
                     return true;
                 }
-                Log.w(TAG, "签名校验：指纹不匹配 expected=" + EXPECTED_SIGN_HASH +
+                Log.w(TAG, "签名校验：(Java) 指纹不匹配 expected=" + EXPECTED_SIGN_HASH +
                         " current=" + currentHash);
             }
             return false;
