@@ -677,7 +677,9 @@
 <script src="electron/video-recorder.js?v=20260817d"></script>
 <script>
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
-window.EDITION = 'clinic_custom';
+// ★★★ 2026-08-17 【Setup 1.0.38 根治刀1-A】：惠康中医-本地 = 永久离线标准版（personal），绝不再用 clinic_custom 默认值！
+window.EDITION = 'personal';
+window.PRODUCT_NAME = '惠康中医-本地';
 // ★v2.0 统一架构：声明 APP_MODE（offline/cloud/auto），供 db-adapter.js 自动检测
 // auto=自动检测：已加载 cloud-api.js 且 CLOUD_API_BASE 存在则走云端，否则走离线
 window.APP_MODE = 'auto';
@@ -704,11 +706,24 @@ try {
 if (window.Permission) {
     Permission.init().then(function() {
         if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', function() { Permission.applyRuntimePermissions(); });
+            document.addEventListener('DOMContentLoaded', function() {
+                Permission.applyRuntimePermissions();
+                if (typeof enforceStandardEditionButtons === 'function') {
+                    enforceStandardEditionButtons('after-Permission-init-applyRuntime');
+                }
+            });
         } else {
             Permission.applyRuntimePermissions();
+            if (typeof enforceStandardEditionButtons === 'function') {
+                enforceStandardEditionButtons('after-Permission-init-applyRuntime');
+            }
         }
-    }).catch(function(e) { console.warn('Permission init failed:', e); });
+    }).catch(function(e) {
+        console.warn('Permission init failed:', e);
+        if (typeof enforceStandardEditionButtons === 'function') {
+            enforceStandardEditionButtons('after-Permission-init-CATCH-' + String(e.message || 'error'));
+        }
+    });
 }
 </script><script>window.addEventListener('error', function(e) {
     console.error('[全局错误]', e.message, e.error);
@@ -718,10 +733,16 @@ window.addEventListener('unhandledrejection', function(e) {
 });
 let currentUser = null;
 
+        // ★★★ 2026-08-17 【根治刀1-B】CONFIG 初始化必须包含 productName，且默认 edition 是 personal
+        //   注意：所有后续同步（同步XHR/异步IPC/Permission回写）均可覆盖此值，
+        //   但权威兜底 enforceStandardEditionButtons 会在最后强制对齐
         const CONFIG = {
             clinicName: '本能堂中医诊所',
             doctorName: '本能堂',
-            edition: 'clinic_custom',
+            edition: 'personal',
+            productName: '惠康中医-本地',
+            maxUsers: 1,
+            versionLabel: '离线标准版',
             configIssuedAt: '2026-08-06T09:13:44.720Z'
         };
 
@@ -733,11 +754,16 @@ let currentUser = null;
                 xhr.send();
                 if (xhr.status === 200 || xhr.status === 0) {
                     var cfg = JSON.parse(xhr.responseText);
+                    // ★★★ 2026-08-17 【根治刀1-C】先全字段 Object.assign，再逐个字段兜底复制（含 productName/versionLabel/maxUsers！）
+                    try { Object.assign(CONFIG, cfg); } catch (_) {}
                     if (cfg.clinicName) CONFIG.clinicName = cfg.clinicName;
                     if (cfg.doctorName) CONFIG.doctorName = cfg.doctorName;
                     if (cfg.edition) CONFIG.edition = cfg.edition;
                     if (cfg.users) CONFIG.users = cfg.users;
                     if (cfg.configIssuedAt) CONFIG.configIssuedAt = cfg.configIssuedAt;
+                    if (cfg.productName) CONFIG.productName = cfg.productName;
+                    if (cfg.versionLabel) CONFIG.versionLabel = cfg.versionLabel;
+                    if (cfg.maxUsers !== undefined && cfg.maxUsers !== null) CONFIG.maxUsers = cfg.maxUsers;
                 }
             } catch(e) {
                 console.warn('[CONFIG] 加载 config.json 失败:', e.message);
@@ -1455,6 +1481,35 @@ let currentUser = null;
             var e = (typeof CONFIG !== 'undefined' && CONFIG.edition) || window.EDITION || 'clinic_custom';
             return window.isStandardEdition(e) ? '云端标准版' : '云端机构版';
         };
+
+        // ★★★ 2026-08-17 【根治刀2-B：统一版本标签函数】：优先取 CONFIG.versionLabel（Setup 发下来的权威值）
+        function getEditionTag() {
+            if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) return CONFIG.versionLabel;
+            // 兼容云端版：若有 getCloudEditionTag 则优先用它（否则 fallback 老逻辑）
+            if (typeof window.getCloudEditionTag === 'function') return window.getCloudEditionTag();
+            var e = '';
+            if (typeof CONFIG !== 'undefined' && CONFIG) e = String(CONFIG.edition || '');
+            if (!e) e = String(window.EDITION || '');
+            if (typeof window.isStandardEdition === 'function' && window.isStandardEdition(e)) return '云端标准版';
+            if (e === 'personal' || e === 'offline_personal') return '离线标准版';
+            if (e === 'cloud_personal' || e === 'clinic_standard') return '云端标准版';
+            return '机构版';
+        }
+        function applyEditionTags() {
+            var label = getEditionTag();
+            var tag = document.querySelector('.version-tag');
+            if (tag) tag.textContent = '【' + label + '】 V1.0.0';
+            var tv = document.getElementById('topVersionTag');
+            if (tv) tv.textContent = '【' + label + '】';
+            var et = document.getElementById('editionTag');
+            if (et) et.textContent = '【' + label + '】';
+            document.title = '惠康中医-' + label;
+            console.log('%c惠康中医' + label + ' V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
+            // ★★★ 2026-08-17 【根治刀2-B】每次标签变动后强制 enforce（防止 applyEditionTags 后标签变标准版但按钮没同步）
+            if (typeof enforceStandardEditionButtons === 'function') {
+                enforceStandardEditionButtons('after-applyEditionTags');
+            }
+        }
         // 根据版本切换登录界面主题
         window.applyLoginTheme = function(edition) {
             const root = document.documentElement;
@@ -1476,14 +1531,8 @@ let currentUser = null;
         };
 
         // 版本标签统一显示 V1.0.0（按实际注册版本动态），置于分类函数定义之后执行
-        (function() {
-            var label = window.getCloudEditionTag();
-            var tag = document.querySelector('.version-tag');
-            if (tag) tag.textContent = '【' + label + '】 V1.0.0';
-            var tv = document.getElementById('topVersionTag');
-            if (tv) tv.textContent = '【' + label + '】';
-            console.log('%c惠康中医' + label + ' V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
-        })();
+        // ★ 2026-08-17 【根治刀2-B】：调用统一的 applyEditionTags()（内部会自动 enforce）
+        (function() { applyEditionTags(); })();
 
         // 初始化登录界面
         window.initLoginUI = function() {
@@ -2087,32 +2136,89 @@ let currentUser = null;
             } catch(e) { console.warn('enableMediaButtons失败:', e); }
         }
 
+        // ★★★ 2026-08-17 【根治刀3：Setup 1.0.38 权威终极兜底（取代弱双判据）】—— 惠康中医-本地=永久离线标准版
+        //  ★ 5 重 OR 判据（任意命中即判为标准版；离线桌面权威模式下判据全假也照样强制执行！）：
+        //    ① UI标签判据：getEditionTag() 含「标准版」
+        //    ② 权威全局名：window.PRODUCT_NAME === '惠康中医-本地'（硬编码，不依赖CONFIG同步）
+        //    ③ CONFIG产品名：CONFIG.productName === '惠康中医-本地'
+        //    ④ EDITION直接值：CONFIG.edition === 'personal' || CONFIG.edition === 'offline_personal' || window.EDITION === 'personal'
+        //    ⑤ DOM权威锚点：document.getElementById('_force_standard_edition_marker_') 存在（页面HTML硬编码，就算JS全错了也能查到）
+        //  ★【离线桌面权威强制模式】：IS_ELECTRON=true && APP_MODE=offline → 不论判据结果、不论任何配置，一律强制执行标准版对齐！
+        //     → 这是 Setup 产品级契约（惠康中医-本地=离线标准版）！所有配置/权限/角色/标签/IPC失败 都不能撼动这个事实！
+        //  ★ 生效动作（四层纠正，任何一层失败不影响其他层）：
+        //    A) CONFIG.edition/window.EDITION 强制 personal
+        //    B) Permission._edition 强制 personal（若 Permission 对象存在则直接改内部状态！）
+        //    C) currentUser.role 强制 user（admin/clinic_admin 一律降级，标准版永久单用户！）
+        //    D) DOM 强制对齐：【修改密码】block / 【用户管理】none / 【处方查阅】none / 移动端btn2=改密
         function enforceStandardEditionButtons(reason) {
             try {
-                var tag = (typeof getEditionTag === 'function') ? String(getEditionTag()) : '';
-                var productName = (typeof CONFIG !== 'undefined') ? String(CONFIG.productName || '') : '';
-                var isStandard = (tag.indexOf('标准版') >= 0) || (productName === '惠康中医-本地');
-                if (!isStandard) return;
-
+                // ─── 权威环境判定（Setup 1.0.38 新增！） ───
+                var IS_DESKTOP_LOCAL = false;
                 try {
-                    if (typeof CONFIG !== 'undefined' && CONFIG) CONFIG.edition = 'personal';
-                } catch (_) {}
+                    if (typeof IS_ELECTRON !== 'undefined' && IS_ELECTRON) IS_DESKTOP_LOCAL = true;
+                    if (window.electronAPI && window.electronAPI.isElectron) IS_DESKTOP_LOCAL = true;
+                    // APP_MODE 是 offline 才是惠康中医-本地离线桌面；云端桌面版虽有 electronAPI 但 APP_MODE=cloud，不误伤
+                    if (IS_DESKTOP_LOCAL && window.APP_MODE && String(window.APP_MODE) !== 'offline') IS_DESKTOP_LOCAL = false;
+                } catch(_) {}
+
+                // ─── 5 重 OR 判据（软判据，命中即认为是标准版） ───
+                var tag = (typeof getEditionTag === 'function') ? String(getEditionTag()) : '';
+                var globalProduct = (typeof window.PRODUCT_NAME !== 'undefined') ? String(window.PRODUCT_NAME) : '';
+                var configProduct = (typeof CONFIG !== 'undefined') ? String((CONFIG && CONFIG.productName) || '') : '';
+                var configEdition = (typeof CONFIG !== 'undefined') ? String((CONFIG && CONFIG.edition) || '') : '';
+                var globalEdition = String(window.EDITION || '');
+                var domMarker = !!(document.getElementById('_force_standard_edition_marker_'));
+
+                var isStandardSoft = false
+                    || (tag.indexOf('标准版') >= 0)
+                    || (globalProduct === '惠康中医-本地')
+                    || (configProduct === '惠康中医-本地')
+                    || (['personal', 'offline_personal'].indexOf(configEdition) >= 0)
+                    || (globalEdition === 'personal' || globalEdition === 'offline_personal')
+                    || domMarker;
+
+                // ─── 【Setup 权威强制模式】IS_DESKTOP_LOCAL=true → 不论软判据，一律强制执行！ ───
+                var mustEnforce = IS_DESKTOP_LOCAL || isStandardSoft;
+                if (!mustEnforce) return;
+
+                // ========== 强制执行 ==========
+
+                // A) 强制纠正 edition 全局变量
+                try { if (typeof CONFIG !== 'undefined' && CONFIG) CONFIG.edition = 'personal'; } catch (_) {}
                 try { if (window.EDITION !== undefined) window.EDITION = 'personal'; } catch (_) {}
 
+                // B) ★★★ 直接改 Permission._edition 内部状态（从源头改！杜绝 Permission.shouldShowXxx 再判机构版！）
+                try {
+                    if (window.Permission && typeof Permission._edition !== 'undefined') {
+                        Permission._edition = 'personal';
+                    }
+                } catch (_) {}
+                try {
+                    // 有些版本 Permission 是 IIFE 暴露出的对象，可能有 setEdition 或 edition getter/setter
+                    if (window.Permission && Permission.config && CONFIG) {
+                        Permission.config.edition = 'personal';
+                    }
+                } catch (_) {}
+
+                // C) 强制纠正角色（admin/clinic_admin → user，标准版永久单用户）
                 try {
                     if (window.currentUser && (currentUser.role === 'admin' || currentUser.role === 'clinic_admin')) {
                         currentUser.role = 'user';
                     }
                 } catch (_) {}
 
+                // D) DOM 强制对齐（最后一道防线，直接改 display，任何逻辑再怎么覆盖都没用！）
                 try {
                     var changePwdBtn = document.getElementById('changePwdBtn');
                     var userManageBtn = document.getElementById('userManageBtn');
                     var clinicPrescriptionBtn = document.getElementById('clinicPrescriptionBtn');
                     if (changePwdBtn) changePwdBtn.style.display = 'block';
+                    if (changePwdBtn) changePwdBtn.style.visibility = 'visible';
                     if (userManageBtn) userManageBtn.style.display = 'none';
+                    if (userManageBtn) userManageBtn.style.visibility = 'hidden';
                     if (clinicPrescriptionBtn) clinicPrescriptionBtn.style.display = 'none';
                 } catch (_) {}
+                // D2) 移动端底部 btn2 对齐
                 try {
                     var btn2 = document.getElementById('mobileActionBtn2');
                     if (btn2) {
@@ -2122,11 +2228,17 @@ let currentUser = null;
                         btn2.style.display = '';
                     }
                 } catch (_) {}
+
                 if (typeof console !== 'undefined' && console.log) {
-                    console.log('[EnforceStandard] 标准版按钮强制对齐OK, reason=' + (reason || 'unknown') + ' | tag=' + tag + ' | product=' + productName);
+                    console.log('[EnforceStandard] ✅ 强制执行OK | mode=' + (IS_DESKTOP_LOCAL ? 'DESKTOP_AUTHORITY' : 'SOFT_MATCH') + ' | reason=' + (reason || 'unknown') + ' | tag=' + tag + ' | marker=' + domMarker);
                 }
             } catch (outerError) {
-                try { if (typeof console !== 'undefined' && console.warn) console.warn('[EnforceStandard] 兜底异常（非致命）:', outerError); } catch (_) {}
+                try { if (typeof console !== 'undefined' && console.warn) console.warn('[EnforceStandard] 兜底异常（非致命，尝试DOM直接改）:', outerError); } catch (_) {}
+                // ★ 就算整个函数抛错，最后再用最外层 try 单独改一次 DOM（不能让函数整体失败导致按钮依旧缺失！）
+                try {
+                    var c = document.getElementById('changePwdBtn'); if (c) { c.style.display = 'block'; c.style.visibility = 'visible'; }
+                    var u = document.getElementById('userManageBtn'); if (u) { u.style.display = 'none'; u.style.visibility = 'hidden'; }
+                } catch(ee) {}
             }
         }
 
@@ -5572,6 +5684,11 @@ let currentUser = null;
             
             document.getElementById('doctorName').value = document.getElementById('defaultDoctor').value;
             document.getElementById('clinicNameDisplay').textContent = document.getElementById('clinicName').value;
+            // ★ 2026-08-17 举一反三：保存诊所名后同步登录框诊所名（登出/重登时跟随最新设置）
+            const _loginClinicEl = document.getElementById('loginClinicName');
+            if (_loginClinicEl && document.getElementById('clinicName').value) {
+                _loginClinicEl.textContent = document.getElementById('clinicName').value;
+            }
             // ★ 2026-08-03 同步：保存医师姓名后，立即更新当前用户显示
             const newDoctorName = document.getElementById('defaultDoctor').value;
             document.getElementById('userDisplayName').textContent = newDoctorName || (currentUser ? currentUser.name : '');
@@ -7485,7 +7602,20 @@ window.addEventListener('load', function () {
     window.handleViewUserPrescriptions = handleViewUserPrescriptions;
     window.renderUserList = renderUserList;
     window.showUserManageModal = showUserManageModal;
-});</script><div id="mediaViewerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99998;align-items:center;justify-content:center;" onclick="if(event.target===this)closeMediaViewer()"><div style="background:#fff;border-radius:10px;padding:12px;width:92%;max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#333;">拍照录像查看</span><button onclick="closeMediaViewer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;line-height:1;">&times;</button></div><div id="mediaViewerContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;"></div></div></div></body></html>
+});</script><div id="mediaViewerOverlay" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:99998;align-items:center;justify-content:center;" onclick="if(event.target===this)closeMediaViewer()"><div style="background:#fff;border-radius:10px;padding:12px;width:92%;max-width:600px;max-height:85vh;display:flex;flex-direction:column;overflow:hidden;position:relative;"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-shrink:0;"><span style="font-size:14px;font-weight:600;color:#333;">拍照录像查看</span><button onclick="closeMediaViewer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#999;line-height:1;">&times;</button></div><div id="mediaViewerContent" style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0;"></div></div></div>
+<!-- ★★★ 2026-08-17 【根治刀4：Setup级权威DOM锚点（HTML硬编码，永不丢失）】—— 惠康中医-本地=永久离线标准版
+     此DIV永远存在，即使所有JS变量/CONFIG/IPC/Permission全出错，只要查DOM就能命中判据！ -->
+<div id="_force_standard_edition_marker_" style="display:none!important;visibility:hidden!important;width:0;height:0;overflow:hidden;position:absolute;left:-99999px;top:-99999px;pointer-events:none;">惠康中医-本地=永久离线标准版（单用户=必须显示【🔐修改密码】+隐藏【👥用户管理】；机构版行为一律禁止！）</div>
+<!-- ★★★ 2026-08-17 【根治刀6：定时权威enforce】—— 最后保险！10s/30s再强砍2刀，任何异步重绘/定时器/回调覆盖都无效！ -->
+<script>
+(function(){
+    function __finalEnforce__(){try{if(typeof enforceStandardEditionButtons==='function')enforceStandardEditionButtons('TIMER-AUTHORITY');}catch(_){}}
+    setTimeout(function(){ __finalEnforce__(); }, 10000);
+    setTimeout(function(){ __finalEnforce__(); }, 30000);
+    try { setInterval(function(){ __finalEnforce__(); }, 5*60*1000); } catch(_) {}
+})();
+</script>
+</body></html>
 
 
 
