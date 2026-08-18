@@ -1972,7 +1972,7 @@ let currentUser = null;
             if (!btn2 || !currentUser) return;
 
             const isApp = !!window.AndroidNative;
-            const changePwdText = isApp ? '🔐 改密' : '🔐 修改密码';
+            const changePwdText = '🔐 修改密码';
 
             // 管理员显示"账户"，普通用户显示"改密"（APP和桌面一致）
             const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
