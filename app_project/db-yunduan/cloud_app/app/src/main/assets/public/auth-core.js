@@ -2028,7 +2028,8 @@
             // 仅 APP 环境注入（参考离线APP：兼容 Capacitor 与 Android WebView）
             const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences)
                 || (typeof global.AndroidNative !== 'undefined')
-                || (typeof global.electronAPI !== 'undefined' && global.electronAPI.isAndroidAPP === true);
+                || (typeof global.electronAPI !== 'undefined' && global.electronAPI.isAndroidAPP === true)
+                || (typeof location !== 'undefined' && location.href.indexOf('android_asset') >= 0);
             if (!isApp) return;
             const overlay = document.getElementById('loginOverlay');
             if (!overlay) return;
@@ -2064,15 +2065,19 @@
 
     global.openAdminActivate = async function () {
         try {
-            if (!global.electronAPI || !global.electronAPI.activate) {
-                showHtmlAlert('授权系统未就绪，请重启应用后重试');
-                return;
-            }
+            // 兼容离线(有 activate 本地桥)与云端APP(无本地激活桥)：
+            // 管理员激活是"提交申请->管理员审批->云端创建账号"，云端为 SaaS，无需本地激活桥即可完成
+            const hasActivate = global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.getMachineId === 'function';
             let machineId = '';
-            try {
-                const r = await global.electronAPI.activate.getMachineId();
-                machineId = (r && r.machineId) ? r.machineId : (r || '');
-            } catch (e) {}
+            if (hasActivate) {
+                try {
+                    const r = await global.electronAPI.activate.getMachineId();
+                    machineId = (r && r.machineId) ? r.machineId : (r || '');
+                } catch (e) {}
+            } else if (global && global.AndroidNative && typeof global.AndroidNative.invoke === 'function') {
+                try { machineId = global.AndroidNative.invoke('getMachineId', '{}') || ''; } catch (e) {}
+            }
             let clinicName = '';
             try {
                 if (typeof CONFIG !== 'undefined' && CONFIG.clinicName) clinicName = CONFIG.clinicName;

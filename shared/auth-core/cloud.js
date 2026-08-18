@@ -2025,37 +2025,475 @@
     // 约束：仅 APP 端（Capacitor 环境、含 loginOverlay）注入；云端桌面/网页版无需激活（登录即可使用），不注入
     function injectActivateLinkIntoLogin() {
         try {
-            // 仅 Capacitor(APP) 环境注入
-            const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences);
+            // 仅 APP 环境注入（参考离线APP：兼容 Capacitor 与 Android WebView）
+            const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences)
+                || (typeof global.AndroidNative !== 'undefined')
+                || (typeof global.electronAPI !== 'undefined' && global.electronAPI.isAndroidAPP === true)
+                || (typeof location !== 'undefined' && location.href.indexOf('android_asset') >= 0);
             if (!isApp) return;
             const overlay = document.getElementById('loginOverlay');
             if (!overlay) return;
-            // 若 index.html 已自带 registerEntry，则仅刷新状态，不重复注入
-            if (document.getElementById('registerEntry')) {
-                if (typeof global.updateRegisterEntry === 'function') { try { global.updateRegisterEntry(); } catch (e) {} }
-                return;
-            }
+            // 已注入过则跳过，避免重复
+            if (document.getElementById('activateLoginEntry')) return;
 
-            // 定位登录按钮区，在其下方插入注册/激活入口
+            // 定位登录按钮区，在其下方插入"软件激活 / 管理员激活"入口（参考桌面登入框）
             const container = overlay.querySelector('.login-buttons');
             if (!container) return;
 
             const entry = document.createElement('div');
-            entry.className = 'register-entry';
-            entry.id = 'registerEntry';
-            entry.setAttribute('onclick', 'if(window.handleRegisterEntry){handleRegisterEntry()}');
-            entry.innerHTML = '<span class="register-entry-icon">🚀</span>' +
-                '<span class="register-entry-text" id="registerEntryText">首次使用？点击设置诊所信息</span>' +
-                '<span class="register-entry-arrow">›</span>';
+            entry.id = 'activateLoginEntry';
+            entry.style.cssText =
+                'margin-top:10px;padding:4px;display:flex;gap:10px;justify-content:center;';
+            entry.innerHTML =
+                '<div style="flex:1;padding:11px 6px;border-radius:8px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;cursor:pointer;font-size:13px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.activateNow){window.activateNow();}">🔑 软件激活</div>' +
+                '<div style="flex:1;padding:11px 6px;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:13px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
             container.parentNode.insertBefore(entry, container.nextSibling);
-            // 刷新入口状态（激活与否、诊所是否已设置）
-            if (typeof global.updateRegisterEntry === 'function') {
-                try { global.updateRegisterEntry(); } catch (e) {}
-            }
-            console.log('[LicenseCheck] 登录界面已注入注册/激活入口');
+            console.log('[LicenseCheck] 登录界面已注入 软件激活/管理员激活 入口');
         } catch (e) {
-            console.warn('[LicenseCheck] 注入登录注册/激活入口失败:', e);
+            console.warn('[LicenseCheck] 注入登录 软件激活/管理员激活 入口失败:', e);
         }
+    }
+
+    // ============================================================================
+    // ★ APP 端"管理员激活"多步骤弹窗（仿桌面 activate-window.html）
+    // 版本选择 → 填写信息 → 确认密码 → 提交 admin-submit → 轮询 admin-status →
+    //   激活成功(离线: installAdminLicense 安装本地license+重启 / 云端: 提示用手机号登录)
+    // 不修改 HTML 源码，仅运行时动态注入 DOM，符合界面保护约束
+    // ============================================================================
+    const ADMIN_SUBMIT_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-submit';
+    const ADMIN_STATUS_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-status';
+
+    global.openAdminActivate = async function () {
+        try {
+            // 兼容离线(有 activate 本地桥)与云端APP(无本地激活桥)：
+            // 管理员激活是"提交申请->管理员审批->云端创建账号"，云端为 SaaS，无需本地激活桥即可完成
+            const hasActivate = global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.getMachineId === 'function';
+            let machineId = '';
+            if (hasActivate) {
+                try {
+                    const r = await global.electronAPI.activate.getMachineId();
+                    machineId = (r && r.machineId) ? r.machineId : (r || '');
+                } catch (e) {}
+            } else if (global && global.AndroidNative && typeof global.AndroidNative.invoke === 'function') {
+                try { machineId = global.AndroidNative.invoke('getMachineId', '{}') || ''; } catch (e) {}
+            }
+            let clinicName = '';
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG.clinicName) clinicName = CONFIG.clinicName;
+            } catch (e) {}
+            showAdminActivateModal(machineId, clinicName);
+        } catch (e) {
+            console.warn('[LicenseCheck] 打开管理员激活弹窗失败:', e);
+        }
+    };
+
+    // 管理员激活多步骤弹窗（自身管理状态机，不阻塞返回）
+    function showAdminActivateModal(machineId, clinicName) {
+        // 若已打开则忽略
+        if (document.getElementById('adminActivateOverlay')) return;
+
+        const PHONE_RE = /^1[3-9]\d{9}$/;
+        let state = { edition: 'institution', phone: '', clinicName: '', adminName: '', password: '', remark: '' };
+        let pollTimer = null;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'adminActivateOverlay';
+        overlay.style.cssText =
+            'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const card = document.createElement('div');
+        card.style.cssText =
+            'background:white;border-radius:14px;width:100%;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,0.3);max-height:92vh;overflow-y:auto;';
+
+        card.innerHTML =
+            // 标题（管理员激活 · 绿色主题）
+            '<div style="background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);padding:18px;border-radius:14px 14px 0 0;text-align:center;">' +
+                '<div style="font-size:19px;font-weight:bold;color:white;">📋 管理员激活</div>' +
+                '<div style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;">惠康中医诊所管理系统</div>' +
+            '</div>' +
+
+            // 第一步：版本选择
+            '<div id="adminStepEdition" style="padding:16px;">' +
+                '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:8px;">请选择要激活的版本</div>' +
+                '<div style="display:flex;gap:10px;">' +
+                    '<div id="editionPersonal" data-edition="personal" style="flex:1;padding:14px;border:2px solid #ddd;border-radius:10px;text-align:center;cursor:pointer;background:#26a69a;border-color:#26a69a;color:#fff;">' +
+                        '<div style="font-size:24px;">🏥</div><div style="font-size:14px;font-weight:bold;margin-top:2px;">标准版</div><div style="font-size:11px;opacity:0.85;">个人诊所 · 单用户</div>' +
+                    '</div>' +
+                    '<div id="editionInstitution" data-edition="institution" style="flex:1;padding:14px;border:2px solid #26a69a;border-radius:10px;text-align:center;cursor:pointer;background:#fff;">' +
+                        '<div style="font-size:24px;">🏨</div><div style="font-size:14px;font-weight:bold;margin-top:2px;color:#333;">机构版</div><div style="font-size:11px;color:#909399;">多人机构 · 多用户管理</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+
+            // 第一步之一：填写信息（默认隐藏）
+            '<div id="adminStepForm" style="display:none;padding:16px;">' +
+                '<div id="adminProgress" style="display:flex;align-items:center;justify-content:center;margin:0 0 14px;gap:6px;">' +
+                    '<span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#26a69a,#00897b);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">1</span>' +
+                    '<span style="flex:1;height:2px;background:#e4e7ed;"></span>' +
+                    '<span id="adminProgressDot2" style="width:24px;height:24px;border-radius:50%;background:#e4e7ed;color:#909399;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">2</span>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="adminClinicName" placeholder="如：惠康中医诊所" autocomplete="new-password" data-lpignore="true" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" style="font-size:11px;color:#909399;margin-top:4px;">💡 必填，请填写您的诊所名称</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">管理员/医师姓名 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="adminAdminName" placeholder="如：王医生" autocomplete="new-password" data-lpignore="true" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" style="font-size:11px;color:#909399;margin-top:4px;">💡 必填，请填写管理员/医师姓名</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">联系电话 <span style="color:#e53935;">*</span>（将作为登录账号）</label>' +
+                    '<input type="text" id="adminPhone" placeholder="如：13800138000" autocomplete="new-password" data-lpignore="true" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" id="adminPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）</div>' +
+                '</div>' +
+                '<div style="margin-bottom:14px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">备注（可选）</label>' +
+                    '<input type="text" id="adminRemark" placeholder="如：需要几个账号" autocomplete="off" maxlength="100" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" style="font-size:11px;color:#909399;margin-top:4px;">💡 机构版管理员可在系统中注册生成5个普通用户（只读权限）</div>' +
+                '</div>' +
+                '<button id="adminToStep2Btn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">下一步：确认密码（可留空=默认 admin）→</button>' +
+            '</div>' +
+
+            // 第二步：密码（默认隐藏）
+            '<div id="adminStepPwd" style="display:none;padding:16px;">' +
+                '<div style="display:flex;align-items:center;justify-content:center;margin:0 0 14px;gap:6px;">' +
+                    '<span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#26a69a,#00897b);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">1</span>' +
+                    '<span style="flex:1;height:2px;background:linear-gradient(135deg,#26a69a,#00897b);"></span>' +
+                    '<span style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,#26a69a,#00897b);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:bold;">2</span>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码（可留空＝默认 admin）</label>' +
+                    '<input type="password" id="adminPassword" placeholder="留空则用默认密码 admin（登入后请修改）" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 留空则默认密码为 admin（登入后请在设置中自行修改密码）</div>' +
+                '</div>' +
+                '<div style="margin-bottom:14px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码（自定义时需再输一次）</label>' +
+                    '<input type="password" id="adminPassword2" placeholder="自定义密码时再次输入" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" id="adminPwd2Hint"></div>' +
+                '</div>' +
+                '<div style="display:flex;gap:10px;">' +
+                    '<button id="adminBackBtn" style="flex:1;padding:12px;font-size:15px;border:1px solid #ddd;border-radius:8px;color:#666;background:#fff;cursor:pointer;">← 返回</button>' +
+                    '<button id="adminSubmitBtn" style="flex:1;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">📤 提交激活申请</button>' +
+                '</div>' +
+            '</div>' +
+
+            // 提交中（默认隐藏）
+            '<div id="adminSubmitting" style="display:none;padding:40px 16px;text-align:center;">' +
+                '<div style="font-size:34px;">📡</div>' +
+                '<div style="font-size:15px;font-weight:bold;color:#333;margin-top:8px;">正在提交激活申请...</div>' +
+                '<div style="font-size:12px;color:#909399;margin-top:4px;">正在连接服务器，请稍候</div>' +
+                '<div style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:8px;">' +
+                    '<span style="width:18px;height:18px;border:2px solid #ddd;border-top-color:#26a69a;border-radius:50%;animation:webkit-rotate 0.8s linear infinite;"></span>' +
+                    '<span style="font-size:13px;color:#26a69a;" id="adminSubmitStatus">正在提交信息...</span>' +
+                '</div>' +
+            '</div>' +
+
+            // 等待审批（默认隐藏）
+            '<div id="adminWaiting" style="display:none;padding:28px 16px;text-align:center;">' +
+                '<div style="font-size:34px;">⏳</div>' +
+                '<div style="font-size:15px;font-weight:bold;color:#333;margin-top:8px;">等待管理员激活...</div>' +
+                '<div style="font-size:12px;color:#909399;margin-top:4px;">激活请求已提交，请耐心等待平台管理员处理</div>' +
+                '<div style="margin-top:12px;font-size:12px;color:#555;line-height:1.9;text-align:left;background:#f7f7f7;border-radius:8px;padding:10px;">' +
+                    '<div>📋 请求编号：<b id="adminRequestNo">--</b></div>' +
+                    '<div>📞 联系电话：<b id="adminSavedPhone">--</b></div>' +
+                    '<div id="adminWaitStatus" style="color:#26a69a;margin-top:4px;">正在等待管理员审核...</div>' +
+                '</div>' +
+                '<div style="font-size:11px;color:#909399;margin-top:10px;">💡 关闭窗口不影响审核，稍后重新打开可恢复状态</div>' +
+            '</div>' +
+
+            // 成功（默认隐藏）
+            '<div id="adminSuccess" style="display:none;padding:32px 16px;text-align:center;">' +
+                '<div style="font-size:40px;">🎉</div>' +
+                '<div style="font-size:17px;font-weight:bold;color:#2e7d32;margin-top:8px;">激活成功！</div>' +
+                '<div id="adminSuccessDesc" style="font-size:13px;color:#555;margin-top:8px;line-height:1.7;"></div>' +
+                '<div style="font-size:12px;color:#333;margin-top:12px;line-height:1.9;">' +
+                    '<div>✅ 登录账号：<b id="adminSuccessPhone">--</b></div>' +
+                    '<div>✅ 密码：<b style="color:#2e7d32;">（默认 admin，登入后请修改）</b></div>' +
+                '</div>' +
+                '<button id="adminSuccessBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">✅ 关闭窗口</button>' +
+            '</div>' +
+
+            // 拒绝（默认隐藏）
+            '<div id="adminRejected" style="display:none;padding:32px 16px;text-align:center;">' +
+                '<div style="font-size:40px;">❌</div>' +
+                '<div style="font-size:16px;font-weight:bold;color:#e53935;margin-top:8px;">激活请求被拒绝</div>' +
+                '<div id="adminRejectReason" style="font-size:13px;color:#666;margin-top:8px;">管理员未通过您的激活申请</div>' +
+                '<button id="adminRetryBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);cursor:pointer;font-weight:bold;">修改后重新提交</button>' +
+            '</div>' +
+
+            // 底部（机器ID + 客服）
+            '<div style="padding:12px 16px;border-top:1px solid #eee;font-size:11px;color:#909399;">' +
+                '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">' +
+                    '<span>🔑 机器 ID：<b style="color:#555;word-break:break-all;">' + (machineId || '未知') + '</b></span>' +
+                    '<button id="adminCopyMidBtn" style="font-size:11px;padding:4px 10px;border:1px solid #ddd;border-radius:4px;background:#fff;color:#555;cursor:pointer;">复制</button>' +
+                '</div>' +
+                '<div style="margin-top:8px;">客服微信：<b style="color:#555;">hktzy1688</b> ｜ 官网：tcm-prescription-system.pages.dev</div>' +
+            '</div>' +
+            '  <button id="adminCloseBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-top:1px solid #eee;color:#909399;background:#fafafa;cursor:pointer;border-radius:0 0 14px 14px;">关闭</button>';
+
+        // 注入旋转动画（避免依赖 webkit-rotate）
+        if (!document.getElementById('adminActivateSpinKeyframes')) {
+            const s = document.createElement('style');
+            s.id = 'adminActivateSpinKeyframes';
+            s.textContent = '@keyframes adminActivateSpin{to{transform:rotate(360deg);}}';
+            document.head.appendChild(s);
+        }
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        function show(id, isForm) {
+            ['adminStepEdition','adminStepForm','adminStepPwd','adminSubmitting','adminWaiting','adminSuccess','adminRejected'].forEach(function(pid){
+                const el = document.getElementById(pid);
+                if (el) el.style.display = 'none';
+            });
+            const t = document.getElementById(id);
+            if (t) t.style.display = 'block';
+        }
+
+        function cleanup() {
+            if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        }
+
+        function showFieldErr(elId, hintEl, msg) {
+            const el = document.getElementById(elId);
+            const hint = document.getElementById(hintEl);
+            if (el) { el.style.borderColor = '#e53935'; }
+            if (hint) { hint.textContent = '⚠ ' + msg; hint.style.color = '#e53935'; }
+        }
+
+        // 版本选择
+        ['editionPersonal','editionInstitution'].forEach(function(id) {
+            document.getElementById(id).addEventListener('click', function() {
+                const ed = this.getAttribute('data-edition');
+                state.edition = ed;
+                document.getElementById('editionPersonal').style.borderColor = (ed === 'personal' ? '#26a69a' : '#ddd');
+                document.getElementById('editionPersonal').style.background = (ed === 'personal' ? '#26a69a' : '#fff');
+                document.getElementById('editionInstitution').style.borderColor = (ed === 'institution' ? '#26a69a' : '#ddd');
+                document.getElementById('editionInstitution').style.background = (ed === 'institution' ? '#26a69a' : '#fff');
+                show('adminStepForm');
+            });
+        });
+
+        // 手机号实时校验
+        document.getElementById('adminPhone').addEventListener('input', function() {
+            const v = this.value.replace(/[^\d]/g, '').slice(0, 11);
+            this.value = v;
+            state.phone = v;
+            const hint = document.getElementById('adminPhoneHint');
+            if (!v) {
+                hint.textContent = '💡 11位手机号为登录账号，默认密码 admin（登入后请自行修改）';
+                hint.style.color = '#909399';
+            } else if (!PHONE_RE.test(v)) {
+                hint.textContent = '⚠ 请输入正确的11位手机号';
+                hint.style.color = '#e53935';
+            } else {
+                hint.textContent = '✓ 手机号格式正确';
+                hint.style.color = '#26a69a';
+            }
+        });
+
+        // 密码强度
+        document.getElementById('adminPassword').addEventListener('input', function() {
+            state.password = this.value;
+            const hint = document.getElementById('adminPwdHint');
+            const pwd = this.value;
+            if (!pwd) {
+                hint.textContent = '💡 留空则默认密码为 admin（登入后请在设置中自行修改密码）';
+                hint.style.color = '#909399';
+            } else if (pwd.length < 8 || !/[a-zA-Z]/.test(pwd) || !/\d/.test(pwd)) {
+                hint.textContent = '⚠ 若自定义密码，需至少8位且包含字母和数字';
+                hint.style.color = '#e53935';
+            } else {
+                hint.textContent = '✓ 密码强度：' + (pwd.length >= 12 ? '强' : '中等');
+                hint.style.color = '#26a69a';
+            }
+        });
+        document.getElementById('adminPassword2').addEventListener('input', function() {
+            const p1 = state.password;
+            const p2 = this.value;
+            const hint = document.getElementById('adminPwd2Hint');
+            if (!p2) { hint.textContent = ''; }
+            else if (p1 !== p2) { hint.textContent = '⚠ 两次密码不一致'; hint.style.color = '#e53935'; }
+            else { hint.textContent = '✓ 密码一致'; hint.style.color = '#26a69a'; }
+        });
+
+        // 表单 → 密码
+        document.getElementById('adminToStep2Btn').addEventListener('click', function() {
+            const clinicName = document.getElementById('adminClinicName').value.trim();
+            const adminName = document.getElementById('adminAdminName').value.trim();
+            const phone = document.getElementById('adminPhone').value.trim();
+            const remark = document.getElementById('adminRemark').value.trim();
+            if (!clinicName) { showFieldErr('adminClinicName','adminClinicNameHint','请填写诊所名称'); return; }
+            if (!adminName) { showFieldErr('adminAdminName','adminAdminNameHint','请填写管理员/医师姓名'); return; }
+            if (!phone) { showFieldErr('adminPhone','adminPhoneHint','请填写联系电话'); return; }
+            if (!PHONE_RE.test(phone)) { showFieldErr('adminPhone','adminPhoneHint','请输入正确的11位手机号'); return; }
+            state.clinicName = clinicName;
+            state.adminName = adminName;
+            state.phone = phone;
+            state.remark = remark;
+            show('adminStepPwd');
+            setTimeout(function(){ var p = document.getElementById('adminPassword'); if (p) p.focus(); }, 200);
+        });
+
+        // 返回
+        document.getElementById('adminBackBtn').addEventListener('click', function() { show('adminStepForm'); });
+
+        // 提交
+        document.getElementById('adminSubmitBtn').addEventListener('click', async function() {
+            const pwdRaw = state.password;
+            const pwd = (pwdRaw && pwdRaw.trim()) ? pwdRaw.trim() : 'admin';
+            const pwd2 = document.getElementById('adminPassword2').value.trim();
+            if (pwd !== 'admin') {
+                if (pwd.length < 8) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需至少8位'); return; }
+                if (!/[a-zA-Z]/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需包含字母'); return; }
+                if (!/\d/.test(pwd)) { showFieldErr('adminPassword','adminPwdHint','若自定义密码，需包含数字'); return; }
+                if (!pwd2) { showFieldErr('adminPassword2','adminPwd2Hint','请再次输入自定义密码'); return; }
+                if (pwd !== pwd2) { showFieldErr('adminPassword2','adminPwd2Hint','两次密码输入不一致'); return; }
+            }
+            state.password = pwd;
+            const btn = document.getElementById('adminSubmitBtn');
+            btn.disabled = true;
+            show('adminSubmitting');
+
+            const payload = {
+                clinicName: state.clinicName,
+                adminName: state.adminName,
+                phone: state.phone,
+                remark: state.remark || '',
+                machineId: machineId || 'unknown',
+                productName: '惠康中医' + (state.edition === 'institution' ? '机构版' : '标准版'),
+                edition: state.edition,
+                appMode: 'app',
+                versionLabel: '',
+                env: 'production'
+            };
+            // ★ password 不上传云端，仅本地安装时创建登录账号使用
+            try {
+                const controller = new AbortController();
+                const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 12000);
+                let res;
+                try {
+                    const r = await fetch(ADMIN_SUBMIT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                        signal: controller.signal
+                    });
+                    res = await r.json();
+                } finally { clearTimeout(t); }
+
+                if (res && res.success) {
+                    document.getElementById('adminRequestNo').textContent = res.requestId;
+                    document.getElementById('adminSavedPhone').textContent = state.phone;
+                    show('adminWaiting');
+                    startPolling(res.requestId);
+                } else {
+                    btn.disabled = false;
+                    const msg = (res && res.error) ? res.error : '提交失败，请重试';
+                    showFormAndAlert(msg);
+                }
+            } catch (e) {
+                btn.disabled = false;
+                showFormAndAlert('网络错误，提交失败：' + (e && e.message || '请检查网络'));
+            }
+        });
+
+        function showFormAndAlert(msg) {
+            show('adminStepPwd');
+            try { alert('❌ 提交失败\n\n' + msg + '\n\n点击确定重新提交'); } catch(e) {}
+        }
+
+        // 轮询
+        function startPolling(requestId) {
+            let count = 0;
+            const statusEl = document.getElementById('adminWaitStatus');
+            const msgs = ['正在等待管理员审核...','管理员正在处理您的请求...','正在验证您的信息...','即将完成激活...'];
+            pollTimer = setInterval(async function() {
+                count++;
+                if (statusEl) {
+                    statusEl.textContent = msgs[Math.min(Math.floor(count/3), msgs.length-1)] +
+                        (count > 3 ? '（已等待 ' + Math.floor(count*5/60) + ' 分钟）' : '');
+                }
+                let r = null;
+                try {
+                    const resp = await fetch(ADMIN_STATUS_URL + '?requestId=' + encodeURIComponent(requestId), {
+                        method: 'GET', headers: { 'Content-Type': 'application/json' }
+                    });
+                    r = await resp.json();
+                } catch (err) { console.warn('[LicenseCheck] admin-status 网络错误:', err); }
+                if (r && r.success && r.status === 'activated') {
+                    clearInterval(pollTimer); pollTimer = null;
+                    await onAdminActivated(r, requestId);
+                } else if (r && r.success && r.status === 'rejected') {
+                    clearInterval(pollTimer); pollTimer = null;
+                    document.getElementById('adminRejectReason').textContent = r.reason || '未知原因';
+                    show('adminRejected');
+                }
+                if (count >= 120) {
+                    clearInterval(pollTimer); pollTimer = null;
+                    if (statusEl) statusEl.textContent = '⏰ 等待时间较长，管理员可能还在处理\n关闭窗口不影响审核';
+                }
+            }, 5000);
+        }
+
+        async function onAdminActivated(r, requestId) {
+            const license = r.license || '';
+            const phone = state.phone;
+            const descEl = document.getElementById('adminSuccessDesc');
+            document.getElementById('adminSuccessPhone').textContent = phone;
+            // 离线 APP：本地安装 license + 重启；云端 APP（无 installAdminLicense）：账号已在云端创建，提示登录
+            if (global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {
+                try {
+                    const inst = await global.electronAPI.activate.installAdminLicense({
+                        license: license,
+                        adminName: state.adminName,
+                        clinicName: state.clinicName,
+                        password: state.password || 'admin',
+                        phone: phone
+                    });
+                    if (inst && inst.success) {
+                        descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录';
+                        show('adminSuccess');
+                        document.getElementById('adminSuccessBtn').textContent = '🔄 重启应用';
+                        document.getElementById('adminSuccessBtn').onclick = function() {
+                            if (global.electronAPI && global.electronAPI.activate && global.electronAPI.activate.restart) {
+                                try { global.electronAPI.activate.restart(); } catch(e){}
+                            }
+                        };
+                    } else {
+                        descEl.innerHTML = '激活已通过，但本地写入失败：' + ((inst && inst.error) || '未知错误') + '<br>请将机器ID发给客服人工激活';
+                        show('adminSuccess');
+                    }
+                } catch (e) {
+                    descEl.innerHTML = '激活已通过，但本地写入失败：' + (e && e.message || '未知错误');
+                    show('adminSuccess');
+                }
+            } else {
+                // 云端 APP / 无本地安装桥：账号已在云端创建，用手机号登录即可
+                descEl.innerHTML = '管理员已通过您的激活申请<br>请返回登录框，使用手机号登录';
+                show('adminSuccess');
+                document.getElementById('adminSuccessBtn').textContent = '✅ 好的';
+                document.getElementById('adminSuccessBtn').onclick = function() { cleanup(); };
+            }
+        }
+
+        document.getElementById('adminRetryBtn').addEventListener('click', function() { show('adminStepEdition'); });
+        document.getElementById('adminCopyMidBtn').addEventListener('click', async function() {
+            const ok = await copyTextToClipboard(machineId || '');
+            const b = document.getElementById('adminCopyMidBtn');
+            b.textContent = ok ? '✅' : '❌';
+            setTimeout(function(){ b.textContent = '复制'; }, 1200);
+        });
+        document.getElementById('adminCloseBtn').addEventListener('click', cleanup);
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) cleanup(); });
+
+        // 预填诊所/医师名（config 提供时）
+        if (clinicName) document.getElementById('adminClinicName').value = clinicName;
     }
 
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
