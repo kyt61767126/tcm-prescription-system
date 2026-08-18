@@ -280,11 +280,26 @@
             if (!user) {
                 user = _users.find(u => u.phone && String(u.phone) === username);
             }
-            // ★ 云端账户回退：本地用户表中找不到该账户时，回退到云端认证（cloudAdapter）
-            //   云端注册的账户（如 wgj）仅存在于云端，本地 config/localStorage 无记录，
-            //   必须走 AuthCore.login() 的云端点 /users?login=true 认证，否则会误报"密码错误"。
+
+            // ★ 云端账户兼容（权威认证）：
+            //   1) 本地用户表完全找不到该账户时，必须回退云端认证；
+            //   2) 本地找到但本地密码校验失败时，仍需回退云端认证兜底——
+            //      云端注册的账户（如 wgj）在本地 localStorage/config 可能残留旧记录，
+            //      本地缓存密码与实际不一致，仅做本地校验会误报"密码错误"。
+            //   云端点认证用 AuthCore.login() 走 /users?login=true，密码以云端为准。
             let _cloudAuth = null;
-            if (!user) {
+
+            // 本地密码是否校验通过（本地无该用户时视作不通过）
+            let localPwdOk = false;
+            if (user) {
+                const storedPwd = user.password || '';
+                const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
+                localPwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
+            }
+
+            // 本地校验通过 → 直接用本地用户（后续版本匹配/password 走本地）
+            if (!localPwdOk) {
+                // 本地失败 → 尝试云端认证兜底
                 if (window.AuthCore && typeof AuthCore.login === 'function') {
                     const cloudRes = await AuthCore.login(username, password);
                     if (cloudRes && cloudRes.success && cloudRes.user) {
@@ -299,16 +314,8 @@
                         };
                     }
                 }
-                // 云端认证也失败（密码错误/网络异常/账户不存在）
+                // 本地未放行 且 云端认证也失败（密码错误/网络异常/账户不存在）
                 if (!_cloudAuth) {
-                    showError('手机号/用户名或密码错误');
-                    return;
-                }
-            } else {
-                const storedPwd = user.password || '';
-                const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
-                const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
-                if (!pwdOk) {
                     showError('手机号/用户名或密码错误');
                     return;
                 }
