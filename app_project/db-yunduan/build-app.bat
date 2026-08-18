@@ -166,6 +166,14 @@ echo.
 
 echo [4/10] Stop lingering Gradle processes + clean build cache...
 taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
+call gradlew.bat --stop >nul 2>&1
+echo [OK] Lingering processes cleaned
+
+REM ★ 2026-08-18 修复 CXX1429：清理 .cxx 原生构建缓存（陈旧 CMake 状态/锁导致 configure 失败）
+if exist "app\.cxx" (
+    rmdir /S /Q "app\.cxx" 2>nul
+    echo [OK] .cxx native build cache cleaned
+)
 
 if exist "app\build\intermediates\javac" (
     rmdir /S /Q "app\build\intermediates\javac" 2>nul

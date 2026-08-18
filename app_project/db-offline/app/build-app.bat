@@ -265,6 +265,11 @@ if exist "app\build\intermediates\merged_assets" (
     rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] merged_assets cache cleaned'"
 )
+REM ★ 2026-08-18 修复 CXX1429：清理 .cxx 原生构建缓存（陈旧 CMake 状态/锁导致 configure 失败）
+if exist "app\.cxx" (
+    rmdir /S /Q "app\.cxx" 2>nul
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] .cxx native build cache cleaned'"
+)
 call gradlew.bat clean
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] clean failed, continuing incremental build'"
