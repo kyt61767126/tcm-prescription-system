@@ -7,9 +7,17 @@
 //
 // 功能：
 //   1. 查找刚打包的APK文件
-//   2. 复制到 public/downloads/ 目录
-//   3. 计算SHA-256并更新 hash-manifest.json 的 url 和 sha256
-//   4. 自动提交并推送到GitHub（Cloudflare Pages自动部署）
+//   2. --confirm 后复制到 public/downloads/ 目录
+//   3. --confirm 后计算SHA-256并更新 hash-manifest.json 的 url 和 sha256
+//   4. --push 手动确认后才提交并推送到GitHub（Cloudflare Pages自动部署）
+//
+// ★ 规范：打包产物禁止自动上传官方下载网站！
+//   - 默认"只检查不落库"：不加 --confirm 时，不会把 APK 复制进 public/downloads/，
+//     也不会改写 hash-manifest.json，避免未经验的 APK 被后续 git push 带上官方站点。
+//   - 人工检查合规合格后，手动执行:
+//       node auto-update-downloads.js <target> --confirm --push
+//   - --confirm：把 APK 复制进 public/downloads/ 并更新 manifest（本地准备）
+//   - --push：        git 提交并推送，触发官方下载页面部署（最终发布）
 // ============================================================================
 
 const fs = require('fs');
@@ -79,7 +87,31 @@ function readVersionFromGradle(appDir) {
 }
 
 function updateDownloads(target) {
-    console.log('[auto-update] 开始自动更新下载页面...');
+    console.log('[auto-update] 检查下载页面更新...');
+
+    // ★ 规范：禁止自动上传！未加 --confirm 时绝不修改 public/downloads/ 和 hash-manifest.json
+    const confirmed = process.argv.includes('--confirm');
+    if (!confirmed) {
+        console.log('  [规范] 打包产物禁止自动上传官方下载网站');
+        console.log('  本次仅检查，不复制 APK、不改写 manifest（避免后续 git push 带上未经验证的包）');
+        console.log('');
+        const targets = target === 'all' ? Object.keys(APP_CONFIG) : [target];
+        for (const key of targets) {
+            const config = APP_CONFIG[key];
+            if (!config) continue;
+            const apkFile = findApkFile(config.apkDir);
+            if (apkFile) {
+                const sizeMB = (getFileSize(apkFile) / 1024 / 1024).toFixed(1);
+                console.log('  [待发布] ' + key + ': ' + config.outputName + ' (' + sizeMB + 'MB)');
+            } else {
+                console.log('  [SKIP] ' + key + ': 未找到 APK');
+            }
+        }
+        console.log('');
+        console.log('  请人工检查优化是否合规合格，确认后手动执行:');
+        console.log('    node auto-update-downloads.js ' + target + ' --confirm --push');
+        return false;
+    }
 
     // 确保 downloads 目录存在
     if (!fs.existsSync(DOWNLOADS_DIR)) {

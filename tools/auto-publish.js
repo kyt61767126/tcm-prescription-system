@@ -3,22 +3,28 @@
 // auto-publish.js — 自动检查 exe/apk 变化并发布到 GitHub Release
 //
 // 用法：
-//   node tools/auto-publish.js              # 自动检查所有 exe+apk，有变化才发布
-//   node tools/auto-publish.js --check      # 只检查不发布（预览有哪些需要更新）
-//   node tools/auto-publish.js --force      # 强制发布（即使没有变化）
-//   node tools/auto-publish.js --target=exe # 只检查 exe
-//   node tools/auto-publish.js --target=apk # 只检查 apk
+//   node tools/auto-publish.js                   # 只检查所有 exe+apk 是否有变化（不发布）
+//   node tools/auto-publish.js --check           # 只检查不发布（预览有哪些需要更新）
+//   node tools/auto-publish.js --publish         # 人工确认合规合格后，手动发布有变化的产物
+//   node tools/auto-publish.js --publish --force # 强制发布（即使没有变化）
+//   node tools/auto-publish.js --target=exe      # 只检查 exe
+//   node tools/auto-publish.js --target=apk      # 只检查 apk
 //
 // 工作原理：
 //   1. 扫描本地所有 exe（各项目 dist/）和 apk（public/downloads/）
 //   2. 计算每个文件的 sha256
 //   3. 与 hash-manifest.json 中已记录的 sha256 比较
-//   4. 若有新文件或 hash 变化，自动调用 publish-release.js 发布
+//   4. 若有新文件或 hash 变化，提示需发布（默认不发布）
 //   5. 若全部一致，提示"无需更新"并退出
 //
+// ★ 规范：打包产物禁止自动上传官方下载网站！
+//   - 默认"只检查不发布"，绝不自动上传。
+//   - 必须由人检查优化是否合规合格后，手动加 --publish 才会调用发布工具上传。
+//   - 发布时会自动携带 --confirm --push，即：手动确认 + 手动提交官方页面部署。
+//
 // 典型场景：
-//   - 你刚打包了新 exe → 双击 build.bat → 运行 auto-publish.js → 自动上传
-//   - 你没打包任何东西 → 运行 auto-publish.js → 提示"无需更新"
+//   - 你刚打包了新 exe → 双击 build.bat → 运行 auto-publish.js → 只提示有变化、不上传
+//   - 人工测试/审查通过 → 运行 auto-publish.js --publish → 手动上传发布
 // ============================================================================
 
 const fs = require('fs');
@@ -200,20 +206,25 @@ function main() {
     console.log();
 
     // 3. 决定是否发布
-    if (checkOnly) {
-        console.log('[3/3] --check 模式，只检查不发布');
+    // ★ 规范：打包产物禁止自动上传官方下载网站！
+    //   默认"只检查不发布"，必须人工检查合规合格后手动加 --publish 才会上传。
+    const allowsPublish = args.includes('--publish');
+
+    if (checkOnly || !allowsPublish) {
+        console.log('[3/3] 只检查不发布（规范：禁止自动上传官方下载网站）');
         if (changes.length > 0) {
-            console.log('  如需发布，运行: node tools/auto-publish.js');
-            process.exit(2);  // 有变化时返回 2
+            console.log('  发现 ' + changes.length + ' 个待发布产物。请人工检查优化是否合规合格，确认后手动发布:');
+            console.log('    node tools/auto-publish.js --target=' + target + ' --publish');
+            console.log('  （--publish 会调用发布工具并携带 --confirm --push，即手动确认+手动部署）');
         } else {
             console.log('  所有文件都是最新，无需发布');
-            process.exit(0);
         }
+        process.exit(checkOnly || changes.length > 0 ? 2 : 0);
     }
 
     if (changes.length === 0 && !force) {
         console.log('[3/3] 所有文件都是最新，无需发布');
-        console.log('  （如需强制重新发布，加 --force 参数）');
+        console.log('  （如需强制重新发布，加 --force --publish 参数）');
         process.exit(0);
     }
 
@@ -227,13 +238,13 @@ function main() {
     const pad = (n) => String(n).padStart(2, '0');
     const versionTag = `v${now.getFullYear()}.${pad(now.getMonth() + 1)}.${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
 
-    console.log('[3/3] 自动调用 publish-release.js 发布...');
+    console.log('[3/3] 人工确认发布（--publish → --confirm --push）...');
     console.log('  版本号: ' + versionTag);
     console.log('  target: ' + publishTarget);
     console.log('  变更文件数: ' + changes.length);
     console.log();
 
-    const publishArgs = ['tools/publish-release.js', '--target=' + publishTarget, versionTag];
+    const publishArgs = ['tools/publish-release.js', '--target=' + publishTarget, '--confirm', '--push', versionTag];
     console.log('  执行命令: node ' + publishArgs.join(' '));
     console.log('--------------------------------------------');
 

@@ -3,12 +3,17 @@
 // publish-release.js — 纯终端一键发布到 GitHub Release（绕开网页）
 //
 // 用法：
-//   node tools/publish-release.js                  # 自动版本号 + 上传所有 APK/exe
-//   node tools/publish-release.js v1.0.0           # 指定版本号
-//   node tools/publish-release.js --target=apk     # 只上传 APK
-//   node tools/publish-release.js --target=exe     # 只上传 exe
-//   node tools/publish-release.js --dry-run        # 预演不实际上传
-//   node tools/publish-release.js --no-push        # 不 git push
+//   node tools/publish-release.js --confirm                   # 手动确认后上传所有 APK/exe（默认不 push）
+//   node tools/publish-release.js v1.0.0 --confirm --push     # 指定版本号 + 上传 + git push 触发官方页面部署
+//   node tools/publish-release.js --target=apk --confirm      # 只上传 APK
+//   node tools/publish-release.js --target=exe --confirm      # 只上传 exe
+//   node tools/publish-release.js --dry-run                   # 预演不实际上传
+//   node tools/publish-release.js --no-push                   # 上传但不 git push（默认本来就不 push）
+//
+// ★ 规范：打包产物禁止自动上传官方下载网站！
+//   - 默认不执行任何上传：必须手动加 --confirm 确认后才会创建 Release 并上传产物。
+//   - 默认不 git push：需手动加 --push 才会推送并触发官方下载页面自动部署。
+//   - 即：人工检查合规合格后，手动执行带 --confirm [--push] 的命令才算"手动上传"。
 //
 // 前提条件（无需 gh auth login，无需打开网页）：
 //   1. git push 能正常工作（已配置 GitHub HTTPS 凭据，Windows 凭据管理器存有 PAT）
@@ -437,15 +442,18 @@ function main() {
     let versionTag = '';
     let target = 'all';
     let dryRun = false;
-    let skipPush = false;
+    let doPush = false;
+    let confirmed = false;
 
     for (const arg of args) {
         if (arg.startsWith('--target=')) {
             target = arg.substring('--target='.length);
         } else if (arg === '--dry-run') {
             dryRun = true;
-        } else if (arg === '--no-push') {
-            skipPush = true;
+        } else if (arg === '--push') {
+            doPush = true;
+        } else if (arg === '--confirm' || arg === '--yes') {
+            confirmed = true;
         } else if (!arg.startsWith('-')) {
             versionTag = arg;
         }
@@ -529,6 +537,24 @@ function main() {
         const prepared = prepareUploadFile(f.path, f.name, f.appKey, f.type);
         return { ...f, uploadPath: prepared.path, uploadName: prepared.name };
     });
+
+    // ★ 规范：禁止自动上传！必须人工检查合规合格后手动确认
+    if (!confirmed) {
+        console.log('------------------------------------------------------------');
+        console.log('  [规范] 打包产物禁止自动上传官方下载网站！');
+        console.log('  已识别 ' + files.length + ' 个待上传文件:');
+        for (const f of files) {
+            console.log('    - [' + f.appKey + '] ' + f.type + ': ' + f.name + ' (v' + f.version + ')');
+        }
+        console.log('');
+        console.log('  请人工检查优化是否合规合格，确认无误后手动执行:');
+        console.log('    node tools/publish-release.js ' + versionTag + ' --target=' + target + ' --confirm [--push]');
+        console.log('  --push: 上传完毕后再 git push，触发官方下载页面自动部署');
+        console.log('  （当前未确认，本次不创建 Release、不上传任何文件）');
+        console.log('------------------------------------------------------------');
+        cleanupReleaseTmp();
+        process.exit(0);
+    }
 
     // 5. 创建/复用 Release 并上传文件（用 GitHub API + curl.exe）
     console.log('[5/6] 上传文件到 GitHub Release...');
@@ -726,9 +752,9 @@ function main() {
     cleanupReleaseTmp();
     console.log('  [OK] 临时文件已清理\n');
 
-    // 7. git commit + push（触发 Cloudflare Pages 部署）
-    if (!skipPush) {
-        console.log('提交并推送到 GitHub...');
+    // 7. git commit + push（触发 Cloudflare Pages 部署）— 默认不 push，需 --push 手动开启
+    if (doPush) {
+        console.log('提交并推送到 GitHub（--push 手动确认）...');
         try {
             execSync('git add public/hash-manifest.json public/downloads/ public/updates/ .gitignore', { cwd: PROJECT_ROOT, stdio: 'ignore' });
             const status = execSync('git status --porcelain', { cwd: PROJECT_ROOT, encoding: 'utf8' });
