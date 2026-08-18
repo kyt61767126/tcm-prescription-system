@@ -4172,13 +4172,15 @@ let currentUser = null;
 
         function updatePrescriptionPaper() {
             const get = document.getElementById.bind(document);
-            get('paperName').textContent = get('patientName').value;
-            get('paperGender').textContent = get('patientGender').value;
-            get('paperAge').textContent = get('patientAge').value;
-            get('paperDate').textContent = get('visitDate').value;
-            get('paperMedicalHistory').textContent = get('medicalHistory').value;
-            get('paperDiagnosis').textContent = get('diagnosis').value;
-            get('paperDoctor').textContent = get('doctorName').value;
+            // 空值兜底：任一 DOM 缺失时跳过，避免单点异常导致整个处方签刷新中断
+            const _pp = (src, dst) => { const s = get(src); if (s) { const d = get(dst); if (d) d.textContent = s.value != null ? s.value : ''; } };
+            _pp('patientName', 'paperName');
+            _pp('patientGender', 'paperGender');
+            _pp('patientAge', 'paperAge');
+            _pp('visitDate', 'paperDate');
+            _pp('medicalHistory', 'paperMedicalHistory');
+            _pp('diagnosis', 'paperDiagnosis');
+            _pp('doctorName', 'paperDoctor');
             const linesDiv = get('prescriptionLines');
             const items = prescriptionItems.filter(item =>item.name);
 
@@ -4439,7 +4441,8 @@ let currentUser = null;
             const list = __historyFullList;
             const showCount = Math.min(list.length, __historyPageSize * __historyCurrentPage);
             const items = list.slice(0, showCount);
-            let html = items.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${p.registrationFee ? ' | 诊费:' + p.registrationFee.toFixed(2) + '元' : ''}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('');
+                        const _rlFee = (p) => { const f = parseFloat(p.registrationFee); return isFinite(f) && f > 0 ? ' | 诊费:' + f.toFixed(2) + '元' : ''; };
+                        let html = items.map((p,i) =>`<div class="history-item" onclick="loadHistory(${p.id})"><div style="display:flex;justify-content:space-between;align-items:center;"><div><div style="display:flex;gap:8px;align-items:center;"><div class="history-name">${escapeHtml(p.patientName)}</div><div style="font-size:10px;color:#8b0000;font-weight:bold;">[${escapeHtml(p.prescriptionNo || '')}]</div></div><div class="history-date">${escapeHtml(p.date)} - ${escapeHtml(p.diagnosis || '')}${_rlFee(p)}</div></div><button onclick="event.stopPropagation();viewMediaFiles('${escapeJs(p.patientName)}','${escapeJs(p.prescriptionNo || '')}','${escapeJs(p.createdAt || '')}')" style="background:none;border:none;font-size:14px;cursor:pointer;padding:0 2px;" title="查看拍照录像">📷🎥</button><button class="small-btn" style="background:#ffdddd;padding:2px 6px;font-size:10px;" onclick="event.stopPropagation();deleteHistory(${p.id})">删除</button></div></div>`).join('');
             if (!html) html = '<div style="text-align:center;color:#999;padding:20px;font-size:11px;">无历史记录</div>';
             if (list.length > showCount) {
                 html += `<div onclick="loadMoreHistory()" style="text-align:center;padding:10px;color:#1976d2;cursor:pointer;font-size:12px;border-top:1px dashed #ccc;background:#f8f9fa;">▼ 加载更多（剩余 ${list.length - showCount} 条 / 共 ${list.length} 条）</div>`;
@@ -5056,10 +5059,10 @@ let currentUser = null;
             prescriptionItems = (record.items || []).map(item =>({
                 code: item.code || '',
                 name: item.name || '',
-                price: item.price || 0,
+                price: (function(){ const v = parseFloat(item.price); return isFinite(v) ? v : 0; })(),
                 unit: item.unit || 'g',
-                dosage: item.dosage || 10,
-                total: item.total || 0
+                dosage: (function(){ const v = parseFloat(item.dosage); return isFinite(v) && v > 0 ? v : 10; })(),
+                total: (function(){ const v = parseFloat(item.total); return isFinite(v) ? v : 0; })()
             }));
             while (prescriptionItems.length< 15) addEmptyRow();
             DOM_CACHE.init();
@@ -5330,6 +5333,11 @@ let currentUser = null;
             const name = document.getElementById('patientName').value;
             if (!name) {alert('请输入患者姓名！'); document.getElementById('patientName').focus(); return;}
             
+            // ★ 防重复点击：保存期间置忙碌标志，超时兜底自动解锁（防止异常导致永久死锁）
+            if (window.__savingRxBusy) { console.warn('[防连点] 处方正在保存中，忽略重复点击'); return; }
+            window.__savingRxBusy = true;
+            var __autoUnlockRx = setTimeout(function(){ window.__savingRxBusy = false; }, 5000);
+            
             // 1. 获取当前保存操作时间戳，解析 YYMMDD 日期串
             const now = new Date();
             const currentDate = now.toLocaleDateString('sv-SE');
@@ -5433,6 +5441,9 @@ let currentUser = null;
 
             // ★ 优化：核心数据已保存到 IndexedDB，立即执行UI响应（清空表单+显示成功提示）
             // 让用户立即感知保存成功，不等待耗时辅助操作
+            // ★ 防重复点击：保存核心完成，显式解锁（并清除超时兜底定时器）
+            clearTimeout(__autoUnlockRx);
+            window.__savingRxBusy = false;
             try { clearPrescription(); } catch (e) { console.warn('清空表单失败:', e); }
             try { showToast('处方保存成功：' + newPrescriptionNo); } catch (e) {}
 

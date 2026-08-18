@@ -6610,13 +6610,15 @@ if (window.Permission) {
 
         function updatePrescriptionPaper() {
             const get = document.getElementById.bind(document);
-            get('paperName').textContent = get('patientName').value;
-            get('paperGender').textContent = get('patientGender').value;
-            get('paperAge').textContent = get('patientAge').value;
-            get('paperDate').textContent = get('visitDate').value;
-            get('paperMedicalHistory').textContent = get('medicalHistory').value;
-            get('paperDiagnosis').textContent = get('diagnosis').value;
-            get('paperDoctor').textContent = get('doctorName').value;
+            // 空值兜底：任一 DOM 缺失时跳过，避免单点异常导致整个处方签刷新中断
+            const _pp = (src, dst) => { const s = get(src); if (s) { const d = get(dst); if (d) d.textContent = s.value != null ? s.value : ''; } };
+            _pp('patientName', 'paperName');
+            _pp('patientGender', 'paperGender');
+            _pp('patientAge', 'paperAge');
+            _pp('visitDate', 'paperDate');
+            _pp('medicalHistory', 'paperMedicalHistory');
+            _pp('diagnosis', 'paperDiagnosis');
+            _pp('doctorName', 'paperDoctor');
             const linesDiv = get('prescriptionLines');
             const items = prescriptionItems.filter(item => item.name);
 
@@ -7326,10 +7328,10 @@ if (window.Permission) {
             prescriptionItems = (record.items || []).map(item => ({
                 code: item.code || '',
                 name: item.name || '',
-                price: item.price || 0,
+                price: (function(){ const v = parseFloat(item.price); return isFinite(v) ? v : 0; })(),
                 unit: item.unit || 'g',
-                dosage: item.dosage || 10,
-                total: item.total || 0
+                dosage: (function(){ const v = parseFloat(item.dosage); return isFinite(v) && v > 0 ? v : 10; })(),
+                total: (function(){ const v = parseFloat(item.total); return isFinite(v) ? v : 0; })()
             }));
             while (prescriptionItems.length < 15) addEmptyRow();
             DOM_CACHE.init();
