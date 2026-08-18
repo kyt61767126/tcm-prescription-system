@@ -152,6 +152,12 @@
     function applyEditionTag(config) {
         var tag = document.querySelector('.version-tag');
         if (!tag) return;
+        // ★ 云端产品版本标签必须带"云端"前缀：优先取配置 versionLabel，缺失则按 edition 推断
+        var vl = (config && config.versionLabel) ? String(config.versionLabel) : '';
+        if (vl && vl.indexOf('云端') >= 0) {
+            tag.textContent = '【' + vl + '】';
+            return;
+        }
         var e = (config && config.edition) || '';
         var inst = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'].indexOf(e) >= 0;
         tag.textContent = '【' + (inst ? '云端机构版' : '云端标准版') + '】';

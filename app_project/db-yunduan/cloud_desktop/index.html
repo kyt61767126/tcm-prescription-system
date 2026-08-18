@@ -631,8 +631,11 @@
 // 动态版本标签：优先取 CONFIG.versionLabel（Setup权威值），否则从 config.edition 读取
 function getEditionTag() {
     if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) {
-        // ★ 云端桌面强制"云端"前缀：防止外部配置（userData config等）丢失前缀导致显示"标准版"而非"云端标准版"
-        if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.appMode === 'cloud' && CONFIG.versionLabel.indexOf('云端') < 0) {
+        // ★ 云端桌面强制"云端"前缀：云端产品的版本标签必须带"云端"前缀，
+        //   无论 CONFIG.appMode 是否赋值（config.json 未打包时 appMode 不会进入 CONFIG），
+        //   只要标签缺失"云端"前缀就按 edition 推断并纠正为 云端标准版/云端机构版。
+        var _raw = String(CONFIG.versionLabel);
+        if (_raw.indexOf('云端') < 0 && _raw.indexOf('离线') < 0) {
             var _instArr = ['institution', 'clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic'];
             var _isInst = _instArr.indexOf(String(CONFIG.edition || '')) >= 0;
             var _fixedLabel = _isInst ? '云端机构版' : '云端标准版';
@@ -664,12 +667,12 @@ window.togglePasswordVisibility = function() {
         }
     }
 };
-// ★★★ 2026-08-17 【Setup 1.0.38 根治刀1-A】：惠康中医-本地 = 永久离线标准版（personal），绝不再用 clinic_custom 默认值！
-window.EDITION = 'personal';
-window.PRODUCT_NAME = '惠康中医-本地';
+// ★★★ 2026-08-18 【云端桌面修复】：本文件是云端桌面版，必须声明为云端标准版，绝不用离线"本地"硬编码！
+window.EDITION = 'cloud_personal';
+window.PRODUCT_NAME = '惠康中医-云端';
 // ★v2.0 统一架构：声明 APP_MODE（offline/cloud/auto），供 db-adapter.js 自动检测
 // auto=自动检测：已加载 cloud-api.js 且 CLOUD_API_BASE 存在则走云端，否则走离线
-window.APP_MODE = 'auto';
+window.APP_MODE = 'cloud';
 // ★修复：消除登录界面闪现（已登录时立即隐藏 loginOverlay，避免 adjustResize 重排时闪现）
 // ★ 修复 2026-07-28：APP 端启动时主动清除所有登录态（纵深防御），确保每次打开都必须手动登录
 // 使用 location.href 检测 APP（此时 electronAPI 尚未注入，无法用 isAndroidAPP）

@@ -1,7 +1,7 @@
 {
   "clinicName": "",
   "doctorName": "",
-  "edition": "personal",
+  "edition": "cloud_personal",
   "appMode": "cloud",
   "maxUsers": 1,
   "productName": "惠康中医-云端",
