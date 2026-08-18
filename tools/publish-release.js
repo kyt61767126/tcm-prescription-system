@@ -9,6 +9,7 @@
 //   node tools/publish-release.js --target=exe --confirm      # 只上传 exe
 //   node tools/publish-release.js --dry-run                   # 预演不实际上传
 //   node tools/publish-release.js --no-push                   # 上传但不 git push（默认本来就不 push）
+//   node tools/publish-release.js --skip-compliance           # 跳过发布前合规检查（人工强漂，慎用）
 //
 // ★ 规范：打包产物禁止自动上传官方下载网站！
 //   - 默认不执行任何上传：必须手动加 --confirm 确认后才会创建 Release 并上传产物。
@@ -444,6 +445,7 @@ function main() {
     let dryRun = false;
     let doPush = false;
     let confirmed = false;
+    let skipCompliance = false;
 
     for (const arg of args) {
         if (arg.startsWith('--target=')) {
@@ -454,6 +456,8 @@ function main() {
             doPush = true;
         } else if (arg === '--confirm' || arg === '--yes') {
             confirmed = true;
+        } else if (arg === '--skip-compliance') {
+            skipCompliance = true;
         } else if (!arg.startsWith('-')) {
             versionTag = arg;
         }
@@ -554,6 +558,29 @@ function main() {
         console.log('------------------------------------------------------------');
         cleanupReleaseTmp();
         process.exit(0);
+    }
+
+    // ★ 发布前合规门禁（必守HARD规则）：未通过合规检查，禁止上传官方下载网站
+    if (!skipCompliance) {
+        console.log('--------------------------------------------');
+        console.log('  [合规] 发布前合规检查（只读，不影响任何文件）...');
+        console.log('  （覆盖：编码/BOM、云端副本、硬编码、版本、shared、JS完整性、IPC、界面基线）');
+        console.log('--------------------------------------------');
+        const complianceScript = path.join(__dirname, 'compliance-check.ps1');
+        const cr = spawnSync('powershell', [
+            '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', complianceScript, '-SummaryOnly'
+        ], { cwd: PROJECT_ROOT, stdio: 'inherit', timeout: 900000 });
+        console.log('--------------------------------------------');
+        if (cr.status !== 0) {
+            console.error('  [ERROR] 合规检查未通过（exit ' + cr.status + '），禁止上传官方下载网站！');
+            console.error('  请先修复上述不合规项，重新运行合规检查通过后，再执行本次发布。');
+            console.error('  （如确认必须强漂，可加 --skip-compliance，但需自行承担风险）');
+            cleanupReleaseTmp();
+            process.exit(1);
+        }
+        console.log('  [OK] 合规检查通过，允许上传。\n');
+    } else {
+        console.log('\n  [WARN] 已按 --skip-compliance 跳过发布前合规检查（人工强漂，需自担风险）\n');
     }
 
     // 5. 创建/复用 Release 并上传文件（用 GitHub API + curl.exe）

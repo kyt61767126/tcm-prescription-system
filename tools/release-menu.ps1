@@ -141,13 +141,13 @@ function Invoke-Publish {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  提示: 上传 75MB exe 需要 5-10 分钟，请耐心等待..." -ForegroundColor Yellow
     Write-Host "  提示: 若卡住无输出，可能是在上传大文件，请勿关闭窗口..." -ForegroundColor Yellow
+    Write-Host "  提示: 发布前会自动执行合规检查，未通过则禁止上传（必守HARD规则）" -ForegroundColor Yellow
     Write-Host ""
 
-    if ($Target -eq "all") {
-        return Invoke-NodeScript -ScriptPath $publishScript
-    } else {
-        return Invoke-NodeScript -ScriptPath $publishScript -Arguments "--target=$Target"
-    }
+    # ★ 必守HARD规则：手动发布 = --confirm（人工确认，内置跑合规门禁）+ --push（手动提交部署）
+    $publishArgs = @('--confirm', '--push')
+    if ($Target -ne "all") { $publishArgs += "--target=$Target" }
+    return Invoke-NodeScript -ScriptPath $publishScript -Arguments $publishArgs
 }
 
 # ============ 调用 node 脚本（用 Start-Process 继承控制台，避免 stdout 缓冲）============
@@ -178,6 +178,27 @@ function Invoke-Verify {
     Write-Host "  验证发布结果..." -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     return Invoke-NodeScript -ScriptPath $verifyScript
+}
+
+# ============ 发布前合规检查（必守HARD规则）============
+function Invoke-ComplianceCheck {
+    $complianceScript = "$script:RootDir\tools\compliance-check.ps1"
+    if (-not (Test-Path $complianceScript)) {
+        Write-Host "[ERROR] 未找到合规检查脚本: $complianceScript" -ForegroundColor Red
+        return 1
+    }
+    Write-Host ""
+    Write-Host "========================================" -ForegroundColor Cyan
+    Write-Host "  发布前合规检查（只读，全部通过才允许手动上传）..." -ForegroundColor Cyan
+    Write-Host "  必守HARD规则：打包产物禁止自动上传官方下载网站" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    Push-Location $script:RootDir
+    try {
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $complianceScript
+        return $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
 }
 
 # ============ 显示版本选择菜单 ============
@@ -321,6 +342,7 @@ while ($true) {
     Write-Host "  [4] 打包全部版本 (one-click-pack.ps1)"
     Write-Host "  [5] 发布全部版本 (auto-publish.js 智能检测)"
     Write-Host "  [6] 验证发布结果 (verify-release.js)"
+    Write-Host "  [7] 合规检查 (compliance-check，发布前必跑)"
     Write-Host "  [0] 退出"
     Write-Host ""
     Write-Host "  说明:" -ForegroundColor DarkGray
@@ -328,8 +350,9 @@ while ($true) {
     Write-Host "  - [1][3] 还需选范围(桌面/APP/全部)" -ForegroundColor DarkGray
     Write-Host "  - 发布使用 publish-release.js 上传到 GitHub Release" -ForegroundColor DarkGray
     Write-Host "  - git push 后 Cloudflare Pages 自动部署下载页" -ForegroundColor DarkGray
+    Write-Host "  - ★必守HARD规则: 发布前自动跑合规检查，未通过禁止上传" -ForegroundColor Yellow
     Write-Host "--------------------------------------------"
-    $choice = Read-Host "请选择 [0-6]"
+    $choice = Read-Host "请选择 [0-7]"
     switch ($choice) {
         "1" {
             # 仅打包 - 单个版本
@@ -376,15 +399,15 @@ while ($true) {
             pause
         }
         "5" {
-            # 发布全部（智能检测）
+            # 发布全部（智能检测，手动 --publish；内置合规门禁）
             $autoPublish = "$script:RootDir\tools\auto-publish.js"
             if (Test-Path $autoPublish) {
                 Write-Host ""
                 Write-Host "========================================" -ForegroundColor Cyan
-                Write-Host "  智能发布 (auto-publish.js)" -ForegroundColor Cyan
-                Write-Host "  仅发布有变化的端" -ForegroundColor Cyan
+                Write-Host "  智能发布 (auto-publish.js --publish)" -ForegroundColor Cyan
+                Write-Host "  仅发布有变化的端；发布前自动跑合规检查" -ForegroundColor Cyan
                 Write-Host "========================================" -ForegroundColor Cyan
-                Invoke-NodeScript -ScriptPath $autoPublish | Out-Null
+                Invoke-NodeScript -ScriptPath $autoPublish -Arguments @('--publish') | Out-Null
             } else {
                 Invoke-Publish -Target "all" | Out-Null
             }
@@ -400,6 +423,12 @@ while ($true) {
         "6" {
             # 验证
             Invoke-Verify | Out-Null
+            Write-Host ""
+            pause
+        }
+        "7" {
+            # 合规检查
+            Invoke-ComplianceCheck | Out-Null
             Write-Host ""
             pause
         }
