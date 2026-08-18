@@ -1805,10 +1805,8 @@ function installLicense(base64Content, options = {}) {
 
         // 创建管理员用户（phone作为用户名）
         const phone = options.phone || '';
-        // 密码留空默认 admin（激活框密码留空时的默认值，保证账号必建可登录）
-        const password = options.password || 'admin';
-        // 仅需手机号非空即创建账号（密码留空则用默认 admin），避免因缺密码漏建账号致 401
-        if (phone) {
+        const password = options.password || '';
+        if (phone && password) {
             if (!Array.isArray(config.users)) config.users = [];
 
             // 检查用户是否已存在
