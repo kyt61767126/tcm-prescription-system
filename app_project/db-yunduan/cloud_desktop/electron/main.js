@@ -24,6 +24,7 @@ const prescriptionCounter = require('./prescription-counter');
 const featureGuard = require('./feature-guard');
 const activateManager = require('./activate');
 const selfCheck = require('./self-check');  // ★ P0-③ exe 签名/完整性自校验（非阻塞，仅记录）
+const logger = require('./electron-logger.cjs');  // ★ P0-[6.3] 主进程滚动日志（脱敏 + 2MB 轮转，.cjs 确保 CJS 解析）
 
 let mainWindow;
 let loginWindow;
@@ -34,34 +35,18 @@ const SESSION_PARTITION = 'persist:tcm-prescription-dingzhi';
 
 // ============================================================================
 //  ★ 全局异常捕获 + 安全防护
-//  1. uncaughtException / unhandledRejection：写入崩溃日志到 userData/crash_logs
+//  1. uncaughtException / unhandledRejection：写入滚动日志到 userData/logs/app.log
+//     （electron-logger 自动脱敏敏感字段、2MB 轮转保留最近 5 份）
 //  2. asar 运行环境检测：打包后必须从 app.asar 内运行，防止解包篡改
 // ============================================================================
-function writeCrashLog(type, err) {
-    try {
-        const fsSync = require('fs');
-        const crashDir = path.join(app.getPath('userData'), 'crash_logs');
-        if (!fsSync.existsSync(crashDir)) fsSync.mkdirSync(crashDir, { recursive: true });
-        const ts = new Date().toISOString().replace(/[:.]/g, '-');
-        const crashFile = path.join(crashDir, 'crash_' + ts + '.txt');
-        const msg = '[' + type + '] ' + new Date().toLocaleString() + '\n' +
-                    'Error: ' + (err && err.message ? err.message : err) + '\n' +
-                    'Stack: ' + (err && err.stack ? err.stack : 'N/A') + '\n';
-        fsSync.writeFileSync(crashFile, msg, 'utf8');
-        console.error('[CRASH] ' + type + ' logged to ' + crashFile);
-    } catch (e) {
-        console.error('[CRASH] writeCrashLog failed:', e);
-    }
-}
-
 process.on('uncaughtException', (err) => {
     console.error('[uncaughtException]', err && err.stack ? err.stack : err);
-    writeCrashLog('uncaughtException', err);
+    logger.crash('uncaughtException', err);
 });
 
 process.on('unhandledRejection', (reason) => {
     console.error('[unhandledRejection]', reason);
-    writeCrashLog('unhandledRejection', reason instanceof Error ? reason : new Error(String(reason)));
+    logger.crash('unhandledRejection', reason instanceof Error ? reason : new Error(String(reason)));
 });
 
 // asar 运行环境检测：打包后 main.js 必须从 app.asar 内运行（防止解包篡改）

@@ -42,6 +42,7 @@ const { execSync, spawnSync } = require('child_process');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
 const DOWNLOADS_DIR = path.join(PROJECT_ROOT, 'public', 'downloads');
+const { getProvenance } = require('./provenance');  // 发布来源声明（P0-[5.2]）
 
 // 各 APP 配置：APK 文件名、build.gradle 路径、exe 打包输出目录、latest.json 路径
 const APP_CONFIG = {
@@ -728,8 +729,12 @@ function main() {
         }
     }
 
+    // ★ P0-[5.2] Release Provenance：顶层写入发布来源声明（仓库/commit/构建者/时间/工具）
+    manifest.provenance = getProvenance({ releaseTag: versionTag });
+
     fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 4), 'utf8');
     console.log('  [OK] hash-manifest.json 已更新');
+    console.log('  [OK] provenance: repo=' + (manifest.provenance.repo || '-') + ' commit=' + (manifest.provenance.commit || '-') + ' builder=' + (manifest.provenance.builder || '-'));
 
     // 更新 latest.json（桌面版自动更新用）
     const latestUpdateKeys = Object.keys(latestUpdates);

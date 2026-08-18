@@ -127,6 +127,14 @@ $CloudModuleTargets = @(
     'app_project/db-yunduan/cloud_desktop'
     )
 
+# Group 9: electron-logger.cjs (P0-[6.3] 主进程滚动日志) -> 2 个 electron 目录
+# 与 main.js 配套使用：main.js 里 require('./electron-logger.cjs')
+# .cjs 后缀确保在根目录 type:module 作用域下仍按 CommonJS 解析
+$ElectronLoggerTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-offline/desktop/electron'
+)
+
 # ============================================================================
 # Helper: Get SHA256 hash of a file
 # ============================================================================
@@ -275,6 +283,11 @@ Write-Host ""
 
 # Group 8: cloud-only modules -> 1 target (cloud_desktop only)
 $result = Sync-Group -GroupName 'cloud modules (3 files -> 1 cloud dir)' -Files $CloudModuleFiles -Targets $CloudModuleTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 9: electron-logger.cjs -> 2 electron dirs (P0-[6.3])
+$result = Sync-Group -GroupName 'electron-logger.cjs -> 2 electron dirs' -Files @('electron-logger.cjs') -Targets $ElectronLoggerTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 

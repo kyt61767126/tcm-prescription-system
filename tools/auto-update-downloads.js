@@ -28,6 +28,7 @@ const { execSync } = require('child_process');
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DOWNLOADS_DIR = path.join(PROJECT_ROOT, 'public', 'downloads');
 const MANIFEST_PATH = path.join(PROJECT_ROOT, 'public', 'hash-manifest.json');
+const { getProvenance } = require('./provenance');  // 发布来源声明（P0-[5.2]）
 
 // 各APP的APK搜索路径和产品名称
 // appDir: 项目根目录（包含 app/ 子目录），用于读取 build.gradle 版本号
@@ -174,6 +175,9 @@ function updateDownloads(target) {
         console.log('[auto-update] 没有更新任何文件');
         return false;
     }
+
+    // ★ P0-[5.2] Release Provenance：顶层写入发布来源声明（仓库/commit/构建者/时间/工具）
+    manifest.provenance = getProvenance({ releaseTag: '' });
 
     // 写入 manifest
     fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 4), 'utf8');

@@ -57,5 +57,15 @@
             "updateTime": "2026-08-18T07:22:33.228Z",
             "fileName": "惠康中医-云端 1.2.56.exe"
         }
+    },
+    "provenance": {
+        "schemaVersion": 1,
+        "repo": "https://github.com/kyt61767126/tcm-prescription-system.git",
+        "commit": "99d54e41284a",
+        "ref": "main",
+        "builder": "kyt61767126",
+        "builtAt": "2026-08-18T23:06:40.633Z",
+        "buildTool": "publish-release.js@v24.16.0",
+        "releaseTag": ""
     }
 }

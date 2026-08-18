@@ -260,6 +260,8 @@ async function main() {
     // 收集并执行所有验证
     const tasks = [];
     for (const appKey of Object.keys(manifest)) {
+        // P0-[5.2]：顶层 provenance 为发布来源声明（字符串元数据），非产物条目，跳过
+        if (appKey === 'provenance') continue;
         const types = manifest[appKey];
         if (!types || typeof types !== 'object') continue;
         for (const type of Object.keys(types)) {
