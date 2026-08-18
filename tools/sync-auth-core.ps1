@@ -101,7 +101,32 @@ function Sync-File {
         return $false
     }
 
-    Copy-Item -Path $Source -Destination $Target -Force
+    # ★ 2026-08-19 防文件占用锁（CLOUD/offline 构建互踩）
+    #   sync-auth-core 会同时同步 offline 与 cloud 两组目标；构建 cloud 时若
+    #   之前残留的 node/gradle 进程仍占用 offline APP 的 auth-core.js，
+    #   Copy-Item 会抛 IOException 导致整次构建中断。这里加短重试（间隔0.5s，
+    #   至多5次），占用为瞬时态时可自动绕过；若持续占用则明确报错。
+    $copied = $false
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        try {
+            Copy-Item -Path $Source -Destination $Target -Force -ErrorAction Stop
+            $copied = $true
+            break
+        } catch [System.IO.IOException] {
+            if ($attempt -lt 5) {
+                Start-Sleep -Milliseconds 500
+                continue
+            }
+        } catch {
+            # 非占用类错误（路径/无权限等）直接抛出
+            throw
+        }
+    }
+    if (-not $copied) {
+        Write-Host "  [ERROR] $Label 文件被占用且重试5次仍无法写入（可能是残留node/gradle进程）" -ForegroundColor Red
+        Write-Host "         请结束后台 node/java 进程后重试构建" -ForegroundColor Yellow
+        return $false
+    }
     Write-Host "  [SYNC] $Label" -ForegroundColor Green
     return $true
 }
