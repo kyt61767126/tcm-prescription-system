@@ -4037,9 +4037,10 @@ let currentUser = null;
             
             prescriptionItems[index].name = name;
             prescriptionItems[index].code = code;
-            prescriptionItems[index].price = parseFloat(price).toFixed(2);
+            const __medSafePrice = isNaN(parseFloat(price)) ? 0 : parseFloat(price);
+            prescriptionItems[index].price = __medSafePrice.toFixed(2);
             prescriptionItems[index].dosage = actualDosage;
-            prescriptionItems[index].total = (price * actualDosage).toFixed(2);
+            prescriptionItems[index].total = (__medSafePrice * actualDosage).toFixed(2);
             if (index >= prescriptionItems.length - 3) addEmptyRow();
             DOM_CACHE.init();
             renderPrescriptionTable();
@@ -4069,8 +4070,11 @@ let currentUser = null;
         }
 
         function updateDosage(index, val) {
-            prescriptionItems[index].dosage = parseFloat(val) || 10;
-            prescriptionItems[index].total = (prescriptionItems[index].price * prescriptionItems[index].dosage).toFixed(2);
+            const __medDose = parseFloat(val) || 10;
+            prescriptionItems[index].dosage = __medDose;
+            const __medUpPrice = parseFloat(prescriptionItems[index].price);
+            const __medUpSafePrice = isNaN(__medUpPrice) ? 0 : __medUpPrice;
+            prescriptionItems[index].total = (__medUpSafePrice * __medDose).toFixed(2);
             // 更新合计列显示
             const row = document.querySelector(`#prescriptionBody tr:nth-child(${index + 1})`);
             if (row) {
