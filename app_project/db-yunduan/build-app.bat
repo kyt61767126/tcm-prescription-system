@@ -37,12 +37,12 @@ set "CLOUD_DIR=%SCRIPT_DIR:~0,-1%"
 set "ANDROID_DIR=%CLOUD_DIR%\cloud_app"
 for %%I in ("%CLOUD_DIR%\..\..") do set "REPO_ROOT=%%~fI"
 
-REM 2026-08-19 Add: Unified build-env gate (ensure-build-env = 8 步门禁：Git/BOM/编码/版本身份/包完整性/残留清理/磁盘空间)
-REM 覆盖原来零散的 fix-ps1-bom / verify-app-version / verify-no-hardcoded-clinic / pre-flight-check 四段（统一入口，避免漏跑+顺序错）
+REM 2026-08-19 Add: Unified build-env gate (8-step: Git/BOM/encoding/version/package/cleanup/disk)
+REM Replaces scattered fix-ps1-bom / verify-app-version / verify-no-hardcoded-clinic / pre-flight-check calls (single entry, no missed steps)
 echo [0/10] Ensure build environment (BOM / encoding / version gate / APP resource / disk >=5GB)...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\ensure-build-env.ps1" -Target cloud-app -AppDir "%ANDROID_DIR%" -MinDiskSpaceGB 5.0
 if errorlevel 1 (
-    echo [FATAL] ensure-build-env FAIL，打包已终止！请根据上方 FAIL 明细修复
+    echo [FATAL] ensure-build-env FAIL, build aborted! Please fix issues above
     if not defined NO_PAUSE pause
     exit /b 1
 )

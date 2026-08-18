@@ -117,8 +117,8 @@ if exist "%OUTPUT_DIR%" (
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Old artifacts cleaned (or skipped)'"
 echo.
 
-REM 2026-08-19 Add: Unified build-env gate (ensure-build-env = 8 步门禁：Git/BOM/编码/版本身份/包完整性/残留清理/磁盘空间)
-REM 放在 bump-version 之前，避免"身份门禁失败版本号白涨"
+REM 2026-08-19 Add: Unified build-env gate (8-step: Git/BOM/encoding/version/package/cleanup/disk)
+REM Place BEFORE bump-version: if identity gate fails, do not waste version bump
 echo [5/9] Ensure build environment (BOM / encoding / version gate / package integrity / cleanup / disk)...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\ensure-build-env.ps1" -Target cloud-desktop -DesktopDir "%~dp0"
 if errorlevel 1 (

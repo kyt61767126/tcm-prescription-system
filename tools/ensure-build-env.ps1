@@ -284,9 +284,9 @@ Finish-Step 2 $(($script:Steps | Where-Object { $_.Id -eq 2 } | Select-Object -F
 Register-Step 3 ".bat 编码校验 (ASCII-only / UTF-8+chcp65001 / GBK-ANSI)"
 
 $batFiles = New-Object System.Collections.ArrayList
-$appProjBat = Get-ChildItem -Path (Join-Path $RepoRoot 'app_project') -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\' -and $_.Name -ne 'gradlew.bat' }
+$appProjBat = Get-ChildItem -Path (Join-Path $RepoRoot 'app_project') -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\|\\build\\|\\dist\\|\\intermediates\\' -and $_.Name -ne 'gradlew.bat' }
 foreach ($f in $appProjBat) { [void]$batFiles.Add($f) }
-$toolsBat = Get-ChildItem -Path (Join-Path $RepoRoot 'tools') -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\|\\\.eb-cache\\' }
+$toolsBat = Get-ChildItem -Path (Join-Path $RepoRoot 'tools') -Recurse -Filter '*.bat' -File -ErrorAction SilentlyContinue | Where-Object { $_.FullName -notmatch '\\node_modules\\|\\\.eb-cache\\|\\build\\|\\dist\\' }
 foreach ($f in $toolsBat) { [void]$batFiles.Add($f) }
 $rootBat = Get-ChildItem -Path $RepoRoot -Filter '*.bat' -File -ErrorAction SilentlyContinue
 foreach ($f in $rootBat) { [void]$batFiles.Add($f) }
@@ -321,6 +321,33 @@ foreach ($f in $batFiles) {
             Add-StepFailure 3 (".bat 编码未知（既非合法 UTF-8 也非合法 GBK），共 $($nonAscii.Count) 个非 ASCII 字节: $rel")
         }
     }
+}
+
+# ---- 工作区 .bat/.cmd 强制 CRLF（记忆 49 根因：工具直写盘产生 LF，cmd 解析含中文批处理必坏）----
+# 只就地改写行尾（内容不变，git 归一化后不产生内容 diff），保证每次打包前批处理都可用
+$utf8NoBom    = New-Object System.Text.UTF8Encoding($false)
+$lfFixedCount = 0
+foreach ($f in $batFiles) {
+    $bytes  = [System.IO.File]::ReadAllBytes($f.FullName)
+    $hasLoneLf = $false
+    for ($i = 0; $i -lt $bytes.Length; $i++) {
+        if ($bytes[$i] -eq 0x0A -and ($i -eq 0 -or $bytes[$i - 1] -ne 0x0D)) { $hasLoneLf = $true; break }
+    }
+    if (-not $hasLoneLf) { continue }
+    $hasBom = ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF)
+    if ($hasBom) {
+        $text = [System.Text.Encoding]::UTF8.GetString($bytes, 3, $bytes.Length - 3)
+    } else {
+        try { $text = $strictUtf8.GetString($bytes) } catch { $text = $gbkEnc.GetString($bytes) }
+    }
+    $text = [regex]::Replace($text, "(?<!\r)\n", "`r`n")
+    $enc  = if ($hasBom) { New-Object System.Text.UTF8Encoding($true) } else { $utf8NoBom }
+    [System.IO.File]::WriteAllText($f.FullName, $text, $enc)
+    $lfFixedCount++
+    Write-Host ("  [FIX] 批处理已强制 CRLF（cmd 兼容）: " + $f.FullName.Substring($RepoRoot.Length + 1)) -ForegroundColor Yellow
+}
+if ($lfFixedCount -gt 0) {
+    Write-Host ("  [WARN] 已修复 $lfFixedCount 个 .bat/.cmd 行尾为 CRLF（行尾归一化不产生内容 diff，重新 git add 即可）") -ForegroundColor Yellow
 }
 
 # 额外复用 verify-packaging 里 Check 4：调用 check-index-consistency.ps1（云端 index.html 副本一致性，非阻断 fail+1，否则 pass+1）

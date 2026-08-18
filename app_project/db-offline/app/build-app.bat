@@ -40,13 +40,13 @@ set "OFFLINE_DIR=%SCRIPT_DIR:~0,-1%"
 for %%I in ("%OFFLINE_DIR%\..") do set "OFFLINE_DIR=%%~fI"
 for %%I in ("%OFFLINE_DIR%\..\..") do set "REPO_ROOT=%%~fI"
 
-REM 2026-08-19 Add: Unified build-env gate (ensure-build-env = 8 步门禁：Git/BOM/编码/版本身份/包完整性/残留清理/磁盘空间)
-REM 覆盖原来零散的 fix-ps1-bom / verify-app-version / verify-no-hardcoded-clinic / pre-flight-check 四段（统一入口，避免漏跑+顺序错）
+REM 2026-08-19 Add: Unified build-env gate (8-step: Git/BOM/encoding/version/package/cleanup/disk)
+REM Replaces scattered fix-ps1-bom / verify-app-version / verify-no-hardcoded-clinic / pre-flight-check calls (single entry, no missed steps)
 echo [0/10] Ensure build environment (BOM / encoding / version gate / APP resource / disk >=5GB)...
-REM 注意 -AppDir 指向 Gradle 工程根（即含 gradlew.bat 的 db-offline/app/ 目录），不是内部 app 模块子目录
+REM NOTE: -AppDir must point to Gradle project root (where gradlew.bat lives), NOT the inner app module dir
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\ensure-build-env.ps1" -Target offline-app -AppDir "%~dp0" -MinDiskSpaceGB 5.0
 if errorlevel 1 (
-    echo [FATAL] ensure-build-env FAIL，打包已终止！请根据上方 FAIL 明细修复
+    echo [FATAL] ensure-build-env FAIL, build aborted! Please fix issues above
     if not defined NO_PAUSE pause
     exit /b 1
 )
