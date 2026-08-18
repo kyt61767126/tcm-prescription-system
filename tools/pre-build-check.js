@@ -135,6 +135,55 @@ function main() {
     console.log('  [PASS] All JS files covered, safe to build');
     console.log('====================================');
 
+    // ★★★ 2026-08-18 【举一反三防旧包】打包前版本标签身份校验
+    //   背景：云端桌面上次被打成"惠康中医-标准版"标签——index.html 由离线/标准版模板复制后
+    //         身份硬编码未全量更新，残留 window.EDITION='personal'、window.PRODUCT_NAME='惠康中医-本地'。
+    //   本质：打包只反映"打包那一刻"工作区源码（prepare-win-unpacked 按 build.files 原样打进 app.asar），
+    //         若 index.html 身份标识与打包目标不符，产出的 exe 就是错误/旧内容。
+    //   措施：打包前强制校验身份，不符即 FAIL 中止，杜绝旧/错误包再次产出。
+    //   原则：宁可漏检不可误报——仅在「确定矛盾」时 FAIL（离线身份硬编码出现在云端目标，或反之）。
+    {
+        const normTarget = absDir.replace(/\\/g, '/');
+        const isCloud = normTarget.includes('db-yunduan');
+        const htmlTitle = (html.match(/<title>([^<]*)<\/title>/i) || [])[1] || '';
+        const hasOfflineProd = /window\.PRODUCT_NAME\s*=\s*'惠康中医-本地'/.test(html);
+        const hasCloudProd = /window\.PRODUCT_NAME\s*=\s*'惠康中医-云端'/.test(html);
+        const hasCloudConfig = /productName:\s*'惠康中医-云端'/.test(html);
+        const appModeMatch = html.match(/window\.APP_MODE\s*=\s*'([^']+)'/);
+        const appMode = appModeMatch ? appModeMatch[1] : '';
+        const editionErrors = [];
+
+        if (isCloud) {
+            // 云端桌面：绝不能残留离线"本地"身份
+            if (hasOfflineProd) editionErrors.push('发现离线身份硬编码 window.PRODUCT_NAME=惠康中医-本地（云端桌面必须为 惠康中医-云端）');
+            if (!hasCloudProd && !hasCloudConfig) editionErrors.push('缺少云端产品名（window.PRODUCT_NAME=惠康中医-云端 或 CONFIG.productName=惠康中医-云端）');
+            if (appMode && appMode !== 'cloud') editionErrors.push('window.APP_MODE 不是 cloud（当前=' + appMode + '），云端桌面必须为 cloud');
+            // 仅当 title 含裸版本标签（标准版/机构版）但缺「云端」前缀时判 FAIL（如旧bug"惠康中医-标准版"）；
+            // 通用标题（如"惠康中医诊所管理系统"）不误报
+            if (/标准版|机构版/.test(htmlTitle) && htmlTitle.indexOf('云端') < 0) editionErrors.push('<title> 含版式标签但缺「云端」前缀（当前="' + htmlTitle + '"），应如 惠康中医-云端标准版/机构版');
+        } else {
+            // 离线桌面：身份必须为 惠康中医-本地 / 离线
+            if (hasCloudProd) editionErrors.push('发现云端身份硬编码 window.PRODUCT_NAME=惠康中医-云端（离线桌面必须为 惠康中医-本地）');
+            if (!hasOfflineProd) editionErrors.push('缺少离线产品名 hardcode（window.PRODUCT_NAME=惠康中医-本地）');
+            if (appMode && appMode !== 'offline') editionErrors.push('window.APP_MODE 不是 offline（当前=' + appMode + '），离线桌面必须为 offline');
+        }
+
+        if (editionErrors.length > 0) {
+            console.log('');
+            console.log('====================================');
+            console.log('  [FAIL] 打包前版本标签身份校验失败！产出必为旧/错误包!');
+            for (const e of editionErrors) console.log('       - ' + e);
+            console.log('  请修正 ' + path.basename(indexPath) + ' 的版本身份标识后再打包');
+            console.log('====================================');
+            process.exit(1);
+        } else {
+            console.log('');
+            console.log('====================================');
+            console.log('  [PASS] 打包前版本标签身份校验通过（' + (isCloud ? '云端' : '离线') + ' 桌面）');
+            console.log('====================================');
+        }
+    }
+
     // ★新增：IPC 一致性检查（按目标端选择对应项目）
     // ★ 第三轮打包优化 S1：原无条件调用只检查云端，导致离线打包被云端 IPC 状态误伤，
     //   且离线自身 IPC 从未被检查。现根据项目目录判定目标端，只检查对应端。
