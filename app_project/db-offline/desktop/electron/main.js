@@ -2001,47 +2001,125 @@ ipcMain.handle('get-app-config', async () => {
                 console.warn('账号备份刷新失败（非致命）:', e.message);
             }
             let merged = { ...defaults, ...cfg };
-            // ★ 2026-08-17 终极兜底1：渲染进程IPC读到的版本必须与授权状态严格一致
-            //   任何未授权(过期/异常/试用/空) → 强制返回标准版(personal) + 管理员降级为user
-            //   杜绝 enforceEditionBinding / 旧 edition 残留 造成的 "标签标准版但改密按钮不显示"
+            // ★ 授权身份判定：正式机构版/正式标准版/未授权(含试用)
+            //   用 validateLicense(机器码绑定) + license.type 判断是否"正式机构版"。
+            //   ★ 2026-08-18 重构：原"产品级永久绑定 if(true) 无条件强制=标准版"已废弃，
+            //     因为离线桌面现支持机构版（管理员激活）。仅"未正式授权或非机构版"才强制标准版，
+            //     正式机构版保留 clinic 版与 admin 角色（否则机构版激活后仍被打成标准版）。
+            let formalValid = false;
+            let formalInstitution = false;
+            let formalCheckLic = null;
             try {
                 const mid = (activateManager && activateManager.getMachineId) ? activateManager.getMachineId() : '';
-                const lic = licenseManager.validateLicense({ localMachineId: mid });
-                if (!lic || !lic.valid) {
-                    merged.edition = 'personal';
-                    if (Array.isArray(merged.users)) {
-                        for (const u of merged.users) {
-                            if (u && (u.role === 'admin' || u.role === 'clinic_admin')) u.role = 'user';
-                        }
-                    }
-                    console.log('[Config] 未授权(含试用)兜底：强制返回标准版 edition=personal');
+                formalCheckLic = licenseManager.validateLicense({ localMachineId: mid });
+                formalValid = !!(formalCheckLic && formalCheckLic.valid);
+                if (formalValid) {
+                    const lh = licenseManager.readLicense();
+                    formalInstitution = !!(lh && lh.type && ['pro', 'institution'].indexOf(String(lh.type).toLowerCase()) >= 0);
                 }
             } catch (e) {
-                console.warn('[Config] license校验兜底失败（非致命，保守走标准版）:', e.message);
-                merged.edition = 'personal';
+                console.warn('[Config] 授权身份判定失败（保守按未授权）:', e.message);
             }
 
-            // ★★★ 2026-08-17 产品级永久绑定（根治"再次出现"！）：本Setup名=「惠康中医-本地」= 离线标准版
-            //   无论激活码是否 valid、无论 license.type 是 pro/institution/personal、
-            //   无论 userData/config.json 历史残留的 edition=clinic_custom、
-            //   无论 enforceEditionBinding 如何校正：
-            //   → merged.edition 永远强制 = personal（标准版）
-            //   → 所有 admin/clinic_admin 角色永远强制降级为 user（标准版永久单用户！）
-            //   这是 Setup 产品级契约："惠康中医-本地"永远是离线标准版，绝不能出现机构版行为！
-            if (true) {
-                merged.edition = 'personal';
-                let downgradedCount = 0;
-                if (Array.isArray(merged.users)) {
-                    for (const u of merged.users) {
-                        if (u && (u.role === 'admin' || u.role === 'clinic_admin')) {
-                            u.role = 'user';
-                            downgradedCount++;
+            // ★ 2026-08-18 自愈：正式授权已装但激活手机号账户缺失/密码为空 → 用持久化的
+            //   激活手机号补齐账户（默认密码 admin），确保"已激活即可用 手机号+admin 登入"。
+            //   仅当正式授权且机器上留有激活手机号时才触发，绝不覆盖用户已改的密码。
+            try {
+                if (formalValid) {
+                    const acctPhone = (activateManager && activateManager.loadAdminAccountPhone)
+                        ? await activateManager.loadAdminAccountPhone()
+                        : '';
+                    if (acctPhone) {
+                        if (!Array.isArray(cfg.users)) cfg.users = [];
+                        let acctUser = cfg.users.find(u => u && (u.username === acctPhone || (u.phone && String(u.phone) === acctPhone)));
+                        const wantRole = formalInstitution ? 'admin' : 'user';
+                        const needHeal = !acctUser || !acctUser.password;
+                        if (needHeal) {
+                            const { passwordHash, salt } = await hashPassword('admin');
+                            const healedUser = {
+                                username: acctPhone,
+                                password: passwordHash,
+                                passwordHash,
+                                salt,
+                                name: cfg.doctorName || acctPhone,
+                                role: wantRole,
+                                createdAt: new Date().toISOString()
+                            };
+                            if (acctUser) {
+                                acctUser.password = passwordHash;
+                                acctUser.passwordHash = passwordHash;
+                                acctUser.salt = salt;
+                                acctUser.role = wantRole;
+                            } else {
+                                cfg.users.push(healedUser);
+                            }
+                            // 写入磁盘（需先签名，签名失败则跳过写入，保留原配置）
+                            try {
+                                const writeCfg = { ...cfg };
+                                licenseManager.signConfig(writeCfg);
+                                if (writeCfg.configSignature) {
+                                    await fse.writeJson(configPath, writeCfg, { spaces: 2 });
+                                    console.log('[Config] 自愈：已补齐激活管理员账户 (手机号=' + acctPhone + ', 角色=' + wantRole + ')');
+                                }
+                            } catch (we) {
+                                console.warn('[Config] 自愈写 config 失败（非致命）:', we.message);
+                            }
+                        }
+                    }
+                    // ★ 2026-08-18 兜底：无激活手机号记录（旧版激活/已装机器无 admin-account.dat）时，
+                    //   机构版下若存在"密码为空/缺失"的 admin 账户 → 兜底重置为 admin（仅重设空密码账户，
+                    //   绝不覆盖用户已设的非空密码；普通只读 user 账户不受影响）。
+                    if (formalInstitution && !acctPhone) {
+                        if (Array.isArray(cfg.users)) {
+                            let healed = false;
+                            for (const u of cfg.users) {
+                                if (u && u.role === 'admin' && !u.password) {
+                                    const { passwordHash, salt } = await hashPassword('admin');
+                                    u.password = passwordHash;
+                                    u.passwordHash = passwordHash;
+                                    u.salt = salt;
+                                    healed = true;
+                                }
+                            }
+                            if (healed) {
+                                try {
+                                    const writeCfg = { ...cfg };
+                                    licenseManager.signConfig(writeCfg);
+                                    if (writeCfg.configSignature) {
+                                        await fse.writeJson(configPath, writeCfg, { spaces: 2 });
+                                        console.log('[Config] 自愈兜底：机构版空密码 admin 账户已重置为 admin');
+                                    }
+                                } catch (we) {
+                                    console.warn('[Config] 自愈兜底写 config 失败（非致命）:', we.message);
+                                }
+                            }
                         }
                     }
                 }
-                // 产品名也强制对齐（防止config里改了productName）
-                merged.productName = '惠康中医-本地';
-                console.log('[Config] 产品级永久绑定生效：惠康中医-本地=离线标准版(personal)。admin降级数=' + downgradedCount);
+            } catch (e) {
+                console.warn('[Config] 账户自愈异常（非致命）:', e.message);
+            }
+
+            // ★ 未正式授权(过期/异常/试用/空)或非机构版 → 强制标准版(personal) + 管理员降级为 user
+            //  （保留原试用兜底：试用 admin 缺【修改密码】按钮的基础行为由此处保证）
+            try {
+                if (!formalInstitution) {
+                    merged.edition = 'personal';
+                    let downgradedCount = 0;
+                    if (Array.isArray(merged.users)) {
+                        for (const u of merged.users) {
+                            if (u && (u.role === 'admin' || u.role === 'clinic_admin')) {
+                                u.role = 'user';
+                                downgradedCount++;
+                            }
+                        }
+                    }
+                    merged.productName = '惠康中医-本地';
+                    console.log('[Config] 非机构版/未授权：强制标准版(personal) edition=personal。admin降级数=' + downgradedCount);
+                }
+            } catch (e) {
+                console.warn('[Config] 标准版兜底失败（非致命，保守走标准版）:', e.message);
+                merged.edition = 'personal';
             }
 
             return { success: true, config: merged };

@@ -364,6 +364,8 @@ function saveAdminRequestId(requestId, clinicName, adminName, phone, password, e
             edition: edition || '',  // ★ 保存版本选择
         };
         fs.writeFileSync(getAdminRequestIdPath(), JSON.stringify(data), 'utf8');
+        // ★ 2026-08-18 同步持久化激活手机号（供自愈），不随审批成功清除
+        saveAdminAccountPhone(data.phone, data.edition);
         console.log('[Admin] requestId 已保存:', requestId);
     } catch (e) {
         console.warn('[Admin] 保存 requestId 失败:', e.message);
@@ -391,6 +393,41 @@ function clearAdminRequestId() {
             console.log('[Admin] requestId 已清除');
         }
     } catch (e) { /* 忽略 */ }
+}
+
+// ★ 2026-08-18 激活账号手机号独立持久化（不随审批成功清除）
+//   自愈机制依赖它：正式授权已装但管理员账户缺失时，按该手机号补齐"手机号+默认admin"账户。
+//   admin-request-id.dat 审批成功后会被清除，但激活手机号需长期保留直到下一次激活覆盖。
+function getAdminAccountPhonePath() {
+    try {
+        return path.join(licenseManager.getWritableDir(), 'admin-account.dat');
+    } catch (e) {
+        return path.join(app.getPath('userData'), 'admin-account.dat');
+    }
+}
+function saveAdminAccountPhone(phone, edition) {
+    if (!phone) return;
+    try {
+        fs.writeFileSync(getAdminAccountPhonePath(), JSON.stringify({
+            phone: String(phone),
+            edition: edition || '',
+            savedAt: new Date().toISOString()
+        }), 'utf8');
+    } catch (e) {
+        console.warn('[Admin] 保存激活手机号失败:', e.message);
+    }
+}
+function loadAdminAccountPhone() {
+    try {
+        const p = getAdminAccountPhonePath();
+        if (fs.existsSync(p)) {
+            const data = JSON.parse(fs.readFileSync(p, 'utf8'));
+            return (data && data.phone) ? String(data.phone) : '';
+        }
+    } catch (e) {
+        console.warn('[Admin] 读取激活手机号失败:', e.message);
+    }
+    return '';
 }
 
 // ★ 提交管理员激活请求到平台
@@ -587,6 +624,7 @@ module.exports = {
     saveLicense,
     cancelAdminRequest,
     saveAdminRequestId,
+    loadAdminAccountPhone,
     loadAdminRequestId,
     clearAdminRequestId,
     ACTIVATE_API_URL

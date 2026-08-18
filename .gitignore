@@ -12,6 +12,8 @@ dist
 dist_debug
 dist_new
 dist-ssr
+dist_old_*
+dist_v*
 *.local
 
 # Electron 构建输出目录（避免锁定问题改用 build_output）
