@@ -120,7 +120,7 @@ export async function onRequest(context) {
         }
 
         const body = await context.request.json().catch(() => ({}));
-        const { code, machineId, user, clinicName } = body;
+        const { code, machineId, user, clinicName, productClass, clientClass } = body;
 
         // 参数校验
         if (!code) {
@@ -307,11 +307,15 @@ export async function onRequest(context) {
             existingDevice.clinicName = record.clinicName || existingDevice.clinicName;
         } else {
             // 新设备激活：添加到数组
+            const pClass = (productClass || '').trim() || null;
+            const cClass = (clientClass || '').trim() || null;
             newDevices.push({
                 machineId: machineId,
                 activatedAt: getNowISO(),
                 clinicName: record.clinicName || clinicName || null,
-                activatedIp: ip
+                activatedIp: ip,
+                productClass: pClass,
+                clientClass: cClass
             });
         }
         updates.devices = newDevices;
@@ -322,7 +326,9 @@ export async function onRequest(context) {
         try {
             await setDeviceVersion(kv, machineId, versionOf(record.type), {
                 licenseCode: code,
-                clinicName: record.clinicName || clinicName || ''
+                clinicName: record.clinicName || clinicName || '',
+                productClass: (productClass || '').trim() || undefined,
+                clientClass: (clientClass || '').trim() || undefined
             });
         } catch (e) { console.warn('[DeviceVersion] 绑定失败:', e.message); }
 

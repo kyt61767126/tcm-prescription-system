@@ -68,7 +68,9 @@ export async function onRequest(context) {
                 versionLabel: VERSION_LABEL[b.version] || b.version,
                 licenseCode: b.licenseCode || null,
                 clinicName: b.clinicName || null,
-                boundAt: b.boundAt || null
+                boundAt: b.boundAt || null,
+                productClass: b.productClass || null,
+                clientClass: b.clientClass || null
             }));
             return json({ success: true, count: list.length, bindings: list });
         }
@@ -89,7 +91,9 @@ export async function onRequest(context) {
                     versionLabel: VERSION_LABEL[binding.version] || binding.version,
                     licenseCode: binding.licenseCode || null,
                     clinicName: binding.clinicName || null,
-                    boundAt: binding.boundAt || null
+                    boundAt: binding.boundAt || null,
+                    productClass: binding.productClass || null,
+                    clientClass: binding.clientClass || null
                 }
             });
         }

@@ -31,7 +31,8 @@
 // ============================================================================
 
 import {
-    getKV, getLicense, updateLicense, checkRateLimit, getDevices, getMaxDevices, appendLicenseLog
+    getKV, getLicense, updateLicense, checkRateLimit, getDevices, getMaxDevices, appendLicenseLog,
+    setDeviceVersion, getDeviceVersion
 } from './_lib/license-core.js';
 
 // ★ P2 安全修复：收紧 CORS，仅允许合法 Origin
@@ -172,6 +173,36 @@ export async function onRequest(context) {
                     serverTime
                 });
             }
+        }
+
+        // ★ 端形态自动上报：心跳携带 productClass(cloud/offline)+clientClass(desktop/app)
+        //   由客户端自动上报，同步持久化到 record.devices 与设备-版本绑定，
+        //   供后台"激活码卡片/设备清单/设备绑定页"展示"云端/离线 + 桌面/APP"。
+        if (deviceMatched && (body.productClass || body.clientClass)) {
+            const pc = ((body.productClass || '').trim()) || null;
+            const cc = ((body.clientClass || '').trim()) || null;
+            const found = devices.find(d => d.machineId === machineId);
+            if (found && (found.productClass !== pc || found.clientClass !== cc)) {
+                found.productClass = pc;
+                found.clientClass = cc;
+                try {
+                    await updateLicense(kv, code, {
+                        devices: devices,
+                        maxDevices: maxDevices
+                    });
+                } catch (e) { console.warn('[Heartbeat] 设备端形态写入失败:', e.message); }
+            }
+            try {
+                const prevBinding = await getDeviceVersion(kv, machineId);
+                if (prevBinding) {
+                    await setDeviceVersion(kv, machineId, prevBinding.version || 'standard', {
+                        productClass: pc || undefined,
+                        clientClass: cc || undefined,
+                        licenseCode: prevBinding.licenseCode || undefined,
+                        clinicName: prevBinding.clinicName || undefined
+                    });
+                }
+            } catch (e) { console.warn('[Heartbeat] 设备绑定端形态更新失败:', e.message); }
         }
 
         // 计算剩余天数

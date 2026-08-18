@@ -82,6 +82,8 @@ h2 { color: #34495e; margin: 20px 0 12px; font-size: 16px; border-left: 4px soli
 .license-card-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .license-card-top .code { font-size: 16px; font-weight: 700; font-family: "Courier New", monospace; color: #2c3e50; word-break: break-all; }
 .license-card-meta { display: flex; gap: 16px; flex-wrap: wrap; color: #606266; font-size: 13px; margin-bottom: 10px; }
+.license-card-end { display: flex; gap: 6px; flex-wrap: wrap; margin: 2px 0 8px; }
+.tag-cloud { background: #e8f0fe; color: #1a56db; }
 .license-card-meta .item b { color: #2c3e50; }
 .license-card-meta .item.clinic { color: #8e44ad; }
 .along-bar { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; }
@@ -1555,6 +1557,31 @@ function renderStats(stats) {
     document.getElementById('statDisabled').textContent = stats.disabled || 0;
 }
 
+// ★ 端形态格式化（云端/离线 × 桌面/APP）→ 中文徽章
+function fmtEndTag(productClass, clientClass) {
+    if (!productClass && !clientClass) return '';
+    const prod = productClass === 'offline' ? '离线' : (productClass === 'cloud' ? '云端' : '');
+    const cli = clientClass === 'app' ? 'APP' : (clientClass === 'desktop' ? '桌面' : '');
+    const label = (prod + (prod && cli ? '·' : '') + cli) || (prod || cli);
+    if (!label) return '';
+    return '<span class="tag tag-cloud">📟 ' + escapeHtml(label) + '</span>';
+}
+function fmtEndSummary(devices) {
+    if (!devices || !devices.length) return '';
+    const set = {};
+    (devices || []).forEach(function (d) {
+        const pc = d.productClass;
+        const cc = d.clientClass;
+        const prod = pc === 'offline' ? '离线' : (pc === 'cloud' ? '云端' : '');
+        const cli = cc === 'app' ? 'APP' : (cc === 'desktop' ? '桌面' : '');
+        const key = (prod && cli) ? (prod + '·' + cli) : (prod || cli);
+        if (key) set[key] = 1;
+    });
+    const keys = Object.keys(set);
+    if (!keys.length) return '';
+    return keys.map(function (k) { return '<span class="tag tag-cloud">📟 ' + escapeHtml(k) + '</span>'; }).join('');
+}
+
 function renderList(records) {
     const el = document.getElementById('listBody');
     if (!records || records.length === 0) {
@@ -1587,6 +1614,7 @@ function renderList(records) {
                 const dAt = d.activatedAt ? new Date(d.activatedAt).toLocaleString('zh-CN') : '-';
                 return '<div class="card-device">' +
                     '<span class="m">' + escapeHtml(d.machineId || '-') + '</span>' +
+                    fmtEndTag(d.productClass, d.clientClass) +
                     '<span class="info">绑定于 ' + dAt + (d.clinicName ? ' · ' + escapeHtml(d.clinicName) : '') + '</span>' +
                 '</div>';
             }).join('');
@@ -1617,6 +1645,7 @@ function renderList(records) {
 
         return '<div class="license-card">' +
             '<div class="license-card-top"><span class="code">' + r.code + '</span>' + typeTag + statusTag + '</div>' +
+            '<div class="license-card-end">' + fmtEndSummary(devices) + '</div>' +
             '<div class="license-card-meta">' + userHtml + clinicHtml +
                 '<span class="item"><b>签发：</b>' + (r.issuedAt ? new Date(r.issuedAt).toLocaleDateString('zh-CN') : '-') + '</span>' +
                 '<span class="item"><b>到期：</b>' + expiresAt + '</span>' + noteHtml +
@@ -1774,6 +1803,7 @@ function renderDevicesList(code, devices) {
             '<div style="flex:1;min-width:200px;">' +
                 '<div style="font-family:Courier New,monospace;color:#2c3e50;font-weight:600;">' + escapeHtml(d.machineId || '-') + '</div>' +
                 '<div style="font-size:12px;color:#909399;margin-top:4px;">激活时间：' + activatedAt + (d.clinicName ? ' · 诊所：' + escapeHtml(d.clinicName) : '') + '</div>' +
+                '<div style="margin-top:6px;">' + fmtEndTag(d.productClass, d.clientClass) + '</div>' +
             '</div>' +
             '<button class="btn btn-sm btn-warning" onclick="unbindDevice(\'' + code + '\',\'' + escapeHtml(d.machineId) + '\',' + i + ')">解绑</button>' +
         '</div>';
@@ -2085,7 +2115,7 @@ async function loadDeviceBindings() {
                 '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button>';
             return '<div class="license-card">' +
                 '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' +
-                    (b.versionLabel || b.version ? versionTag(b.version) : '') + testTag + '</div>' +
+                    (b.versionLabel || b.version ? versionTag(b.version) : '') + testTag + fmtEndTag(b.productClass, b.clientClass) + '</div>' +
                 '<div class="license-card-meta">' +
                     '<span class="item"><b>激活码：</b>' + escapeHtml(b.licenseCode || '-') + '</span>' +
                     '<span class="item"><b>诊所：</b>' + escapeHtml(b.clinicName || '-') + '</span>' +
@@ -2106,7 +2136,7 @@ function renderSingleDeviceBindingCard(b) {
         : '';
     const ops = '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button>';
     return '<div class="license-card">' +
-        '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' + versionTag + '</div>' +
+        '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' + versionTag + fmtEndTag(b.productClass, b.clientClass) + '</div>' +
         '<div class="license-card-meta">' +
             '<span class="item"><b>激活码：</b>' + escapeHtml(b.licenseCode || '-') + '</span>' +
             '<span class="item"><b>诊所：</b>' + escapeHtml(b.clinicName || '-') + '</span>' +

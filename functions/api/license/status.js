@@ -16,7 +16,8 @@
 import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
 import {
     getKV, getLicense, updateLicense, sanitizeRecord, KV_LICENSE_PREFIX, KV_LICENSE_INDEX,
-    getDevices, getMaxDevices, appendLicenseLog, deleteLicenseLogs
+    getDevices, getMaxDevices, appendLicenseLog, deleteLicenseLogs,
+    setDeviceVersion, getDeviceVersion, versionOf
 } from './_lib/license-core.js';
 
 function corsHeaders() {
@@ -69,6 +70,30 @@ async function handleHeartbeat(kv, body) {
         const devices = getDevices(record);
         const matchedDevice = devices.find(d => d.machineId === machineId);
         if (matchedDevice) {
+            // ★ 端形态自动上报持久化：更新 record.devices + 设备-版本绑定
+            if (body.productClass || body.clientClass) {
+                const pc = ((body.productClass || '').trim()) || null;
+                const cc = ((body.clientClass || '').trim()) || null;
+                if (matchedDevice.productClass !== pc || matchedDevice.clientClass !== cc) {
+                    matchedDevice.productClass = pc;
+                    matchedDevice.clientClass = cc;
+                    try {
+                        await updateLicense(kv, code, { devices, maxDevices: getMaxDevices(record) });
+                    } catch (e) { console.warn('[Heartbeat] 设备端形态写入失败:', e.message); }
+                }
+                try {
+                    const prevBinding = await getDeviceVersion(kv, machineId);
+                    if (prevBinding) {
+                        await setDeviceVersion(kv, machineId, prevBinding.version || 'standard', {
+                            productClass: pc || undefined,
+                            clientClass: cc || undefined,
+                            licenseCode: prevBinding.licenseCode || undefined,
+                            clinicName: prevBinding.clinicName || undefined
+                        });
+                    }
+                } catch (e) { console.warn('[Heartbeat] 设备绑定端形态更新失败:', e.message); }
+            }
+
             if (record.status === 'disabled') {
                 return json({
                     revoked: true,

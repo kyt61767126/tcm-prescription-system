@@ -409,7 +409,9 @@ function sanitizeRecord(record) {
         devices: devices.map(d => ({                                           // 已绑定设备列表（脱敏）
             machineId: d.machineId ? d.machineId.substring(0, 8) + '...' : null,
             activatedAt: d.activatedAt || null,
-            clinicName: d.clinicName || null
+            clinicName: d.clinicName || null,
+            productClass: d.productClass || null,   // ★ 端形态：cloud云端/offline离线
+            clientClass: d.clientClass || null      // ★ 客户端形态：desktop桌面/app
         }))
     };
 }
@@ -476,6 +478,8 @@ async function getDeviceVersion(kv, machineId) {
 }
 
 // 写入设备版本绑定（保留已有 licenseCode/clinicName）
+// ★ 2026-08 新增：meta.productClass（cloud云端/offline离线）、meta.clientClass（desktop桌面/app）。
+//   由客户端心跳自动上报，后台据此展示每台设备的端形态。
 async function setDeviceVersion(kv, machineId, version, meta = {}) {
     if (!kv || !machineId) return;
     // 测试机不持久化版本绑定，允许自由切换标准版/机构版
@@ -486,7 +490,9 @@ async function setDeviceVersion(kv, machineId, version, meta = {}) {
         version: version,
         licenseCode: meta.licenseCode || (prev && prev.licenseCode) || null,
         clinicName: meta.clinicName || (prev && prev.clinicName) || null,
-        boundAt: new Date().toISOString()
+        boundAt: new Date().toISOString(),
+        productClass: meta.productClass || (prev && prev.productClass) || null,
+        clientClass: meta.clientClass || (prev && prev.clientClass) || null
     };
     await kv.put(KV_DEVICE_VERSION_PREFIX + machineId, JSON.stringify(binding));
     return binding;
