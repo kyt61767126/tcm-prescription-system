@@ -869,7 +869,8 @@ document.getElementById('submitBtn').addEventListener('click', async () => {
             phone: state.phone,
             password: pwd,
             remark: state.remark,
-            machineId
+            machineId,
+            edition: state.edition // ★ 补传版本选择：机构版/标准版，后台据此正确显示
         });
         if (result.success) {
             showWaiting(result.requestId, new Date().toISOString());
