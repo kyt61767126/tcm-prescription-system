@@ -13,7 +13,7 @@ if (signingPropertiesFile.exists()) {
     signingProperties.load(new FileInputStream(signingPropertiesFile))
 }
 
-// 软著申请版本号统一为 V1.0.0（versionName 固定，不再使用构建时间戳）
+// 软著申请版本号统一为 V1.0.0（版本号固定，不再使用构建时间戳）
 
 android {
     namespace = "com.tcm.prescription"
@@ -48,7 +48,7 @@ android {
         applicationId "com.tcm.prescription"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 172
+        versionCode 176
         versionName "1.0.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {

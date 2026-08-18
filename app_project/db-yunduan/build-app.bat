@@ -19,8 +19,8 @@ if /i "%~1"=="standard" (
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 
 REM 统一安装包：单 APK，标准版/机构版由运行时激活码决定（合并 8 包 → 4 包）
-set "FLAVOR="
-set "FLAVOR_NAME="
+set "FLAVOR=云端统一版"
+set "FLAVOR_NAME=惠康中医-云端"
 set "FLAVOR_CAP="
 set "APK_NAME=惠康中医-云端"
 set "ASSEMBLE_TASK=:app:assembleRelease"
@@ -280,7 +280,7 @@ echo Reading product name and version...
 set "PRODUCT_NAME=%APK_NAME%"
 
 set "VERSION_STR="
-for /f "tokens=2 delims=:" %%v in ('findstr "versionName" "app\build.gradle"') do (
+for /f "tokens=2 delims= " %%v in ('findstr "versionName" "app\build.gradle"') do (
     set "VERSION_STR=%%v"
 )
 set "VERSION_STR=%VERSION_STR: =%"
@@ -311,11 +311,18 @@ if errorlevel 1 (
 )
 echo.
 
+REM 提取 versionCode（构建序号，证明是否为最新一次打包）+ APK 文件时间
+set "VERSION_CODE_STR="
+for /f "tokens=2 delims= " %%v in ('findstr "versionCode" "app\build.gradle"') do set "VERSION_CODE_STR=%%v"
+if "%VERSION_CODE_STR%"=="" set "VERSION_CODE_STR=?"
+for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; (Get-Item '%FINAL_APK%').LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')"') do set "APK_FILE_TIME=%%t"
+
 echo ============================================
 echo   APK 打包完成！
 echo   Path: %FINAL_APK%
 echo   版本类型: %FLAVOR%
-echo   版本号: %VERSION_STR%
+echo   版本号: %VERSION_STR% (versionCode %VERSION_CODE_STR%)
+echo   文件时间: %APK_FILE_TIME%
 echo ============================================
 echo.
 

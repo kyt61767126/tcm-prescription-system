@@ -18,7 +18,8 @@ for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncod
 
 REM 统一安装包：单 APK，标准版/机构版由运行时激活码决定（合并 8 包 → 4 包）
 set "FLAVOR_TARGET=dingzhi"
-set "FLAVOR_NAME="
+set "FLAVOR=本地统一版"
+set "FLAVOR_NAME=惠康中医-本地"
 set "FLAVOR_CAP="
 set "APK_NAME=惠康中医-本地"
 set "ASSEMBLE_TASK=:app:assembleRelease"
@@ -405,7 +406,7 @@ echo.
 
 echo [10/10] Copy APK to output dir + compute SHA-256 + update download page...
 set "VERSION_STR="
-for /f "tokens=2 delims=:" %%v in ('findstr "versionName" "app\build.gradle"') do (
+for /f "tokens=2 delims= " %%v in ('findstr "versionName" "app\build.gradle"') do (
     set "VERSION_STR=%%v"
 )
 set "VERSION_STR=%VERSION_STR: =%"
@@ -474,7 +475,8 @@ echo.
 
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  APK 打包完成！' -ForegroundColor Yellow; Write-Host '  Path: %APK_FULL_PATH%' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Total elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
+for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; (Get-Item '%APK_FULL_PATH%').LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')"') do set "APK_FILE_TIME=%%t"
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  APK 打包完成！' -ForegroundColor Yellow; Write-Host '  Path: %APK_FULL_PATH%' -ForegroundColor Yellow; Write-Host '  版本类型: %FLAVOR%' -ForegroundColor Yellow; Write-Host '  版本号: %VERSION_STR%' -ForegroundColor Yellow; Write-Host '  文件时间: %APK_FILE_TIME%' -ForegroundColor Yellow; Write-Host '  Start: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  End: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Total elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
 if not defined NO_PAUSE (
     set "EXIT_KEY="
     set "EXIT_KEY="

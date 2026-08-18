@@ -1,9 +1,23 @@
 ﻿# one-click-pack.ps1 - One-click packaging tool for all 4 versions
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
+param(
+    [string]$AutoMode = ""   # 非空时跳过菜单直接执行：1=云端 2=本地 3=全部，全程不暂停，完成后自动退出
+)
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::InputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
+
+# 自动模式（AutoMode 非空）下跳过所有 pause 交互暂停，实现"一键完成、无需确定"
+$script:SkipPause = $false
+if ($AutoMode) { $script:SkipPause = $true }
+
+# 自动模式下覆盖 pause：移除内置别名并定义空函数，使所有 pause 调用变为空操作
+if ($script:SkipPause) {
+    Remove-Item alias:pause -ErrorAction SilentlyContinue
+    function global:pause {}
+}
 
 # 脚本位于 <仓库根>\tools\，仓库根 = $PSScriptRoot 的上级
 $script:RootDir = Split-Path $PSScriptRoot -Parent
@@ -48,6 +62,47 @@ function Get-TimeStamp {
     return (Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
 }
 
+# 显示最新 APK 实际信息（文件名/版本号/versionCode/文件时间），供一键打包总结记录
+# 直接在打包完成后读取产物文件时间，确保展示的是"最新一次打包"的真实记录
+function Show-LatestApk {
+    param(
+        [string]$Dir,        # APK 所在目录（如 db-yunduan）
+        [string]$GradleFile, # 对应 app\build.gradle（读取 versionName/versionCode）
+        [string]$Label       # 显示标签，如 "云端APP"
+    )
+    $apk = Get-ChildItem (Join-Path $Dir '*.apk') -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $apk) {
+        Write-Host "  ${Label}: (未找到 APK)" -ForegroundColor Yellow
+        return
+    }
+    $vname = '?'
+    $vcode = '?'
+    if (Test-Path $GradleFile) {
+        $c = Get-Content $GradleFile -Raw -Encoding UTF8
+        if ($c -match 'versionName\s+"([^"]+)"') { $vname = $matches[1] }
+        if ($c -match 'versionCode\s+(\d+)')     { $vcode = $matches[1] }
+    }
+    $ftime = $apk.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
+    Write-Host ("  {0}: {1}  版本 {2} (versionCode {3})  文件时间 {4}" -f $Label, $apk.Name, $vname, $vcode, $ftime) -ForegroundColor Green
+}
+
+# 显示最新 EXE 实际信息（文件名/文件时间），供一键打包总结记录
+function Show-LatestExe {
+    param(
+        [string]$Dir,   # dist 目录
+        [string]$Label  # 显示标签，如 "云端桌面"
+    )
+    $exe = Get-ChildItem (Join-Path $Dir '*.exe') -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    if (-not $exe) {
+        Write-Host "  ${Label}: (未找到 EXE)" -ForegroundColor Yellow
+        return
+    }
+    $ftime = $exe.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
+    Write-Host ("  {0}: {1}  文件时间 {2}" -f $Label, $exe.Name, $ftime) -ForegroundColor Green
+}
+
 # ============ Cloud Build ============
 function Build-Cloud {
     param([string]$Target = "all")
@@ -88,8 +143,9 @@ function Build-Cloud {
     Write-Host "  云端版打包完成！" -ForegroundColor Green
     Write-Host "  开始: $startTime" -ForegroundColor Green
     Write-Host "  结束: $endTime" -ForegroundColor Green
-    Write-Host "  桌面: app_project\db-yunduan/cloud_desktop\dist\*.exe" -ForegroundColor Green
-    Write-Host "  APP:  app_project\db-yunduan\*.apk" -ForegroundColor Green
+    Write-Host "  --- 最新产物记录 ---" -ForegroundColor Cyan
+    Show-LatestExe -Dir "$script:RootDir\app_project\db-yunduan\cloud_desktop\dist" -Label "云端桌面"
+    Show-LatestApk -Dir "$script:RootDir\app_project\db-yunduan" -GradleFile "$script:RootDir\app_project\db-yunduan\cloud_app\app\build.gradle" -Label "云端APP"
     Write-Host "========================================" -ForegroundColor Green
     pause
 }
@@ -101,7 +157,7 @@ function Build-Offline {
         [string]$Target = "all"
     )
     $verLabel = switch ($Version) {
-        "dingzhi" { "定制" }
+        "dingzhi" { "本地" }
         default   { $Version }
     }
 
@@ -179,8 +235,9 @@ function Build-Offline {
     Write-Host "  离线$verLabel 版打包完成！" -ForegroundColor Green
     Write-Host "  开始: $startTime" -ForegroundColor Green
     Write-Host "  结束: $endTime" -ForegroundColor Green
-    Write-Host "  桌面: app_project\db-$Version\dist\*.exe" -ForegroundColor Green
-    Write-Host "  APP:  app_project\db-$Version\*.apk" -ForegroundColor Green
+    Write-Host "  --- 最新产物记录 ---" -ForegroundColor Cyan
+    Show-LatestExe -Dir "$script:RootDir\app_project\db-offline\desktop\dist" -Label "离线桌面"
+    Show-LatestApk -Dir "$script:RootDir\app_project\db-offline" -GradleFile "$script:RootDir\app_project\db-offline\app\app\build.gradle" -Label "离线APP"
     Write-Host "========================================" -ForegroundColor Green
     pause
 }
@@ -251,6 +308,20 @@ function Show-StandaloneUsage {
 
 # ============ Main Menu ============
 $menuStart = Get-TimeStamp
+
+# 自动模式：跳过菜单直接执行对应打包，全部完成后提示结果并自动退出（不返回菜单）
+if ($AutoMode) {
+    switch ($AutoMode) {
+        "1" { Build-Cloud -Target "all"; exit 0 }
+        "2" { Build-Offline -Version "dingzhi" -Target "all"; exit 0 }
+        "3" { Build-All; exit 0 }
+        default {
+            Write-Host "[ERROR] 无效自动模式: $AutoMode（应为 1=云端 2=本地 3=全部）" -ForegroundColor Red
+            exit 1
+        }
+    }
+}
+
 while ($true) {
     Clear-Host
     Write-Host ""
