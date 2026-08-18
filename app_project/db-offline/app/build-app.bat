@@ -1,7 +1,6 @@
 @echo off
 chcp 65001 >nul
-REM P0: .ps1 BOM
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\fix-ps1-bom.ps1" >nul 2>&1
+setlocal EnableExtensions EnableDelayedExpansion
 title Huikang-TCM Build Tool
 
 REM 模式识别：standard = 严格模式（哈希失败强制中断），无参 = 普通模式
@@ -41,21 +40,18 @@ set "OFFLINE_DIR=%SCRIPT_DIR:~0,-1%"
 for %%I in ("%OFFLINE_DIR%\..") do set "OFFLINE_DIR=%%~fI"
 for %%I in ("%OFFLINE_DIR%\..\..") do set "REPO_ROOT=%%~fI"
 
-REM ★ 2026-08-17 新增：版本号一致性预检（举一反三杜绝离线APP版本不一致）
-REM 打包前检查：index-app.html __APP_VERSION__ = desktop/index.html __APP_VERSION__
-REM 任何不一致直接 exit 1 终止打包
-echo [0/10] Version consistency precheck (offline APP group)...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\verify-app-version-consistency.ps1" -Target offline -RepoRoot "%REPO_ROOT%"
-if errorlevel 1 exit /b 1
+REM 2026-08-19 Add: Unified build-env gate (ensure-build-env = 8 步门禁：Git/BOM/编码/版本身份/包完整性/残留清理/磁盘空间)
+REM 覆盖原来零散的 fix-ps1-bom / verify-app-version / verify-no-hardcoded-clinic / pre-flight-check 四段（统一入口，避免漏跑+顺序错）
+echo [0/10] Ensure build environment (BOM / encoding / version gate / APP resource / disk >=5GB)...
+REM 注意 -AppDir 指向 Gradle 工程根（即含 gradlew.bat 的 db-offline/app/ 目录），不是内部 app 模块子目录
+powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\ensure-build-env.ps1" -Target offline-app -AppDir "%~dp0" -MinDiskSpaceGB 5.0
+if errorlevel 1 (
+    echo [FATAL] ensure-build-env FAIL，打包已终止！请根据上方 FAIL 明细修复
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
 echo.
 
-REM ★ 2026-08-17 新增：诊所名/医师名硬编码反模式扫描（举一反三预防）
-REM 禁止运行期回退值写死"本能堂"字面量 / 禁止config版本变化时清空用户诊所名。
-REM 任何违规直接 exit 1 终止打包，防止登录框/处方PDF回显过时诊所名的bug复发。
-echo [0.5/10] Hardcoded clinic-name anti-pattern scan (prevent regression)...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\verify-no-hardcoded-clinic.ps1" -RepoRoot "%REPO_ROOT%"
-if errorlevel 1 exit /b 1
-echo.
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[1/10] Configure clinic info (Flavor: %FLAVOR%)...'"
 if defined SKIP_CONFIG (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] --skip-config argument detected, skipping config'"
@@ -67,10 +63,6 @@ if defined SKIP_CONFIG (
         exit /b 1
     )
 )
-echo.
-
-REM Pre-flight check: detect leftover from previous abnormal exit (.build_vcode_prev/.bak/configuration-cache/Gradle daemon)
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\pre-flight-check.ps1" -Target %FLAVOR_TARGET% -AppDir "%~dp0app"
 echo.
 
 echo [1.5/10] Refresh APK signature hash (normal/strict common, auto anti-repack)...

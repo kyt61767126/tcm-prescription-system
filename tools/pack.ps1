@@ -597,8 +597,14 @@ function Restore-VersionCode {
 function Build-Desktop {
     Write-Step "桌面版打包" "Building Electron desktop application..."
 
-    # Pre-flight check: 检测上次非正常退出残留（.bak/certbak/dist_old/Gradle daemon）
-    & "$PSScriptRoot\pre-flight-check.ps1" -Target $Version -DesktopDir $script:DesktopDir
+    # 2026-08-19 Add: Unified build-env gate (ensure-build-env = 8 步门禁)
+    # 替代原 pre-flight-check 单脚本：同时跑 BOM/Encoding/版本门禁/包完整性/残留清理/磁盘空间
+    # pack.ps1 仅用于 db-offline，Version=dingzhi 固定
+    & "$PSScriptRoot\ensure-build-env.ps1" -Target offline-desktop -DesktopDir $script:DesktopDir
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[FATAL] ensure-build-env FAIL, aborting desktop build" -ForegroundColor Red
+        return 1
+    }
 
     # Kill old process (only target our app, reduce wait time)
     $processNames = @("app-local", "app-custom", "app-personal", "HuikangTCM-Local", "HuikangTCM-Custom", "HuikangTCM-Personal")
@@ -926,8 +932,13 @@ function Build-Desktop {
 function Build-App {
     Write-Step "APP 打包" "Building Android APK..."
 
-    # Pre-flight check: 检测上次非正常退出残留（.build_vcode_prev/.bak/configuration-cache/Gradle daemon）
-    & "$PSScriptRoot\pre-flight-check.ps1" -Target $Version -AppDir $script:AndroidDir
+    # 2026-08-19 Add: Unified build-env gate (ensure-build-env = 8 步门禁)
+    # 替代原 pre-flight-check 单脚本：同时跑 BOM/Encoding/版本门禁/包完整性/残留清理/磁盘空间
+    & "$PSScriptRoot\ensure-build-env.ps1" -Target offline-app -AppDir $script:AndroidDir -MinDiskSpaceGB 5.0
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[FATAL] ensure-build-env FAIL, aborting APP build" -ForegroundColor Red
+        return 1
+    }
 
     # ★ 统一入口：委托 build-app.bat（db-offline\build-app.bat → app\build-app.bat）
     # 与云端 packaging.ps1 对齐，所有 APP 打包逻辑收敛到 build-app.bat：

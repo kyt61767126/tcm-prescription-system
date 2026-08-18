@@ -117,35 +117,18 @@ if exist "%OUTPUT_DIR%" (
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Old artifacts cleaned (or skipped)'"
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[5/9] Auto-bump version (triggers integrity baseline rebuild)...'"
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
-echo.
-
-echo [6/9] Pre-build security integrity check...
-echo ============================================
-echo Security integrity check
-echo ============================================
-node "%~dp0..\..\..\tools\pre-build-check.js" "%CD%"
-if errorlevel 1 (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[FAILED] Security check failed, aborting build! Please fix package.json files list'"
-    exit /b 1
-)
-echo [OK] Security check passed
-echo.
-echo Disk space check...
-for /f "delims=" %%d in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; [math]::Round((Get-PSDrive -Name $((Get-Location).Drive.Name)).Free/1GB,2)"') do set "FREE_GB=%%d"
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Free space: %FREE_GB% GB'"
-if "%FREE_GB%"=="" set "FREE_GB=0"
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; if([double]'%FREE_GB%' -lt 1.0){ Write-Host '[ERROR] Insufficient disk space: %FREE_GB%GB, need >=1GB'; exit 1 }"
+REM 2026-08-19 Add: Unified build-env gate (ensure-build-env = 8 步门禁：Git/BOM/编码/版本身份/包完整性/残留清理/磁盘空间)
+REM 放在 bump-version 之前，避免"身份门禁失败版本号白涨"
+echo [5/9] Ensure build environment (BOM / encoding / version gate / package integrity / cleanup / disk)...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\ensure-build-env.ps1" -Target cloud-desktop -DesktopDir "%~dp0"
 if errorlevel 1 (
     if not defined NO_PAUSE pause
     exit /b 1
 )
-echo [OK] Sufficient disk space
 echo.
 
-REM 预防性检查：清理上次非正常退出（Ctrl+C/崩溃）留下的 .build_vcode_prev / .bak / dist_old 等残留
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\pre-flight-check.ps1" -Target cloud -DesktopDir "%~dp0"
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[6/9] Auto-bump version (triggers integrity baseline rebuild)...'"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[7/9] Code obfuscation (target=cloud)...'"

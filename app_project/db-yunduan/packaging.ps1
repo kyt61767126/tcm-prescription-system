@@ -476,8 +476,14 @@ function Build-Desktop {
     param([switch]$SkipConfirm)
     Write-Step "打包云端桌面版 exe (Electron)"
 
-    # Pre-flight check: 检测上次非正常退出残留（.bak/certbak/dist_old/Gradle daemon）
-    & "$scriptDir\..\..\tools\pre-flight-check.ps1" -Target cloud -DesktopDir (Join-Path $scriptDir "cloud_desktop")
+    # 2026-08-19 Add: Unified build-env gate (ensure-build-env = 8 步门禁)
+    # 替代原 pre-flight-check 单脚本：同时跑 BOM/Encoding/版本门禁/包完整性/残留清理/磁盘空间
+    $desktopEnsurePath = Join-Path $scriptDir "cloud_desktop"
+    & "$scriptDir\..\..\tools\ensure-build-env.ps1" -Target cloud-desktop -DesktopDir $desktopEnsurePath
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[FATAL] ensure-build-env FAIL, aborting cloud desktop build" -ForegroundColor Red
+        return 1
+    }
 
     if (-not $SkipConfirm) {
         if (-not (Confirm-BuildConfig -Target "云端桌面版")) { return 1 }
@@ -652,8 +658,14 @@ function Build-App {
     param([switch]$SkipConfirm)
     Write-Step "打包云端手机 APP (APK)"
 
-    # Pre-flight check: 检测上次非正常退出残留（.build_vcode_prev/.bak/configuration-cache/Gradle daemon）
-    & "$scriptDir\..\..\tools\pre-flight-check.ps1" -Target cloud -AppDir (Join-Path $scriptDir "cloud_app")
+    # 2026-08-19 Add: Unified build-env gate (ensure-build-env = 8 步门禁)
+    # 替代原 pre-flight-check 单脚本：同时跑 BOM/Encoding/版本门禁/包完整性/残留清理/磁盘空间
+    $appEnsurePath = Join-Path $scriptDir "cloud_app"
+    & "$scriptDir\..\..\tools\ensure-build-env.ps1" -Target cloud-app -AppDir $appEnsurePath -MinDiskSpaceGB 5.0
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "[FATAL] ensure-build-env FAIL, aborting cloud APP build" -ForegroundColor Red
+        return 1
+    }
 
     # 打包前配置确认（Build-AllStrict/Build-All 连续流程时跳过，避免中间回车打断）
     if (-not $SkipConfirm) {
