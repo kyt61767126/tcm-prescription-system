@@ -38,7 +38,10 @@
 //    5. 客户端下次轮询 admin-status 时获取 license 并写入 license.dat
 // ============================================================================
 
-import { parseAuthHeader, isPlatformAdmin } from '../_lib/auth.js';
+import {
+    parseAuthHeader, isPlatformAdmin, hashPassword,
+    ROLE_CLINIC_ADMIN, KV_SYSTEM_CLINICS
+} from '../_lib/auth.js';
 import {
     getKV, saveLicense, buildLicenseData, encodeLicenseBase64,
     generateActivationCode, appendLicenseLog, getDevices, getMaxDevices,
@@ -67,6 +70,60 @@ function getClientIP(context) {
 }
 
 const KV_ADMIN_REQ_PREFIX = 'admin_req:';
+
+// ★★ 2026-08-19 云端账号自动开通
+//   审核通过"管理员激活"请求时，为云端创建诊所 + clinic_admin 账号（username=激活手机号）。
+//   仅当手机号非空且该账号尚未存在时执行；已存在则跳过（兼容历史多端共享同一手机号）。
+//   诊所按 clinicName 复用：已存在同名诊所则不重复创建，仅补充账号到该诊所。
+async function provisionCloudAccount(kv, record) {
+    const phone = (record.phone || '').trim();
+    const clinicName = (record.clinicName || '').trim();
+    if (!phone || !clinicName) return;
+
+    const now = new Date().toISOString();
+    const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+    let clinic = clinics.find(c => c.name === clinicName);
+
+    // 1) 存在同名诊所 → 直接复用
+    if (clinic) {
+        await ensureClinicUser(kv, clinic.id, clinicName, phone, record.adminName, now);
+        return;
+    }
+
+    // 2) 不存在 → 创建新诊所
+    const clinicId = 'clinic_' + Array.from(crypto.getRandomValues(new Uint8Array(10)))
+        .map(b => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
+    clinic = { id: clinicId, name: clinicName, status: 'active', createdAt: now, updatedAt: now };
+    clinics.push(clinic);
+    await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
+
+    await ensureClinicUser(kv, clinicId, clinicName, phone, record.adminName, now);
+}
+
+// 在指定诊所下补充（或不动）clinic_admin 账号
+async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now) {
+    const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
+    const exists = users.some(u => u.username === phone || u.phone === phone);
+    if (exists) return;
+
+    // 密码留空默认 admin（与离线端默认密码一致；激活框密码留空时的默认值）
+    const { passwordHash, salt } = await hashPassword('admin');
+    users.push({
+        username: phone,
+        phone: phone,
+        name: (adminName || phone).trim(),
+        role: ROLE_CLINIC_ADMIN,
+        passwordHash,
+        salt,
+        allowedMode: 'both',
+        cloudEnabled: true,
+        allowSavePrescription: true,
+        createdAt: now,
+        updatedAt: now
+    });
+    await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));
+    console.log('[AdminApprove] 云端账号已开通:', phone, 'clinic=', clinicName);
+}
 
 export async function onRequest(context) {
     const method = context.request.method;
@@ -199,6 +256,18 @@ export async function onRequest(context) {
         };
 
         await saveLicense(kv, licenseRecord);
+
+        // ★★ 2026-08-19 云端账号自动开通
+        //   （解决"激活通过后，云端APP/桌面用手机号登录返回 401"）
+        //   admin-approve 之前只生成 license，从不创建云端诊所/账号，
+        //   前端提示"账号已在云端创建，用手机号登录"，但 findUserForLogin 找不到 → 401。
+        //   此处为云端机构版/标准版自动开通：诊所（按名称复用，不重复建）+ clinic_admin 账号
+        //   （username=激活手机号，密码留空默认 admin，与离线端默认密码一致）。
+        try {
+            await provisionCloudAccount(kv, record);
+        } catch (e) {
+            console.warn('[AdminApprove] 云端账号开通失败（不影响license）:', e.message);
+        }
 
         // ★ 设备-版本绑定：授权成功后绑定设备版本（同一设备只能注册一个版本）
         try {
