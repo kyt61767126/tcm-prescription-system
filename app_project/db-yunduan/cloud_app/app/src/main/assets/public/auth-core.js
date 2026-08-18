@@ -2037,19 +2037,26 @@
             // 已注入过则跳过，避免重复
             if (document.getElementById('activateLoginEntry')) return;
 
-            // 定位登录按钮区，在其下方插入"软件激活 / 管理员激活"入口（参考桌面登入框）
+            // ★ 云端为 SaaS 登录制，无本地激活码授权；登录框仅保留"管理员激活"入口（申请登录账号）
+            // 定位登录按钮区，在其下方插入"管理员激活"入口
             const container = overlay.querySelector('.login-buttons');
             if (!container) return;
+
+            // 登录框诊所名应显示打包 config.json 配置，而非静态 HTML 硬编码的"本能堂中医诊所"
+            try {
+                const lc = document.getElementById('loginClinicName');
+                const cc = (typeof CONFIG !== 'undefined' && CONFIG.clinicName) ? CONFIG.clinicName : '';
+                if (lc && cc) lc.textContent = cc;
+            } catch (e) {}
 
             const entry = document.createElement('div');
             entry.id = 'activateLoginEntry';
             entry.style.cssText =
-                'margin-top:10px;padding:4px;display:flex;gap:10px;justify-content:center;';
+                'margin-top:12px;padding:0 4px;';
             entry.innerHTML =
-                '<div style="flex:1;padding:11px 6px;border-radius:8px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;cursor:pointer;font-size:13px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.activateNow){window.activateNow();}">🔑 软件激活</div>' +
-                '<div style="flex:1;padding:11px 6px;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:13px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
+                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
             container.parentNode.insertBefore(entry, container.nextSibling);
-            console.log('[LicenseCheck] 登录界面已注入 软件激活/管理员激活 入口');
+            console.log('[LicenseCheck] 登录界面已注入 管理员激活 入口');
         } catch (e) {
             console.warn('[LicenseCheck] 注入登录 软件激活/管理员激活 入口失败:', e);
         }
