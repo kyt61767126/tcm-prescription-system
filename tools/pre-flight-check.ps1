@@ -8,6 +8,11 @@ param(
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+# 参数规范化：CMD 调用用 "%~dp0"（结尾带反斜杠）传路径时，PowerShell 命令行解析
+# 会把 \" 当作转义引号，导致路径尾部残留一个引号（Test-Path: Illegal characters in path）。
+# 这里统一剥离首尾引号与尾部反斜杠，保证 Test-Path / Join-Path 正常工作。
+$DesktopDir = ($DesktopDir.Trim('"')).TrimEnd('\')
+$AppDir = ($AppDir.Trim('"')).TrimEnd('\')
 $scriptDir = $PSScriptRoot
 $projectRoot = if ($scriptDir) { Split-Path $scriptDir -Parent } else { $PWD.Path }
 
