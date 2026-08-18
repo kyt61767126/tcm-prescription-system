@@ -280,16 +280,38 @@
             if (!user) {
                 user = _users.find(u => u.phone && String(u.phone) === username);
             }
+            // ★ 云端账户回退：本地用户表中找不到该账户时，回退到云端认证（cloudAdapter）
+            //   云端注册的账户（如 wgj）仅存在于云端，本地 config/localStorage 无记录，
+            //   必须走 AuthCore.login() 的云端点 /users?login=true 认证，否则会误报"密码错误"。
+            let _cloudAuth = null;
             if (!user) {
-                showError('手机号/用户名或密码错误');
-                return;
-            }
-            const storedPwd = user.password || '';
-            const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
-            const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
-            if (!pwdOk) {
-                showError('手机号/用户名或密码错误');
-                return;
+                if (window.AuthCore && typeof AuthCore.login === 'function') {
+                    const cloudRes = await AuthCore.login(username, password);
+                    if (cloudRes && cloudRes.success && cloudRes.user) {
+                        _cloudAuth = cloudRes.user; // 含云端返回的 token
+                        // 用云端用户填充本地匹配结果（后续版本匹配/password字段判断走云端）
+                        user = {
+                            username: _cloudAuth.username,
+                            name: _cloudAuth.name || _cloudAuth.username,
+                            role: _cloudAuth.role || 'user',
+                            password: _cloudAuth.password || '',
+                            token: _cloudAuth.token || ''
+                        };
+                    }
+                }
+                // 云端认证也失败（密码错误/网络异常/账户不存在）
+                if (!_cloudAuth) {
+                    showError('手机号/用户名或密码错误');
+                    return;
+                }
+            } else {
+                const storedPwd = user.password || '';
+                const isHash = /^[a-f0-9]{64}$/.test(storedPwd);
+                const pwdOk = isHash ? (storedPwd === await hashPassword(password)) : (storedPwd === password);
+                if (!pwdOk) {
+                    showError('手机号/用户名或密码错误');
+                    return;
+                }
             }
 
             // ★ 严格版本匹配（安全隔离）：账户版本必须与电脑激活版本一致
@@ -297,7 +319,11 @@
                 const appCfg = await getAppConfig();
                 const machineEdition = (appCfg && appCfg.edition) || '';
                 const machineIsInstitution = ['clinic_custom', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud', 'institution'].indexOf(machineEdition) >= 0;
-                const accountIsInstitution = (user.role === 'admin');
+                // 机构版账户：本地角色 admin/机构版，或云端角色 clinic_admin/platform_admin
+                const accountIsInstitution =
+                    (user.role === 'admin') ||
+                    (user.role === 'clinic_admin') ||
+                    (user.role === 'platform_admin');
                 if (machineIsInstitution !== accountIsInstitution) {
                     if (machineIsInstitution) {
                         showError('⚠️ 该账户属于【标准版】，不能登录【机构版】电脑。请使用机构版账户登录，或在标准版电脑上使用该账户。');
@@ -309,7 +335,15 @@
             } catch (e) { console.warn('[login] 版本匹配校验失败:', e); }
 
             // ★ 优化：批量并行写入 AuthCore 存储
-            const userData = { username: user.username, name: user.name, role: user.role || 'user' };
+            // 云端账户回退登录时 user.token 来自云端 /users?login=true，必须保留，
+            // 供主界面 index.html 构造 Bearer header（buildAuthHeader 依赖 user.token），
+            // 否则后续云端 API 请求回退 Basic auth 会 401 触发自动登出。
+            const userData = {
+                username: user.username,
+                name: user.name,
+                role: user.role || 'user',
+                token: user.token || ''
+            };
             const userDataStr = JSON.stringify(userData);
             const loginDataStr = JSON.stringify({ loginTime: Date.now(), username: user.username });
 
