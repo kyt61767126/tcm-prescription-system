@@ -135,6 +135,76 @@ function main() {
     console.log('  [PASS] All JS files covered, safe to build');
     console.log('====================================');
 
+    // ★★★ 2026-08-18 【规范执行三原则：build.files 同步自动化·原则二/三】
+    //   build.files 既是该桌面工程打包内容的唯一权威源(原则一)，也必须"可自证"。
+    //   新增方向校验：每条 build.files 条目在磁盘上能否解析到文件，防止拼写/路径错、
+    //   或新增脚本漏加进 files 却又不被 index.html 引用(仅 main.js 注入)而静默缺包。
+    //   原则三(分级·宁漏检不可误报)：条目解析不到 → 仅 [WARN]，不阻断(可能为构建时生成/模板)。
+    {
+        console.log('');
+        console.log('====================================');
+        console.log('  build.files 磁盘存在性校验 (WARN级)');
+        console.log('====================================');
+
+        function globExists(base, glob) {
+            // 递归收集 base 下所有文件相对路径(以 / 分隔)
+            const files = [];
+            function walk(dir) {
+                let entries = [];
+                try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+                for (const ent of entries) {
+                    const full = path.join(dir, ent.name);
+                    if (ent.isDirectory()) { walk(full); } else { files.push(path.relative(base, full).replace(/\\/g, '/')); }
+                }
+            }
+            walk(base);
+
+            // 通配转正则(支持 **、*)。** 表示零或多个路径段(自带结尾 /)，* 表示单段任意名。
+            const parts = glob.split('/');
+            let re = '^';
+            for (let i = 0; i < parts.length; i++) {
+                const p = parts[i];
+                if (p === '**') { re += '(?:[^/]+/)*'; }
+                else {
+                    if (i > 0) re += '/';
+                    re += (p === '*') ? '[^/]*' : p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                }
+            }
+            re += '$';
+            return files.filter(function (r) { return new RegExp(re).test(r); });
+        }
+
+        const missingEntries = [];
+        const checkedPatterns = [];
+        const rawFiles = (pkg.build && pkg.build.files) || [];
+        // 排除规则(以 ! 开头)表示"从打包中剔除"，无需磁盘存在性校验
+        const positives = rawFiles.filter(f => !f.startsWith('!'));
+        // 每个顶层模式：若条目是文件则直检；若目录/通配则 glob 解析
+        for (const gl of positives) {
+            if (gl.includes('*')) {
+                const hits = globExists(absDir, gl);
+                checkedPatterns.push({ gl, count: hits.length });
+                if (hits.length === 0) missingEntries.push(gl);
+            } else {
+                const target = path.join(absDir, gl.split('/').join(path.sep));
+                checkedPatterns.push({ gl, count: fs.existsSync(target) ? 1 : 0 });
+                if (!fs.existsSync(target)) missingEntries.push(gl);
+            }
+        }
+
+        for (const c of checkedPatterns) {
+            console.log(`       ${c.gl}  ->  ${c.count === 0 ? '无命中' : c.count + (c.count === 1 ? ' 项' : ' 项')}`);
+        }
+        if (missingEntries.length > 0) {
+            console.log('');
+            console.log('  [WARN] 以下 build.files 条目在磁盘上无命中，请核对是否拼写错误或被构建时生成：');
+            for (const m of missingEntries) console.log('       - ' + m);
+            console.log('  (WARN 不阻断发布；若确为遗漏脚本请补入 files 再打包)');
+        } else {
+            console.log('  [OK] 所有 build.files 条目均有磁盘命中');
+        }
+    }
+
     // ★★★ 2026-08-18 【举一反三防旧包】打包前版本标签身份校验
     //   背景：云端桌面上次被打成"惠康中医-标准版"标签——index.html 由离线/标准版模板复制后
     //         身份硬编码未全量更新，残留 window.EDITION='personal'、window.PRODUCT_NAME='惠康中医-本地'。

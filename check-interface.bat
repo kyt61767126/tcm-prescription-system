@@ -1,4 +1,5 @@
 @echo off
+chcp 65001 >nul
 title Interface Structure Integrity Check
 REM ★ P0-1 收口：统一到 tools\check-interface.ps1 + 入库的 .interface-lock.json 基线
 REM    （废弃旧 .interface-baseline\ 本地快照机制，杜绝"双套脚本口径不一致"）

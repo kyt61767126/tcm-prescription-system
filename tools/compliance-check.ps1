@@ -113,6 +113,12 @@ Invoke-Check -Name "4/8 版本号一致性" -ArgsList @(
     '-Target', 'all'
 )
 
+# --- 4b 版本展示一致性（8 处版本标识自动化，防"改一处漏其余"） ---
+# 【规范执行三原则】把原手工"检查8处版本"固化为自动门禁：唯一权威源 + 可自证 + 分级不误报。
+Invoke-Check -Name "4b/9 版本展示一致性(8处标识)" -ArgsList @(
+    (Join-Path $scriptDir 'verify-version-display.ps1')
+)
+
 # --- 5 shared/ 模块分发一致性（VerifyOnly 只检不改） ---
 Invoke-Check -Name "5/8 shared/ 模块一致性" -ArgsList @(
     (Join-Path $scriptDir 'sync-all.ps1'),
