@@ -39,7 +39,7 @@ for %%I in ("%CLOUD_DIR%\..\..") do set "REPO_ROOT=%%~fI"
 
 REM 2026-08-19 Add: Unified build-env gate (8-step: Git/BOM/encoding/version/package/cleanup/disk)
 REM Replaces scattered fix-ps1-bom / verify-app-version / verify-no-hardcoded-clinic / pre-flight-check calls (single entry, no missed steps)
-echo [0/10] Ensure build environment (BOM / encoding / version gate / APP resource / disk >=5GB)...
+echo [0/10] Ensure build environment (BOM / encoding / version gate / APP resource / disk ^>=5GB)...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\ensure-build-env.ps1" -Target cloud-app -AppDir "%ANDROID_DIR%" -MinDiskSpaceGB 5.0
 if errorlevel 1 (
     echo [FATAL] ensure-build-env FAIL, build aborted! Please fix issues above

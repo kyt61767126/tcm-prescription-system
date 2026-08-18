@@ -42,7 +42,7 @@ for %%I in ("%OFFLINE_DIR%\..\..") do set "REPO_ROOT=%%~fI"
 
 REM 2026-08-19 Add: Unified build-env gate (8-step: Git/BOM/encoding/version/package/cleanup/disk)
 REM Replaces scattered fix-ps1-bom / verify-app-version / verify-no-hardcoded-clinic / pre-flight-check calls (single entry, no missed steps)
-echo [0/10] Ensure build environment (BOM / encoding / version gate / APP resource / disk >=5GB)...
+echo [0/10] Ensure build environment (BOM / encoding / version gate / APP resource / disk ^>=5GB)...
 REM NOTE: -AppDir must point to Gradle project root (where gradlew.bat lives), NOT the inner app module dir
 powershell -NoProfile -ExecutionPolicy Bypass -File "%REPO_ROOT%\tools\ensure-build-env.ps1" -Target offline-app -AppDir "%~dp0" -MinDiskSpaceGB 5.0
 if errorlevel 1 (
