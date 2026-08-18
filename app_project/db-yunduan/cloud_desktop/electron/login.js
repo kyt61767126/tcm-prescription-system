@@ -312,11 +312,31 @@
                             password: _cloudAuth.password || '',
                             token: _cloudAuth.token || ''
                         };
+                    } else {
+                        // ★ 诊断：记录云端认证返回的具体错误，供排查
+                        const dbgErr = cloudRes && cloudRes.error ? String(cloudRes.error) : '未知错误';
+                        console.error('[login] 云端认证失败:', dbgErr);
+                        // 将真实错误写入 userData（save-user-data IPC）
+                        try {
+                            if (window.electronAPI && typeof window.electronAPI.saveUserData === 'function') {
+                                await window.electronAPI.saveUserData('login_debug', JSON.stringify({ time: Date.now(), error: dbgErr, ok: false }));
+                            }
+                        } catch(e) { console.warn('[login] 写入诊断日志失败:', e); }
                     }
                 }
                 // 本地未放行 且 云端认证也失败（密码错误/网络异常/账户不存在）
                 if (!_cloudAuth) {
-                    showError('手机号/用户名或密码错误');
+                    // ★ 诊断增强：显示具体失败原因，便于定位（不隐藏真实错误）
+                    let detailErr = '';
+                    try {
+                        const ret = await window.electronAPI.getUserData('login_debug');
+                        if (ret && ret.success && ret.data) {
+                            const dd = ret.data;
+                            detailErr = dd.error ? String(dd.error) : '';
+                        }
+                    } catch(e) {}
+                    const msg = detailErr ? ('登录失败：' + detailErr) : '手机号/用户名或密码错误';
+                    showError(msg);
                     return;
                 }
             }

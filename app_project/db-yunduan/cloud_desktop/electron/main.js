@@ -365,7 +365,9 @@ function installCSP(sess) {
             "img-src 'self' data:",
             "media-src 'self' blob:",          // 新增：允许 blob: 视频源
             "font-src 'self' data:",
-            "connect-src 'self'",
+            // ★ 云端认证修复：connect-src 需允许连接云端 API 域名，
+            //   否则 file:// 登录页 fetch(https://...pages.dev/api/...) 被 CSP 拦截 → Failed to fetch → 云端回退失败 → 误报"密码错误"
+            "connect-src 'self' https://tcm-prescription-system.pages.dev https://*.tcm-prescription-system.pages.dev",
             "object-src 'none'",
             "base-uri 'self'"
         ].join('; ');
