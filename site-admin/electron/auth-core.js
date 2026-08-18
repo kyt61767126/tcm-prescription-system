@@ -1493,7 +1493,8 @@
     async function showActivateDialog() {
         try {
             if (!global.electronAPI || !global.electronAPI.activate) {
-                showHtmlAlert('授权系统未就绪，请重启应用后重试');
+                // ★ 云端SaaS：无本地授权桥（无机器码/无需激活码），引导登录或管理员激活
+                await showHtmlAlert('🌐 云端版无需激活码\n\n直接登录即可使用。\n如需申请登录账号，请返回登录页点击「📋 管理员激活」。');
                 global.__licenseActivating = false;
                 return;
             }
