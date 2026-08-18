@@ -2727,6 +2727,121 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         }
     }
 
+    // ========================================================================
+    //  ★ 管理员激活：安装后端审批已生成的 license（无需网络校验激活码）
+    //    与 activateOnline 成功后安装流程一致（写license+清trial+同步config/版本
+    //    +初始化验证状态+创建登录账号），但 license 来自 admin-status 返回，而非本机联网校验。
+    //  ========================================================================
+    public JSONObject installAdminLicense(String licenseBase64, String machineId, String user,
+                                          String clinicName, String password,
+                                          String loginUsername, String phone) {
+        try {
+            if (licenseBase64 == null || licenseBase64.isEmpty()) {
+                return failResult("服务器返回的 license 数据为空");
+            }
+            String mid = (machineId == null || machineId.isEmpty()) ? getMachineId() : machineId;
+
+            // 1. 写入 license 文件
+            if (!writeLicenseContent(licenseBase64, mid)) {
+                return failResult("写入 license 文件失败");
+            }
+
+            // 2. 清除 trial 文件（已正式激活）
+            try { getFile(TRIAL_FILE).delete(); } catch (Exception ignored) {}
+
+            // 3. 激活成功，重置失败计数
+            resetActivateFailCount();
+
+            // 4. 同步 clinicName 和 doctorName(user) 到 filesDir/config.json 副本
+            try {
+                JSONObject licenseData = null;
+                try {
+                    String jsonStr = decryptLicenseContent(licenseBase64, mid);
+                    if (jsonStr != null && !jsonStr.isEmpty()) licenseData = new JSONObject(jsonStr);
+                } catch (Exception parseEx) { /* 解析失败不影响激活 */ }
+                if (licenseData == null) {
+                    licenseData = readLicense(mid);
+                }
+                if (licenseData != null) {
+                    setLicenseDataContext(licenseData); // 供 getEffectiveConfigSignKey() 使用 masterKey
+                }
+                String syncClinicName = "";
+                if (clinicName != null && !clinicName.isEmpty()) syncClinicName = clinicName;
+                if (syncClinicName.isEmpty() && licenseData != null) {
+                    syncClinicName = licenseData.optString("clinicName", "");
+                }
+                JSONObject cfg = readConfigJSON();
+                boolean changed = false;
+                if (!syncClinicName.isEmpty() && !syncClinicName.equals(cfg.optString("clinicName", ""))) {
+                    cfg.put("clinicName", syncClinicName);
+                    Log.i(TAG, "管理员激活同步: config.clinicName → " + syncClinicName);
+                    changed = true;
+                }
+                if (user != null && !user.isEmpty() && !user.equals(cfg.optString("doctorName", ""))) {
+                    cfg.put("doctorName", user);
+                    Log.i(TAG, "管理员激活同步: config.doctorName → " + user);
+                    changed = true;
+                }
+                boolean noSig = cfg.optString("configSignature", "").isEmpty();
+                if (changed || noSig) writeConfigJSON(cfg, true);
+            } catch (Exception syncErr) {
+                Log.w(TAG, "管理员激活后同步config失败(不影响激活): " + syncErr.getMessage());
+            }
+
+            // 5. 同步版本信息（edition + 用户角色）
+            try {
+                String licenseType = "personal";
+                try {
+                    JSONObject ld = decryptLicenseContent(licenseBase64, mid);
+                    if (ld != null) licenseType = ld.optString("type", "personal");
+                } catch (Exception parseEx) { /* 使用默认 */ }
+                syncConfigEdition(licenseType);
+            } catch (Exception edErr) {
+                Log.w(TAG, "管理员激活版本同步失败(不影响激活): " + edErr.getMessage());
+            }
+
+            // 6. 初始化在线验证状态（激活时视为已验证）
+            try {
+                JSONObject vs = new JSONObject();
+                vs.put("lastOnlineVerify", System.currentTimeMillis());
+                vs.put("prescriptionsSinceVerify", 0);
+                writeVerifyState(vs);
+            } catch (Exception ve) {
+                Log.w(TAG, "管理员激活初始化验证状态失败(不影响激活)", ve);
+            }
+
+            // 7. 保存激活记录（管理员激活无激活码，codeHash 留空，用于追溯）
+            try {
+                JSONObject ar = new JSONObject();
+                ar.put("codeHash", "");
+                ar.put("adminActivated", true);
+                ar.put("activateTime", System.currentTimeMillis());
+                ar.put("machineId", mid);
+                writeActivationRecord(ar);
+            } catch (Exception ae) {
+                Log.w(TAG, "管理员激活保存激活记录失败(不影响激活)", ae);
+            }
+
+            // 8. 创建登录账号（手机号为登录账号，密码可留空=admin）
+            try {
+                String effPwd = (password == null || password.isEmpty()) ? "admin" : password;
+                String login = (loginUsername == null || loginUsername.isEmpty()) ? user : loginUsername;
+                syncCreateActivationUser(login, phone, effPwd, user);
+            } catch (Exception ue) {
+                Log.w(TAG, "管理员激活创建登录账号失败(不影响激活): " + ue.getMessage());
+            }
+
+            JSONObject r = new JSONObject();
+            r.put("success", true);
+            r.put("message", "激活成功，请重启应用");
+            r.put("license", licenseBase64);
+            return r;
+        } catch (Exception e) {
+            Log.e(TAG, "管理员激活安装失败", e);
+            return failResult("激活失败: " + e.getMessage());
+        }
+    }
+
 
     // ========================================================================
     //  ★ 版本规范化：将API返回的license type映射为config.json标准edition值

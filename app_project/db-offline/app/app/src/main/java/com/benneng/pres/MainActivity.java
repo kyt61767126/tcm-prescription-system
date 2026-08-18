@@ -631,10 +631,11 @@ public class MainActivity extends BridgeActivity {
             "      verifyOnline: function(){ return callNativeAsync('verifyOnline', {}); }," +
             "      getActivationRecord: function(){ return callNativeAsync('getActivationRecord', {}); }" +
             "    }," +
-            "    activate: {" +
+            "activate: {" +
             "      show: function(){ return new Promise(function(resolve){ try { window.dispatchEvent(new CustomEvent('app:show-activate')); resolve({success:true}); } catch(e){ resolve({success:false,error:String(e)}); } }); }," +
             "      submit: function(code, user, password){ return callNativeAsync('activateLicense', {code: code, user: user||'', password: password||'admin'}); }," +
             "      getMachineId: function(){ return callNativeAsync('getMachineId', {}); }," +
+            "      installAdminLicense: function(args){ return callNativeAsync('installAdminLicense', {licenseBase64: (args&&args.license)||'', user: (args&&args.adminName)||(args&&args.user)||'', clinicName: (args&&args.clinicName)||'', password: (args&&args.password)||'admin', loginUsername: (args&&args.phone)||'', phone: (args&&args.phone)||''}); }," +
             "      close: function(){ return Promise.resolve({success:true}); }," +
             "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
             "    }" +
@@ -1008,6 +1009,15 @@ public class MainActivity extends BridgeActivity {
                         return activateLicense(args.optString("code", ""),
                                 args.optString("user", ""),
                                 args.optString("password", "admin")).toString();
+                    case "installAdminLicense":
+                        // ★ 管理员激活：安装后端审批已生成的 license（无需网络校验激活码）
+                        return installAdminLicense(
+                                args.optString("licenseBase64", ""),
+                                args.optString("user", args.optString("adminName", "")),
+                                args.optString("clinicName", ""),
+                                args.optString("password", "admin"),
+                                args.optString("loginUsername", args.optString("phone", "")),
+                                args.optString("phone", "")).toString();
                     case "getMachineId":
                         return getMachineIdJson().toString();
                     case "verifyOnline":
@@ -1656,6 +1666,27 @@ public class MainActivity extends BridgeActivity {
                         String verifyMsg = verify != null ? verify.optString("message", "未知") : "验证返回 null";
                         Log.e(TAG, "激活后验证失败: " + verifyMsg);
                         result.put("warning", "激活数据写入后验证异常: " + verifyMsg + "（machineId=" + machineId + "）");
+                    }
+                }
+                return result;
+            } catch (Exception e) { return fail(e.getMessage()); }
+        }
+
+        // ★ 管理员激活：安装后端审批已生成的 license（复用 LicenseManager.installAdminLicense）
+        private JSONObject installAdminLicense(String licenseBase64, String user, String clinicName,
+                                               String password, String loginUsername, String phone) {
+            try {
+                String machineId = getLM().getMachineId();
+                JSONObject result = getLM().installAdminLicense(
+                        licenseBase64, machineId, user, clinicName, password, loginUsername, phone);
+                if (result != null && result.optBoolean("success", false)) {
+                    // 与 activateLicense 一致：激活后立即验证 license 是否可读
+                    JSONObject verify = getLM().validateLicense(machineId);
+                    boolean valid = verify != null && verify.optBoolean("valid", false);
+                    if (!valid) {
+                        String verifyMsg = verify != null ? verify.optString("message", "未知") : "验证返回 null";
+                        Log.e(TAG, "管理员激活后验证失败: " + verifyMsg);
+                        result.put("warning", "激活数据写入后验证异常: " + verifyMsg);
                     }
                 }
                 return result;
