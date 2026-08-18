@@ -2173,8 +2173,8 @@
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码（可留空＝默认 admin）</label>' +
-                    '<input type="password" id="adminPassword" placeholder="留空则用默认密码 admin（登入后请修改）" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
-                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 留空则默认密码为 admin（登入后请在设置中自行修改密码）</div>' +
+                    '<input type="password" id="adminPassword" placeholder="云端登录密码固定为 admin（自定义密码不生效）" autocomplete="new-password" data-lpignore="true" maxlength="32" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div class="admin-field-hint" id="adminPwdHint" style="font-size:11px;color:#e53935;margin-top:4px;">💡 云端登录密码固定为 admin，自定义密码不生效，登入后请自行修改密码</div>' +
                 '</div>' +
                 '<div style="margin-bottom:14px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码（自定义时需再输一次）</label>' +
@@ -2310,13 +2310,13 @@
             const hint = document.getElementById('adminPwdHint');
             const pwd = this.value;
             if (!pwd) {
-                hint.textContent = '💡 留空则默认密码为 admin（登入后请在设置中自行修改密码）';
-                hint.style.color = '#909399';
+                hint.textContent = '💡 云端登录密码固定为 admin，自定义密码不生效，登入后请自行修改密码';
+                hint.style.color = '#e53935';
             } else if (pwd.length < 8 || !/[a-zA-Z]/.test(pwd) || !/\d/.test(pwd)) {
                 hint.textContent = '⚠ 若自定义密码，需至少8位且包含字母和数字';
                 hint.style.color = '#e53935';
             } else {
-                hint.textContent = '✓ 密码强度：' + (pwd.length >= 12 ? '强' : '中等');
+                hint.textContent = '✓ 密码强度：' + (pwd.length >= 12 ? '强' : '中等') + '（注意：云端登录密码固定为 admin，登入后请修改）';
                 hint.style.color = '#26a69a';
             }
         });
