@@ -80,7 +80,7 @@ if defined SKIP_CONFIG (
 ) else if /i "%1"=="--skip-config" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] --skip-config flag detected, skipping config'"
 ) else (
-    powershell -ExecutionPolicy Bypass -File "..\edit-config.ps1" -DesktopDir desktop -AppDir app
+    powershell -ExecutionPolicy Bypass -File "..\edit-config.ps1" -DesktopDir desktop -AppDir app -AutoConfirm
 )
 echo.
 

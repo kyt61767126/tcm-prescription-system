@@ -64,13 +64,13 @@ if errorlevel 1 (
 )
 echo.
 
-REM ★ 2026-08-18 新增：诊所/医师信息配置步骤（与离线版 edit-config.ps1 对齐）
-REM 手动打包时弹出交互式配置编辑；一键打包（one-click-pack.ps1 设置 SKIP_CONFIG=1）时仅同步 config.json
+REM ★ 2026-08-18 Add: Clinic/Doctor info config step (align with offline edit-config.ps1)
+REM Manual build: interactive edit; one-click build (one-click-pack.ps1 with SKIP_CONFIG=1): sync only
 echo [0.6/10] Configure clinic info (Flavor: %FLAVOR%)...
 if defined SKIP_CONFIG (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] SKIP_CONFIG env detected, skipping config'"
 ) else (
-    powershell -ExecutionPolicy Bypass -File "%~dp0edit-config.ps1"
+    powershell -ExecutionPolicy Bypass -File "%~dp0edit-config.ps1" -AutoConfirm
     if errorlevel 1 (
         powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] edit-config.ps1 execution failed, aborting build'"
         if not defined NO_PAUSE pause
@@ -170,7 +170,7 @@ if exist "%SHARED_DIR%\permission.js" (
 ) else (
     echo [WARN] shared\permission.js not found
 )
-REM ★ 2026-08-18 新增：同步 config.json（诊所/医师信息，由 edit-config.ps1 维护签名）到 APP assets
+REM 2026-08-18 Add: sync config.json (clinic/doctor info, signed by edit-config.ps1) to APP assets
 if exist "%CLOUD_DIR%\cloud_desktop\config.json" (
     copy /Y "%CLOUD_DIR%\cloud_desktop\config.json" "%ASSETS_PUBLIC%\config.json" >nul
     echo [OK] config.json synced to assets
@@ -191,7 +191,7 @@ taskkill /F /IM java.exe /FI "WINDOWTITLE eq gradle*" >nul 2>&1
 call gradlew.bat --stop >nul 2>&1
 echo [OK] Lingering processes cleaned
 
-REM ★ 2026-08-18 修复 CXX1429：清理 .cxx 原生构建缓存（陈旧 CMake 状态/锁导致 configure 失败）
+REM 2026-08-18 Fix CXX1429: clean .cxx native build cache (stale CMake state/lock breaks configure)
 if exist "app\.cxx" (
     rmdir /S /Q "app\.cxx" 2>nul
     echo [OK] .cxx native build cache cleaned

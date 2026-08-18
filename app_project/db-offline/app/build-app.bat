@@ -60,7 +60,7 @@ powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]
 if defined SKIP_CONFIG (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] --skip-config argument detected, skipping config'"
 ) else (
-    powershell -ExecutionPolicy Bypass -File "..\edit-config.ps1"
+    powershell -ExecutionPolicy Bypass -File "..\edit-config.ps1" -AutoConfirm
     if errorlevel 1 (
         powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] edit-config.ps1 execution failed, aborting build'"
         if not defined NO_PAUSE pause
@@ -265,7 +265,7 @@ if exist "app\build\intermediates\merged_assets" (
     rmdir /S /Q "app\build\intermediates\merged_assets" 2>nul
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] merged_assets cache cleaned'"
 )
-REM ★ 2026-08-18 修复 CXX1429：清理 .cxx 原生构建缓存（陈旧 CMake 状态/锁导致 configure 失败）
+REM 2026-08-18 Fix CXX1429: clean .cxx native build cache (stale CMake state/lock breaks configure)
 if exist "app\.cxx" (
     rmdir /S /Q "app\.cxx" 2>nul
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] .cxx native build cache cleaned'"

@@ -7,15 +7,20 @@
     Syncs config.json to Capacitor public/ directory for APP packaging.
 .PARAMETER SkipConfig
     Skip interactive config editing (for automated builds).
+.PARAMETER AutoConfirm
+    Auto-confirm current values without prompting (keep clinic/doctor, re-sign & sync).
+    Used by manual pack scripts so no Enter key is required.
 .PARAMETER Version
     Target version: yun.
 .EXAMPLE
     powershell -File edit-config.ps1
     powershell -File edit-config.ps1 -SkipConfig
+    powershell -File edit-config.ps1 -AutoConfirm
 #>
 
 param(
     [switch]$SkipConfig,
+    [switch]$AutoConfirm,
     [string]$Version,
     [string]$DesktopDir = 'cloud_desktop',
     [string]$AppDir = 'cloud_app'
@@ -55,6 +60,10 @@ function Show-CurrentConfig {
 }
 
 function Edit-ClinicConfig {
+    param(
+        [switch]$AutoConfirm
+    )
+
     if (-not (Test-Path $configPath)) {
         Write-Host "  [WARN] config.json not found: $configPath" -ForegroundColor Yellow
         return 1
@@ -73,6 +82,15 @@ function Edit-ClinicConfig {
     $currentVersionLabel = $config.versionLabel
 
     Show-CurrentConfig $config
+
+    if ($AutoConfirm) {
+        Write-Host ""
+        Write-Host "  (Auto-confirm: keeping current values, no input required)" -ForegroundColor DarkGray
+        Write-Host ""
+        Write-Host "  [OK] Using current config (clinic=$currentClinic, doctor=$currentDoctor)" -ForegroundColor Green
+        Write-Host ""
+        return 0
+    }
 
     Write-Host ""
     Write-Host "  (按回车键保留当前值，或输入新值修改)" -ForegroundColor DarkGray
@@ -189,7 +207,7 @@ if ($SkipConfig) {
     Write-Host "  [SKIP] -SkipConfig parameter detected, skipping config editing" -ForegroundColor Yellow
     Write-Host ""
 } else {
-    $result = Edit-ClinicConfig
+    $result = Edit-ClinicConfig -AutoConfirm:$AutoConfirm
     if ($result -ne 0) {
         Write-Host "  [WARN] Config editing had issues, continuing anyway" -ForegroundColor Yellow
     }

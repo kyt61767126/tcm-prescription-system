@@ -1326,12 +1326,7 @@
             const response = await fetch('https://tcm-prescription-system.pages.dev/api/license/heartbeat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    code: licenseCode,
-                    machineId: machineId,
-                    productClass: 'offline',  // 离线（自动上报端形态，供后台展示）
-                    clientClass: 'app'        // APP客户端
-                })
+                body: JSON.stringify({ code: licenseCode, machineId: machineId })
             });
 
             if (!response.ok) {
