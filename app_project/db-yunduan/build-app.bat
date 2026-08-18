@@ -64,6 +64,21 @@ if errorlevel 1 (
 )
 echo.
 
+REM ★ 2026-08-18 新增：诊所/医师信息配置步骤（与离线版 edit-config.ps1 对齐）
+REM 手动打包时弹出交互式配置编辑；一键打包（one-click-pack.ps1 设置 SKIP_CONFIG=1）时仅同步 config.json
+echo [0.6/10] Configure clinic info (Flavor: %FLAVOR%)...
+if defined SKIP_CONFIG (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] SKIP_CONFIG env detected, skipping config'"
+) else (
+    powershell -ExecutionPolicy Bypass -File "%~dp0edit-config.ps1"
+    if errorlevel 1 (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] edit-config.ps1 execution failed, aborting build'"
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+)
+echo.
+
 if not exist "%ANDROID_DIR%\gradlew.bat" (
     echo [ERROR] cloud_app directory not found: %ANDROID_DIR%
     echo   Ensure cloud_app exists under db-yunduan/
@@ -154,6 +169,13 @@ if exist "%SHARED_DIR%\permission.js" (
     echo [OK] permission.js synced
 ) else (
     echo [WARN] shared\permission.js not found
+)
+REM ★ 2026-08-18 新增：同步 config.json（诊所/医师信息，由 edit-config.ps1 维护签名）到 APP assets
+if exist "%CLOUD_DIR%\cloud_desktop\config.json" (
+    copy /Y "%CLOUD_DIR%\cloud_desktop\config.json" "%ASSETS_PUBLIC%\config.json" >nul
+    echo [OK] config.json synced to assets
+) else (
+    echo [WARN] cloud_desktop\config.json not found
 )
 echo.
 

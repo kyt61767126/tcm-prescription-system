@@ -71,6 +71,18 @@ powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]
 echo [OK] Leftover processes cleaned
 echo.
 
+REM ★ 2026-08-18 新增：诊所/医师信息配置步骤（与离线版 desktop\build.bat 对齐）
+REM 手动打包时弹出交互式配置编辑；一键打包（one-click-pack.ps1 设置 SKIP_CONFIG=1）时跳过
+echo [3.5/9] Configure clinic info...
+if defined SKIP_CONFIG (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] SKIP_CONFIG env detected, skipping config'"
+) else if /i "%1"=="--skip-config" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[SKIP] --skip-config flag detected, skipping config'"
+) else (
+    powershell -ExecutionPolicy Bypass -File "%~dp0..\edit-config.ps1" -DesktopDir cloud_desktop -AppDir cloud_app
+)
+echo.
+
 echo [4/9] Clean old build artifacts...
 for /f "delims=" %%d in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; try { (Get-Content package.json -Raw | ConvertFrom-Json).build.directories.output } catch { 'dist' }"') do set "OUTPUT_DIR=%%d"
 if "%OUTPUT_DIR%"=="" set "OUTPUT_DIR=dist"

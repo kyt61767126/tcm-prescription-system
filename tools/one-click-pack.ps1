@@ -113,9 +113,38 @@ function Build-Cloud {
     Write-Host "  开始: $startTime" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
 
+    # 云端版直接使用 config.json 默认值（XXX中医诊所/XXX医生），不弹配置编辑窗口
+    # 设置 SKIP_CONFIG=1，使桌面 cloud_desktop\build.bat 与 build-app.bat 整轮跳过后台配置编辑
+    $env:SKIP_CONFIG = "1"
+
+    # Step 1: Edit config (for all / app modes) - 跳过后台配置编辑，仅同步 config.json 到 Capacitor
+    if ($Target -eq "all" -or $Target -eq "app") {
+        Write-Host ""
+        if ($Target -eq "all") {
+            Write-Host "[Step 1/3] 同步默认配置 (跳过编辑)..." -ForegroundColor Yellow
+        } else {
+            Write-Host "[Step 1/2] 同步默认配置 (跳过编辑)..." -ForegroundColor Yellow
+        }
+        Push-Location "$script:RootDir\app_project\db-yunduan"
+        try {
+            & powershell -NoProfile -ExecutionPolicy Bypass -File "edit-config.ps1" -SkipConfig
+            $rc = $LASTEXITCODE
+        } finally {
+            Pop-Location
+        }
+        if ($rc -ne 0) {
+            Write-Host ""
+            Write-Host "[WARN] 配置同步出现警告(继续打包)，退出码: $rc" -ForegroundColor Yellow
+        }
+    }
+
     if ($Target -eq "all" -or $Target -eq "desktop") {
         Write-Host ""
-        Write-Host "[Step 1/2] 打包云端桌面 exe..." -ForegroundColor Yellow
+        if ($Target -eq "all") {
+            Write-Host "[Step 2/3] 打包云端桌面 exe..." -ForegroundColor Yellow
+        } else {
+            Write-Host "[Step 1/1] 打包云端桌面 exe..." -ForegroundColor Yellow
+        }
         $rc = Invoke-BatFile "$script:RootDir\app_project\db-yunduan\pack-desktop.bat" "$script:RootDir\app_project\db-yunduan" "cloud desktop build"
         if ($rc -ne 0) {
             Write-Host ""
@@ -127,7 +156,11 @@ function Build-Cloud {
 
     if ($Target -eq "all" -or $Target -eq "app") {
         Write-Host ""
-        Write-Host "[Step 2/2] 打包云端手机 APP (严格模式)..." -ForegroundColor Yellow
+        if ($Target -eq "all") {
+            Write-Host "[Step 3/3] 打包云端手机 APP (严格模式)..." -ForegroundColor Yellow
+        } else {
+            Write-Host "[Step 2/2] 打包云端手机 APP (严格模式)..." -ForegroundColor Yellow
+        }
         $rc = Invoke-BatFile "$script:RootDir\app_project\db-yunduan\build-pack.bat" "$script:RootDir\app_project\db-yunduan" "cloud app build" "app-strict"
         if ($rc -ne 0) {
             Write-Host ""
