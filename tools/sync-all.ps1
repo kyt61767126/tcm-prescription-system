@@ -150,8 +150,11 @@ function Sync-File {
     )
 
     if (-not (Test-Path $Source)) {
-        Write-Host "  [WARN] Source not found: $Source" -ForegroundColor Yellow
-        return $false
+        # ★ 原则：宁可漏检不可误报 —— 源文件不存在时该目标无法对照，视为"跳过"
+        #   而非"不同步"，避免源本就废弃/未纳入 shared 的组永远误报 FAIL。
+        #[WARN 仍提示 源缺失需人工关注，但不阻断发布]
+        Write-Host "  [WARN] Source not found (skipped): $Source" -ForegroundColor Yellow
+        return $true
     }
 
     # Create target directory if needed

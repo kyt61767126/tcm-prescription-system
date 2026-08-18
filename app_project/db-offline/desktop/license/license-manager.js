@@ -1805,11 +1805,8 @@ function installLicense(base64Content, options = {}) {
 
         // 创建管理员用户（phone作为用户名）
         const phone = options.phone || '';
-        // ★ 2026-08-18 修复：激活流程契约「手机号=登录账号，密码留空=默认 admin」。
-        //   只要填了手机号就必须创建可登录账户；若密码为空(safeStorage解密失败等)统一回退 admin，
-        //   防止 license 已装但账户未创建，导致"已激活却无法登入"。
-        const password = (options.password !== undefined && options.password !== '') ? options.password : 'admin';
-        if (phone) {
+        const password = options.password || '';
+        if (phone && password) {
             if (!Array.isArray(config.users)) config.users = [];
 
             // 检查用户是否已存在
