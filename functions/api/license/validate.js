@@ -34,6 +34,7 @@
 import {
     getKV, getLicense, updateLicense, saveLicense,
     buildLicenseData, encodeLicenseBase64, checkRateLimit,
+    checkCodeRateLimit,  // ★ P0-1 激活码级短时频控
     getDevices, getMaxDevices, appendLicenseLog,
     checkDeviceVersion, setDeviceVersion, versionOf
 } from './_lib/license-core.js';
