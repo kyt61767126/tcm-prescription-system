@@ -1534,11 +1534,7 @@ async function checkLicenseRevocation(machineId) {
         const response = await fetch(HEARTBEAT_API_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                machineId: machineId || getMachineId(),
-                productClass: 'cloud',    // 云端（自动上报端形态，供后台展示）
-                clientClass: 'desktop'    // 桌面客户端
-            }),
+            body: JSON.stringify({ machineId: machineId || getMachineId() }),
             signal: controller.signal
         });
 
