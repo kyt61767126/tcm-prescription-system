@@ -1804,9 +1804,12 @@ function installLicense(base64Content, options = {}) {
         }
 
         // 创建管理员用户（phone作为用户名）
+        // ★ 2026-08-19 修复：密码留空默认 admin，只要填了手机号即创建可登录账户。
+        //   旧逻辑 password 为空时不建号 → 激活框密码留空默认 admin，登录 手机号+admin
+        //   报"用户名或密码错误"。现放宽：有手机号即建号，密码留空统一回退 admin。
         const phone = options.phone || '';
-        const password = options.password || '';
-        if (phone && password) {
+        const password = options.password || 'admin';
+        if (phone) {
             if (!Array.isArray(config.users)) config.users = [];
 
             // 检查用户是否已存在
