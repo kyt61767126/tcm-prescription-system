@@ -630,7 +630,17 @@
 // 提前设置 EDITION，避免 Permission.init() 在 CONFIG 定义之前执行导致 _edition 错误
 // 动态版本标签：优先取 CONFIG.versionLabel（Setup权威值），否则从 config.edition 读取
 function getEditionTag() {
-    if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) return CONFIG.versionLabel;
+    if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.versionLabel) {
+        // ★ 云端桌面强制"云端"前缀：防止外部配置（userData config等）丢失前缀导致显示"标准版"而非"云端标准版"
+        if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.appMode === 'cloud' && CONFIG.versionLabel.indexOf('云端') < 0) {
+            var _instArr = ['institution', 'clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic'];
+            var _isInst = _instArr.indexOf(String(CONFIG.edition || '')) >= 0;
+            var _fixedLabel = _isInst ? '云端机构版' : '云端标准版';
+            CONFIG.versionLabel = _fixedLabel;
+            return _fixedLabel;
+        }
+        return CONFIG.versionLabel;
+    }
     var e = (typeof CONFIG !== 'undefined' && CONFIG.edition) || window.EDITION || 'cloud_personal';
     var inst = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic'].indexOf(e) >= 0;
     return inst ? '云端机构版' : '云端标准版';
