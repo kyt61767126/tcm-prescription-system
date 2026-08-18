@@ -1626,6 +1626,47 @@ let currentUser = null;
                     return;
                 }
 
+                // ★ 2026-08-19 云端改密走云端API（云端账号由后台审批开通，存于云端 KV；
+                //   前端本地 user 表不含该账号，旧逻辑只改本地 → 报"用户不存在"，且云端密码永不生效）。
+                //   API 校验原密码并写入云端，成功后撤销 token，强制用新密码重新登录。
+                const isCloudMode = (typeof window.CLOUD_API_BASE !== 'undefined') && !!window.CLOUD_API_BASE;
+                const cloudUsername = (currentUser && (currentUser.username || currentUser.phone)) || '';
+                let cloudToken = '';
+                try { cloudToken = window.__FORCE_CLOUD_TOKEN__ || ''; } catch(e) {}
+                if (!cloudToken) { try { const _c = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); cloudToken = _c.token || ''; } catch(e) {} }
+                if (!cloudToken) { try { const _c = JSON.parse(localStorage.getItem('currentUser') || '{}'); cloudToken = _c.token || ''; } catch(e) {} }
+                if (!cloudToken) { try { cloudToken = localStorage.getItem('authToken') || ''; } catch(e) {} }
+                if (isCloudMode && cloudUsername && cloudToken) {
+                    try {
+                        const cloudResp = await fetch(window.CLOUD_API_BASE + '/users?action=change-password', {
+                            method: 'POST',
+                            headers: { 'Authorization': 'Bearer ' + cloudToken, 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username: cloudUsername, oldPassword: oldPwd, newPassword: newPwd })
+                        });
+                        if (cloudResp.status === 401) { alert('原密码错误'); return; }
+                        if (cloudResp.status === 403) { alert('只能修改自己的密码'); return; }
+                        if (cloudResp.ok) {
+                            alert('密码修改成功！请使用新密码重新登录。');
+                            closeModal('changePwdModal');
+                            try { const _KEYS = ['currentUser','isLoggedIn','user_login_data','auth:isLoggedIn','auth:currentUser','auth:loginData','cloud_isLoggedIn','cloud_currentUser','authToken']; for (const _k of _KEYS) localStorage.removeItem(_k); } catch(e) {}
+                            currentUser = null;
+                            const _ov = document.getElementById('loginOverlay');
+                            if (_ov) _ov.style.display = 'flex';
+                            const _mc = document.querySelector('.main-container');
+                            if (_mc) _mc.style.display = 'none';
+                            const _lp = document.getElementById('loginPassword');
+                            if (_lp) _lp.value = '';
+                            return;
+                        }
+                        const cloudErr = await cloudResp.json().catch(() => ({}));
+                        if (cloudResp.status !== 404) { alert(cloudErr.error || ('云端密码修改失败(' + cloudResp.status + ')，请重试')); return; }
+                        // 404：云端确实无此账号（本地用户）→ 回退下方本地逻辑
+                    } catch (e) {
+                        console.warn('云端改密失败，回退本地:', e);
+                        // 离线/网络异常 → 回退下方本地逻辑
+                    }
+                }
+
                 const users = getUsers();
                 const userIndex = users.findIndex(u =>u.username === currentUser.username);
 
