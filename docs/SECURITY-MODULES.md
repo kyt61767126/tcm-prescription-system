@@ -158,8 +158,8 @@ functions/api/           # Cloudflare Pages Functions（API 后端）
 
 - **禁止修改** index.html 的 `<body>` 内 DOM 结构、`<style>` 部分、mobileNav/mobileActionBar 配置
 - **禁止修改** login.html/login.js 的 UI 部分
-- 优化前必须运行 `check-interface.ps1` 建立基线
-- 优化后必须运行 `check-interface.ps1` 验证界面未被破坏
+- 优化前必须运行 `powershell -File tools\check-interface.ps1`（统一入库基线 `.interface-lock.json`）确认基线
+- 优化后必须再次运行同命令验证界面未被破坏；若界面结构确已变化且属预期，运行 `powershell -File tools\generate-interface-lock.ps1` 重建基线并连同 `.interface-lock.json` 一起提交
 - 只允许修改 main.js/MainActivity.java/auth-core.js/build.gradle/proguard/build.bat 等逻辑文件
 
 ---

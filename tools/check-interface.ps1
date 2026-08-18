@@ -27,6 +27,25 @@ Write-Host "  Baseline: $($lock.generated_at)" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
+# ★ P0-2 防退化：把 lock.generated_at 解析成 Unix 秒，供"基线新鲜度"比对。
+#   （解析失败则置 $null，表示无法判定新鲜度，退回仅哈希比对，遵循"宁可漏检不可误报"。）
+$lockGtS = $null
+try {
+    $lockGtS = [datetimeoffset]::ParseExact(
+        ([string]$lock.generated_at).Trim(),
+        'yyyy-MM-dd HH:mm:ss zzz',
+        [System.Globalization.CultureInfo]::InvariantCulture
+    ).ToUnixTimeSeconds()
+} catch { $lockGtS = $null }
+
+function Get-LastCommitTime([string]$f) {
+    # 返回该文件最近一次 git 提交的 Unix 秒；无记录(未跟踪/未提交)返回 $null
+    $raw = (git -C $root log -1 --format=%ct -- $f) 2>$null | Out-String
+    $ts = ($raw -split "`r?`n" | Where-Object { $_ -match '^\d+$' } | Select-Object -First 1)
+    if ($ts) { return [long]$ts }
+    return $null
+}
+
 foreach ($prop in $lock.files.PSObject.Properties) {
     $f = $prop.Name
     $baseline = $prop.Value
@@ -65,6 +84,16 @@ foreach ($prop in $lock.files.PSObject.Properties) {
         Write-Host ("        baseline: " + $baseline.sha256) -ForegroundColor Red
         Write-Host ("        current : " + $currentHash) -ForegroundColor Red
         Write-Host ("        >>> Interface HTML structure changed! Verify this is intended.") -ForegroundColor Yellow
+        # ★ P0-2 双保险(不阻断): 结构确已变更时, 若该页自锁生成后还有新提交, 追加"基线可能过期"线索,
+        #   帮助判断是"需重建基线"还是"页面被误改"。（禁止用提交时间独立阻断，防 JS 提交误报。）
+        if ($null -ne $lockGtS) {
+            $fileCommitS = Get-LastCommitTime -f $f
+            if ($null -ne $fileCommitS -and $fileCommitS -gt $lockGtS) {
+                Write-Host "        >>> 提示: 该页面自锁生成后又有新提交，.interface-lock.json 可能未同步重建(基线过期)。" -ForegroundColor Yellow
+                Write-Host "            → 若为预期界面改动: powershell -File tools\generate-interface-lock.ps1 重建并连同 lock 一起提交;" -ForegroundColor Yellow
+                Write-Host "            → 若为非预期改动: git checkout 还原对应页面文件 还原页面。" -ForegroundColor Yellow
+            }
+        }
         $changed++
     }
 }
