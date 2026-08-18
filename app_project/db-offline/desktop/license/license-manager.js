@@ -401,6 +401,50 @@ function getHardwareFingerprint() {
     return _hardwareFingerprintCache;
 }
 
+// ============================================================================
+//  ★ P1-[2.1] 密钥三层 + HKDF 改造（本地文件加密密钥派生升级，2026-08-19）
+//
+//  三层结构（RFC 5869 HKDF-SHA256）：
+//    第一层 根密钥 IKM     = LICENSE_HMAC_KEY（静态主密钥，与激活码签名链路共用常量，不改动）
+//    第二层 设备主密钥 PRK = HKDF-Extract(salt = 设备指纹(machineId|hwFp), IKM)
+//                          绑定到具体设备：破解一台不影响其他机器、防跨机复制
+//    第三层 用途密钥 OKM   = HKDF-Expand(PRK, info = 'bnzc:local-file:v1:<用途>', 32)
+//                          license / license-hmac / trial / lastrun 各用途域分离，
+//                          单一用途密钥泄露不会波及其他本地文件
+//
+//  说明：
+//    1) 仅升级“本地文件加密”的密钥派生（license.dat / trial.dat / last-run.dat）；
+//       激活码签名链路（HMAC 签名 / ECDSA v5 验签）完全不动 → 已发激活码零影响。
+//    2) 旧 SHA256 派生保留为回退：存量加密文件仍可读取（HKDF → SHA256含hwFp → SHA256无hwFp
+//       三级回退），读到后重新保存即自动迁移为 HKDF 派生。
+//    3) 与 Java 端 LicenseManager.java 的 RFC5869 实现算法完全一致，便于跨端对齐验证。
+// ============================================================================
+const HKDF_SALT_PREFIX = 'bnzc:local:';
+const HKDF_INFO_PREFIX = 'bnzc:local-file:v1:';
+
+// RFC 5869 HKDF 一步完成（crypto.hkdfSync = Extract + Expand）
+// keylen 默认 32（AES-256 / HMAC-SHA256 密钥长度）
+function hkdfSha256(ikm, salt, info, keylen) {
+    return crypto.hkdfSync('sha256',
+        Buffer.from(ikm, 'utf8'),
+        Buffer.from(salt, 'utf8'),
+        Buffer.from(info, 'utf8'),
+        keylen || 32);
+}
+
+// 第三层：用途密钥（域分离，info 带独立前缀防止与激活码签名链路混淆）
+function hkdfPurposeKey(machineId, purpose) {
+    const hwFp = getHardwareFingerprint();
+    const salt = HKDF_SALT_PREFIX + (machineId || '') + '|' + (hwFp || '');
+    return hkdfSha256(LICENSE_HMAC_KEY, salt, HKDF_INFO_PREFIX + purpose, 32);
+}
+
+// ★ P1-[2.1] 各用途 HKDF 密钥
+function deriveLicenseKeyHkdf(machineId)     { return hkdfPurposeKey(machineId, 'license'); }
+function deriveLicenseHmacKeyHkdf(machineId) { return hkdfPurposeKey(machineId, 'license-hmac'); }
+function deriveTrialKeyHkdf(machineId)       { return hkdfPurposeKey(machineId, 'trial'); }
+function deriveLastRunKeyHkdf(machineId)     { return hkdfPurposeKey(machineId, 'lastrun'); }
+
 // ★ P3-A 新增：派生 AES-256 密钥（含硬件指纹）
 // 新密钥 = SHA256(machineId + hardwareFingerprint + LICENSE_HMAC_KEY)
 function deriveLicenseKey(machineId) {
@@ -436,7 +480,8 @@ function tryDecryptAes(base64Data, key) {
 // 文件格式：ENC2:hex(hmac):base64(iv + ciphertext)
 // 旧格式 ENC1:base64(iv + ciphertext) 仍可读（向后兼容，读取后自动迁移为 ENC2）
 function encryptLicenseContent(jsonStr, machineId) {
-    const key = deriveLicenseKey(machineId);
+    // ★ P1-[2.1] 改用 HKDF 派生密钥（旧版读取时三级回退自动兼容）
+    const key = deriveLicenseKeyHkdf(machineId);
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
     const plaintext = Buffer.from(jsonStr, 'utf8');
@@ -444,7 +489,7 @@ function encryptLicenseContent(jsonStr, machineId) {
     const payload = Buffer.concat([iv, ciphertext]).toString('base64');
     // ★ P3-C 新增：计算外层 HMAC（基于 machineId + 硬件指纹 + 密文）
     // 防止攻击者替换整个 license.dat 文件（即使 machineId 相同，HMAC 不匹配也会拒绝）
-    const hmacKey = deriveLicenseHmacKey(machineId);
+    const hmacKey = deriveLicenseHmacKeyHkdf(machineId);
     const hmac = crypto.createHmac('sha256', hmacKey).update(payload).digest('hex');
     return 'ENC2:' + hmac + ':' + payload;
 }
@@ -458,7 +503,7 @@ function deriveLicenseHmacKey(machineId) {
 
 // 解密 license 字符串（返回 JSON 字符串，失败返回 null）
 // ★ P3-C 新增：优先 ENC2 格式（含 HMAC 校验），回退 ENC1 格式（向后兼容）
-// ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
+// ★ P1-[2.1] 升级：三级回退（HKDF → SHA256含hwFp → SHA256无hwFp）
 function decryptLicenseContent(encryptedStr, machineId) {
     if (!encryptedStr) return null;
     // ★ P3-C 新增：优先尝试 ENC2 格式（含 HMAC 校验）
@@ -467,42 +512,52 @@ function decryptLicenseContent(encryptedStr, machineId) {
         if (parts.length < 2) return null;
         const storedHmac = parts[0];
         const base64Data = parts.slice(1).join(':');
-        // 优先用新密钥校验 HMAC
-        const newHmacKey = deriveLicenseHmacKey(machineId);
-        const newExpectedHmac = crypto.createHmac('sha256', newHmacKey).update(base64Data).digest('hex');
+        // 三级 HMAC 密钥候选：HKDF → 旧SHA256(含hwFp) → 最旧SHA256(无hwFp)
+        const hmacCandidates = [
+            deriveLicenseHmacKeyHkdf(machineId),
+            deriveLicenseHmacKey(machineId),
+            deriveLicenseHmacKeyLegacy(machineId)
+        ];
         let hmacMatched = false;
-        try {
-            if (crypto.timingSafeEqual(Buffer.from(storedHmac, 'hex'), Buffer.from(newExpectedHmac, 'hex'))) {
-                hmacMatched = true;
-            }
-        } catch (e) { /* 长度不匹配，尝试旧密钥 */ }
-        // 旧 HMAC 密钥（不含硬件指纹，向后兼容）
-        if (!hmacMatched) {
-            const legacyHmacKey = deriveLicenseHmacKeyLegacy(machineId);
-            const legacyExpectedHmac = crypto.createHmac('sha256', legacyHmacKey).update(base64Data).digest('hex');
+        for (const hmacKey of hmacCandidates) {
             try {
-                if (crypto.timingSafeEqual(Buffer.from(storedHmac, 'hex'), Buffer.from(legacyExpectedHmac, 'hex'))) {
+                const expected = crypto.createHmac('sha256', hmacKey).update(base64Data).digest('hex');
+                if (crypto.timingSafeEqual(Buffer.from(storedHmac, 'hex'), Buffer.from(expected, 'hex'))) {
                     hmacMatched = true;
+                    break;
                 }
-            } catch (e) { return null; }
+            } catch (e) { /* 长度不匹配，尝试下一个候选密钥 */ }
         }
         if (!hmacMatched) {
             console.error('[License] HMAC 校验失败（文件可能被替换/篡改）');
             return null;
         }
-        // HMAC 校验通过，解密内容（双密钥尝试）
-        let plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
-        if (plaintext) return plaintext;
-        return tryDecryptAes(base64Data, deriveLicenseKeyLegacy(machineId));
+        // HMAC 校验通过，解密内容（三级密钥尝试）
+        const decryptCandidates = [
+            deriveLicenseKeyHkdf(machineId),
+            deriveLicenseKey(machineId),
+            deriveLicenseKeyLegacy(machineId)
+        ];
+        for (const key of decryptCandidates) {
+            const plaintext = tryDecryptAes(base64Data, key);
+            if (plaintext) return plaintext;
+        }
+        return null;
     }
     // 旧 ENC1 格式 - 向后兼容
     if (encryptedStr.startsWith('ENC1:')) {
         const base64Data = encryptedStr.substring(5);
-        // 优先尝试新密钥（含硬件指纹）
-        let plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
-        if (plaintext) return plaintext;
-        // 回退到旧密钥（向后兼容旧 license.dat）
-        return tryDecryptAes(base64Data, deriveLicenseKeyLegacy(machineId));
+        // 三级密钥尝试：HKDF → 旧SHA256(含hwFp) → 最旧SHA256(无hwFp)
+        const decryptCandidates = [
+            deriveLicenseKeyHkdf(machineId),
+            deriveLicenseKey(machineId),
+            deriveLicenseKeyLegacy(machineId)
+        ];
+        for (const key of decryptCandidates) {
+            const plaintext = tryDecryptAes(base64Data, key);
+            if (plaintext) return plaintext;
+        }
+        return null;
     }
     return null;
 }
@@ -551,8 +606,9 @@ function deriveLastRunKeyLegacy(machineId) {
 }
 
 // 加密 trial JSON 字符串
+// ★ P1-[2.1] 改用 HKDF 派生密钥（旧版读取时三级回退自动兼容）
 function encryptTrialContent(jsonStr, machineId) {
-    const key = deriveTrialKey(machineId);
+    const key = deriveTrialKeyHkdf(machineId);
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
     const plaintext = Buffer.from(jsonStr, 'utf8');
@@ -561,18 +617,26 @@ function encryptTrialContent(jsonStr, machineId) {
 }
 
 // 解密 trial 字符串（仅处理 TRIAL1: 前缀，失败返回 null）
-// ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
+// ★ P1-[2.1] 升级：三级回退（HKDF → SHA256含hwFp → SHA256无hwFp）
 function decryptTrialContent(encryptedStr, machineId) {
     if (!encryptedStr || !encryptedStr.startsWith(TRIAL_ENC_PREFIX)) return null;
     const base64Data = encryptedStr.substring(TRIAL_ENC_PREFIX.length);
-    let plaintext = tryDecryptAes(base64Data, deriveTrialKey(machineId));
-    if (plaintext) return plaintext;
-    return tryDecryptAes(base64Data, deriveTrialKeyLegacy(machineId));
+    const decryptCandidates = [
+        deriveTrialKeyHkdf(machineId),
+        deriveTrialKey(machineId),
+        deriveTrialKeyLegacy(machineId)
+    ];
+    for (const key of decryptCandidates) {
+        const plaintext = tryDecryptAes(base64Data, key);
+        if (plaintext) return plaintext;
+    }
+    return null;
 }
 
 // 加密 last-run JSON 字符串
+// ★ P1-[2.1] 改用 HKDF 派生密钥（旧版读取时三级回退自动兼容）
 function encryptLastRunContent(jsonStr, machineId) {
-    const key = deriveLastRunKey(machineId);
+    const key = deriveLastRunKeyHkdf(machineId);
     const iv = crypto.randomBytes(16);
     const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
     const plaintext = Buffer.from(jsonStr, 'utf8');
@@ -581,13 +645,20 @@ function encryptLastRunContent(jsonStr, machineId) {
 }
 
 // 解密 last-run 字符串（仅处理 LASTRUN1: 前缀，失败返回 null）
-// ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
+// ★ P1-[2.1] 升级：三级回退（HKDF → SHA256含hwFp → SHA256无hwFp）
 function decryptLastRunContent(encryptedStr, machineId) {
     if (!encryptedStr || !encryptedStr.startsWith(LASTRUN_ENC_PREFIX)) return null;
     const base64Data = encryptedStr.substring(LASTRUN_ENC_PREFIX.length);
-    let plaintext = tryDecryptAes(base64Data, deriveLastRunKey(machineId));
-    if (plaintext) return plaintext;
-    return tryDecryptAes(base64Data, deriveLastRunKeyLegacy(machineId));
+    const decryptCandidates = [
+        deriveLastRunKeyHkdf(machineId),
+        deriveLastRunKey(machineId),
+        deriveLastRunKeyLegacy(machineId)
+    ];
+    for (const key of decryptCandidates) {
+        const plaintext = tryDecryptAes(base64Data, key);
+        if (plaintext) return plaintext;
+    }
+    return null;
 }
 
 // ============================================================================

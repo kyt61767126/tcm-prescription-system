@@ -735,11 +735,110 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         }
     }
 
+    // ============================================================================
+    //  ★ P1-[2.1] 密钥三层 + HKDF 改造（本地文件加密密钥派生升级，2026-08-19）
+    //  三层结构（RFC 5869 HKDF-SHA256，与桌面版 license-manager.js 完全一致）：
+    //    第一层 根密钥 IKM     = LICENSE_HMAC_KEY（静态主密钥，与激活码签名链路共用常量，不改动）
+    //    第二层 设备主密钥 PRK = HKDF-Extract(salt = 设备指纹(machineId|hwFp), IKM)
+    //                          绑定到具体设备：破解一台不影响其他机器、防跨机复制
+    //    第三层 用途密钥 OKM   = HKDF-Expand(PRK, info = 'bnzc:local-file:v1:<用途>', 32)
+    //                          license/license-hmac/trial/lastrun/count/vstate/actrec 域分离
+    //  说明：
+    //    1) 仅升级“本地文件加密”的密钥派生；激活码签名链路（HMAC 签名 / ECDSA v5 验签）不动。
+    //    2) 旧 SHA256 派生保留为回退：存量加密文件仍可读取（HKDF → SHA256含hwFp → SHA256无hwFp
+    //       三级回退），读到后重新保存即自动迁移为 HKDF 派生。
+    // ============================================================================
+    private static final String HKDF_SALT_PREFIX = "bnzc:local:";
+    private static final String HKDF_INFO_PREFIX = "bnzc:local-file:v1:";
+    private static final String HKDF_ALGO = "HmacSHA256";
+    private static final int HKDF_SHA256_LEN = 32;
+
+    // RFC 5869 HKDF-Extract: PRK = HMAC-Hash(salt, IKM)
+    private byte[] hkdfExtract(byte[] salt, byte[] ikm) {
+        try {
+            Mac mac = Mac.getInstance(HKDF_ALGO);
+            mac.init(new SecretKeySpec(salt, HKDF_ALGO));
+            return mac.doFinal(ikm);
+        } catch (Exception e) {
+            Log.e(TAG, "HKDF-Extract 失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // RFC 5869 HKDF-Expand: OKM = T(1)||...||T(N)
+    // SHA-256 下 32 字节只需 1 轮：T(1) = HMAC(PRK, info || 0x01)；>32 字节走通用多轮
+    private byte[] hkdfExpand(byte[] prk, byte[] info, int keylen) {
+        try {
+            if (keylen <= HKDF_SHA256_LEN) {
+                Mac mac = Mac.getInstance(HKDF_ALGO);
+                mac.init(new SecretKeySpec(prk, HKDF_ALGO));
+                mac.update(info);
+                mac.update((byte) 0x01);
+                byte[] okm = mac.doFinal();
+                if (okm.length == keylen) return okm;
+                byte[] out = new byte[keylen];
+                System.arraycopy(okm, 0, out, 0, keylen);
+                return out;
+            }
+            // 多轮通用实现（keylen > 32，当前未用到，保留完整性）
+            byte[] t = new byte[0];
+            byte[] prev = new byte[0];
+            int n = (keylen + HKDF_SHA256_LEN - 1) / HKDF_SHA256_LEN;
+            for (int i = 1; i <= n; i++) {
+                Mac mac = Mac.getInstance(HKDF_ALGO);
+                mac.init(new SecretKeySpec(prk, HKDF_ALGO));
+                mac.update(prev);
+                mac.update(info);
+                mac.update((byte) i);
+                prev = mac.doFinal();
+                byte[] nxt = new byte[t.length + prev.length];
+                System.arraycopy(t, 0, nxt, 0, t.length);
+                System.arraycopy(prev, 0, nxt, t.length, prev.length);
+                t = nxt;
+            }
+            if (t.length == keylen) return t;
+            byte[] out = new byte[keylen];
+            System.arraycopy(t, 0, out, 0, keylen);
+            return out;
+        } catch (Exception e) {
+            Log.e(TAG, "HKDF-Expand 失败: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // 第三层：用途密钥（域分离，info 带独立前缀防止与激活码签名链路混淆）
+    private SecretKeySpec deriveHkdfPurposeKey(String machineId, String purpose, String algo) {
+        try {
+            String hwFp = getHardwareFingerprint();
+            String salt = HKDF_SALT_PREFIX + (machineId == null ? "" : machineId)
+                    + "|" + (hwFp == null ? "" : hwFp);
+            byte[] prk = hkdfExtract(salt.getBytes(StandardCharsets.UTF_8),
+                    LICENSE_HMAC_KEY.getBytes(StandardCharsets.UTF_8));
+            if (prk == null) return null;
+            byte[] okm = hkdfExpand(prk, (HKDF_INFO_PREFIX + purpose).getBytes(StandardCharsets.UTF_8), 32);
+            if (okm == null) return null;
+            return new SecretKeySpec(okm, algo);  // algo = "AES" 或 "HmacSHA256"
+        } catch (Exception e) {
+            Log.e(TAG, "派生 HKDF 用途密钥失败(" + purpose + "): " + e.getMessage());
+            return null;
+        }
+    }
+
+    // ★ P1-[2.1] 各用途 HKDF 密钥（与桌面版 license-manager.js 一一对应）
+    private SecretKeySpec deriveLicenseKeyHkdf(String machineId)           { return deriveHkdfPurposeKey(machineId, "license", "AES"); }
+    private SecretKeySpec deriveLicenseHmacKeyHkdf(String machineId)       { return deriveHkdfPurposeKey(machineId, "license-hmac", "HmacSHA256"); }
+    private SecretKeySpec deriveTrialKeyHkdf(String machineId)             { return deriveHkdfPurposeKey(machineId, "trial", "AES"); }
+    private SecretKeySpec deriveLastRunKeyHkdf(String machineId)           { return deriveHkdfPurposeKey(machineId, "lastrun", "AES"); }
+    private SecretKeySpec deriveCountKeyHkdf(String machineId)             { return deriveHkdfPurposeKey(machineId, "count", "AES"); }
+    private SecretKeySpec deriveVerifyStateKeyHkdf(String machineId)       { return deriveHkdfPurposeKey(machineId, "vstate", "AES"); }
+    private SecretKeySpec deriveActivationRecordKeyHkdf(String machineId)  { return deriveHkdfPurposeKey(machineId, "actrec", "AES"); }
+
     // 加密 license JSON 字符串
     // ★ P3-C 新增：加密后追加外层 HMAC 签名，文件格式 ENC2:hex(hmac):base64(iv+ciphertext)
     private String encryptLicenseContent(String jsonStr, String machineId) {
         try {
-            SecretKeySpec key = deriveLicenseKey(machineId);
+            // ★ P1-[2.1] 改用 HKDF 派生密钥（旧版读取时三级回退自动兼容）
+            SecretKeySpec key = deriveLicenseKeyHkdf(machineId);
             if (key == null) return null;
 
             // 生成随机 IV（16 字节）
@@ -758,7 +857,8 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             String payload = Base64.encodeToString(combined, Base64.NO_WRAP);
 
             // ★ P3-C 新增：计算外层 HMAC（基于 machineId + 硬件指纹 + 密文）
-            SecretKeySpec hmacKey = deriveLicenseHmacKey(machineId);
+            // ★ P1-[2.1] 改用 HKDF 派生 HMAC 密钥
+            SecretKeySpec hmacKey = deriveLicenseHmacKeyHkdf(machineId);
             if (hmacKey == null) return null;
             javax.crypto.Mac mac = javax.crypto.Mac.getInstance("HmacSHA256");
             mac.init(hmacKey);
@@ -775,7 +875,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
 
     // 解密 license 字符串（返回 JSON 字符串，失败返回 null）
     // ★ P3-C 新增：优先 ENC2 格式（含 HMAC 校验），回退 ENC1 格式（向后兼容）
-    // ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
+    // ★ P1-[2.1] 升级：三级回退（HKDF → SHA256含hwFp → SHA256无hwFp）
     private String decryptLicenseContent(String encryptedStr, String machineId) {
         if (encryptedStr == null) return null;
         // ★ P3-C 新增：优先尝试 ENC2 格式（含 HMAC 校验）
@@ -785,9 +885,11 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             if (sep < 0) return null;
             String storedHmac = rest.substring(0, sep);
             String base64Data = rest.substring(sep + 1);
-            // 优先用新密钥校验 HMAC
-            boolean hmacMatched = verifyHmac(storedHmac, base64Data, deriveLicenseHmacKey(machineId));
-            // 旧 HMAC 密钥（不含硬件指纹，向后兼容）
+            // 三级 HMAC 密钥候选：HKDF → 旧SHA256(含hwFp) → 最旧SHA256(无hwFp)
+            boolean hmacMatched = verifyHmac(storedHmac, base64Data, deriveLicenseHmacKeyHkdf(machineId));
+            if (!hmacMatched) {
+                hmacMatched = verifyHmac(storedHmac, base64Data, deriveLicenseHmacKey(machineId));
+            }
             if (!hmacMatched) {
                 hmacMatched = verifyHmac(storedHmac, base64Data, deriveLicenseHmacKeyLegacy(machineId));
             }
@@ -795,16 +897,20 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                 Log.e(TAG, "HMAC 校验失败（文件可能被替换/篡改）");
                 return null;
             }
-            // HMAC 校验通过，解密内容（双密钥尝试）
-            String plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
+            // HMAC 校验通过，解密内容（三级密钥尝试）
+            String plaintext = tryDecryptAes(base64Data, deriveLicenseKeyHkdf(machineId));
+            if (plaintext != null) return plaintext;
+            plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
             if (plaintext != null) return plaintext;
             return tryDecryptAes(base64Data, deriveLicenseKeyLegacy(machineId));
         }
         // 旧 ENC1 格式 - 向后兼容
         if (encryptedStr.startsWith(LICENSE_ENC_PREFIX)) {
             String base64Data = encryptedStr.substring(LICENSE_ENC_PREFIX.length());
-            // 优先尝试新密钥（含硬件指纹）
-            String plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
+            // 三级密钥尝试：HKDF → 旧SHA256(含hwFp) → 最旧SHA256(无hwFp)
+            String plaintext = tryDecryptAes(base64Data, deriveLicenseKeyHkdf(machineId));
+            if (plaintext != null) return plaintext;
+            plaintext = tryDecryptAes(base64Data, deriveLicenseKey(machineId));
             if (plaintext != null) return plaintext;
             return tryDecryptAes(base64Data, deriveLicenseKeyLegacy(machineId));
         }
@@ -972,40 +1078,49 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
     }
 
     // trial 加解密
+    // ★ P1-[2.1] 改用 HKDF 派生密钥（旧版读取时三级回退自动兼容）
     private String encryptTrialContent(String jsonStr, String machineId) {
-        return aesEncrypt(jsonStr, deriveTrialKey(machineId), TRIAL_ENC_PREFIX);
+        return aesEncrypt(jsonStr, deriveTrialKeyHkdf(machineId), TRIAL_ENC_PREFIX);
     }
-    // ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
+    // ★ P1-[2.1] 升级：三级回退（HKDF → SHA256含hwFp → SHA256无hwFp）
     private String decryptTrialContent(String encryptedStr, String machineId) {
         if (encryptedStr == null || !encryptedStr.startsWith(TRIAL_ENC_PREFIX)) return null;
         String base64Data = encryptedStr.substring(TRIAL_ENC_PREFIX.length());
-        String plaintext = tryDecryptAes(base64Data, deriveTrialKey(machineId));
+        String plaintext = tryDecryptAes(base64Data, deriveTrialKeyHkdf(machineId));
+        if (plaintext != null) return plaintext;
+        plaintext = tryDecryptAes(base64Data, deriveTrialKey(machineId));
         if (plaintext != null) return plaintext;
         return tryDecryptAes(base64Data, deriveTrialKeyLegacy(machineId));
     }
 
     // last-run 加解密
+    // ★ P1-[2.1] 改用 HKDF 派生密钥（旧版读取时三级回退自动兼容）
     private String encryptLastRunContent(String jsonStr, String machineId) {
-        return aesEncrypt(jsonStr, deriveLastRunKey(machineId), LASTRUN_ENC_PREFIX);
+        return aesEncrypt(jsonStr, deriveLastRunKeyHkdf(machineId), LASTRUN_ENC_PREFIX);
     }
-    // ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
+    // ★ P1-[2.1] 升级：三级回退（HKDF → SHA256含hwFp → SHA256无hwFp）
     private String decryptLastRunContent(String encryptedStr, String machineId) {
         if (encryptedStr == null || !encryptedStr.startsWith(LASTRUN_ENC_PREFIX)) return null;
         String base64Data = encryptedStr.substring(LASTRUN_ENC_PREFIX.length());
-        String plaintext = tryDecryptAes(base64Data, deriveLastRunKey(machineId));
+        String plaintext = tryDecryptAes(base64Data, deriveLastRunKeyHkdf(machineId));
+        if (plaintext != null) return plaintext;
+        plaintext = tryDecryptAes(base64Data, deriveLastRunKey(machineId));
         if (plaintext != null) return plaintext;
         return tryDecryptAes(base64Data, deriveLastRunKeyLegacy(machineId));
     }
 
     // count 加解密
+    // ★ P1-[2.1] 改用 HKDF 派生密钥（旧版读取时三级回退自动兼容）
     private String encryptCountContent(String jsonStr, String machineId) {
-        return aesEncrypt(jsonStr, deriveCountKey(machineId), COUNT_ENC_PREFIX);
+        return aesEncrypt(jsonStr, deriveCountKeyHkdf(machineId), COUNT_ENC_PREFIX);
     }
-    // ★ P3-A 新增：双密钥尝试 - 优先新密钥（含硬件指纹），失败回退旧密钥
+    // ★ P1-[2.1] 升级：三级回退（HKDF → SHA256含hwFp → SHA256无hwFp）
     private String decryptCountContent(String encryptedStr, String machineId) {
         if (encryptedStr == null || !encryptedStr.startsWith(COUNT_ENC_PREFIX)) return null;
         String base64Data = encryptedStr.substring(COUNT_ENC_PREFIX.length());
-        String plaintext = tryDecryptAes(base64Data, deriveCountKey(machineId));
+        String plaintext = tryDecryptAes(base64Data, deriveCountKeyHkdf(machineId));
+        if (plaintext != null) return plaintext;
+        plaintext = tryDecryptAes(base64Data, deriveCountKey(machineId));
         if (plaintext != null) return plaintext;
         return tryDecryptAes(base64Data, deriveCountKeyLegacy(machineId));
     }
@@ -1766,7 +1881,12 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             String json = null;
             boolean legacy = false;
             if (content.startsWith(VERIFYSTATE_ENC_PREFIX)) {
-                json = tryDecryptAes(content.substring(VERIFYSTATE_ENC_PREFIX.length()), deriveVerifyStateKey(getMachineId()));
+                String base64Data = content.substring(VERIFYSTATE_ENC_PREFIX.length());
+                // ★ P1-[2.1] HKDF 优先，失败回退旧 SHA256 密钥
+                json = tryDecryptAes(base64Data, deriveVerifyStateKeyHkdf(getMachineId()));
+                if (json == null) {
+                    json = tryDecryptAes(base64Data, deriveVerifyStateKey(getMachineId()));
+                }
             } else {
                 // 旧格式（XOR + Base64）- 向后兼容
                 json = xorDecrypt(content, VERIFY_STATE_KEY);
@@ -1787,7 +1907,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             String jsonStr = state.toString();
             String mid = getMachineId();
             String encrypted = (mid != null && !mid.isEmpty())
-                    ? aesEncrypt(jsonStr, deriveVerifyStateKey(mid), VERIFYSTATE_ENC_PREFIX) : null;
+                    ? aesEncrypt(jsonStr, deriveVerifyStateKeyHkdf(mid), VERIFYSTATE_ENC_PREFIX) : null;
             if (encrypted == null) {
                 Log.w(TAG, "machineId 不可用，verify-state 回退到 XOR 加密");
                 encrypted = xorEncrypt(jsonStr, VERIFY_STATE_KEY);
@@ -1913,7 +2033,12 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             String json = null;
             boolean legacy = false;
             if (content.startsWith(ACTREC_ENC_PREFIX)) {
-                json = tryDecryptAes(content.substring(ACTREC_ENC_PREFIX.length()), deriveActivationRecordKey(getMachineId()));
+                String base64Data = content.substring(ACTREC_ENC_PREFIX.length());
+                // ★ P1-[2.1] HKDF 优先，失败回退旧 SHA256 密钥
+                json = tryDecryptAes(base64Data, deriveActivationRecordKeyHkdf(getMachineId()));
+                if (json == null) {
+                    json = tryDecryptAes(base64Data, deriveActivationRecordKey(getMachineId()));
+                }
             } else {
                 // 旧格式（XOR + Base64）- 向后兼容
                 json = xorDecrypt(content, ACTIVATION_RECORD_KEY);
@@ -1934,7 +2059,7 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             String jsonStr = record.toString();
             String mid = getMachineId();
             String encrypted = (mid != null && !mid.isEmpty())
-                    ? aesEncrypt(jsonStr, deriveActivationRecordKey(mid), ACTREC_ENC_PREFIX) : null;
+                    ? aesEncrypt(jsonStr, deriveActivationRecordKeyHkdf(mid), ACTREC_ENC_PREFIX) : null;
             if (encrypted == null) {
                 Log.w(TAG, "machineId 不可用，activation-record 回退到 XOR 加密");
                 encrypted = xorEncrypt(jsonStr, ACTIVATION_RECORD_KEY);
@@ -2792,8 +2917,11 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             try {
                 String licenseType = "personal";
                 try {
-                    JSONObject ld = decryptLicenseContent(licenseBase64, mid);
-                    if (ld != null) licenseType = ld.optString("type", "personal");
+                    String jsonStr = decryptLicenseContent(licenseBase64, mid);
+                    if (jsonStr != null && !jsonStr.isEmpty()) {
+                        JSONObject ld = new JSONObject(jsonStr);
+                        licenseType = ld.optString("type", "personal");
+                    }
                 } catch (Exception parseEx) { /* 使用默认 */ }
                 syncConfigEdition(licenseType);
             } catch (Exception edErr) {
