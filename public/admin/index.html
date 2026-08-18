@@ -72,6 +72,33 @@ h2 { color: #34495e; margin: 20px 0 12px; font-size: 16px; border-left: 4px soli
 .gen-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .gen-actions { display: flex; gap: 10px; margin-top: 12px; }
 
+/* ★ 卡片式激活码概览 */
+.card-list { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.license-card {
+    background: #fff; border: 1px solid #ebeef5; border-radius: 10px;
+    padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.license-card:hover { box-shadow: 0 3px 10px rgba(52,152,219,0.12); border-color: #cfe6f7; }
+.license-card-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.license-card-top .code { font-size: 16px; font-weight: 700; font-family: "Courier New", monospace; color: #2c3e50; word-break: break-all; }
+.license-card-meta { display: flex; gap: 16px; flex-wrap: wrap; color: #606266; font-size: 13px; margin-bottom: 10px; }
+.license-card-meta .item b { color: #2c3e50; }
+.license-card-meta .item.clinic { color: #8e44ad; }
+.along-bar { display: flex; align-items: center; gap: 10px; margin: 4px 0 12px; }
+.along-bar .along-label { font-size: 12px; color: #909399; white-space: nowrap; flex: 0 0 auto; }
+.along-progress { flex: 1; height: 8px; background: #ecf0f1; border-radius: 6px; overflow: hidden; }
+.along-progress > div { height: 100%; border-radius: 6px; transition: width .3s; }
+.along-progress.full > div { background: #e74c3c; }
+.along-progress.warn > div { background: #f39c12; }
+.along-progress.ok > div { background: #27ae60; }
+.along-progress.idle > div { background: #bdc3c7; }
+.along-num { font-size: 12px; color: #606266; white-space: nowrap; font-weight: 600; }
+.card-devices { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 12px; padding: 10px; background: #f8fafc; border-radius: 8px; }
+.card-device { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12px; }
+.card-device .m { font-family: "Courier New", monospace; color: #2c3e50; }
+.card-device .info { color: #909399; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
 /* 表格 */
 .table-box { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; min-width: 900px; }
@@ -382,26 +409,9 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <button class="btn btn-sm" onclick="loadList()" style="margin-left:auto;">刷新</button>
         </div>
         <div class="table-box">
-            <table>
-                <thead>
-                    <tr>
-                        <th>激活码</th>
-                        <th>用户</th>
-                        <th>类型</th>
-                        <th>状态</th>
-                        <th>签发时间</th>
-                        <th>激活时间</th>
-                        <th>到期时间</th>
-                        <th>机器ID / 设备</th>
-                        <th>诊所名</th>
-                        <th>备注</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody id="listBody">
-                    <tr><td colspan="11" class="loading">加载中...</td></tr>
-                </tbody>
-            </table>
+            <div id="listBody" class="card-list">
+                <div class="empty">加载中...</div>
+            </div>
         </div>
         </div><!-- /tabLicense -->
 
@@ -450,21 +460,9 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <button class="btn btn-sm" onclick="loadDeviceBindings()">刷新全部绑定</button>
             </div>
             <div class="table-box">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>机器码</th>
-                            <th>绑定版本</th>
-                            <th>激活码</th>
-                            <th>诊所</th>
-                            <th>绑定时间</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="deviceVersionListBody">
-                        <tr><td colspan="6" class="loading">加载中...</td></tr>
-                    </tbody>
-                </table>
+                <div id="deviceVersionListBody" class="card-list">
+                    <div class="empty">加载中...</div>
+                </div>
             </div>
         </div>
         <div id="tabClinics" class="tab-content">
@@ -563,26 +561,9 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </label>
             </div>
             <div class="table-box">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>请求编号</th>
-                            <th>诊所名称</th>
-                            <th>管理员</th>
-                            <th>联系电话</th>
-                            <th>机器ID</th>
-                            <th>版本</th>
-                            <th>备注</th>
-                            <th>提交时间</th>
-                            <th>IP</th>
-                            <th>状态</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="adminActivateListBody">
-                        <tr><td colspan="11" class="loading">加载中...</td></tr>
-                    </tbody>
-                </table>
+                <div id="adminActivateListBody" class="card-list">
+                    <div class="empty">加载中...</div>
+                </div>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">说明：客户端激活窗口选择"管理员激活"模式提交的请求会出现在此列表。点击"审核"查看客户完整信息并一键通过/拒绝。通过后客户端将在 5 秒内自动获取 license 并重启。</p>
         </div>
@@ -1557,11 +1538,11 @@ async function loadList() {
                 showAlert('mainAlert', '登录已过期，请重新登录', 'error');
                 setTimeout(doLogout, 1500);
             } else {
-                document.getElementById('listBody').innerHTML = '<tr><td colspan="10" class="empty">' + (data.error || '加载失败') + '</td></tr>';
+                document.getElementById('listBody').innerHTML = '<div class="empty">' + (data.error || '加载失败') + '</div>';
             }
         }
     } catch (e) {
-        document.getElementById('listBody').innerHTML = '<tr><td colspan="10" class="empty">网络错误：' + e.message + '</td></tr>';
+        document.getElementById('listBody').innerHTML = '<div class="empty">网络错误：' + e.message + '</div>';
     }
 }
 
@@ -1575,38 +1556,56 @@ function renderStats(stats) {
 }
 
 function renderList(records) {
-    const tbody = document.getElementById('listBody');
+    const el = document.getElementById('listBody');
     if (!records || records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" class="empty">暂无激活码</td></tr>';
+        el.innerHTML = '<div class="empty">暂无激活码</div>';
         return;
     }
     const typeNames = { trial: '试用版', personal: '标准版', pro: '机构版' };
     const statusNames = { unused: '未使用', used: '已激活', expired: '已过期', disabled: '已禁用' };
 
-    tbody.innerHTML = records.map(r => {
+    el.innerHTML = records.map(r => {
         const typeTag = '<span class="tag tag-' + r.type + '">' + typeNames[r.type] + '</span>';
         const statusTag = '<span class="tag tag-' + r.status + '">' + statusNames[r.status] + '</span>';
-        const issuedAt = r.issuedAt ? new Date(r.issuedAt).toLocaleString('zh-CN') : '-';
-        const activatedAt = r.activatedAt ? new Date(r.activatedAt).toLocaleString('zh-CN') : '-';
+        const joinedAt = r.activatedAt ? new Date(r.activatedAt).toLocaleString('zh-CN') : '-';
         const expiresAt = r.expiresAt ? new Date(r.expiresAt).toLocaleDateString('zh-CN') : '-';
 
-        // ★ v4 新增：机器ID + 设备数显示
+        // 授权配额
         const maxDev = r.maxDevices || 1;
         const devCount = r.devicesCount || 0;
-        let machineCell = '<span style="font-family:Courier New,monospace;">' + escapeHtml(r.machineId || '-') + '</span>';
-        if (maxDev > 1 || devCount > 0) {
-            machineCell += '<div class="dev-count">设备：<strong>' + devCount + '</strong>/' + maxDev + '</div>';
+        let barClass = 'idle';
+        if (r.status === 'used') {
+            barClass = devCount >= maxDev ? 'full' : (devCount > 0 ? 'warn' : 'ok');
+        }
+        const pct = Math.min(100, Math.round((devCount / maxDev) * 100));
+
+        // 已绑定设备（列表最多展示 2 台，更多点击"设备"查看）
+        const devices = (r.devices && r.devices.length) ? r.devices : null;
+        let devicesHtml = '';
+        if (devices && devices.length) {
+            const shown = devices.slice(0, 2).map(function (d) {
+                const dAt = d.activatedAt ? new Date(d.activatedAt).toLocaleString('zh-CN') : '-';
+                return '<div class="card-device">' +
+                    '<span class="m">' + escapeHtml(d.machineId || '-') + '</span>' +
+                    '<span class="info">绑定于 ' + dAt + (d.clinicName ? ' · ' + escapeHtml(d.clinicName) : '') + '</span>' +
+                '</div>';
+            }).join('');
+            const more = devices.length > 2 ? '<div style="font-size:12px;color:#909399;">… 共 ' + devices.length + ' 台，点击"设备"查看全部</div>' : '';
+            devicesHtml = '<div class="card-devices">' + shown + more + '</div>';
         }
 
-        // ★ v3 新增：诊所名显示
-        const clinicCell = r.clinicName ? '<span style="color:#8e44ad;">' + escapeHtml(r.clinicName) + '</span>' : '-';
+        // 诊所 / 用户信息
+        const clinicHtml = r.clinicName ? '<span class="item clinic"><b>诊所：</b>' + escapeHtml(r.clinicName) + '</span>' : '';
+        const userHtml = r.user ? '<span class="item"><b>用户：</b>' + escapeHtml(r.user) + '</span>' : '';
+        const noteHtml = r.note ? '<span class="item"><b>备注：</b>' + escapeHtml(r.note) + '</span>' : '';
 
+        // 操作按钮
         let actions = '<button class="btn btn-sm" onclick="copyCode(\'' + r.code + '\')">复制</button>';
         actions += '<button class="btn btn-sm btn-primary" onclick="quickGenLinkFromCode(\'' + r.code + '\')" title="生成一键激活链接">🔗 链接</button>';
         actions += '<button class="btn btn-sm" onclick="showLogs(\'' + r.code + '\')">日志</button>';
         actions += '<button class="btn btn-sm" onclick="openEditModal(\'' + r.code + '\')">编辑</button>';
         if (r.status === 'used') {
-            actions += '<button class="btn btn-sm" onclick="showDevices(\'' + r.code + '\')">查看设备</button>';
+            actions += '<button class="btn btn-sm" onclick="showDevices(\'' + r.code + '\')">📱 设备</button>';
         }
         actions += '<button class="btn btn-sm" onclick="openExportModal(\'' + r.code + '\')">导出</button>';
         if (r.status !== 'disabled') {
@@ -1616,19 +1615,20 @@ function renderList(records) {
         }
         actions += '<button class="btn btn-sm btn-danger" onclick="deleteCode(\'' + r.code + '\')">删除</button>';
 
-        return '<tr>' +
-            '<td class="code">' + r.code + '</td>' +
-            '<td>' + escapeHtml(r.user || '-') + '</td>' +
-            '<td>' + typeTag + '</td>' +
-            '<td>' + statusTag + '</td>' +
-            '<td>' + issuedAt + '</td>' +
-            '<td>' + activatedAt + '</td>' +
-            '<td>' + expiresAt + '</td>' +
-            '<td>' + machineCell + '</td>' +
-            '<td>' + clinicCell + '</td>' +
-            '<td>' + escapeHtml(r.note || '-') + '</td>' +
-            '<td style="white-space:nowrap;">' + actions + '</td>' +
-            '</tr>';
+        return '<div class="license-card">' +
+            '<div class="license-card-top"><span class="code">' + r.code + '</span>' + typeTag + statusTag + '</div>' +
+            '<div class="license-card-meta">' + userHtml + clinicHtml +
+                '<span class="item"><b>签发：</b>' + (r.issuedAt ? new Date(r.issuedAt).toLocaleDateString('zh-CN') : '-') + '</span>' +
+                '<span class="item"><b>到期：</b>' + expiresAt + '</span>' + noteHtml +
+            '</div>' +
+            '<div class="along-bar">' +
+                '<span class="along-label">设备授权 ' + (r.status === 'used' ? devCount + '/' + maxDev + ' 台' : '未激活') + '</span>' +
+                '<div class="along-progress ' + barClass + '"><div style="width:' + (r.status === 'used' && maxDev > 0 ? pct + '%' : '0%') + '"></div></div>' +
+            '</div>' +
+            (r.status === 'used' ? '<div style="font-size:12px;color:#909399;margin-bottom:4px;">最近激活：' + joinedAt + '</div>' : '') +
+            devicesHtml +
+            '<div class="card-actions">' + actions + '</div>' +
+        '</div>';
     }).join('');
 }
 
@@ -2040,43 +2040,86 @@ function switchTab(tabName) {
 
 // ===== ★ 设备版本绑定管理 =====
 async function loadDeviceBindings() {
-    const tbody = document.getElementById('deviceVersionListBody');
-    if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" class="loading">加载中...</td></tr>';
+    const el = document.getElementById('deviceVersionListBody');
+    if (!el) return;
+    el.innerHTML = '<div class="empty">加载中...</div>';
     try {
-        const res = await fetch(API_BASE + '/license/admin-device-version', {
+        const listRes = await fetch(API_BASE + '/license/admin-device-version', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
             body: JSON.stringify({ action: 'list' })
         });
-        const data = await res.json();
-        if (!data.success) throw new Error(data.error || '加载失败');
-        const bindings = data.bindings || [];
+        const listData = await listRes.json();
+        if (!listData.success) throw new Error(listData.error || '加载失败');
+        const bindings = listData.bindings || [];
+
+        // 测试机白名单（标记同一台设备）
+        let testSet = {};
+        try {
+            const tRes = await fetch(API_BASE + '/license/admin-test-machine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ action: 'list' })
+            });
+            const tData = await tRes.json();
+            if (tData.success) {
+                (tData.machines || []).forEach(function (m) { testSet[m.machineId] = m; });
+            }
+        } catch (e) { /* 测试机列表加载失败不影响主列表 */ }
+
         const alertEl = document.getElementById('deviceVersionAlert');
         if (alertEl) alertEl.style.display = 'none';
+
         if (bindings.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" class="loading">暂无设备版本绑定</td></tr>';
+            el.innerHTML = '<div class="empty">暂无设备版本绑定</div>';
             return;
         }
-        tbody.innerHTML = bindings.map((b) =>
-            '<tr>' +
-            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(b.machineId || '-') + '</td>' +
-            '<td>' + escapeHtml(b.versionLabel || b.version || '-') + '</td>' +
-            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(b.licenseCode || '-') + '</td>' +
-            '<td>' + escapeHtml(b.clinicName || '-') + '</td>' +
-            '<td>' + escapeHtml(b.boundAt || '-') + '</td>' +
-            '<td><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button></td>' +
-            '</tr>'
-        ).join('');
+        const versionTag = function (v) {
+            const name = (v === 'institution') ? '机构版' : '标准版';
+            return '<span class="tag ' + (v === 'institution' ? 'tag-pro' : 'tag-personal') + '">' + name + '</span>';
+        };
+        el.innerHTML = bindings.map((b) => {
+            const test = testSet[b.machineId];
+            const testTag = test ? '<span class="tag tag-trial" title="测试机：' + escapeHtml((test.note || '') + ' ' + (test.addedAt || '')) + '">🖥 测试机</span>' : '';
+            const ops =
+                '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button>';
+            return '<div class="license-card">' +
+                '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' +
+                    (b.versionLabel || b.version ? versionTag(b.version) : '') + testTag + '</div>' +
+                '<div class="license-card-meta">' +
+                    '<span class="item"><b>激活码：</b>' + escapeHtml(b.licenseCode || '-') + '</span>' +
+                    '<span class="item"><b>诊所：</b>' + escapeHtml(b.clinicName || '-') + '</span>' +
+                    '<span class="item"><b>绑定时间：</b>' + escapeHtml(b.boundAt || '-') + '</span>' +
+                '</div>' +
+                '<div class="card-actions">' + ops + '</div>' +
+            '</div>';
+        }).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" class="loading" style="color:#ff4d4f;">' + escapeHtml(e.message) + '</td></tr>';
+        el.innerHTML = '<div class="empty" style="color:#ff4d4f;">' + escapeHtml(e.message) + '</div>';
     }
+}
+
+// 单台设备版本绑定 → 卡片（版本徽章 + 测试机标记复用）
+function renderSingleDeviceBindingCard(b) {
+    const versionTag = (b.version || b.versionLabel)
+        ? '<span class="tag ' + (b.version === 'institution' ? 'tag-pro' : 'tag-personal') + '">' + escapeHtml(b.versionLabel || (b.version === 'institution' ? '机构版' : '标准版')) + '</span>'
+        : '';
+    const ops = '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button>';
+    return '<div class="license-card">' +
+        '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' + versionTag + '</div>' +
+        '<div class="license-card-meta">' +
+            '<span class="item"><b>激活码：</b>' + escapeHtml(b.licenseCode || '-') + '</span>' +
+            '<span class="item"><b>诊所：</b>' + escapeHtml(b.clinicName || '-') + '</span>' +
+            '<span class="item"><b>绑定时间：</b>' + escapeHtml(b.boundAt || '-') + '</span>' +
+        '</div>' +
+        '<div class="card-actions">' + ops + '</div>' +
+    '</div>';
 }
 
 async function queryDeviceBinding() {
     const machineId = document.getElementById('deviceVersionQueryInput').value.trim();
     const alertEl = document.getElementById('deviceVersionAlert');
-    const tbody = document.getElementById('deviceVersionListBody');
+    const tb = document.getElementById('deviceVersionListBody');
     if (!machineId) {
         alertEl.className = 'alert alert-error'; alertEl.style.display = 'block';
         alertEl.textContent = '请输入机器码'; return;
@@ -2092,20 +2135,13 @@ async function queryDeviceBinding() {
         if (!data.found) {
             alertEl.className = 'alert'; alertEl.style.display = 'block';
             alertEl.textContent = '该设备暂无版本绑定记录，可正常激活任意版本。';
-            tbody.innerHTML = '<tr><td colspan="6" class="loading">无绑定记录</td></tr>';
+            tb.innerHTML = '<div class="empty">无绑定记录</div>';
             return;
         }
         alertEl.style.display = 'none';
         const b = data.binding;
-        tbody.innerHTML =
-            '<tr>' +
-            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(b.machineId || '-') + '</td>' +
-            '<td>' + escapeHtml(b.versionLabel || '-') + '</td>' +
-            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(b.licenseCode || '-') + '</td>' +
-            '<td>' + escapeHtml(b.clinicName || '-') + '</td>' +
-            '<td>' + escapeHtml(b.boundAt || '-') + '</td>' +
-            '<td><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button></td>' +
-            '</tr>';
+        // ★ 复用卡片式渲染（含版本徽章）
+        tb.innerHTML = renderSingleDeviceBindingCard(b);
     } catch (e) {
         alertEl.className = 'alert alert-error'; alertEl.style.display = 'block';
         alertEl.textContent = '⚠️ ' + e.message;
@@ -2219,7 +2255,7 @@ async function loadAdminActivateList() {
     const tbody = document.getElementById('adminActivateListBody');
     if (!tbody) return;
     const filter = document.getElementById('adminActivateFilter').value;
-    tbody.innerHTML = '<tr><td colspan="10" class="loading">加载中...</td></tr>';
+    tbody.innerHTML = '<div class="empty">加载中...</div>';
     try {
         // 同时拉取待审核和已通过（用于统计卡片），filter=all 时一次拉全
         const fetchUrl = API_BASE + '/license/admin-list?status=' + encodeURIComponent(filter) + '&limit=500';
@@ -2287,8 +2323,8 @@ function filterAdminActivateList() {
 }
 
 function renderAdminActivateTable() {
-    const tbody = document.getElementById('adminActivateListBody');
-    if (!tbody) return;
+    const el = document.getElementById('adminActivateListBody');
+    if (!el) return;
     const search = (document.getElementById('adminActivateSearch').value || '').trim().toLowerCase();
     let list = _adminActivateCache || [];
     if (search) {
@@ -2308,32 +2344,40 @@ function renderAdminActivateTable() {
     if (list.length === 0) {
         const filter = document.getElementById('adminActivateFilter').value;
         const emptyText = search ? '没有匹配的记录' : '暂无' + (filter === 'all' ? '' : filter) + '请求';
-        tbody.innerHTML = '<tr><td colspan="11" class="empty">' + escapeHtml(emptyText) + '</td></tr>';
+        el.innerHTML = '<div class="empty">' + escapeHtml(emptyText) + '</div>';
         return;
     }
-    tbody.innerHTML = list.map(r => {
+    el.innerHTML = list.map(r => {
         const submitTime = r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-CN') : '-';
         const statusBadge = renderAdminActivateStatus(r.status);
         // 电话可点击拨号（移动端友好）
         const phoneDisplay = r.phone ? '<a href="tel:' + escapeHtml(r.phone) + '" style="color:#409eff;">' + escapeHtml(r.phone) + '</a>' : '-';
-        const actions = r.status === 'pending'
-            ? '<div style="display:flex;gap:4px;"><button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>'
-            : '<div style="display:flex;gap:4px;align-items:center;"><span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button></div>';
+        let actions;
+        if (r.status === 'pending') {
+            actions = '<button class="btn btn-sm btn-success" onclick="openAdminApproveModal(\'' + r.requestId + '\')">审核</button>' +
+                '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button>';
+        } else {
+            actions = '<span style="color:#909399;font-size:12px;">' + escapeHtml(r.licenseCode || '已处理') + '</span>' +
+                '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;padding:2px 6px;" onclick="deleteAdminActivateRequest(\'' + r.requestId + '\',\'' + escapeHtml(r.clinicName || '') + '\')" title="删除此请求">🗑</button>';
+        }
         // ★ 版本信息渲染：区分离线/云端、机构版/标准版
         const versionDisplay = renderVersionInfo(r);
-        return '<tr>' +
-            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(r.requestId) + '</td>' +
-            '<td><strong>' + escapeHtml(r.clinicName || '-') + '</strong></td>' +
-            '<td>' + escapeHtml(r.adminName || '-') + '</td>' +
-            '<td>' + phoneDisplay + '</td>' +
-            '<td style="font-family:Courier New,monospace;font-size:11px;" title="' + escapeHtml(r.machineId || '') + '">' + escapeHtml(r.machineId || '-') + '</td>' +
-            '<td style="font-size:12px;white-space:nowrap;">' + versionDisplay + '</td>' +
-            '<td style="max-width:200px;word-break:break-all;font-size:12px;color:#606266;">' + escapeHtml(r.remark || '-') + '</td>' +
-            '<td style="font-size:12px;white-space:nowrap;">' + escapeHtml(submitTime) + '</td>' +
-            '<td style="font-size:11px;color:#909399;">' + escapeHtml(r.submittedIp || '-') + '</td>' +
-            '<td>' + statusBadge + '</td>' +
-            '<td style="white-space:nowrap;">' + actions + '</td>' +
-        '</tr>';
+        const remarkHtml = r.remark ? ('<div class="item"><b>备注：</b>' + escapeHtml(r.remark) + '</div>') : '';
+        return '<div class="license-card">' +
+            '<div class="license-card-top">' +
+                '<span style="font-family:Courier New,monospace;font-size:12px;color:#909399;">' + escapeHtml(r.requestId) + '</span>' +
+                '<strong style="font-size:15px;color:#2c3e50;">' + escapeHtml(r.clinicName || '-') + '</strong>' +
+                versionDisplay + statusBadge +
+            '</div>' +
+            '<div class="license-card-meta">' +
+                '<span class="item"><b>管理员：</b>' + escapeHtml(r.adminName || '-') + '</span>' +
+                '<span class="item"><b>电话：</b>' + phoneDisplay + '</span>' +
+                '<span class="item"><b>机器ID：</b><span style="font-family:Courier New,monospace;">' + escapeHtml(r.machineId || '-') + '</span></span>' +
+                '<span class="item"><b>提交时间：</b>' + escapeHtml(submitTime) + '</span>' +
+                '<span class="item"><b>IP：</b>' + escapeHtml(r.submittedIp || '-') + '</span>' + remarkHtml +
+            '</div>' +
+            '<div class="card-actions">' + actions + '</div>' +
+        '</div>';
     }).join('');
 }
 
