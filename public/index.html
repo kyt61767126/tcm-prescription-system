@@ -772,7 +772,8 @@ let currentUser = null;
 
         // ★ 2026-08-17 v3：补丁③ 退出语义终极对齐（底部退出图标=单击立即关APP）
         //   应用内 EXPECTED_APP_VERSION 必须与此字符串完全一致，否则启动清 HTTP 缓存
-        window.__APP_VERSION__ = '2026-08-17-v3';
+        // ★ 2026-08-19 v1：缓存版本号升级，强制云端APP启动清理旧缓存（修复 setCloudActivationDone is not defined）
+        window.__APP_VERSION__ = '2026-08-19-v1';
 
         const IS_ELECTRON = !!(window.electronAPI && window.electronAPI.isElectron);
 
