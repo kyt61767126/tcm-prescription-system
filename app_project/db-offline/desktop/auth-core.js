@@ -2007,7 +2007,8 @@
             '<div style="font-weight:bold;margin-bottom:8px;color:#333;">🔐 授权状态</div>' +
             '<div id="licenseStatusText" style="font-size:13px;color:#666;margin-bottom:10px;">加载中...</div>' +
             (hasLicenseApi
-                ? '<button class="action-btn" id="activateNowBtn" style="background:#ff9800;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;">立即激活</button>'
+                ? '<button class="action-btn" id="activateNowBtn" style="background:#ff9800;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;margin-bottom:8px;">立即激活</button>' +
+                  '<button class="action-btn" id="adminActivateSettingsBtn" style="background:#26a69a;color:white;width:100%;padding:8px;font-size:14px;border:none;border-radius:4px;cursor:pointer;">📋 管理员激活</button>'
                 : '');
 
         modalBody.appendChild(section);
@@ -2019,6 +2020,18 @@
                 btn.addEventListener('click', function () {
                     try { closeModal('settingsModal'); } catch (e) { }
                     if (typeof global.activateNow === 'function') {
+                        global.activateNow();
+                    }
+                });
+            }
+            // ★ 2026-08-19 管理员激活：原登录框入口已收敛，补齐到基础设置授权区
+            const adminBtn = section.querySelector('#adminActivateSettingsBtn');
+            if (adminBtn) {
+                adminBtn.addEventListener('click', function () {
+                    try { closeModal('settingsModal'); } catch (e) { }
+                    if (typeof global.openAdminActivate === 'function') {
+                        global.openAdminActivate();
+                    } else if (typeof global.activateNow === 'function') {
                         global.activateNow();
                     }
                 });
@@ -2564,10 +2577,8 @@
             await checkLicenseAndShowActivate();
             // ★ 启动兜底检查（无论首次校验结果如何，都启动定时器）
             startFallbackCheck();
-            // ★ 新增：向 settingsModal 注入 license 状态显示 + 立即激活按钮
+            // ★ 2026-08-19 激活入口收敛：向 settingsModal（基础设置底部）注入授权状态 + 立即激活/管理员激活；不再向登录框注入激活入口（登录界面整洁）
             injectLicenseStatusIntoSettings();
-            // ★ 新增：向登录界面注入激活入口（激活软件 / 管理员激活）
-            injectActivateLinkIntoLogin();
         }, 2000);
     }
 
