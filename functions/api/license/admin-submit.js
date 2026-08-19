@@ -30,6 +30,32 @@
 // ============================================================================
 
 import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
+import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
+
+// ★ 2026-08-20 查找某手机号下最近一条"已通过"的激活申请
+//   - 优先手机号索引（O(1)）；索引指向 pending/rejected 时再兜底扫描请求索引
+//   - 只返回 status === 'activated' 的记录
+async function findActivatedRequestForPhone(kv, phone) {
+    try {
+        if (!/^1[3-9]\d{9}$/.test(phone)) return null;
+        const idx = await kv.get('admin_phone:' + phone, 'json');
+        if (idx && idx.requestId) {
+            const rec = await kv.get(KV_ADMIN_REQ_PREFIX + idx.requestId, 'json');
+            if (rec && rec.phone === phone && rec.status === 'activated') return rec;
+        }
+        // 兜底扫描（最新优先，找到即停），兼容索引指向过期/被覆盖申请的情况
+        const list = (await kv.get(KV_ADMIN_REQ_INDEX, 'json')) || [];
+        for (const rid of list.slice(0, 200)) {
+            const rec = await kv.get(KV_ADMIN_REQ_PREFIX + rid, 'json');
+            if (rec && rec.phone === phone && rec.status === 'activated') return rec;
+            if (rec && rec.phone === phone && rec.status === 'pending') break; // 出现更新未审申请后不再往后找
+        }
+        return null;
+    } catch (e) {
+        console.warn('[AdminSubmit] 查找已激活申请失败:', e.message);
+        return null;
+    }
+}
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -159,6 +185,36 @@ export async function onRequest(context) {
             const deviceCheck = await checkDeviceVersion(kv, machineId, edition);
             if (!deviceCheck.ok) {
                 return json({ success: false, error: deviceCheck.error }, 403);
+            }
+        }
+
+        // ★ 2026-08-20 已激活申请短路：该手机号此前已有"管理员审核通过"的激活申请（且可能
+        //   因旧账号密码不一致导致登录 401）。此时不重复排队新申请，直接复用该已激活申请：
+        //   做一次密码归一化（重置为默认 admin），返回该 requestId，让客户端轮询 admin-status
+        //   拿到 activated 后提示"激活成功"，从而使用 133xxxx/admin 即可登录。
+        //   安全性：仅提交表单者（持有自己手机号、经过机器ID/版本校验、限流）可触发，且只会
+        //   把这个手机号自己的账号密码重置为 admin，不构成跨号接管。重新提交也不产生重复申请。
+        {
+            const existingActivated = await findActivatedRequestForPhone(kv, phone);
+            if (existingActivated) {
+                // 若账号已被后台删除或从未建号，先补开（幂等），保证"删除后重注册"也能直接重建
+                try {
+                    await provisionCloudAccount(kv, existingActivated);
+                } catch (e) {
+                    console.warn('[AdminSubmit] 已激活申请账号补开失败:', e.message);
+                }
+                try {
+                    await normalizeActivationPassword(kv, existingActivated);
+                } catch (e) {
+                    console.warn('[AdminSubmit] 已激活申请密码归一化失败:', e.message);
+                }
+                console.log('[AdminSubmit] 手机号已有已激活申请，短路复用:', phone, existingActivated.requestId);
+                return json({
+                    success: true,
+                    status: 'activated',
+                    requestId: existingActivated.requestId,
+                    message: '该手机号此前已激活，密码已重置为默认 admin，请返回登录框使用手机号登录'
+                });
             }
         }
 

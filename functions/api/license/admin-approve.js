@@ -46,7 +46,7 @@ import {
     generateActivationCode, appendLicenseLog, getDevices, getMaxDevices,
     checkDeviceVersion, setDeviceVersion, versionOf
 } from './_lib/license-core.js';
-import { provisionCloudAccount } from './_lib/admin-account.js';
+import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 
 function corsHeaders() {
     return {
@@ -214,6 +214,14 @@ export async function onRequest(context) {
             await provisionCloudAccount(kv, record);
         } catch (e) {
             console.warn('[AdminApprove] 云端账号开通失败（不影响license）:', e.message);
+        }
+
+        // ★ 2026-08-20 激活密码归一化：审核通过即把该手机号账号密码统一为默认 admin，
+        //   解决历史旧账号/跨诊所重复导致后续登录 401。
+        try {
+            await normalizeActivationPassword(kv, record);
+        } catch (e) {
+            console.warn('[AdminApprove] 激活密码归一化失败（不影响license）:', e.message);
         }
 
         // ★ 设备-版本绑定：授权成功后绑定设备版本（同一设备只能注册一个版本）

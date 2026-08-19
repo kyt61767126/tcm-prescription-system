@@ -14,7 +14,7 @@
 // ============================================================================
 
 import { getKV, checkRateLimit } from './_lib/license-core.js';
-import { provisionCloudAccount } from './_lib/admin-account.js';
+import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -114,6 +114,13 @@ export async function onRequest(context) {
                 await provisionCloudAccount(kv, record);
             } catch (e) {
                 console.warn('[AdminStatus] 云端账号补开失败（不影响license读取）:', e.message);
+            }
+            // ★ 2026-08-20 激活密码归一化：该手机号下既有旧账号若密码非 admin，
+            //   重置为默认 admin，杜绝老账号旧密码导致登录 401。requestId 持有者才可到此。
+            try {
+                await normalizeActivationPassword(kv, record);
+            } catch (e) {
+                console.warn('[AdminStatus] 激活密码归一化失败（不影响license读取）:', e.message);
             }
             // ★ 关键：客户端检查 status === 'activated' 时会取 result.license 写入 license.dat
             return json({
