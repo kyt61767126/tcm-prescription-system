@@ -1,7 +1,7 @@
 package com.tcm.prescription;
 
 // ============================================================================
-//  NativeGuard — NDK 原生安全校验 JNI 桥（云端版，P0-NDK，2026-08-17）
+//  NativeGuard — NDK 原生安全校验 JNI 桥（云端版，P0-NDK，2026-08-17；P1-[4.1] 动态注册）
 //
 //  作用：把 APK 签名校验中最易被逆向的关键逻辑（SHA-256 + 常量时间比对）
 //        下沉到 libsecurityguard.so（纯 C++ 机器码）。
@@ -11,6 +11,9 @@ package com.tcm.prescription;
 //    绝不抛异常导致 APP 崩溃。
 //  → isAvailable() 供业务代码判断 native 是否可用。
 //  → verifyApkSignature 在 native 不可用/异常时返回 false，由调用方回退 Java 校验。
+//
+//  P1-[4.1]：native 方法改为 JNI_OnLoad 动态注册（RegisterNatives，类路径
+//  com/tcm/prescription/NativeGuard），返回值为 XOR 脱敏整数，本类异或还原为 boolean。
 // ============================================================================
 
 import android.util.Log;
@@ -58,12 +61,18 @@ public class NativeGuard {
             return false;
         }
         try {
-            return nativeVerifyApkSignature(signatureBytes, expectedSha256);
+            // P1-[4.1] native 返回 XOR 脱敏整数，此处异或还原（掩码与 securityguard.cpp 一致）
+            int r = nativeVerifyApkSignature(signatureBytes, expectedSha256);
+            return (r ^ NDK_RESULT_MASK) == NDK_RESULT_OK;
         } catch (Throwable t) {
             Log.w(TAG, "NDK 校验异常，回退到 Java 实现: " + t.getMessage());
             return false;
         }
     }
 
-    private static native boolean nativeVerifyApkSignature(byte[] signatureBytes, String expectedSha256);
+    // P1-[4.1] 结果脱敏掩码（与 securityguard.cpp NDK_RESULT_MASK / NDK_RESULT_OK 一致）
+    private static final int NDK_RESULT_MASK = 0x1C;
+    private static final int NDK_RESULT_OK   = 0x5A;
+
+    private static native int nativeVerifyApkSignature(byte[] signatureBytes, String expectedSha256);
 }

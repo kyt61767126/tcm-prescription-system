@@ -1,5 +1,5 @@
 // ============================================================================
-//  securityguard.cpp — NDK 原生安全校验库（云端版，P0-NDK，2026-08-17）
+//  securityguard.cpp — NDK 原生安全校验库（P0-NDK，2026-08-17；P1-[4.1] 动态注册）
 //
 //  目标：把 APK 签名校验中最易被逆向的关键逻辑（SHA-256 摘要 + 常量时间比对）
 //        下沉到 NDK 原生层，提高反汇编/反篡改难度。
@@ -10,10 +10,12 @@
 //    原 Java 实现，.so 加载异常绝不导致闪退。
 //  → 比对采用常量时间（constant-time），防止时序侧信道。
 //
-//  JNI 入口：Java_<包名>_<类名>_nativeVerifyApkSignature
-//    - 云端版：com.tcm.prescription.NativeGuard（本文件符号）
-//    - 离线版：com.benneng.pres.NativeGuard（见 db-offline，另一份副本）
-//  （JNI 符号名随包名/类名变化，故两端各保存一份）
+//  P1-[4.1] 动态注册（2026-08-19）：
+//  → 移除 Java_<包名>_<类名>_<方法名> 静态导出符号，改为 JNI_OnLoad 中用
+//    RegisterNatives 动态绑定，.so 导出符号不再暴露类名/包名，降低逆向定位难度。
+//  → 返回结果做 XOR 脱敏：通过=0x5A^MASK，不通过=0xA5^MASK，Java 侧异或还原。
+//  → 绑定失败不返回非法版本（避免 JVM 拒绝加载库），仅清理挂起异常；Java 侧
+//    调用未绑定方法会抛 UnsatisfiedLinkError，由 NativeGuard 的 try-catch 捕获回退。
 // ============================================================================
 
 #include <jni.h>
@@ -151,34 +153,70 @@ bool constantTimeEqualsIgnoreCase(const std::string& a, const std::string& b) {
 } // namespace
 
 // ----------------------------------------------------------------------------
-//  JNI 入口：nativeVerifyApkSignature(byte[] signatureBytes, String expectedSha256)
-//  @param signatureBytes 签名证书原始字节（Signature.toByteArray()）
-//  @param expectedSha256 由 Java 侧注入的期望 SHA-256 指纹
-//  @return jboolean 1=通过 0=不通过
-//  包名 com.tcm.prescription，类名 NativeGuard（云端版）
+//  动态 JNI 注册（P1-[4.1]）
+//  → 核心实现函数在匿名 namespace 内（符号隐藏），不导出到 .so 符号表。
+//  → JNI_OnLoad 中按类路径 FindClass + RegisterNatives 绑定，
+//    云端版类路径 com/tcm/prescription/NativeGuard。
 // ----------------------------------------------------------------------------
-extern "C" JNIEXPORT jboolean JNICALL
-Java_com_tcm_prescription_NativeGuard_nativeVerifyApkSignature(
-        JNIEnv* env, jobject /*thiz*/,
-        jbyteArray signatureBytes, jstring expectedSha256) {
+namespace {
 
+// 结果脱敏掩码（与 Java 侧 NativeGuard.NDK_RESULT_MASK / NDK_RESULT_OK 一致）
+const jint NDK_RESULT_MASK = 0x1C;
+const jint NDK_RESULT_OK   = 0x5A;   // 通过
+const jint NDK_RESULT_FAIL = 0xA5;   // 不通过
+
+// nativeVerifyApkSignature(byte[] signatureBytes, String expectedSha256)
+// @return jint：结果经 XOR 脱敏后返回（Java 侧异或还原）
+jint nativeVerifyApkSignatureImpl(JNIEnv* env, jobject /*thiz*/,
+                                  jbyteArray signatureBytes, jstring expectedSha256) {
     if (signatureBytes == NULL || expectedSha256 == NULL) {
-        return JNI_FALSE;
+        return NDK_RESULT_FAIL ^ NDK_RESULT_MASK;
     }
 
     jsize len = env->GetArrayLength(signatureBytes);
-    if (len <= 0) return JNI_FALSE;
+    if (len <= 0) return NDK_RESULT_FAIL ^ NDK_RESULT_MASK;
 
     jbyte* raw = env->GetByteArrayElements(signatureBytes, NULL);
-    if (raw == NULL) return JNI_FALSE;
+    if (raw == NULL) return NDK_RESULT_FAIL ^ NDK_RESULT_MASK;
 
     std::string fingerprint = sha256Hex((const uint8_t*)raw, (size_t)len);
     env->ReleaseByteArrayElements(signatureBytes, raw, JNI_ABORT);
 
     const char* expected = env->GetStringUTFChars(expectedSha256, NULL);
-    if (expected == NULL) return JNI_FALSE;
+    if (expected == NULL) return NDK_RESULT_FAIL ^ NDK_RESULT_MASK;
     std::string expectedStr(expected);
     env->ReleaseStringUTFChars(expectedSha256, expected);
 
-    return constantTimeEqualsIgnoreCase(expectedStr, fingerprint) ? JNI_TRUE : JNI_FALSE;
+    bool ok = constantTimeEqualsIgnoreCase(expectedStr, fingerprint);
+    return (ok ? NDK_RESULT_OK : NDK_RESULT_FAIL) ^ NDK_RESULT_MASK;
+}
+
+} // namespace
+
+// JNI_OnLoad：动态注册（必须导出，供 JVM 加载时发现）
+// 绑定失败时不返回非法版本（避免 JVM 拒绝加载库导致整体不可用），
+// 仅清理挂起异常；Java 侧调用未绑定方法抛 UnsatisfiedLinkError → 回退 Java 实现。
+extern "C" JNIEXPORT jint JNICALL
+JNI_OnLoad(JavaVM* vm, void* /*reserved*/) {
+    JNIEnv* env = NULL;
+    if (vm->GetEnv((void**)&env, JNI_VERSION_1_6) != JNI_OK) {
+        return JNI_ERR;
+    }
+
+    jclass clazz = env->FindClass("com/tcm/prescription/NativeGuard");
+    if (clazz == NULL) {
+        env->ExceptionClear(); // 清理挂起的 NoClassDefFoundError
+        return JNI_VERSION_1_6;
+    }
+
+    static const JNINativeMethod methods[] = {
+        { "nativeVerifyApkSignature", "([BLjava/lang/String;)I", (void*)nativeVerifyApkSignatureImpl }
+    };
+    if (env->RegisterNatives(clazz, methods, 1) != JNI_OK) {
+        env->ExceptionClear();
+        env->DeleteLocalRef(clazz);
+        return JNI_VERSION_1_6;
+    }
+    env->DeleteLocalRef(clazz);
+    return JNI_VERSION_1_6;
 }
