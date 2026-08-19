@@ -16,6 +16,12 @@
 # 页面 HTML（含内联脚本）：始终重新校验，避免浏览器/WebView 缓存旧版导致修复不生效
 /index.html
   Cache-Control: no-cache, must-revalidate
+/admin/index.html
+  Cache-Control: no-cache, must-revalidate
+/login.html
+  Cache-Control: no-cache, must-revalidate
+/admin/login.html
+  Cache-Control: no-cache, must-revalidate
 
 # API 接口：添加缓存控制
 /api/*
