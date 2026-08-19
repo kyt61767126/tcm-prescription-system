@@ -927,6 +927,11 @@
                 await StorageAdapter.setItem('auth:clinicName', user.clinicName);
             }
 
+            // ★ 2026-08-20 登录成功即视为"软件已激活"，登录框的"软件激活"入口自动隐藏
+            //   （登录框通常将随登录成功关闭；此处设置标记确保下次回到登录框时不再显示）
+            setCloudActivationDone();
+            hideActivateLoginEntry();
+
             // P4-4: 登录成功后启动会话监控（8小时自动登出）
             // options.onSessionTimeout 可选外部回调（用于登出后跳转/刷新页面）
             startSessionMonitor(options.onSessionTimeout || null);
@@ -2046,17 +2051,19 @@
                 || (typeof global.AndroidNative !== 'undefined')
                 || (typeof global.electronAPI !== 'undefined' && global.electronAPI.isAndroidAPP === true)
                 || (typeof location !== 'undefined' && location.href.indexOf('android_asset') >= 0);
-            // ★ 2026-08-19 云端桌面同步：Electron 桌面版（存在 activate.showExpireAlert 桥接）也在登录框注入"管理员激活"入口
+            // ★ 2026-08-19 云端桌面同步：Electron 桌面版（存在 activate.showExpireAlert 桥接）也在登录框注入"软件激活"入口
             const isCloudDesktop = (typeof global.electronAPI !== 'undefined' && global.electronAPI.activate
                 && typeof global.electronAPI.activate.showExpireAlert === 'function');
             if (!isApp && !isCloudDesktop) return;
             const overlay = document.getElementById('loginOverlay');
             if (!overlay) return;
+            // ★ 2026-08-20 激活完成后自动隐藏：已登录/已激活过则不再显示"软件激活"入口
+            if (isCloudActivationDone()) return;
             // 已注入过则跳过，避免重复
             if (document.getElementById('activateLoginEntry')) return;
 
-            // ★ 云端为 SaaS 登录制，无本地激活码授权；登录框仅保留"管理员激活"入口（申请登录账号）
-            // 定位登录按钮区，在其下方插入"管理员激活"入口
+            // ★ 云端为 SaaS 登录制，无本地激活码授权；登录框仅保留"软件激活"入口（申请登录账号）
+            // 定位登录按钮区，在其下方插入"软件激活"入口
             const container = overlay.querySelector('.login-buttons');
             if (!container) return;
 
@@ -2065,12 +2072,31 @@
             entry.style.cssText =
                 'margin-top:12px;padding:0 4px;';
             entry.innerHTML =
-                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
+                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 软件激活</div>';
             container.parentNode.insertBefore(entry, container.nextSibling);
-            console.log('[LicenseCheck] 登录界面已注入 管理员激活 入口');
+            console.log('[LicenseCheck] 登录界面已注入 软件激活 入口');
         } catch (e) {
-            console.warn('[LicenseCheck] 注入登录 软件激活/管理员激活 入口失败:', e);
+            console.warn('[LicenseCheck] 注入登录 软件激活 入口失败:', e);
         }
+    }
+
+    // ============ 登录框"软件激活"入口的激活态标记（登录/激活成功后自动隐藏入口） ============
+
+    function isCloudActivationDone() {
+        try {
+            return global.localStorage && global.localStorage.getItem('auth:activationDone') === '1';
+        } catch (e) { return false; }
+    }
+
+    function setCloudActivationDone() {
+        try { if (global.localStorage) global.localStorage.setItem('auth:activationDone', '1'); } catch (e) {}
+    }
+
+    function hideActivateLoginEntry() {
+        try {
+            const el = document.getElementById('activateLoginEntry');
+            if (el) { el.style.display = 'none'; }
+        } catch (e) {}
     }
 
     // ============================================================================
@@ -2498,6 +2524,9 @@
                 show('adminSuccess');
                 document.getElementById('adminSuccessBtn').textContent = '✅ 好的';
                 document.getElementById('adminSuccessBtn').onclick = function() { cleanup(); };
+                // ★ 2026-08-20 激活成功：登录框"软件激活"入口自动隐藏
+                setCloudActivationDone();
+                hideActivateLoginEntry();
             }
         }
 
