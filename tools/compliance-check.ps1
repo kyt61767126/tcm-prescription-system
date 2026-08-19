@@ -151,6 +151,13 @@ Invoke-Check -Name "8/8 界面结构基线保护" -ArgsList @(
     (Join-Path $scriptDir 'check-interface.ps1')
 )
 
+# --- 9 认证密钥安全门禁（AUTH_SECRET fail-closed 防回归 + 弱配置探测 + 密钥文件不入库） ---
+# 【P1-A 2026-08-19】全局审查 R1 高风险修复配套：auth.js 静默回退默认密钥已改 fail-closed，
+#   本项固化该门禁防回归（宁漏检不可误报：仅确定性 FATAL 才阻断）。
+Invoke-Check -Name "9/9 认证密钥安全门禁(AUTH_SECRET)" -ArgsList @(
+    (Join-Path $scriptDir 'verify-auth-secret.ps1')
+)
+
 # ============================ 汇总 ============================
 Write-Host ""
 Write-Host "============================================" -ForegroundColor Cyan

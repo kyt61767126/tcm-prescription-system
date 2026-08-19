@@ -26,12 +26,24 @@ export const KV_TOKEN_REVOKED_PREFIX = 'revoked_token:';
 
 const DEFAULT_SECRET = 'tcm-dev-insecure-secret-replace-in-prod';
 
+// ★ P1-A fail-closed 安全门禁（2026-08-19）：
+//   AUTH_SECRET 未配置或等于默认不安全值时，getSecret 返回 null：
+//   - signToken 拒绝签发（登录直接失败，不产生可用默认密钥签名的 token）
+//   - verifyToken 拒绝验证（攻击者无法再用公开的默认密钥伪造任意角色 token）
+//   设计依据：认证密钥缺失时宁可显式不可用，不可静默降级为可伪造签名。
+//   处置：Cloudflare Pages 后台 Settings → Environment variables 配置
+//   AUTH_SECRET（32 位以上随机串）后重新部署；本地开发在仓库根目录 .dev.vars 配置。
 function getSecret(env) {
-    const secret = env?.AUTH_SECRET || DEFAULT_SECRET;
-    if (secret === DEFAULT_SECRET) {
-        console.warn('[安全警告] AUTH_SECRET 未配置，正在使用默认不安全密钥！请在 Cloudflare Pages 后台设置环境变量 AUTH_SECRET。');
+    const secret = env?.AUTH_SECRET || '';
+    if (!secret || secret === DEFAULT_SECRET) {
+        return null;
     }
     return secret;
+}
+
+// 供调用方预检密钥配置状态（如诊断端点/健康检查）
+export function isAuthSecretConfigured(env) {
+    return getSecret(env) !== null;
 }
 
 function strToBytes(str) {
@@ -165,7 +177,11 @@ async function hmacSign(message, secret) {
 //   u: username, r: role, c: clinicId, e: expire timestamp(ms), s: HMAC signature
 // P3-6：TTL 支持环境变量 AUTH_TOKEN_TTL_HOURS 配置（默认 168 小时 = 7 天）
 export async function signToken(payload, env, ttlMs = null) {
+    // ★ P1-A fail-closed：密钥未配置时拒绝签发（抛错由调用方转成可行动提示）
     const secret = getSecret(env);
+    if (!secret) {
+        throw new Error('AUTH_SECRET_NOT_CONFIGURED');
+    }
     // P3-6：优先使用环境变量配置的 TTL
     const envTtlHours = env?.AUTH_TOKEN_TTL_HOURS ? parseFloat(env.AUTH_TOKEN_TTL_HOURS) : null;
     const effectiveTtl = ttlMs !== null ? ttlMs : (envTtlHours ? envTtlHours * 60 * 60 * 1000 : 7 * 24 * 60 * 60 * 1000);
@@ -198,7 +214,12 @@ export async function verifyToken(token, env) {
 
         if (Date.now() > payload.e) return null;
 
+        // ★ P1-A fail-closed：密钥未配置时拒绝验证（防默认密钥伪造 token）
         const secret = getSecret(env);
+        if (!secret) {
+            console.error('[安全] AUTH_SECRET 未配置，拒绝验证 Token（fail-closed，防默认密钥伪造）。请在 Cloudflare Pages 后台配置环境变量 AUTH_SECRET。');
+            return null;
+        }
         // P0-2 修复：新 token 签名覆盖 v 字段；旧 token（无 v）按旧算法校验以保持兼容
         const sigBody = payload.v !== undefined
             ? { u: payload.u, r: payload.r, c: payload.c, e: payload.e, v: payload.v }

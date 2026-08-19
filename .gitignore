@@ -101,6 +101,9 @@ android/local.properties
 
 # Cloudflare
 .wrangler/
+# Cloudflare Pages Functions 本地开发密钥文件（绝不入库）
+.dev.vars
+**/.dev.vars
 
 # tcm-prescription-system 是 origin 仓库本身的 clone，避免循环引用
 cloud_project/tcm-prescription-system/

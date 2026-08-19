@@ -730,11 +730,21 @@ export async function onRequest(context) {
             // P1-1：登录成功，清除失败计数
             await clearLoginFailures(kv, username);
 
-            const token = await signToken({
-                username: user.username,
-                role: user.role,
-                clinicId: clinicId
-            }, context.env);
+            // ★ P1-A fail-closed：AUTH_SECRET 未配置时 signToken 抛错，转成可行动提示
+            let token;
+            try {
+                token = await signToken({
+                    username: user.username,
+                    role: user.role,
+                    clinicId: clinicId
+                }, context.env);
+            } catch (signErr) {
+                console.error('[P1-A] 登录 Token 签发失败:', signErr.message);
+                return json({
+                    success: false,
+                    error: '服务端安全配置缺失（AUTH_SECRET 未配置），登录暂不可用。请联系管理员：在 Cloudflare Pages 后台配置环境变量 AUTH_SECRET 后重新部署。'
+                }, 503, context.request);
+            }
 
             // P1-2：记录登录成功审计日志
             await writeAuditLog(kv, clinicId, user.username, user.role, 'login_success', 'auth', context.request);
