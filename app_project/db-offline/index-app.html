@@ -5861,7 +5861,12 @@ let currentUser = null;
                     if (backupData.formulas) { formulas = backupData.formulas; localStorage.setItem('local_formulas', JSON.stringify(formulas)); }
                     if (backupData.prescriptionHistory) { prescriptionHistory = backupData.prescriptionHistory; }
                 }
-                renderMedicineList(); renderPrescriptionHistory(); updateStats();
+                renderMedicineList();
+                // ★ 2026-08-20 修复：原调用的 renderPrescriptionHistory()/updateStats() 本文件从未定义，
+                //   恢复备份后触发 ReferenceError 中断后续流程。改用实际存在的 renderHistoryList 刷新历史列表
+                if (typeof renderHistoryList === 'function' && Array.isArray(prescriptionHistory)) {
+                    renderHistoryList(prescriptionHistory);
+                }
                 showToast('✅ 已从备份恢复 ' + (backup.prescriptionCount || 0) + ' 条处方');
             } catch (error) {
                 console.error('恢复备份失败:', error);

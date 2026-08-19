@@ -24,6 +24,49 @@ export const KV_SYSTEM_PLATFORM_MEDICINES = 'system:platform_medicines';
 // Token 黑名单 KV key 前缀
 export const KV_TOKEN_REVOKED_PREFIX = 'revoked_token:';
 
+// ============================================================================
+// ★ 2026-08-20 手机号占位检查（"一个号码只能注册一次"核心支撑）
+//   供 users.js（register-clinic / check-register）与 admin-submit.js（激活申请提交）
+//   共同调用，避免同一手机号产生重复注册 / 重复激活申请冲突，并及时向用户提示。
+//
+//   KV 依赖：
+//     admin_phone:{phone}   -> { requestId, status }（最新激活申请索引）
+//     admin_req_index       -> [requestId, ...]（激活申请索引，最新在前）
+//     admin_req:{requestId} -> 激活申请记录
+//
+//   返回（未占用返回 null）：
+//     { occupied: true, kind: 'pending_activation'|'activated', detail: 申请记录 }
+//   kind 语义：
+//     pending_activation：已有进行中的激活申请 → 提示"请耐心等待管理员审核"
+//     activated         ：已有审核通过的激活申请 → 提示"已激活开通，请直接登录"
+// ============================================================================
+export async function findPhoneOccupancy(kv, phone) {
+    if (!/^1[3-9]\d{9}$/.test(String(phone || '').trim())) return null;
+    const ph = String(phone).trim();
+
+    // 1) 优先手机号索引（最新激活申请，O(1)）
+    const idx = await kv.get('admin_phone:' + ph, 'json').catch(() => null);
+    if (idx && idx.requestId) {
+        const rec = await kv.get('admin_req:' + idx.requestId, 'json').catch(() => null);
+        if (rec && rec.phone === ph) {
+            if (rec.status === 'pending') return { occupied: true, kind: 'pending_activation', detail: rec };
+            if (rec.status === 'activated' || rec.status === 'approved') return { occupied: true, kind: 'activated', detail: rec };
+        }
+    }
+
+    // 2) 兜底扫描请求索引（最新优先，兼容索引指向被覆盖/历史申请）
+    //    命中 rejected/其它状态继续向后找更早的占用申请
+    const list = (await kv.get('admin_req_index', 'json').catch(() => null)) || [];
+    for (const rid of list.slice(0, 200)) {
+        const rec = await kv.get('admin_req:' + rid, 'json').catch(() => null);
+        if (rec && rec.phone === ph) {
+            if (rec.status === 'pending') return { occupied: true, kind: 'pending_activation', detail: rec };
+            if (rec.status === 'activated' || rec.status === 'approved') return { occupied: true, kind: 'activated', detail: rec };
+        }
+    }
+    return null;
+}
+
 const DEFAULT_SECRET = 'tcm-dev-insecure-secret-replace-in-prod';
 
 // ★ P1-A fail-closed 安全门禁（2026-08-19）：
