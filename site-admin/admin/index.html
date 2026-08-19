@@ -2460,6 +2460,9 @@ async function loadClinicsList() {
                     ? '<button class="btn btn-sm btn-info" onclick="toggleClinicStatus(\'' + c.id + '\',\'test\')">设为待审核</button>'
                     : '';
                 const editBtn = '<button class="btn btn-sm" onclick=\'editClinic(' + JSON.stringify({id:c.id,name:c.name,adminUsername:c.adminUsername,adminName:c.adminName}).replace(/'/g, "&#39;") + ')\'>编辑</button>';
+                const unlockBtn = (c.adminUsername)
+                    ? '<button class="btn btn-sm" onclick="unlockAccount(\'' + escapeHtml(c.adminUsername) + '\')">🔓解锁</button>'
+                    : '';
                 const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '-';
                 const srcTag = c.source === 'self-register' ? ' <span style="font-size:11px;color:#3498db;">自助注册</span>' : '';
                 return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
@@ -2468,7 +2471,7 @@ async function loadClinicsList() {
                         '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + escapeHtml(c.adminUsername || '-') + '</strong>（' + escapeHtml(c.adminName || '-') + '）| 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:2px;">有效期: ' + expiryHtml + '</div>' +
                     '</div>' +
-                    '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + ' ' + renewBtn + '</div>' +
+                    '<div style="white-space:nowrap;">' + editBtn + ' ' + unlockBtn + ' ' + testBtn + ' ' + toggleBtn + ' ' + renewBtn + '</div>' +
                 '</div>';
             }).join('');
         } else {
@@ -2889,6 +2892,26 @@ async function editClinic(clinic) {
             loadClinicsList();
         } else {
             showAlert('clinicAlert', data.error || '更新失败', 'error');
+        }
+    } catch (e) {
+        showAlert('clinicAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// 解锁账号：调用后端 action=unlock 清除账号的 15 分钟锁定
+async function unlockAccount(username) {
+    if (!confirm('确定解锁账号「' + username + '」吗？\n清除其登录失败计数与锁定状态。')) return;
+    try {
+        const res = await fetch(API_BASE + '/users?action=unlock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ username })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('clinicAlert', data.message || '账号已解锁', 'success');
+        } else {
+            showAlert('clinicAlert', data.error || '解锁失败', 'error');
         }
     } catch (e) {
         showAlert('clinicAlert', '网络错误：' + e.message, 'error');
