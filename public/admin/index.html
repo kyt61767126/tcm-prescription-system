@@ -523,14 +523,15 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                             <th>所属诊所</th>
                             <th>允许模式</th>
                             <th>创建时间</th>
+                            <th style="width:90px;">操作</th>
                         </tr>
                     </thead>
                     <tbody id="usersListBody">
-                        <tr><td colspan="6" class="loading">加载中...</td></tr>
+                        <tr><td colspan="7" class="loading">加载中...</td></tr>
                     </tbody>
                 </table>
             </div>
-            <p style="margin-top:12px;color:#909399;font-size:12px;">提示：用户管理（创建/编辑/删除）请到对应诊所内操作，或使用主应用的用户管理界面。此处仅用于查看所有用户列表。</p>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">提示：用户管理（创建/编辑/删除）请到对应诊所内操作，或使用主应用的用户管理界面。此处可查看所有用户列表，并对被锁定的账号执行「🔓 解锁」（登录连续失败 5 次会锁定 15 分钟，解锁立即恢复登录，操作会记入审计日志）。</p>
         </div>
 
         <!-- ★ 管理员激活审核标签页 -->
@@ -3307,7 +3308,7 @@ async function editClinic(clinic) {
 async function loadUsersList() {
     const tbody = document.getElementById('usersListBody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" class="loading">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="loading">加载中...</td></tr>';
     try {
         const res = await fetch(API_BASE + '/users', {
             headers: { 'Authorization': 'Bearer ' + token }
@@ -3315,7 +3316,7 @@ async function loadUsersList() {
         const data = await res.json();
         if (data.success && Array.isArray(data.data)) {
             if (data.data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty">暂无用户</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="empty">暂无用户</td></tr>';
                 return;
             }
             const roleNames = { platform_admin: '平台总管理员', clinic_admin: '诊所管理员', doctor: '医师' };
@@ -3327,6 +3328,8 @@ async function loadUsersList() {
                         ? '<span class="tag tag-personal">' + (roleNames[u.role] || u.role) + '</span>'
                         : '<span class="tag tag-trial">' + (roleNames[u.role] || u.role) + '</span>');
                 const created = u.createdAt ? new Date(u.createdAt).toLocaleString('zh-CN') : '-';
+                // ★ P2-B：解锁按钮（data 属性传参防注入；escapeHtml 转义后浏览器解析回原值）
+                const unlockBtn = '<button class="btn btn-sm" data-u="' + escapeHtml(u.username) + '" onclick="unlockUser(this.dataset.u)" title="清除登录失败计数，锁定中的账号立即恢复登录">🔓 解锁</button>';
                 return '<tr>' +
                     '<td class="code">' + escapeHtml(u.username) + '</td>' +
                     '<td>' + escapeHtml(u.name || '-') + '</td>' +
@@ -3334,6 +3337,7 @@ async function loadUsersList() {
                     '<td>' + escapeHtml(u.clinicName || '-') + '</td>' +
                     '<td>' + escapeHtml(modeNames[u.allowedMode] || u.allowedMode || '-') + '</td>' +
                     '<td>' + escapeHtml(created) + '</td>' +
+                    '<td>' + unlockBtn + '</td>' +
                 '</tr>';
             }).join('');
         } else {
@@ -3341,11 +3345,35 @@ async function loadUsersList() {
                 showAlert('userAlert', '登录已过期，请重新登录', 'error');
                 setTimeout(doLogout, 1500);
             } else {
-                tbody.innerHTML = '<tr><td colspan="6" class="empty">' + escapeHtml(data.error || '加载失败') + '</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="empty">' + escapeHtml(data.error || '加载失败') + '</td></tr>';
             }
         }
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+    }
+}
+
+// ★ P2-B：管理员主动解锁账号（POST /users?action=unlock，后端 cecc9021 已就绪）
+// 幂等：账号未锁定时仅清除失败计数；操作写入 audit_log（unlock_account）
+async function unlockUser(username) {
+    if (!confirm('确认解锁账号「' + username + '」？\n\n将清除该账号的登录失败计数；若处于锁定状态（连续失败 5 次锁 15 分钟），解锁后立即可正常登录。\n本操作会记入审计日志。')) return;
+    try {
+        const res = await fetch(API_BASE + '/users?action=unlock', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ username: username })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('userAlert', '✅ ' + (data.message || '账号已解锁') + '（用户：' + username + (data.clearedCount > 0 ? '，清除失败计数 ' + data.clearedCount + ' 次' : '') + '）', 'success');
+        } else if (res.status === 401) {
+            showAlert('userAlert', '登录已过期，请重新登录', 'error');
+            setTimeout(doLogout, 1500);
+        } else {
+            showAlert('userAlert', '解锁失败：' + escapeHtml(data.error || ('HTTP ' + res.status)), 'error');
+        }
+    } catch (e) {
+        showAlert('userAlert', '网络错误：' + escapeHtml(e.message), 'error');
     }
 }
 

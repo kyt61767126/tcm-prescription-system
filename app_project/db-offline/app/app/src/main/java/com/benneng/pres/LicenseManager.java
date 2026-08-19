@@ -74,7 +74,7 @@ public class LicenseManager {
     // 公钥只能验签不能签发，即使被反编译提取也无法伪造 license
     // 注意：minSdk=24 不支持 Android 原生 EdDSA（需 API 33+），故用下方纯 Java 实现（Ed25519 类）
     private static final String ED25519_VERIFY_PUBLIC_KEY_HEX =
-            "d19f733795a8bb44b10f71d93e88892a56de55fe5f314574eb074ffca79f1879";
+            "f1b58e1d305ebdb856743fff7e400e60ec96ca0207f7b414aa5284673a221f33";
 
     // ★ v3 新增：config.json 完整性签名密钥（与桌面版 license-manager.js / edit-config.ps1 完全一致）
     private static final String CONFIG_SIGN_KEY = "bnzc_config_sign_key_v1_2026";

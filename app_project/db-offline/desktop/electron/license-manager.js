@@ -41,7 +41,7 @@ DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==
 //   3. 公钥（-----BEGIN PUBLIC KEY----- 整段）填入此常量
 //   4. 重新打包 exe
 const ED25519_VERIFY_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEA0Z9zN5Wou0SxD3HZPoiJKlbeVf5fMUV06wdP/KefGHk=
+MCowBQYDK2VwAyEA8bWOHTBevbhWdD//fkAOYOyWygIH97QUqlKEZzoiHzM=
 -----END PUBLIC KEY-----`;
 
 const TRIAL_KEY = 'bnzc_trial_key_v1';
