@@ -3336,6 +3336,8 @@ async function loadUsersList() {
                 const created = u.createdAt ? new Date(u.createdAt).toLocaleString('zh-CN') : '-';
                 // ★ P2-B：解锁按钮（data 属性传参防注入；escapeHtml 转义后浏览器解析回原值）
                 const unlockBtn = '<button class="btn btn-sm" data-u="' + escapeHtml(u.username) + '" onclick="unlockUser(this.dataset.u)" title="清除登录失败计数，锁定中的账号立即恢复登录">🔓 解锁</button>';
+                // ★ 2026-08-20 重置密码按钮：按用户名精确定位，避免诊所编辑弹窗改错账号
+                const resetPwdBtn = '<button class="btn btn-sm" data-u="' + escapeHtml(u.username) + '" onclick="resetUserPassword(this.dataset.u)" title="按用户名精确重置登录密码（至少8位，含字母和数字）">🔑 重置密码</button>';
                 return '<tr>' +
                     '<td class="code">' + escapeHtml(u.username) + '</td>' +
                     '<td>' + escapeHtml(u.name || '-') + '</td>' +
@@ -3343,7 +3345,7 @@ async function loadUsersList() {
                     '<td>' + escapeHtml(u.clinicName || '-') + '</td>' +
                     '<td>' + escapeHtml(modeNames[u.allowedMode] || u.allowedMode || '-') + '</td>' +
                     '<td>' + escapeHtml(created) + '</td>' +
-                    '<td>' + unlockBtn + '</td>' +
+                    '<td>' + unlockBtn + ' ' + resetPwdBtn + '</td>' +
                 '</tr>';
             }).join('');
         } else {
@@ -3377,6 +3379,40 @@ async function unlockUser(username) {
             setTimeout(doLogout, 1500);
         } else {
             showAlert('userAlert', '解锁失败：' + escapeHtml(data.error || ('HTTP ' + res.status)), 'error');
+        }
+    } catch (e) {
+        showAlert('userAlert', '网络错误：' + escapeHtml(e.message), 'error');
+    }
+}
+
+// ★ 2026-08-20 平台总管理员按用户名精确重置密码（POST /users?action=reset-password）
+// 解决"诊所编辑弹窗改错账号"问题：用户管理列表每个账号一行，点该行按钮即可，杜绝填错
+async function resetUserPassword(username) {
+    const newPassword = prompt('为账号「' + username + '」设置新登录密码：\n\n（至少 8 位，须同时包含字母和数字）', '');
+    if (newPassword === null) return;
+    if (!newPassword || newPassword.length < 8) {
+        showAlert('userAlert', '密码至少 8 位', 'error');
+        return;
+    }
+    if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+        showAlert('userAlert', '密码必须同时包含字母和数字', 'error');
+        return;
+    }
+    if (!confirm('确认将账号「' + username + '」的密码重置为：' + newPassword + '？\n\n重置后将清除该账号的登录失败计数，可用新密码立即登录。\n本操作会记入审计日志。')) return;
+    try {
+        const res = await fetch(API_BASE + '/users?action=reset-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ username: username, password: newPassword })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showAlert('userAlert', '✅ 密码已重置，账号「' + username + '」可用新密码立即登录' + (data.clinicName ? '（诊所：' + data.clinicName + '）' : ''), 'success');
+        } else if (res.status === 401) {
+            showAlert('userAlert', '登录已过期，请重新登录', 'error');
+            setTimeout(doLogout, 1500);
+        } else {
+            showAlert('userAlert', '重置密码失败：' + escapeHtml(data.error || ('HTTP ' + res.status)), 'error');
         }
     } catch (e) {
         showAlert('userAlert', '网络错误：' + escapeHtml(e.message), 'error');

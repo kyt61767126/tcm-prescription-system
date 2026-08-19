@@ -436,6 +436,78 @@ export async function onRequest(context) {
             });
         }
 
+        // ===== 平台总管理员按用户名精确重置密码 POST /users?action=reset-password =====
+        // ★ 2026-08-20 新增：解决"改密码改错账号"问题。按 username 精确定位（username 或 phone 匹配），
+        //   平台管理员可直接重置任意诊所用户/平台管理员密码，不再依赖"诊所编辑弹窗找第一个 admin"。
+        if (method === 'POST' && url.searchParams.get('action') === 'reset-password') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isPlatformAdmin(authUser)) {
+                return json({ success: false, error: '未授权：仅平台总管理员可重置密码' }, 401, context.request);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const targetUsername = (body.username || '').trim();
+            const newPassword = (body.password || '');
+            if (!targetUsername) {
+                return json({ success: false, error: '请提供要重置密码的用户名' }, 400, context.request);
+            }
+            if (newPassword.length < 8) {
+                return json({ success: false, error: '密码至少8位' }, 400, context.request);
+            }
+            if (newPassword.length > 128) {
+                return json({ success: false, error: '密码过长（最多128位）' }, 400, context.request);
+            }
+            if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+                return json({ success: false, error: '密码必须同时包含字母和数字' }, 400, context.request);
+            }
+
+            // 精确定位目标用户（平台管理员或任一诊所用户）
+            const found = await findUserForLogin(kv, targetUsername);
+            if (!found || !found.user) {
+                return json({ success: false, error: '用户不存在', errorCode: 'USER_NOT_FOUND' }, 404, context.request);
+            }
+
+            const { passwordHash, salt } = await hashPassword(newPassword);
+            found.user.passwordHash = passwordHash;
+            found.user.salt = salt;
+            found.user.updatedAt = getNowISO();
+
+            if (found.clinicId) {
+                const users = (await kv.get(`clinic:${found.clinicId}:users`, 'json')) || [];
+                const idx = users.findIndex(u => u.username === found.user.username);
+                if (idx !== -1) {
+                    users[idx] = found.user;
+                    await kv.put(`clinic:${found.clinicId}:users`, JSON.stringify(users));
+                } else {
+                    return json({ success: false, error: '诊所用户数据异常，未写入' }, 500, context.request);
+                }
+            } else {
+                const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+                const idx = admins.findIndex(u => u.username === found.user.username);
+                if (idx !== -1) {
+                    admins[idx] = found.user;
+                    await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(admins));
+                } else {
+                    return json({ success: false, error: '平台管理员数据异常，未写入' }, 500, context.request);
+                }
+            }
+
+            // 同时清除失败计数，避免重置后仍被锁定拦截
+            await clearLoginFailures(kv, found.user.username);
+
+            // 审计
+            await writeAuditLog(kv, found.clinicId || null, authUser.username, authUser.role,
+                'reset_password', found.user.username, context.request,
+                { targetClinicId: found.clinicId || null, targetClinicName: found.clinicName || null });
+
+            return json({
+                success: true,
+                username: found.user.username,
+                clinicName: found.clinicName || null,
+                message: '密码已重置，可立即登录'
+            });
+        }
+
         // ===== 公开诊断端点 GET /users?diagnose=username&key=xxx =====
         // 用于临时排查账号问题，需要 DIAGNOSE_KEY 环境变量验证
         if (method === 'GET' && url.searchParams.get('diagnose')) {
