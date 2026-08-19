@@ -233,6 +233,40 @@ if errorlevel 1 (
 )
 echo [OK] Original code restored
 echo.
+REM 2026-08-19 POST-BUILD CONSOLIDATION: if we used build_output_<ts> fallback dir (dist was locked)
+REM   now try to move results back to dist so user always finds deliverable in dist/ (project convention)
+REM   Do NOT fail build if move fails (dist might still be locked); just report and keep alt dir.
+set "DEFAULT_OUTPUT=dist"
+if /i not "%OUTPUT_DIR%"=="%DEFAULT_OUTPUT%" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[INFO] Used fallback dir %OUTPUT_DIR%, attempting to consolidate back to %DEFAULT_OUTPUT%...'"
+    REM Try to wipe stale contents inside dist first (best-effort, partial failure OK)
+    if exist "%DEFAULT_OUTPUT%" (
+        for /f "delims=" %%E in ('dir /b "%DEFAULT_OUTPUT%" 2^>nul') do (
+            if exist "%DEFAULT_OUTPUT%\%%E\*" ( rmdir /s /q "%DEFAULT_OUTPUT%\%%E" 2>nul ) else ( del /f /q "%DEFAULT_OUTPUT%\%%E" 2>nul )
+        )
+    ) else ( mkdir "%DEFAULT_OUTPUT%" )
+    REM Move all files+dirs from OUTPUT_DIR -> DEFAULT_OUTPUT (robocopy-style move)
+    set "MOVE_OK=1"
+    for /f "delims=" %%E in ('dir /b "%OUTPUT_DIR%" 2^>nul') do (
+        move /Y "%OUTPUT_DIR%\%%E" "%DEFAULT_OUTPUT%\%%E" >nul 2>nul
+        if errorlevel 1 (
+            REM move failed: try copy + delete fallback for directories
+            if exist "%OUTPUT_DIR%\%%E\*" (
+                xcopy /E /I /Y /Q "%OUTPUT_DIR%\%%E" "%DEFAULT_OUTPUT%\%%E" >nul 2>nul
+                if exist "%DEFAULT_OUTPUT%\%%E" ( rmdir /s /q "%OUTPUT_DIR%\%%E" 2>nul ) else ( set "MOVE_OK=0" )
+            ) else ( set "MOVE_OK=0" )
+        )
+    )
+    if "!MOVE_OK!"=="1" (
+        rmdir "%OUTPUT_DIR%" 2>nul
+        set "OUTPUT_DIR=%DEFAULT_OUTPUT%"
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Consolidated output into %DEFAULT_OUTPUT% (fallback dir cleaned)'"
+    ) else (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Could not fully consolidate (dist still partially locked). Artifacts in both dirs.'"
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[INFO] Main deliverables: %CD%\%DEFAULT_OUTPUT%\ and fallback %CD%\%OUTPUT_DIR%\ '"
+    )
+)
+
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[9/9] Verify artifacts & finish...'"
 set "EXE_FILE="
