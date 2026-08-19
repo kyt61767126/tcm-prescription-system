@@ -4,7 +4,8 @@ import {
     isPlatformAdmin, isClinicAdmin, isAdmin, isLegacyPasswordHash,
     revokeAllUserTokens,
     ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR,
-    KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS
+    KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS,
+    findPhoneOccupancy
 } from './_lib/auth.js';
 import { provisionCloudAccount } from './license/_lib/admin-account.js';
 
@@ -1645,6 +1646,16 @@ export async function onRequest(context) {
                 return json({ success: false, error: '该手机号已注册，请直接登录；忘记密码请联系客服重置' }, 409, context.request);
             }
 
+            // ★ 2026-08-20 手机号激活申请占位拦截（一个号码只能注册一次，避免与激活流程冲突）：
+            //   手机号已有进行中/已通过的激活申请时，禁止再次自助注册，及时提醒用户。
+            const occ = await findPhoneOccupancy(kv, phone);
+            if (occ && occ.kind === 'pending_activation') {
+                return json({ success: false, error: '该手机号已有激活申请正在审核中，请耐心等待管理员审核' }, 409, context.request);
+            }
+            if (occ && occ.kind === 'activated') {
+                return json({ success: false, error: '该手机号已激活开通，请直接登录（登录账号=手机号）' }, 409, context.request);
+            }
+
             // 4. 诊所名称重名检查
             const clinics = await kv.get(KV_SYSTEM_CLINICS, 'json');
             const clinicList = clinics || [];
@@ -1713,7 +1724,15 @@ export async function onRequest(context) {
             // 可用性检查
             const found = await findUserForLogin(kv, phone);
             if (found && found.user) {
-                return json({ available: false, reason: '该手机号已注册，请直接登录', phone });
+                return json({ available: false, reason: '该手机号已注册，请直接登录', error: '该手机号已注册，请直接登录', phone });
+            }
+            // ★ 2026-08-20 激活申请占位检查：手机号已被激活流程占用时，预检即提示不可注册
+            const occ = await findPhoneOccupancy(kv, phone);
+            if (occ && occ.kind === 'pending_activation') {
+                return json({ available: false, reason: '该手机号已有激活申请正在审核中，请耐心等待', error: '该手机号已有激活申请正在审核中，请耐心等待', phone });
+            }
+            if (occ && occ.kind === 'activated') {
+                return json({ available: false, reason: '该手机号已激活开通，请直接登录', error: '该手机号已激活开通，请直接登录', phone });
             }
             return json({ available: true, phone });
         }
