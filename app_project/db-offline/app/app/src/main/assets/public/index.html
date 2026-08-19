@@ -2106,7 +2106,7 @@ let currentUser = null;
                     var btn2 = document.getElementById('mobileActionBtn2');
                     if (btn2) {
                         var isApp = !!(window.AndroidNative || (window.Capacitor && window.Capacitor.isNativePlatform));
-                        btn2.innerHTML = '🔐 修改密码';
+                        btn2.innerHTML = isApp ? '🔐 改密' : '🔐 修改密码';
                         btn2.onclick = function () { try { showChangePwdModal(); } catch (_) {} };
                         btn2.style.display = '';
                     }
@@ -2156,7 +2156,7 @@ let currentUser = null;
             if (!btn2 || !currentUser) return;
 
             const isApp = !!window.AndroidNative;
-            const changePwdText = '🔐 修改密码';
+            const changePwdText = isApp ? '🔐 改密' : '🔐 修改密码';
 
             // ★ 标准版：固定显示"改密"，不显示"用户管理"
             if (CONFIG.edition === 'personal') {
