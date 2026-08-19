@@ -287,6 +287,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <button class="tab-btn" data-tab="Users" onclick="switchTab('Users')">👥 用户管理</button>
             <button class="tab-btn" data-tab="TestMachine" onclick="switchTab('TestMachine')">🖥 测试机管理</button>
             <button class="tab-btn" data-tab="DeviceVersion" onclick="switchTab('DeviceVersion')">🔓 设备绑定</button>
+            <button class="tab-btn" data-tab="AuditLogs" onclick="switchTab('AuditLogs')">📊 审计日志</button>
         </div>
 
         <!-- 激活码管理标签页（原有内容） -->
@@ -568,6 +569,54 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </div>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">说明：客户端激活窗口选择"管理员激活"模式提交的请求会出现在此列表。点击"审核"查看客户完整信息并一键通过/拒绝。通过后客户端将在 5 秒内自动获取 license 并重启。</p>
+        </div>
+
+        <!-- ★ 审计日志标签页（P2-C 可视化 + P2-D 用户操作历史） -->
+        <div id="tabAuditLogs" class="tab-content">
+            <div id="auditAlert" class="alert"></div>
+
+            <!-- 筛选栏 -->
+            <div class="filter-bar">
+                <label style="font-size:12px;color:#909399;display:flex;align-items:center;gap:4px;">日期
+                    <input type="date" id="auditDateFrom" style="width:140px;">
+                    ~
+                    <input type="date" id="auditDateTo" style="width:140px;">
+                </label>
+                <select id="auditClinicSel" style="max-width:200px;">
+                    <option value="all">全部范围</option>
+                    <option value="platform">平台级操作</option>
+                </select>
+                <input type="text" id="auditUsername" placeholder="按用户名查操作历史" style="width:160px;">
+                <select id="auditActionSel" style="max-width:180px;">
+                    <option value="">全部动作</option>
+                </select>
+                <button class="btn btn-primary btn-sm" onclick="loadAuditLogs()">🔍 查询</button>
+                <button class="btn btn-sm" onclick="exportAuditCsv()">📥 导出CSV</button>
+            </div>
+
+            <!-- 统计摘要 -->
+            <div id="auditSummary" style="margin:10px 0;font-size:13px;color:#606266;">尚未查询</div>
+
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:150px;">时间</th>
+                            <th style="width:140px;">诊所/范围</th>
+                            <th style="width:110px;">用户名</th>
+                            <th style="width:90px;">角色</th>
+                            <th style="width:130px;">动作</th>
+                            <th>目标</th>
+                            <th style="width:120px;">IP</th>
+                            <th style="width:220px;">详情</th>
+                        </tr>
+                    </thead>
+                    <tbody id="auditLogsBody">
+                        <tr><td colspan="8" class="empty">切换到此页后自动加载当日日志</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">说明：审计日志记录登录/改密/解锁/诊所管理/用户导入导出/处方删除等敏感操作，保留 90 天（每天每范围最多 1000 条），单次查询跨度最多 31 天。在"用户名"输入框中输入账号即可查询该用户的完整操作历史。</p>
         </div>
     </div>
 </div>
@@ -2066,6 +2115,175 @@ function switchTab(tabName) {
     else if (tabName === 'AdminActivate') loadAdminActivateList();
     else if (tabName === 'TestMachine') loadTestMachines();
     else if (tabName === 'DeviceVersion') loadDeviceBindings();
+    else if (tabName === 'AuditLogs') initAuditLogsTab();
+}
+
+// ===== ★ 审计日志（P2-C 可视化 + P2-D 用户操作历史查询）=====
+// 动作类型中文映射（与后端 writeAuditLog 写入的 action 保持一致）
+const AUDIT_ACTION_LABELS = {
+    login_success: '登录成功', login_failed: '登录失败',
+    unlock_account: '解锁账号',
+    change_password_success: '改密成功', change_password_failed: '改密失败',
+    reset_platform_admin: '重置管理员密码', reset_platform_admin_denied: '重置被拒',
+    create_clinic: '创建诊所', update_clinic: '更新诊所', register_clinic: '诊所注册',
+    export_users: '导出用户', import_users: '导入用户',
+    prescription_soft_delete: '处方软删除', prescription_permanent_delete: '处方永久删除',
+    register_rate_limited: '注册限流', bootstrap_rate_limited: '引导限流'
+};
+const AUDIT_ROLE_LABELS = {
+    platform_admin: '平台管理员', clinic_admin: '诊所管理员',
+    doctor: '医生', admin: '管理员', user: '用户', unknown: '未知'
+};
+let auditClinicMap = {};   // clinicId -> name
+let auditClinicsLoaded = false;
+let auditLastQuery = null; // 导出CSV复用当前查询参数
+
+// 进入标签页：首次初始化日期默认值/诊所下拉/动作下拉，然后加载
+async function initAuditLogsTab() {
+    const today = new Date().toISOString().split('T')[0];
+    const fromEl = document.getElementById('auditDateFrom');
+    const toEl = document.getElementById('auditDateTo');
+    if (!fromEl.value) fromEl.value = today;
+    if (!toEl.value) toEl.value = today;
+    // 填充动作下拉（仅一次）
+    const actionEl = document.getElementById('auditActionSel');
+    if (actionEl.options.length <= 1) {
+        for (const [k, v] of Object.entries(AUDIT_ACTION_LABELS)) {
+            const opt = document.createElement('option');
+            opt.value = k; opt.textContent = v;
+            actionEl.appendChild(opt);
+        }
+    }
+    if (!auditClinicsLoaded) await loadAuditClinics();
+    loadAuditLogs();
+}
+
+// 拉诊所列表填充范围下拉 + 名称映射
+async function loadAuditClinics() {
+    try {
+        const res = await fetch(API_BASE + '/users?clinics=true', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (!data.success || !Array.isArray(data.data)) return;
+        const sel = document.getElementById('auditClinicSel');
+        auditClinicMap = {};
+        for (const c of data.data) {
+            auditClinicMap[c.id] = c.name || c.id;
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.name || c.id;
+            sel.appendChild(opt);
+        }
+        auditClinicsLoaded = true;
+    } catch (e) {
+        showAlert('auditAlert', '诊所列表加载失败（不影响平台级查询）：' + e.message, 'error');
+    }
+}
+
+// 查询审计日志；exportMode=1 时静默拉满 2000 条用于CSV
+async function loadAuditLogs(exportMode) {
+    const bodyEl = document.getElementById('auditLogsBody');
+    const sumEl = document.getElementById('auditSummary');
+    const params = new URLSearchParams();
+    params.set('dateFrom', document.getElementById('auditDateFrom').value || '');
+    params.set('dateTo', document.getElementById('auditDateTo').value || '');
+    params.set('clinicId', document.getElementById('auditClinicSel').value || 'all');
+    params.set('username', document.getElementById('auditUsername').value.trim());
+    params.set('action', document.getElementById('auditActionSel').value || '');
+    if (!params.get('dateFrom') || !params.get('dateTo')) {
+        showAlert('auditAlert', '请选择查询日期范围', 'error');
+        return null;
+    }
+    if (exportMode) params.set('limit', '2000'); else params.set('limit', '500');
+    auditLastQuery = params.toString();
+
+    if (!exportMode) {
+        bodyEl.innerHTML = '<tr><td colspan="8" class="loading">查询中...</td></tr>';
+        sumEl.textContent = '查询中...';
+    }
+    try {
+        const res = await fetch(API_BASE + '/audit-logs?' + params.toString(), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || ('HTTP ' + res.status));
+        const okAlert = document.getElementById('auditAlert');
+        if (okAlert) okAlert.className = 'alert'; // 成功时清隐提示框
+        const logs = data.logs || [];
+        if (!exportMode) {
+            sumEl.innerHTML = '命中 <strong>' + data.total + '</strong> 条' +
+                (data.shown < data.total ? '，当前显示前 ' + data.shown + ' 条（导出CSV可取前2000条）' : '') +
+                '　|　扫描分片 ' + data.scannedKeys + ' 个　|　范围 ' + (data.clinicId === 'all' ? '全部' : (data.clinicId === 'platform' ? '平台级' : (auditClinicMap[data.clinicId] || data.clinicId))) +
+                '　|　' + data.dateFrom + ' ~ ' + data.dateTo;
+            if (logs.length === 0) {
+                bodyEl.innerHTML = '<tr><td colspan="8" class="empty">该条件下无审计记录</td></tr>';
+            } else {
+                bodyEl.innerHTML = logs.map(renderAuditRow).join('');
+            }
+        }
+        return data;
+    } catch (e) {
+        if (!exportMode) {
+            bodyEl.innerHTML = '<tr><td colspan="8" class="empty">查询失败</td></tr>';
+            sumEl.textContent = '查询失败';
+        }
+        showAlert('auditAlert', '审计日志查询失败：' + e.message, 'error');
+        return null;
+    }
+}
+
+// 单行渲染
+function renderAuditRow(e) {
+    const ts = e.timestamp ? new Date(e.timestamp).toLocaleString('zh-CN', { hour12: false }) : '-';
+    const scope = e.clinicId === 'platform' ? '平台级' : (auditClinicMap[e.clinicId] || e.clinicId || '-');
+    const role = AUDIT_ROLE_LABELS[e.role] || e.role || '-';
+    const actionName = AUDIT_ACTION_LABELS[e.action] || e.action;
+    let extra = '';
+    if (e.extra && Object.keys(e.extra).length > 0) {
+        const s = JSON.stringify(e.extra);
+        extra = '<span title="' + escapeHtml(s) + '">' + escapeHtml(s.length > 60 ? s.slice(0, 60) + '…' : s) + '</span>';
+    }
+    const isFail = /failed|denied|rate_limited|permanent_delete/.test(e.action || '');
+    return '<tr>' +
+        '<td style="white-space:nowrap;">' + escapeHtml(ts) + '</td>' +
+        '<td>' + escapeHtml(scope) + '</td>' +
+        '<td>' + escapeHtml(e.username || '-') + '</td>' +
+        '<td>' + escapeHtml(role) + '</td>' +
+        '<td>' + (isFail ? '<span class="tag tag-expired">' : '<span class="tag tag-personal">') + escapeHtml(actionName) + '</span></td>' +
+        '<td style="word-break:break-all;">' + escapeHtml(e.target || '-') + '</td>' +
+        '<td style="word-break:break-all;">' + escapeHtml(e.ip || '-') + '</td>' +
+        '<td style="word-break:break-all;font-size:12px;color:#909399;">' + (extra || '-') + '</td>' +
+        '</tr>';
+}
+
+// 导出当前条件的审计日志 CSV（UTF-8 BOM 防中文乱码）
+async function exportAuditCsv() {
+    if (!auditLastQuery) {
+        showAlert('auditAlert', '请先执行一次查询，再导出', 'error');
+        return;
+    }
+    const data = await loadAuditLogs(1);
+    if (!data || !Array.isArray(data.logs) || data.logs.length === 0) {
+        showAlert('auditAlert', '当前条件下无可导出的记录', 'error');
+        return;
+    }
+    const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+    const lines = [['时间', '范围', '诊所ID', '用户名', '角色', '动作', '目标', 'IP', 'UserAgent', '详情'].map(esc).join(',')];
+    for (const e of data.logs) {
+        lines.push([
+            e.timestamp, e.clinicId === 'platform' ? '平台级' : (auditClinicMap[e.clinicId] || e.clinicId),
+            e.clinicId, e.username, AUDIT_ROLE_LABELS[e.role] || e.role,
+            AUDIT_ACTION_LABELS[e.action] || e.action, e.target, e.ip, e.userAgent,
+            e.extra && Object.keys(e.extra).length ? JSON.stringify(e.extra) : ''
+        ].map(esc).join(','));
+    }
+    const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = '审计日志_' + data.dateFrom + '_' + data.dateTo + '.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
 }
 
 // ===== ★ 设备版本绑定管理 =====
