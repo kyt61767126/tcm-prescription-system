@@ -1141,7 +1141,8 @@ export async function onRequest(context) {
         }
 
         // ===== GET 用户列表 =====
-        if (method === 'GET') {
+        // （排除 check-register 注册预检，避免带该参数的 GET 被此登录态分支拦截）
+        if (method === 'GET' && !url.searchParams.get('check-register')) {
             const currentUser = await parseAuthHeader(context.request, context.env);
             if (!currentUser) {
                 return json({ success: false, error: '未授权访问' }, 401);
@@ -1174,7 +1175,11 @@ export async function onRequest(context) {
         }
 
         // ===== POST 保存用户列表 =====
-        if (method === 'POST') {
+        // ★ 2026-08-20 修复：排除所有带 action 参数的特殊分支（register-clinic/unlock/bootstrap/
+        //   reset-platform-admin/reset-public/change-password/import/xxx），这些分支在下方按
+        //   url.searchParams.get('action') 分别处理；若不排除，注册等请求会被本分支拦截并因
+        //   缺少 body.users 返回 400 "Missing or invalid users data"，导致注册开通失效
+        if (method === 'POST' && !url.searchParams.get('action')) {
             const body = await context.request.json().catch(() => ({}));
             if (!body.users || !Array.isArray(body.users)) {
                 return json({ success: false, error: 'Missing or invalid users data' }, 400);
