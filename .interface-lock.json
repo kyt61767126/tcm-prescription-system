@@ -1,30 +1,30 @@
 ﻿{
-    "generated_at":  "2026-08-19 08:48:21 +08:00",
+    "generated_at":  "2026-08-19 09:06:26 +08:00",
     "description":  "Interface structure fingerprint. SHA256 of HTML body (before first \u003cscript\u003e). Changes to \u003cscript\u003e blocks do NOT affect fingerprint.",
     "files":  {
                   "app_project/db-yunduan/cloud_desktop/index.html":  {
-                                                                          "sha256":  "ea1af43498c42c9972c8b2411d01cf92bfb98bf39b096298467e49d606c71893",
-                                                                          "html_length":  24758
+                                                                          "sha256":  "791dc3aa1ca93ff0e4daae65704408a0fec028dbd09be27bd37885a33e6289e6",
+                                                                          "html_length":  24765
                                                                       },
                   "public/index.html":  {
                                             "sha256":  "ed2a989670a8fe746668d40c28c62bc8dc7356ba374a2d306326be2f79d6b8b2",
                                             "html_length":  24761
                                         },
                   "app_project/db-offline/desktop/index.html":  {
-                                                                    "sha256":  "c24680a3e54c812951000b15bc9db7e1b089157a8728090a687cc2ec090cd0a1",
-                                                                    "html_length":  24735
+                                                                    "sha256":  "78f10b67ebd0575d05cadd575a216c22e601acfe428ab3c8a7c7b46abecb3c9e",
+                                                                    "html_length":  24765
                                                                 },
                   "app_project/db-yunduan/cloud_desktop/electron/login.html":  {
-                                                                                   "sha256":  "cc20acd4469408dfa392b30fd4a497039880edd5eedbf342410169ddb44ee90c",
-                                                                                   "html_length":  4705
+                                                                                   "sha256":  "bd764d0d586222f5ef70eacc3934589cd8fff1f132a65541b57a54db5b2c9600",
+                                                                                   "html_length":  4733
                                                                                },
                   "public/electron/login.html":  {
-                                                     "sha256":  "61a34bacfbd2b45dfdbc13846277e4c3a375c2a0fade84f86bc73eaa3ca66ad0",
-                                                     "html_length":  1639
+                                                     "sha256":  "dced25f5b1bfa10d2a6a7dfa61a597302763d51bea7a1a255484b66ed04f4e2a",
+                                                     "html_length":  1667
                                                  },
                   "app_project/db-offline/desktop/electron/login.html":  {
-                                                                             "sha256":  "589d6a9057d1db87d0415043c3f6136f06684b10f387f65a521d87878bf2e280",
-                                                                             "html_length":  4808
+                                                                             "sha256":  "4510acf270e2b23cd4bc00f7c347e59723954cad16e027c839c5e50ab0d0b413",
+                                                                             "html_length":  4836
                                                                          }
               }
 }

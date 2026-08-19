@@ -149,10 +149,16 @@
         $('clinicName').textContent = name;
     }
 
+    // ★ 2026-08-19 登录前保持「登录后显示版本」待登录提示，登录成功后置 _loggedIn 再刷新真实版本
+    let _loggedIn = false;
+    let _configForTag = null;
+
     // ★ 统一安装包：登录窗口版本标签按 config.edition 动态显示（离线标准版/离线机构版）
     function applyEditionTag(config) {
         var tag = document.querySelector('.version-tag');
         if (!tag) return;
+        // ★ 登录前不写真实版本（保持待登录提示），登录成功后才刷新
+        if (!_loggedIn) return;
         var e = (config && config.edition) || '';
         var inst = ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'].indexOf(e) >= 0;
         tag.textContent = '【' + (inst ? '离线机构版' : '离线标准版') + '】';
@@ -360,6 +366,9 @@
             } catch(e) { console.warn('同步用户列表失败:', e); }
 
             if (window.electronAPI && window.electronAPI.loginSuccess) {
+                // ★ 2026-08-19 登录成功：待登录提示 → 刷新为真实版本
+                _loggedIn = true;
+                applyEditionTag(_configForTag);
                 // ★ 绿色成功反馈：登录成功提示
                 showGreenHint(`✓ 登录成功！欢迎 ${user.name || user.username}，正在进入系统...`);
                 await window.electronAPI.loginSuccess(userData);
@@ -412,7 +421,8 @@
         // ★ 主动清理历史遗留用户（在渲染登录界面之前）
         cleanLegacyUsers();
         loadClinicName(config);
-        applyEditionTag(config);
+        _configForTag = config;
+        applyEditionTag(config); // 登录前 _loggedIn=false 保持「登录后显示版本」待登录提示
         initLoginInput(config);
         initLoginPermissions();
         // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码
