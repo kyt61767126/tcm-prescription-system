@@ -2,7 +2,10 @@
 # All Chinese menu logic moved here from 一键打包.bat to avoid cmd GBK encoding issues
 # .ps1 with BOM can correctly handle UTF-8 Chinese display
 param(
-    [string]$AutoMode = ""   # 非空时跳过菜单直接执行：1=云端 2=本地 3=全部，全程不暂停，完成后自动退出
+    [string]$AutoMode = "",   # 非空时跳过菜单直接执行：1=云端 2=本地 3=全部，全程不暂停，完成后自动退出
+    [switch]$AutoCommit,      # P1-B: 打包完成后自动收纳打包副作用（versionCode/version/hash-manifest 提交并推送；index.html 等其余变更仅列出待人工确认）
+    [switch]$CollectSideEffectsOnly,  # P1-B: 仅执行打包副作用收纳（预览/测试用，不打包）
+    [switch]$DryRun           # P1-B: 配合收纳逻辑，只打印将执行的 git 命令不实际执行（测试用）
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -101,6 +104,88 @@ function Show-LatestExe {
     }
     $ftime = $exe.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
     Write-Host ("  {0}: {1}  文件时间 {2}" -f $Label, $exe.Name, $ftime) -ForegroundColor Green
+}
+
+# ============ P1-B 打包副作用收纳 ============
+# 背景：全局审查 R3——打包副作用（build.gradle versionCode / package.json version /
+#       hash-manifest.json）靠人工提交易遗漏，造成"本机有、仓库无"的基线偏差。
+# 原则：宁漏检不可误报——只自动收纳确定性副作用文件；index.html 等可能含手工改动
+#       的文件仅列出交人工确认，绝不盲目 git add -A。
+function Invoke-PackSideEffectCollect {
+    param(
+        [switch]$Commit,
+        [switch]$DryRun
+    )
+    Write-Host ""
+    Write-Host "--- 打包副作用收纳 (P1-B) ---" -ForegroundColor Cyan
+    $raw = & git -C $script:RootDir status --short 2>$null
+    if (-not $raw) {
+        Write-Host "  [OK] 工作区干净，无打包副作用" -ForegroundColor Green
+        return
+    }
+    # 确定性副作用（打包自动递增/重写）：仅这些允许自动收纳
+    $autoPatterns = @(
+        '^app_project/.+/build\.gradle$',       # APP versionCode 递增
+        '^app_project/.+/package\.json$',       # 桌面版本号递增
+        '^public/hash-manifest\.json$',         # 产物哈希清单
+        '^app_project/.+/hash-manifest\.json$'  # 产物哈希清单副本(若有)
+    )
+    # 可能含手工改动的文件：只列出，绝不自动收纳
+    $manualPatterns = @(
+        '^app_project/.+/index\.html$',
+        '^app_project/.+/\.interface-lock\.json$'
+    )
+    $auto = @(); $manual = @(); $other = @()
+    foreach ($line in $raw) {
+        if ($line.Length -lt 4) { continue }
+        $f = $line.Substring(3).Trim('"')
+        $cls = $null
+        foreach ($p in $manualPatterns) { if ($f -match $p) { $cls = 'manual'; break } }
+        if (-not $cls) { foreach ($p in $autoPatterns) { if ($f -match $p) { $cls = 'auto'; break } } }
+        if (-not $cls) { $cls = 'other' }
+        switch ($cls) {
+            'auto'   { $auto += $f }
+            'manual' { $manual += $f }
+            'other'  { $other += $f }
+        }
+    }
+    if ($auto.Count -gt 0) {
+        Write-Host "  确定性打包副作用（$($auto.Count) 个）:" -ForegroundColor Yellow
+        $auto | ForEach-Object { Write-Host "    $_" }
+        if ($Commit) {
+            $msgLines = @(
+                "build: 一键打包副作用自动收纳",
+                "",
+                "versionCode/version 递增与 hash-manifest 重写（one-click-pack.ps1 -AutoCommit 自动提交）。",
+                "文件:"
+            ) + @($auto | ForEach-Object { "- $_" })
+            $msg = $msgLines -join "`n"
+            if ($DryRun) {
+                Write-Host "  [DryRun] 将执行: git add -- $($auto -join ' ')" -ForegroundColor Magenta
+                Write-Host "  [DryRun] 将执行: git commit -m <收纳提交信息 $($auto.Count) 个文件>" -ForegroundColor Magenta
+                Write-Host "  [DryRun] 将执行: git push" -ForegroundColor Magenta
+            } else {
+                & git -C $script:RootDir add -- $auto
+                if ($LASTEXITCODE -ne 0) { Write-Host "  [WARN] git add 失败，请人工处理" -ForegroundColor Yellow; return }
+                & git -C $script:RootDir commit -m $msg
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "  [OK] 副作用已提交，推送中..." -ForegroundColor Green
+                    & git -C $script:RootDir push
+                    if ($LASTEXITCODE -ne 0) { Write-Host "  [WARN] push 失败，请稍后手动 git push" -ForegroundColor Yellow }
+                } else {
+                    Write-Host "  [WARN] 提交失败，请人工处理" -ForegroundColor Yellow
+                }
+            }
+        } else {
+            Write-Host "  提示: 加 -AutoCommit 可自动提交推送以上副作用文件" -ForegroundColor DarkGray
+        }
+    }
+    foreach ($grp in @(@('需人工确认-不自动收纳', $manual), @('其他变更-与本工具无关', $other))) {
+        if ($grp[1].Count -gt 0) {
+            Write-Host "  $($grp[0])（$($grp[1].Count) 个）:" -ForegroundColor Yellow
+            $grp[1] | ForEach-Object { Write-Host "    $_" }
+        }
+    }
 }
 
 # ============ Cloud Build ============
@@ -342,12 +427,18 @@ function Show-StandaloneUsage {
 # ============ Main Menu ============
 $menuStart = Get-TimeStamp
 
+# P1-B: 仅执行打包副作用收纳（预览/测试用，不打包）
+if ($CollectSideEffectsOnly) {
+    Invoke-PackSideEffectCollect -Commit:$AutoCommit -DryRun:$DryRun
+    exit 0
+}
+
 # 自动模式：跳过菜单直接执行对应打包，全部完成后提示结果并自动退出（不返回菜单）
 if ($AutoMode) {
     switch ($AutoMode) {
-        "1" { Build-Cloud -Target "all"; exit 0 }
-        "2" { Build-Offline -Version "dingzhi" -Target "all"; exit 0 }
-        "3" { Build-All; exit 0 }
+        "1" { Build-Cloud -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; exit 0 }
+        "2" { Build-Offline -Version "dingzhi" -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit; exit 0 }
+        "3" { Build-All; Invoke-PackSideEffectCollect -Commit:$AutoCommit; exit 0 }
         default {
             Write-Host "[ERROR] 无效自动模式: $AutoMode（应为 1=云端 2=本地 3=全部）" -ForegroundColor Red
             exit 1
@@ -383,9 +474,9 @@ while ($true) {
     Write-Host "--------------------------------------------"
     $choice = Read-Host "请选择 [0-7]"
     switch ($choice) {
-        "1" { Build-Cloud -Target "all" }
-        "2" { Build-Offline -Version "dingzhi" -Target "all" }
-        "3" { Build-All }
+        "1" { Build-Cloud -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
+        "2" { Build-Offline -Version "dingzhi" -Target "all"; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
+        "3" { Build-All; Invoke-PackSideEffectCollect -Commit:$AutoCommit }
         "5" { Show-PickVersionMenu -Mode "desktop" }
         "6" { Show-PickVersionMenu -Mode "app" }
         "7" { Show-StandaloneUsage }
