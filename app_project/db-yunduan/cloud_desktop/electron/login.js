@@ -494,6 +494,8 @@
         showTrialStatus();
         // ★ 2026-08-19 激活入口收敛：按激活状态显示/隐藏登录框极简提示
         updateLoginActivateHint();
+        // ★ 2026-08-19 云端桌面同步：登录框注入"管理员激活"入口
+        injectAdminActivateEntry();
 
         // ★ bnzc:// 一键激活：检查是否有待激活数据
         await checkBnzcPendingActivation(config);
@@ -626,6 +628,28 @@
             window.electronAPI.license.show();
         } else {
             alert('请在软件主菜单中选择「帮助 → 激活授权」打开激活窗口');
+        }
+    }
+
+    // ★ 2026-08-19 云端桌面同步：登录框注入"管理员激活"入口（与云端APP一致），调用 auth-core 的 openAdminActivate
+    function injectAdminActivateEntry() {
+        try {
+            if (!window.openAdminActivate) return; // auth-core(cloud.js) 未提供则跳过
+            if (document.getElementById('activateLoginEntry')) return; // 已注入过则跳过
+            const container = document.querySelector('.login-box .login-buttons');
+            if (!container) return;
+            const entry = document.createElement('div');
+            entry.id = 'activateLoginEntry';
+            entry.style.cssText = 'margin-top:12px;padding:0 4px;';
+            entry.innerHTML =
+                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 0;border-radius:7px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:12px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
+            container.parentNode.insertBefore(entry, container.nextSibling);
+            // 隐藏原有极简激活提示（避免重复入口）
+            const wrap = document.getElementById('activateHintWrap');
+            if (wrap) wrap.style.display = 'none';
+            console.log('[login] 登录框已注入 管理员激活 入口');
+        } catch (e) {
+            console.warn('[login] 注入 管理员激活 入口失败:', e);
         }
     }
 

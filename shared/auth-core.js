@@ -2041,12 +2041,15 @@
         try {
             // 登录框诊所名无条件同步（与 App/网页/桌面环境无关）
             syncLoginClinicName();
-            // 仅 APP 环境注入（参考离线APP：兼容 Capacitor 与 Android WebView）
+            // 云端APP环境注入（兼容 Capacitor 与 Android WebView）
             const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences)
                 || (typeof global.AndroidNative !== 'undefined')
                 || (typeof global.electronAPI !== 'undefined' && global.electronAPI.isAndroidAPP === true)
                 || (typeof location !== 'undefined' && location.href.indexOf('android_asset') >= 0);
-            if (!isApp) return;
+            // ★ 2026-08-19 云端桌面同步：Electron 桌面版（存在 activate.showExpireAlert 桥接）也在登录框注入"管理员激活"入口
+            const isCloudDesktop = (typeof global.electronAPI !== 'undefined' && global.electronAPI.activate
+                && typeof global.electronAPI.activate.showExpireAlert === 'function');
+            if (!isApp && !isCloudDesktop) return;
             const overlay = document.getElementById('loginOverlay');
             if (!overlay) return;
             // 已注入过则跳过，避免重复
