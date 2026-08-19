@@ -45,8 +45,22 @@ function main() {
             fail('embed 失败: ' + e.message);
         }
     } else if (cmd === 'verify') {
+        const fs = require('fs');
         const r = peGuard.verifyZone(abs);
         console.log('[PE-Zone] verify ' + JSON.stringify(r));
+        // ★ 2026-08-19：verify 同时校验 PE 布局合法性（区段指针对齐），
+        //   防止"哈希对但布局坏（exe 无法加载）"的产物通过门禁。
+        let layoutProblems = [];
+        try {
+            const buf = fs.readFileSync(abs);
+            layoutProblems = peGuard.validateLayout(buf, peGuard.parsePe(buf));
+        } catch (e) {
+            layoutProblems = [e.message];
+        }
+        if (layoutProblems.length > 0) {
+            console.error('[PE-Zone] PE layout invalid: ' + layoutProblems.join('; '));
+            process.exit(1);
+        }
         if (r.status === 'ok') process.exit(0);
         if (r.status === 'no-zone') process.exit(2);
         if (r.status === 'mismatch') {

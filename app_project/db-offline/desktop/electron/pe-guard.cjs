@@ -57,8 +57,12 @@ function parsePe(buf) {
     if (optOff + optSize > buf.length) throw new Error('Optional header out of range');
     const magic = buf.readUInt16LE(optOff);
     const isPe32Plus = magic === 0x20B;
-    const fileAlign = isPe32Plus ? buf.readUInt32LE(optOff + 36) : buf.readUInt32LE(optOff + 32);
-    const sectionAlign = isPe32Plus ? buf.readUInt32LE(optOff + 40) : buf.readUInt32LE(optOff + 32 + 4);
+    // ★ 修复（2026-08-19）：PE32/PE32+ 的 SectionAlignment 均在 optOff+32、
+    //   FileAlignment 均在 optOff+36。旧代码 PE32+ 读 optOff+40（那是
+    //   MajorOperatingSystemVersion，Electron 是 10.0 → secAlign 误读为 10），
+    //   PE32 分支两值互换，导致 .bnzc 的 VA/VirtualSize/SizeOfImage 全算错。
+    const sectionAlign = buf.readUInt32LE(optOff + 32);
+    const fileAlign = buf.readUInt32LE(optOff + 36);
     const sizeOfImage = buf.readUInt32LE(optOff + 56);
     const sectionTableOff = optOff + optSize;
     const headerSize = sectionTableOff + numSections * 40;
@@ -137,6 +141,21 @@ function readZonePayload(buf, pe, zone) {
 // ---------------------------------------------------------------------------
 // 追加新区段（仅当 .bnzc 不存在时）
 // ---------------------------------------------------------------------------
+// ★ 重写（2026-08-19）：旧实现无条件"既有区段 PointerToRawData +40"，
+//   破坏 FileAlignment 对齐（合法指针 0x600 → 0x628 非对齐），Windows 加载器
+//   直接拒绝加载（STATUS_INVALID_IMAGE_FORMAT，"不是有效应用程序"）——1.0.61
+//   起所有桌面 exe 均因此损坏。此前验证只跑 pe-guard 自身哈希校验（不查布局），
+//   从未实际启动过被嵌入的 exe，故未暴露。
+//
+//   新策略：
+//     A. 零移动（常态）：section table 结束处到首个 raw 区段之间通常有
+//        FileAlignment 填充空隙；空隙 ≥40 字节时把 .bnzc header 写入空隙，
+//        新区段数据追加到文件末尾——不改动文件任何既有字节。
+//     B. 移动兜底（罕见，空隙 <40）：raw 数据区整体后移 delta 字节，
+//        delta = align(headerLen+40, fileAlign) - firstRawPtr，必为
+//        fileAlign 倍数，保证所有指针保持对齐；同时更新 SizeOfHeaders。
+//   区段 VA 按 SectionAlignment 对齐（旧代码因 secAlign 误读为 10 未对齐）。
+// ---------------------------------------------------------------------------
 function buildWithNewSection(orig, pe, payload) {
     const fileAlign = pe.fileAlign || 0x200;
     const secAlign = pe.sectionAlign || 0x1000;
@@ -146,20 +165,48 @@ function buildWithNewSection(orig, pe, payload) {
     const last = pe.sections[pe.sections.length - 1];
     const lastVAEnd = last ? (last.virtualAddress + last.virtualSize) : 0;
     const newVA = align(Math.max(lastVAEnd, secAlign), secAlign);
-    const newVirtualSize = align(payloadLen, secAlign);
+    const newVirtualSize = payloadLen; // 内存大小=载荷实际长度；需对齐的是 VA 与 SizeOfRawData
+    const sizeOfImageDelta = align(payloadLen, secAlign);
 
-    const headerLen = pe.headerSize; // section table 结束处 = raw 数据起点
-    const rawStart = headerLen;
-    const rawLen = orig.length - rawStart;
-    const newHeaderLen = headerLen + 40;
-    const zoneRawPtr = align(newHeaderLen + rawLen, fileAlign);
-    const outLen = zoneRawPtr + alignedPayloadLen;
-    const out = Buffer.alloc(outLen, 0);
+    const headerLen = pe.headerSize; // 原 section table 结束位置
 
-    // 1. header 区（含原 section table）
-    orig.copy(out, 0, 0, headerLen);
+    // 既有区段 raw 数据起点（忽略 rawPtr=0 的纯内存区段）
+    let firstRawPtr = Infinity;
+    for (const s of pe.sections) {
+        if (s.rawPtr > 0 && s.rawPtr < firstRawPtr) firstRawPtr = s.rawPtr;
+    }
+    if (!isFinite(firstRawPtr)) firstRawPtr = align(headerLen, fileAlign);
 
-    // 2. 新增 .bnzc section header
+    let out;
+    let zoneRawPtr;
+    if (firstRawPtr - headerLen >= 40) {
+        // 情形 A：零移动。原文件原样保留（含 overlay），.bnzc header 写入表后空隙。
+        zoneRawPtr = align(orig.length, fileAlign);
+        const outLen = zoneRawPtr + alignedPayloadLen;
+        out = Buffer.alloc(outLen, 0);
+        orig.copy(out, 0, 0, orig.length);
+    } else {
+        // 情形 B：空隙不足，raw 区整体后移（delta 为 fileAlign 倍数，保持对齐）。
+        const newFirstRawPtr = align(headerLen + 40, fileAlign);
+        const delta = newFirstRawPtr - firstRawPtr; // ≥0 且 ≡0 (mod fileAlign)
+        zoneRawPtr = align(orig.length + delta, fileAlign);
+        const outLen = zoneRawPtr + alignedPayloadLen;
+        out = Buffer.alloc(outLen, 0);
+        // 1. header 区（含原 section table）
+        orig.copy(out, 0, 0, headerLen);
+        // 2. raw 数据区（首个 raw 起，含 overlay）整体后移 delta
+        orig.copy(out, newFirstRawPtr, firstRawPtr, orig.length);
+        // 3. 既有区段 PointerToRawData +delta（保持 fileAlign 对齐）
+        for (let i = 0; i < pe.numSections; i++) {
+            const so = pe.sectionTableOff + i * 40;
+            const oldPtr = out.readUInt32LE(so + 20);
+            if (oldPtr > 0) out.writeUInt32LE(oldPtr + delta, so + 20);
+        }
+        // 4. SizeOfHeaders 同步为新的 raw 起点保持合法
+        out.writeUInt32LE(newFirstRawPtr, pe.optOff + 60);
+    }
+
+    // 写入 .bnzc section header（两种情形位置相同：原 table 末尾）
     const hOff = pe.sectionTableOff + pe.numSections * 40;
     out.write(SECTION_NAME.padEnd(8, '\u0000').slice(0, 8), hOff, 8, 'ascii');
     out.writeUInt32LE(newVirtualSize, hOff + 8);
@@ -173,26 +220,36 @@ function buildWithNewSection(orig, pe, payload) {
     // INITIALIZED_DATA(0x40) | READ(0x40000000)
     out.writeUInt32LE(0x40000040, hOff + 36);
 
-    // 3. NumberOfSections +1
+    // NumberOfSections +1
     out.writeUInt16LE(pe.numSections + 1, pe.peOff + 6);
+    // SizeOfImage += 新区段对齐后虚拟大小
+    out.writeUInt32LE(pe.sizeOfImage + sizeOfImageDelta, pe.sizeOfImageOffset);
 
-    // 4. 既有 section 的 PointerToRawData 整体后移 40（raw 数据区前移了 header）
-    for (let i = 0; i < pe.numSections; i++) {
-        const so = pe.sectionTableOff + i * 40;
-        const oldPtr = out.readUInt32LE(so + 20);
-        out.writeUInt32LE(oldPtr + 40, so + 20);
-    }
-
-    // 5. SizeOfImage += 新区段对齐后虚拟大小
-    out.writeUInt32LE(pe.sizeOfImage + newVirtualSize, pe.sizeOfImageOffset);
-
-    // 6. raw 数据区（原文件 header 之后的所有字节，含可能存在的 overlay）
-    orig.copy(out, newHeaderLen, rawStart, orig.length);
-
-    // 7. .bnzc payload
+    // .bnzc payload（写入文件末尾的区段数据区）
     payload.copy(out, zoneRawPtr, 0, payloadLen);
 
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// 布局合法性检查（防回归）：Windows 加载器要求 PointerToRawData 按
+// FileAlignment 对齐、VirtualAddress 按 SectionAlignment 对齐；旧版 bug
+// 正是破坏对齐导致"不是有效的应用程序"，此函数确保此类损坏永远无法入库。
+// ---------------------------------------------------------------------------
+function validateLayout(buf, pe) {
+    const problems = [];
+    for (const s of pe.sections) {
+        if (s.rawPtr > 0 && s.rawPtr % pe.fileAlign !== 0) {
+            problems.push('section ' + (s.name || '?') + ' rawPtr 0x' + s.rawPtr.toString(16) + ' not aligned to fileAlign 0x' + pe.fileAlign.toString(16));
+        }
+        if (s.virtualAddress > 0 && s.virtualAddress % pe.sectionAlign !== 0) {
+            problems.push('section ' + (s.name || '?') + ' VA 0x' + s.virtualAddress.toString(16) + ' not aligned to sectionAlign 0x' + pe.sectionAlign.toString(16));
+        }
+        if (s.rawPtr + s.rawSize > buf.length) {
+            problems.push('section ' + (s.name || '?') + ' raw range out of file');
+        }
+    }
+    return problems;
 }
 
 // ---------------------------------------------------------------------------
@@ -239,10 +296,16 @@ function embedZone(exePath) {
     fs.writeFileSync(tmp, base);
     fs.renameSync(tmp, exePath);
 
-    // 自验证：嵌入后必须能通过校验
+    // 自验证：嵌入后必须能通过校验 + PE 布局合法（Windows 可加载）
     const check = verifyZone(exePath);
     if (!check.present || !check.match) {
         throw new Error('self-verify failed after embed: ' + JSON.stringify(check));
+    }
+    const finalBuf = fs.readFileSync(exePath);
+    const finalPe = parsePe(finalBuf);
+    const layoutProblems = validateLayout(finalBuf, finalPe);
+    if (layoutProblems.length > 0) {
+        throw new Error('PE layout invalid after embed (exe would not load): ' + layoutProblems.join('; '));
     }
     return { mode, sha256hex, exePath };
 }
@@ -300,6 +363,7 @@ module.exports = {
     ZONE_DATA_LEN,
     parsePe,
     hashExcludingZone,
+    validateLayout,
     embedZone,
     verifyZone,
     inspectZone

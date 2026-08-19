@@ -39,6 +39,11 @@ exports.default = async ({ appOutDir, packager }) => {
 
   // ★ P1-[3.1] 嵌入 PE 自定义完整性区段 .bnzc（EXE 签名自校验第二路）
   // asarmor 只改 app.asar 不改 exe；此处对主 exe 嵌入完整性区段（非阻塞告警）。
+  // ★ 2026-08-19 时机说明：electron-builder 顺序为 copy exe → afterPack(本钩子)
+  //   → rcedit(图标/版本写 exe)。本钩子嵌入的哈希会被 rcedit 修改作废，
+  //   最终哈希由 build.bat 两段式打包的 Phase 2（pe-zone-sign embed）在 rcedit
+  //   之后重新校正；此处保留嵌入仅作布局防御层（单独 npm run build 时 .bnzc
+  //   布局合法、哈希可能失效，运行时 self-check 为 fail-open 告警不阻断）。
   try {
     const peGuard = require('../../../shared/pe-guard.cjs');
     const productFilename = packager.appInfo.productFilename;

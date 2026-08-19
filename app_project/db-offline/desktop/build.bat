@@ -144,7 +144,7 @@ if errorlevel 1 (
 echo [OK] Code obfuscation complete
 echo.
 
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[8/9] Running build (npm run build + retry on fail)...'"
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[8/9] Running build (two-phase: --dir + final .bnzc embed + --prepackaged)...'"
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
 REM better-sqlite3 prebuild-install GitHub Releases SSL
@@ -158,21 +158,92 @@ if not exist "tmp" mkdir tmp
 set "TEMP=%CD%\tmp"
 set "TMP=%CD%\tmp"
 
+REM ============================================================================
+REM 2026-08-19 Two-phase build (fix .bnzc hash invalidated by rcedit):
+REM electron-builder order = copy exe -> afterPack(embed .bnzc, hash OK) ->
+REM rcedit(icon/version writes exe -> hash broken). Old single npm run build
+REM produced Setup with mismatched .bnzc. New flow:
+REM   Phase 1: --dir only (afterPack + rcedit complete, exe final)
+REM   Phase 2: embed+verify .bnzc on final exe (blocking gate)
+REM   Phase 3: --prepackaged builds nsis+portable from the embedded exe
+REM ============================================================================
 set NODE_TLS_REJECT_UNAUTHORIZED=0
-call npm run build
+node "node_modules\electron-builder\cli.js" --win --dir
 set "BUILD_RC=%errorlevel%"
-REM TLS
-set NODE_TLS_REJECT_UNAUTHORIZED=
 if not "%BUILD_RC%"=="0" (
     echo.
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] First build failed, retry in 3s...'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Phase 1 (--dir) failed, retry in 3s...'"
+    timeout /t 3 /nobreak >nul
+    set "TEMP=%CD%\tmp"
+    set "TMP=%CD%\tmp"
+    node "node_modules\electron-builder\cli.js" --win --dir
+    set "BUILD_RC=%errorlevel%"
+)
+
+if not "%BUILD_RC%"=="0" (
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Phase 1 (--dir) build failed, see logs above'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring original JavaScript code...'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] Phase 1 complete: win-unpacked ready (rcedit applied)
+echo.
+
+echo Running final .bnzc integrity embed (post-rcedit)...
+set "MAIN_EXE="
+for %%f in ("%OUTPUT_DIR%\win-unpacked\*.exe") do set "MAIN_EXE=%%f"
+if "%MAIN_EXE%"=="" (
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Main exe not found in %OUTPUT_DIR%\win-unpacked'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+node "%~dp0..\..\..\tools\pe-zone-sign.cjs" embed "%MAIN_EXE%"
+if errorlevel 1 (
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] .bnzc final embed failed - build aborted'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+node "%~dp0..\..\..\tools\pe-zone-sign.cjs" verify "%MAIN_EXE%"
+if errorlevel 1 (
+    set NODE_TLS_REJECT_UNAUTHORIZED=
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] .bnzc verify gate failed - build aborted'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] .bnzc embedded and verified on final exe
+echo.
+
+echo Running electron-builder --prepackaged (nsis + portable)...
+node "node_modules\electron-builder\cli.js" --win --prepackaged "%OUTPUT_DIR%/win-unpacked"
+set "BUILD_RC=%errorlevel%"
+set NODE_TLS_REJECT_UNAUTHORIZED=
+
+if not "%BUILD_RC%"=="0" (
+    echo.
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Phase 3 (--prepackaged) failed, retry in 3s...'"
     timeout /t 3 /nobreak >nul
     set NODE_TLS_REJECT_UNAUTHORIZED=0
     set "TEMP=%CD%\tmp"
     set "TMP=%CD%\tmp"
-    call npm run build
+    node "node_modules\electron-builder\cli.js" --win --prepackaged "%OUTPUT_DIR%/win-unpacked"
     set "BUILD_RC=%errorlevel%"
     set NODE_TLS_REJECT_UNAUTHORIZED=
+)
+
+if not "%BUILD_RC%"=="0" (
+    echo.
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Phase 3 (--prepackaged) build failed, see logs above'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Restoring original JavaScript code...'"
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
 )
 
 REM TEMP
