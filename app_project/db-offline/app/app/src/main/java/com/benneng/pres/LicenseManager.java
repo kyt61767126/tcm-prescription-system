@@ -34,6 +34,7 @@ import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.math.BigInteger;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -67,6 +68,13 @@ public class LicenseManager {
             "MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXqspDCFxlyS9wH0Kyb/fR9sqOeAG\n" +
             "DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==\n" +
             "-----END PUBLIC KEY-----";
+
+    // ★ P1-[5.1][5.3] 新增：Ed25519 验签公钥（原始 32 字节 hex，RFC 8032）
+    // 用于验证 license 中 signatureV7 字段（云端 Ed25519 私钥签发，工具 tools/gen-ed25519-keys.cjs）
+    // 公钥只能验签不能签发，即使被反编译提取也无法伪造 license
+    // 注意：minSdk=24 不支持 Android 原生 EdDSA（需 API 33+），故用下方纯 Java 实现（Ed25519 类）
+    private static final String ED25519_VERIFY_PUBLIC_KEY_HEX =
+            "644048f74f055f3aeb400e25e9c1d72e8c84c9e84f300d30fb513d48cb40fa7d";
 
     // ★ v3 新增：config.json 完整性签名密钥（与桌面版 license-manager.js / edit-config.ps1 完全一致）
     private static final String CONFIG_SIGN_KEY = "bnzc_config_sign_key_v1_2026";
@@ -1319,6 +1327,20 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         //      ECDSA v5（如果配置）提供更强的防篡改保证。
         setLicenseDataContext(data);
 
+        // ★ P1-[5.1][5.3] 新增：v7 Ed25519 签名优先校验（内容 = v5 全部字段 + sigSerial + sigNonce）
+        // v7 验签失败直接拒绝（fail-closed，与 v6/v5 一致）：license 声明由 v7 云端签发却验不过，
+        //   说明字段被篡改后重算了对称 HMAC；若降级到 v6/v5/HMAC 会让非对称验签保护形同虚设。
+        // 旧版 license（无 signatureV7 字段）不受影响，继续走 v6/v5/HMAC 链路。
+        if (data.has("signatureV7") && ED25519_VERIFY_PUBLIC_KEY_HEX != null
+                && !ED25519_VERIFY_PUBLIC_KEY_HEX.isEmpty()) {
+            if (verifyEd25519SignatureV7(data)) {
+                return true;
+            }
+            Log.w(TAG, "v7 Ed25519 验签失败，拒绝该 license（fail-closed）");
+            setLicenseDataContext(null);
+            return false;
+        }
+
         // ★ P1-[2.2] 新增：v6 ECDSA 防重放签名优先校验（内容 = v5 全部字段 + sigSerial + sigNonce）
         // v6 验签失败直接拒绝（fail-closed，与 v5 一致）：license 声明由 v6 云端签发却验不过，
         //   说明字段被篡改后重算了对称 HMAC；若降级到 v5/HMAC 会让非对称验签保护形同虚设。
@@ -1450,6 +1472,186 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         } catch (Exception e) {
             Log.w(TAG, "v6 ECDSA 验签异常: " + e.getMessage());
             return false;
+        }
+    }
+
+    // ★ P1-[5.1][5.3] 新增：v7 Ed25519 非对称验签（防重放）
+    // 签名内容 = v5 全部字段 + sigSerial + sigNonce，与云端 generateSignatureV7 完全一致
+    // 算法：Ed25519（RFC 8032），纯 Java 实现（minSdk=24 无原生 EdDSA，见下方 Ed25519 类）
+    private boolean verifyEd25519SignatureV7(JSONObject data) {
+        String sigV7 = data.optString("signatureV7", "");
+        if (sigV7 == null || sigV7.isEmpty() ||
+                ED25519_VERIFY_PUBLIC_KEY_HEX == null || ED25519_VERIFY_PUBLIC_KEY_HEX.isEmpty()) {
+            return false;
+        }
+        try {
+            // 1. 构造签名内容（与云端 generateSignatureV7 一致）
+            String content = buildSignatureContent(data, true, true)
+                    + "|" + String.valueOf(data.optLong("sigSerial", 0))
+                    + "|" + data.optString("sigNonce", "");
+            // 2. 公钥 hex → 32 字节
+            byte[] pubKey = hexToBytes(ED25519_VERIFY_PUBLIC_KEY_HEX);
+            if (pubKey == null || pubKey.length != 32) return false;
+            // 3. 签名 hex → 64 字节
+            byte[] sigBytes = hexToBytes(sigV7);
+            if (sigBytes == null || sigBytes.length != 64) return false;
+            // 4. Ed25519 验签（纯 Java RFC 8032）
+            return Ed25519.verify(pubKey, content.getBytes(StandardCharsets.UTF_8), sigBytes);
+        } catch (Exception e) {
+            Log.w(TAG, "v7 Ed25519 验签异常: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // ========================================================================
+    //  ★ P1-[5.1][5.3] 新增：Ed25519 纯 Java 验签实现（RFC 8032）
+    //  背景：minSdk=24 的设备不支持 Android 原生 EdDSA（需 API 33+ / JDK 15+ 的 Ed25519），
+    //        引入 BouncyCastle 会增大 APK 体积并引入打包/混淆风险，
+    //        故用 BigInteger + SHA-512 纯 Java 实现 Ed25519 验签（仅验签，不含私钥运算）。
+    //  说明：BigInteger 模运算并非严格常量时间；但对"验签"场景（输入公开、不含私钥
+    //        运算，时序不泄露任何机密）可接受。验签失败返回 false，绝不抛异常导致闪退。
+    //  引用：RFC 8032 §5.1（Ed25519）、§5.1.3（点解码）、§5.1.7（验签）
+    // ========================================================================
+    private static final class Ed25519 {
+        private static final BigInteger P = new BigInteger(
+                "57896044618658097711785492504343953926634992332820282019728792003956564819949"); // 2^255 - 19
+        private static final BigInteger L = new BigInteger(
+                "7237005577332262213973186563042994240857116359379907606001950938285454250989"); // 2^252 + 27742317777372353535851937790883648493
+        private static final BigInteger D = new BigInteger(
+                "37095705934669439343138083508754565189542113879843219016388785533085940283555"); // -121665/121666 mod p
+        private static final BigInteger SQRT_M1 = new BigInteger(
+                "19681161376707505956807079304988542015446066515923890162744021073123829784752"); // 2^((p-1)/4) mod p
+        private static final BigInteger[] BASE = {
+                new BigInteger("15112221349535400772501151409588531511454012693041857206046113283949847762202"),
+                new BigInteger("46316835694926478169428394003475163141307993866256225615783033603165251855960")
+        };
+
+        /** 单位元 (0,1) 用 null 表示，add 与 scalarMul 自动处理 */
+        private static BigInteger[] add(BigInteger[] p, BigInteger[] q) {
+            if (p == null) return q;
+            if (q == null) return p;
+            BigInteger x1 = p[0], y1 = p[1], x2 = q[0], y2 = q[1];
+            // Edwards 曲线 a=-1：x3=(x1y2+x2y1)/(1+d*x1x2y1y2), y3=(y1y2+x1x2)/(1-d*x1x2y1y2)
+            BigInteger t = x1.multiply(x2).multiply(y1).multiply(y2).mod(P);
+            BigInteger denom1 = BigInteger.ONE.add(D.multiply(t)).mod(P);
+            BigInteger denom2 = BigInteger.ONE.subtract(D.multiply(t)).mod(P);
+            BigInteger x3 = x1.multiply(y2).add(x2.multiply(y1))
+                    .multiply(denom1.modInverse(P)).mod(P);
+            BigInteger y3 = y1.multiply(y2).add(x1.multiply(x2))
+                    .multiply(denom2.modInverse(P)).mod(P);
+            return new BigInteger[]{ x3, y3 };
+        }
+
+        /** 标量乘法：double-and-add */
+        private static BigInteger[] scalarMul(BigInteger k, BigInteger[] point) {
+            BigInteger[] result = null; // 单位元
+            BigInteger[] addend = point;
+            while (k.signum() > 0) {
+                if (k.testBit(0)) result = add(result, addend);
+                addend = add(addend, addend);
+                k = k.shiftRight(1);
+            }
+            return result == null ? new BigInteger[]{ BigInteger.ZERO, BigInteger.ONE } : result;
+        }
+
+        /** 小端字节 → 正 BigInteger */
+        private static BigInteger littleEndian(byte[] b) {
+            byte[] reversed = new byte[b.length + 1]; // 前导 0 保证非负
+            for (int i = 0; i < b.length; i++) reversed[i + 1] = b[b.length - 1 - i];
+            return new BigInteger(reversed);
+        }
+
+        /** BigInteger → 小端字节（固定 length 字节，截断高位） */
+        private static byte[] toLittleEndian(BigInteger v, int length) {
+            byte[] bigEndian = v.toByteArray();
+            byte[] out = new byte[length];
+            for (int i = 0; i < length && i < bigEndian.length; i++) {
+                out[i] = bigEndian[bigEndian.length - 1 - i];
+            }
+            return out;
+        }
+
+        /** p ≡ 5 (mod 8) 下的模平方根；非平方剩余返回 null */
+        private static BigInteger modSqrt(BigInteger a) {
+            BigInteger c = a.modPow(P.add(BigInteger.valueOf(3)).shiftRight(3), P); // a^((p+3)/8)
+            if (c.multiply(c).mod(P).equals(a)) return c;
+            BigInteger c2 = c.multiply(SQRT_M1).mod(P);
+            if (c2.multiply(c2).mod(P).equals(a)) return c2;
+            return null;
+        }
+
+        /** 从压缩编码解压 Edwards 点（RFC 8032 §5.1.3）；非法编码返回 null */
+        private static BigInteger[] decompress(byte[] encoded) {
+            byte[] yBytes = encoded.clone();
+            yBytes[31] &= 0x7f; // 清除符号位
+            BigInteger y = littleEndian(yBytes);
+            if (y.compareTo(P) >= 0) return null;
+            // x^2 = (y^2 - 1) / (d*y^2 + 1)
+            BigInteger y2 = y.multiply(y).mod(P);
+            BigInteger u = y2.subtract(BigInteger.ONE).mod(P);
+            BigInteger v = D.multiply(y2).add(BigInteger.ONE).mod(P);
+            BigInteger x = modSqrt(u.multiply(v.modInverse(P)).mod(P));
+            if (x == null) return null;
+            // 符号位：x 为奇数 ↔ 符号位为 1
+            boolean sign = (encoded[31] & 0x80) != 0;
+            if ((x.testBit(0) ? 1 : 0) != (sign ? 1 : 0)) {
+                x = P.subtract(x);
+            }
+            return new BigInteger[]{ x, y };
+        }
+
+        /** 压缩编码 Edwards 点（32 字节小端，最高位为 x 符号位） */
+        private static byte[] encode(BigInteger[] p) {
+            byte[] out = toLittleEndian(p[1], 32);
+            if (p[0].testBit(0)) out[31] |= 0x80;
+            return out;
+        }
+
+        /**
+         * Ed25519 验签（RFC 8032 §5.1.7）
+         * @param publicKey 32 字节压缩公钥
+         * @param message   待验消息（license 签名内容 UTF-8）
+         * @param signature 64 字节签名（R||S）
+         * @return 验签是否通过；任何异常返回 false（绝不抛异常）
+         */
+        static boolean verify(byte[] publicKey, byte[] message, byte[] signature) {
+            if (publicKey == null || publicKey.length != 32) return false;
+            if (signature == null || signature.length != 64) return false;
+            try {
+                // 1. 解压公钥 A
+                BigInteger[] A = decompress(publicKey);
+                if (A == null) return false;
+                // 2. S < L（否则拒绝，防签名伪造）
+                byte[] sBytes = new byte[32];
+                System.arraycopy(signature, 32, sBytes, 0, 32);
+                BigInteger S = littleEndian(sBytes);
+                if (S.compareTo(L) >= 0) return false;
+                // 3. 解压 R
+                byte[] rBytes = new byte[32];
+                System.arraycopy(signature, 0, rBytes, 0, 32);
+                BigInteger[] R = decompress(rBytes);
+                if (R == null) return false;
+                // 4. h = SHA-512(R || A || M) 取 64 字节 → 模 L 标量
+                ByteArrayOutputStream baos = new ByteArrayOutputStream(64 + 32 + message.length);
+                baos.write(signature, 0, 32);   // R
+                baos.write(publicKey, 0, 32);   // A
+                baos.write(message);            // M
+                byte[] h = MessageDigest.getInstance("SHA-512").digest(baos.toByteArray());
+                BigInteger hScalar = littleEndian(h).mod(L);
+                // 5. 校验 [S]B + [h](-A) == R
+                BigInteger[] SB = scalarMul(S, BASE);
+                BigInteger[] negA = { A[0].negate().mod(P), A[1] };
+                BigInteger[] hNegA = scalarMul(hScalar, negA);
+                BigInteger[] check = add(SB, hNegA);
+                if (check == null) check = new BigInteger[]{ BigInteger.ZERO, BigInteger.ONE };
+                byte[] checkBytes = encode(check);
+                for (int i = 0; i < 32; i++) {
+                    if (checkBytes[i] != rBytes[i]) return false;
+                }
+                return true;
+            } catch (Exception e) {
+                return false;
+            }
         }
     }
 

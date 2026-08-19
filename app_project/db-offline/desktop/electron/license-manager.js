@@ -32,6 +32,18 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEXqspDCFxlyS9wH0Kyb/fR9sqOeAG
 DurLP5B6cwCvAhMF8Lvlzv9nnvdEWdY0+GytTCUsXWrBbDDgLrOufN1NNw==
 -----END PUBLIC KEY-----`;
 
+// ★ P1-[5.1][5.3] 新增：Ed25519 验签公钥（PEM SPKI 格式）
+// 用于验证 license 中的 signatureV7 字段（云端 Ed25519 私钥签发）
+// 与 ECDSA 公钥一样：公钥只能验签不能签发，即使被反编译提取也无法伪造 license
+// 启用步骤：
+//   1. 运行 node tools/gen-ed25519-keys.cjs 生成密钥对
+//   2. 私钥 LICENSE_SIGN_ED25519_PRIVATE_KEY 存 Cloudflare Secrets
+//   3. 公钥（-----BEGIN PUBLIC KEY----- 整段）填入此常量
+//   4. 重新打包 exe
+const ED25519_VERIFY_PUBLIC_KEY_PEM = `-----BEGIN PUBLIC KEY-----
+MCowBQYDK2VwAyEAZEBI908FXzrrQA4l6cHXLoyEyehPMA0w+1E9SMtA+n0=
+-----END PUBLIC KEY-----`;
+
 const TRIAL_KEY = 'bnzc_trial_key_v1';
 const LASTRUN_KEY = 'bnzc_lastrun_key_v1';
 
@@ -712,6 +724,21 @@ function verifySignature(data) {
     //      ECDSA v5（如果配置）提供更强的防篡改保证。
     setLicenseDataContext(data);
 
+    // ★ P1-[5.1][5.3] 新增：v7 Ed25519 签名优先校验
+    // 内容 = v5 全部字段 + sigSerial + sigNonce，算法 Ed25519（比 ECDSA P-256 更现代、更安全）
+    // v7 验签失败直接拒绝（fail-closed，与 v6/v5 一致）：
+    //   license 声明由 v7 云端签发却验不过，说明字段被篡改后重算了对称 HMAC；
+    //   若降级到 v6/v5/HMAC 会让非对称验签保护形同虚设。
+    // 旧版 license（无 signatureV7 字段）不受影响，继续走 v6/v5/HMAC 链路。
+    if (data.signatureV7 && ED25519_VERIFY_PUBLIC_KEY_PEM) {
+        if (verifyEd25519SignatureV7(data)) {
+            return true;
+        }
+        console.warn('[License] v7 Ed25519 验签失败，拒绝该 license（fail-closed）');
+        setLicenseDataContext(null);
+        return false;
+    }
+
     // ★ P1-[2.2] 新增：v6 ECDSA 防重放签名优先校验
     // 如果 license 包含 signatureV6 字段且配置了 ECDSA 公钥，优先验 v6（内容 = v5 + serial + nonce）
     // v6 验签失败直接拒绝（fail-closed，与 v5 一致）：license 声明由 v6 云端签发却验不过，
@@ -905,6 +932,40 @@ function encodeEcdsaSigToDER(r, s) {
         Buffer.from([0x02, sDER.length]),
         sDER
     ]);
+}
+
+// ★ P1-[5.1][5.3] 新增：Ed25519 非对称验签（v7）
+// 签名内容 = v5 全部字段 + sigSerial + sigNonce（与云端 generateSignatureV7 完全一致）
+// Ed25519 签名固定 64 字节（无需 DER 转换），验签无需指定哈希算法
+function verifyEd25519SignatureV7(data) {
+    if (!data.signatureV7 || !ED25519_VERIFY_PUBLIC_KEY_PEM) return false;
+    try {
+        const content = [
+            data.user,
+            data.type,
+            data.issuedAt,
+            data.expiresAt,
+            String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
+            Array.isArray(data.features) ? data.features.join(',') : '',
+            data.clinicName || '',
+            data.machineId || '',
+            data.licenseBinding || '',
+            String(data.sigSerial !== undefined ? data.sigSerial : ''),
+            String(data.sigNonce !== undefined ? data.sigNonce : '')
+        ].join('|');
+
+        const sigBytes = Buffer.from(data.signatureV7, 'hex');
+        if (sigBytes.length !== 64) {
+            console.warn('[License] v7 签名长度异常:', sigBytes.length);
+            return false;
+        }
+
+        // Ed25519：crypto.verify 的算法参数传 null（算法自带 SHA-512 预哈希）
+        return crypto.verify(null, Buffer.from(content, 'utf8'), ED25519_VERIFY_PUBLIC_KEY_PEM, sigBytes);
+    } catch (e) {
+        console.warn('[License] v7 Ed25519 验签异常:', e.message);
+        return false;
+    }
 }
 
 // ============================================================================

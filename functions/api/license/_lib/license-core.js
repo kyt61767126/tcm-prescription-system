@@ -233,6 +233,71 @@ async function getNextSerial(kv, code) {
     return Date.now();
 }
 
+// ============================================================================
+//  ★ P1-[5.1][5.3] 新增：Ed25519 签名（v7）
+//  算法：Ed25519（RFC 8032，SHA-512 内部预哈希，签名固定 64 字节）
+//  相比 ECDSA P-256 优势：
+//    - 性能更高、签名更短（64B vs ECDSA DER ~70-72B）
+//    - 常量时间实现，天然抗时序侧信道
+//    - 无随机数缺陷风险（ECDSA 的 k 泄露可导致私钥泄露）
+//  私钥仅云端持有（Cloudflare Secrets: LICENSE_SIGN_ED25519_PRIVATE_KEY，
+//    PEM PKCS#8 格式，由 tools/gen-ed25519-keys.cjs 生成）。
+//  公钥嵌入客户端（Node: ED25519_VERIFY_PUBLIC_KEY_PEM，Java: hex 公钥）。
+//  兼容性：v7 只新增字段，不改动 v1~v6 既有签名；客户端验签顺序 v7→v6→v5→HMAC。
+//  v7 仍带 sigKId='v7-001'，复用 v6 的 serial/nonce 防重放字段（内容含 sigSerial/sigNonce）。
+// ============================================================================
+const ED25519_SIGN_ALGO = 'Ed25519';  // RFC 8032
+
+// 从环境变量读取 Ed25519 私钥（PEM PKCS#8）
+// 在 Cloudflare Pages 后台设置环境变量 LICENSE_SIGN_ED25519_PRIVATE_KEY
+function getEd25519PrivateKeyPem(context) {
+    if (context && context.env && context.env.LICENSE_SIGN_ED25519_PRIVATE_KEY) {
+        return context.env.LICENSE_SIGN_ED25519_PRIVATE_KEY;
+    }
+    if (typeof process !== 'undefined' && process.env && process.env.LICENSE_SIGN_ED25519_PRIVATE_KEY) {
+        return process.env.LICENSE_SIGN_ED25519_PRIVATE_KEY;
+    }
+    return null;  // 未配置 Ed25519 私钥时跳过 v7 签名
+}
+
+// 用 Ed25519 私钥签名消息，返回 hex（Web Crypto：signature 固定 64 字节）
+async function ed25519Sign(message, privateKeyPem) {
+    if (!privateKeyPem) throw new Error('Ed25519 私钥未配置');
+    const derB64 = pemToDer(privateKeyPem);
+    const derBytes = base64ToBytes(derB64);
+
+    const key = await crypto.subtle.importKey(
+        'pkcs8',
+        derBytes,
+        { name: ED25519_SIGN_ALGO },
+        false,
+        ['sign']
+    );
+    const sig = await crypto.subtle.sign(ED25519_SIGN_ALGO, key, strToBytes(message));
+    // Ed25519 签名固定 64 字节，转 hex
+    return bytesToHex(new Uint8Array(sig));
+}
+
+// ★ v7 签名内容 = v5 全部字段 + sigSerial + sigNonce（与 v6 完全一致）
+// Ed25519 对相同内容产生确定性签名，但 serial 每次 +1、nonce 每次随机，
+// 因此即使 license 字段相同，每次签名的内容也不同（防重放仍生效）。
+async function generateSignatureV7(data, privateKeyPem, serial, nonce) {
+    const content = [
+        data.user,
+        data.type,
+        data.issuedAt,
+        data.expiresAt,
+        String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
+        Array.isArray(data.features) ? data.features.join(',') : '',
+        data.clinicName || '',
+        data.machineId || '',
+        data.licenseBinding || '',
+        String(serial),
+        String(nonce)
+    ].join('|');
+    return ed25519Sign(content, privateKeyPem);
+}
+
 // ★ v2 签名：与客户端 generateSignature 一致
 // 内容：user|type|issuedAt|expiresAt|maxPrescriptions|features
 async function generateSignature(data, secret) {
@@ -391,6 +456,29 @@ async function buildLicenseData(record, options = {}) {
                 console.log('[License] 已附加 v6 ECDSA 防重放签名 (serial=' + serial + ')');
             } catch (e) {
                 console.warn('[License] v6 ECDSA 签名失败（降级为 v5）:', e.message);
+            }
+        }
+    }
+
+    // ★ P1-[5.1][5.3] 新增：附加 v7 Ed25519 签名（v5 内容 + serial + nonce + kid）
+    // - 算法：Ed25519（RFC 8032），私钥存 LICENSE_SIGN_ED25519_PRIVATE_KEY
+    // - serial/nonce 复用 v6 的防重放字段（KV 计数 + 随机数）
+    // - kid 标识所用密钥对 = 'v7-001'
+    // 客户端验签顺序 v7→v6→v5→HMAC；v7 签名失败自动降级 v6/v5（fail-open，不阻塞激活）
+    if (options.context) {
+        const ed25519PrivateKey = getEd25519PrivateKeyPem(options.context);
+        if (ed25519PrivateKey) {
+            try {
+                const serial = await getNextSerial(options.kv, record.code);
+                const nonce = randomHexBytes(16);
+                data.signatureV7 = await generateSignatureV7(data, ed25519PrivateKey, serial, nonce);
+                data.sigKId = 'v7-001';
+                data.sigSerial = serial;
+                data.sigNonce = nonce;
+                data.signatureVersion = 7;
+                console.log('[License] 已附加 v7 Ed25519 签名 (serial=' + serial + ')');
+            } catch (e) {
+                console.warn('[License] v7 Ed25519 签名失败（降级为 v6/v5）:', e.message);
             }
         }
     }
