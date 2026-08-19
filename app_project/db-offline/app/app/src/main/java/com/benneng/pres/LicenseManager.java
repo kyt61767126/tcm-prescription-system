@@ -1319,6 +1319,20 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         //      ECDSA v5（如果配置）提供更强的防篡改保证。
         setLicenseDataContext(data);
 
+        // ★ P1-[2.2] 新增：v6 ECDSA 防重放签名优先校验（内容 = v5 全部字段 + sigSerial + sigNonce）
+        // v6 验签失败直接拒绝（fail-closed，与 v5 一致）：license 声明由 v6 云端签发却验不过，
+        //   说明字段被篡改后重算了对称 HMAC；若降级到 v5/HMAC 会让非对称验签保护形同虚设。
+        // 旧版 license（无 signatureV6 字段）不受影响，继续走 v5/HMAC 链路。
+        if (data.has("signatureV6") && ECDSA_VERIFY_PUBLIC_KEY_PEM != null
+                && !ECDSA_VERIFY_PUBLIC_KEY_PEM.isEmpty()) {
+            if (verifyECDSASignatureV6(data)) {
+                return true;
+            }
+            Log.w(TAG, "v6 ECDSA 验签失败，拒绝该 license（fail-closed）");
+            setLicenseDataContext(null);
+            return false;
+        }
+
         // ★ v5 ECDSA 非对称验签优先校验（云端私钥签，客户端公钥验）
         // 优势：即使 APP 被反编译拿到公钥，也无法伪造签名（公钥只能验不能签）
         if (data.has("signatureV5") && ECDSA_VERIFY_PUBLIC_KEY_PEM != null
@@ -1397,6 +1411,44 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             return sig.verify(derSig);
         } catch (Exception e) {
             Log.w(TAG, "v5 ECDSA 验签异常: " + e.getMessage());
+            return false;
+        }
+    }
+
+    // ★ P1-[2.2] 新增：v6 ECDSA P-256 非对称验签（防重放）
+    // 签名内容 = v5 全部字段 + sigSerial + sigNonce，与云端 generateSignatureV6 完全一致
+    private boolean verifyECDSASignatureV6(JSONObject data) {
+        String sigV6 = data.optString("signatureV6", "");
+        if (sigV6 == null || sigV6.isEmpty() ||
+                ECDSA_VERIFY_PUBLIC_KEY_PEM == null || ECDSA_VERIFY_PUBLIC_KEY_PEM.isEmpty()) {
+            return false;
+        }
+        try {
+            // 1. 构造签名内容（与云端 generateSignatureV6 一致）
+            String content = buildSignatureContent(data, true, true)
+                    + "|" + String.valueOf(data.optLong("sigSerial", 0))
+                    + "|" + data.optString("sigNonce", "");
+            // 2. hex(raw) → raw bytes → DER
+            byte[] rawSig = hexToBytes(sigV6);
+            if (rawSig == null || rawSig.length != 64) return false;
+            byte[] derSig = ecdsaRawToDer(rawSig);
+            if (derSig == null) return false;
+            // 3. 解析公钥 PEM（去头尾与空白后 Base64 解码）
+            String b64 = ECDSA_VERIFY_PUBLIC_KEY_PEM
+                    .replace("-----BEGIN PUBLIC KEY-----", "")
+                    .replace("-----END PUBLIC KEY-----", "")
+                    .replaceAll("\\s+", "");
+            byte[] pubKeyBytes = Base64.decode(b64, Base64.DEFAULT);
+            X509EncodedKeySpec keySpec = new X509EncodedKeySpec(pubKeyBytes);
+            KeyFactory kf = KeyFactory.getInstance("EC");
+            PublicKey publicKey = kf.generatePublic(keySpec);
+            // 4. 验签
+            Signature sig = Signature.getInstance("SHA256withECDSA");
+            sig.initVerify(publicKey);
+            sig.update(content.getBytes(StandardCharsets.UTF_8));
+            return sig.verify(derSig);
+        } catch (Exception e) {
+            Log.w(TAG, "v6 ECDSA 验签异常: " + e.getMessage());
             return false;
         }
     }
@@ -1782,11 +1834,21 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         }
     }
 
+    // ★ P1-[2.2] 修复：合并写入，保留 sigSerialSeen 等审计字段（避免覆盖丢失）
     private void writeLastRun(long timestamp) {
+        JSONObject data = readLastRun();
+        if (data == null) data = new JSONObject();
+        try {
+            data.put("timestamp", timestamp);
+        } catch (Exception e) {
+            // 仅 timestamp 写入失败，忽略（后续仍有 writeLastRun(JSONObject) 落盘）
+        }
+        writeLastRun(data);
+    }
+
+    private void writeLastRun(JSONObject data) {
         try {
             File f = getFile(LASTRUN_FILE);
-            JSONObject data = new JSONObject();
-            data.put("timestamp", timestamp);
             String jsonStr = data.toString();
             // ★ P2 新增：优先使用 AES-256-CBC 加密写入
             String mid = getMachineId();
@@ -1801,6 +1863,47 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             }
         } catch (Exception e) {
             Log.e(TAG, "写入 last-run 失败", e);
+        }
+    }
+
+    // ★ P1-[2.2] 新增：v6 serial 防重放审计（fail-open，仅警告记录，绝不阻塞激活）
+    // 与桌面版 license-manager.js auditSigSerial 逻辑一致：
+    //   以 user|issuedAt 为键记录已见最高 sigSerial；同一签发批次再次出现更小/相等 serial → 疑似重放告警
+    private void auditSigSerial(JSONObject data) {
+        try {
+            if (data == null || !data.has("signatureV6") || !data.has("sigSerial")) return;
+            long serial;
+            try {
+                serial = data.getLong("sigSerial");
+            } catch (Exception e) {
+                return;
+            }
+            if (serial <= 0) return;
+            String key = data.optString("user", "") + "|" + data.optString("issuedAt", "");
+            JSONObject lastRun = readLastRun();
+            JSONObject seen = (lastRun != null && lastRun.has("sigSerialSeen"))
+                    ? lastRun.optJSONObject("sigSerialSeen") : new JSONObject();
+            boolean isNew = !seen.has(key);
+            long prev = isNew ? 0 : seen.getLong(key);
+            if (!isNew && serial <= prev) {
+                Log.w(TAG, "疑似授权文件重放：同一签发批次 serial=" + serial
+                        + " 已见更高 serial=" + prev + "（仅记录告警，不阻断运行）");
+            }
+            if (isNew || serial > prev) {
+                seen.put(key, serial);
+                // 上限 20 条，淘汰最旧（JSONObject.keys 顺序，仅防膨胀）
+                if (seen.length() > 20) {
+                    Iterator<String> it = seen.keys();
+                    String firstKey = null;
+                    while (it.hasNext()) firstKey = it.next();
+                    if (firstKey != null) seen.remove(firstKey);
+                }
+                if (lastRun == null) lastRun = new JSONObject();
+                lastRun.put("sigSerialSeen", seen);
+                writeLastRun(lastRun);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "serial 审计异常: " + e.getMessage());
         }
     }
 
@@ -2130,6 +2233,19 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
             if (license.has("masterKey")) {
                 normalized.put("masterKey", license.optString("masterKey", ""));
             }
+            // ★ P1-[2.2] 新增：透传 v6 ECDSA 防重放签名相关字段（旧 license 无此字段时不设置）
+            if (license.has("signatureV6")) {
+                normalized.put("signatureV6", license.optString("signatureV6", ""));
+            }
+            if (license.has("sigKId")) {
+                normalized.put("sigKId", license.optString("sigKId", ""));
+            }
+            if (license.has("sigSerial")) {
+                normalized.put("sigSerial", license.getLong("sigSerial"));
+            }
+            if (license.has("sigNonce")) {
+                normalized.put("sigNonce", license.optString("sigNonce", ""));
+            }
             return normalized;
         } catch (Exception e) {
             Log.e(TAG, "normalizeLicense 失败", e);
@@ -2442,6 +2558,9 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
                 }
                 // 签名验证通过，规范化字段
                 JSONObject license = normalizeLicense(rawLicense);
+
+                // ★ P1-[2.2] 新增：v6 serial 防重放审计（仅警告记录，fail-open，不影响放行）
+                auditSigSerial(license);
 
                 // ★ v3 新增：config.json 完整性校验（仅对绑定型 license 生效）
                 if (license != null && license.has("licenseBinding") && !verifyConfigIntegrity()) {

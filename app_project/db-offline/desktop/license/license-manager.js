@@ -712,6 +712,20 @@ function verifySignature(data) {
     //      ECDSA v5（如果配置）提供更强的防篡改保证。
     setLicenseDataContext(data);
 
+    // ★ P1-[2.2] 新增：v6 ECDSA 防重放签名优先校验
+    // 如果 license 包含 signatureV6 字段且配置了 ECDSA 公钥，优先验 v6（内容 = v5 + serial + nonce）
+    // v6 验签失败直接拒绝（fail-closed，与 v5 一致）：license 声明由 v6 云端签发却验不过，
+    //   说明字段被篡改后重算了对称 HMAC；若降级到 v5/HMAC 会让非对称验签保护形同虚设。
+    // 旧版 license（无 signatureV6 字段）不受影响，继续走 v5/HMAC 链路。
+    if (data.signatureV6 && ECDSA_VERIFY_PUBLIC_KEY_PEM) {
+        if (verifyECDSASignatureV6(data)) {
+            return true;
+        }
+        console.warn('[License] v6 ECDSA 验签失败，拒绝该 license（fail-closed）');
+        setLicenseDataContext(null);
+        return false;
+    }
+
     // ★ 任务2 新增：v5 ECDSA 签名优先校验
     // 如果 license 包含 signatureV5 字段且配置了 ECDSA 公钥，优先用非对称验签
     // ★ 第三轮终检 P1 修复（2026-08-16）：验签失败直接拒绝（fail-closed）。
@@ -823,6 +837,45 @@ function verifyECDSASignature(data) {
         return verify.verify(ECDSA_VERIFY_PUBLIC_KEY_PEM, derSig);
     } catch (e) {
         console.warn('[License] v5 ECDSA 验签异常:', e.message);
+        return false;
+    }
+}
+
+// ★ P1-[2.2] 新增：ECDSA P-256 非对称验签（v6 防重放）
+// 签名内容 = v5 全部字段 + sigSerial + sigNonce，与云端 generateSignatureV6 完全一致
+function verifyECDSASignatureV6(data) {
+    if (!data.signatureV6 || !ECDSA_VERIFY_PUBLIC_KEY_PEM) return false;
+    try {
+        const content = [
+            data.user,
+            data.type,
+            data.issuedAt,
+            data.expiresAt,
+            String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
+            Array.isArray(data.features) ? data.features.join(',') : '',
+            data.clinicName || '',
+            data.machineId || '',
+            data.licenseBinding || '',
+            String(data.sigSerial !== undefined ? data.sigSerial : ''),
+            String(data.sigNonce !== undefined ? data.sigNonce : '')
+        ].join('|');
+
+        const rawSigHex = data.signatureV6;
+        const rawSigBytes = Buffer.from(rawSigHex, 'hex');
+        if (rawSigBytes.length !== 64) {
+            console.warn('[License] v6 签名长度异常:', rawSigBytes.length);
+            return false;
+        }
+        const r = rawSigBytes.slice(0, 32);
+        const s = rawSigBytes.slice(32, 64);
+        const derSig = encodeEcdsaSigToDER(r, s);
+
+        const verify = crypto.createVerify('SHA256');
+        verify.update(content);
+        verify.end();
+        return verify.verify(ECDSA_VERIFY_PUBLIC_KEY_PEM, derSig);
+    } catch (e) {
+        console.warn('[License] v6 ECDSA 验签异常:', e.message);
         return false;
     }
 }
@@ -1024,6 +1077,41 @@ function writeLastRun(data) {
     }
 }
 
+// ★ P1-[2.2] 新增：v6 serial 防重放审计（fail-open，仅警告记录，绝不阻塞激活）
+// 目的：检测"旧 license 副本回灌/重放"。v6 license 自带 issuedAt（云端签发毫秒时间戳），
+//       以 user|issuedAt 为键记录已见最高 sigSerial。
+//  - 同一签发批次（同 user|issuedAt）再次出现更小/相等 serial → 疑似重放 → 记录告警
+//  - 不同签发批次（issuedAt 不同）天然不同键，不误报（换码/重激活均产生新 issuedAt）
+//  - 条目上限 20，FIFO 淘汰，防止 last-run.dat 无限膨胀
+function auditSigSerial(data) {
+    try {
+        if (!data || !data.signatureV6) return;
+        const serial = parseInt(data.sigSerial, 10);
+        if (isNaN(serial) || serial <= 0) return;
+        const key = (data.user || '') + '|' + (data.issuedAt || '');
+        const lastRun = readLastRun() || {};
+        const seen = (lastRun.sigSerialSeen && typeof lastRun.sigSerialSeen === 'object') ? lastRun.sigSerialSeen : {};
+        const prev = seen[key];
+        const isNew = prev === undefined;
+        if (!isNew && serial <= prev) {
+            console.warn('[License] 疑似授权文件重放：同一签发批次 serial=' + serial
+                + ' 已见更高 serial=' + prev + '（仅记录告警，不阻断运行）');
+        }
+        if (isNew || serial > prev) {
+            seen[key] = serial;
+            const keys = Object.keys(seen);
+            if (keys.length > 20) {
+                const sorted = keys.slice().sort();
+                for (let i = 0; i < sorted.length - 20; i++) delete seen[sorted[i]];
+            }
+            lastRun.sigSerialSeen = seen;
+            writeLastRun(lastRun);
+        }
+    } catch (e) {
+        console.warn('[License] serial 审计异常:', e.message);
+    }
+}
+
 // ============================================================================
 //  版本类型规范化（兼容旧版 license 无 type/maxPrescriptions/features 字段）
 // ============================================================================
@@ -1049,6 +1137,11 @@ function normalizeLicense(license) {
     // ★ v3 新增：v5 ECDSA 签名透传（如果存在）
     if (license.signatureV5 !== undefined) normalized.signatureV5 = license.signatureV5;
     if (license.signatureVersion !== undefined) normalized.signatureVersion = license.signatureVersion;
+    // ★ P1-[2.2] 新增：v6 ECDSA 防重放签名相关字段透传
+    if (license.signatureV6 !== undefined) normalized.signatureV6 = license.signatureV6;
+    if (license.sigKId !== undefined) normalized.sigKId = license.sigKId;
+    if (license.sigSerial !== undefined) normalized.sigSerial = license.sigSerial;
+    if (license.sigNonce !== undefined) normalized.sigNonce = license.sigNonce;
     return normalized;
 }
 
@@ -1390,6 +1483,9 @@ function validateLicense(options) {
         // 签名验证通过后，规范化字段（补全 v2 新字段默认值）
         const license = normalizeLicense(rawLicense);
 
+        // ★ P1-[2.2] 新增：v6 serial 防重放审计（仅警告记录，fail-open，不影响放行）
+        auditSigSerial(license);
+
         // ★ v3 新增：config.json 完整性校验（仅对绑定型 license 生效）
         // 防止用户修改 config.json 中的 clinicName 绕过 license 绑定校验
         // ★ P2-预防重装：license 前已验签有效；config 签名不匹配大概率是重装/重激活
@@ -1440,7 +1536,10 @@ function validateLicense(options) {
         }
 
         // license 有效
-        writeLastRun({ timestamp: now });
+        // ★ P1-[2.2] 修复：合并写入，保留 sigSerialSeen 等审计字段（避免覆盖丢失）
+        const lrData = readLastRun() || {};
+        lrData.timestamp = now;
+        writeLastRun(lrData);
         const remainingDays = Math.ceil((expiresAtMs - now) / (24 * 60 * 60 * 1000));
         return {
             valid: true,
@@ -1489,7 +1588,10 @@ function validateLicense(options) {
     }
 
     // 试用有效（v2: 试用版也有处方数量限制）
-    writeLastRun({ timestamp: now });
+    // ★ P1-[2.2] 修复：合并写入，保留 sigSerialSeen 等审计字段（避免覆盖丢失）
+    const trialLrData = readLastRun() || {};
+    trialLrData.timestamp = now;
+    writeLastRun(trialLrData);
     const remainingDays = Math.ceil((trialExpiresAtMs - now) / (24 * 60 * 60 * 1000));
     return {
         valid: true,

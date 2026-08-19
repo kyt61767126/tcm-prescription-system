@@ -182,6 +182,57 @@ async function generateSignatureV5(data, privateKeyPem) {
     return ecdsaSign(content, privateKeyPem);
 }
 
+// ============================================================================
+//  ★ P1-[2.2] 新增：ECDSA v6 防重放签名（serial / nonce / kid）
+//  在 v5 的基础上追加 serial（激活码单调递增签发序号）和 nonce（本次签发随机数），
+//  kid 标识所用密钥对（复用现有 ECDSA 密钥对 = 'v6-001'）。
+//  防重放效果：
+//    - serial 每次签发 +1，旧 license 副本的 serial 必然小于新签发值
+//    - nonce 每次签发随机，即使内容相同签名也不同
+//  兼容性：v6 只新增字段，不改动 v1~v5 的既有签名内容与密钥；客户端验签顺序 v6→v5→HMAC
+// ============================================================================
+// 生成 n 字节随机数 hex（Web Crypto getRandomValues，Cloudflare Workers 兼容）
+function randomHexBytes(n) {
+    const bytes = crypto.getRandomValues(new Uint8Array(n));
+    return bytesToHex(bytes);
+}
+
+// ★ v6 签名内容 = v5 全部字段 + serial + nonce
+async function generateSignatureV6(data, privateKeyPem, serial, nonce) {
+    const content = [
+        data.user,
+        data.type,
+        data.issuedAt,
+        data.expiresAt,
+        String(data.maxPrescriptions !== undefined ? data.maxPrescriptions : 0),
+        Array.isArray(data.features) ? data.features.join(',') : '',
+        data.clinicName || '',
+        data.machineId || '',
+        data.licenseBinding || '',
+        String(serial),
+        String(nonce)
+    ].join('|');
+    return ecdsaSign(content, privateKeyPem);
+}
+
+// ★ v6 签发序号：激活码单调递增计数（KV 持久化，防重放核心）
+// KV key: license_serial:{CODE} → 签发次数；本次签发 serial = 上次 + 1
+// KV 不可用时回退时间戳（fail-open，宁漏检不可误报，绝不阻塞正常激活）
+async function getNextSerial(kv, code) {
+    const key = 'license_serial:' + String(code || '').toUpperCase();
+    try {
+        if (kv) {
+            const current = parseInt((await kv.get(key)) || '0', 10);
+            const next = (isNaN(current) || current < 0) ? 1 : current + 1;
+            await kv.put(key, String(next));
+            return next;
+        }
+    } catch (e) {
+        console.warn('[License] serial 计数失败，回退时间戳:', e.message);
+    }
+    return Date.now();
+}
+
 // ★ v2 签名：与客户端 generateSignature 一致
 // 内容：user|type|issuedAt|expiresAt|maxPrescriptions|features
 async function generateSignature(data, secret) {
@@ -317,6 +368,29 @@ async function buildLicenseData(record, options = {}) {
                 console.log('[License] 已附加 v5 ECDSA 签名');
             } catch (e) {
                 console.warn('[License] v5 ECDSA 签名失败（降级为 HMAC）:', e.message);
+            }
+        }
+    }
+
+    // ★ P1-[2.2] 新增：附加 v6 ECDSA 防重放签名（v5 内容 + serial + nonce + kid）
+    // - serial：激活码单调递增签发序号（KV 计数，KV 不可用回退时间戳，fail-open）
+    // - nonce ：本次签发随机数（16 字节 hex，即使内容相同每次签名也不同）
+    // - kid   ：密钥标识，复用现有 ECDSA 密钥对 = 'v6-001'
+    // 客户端优先验 v6，v6 验签失败 fail-closed 拒绝；serial 仅客户端审计告警（fail-open）
+    if (options.context) {
+        const ecdsaPrivateKey = getEcdsaPrivateKeyPem(options.context);
+        if (ecdsaPrivateKey) {
+            try {
+                const serial = await getNextSerial(options.kv, record.code);
+                const nonce = randomHexBytes(16);
+                data.signatureV6 = await generateSignatureV6(data, ecdsaPrivateKey, serial, nonce);
+                data.sigKId = 'v6-001';
+                data.sigSerial = serial;
+                data.sigNonce = nonce;
+                data.signatureVersion = 6;
+                console.log('[License] 已附加 v6 ECDSA 防重放签名 (serial=' + serial + ')');
+            } catch (e) {
+                console.warn('[License] v6 ECDSA 签名失败（降级为 v5）:', e.message);
             }
         }
     }
@@ -737,6 +811,9 @@ export {
     ecdsaSign,              // 用 ECDSA 私钥签名消息
     generateSignatureV5,    // 生成 v5 签名（ECDSA P-256）
     getEcdsaPrivateKeyPem,    // 从环境变量读取 ECDSA 私钥（PEM 格式）
+    // ★ P1-[2.2] 新增：ECDSA v6 防重放签名
+    generateSignatureV6,    // 生成 v6 签名（v5 内容 + serial + nonce）
+    getNextSerial,          // 激活码单调递增签发序号（KV 持久化，防重放核心）
     // ★ P1 安全分发优化：masterKey 下发
     getLicenseMasterKey     // 从环境变量读取 LICENSE_MASTER_KEY（可选，未配置返回 null）
 };

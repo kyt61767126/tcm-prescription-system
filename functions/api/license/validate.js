@@ -283,6 +283,8 @@ export async function onRequest(context) {
         licenseOptions.devicesCount = existingDevice ? devices.length : devices.length + 1;
         // ★ 新增：传递 context 以支持环境变量动态密钥
         licenseOptions.context = context;
+        // ★ P1-[2.2] 新增：传递 kv 供 v6 防重放签名使用单调递增签发序号
+        licenseOptions.kv = kv;
         const licenseData = await buildLicenseData(licenseRecord, licenseOptions);
 
         // 更新激活码记录：标记为已使用，绑定机器 ID + 诊所名
