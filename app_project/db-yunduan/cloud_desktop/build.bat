@@ -67,7 +67,13 @@ echo.
 echo [3/9] Kill leftover processes...
 taskkill /F /IM "HuikangTCM*.exe" >nul 2>&1
 taskkill /F /IM "Huikang*.exe" >nul 2>&1
+REM 2026-08-19 enhanced: kill Chinese-prefixed exe, electron.exe, wmic path match (sibling to offline desktop)
+taskkill /F /IM "惠康*.exe" >nul 2>&1
+taskkill /F /IM "electron.exe" >nul 2>&1
+wmic process where "ExecutablePath like '%%db-yunduan%%cloud_desktop%%' or ExecutablePath like '%%惠康%%'" call Terminate >nul 2>&1
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Process | Where-Object { try { $_.Path -like '*db-yunduan/cloud_desktop*dist*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
+REM wait 2s for handles to be released (AV/minifilter scan)
+timeout /t 2 /nobreak >nul
 echo [OK] Leftover processes cleaned
 echo.
 
@@ -95,6 +101,14 @@ for /f "delims=" %%D in ('dir /b /ad "dist_old_*" 2^>nul ^| sort /r') do (
         rmdir /s /q "%%D" 2>nul
     )
 )
+REM 2026-08-19 NEW: clean build_output_* fallback dirs (keep last 2 only)
+set old_count=0
+for /f "delims=" %%D in ('dir /b /ad "build_output_*" 2^>nul ^| sort /r') do (
+    set /a old_count+=1
+    if !old_count! gtr 2 (
+        rmdir /s /q "%%D" 2>nul
+    )
+)
 for /f "delims=" %%D in ('dir /b /ad "build_output_old_*" 2^>nul ^| sort /r') do (
     rmdir /s /q "%%D" 2>nul
 )
@@ -109,12 +123,17 @@ if exist "%OUTPUT_DIR%" (
         for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "DSTAMP=%%t"
         powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Cannot delete %OUTPUT_DIR%, renaming to dist_old_!DSTAMP!...'"
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
-        if exist "%OUTPUT_DIR%" (
-            powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Skip cleaning %OUTPUT_DIR% (locked by Explorer or process, does not affect actual build)'"
-        )
+    )
+    REM 2026-08-19 NEW fallback: rename ALSO fails (Defender minifilter lock on app.asar)
+    REM   -> switch to build_output_<ts> isolated dir. Never block build.
+    if exist "%OUTPUT_DIR%" (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] %OUTPUT_DIR% locked (likely Defender scanning app.asar), switching to alternate output dir build_output_!DSTAMP!...'"
+        set "OUTPUT_DIR=build_output_!DSTAMP!"
+        if exist "!OUTPUT_DIR!" rmdir /s /q "!OUTPUT_DIR!" 2>nul
     )
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Old artifacts cleaned (or skipped)'"
+if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] Output dir ready: %CD%\%OUTPUT_DIR%'"
 echo.
 
 REM 2026-08-19 Add: Unified build-env gate (8-step: Git/BOM/encoding/version/package/cleanup/disk)
@@ -169,7 +188,7 @@ set "PREV_TMP=%TMP%"
 if not exist "tmp" mkdir tmp
 set "TEMP=%CD%\tmp"
 set "TMP=%CD%\tmp"
-node "node_modules\electron-builder\cli.js" --win --prepackaged "%WIN_UNPACKED_PATH%"
+node "node_modules\electron-builder\cli.js" --win --prepackaged "%WIN_UNPACKED_PATH%" --config.directories.output="%OUTPUT_DIR%"
 set "BUILD_RC=%errorlevel%"
 set NODE_TLS_REJECT_UNAUTHORIZED=
 set "TEMP=%PREV_TEMP%"
@@ -187,7 +206,7 @@ if not "%BUILD_RC%"=="0" (
         timeout /t 3 /nobreak >nul
         set "TEMP=%CD%\tmp"
         set "TMP=%CD%\tmp"
-        node "node_modules\electron-builder\cli.js" --win --prepackaged "%WIN_UNPACKED_PATH%"
+        node "node_modules\electron-builder\cli.js" --win --prepackaged "%WIN_UNPACKED_PATH%" --config.directories.output="%OUTPUT_DIR%"
         set "BUILD_RC=%errorlevel%"
         set "TEMP=%PREV_TEMP%"
         set "TMP=%PREV_TMP%"

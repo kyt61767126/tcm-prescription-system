@@ -69,8 +69,14 @@ echo [3/9] Kill leftover processes...
 REM Kill old version processes that may hold locks (ASCII wildcard match)
 taskkill /F /IM "*offline*Setup*.exe" >nul 2>&1
 taskkill /F /IM "*Huikang*.exe" >nul 2>&1
+REM 2026-08-19 enhanced: kill Chinese-prefixed exe (ª›øµ*.exe), wmic path match
+taskkill /F /IM "ª›øµ*.exe" >nul 2>&1
+taskkill /F /IM "electron.exe" >nul 2>&1
+wmic process where "ExecutablePath like '%%db-offline%%desktop%%' or ExecutablePath like '%%ª›øµ%%'" call Terminate >nul 2>&1
 REM Use PowerShell Get-Process (path-based exact match, ASCII safe) - kills processes from dist/build_output dirs
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Process | Where-Object { try { $_.Path -like '*db-offline\desktop\dist*' -or $_.Path -like '*db-offline\desktop\build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
+REM wait 2s for handles to be released by AV/minifilter
+timeout /t 2 /nobreak >nul
 echo [OK] Leftover processes cleaned
 echo.
 
@@ -87,8 +93,18 @@ echo.
 echo [5/9] Clean old build artifacts...
 set "OUTPUT_DIR=dist"
 
+REM clean dist_old_* (keep last 2)
 set old_count=0
 for /f "delims=" %%D in ('dir /b /ad "dist_old_*" 2^>nul ^| sort /r') do (
+    set /a old_count+=1
+    if !old_count! gtr 2 (
+        rmdir /s /q "%%D" 2>nul
+    )
+)
+
+REM 2026-08-19 NEW: clean build_output_* (keep last 2, fallback dirs)
+set old_count=0
+for /f "delims=" %%D in ('dir /b /ad "build_output_*" 2^>nul ^| sort /r') do (
     set /a old_count+=1
     if !old_count! gtr 2 (
         rmdir /s /q "%%D" 2>nul
@@ -102,20 +118,20 @@ if exist "%OUTPUT_DIR%" (
         powershell -ExecutionPolicy Bypass -Command "try { [System.IO.Directory]::Delete('%CD%\%OUTPUT_DIR%', $true) } catch { Write-Host '[WARN] PowerShell delete also failed' }" 2>nul
     )
     if exist "%OUTPUT_DIR%" (
-        REM Use PowerShell Get-Date instead of deprecated wmic for timestamp
         for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "DSTAMP=%%t"
         powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Cannot delete %OUTPUT_DIR%, renaming to dist_old_!DSTAMP!...'"
         rename "%OUTPUT_DIR%" "dist_old_!DSTAMP!" 2>nul
-        if exist "%OUTPUT_DIR%" (
-            powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] Cannot clean or rename %OUTPUT_DIR% directory'"
-            powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Please close programs using %OUTPUT_DIR%\ and retry'"
-            powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Or manually delete/rename %OUTPUT_DIR% folder'"
-            if not defined NO_PAUSE pause
-            exit /b 1
-        )
+    )
+    REM 2026-08-19 fallback: if rename ALSO fails (Defender minifilter lock on app.asar),
+    REM   switch to timestamp-isolated output dir build_output_<ts>. Never blocks.
+    if exist "%OUTPUT_DIR%" (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] %OUTPUT_DIR% still locked (likely Defender scanning app.asar), switching to alternate output dir build_output_!DSTAMP!...'"
+        set "OUTPUT_DIR=build_output_!DSTAMP!"
+        if exist "!OUTPUT_DIR!" rmdir /s /q "!OUTPUT_DIR!" 2>nul
     )
 )
-echo [OK] Old artifacts cleaned
+if not exist "%OUTPUT_DIR%" mkdir "%OUTPUT_DIR%"
+echo [OK] Output dir ready: %CD%\%OUTPUT_DIR%
 echo.
 
 REM 2026-08-19 Add: Unified build-env gate (8-step: Git/BOM/encoding/version/package/cleanup/disk)
@@ -168,7 +184,8 @@ REM   Phase 2: embed+verify .bnzc on final exe (blocking gate)
 REM   Phase 3: --prepackaged builds nsis+portable from the embedded exe
 REM ============================================================================
 set NODE_TLS_REJECT_UNAUTHORIZED=0
-node "node_modules\electron-builder\cli.js" --win --dir
+REM 2026-08-19: pass OUTPUT_DIR explicitly (supports build_output_<ts> fallback when dist locked)
+node "node_modules\electron-builder\cli.js" --win --dir --config.directories.output="%OUTPUT_DIR%"
 set "BUILD_RC=%errorlevel%"
 if not "%BUILD_RC%"=="0" (
     echo.
@@ -176,7 +193,7 @@ if not "%BUILD_RC%"=="0" (
     timeout /t 3 /nobreak >nul
     set "TEMP=%CD%\tmp"
     set "TMP=%CD%\tmp"
-    node "node_modules\electron-builder\cli.js" --win --dir
+    node "node_modules\electron-builder\cli.js" --win --dir --config.directories.output="%OUTPUT_DIR%"
     set "BUILD_RC=%errorlevel%"
 )
 
@@ -221,7 +238,7 @@ echo [OK] .bnzc embedded and verified on final exe
 echo.
 
 echo Running electron-builder --prepackaged (nsis + portable)...
-node "node_modules\electron-builder\cli.js" --win --prepackaged "%OUTPUT_DIR%/win-unpacked"
+node "node_modules\electron-builder\cli.js" --win --prepackaged "%OUTPUT_DIR%/win-unpacked" --config.directories.output="%OUTPUT_DIR%"
 set "BUILD_RC=%errorlevel%"
 set NODE_TLS_REJECT_UNAUTHORIZED=
 
@@ -232,7 +249,7 @@ if not "%BUILD_RC%"=="0" (
     set NODE_TLS_REJECT_UNAUTHORIZED=0
     set "TEMP=%CD%\tmp"
     set "TMP=%CD%\tmp"
-    node "node_modules\electron-builder\cli.js" --win --prepackaged "%OUTPUT_DIR%/win-unpacked"
+    node "node_modules\electron-builder\cli.js" --win --prepackaged "%OUTPUT_DIR%/win-unpacked" --config.directories.output="%OUTPUT_DIR%"
     set "BUILD_RC=%errorlevel%"
     set NODE_TLS_REJECT_UNAUTHORIZED=
 )
@@ -300,7 +317,7 @@ if exist "dist_old_*" (
 )
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  ÊâìÂåÖÂÆåÊàêÔºÅ' -ForegroundColor Yellow; Write-Host '  Started: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  Finished: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Total elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  ¥Ú∞¸ÕÍ≥…£°' -ForegroundColor Yellow; Write-Host '  Started: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  Finished: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Total elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
 if not defined NO_PAUSE (
     set "EXIT_KEY="
     set /p "EXIT_KEY=Press 0 or Enter to exit: "
