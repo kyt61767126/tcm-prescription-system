@@ -2871,13 +2871,17 @@ async function loadClinicsList() {
                     ? '<button class="btn btn-sm btn-info" onclick="toggleClinicStatus(\'' + c.id + '\',\'test\')">设为测试</button>'
                     : '';
                 const editBtn = '<button class="btn btn-sm" onclick=\'editClinic(' + JSON.stringify({id:c.id,name:c.name,adminUsername:c.adminUsername,adminName:c.adminName}).replace(/'/g, "&#39;") + ')\'>编辑</button>';
+                // ★ 2026-08-20 诊所管理增加解锁按钮（与用户管理一致，按登录账号精确解锁）
+                const unlockBtn = (c.adminUsername)
+                    ? '<button class="btn btn-sm" data-u="' + escapeHtml(c.adminUsername) + '" onclick="unlockUser(this.dataset.u)" title="清除登录失败计数，锁定中的账号立即恢复登录">🔓 解锁</button>'
+                    : '';
                 const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '-';
                 return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
                     '<div style="flex:1;min-width:200px;">' +
                         '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + statusBadge + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + escapeHtml(c.adminUsername || '-') + '</strong>（' + escapeHtml(c.adminName || '-') + '）| 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
                     '</div>' +
-                    '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + '</div>' +
+                    '<div style="white-space:nowrap;">' + editBtn + ' ' + unlockBtn + ' ' + testBtn + ' ' + toggleBtn + '</div>' +
                 '</div>';
             }).join('');
         } else {
@@ -3283,7 +3287,9 @@ async function editClinic(clinic) {
     if (adminPassword === null) return;
     if (!name || !adminUsername) { showAlert('clinicAlert', '诊所名称和管理员账号不能为空', 'error'); return; }
     const body = { clinicId: clinic.id, name };
-    if (adminUsername !== clinic.adminUsername) body.adminUsername = adminUsername;
+    // ★ 2026-08-20 必须始终传 adminUsername（后端按登录账号精确定位改密码），
+    //   否则多管理员诊所会误改第一个 clinic_admin 的密码
+    if (adminUsername) body.adminUsername = adminUsername;
     if (adminName && adminName !== clinic.adminName) body.adminName = adminName;
     if (adminPassword) body.adminPassword = adminPassword;
     try {

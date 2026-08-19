@@ -2877,7 +2877,9 @@ async function editClinic(clinic) {
     if (adminPassword === null) return;
     if (!name || !adminUsername) { showAlert('clinicAlert', '诊所名称和管理员账号不能为空', 'error'); return; }
     const body = { clinicId: clinic.id, name };
-    if (adminUsername !== clinic.adminUsername) body.adminUsername = adminUsername;
+    // ★ 2026-08-20 必须始终传 adminUsername（后端按登录账号精确定位改密码），
+    //   否则多管理员诊所会误改第一个 clinic_admin 的密码
+    if (adminUsername) body.adminUsername = adminUsername;
     if (adminName && adminName !== clinic.adminName) body.adminName = adminName;
     if (adminPassword) body.adminPassword = adminPassword;
     try {

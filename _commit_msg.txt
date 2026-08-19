@@ -1,0 +1,22 @@
+fix(admin): 改密码按登录账号精确定位+诊所管理增加解锁按钮
+
+问题: 用户 13398628212 在后台改密码后仍无法登录(401/423)。
+诊断发现: findUserForLogin 遍历诊所返回第一个匹配账号, 而 13398628212 可能
+在多个诊所有账号(惠康堂 clinic_admin + XXX诊所 clinic_admin), 后台改密码
+原按"该诊所第一个 clinic_admin"定位, 改到错误账号。
+
+修复:
+1. functions/api/users.js clinic=update 改密码逻辑:
+   - 优先按 adminUsername 精确定位(username 或 phone 匹配), 不再按"第一个 clinic_admin"
+   - 未指定/未命中才回退第一个 clinic_admin(兼容旧调用)
+   - 审计日志记录实际改密账号(password: updated (xxx))
+   - 找不到账号返回 404 而非静默
+2. 后台诊所管理 tab 增加"🔓 解锁"按钮(public/admin 与 site-admin 一致),
+   按登录账号精确解锁, 复用 unlockUser/action=unlock 端点
+3. editClinic 始终传 adminUsername(原仅改动时才传, 导致后端回退错误)
+4. 诊断端点增强: userSearch 附带该诊所完整用户清单(clinicUsers), 便于定位
+   多账号同名手机号分布
+
+【生效方式】推送GitHub后 Cloudflare Pages 自动重部署 Functions 与 admin 页面,
+约1-2分钟生效, 无需重打包。后台刷新"诊所管理"即可看到"解锁"按钮。
+改密码时"管理员账号"栏必须填写目标登录账号(13398628212), 后端将精确改该账号密码。

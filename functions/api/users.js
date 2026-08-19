@@ -495,12 +495,21 @@ export async function onRequest(context) {
                         );
                         if (userFound) {
                             foundInClinic = true;
+                            // ★ 诊断辅助：列出该诊所全部用户（角色/是否第一clinic_admin），定位改密码误伤目标
+                            const clinicUsers = users.map(u => ({
+                                username: u.username,
+                                name: u.name || '',
+                                role: u.role || '',
+                                isFirstClinicAdmin: users.findIndex(x => x.role === ROLE_CLINIC_ADMIN) === users.indexOf(u),
+                                hasPasswordHash: !!u.passwordHash
+                            }));
                             result.checks.userSearch = {
                                 found: true,
                                 location: 'clinic',
                                 clinicId: clinic.id,
                                 clinicName: clinic.name,
                                 clinicStatus: clinic.status || 'active',
+                                clinicUsers,
                                 userInfo: {
                                     username: userFound.username,
                                     name: userFound.name,
@@ -1113,12 +1122,28 @@ export async function onRequest(context) {
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
 
             // 更新管理员信息（如果有提供）
+            // ★ 2026-08-20 修复：必须按登录账号（adminUsername）精确定位，不能按"第一个 clinic_admin"
+            //   否则多管理员诊所会误改其他账号密码（用户 13398628212 因此反复改密码仍 401）
             if (adminUsername || adminName || adminPassword) {
                 const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
-                const adminIdx = users.findIndex(u => u.role === ROLE_CLINIC_ADMIN);
+
+                // 1) 优先按 adminUsername 精确定位（username 或 phone 匹配）
+                let adminIdx = -1;
+                if (adminUsername) {
+                    const t = String(adminUsername).trim();
+                    adminIdx = users.findIndex(u =>
+                        u.username === t || u.phone === t
+                    );
+                }
+                // 2) 未指定或未命中 → 回退到第一个 clinic_admin（兼容旧调用）
+                if (adminIdx === -1) {
+                    adminIdx = users.findIndex(u => u.role === ROLE_CLINIC_ADMIN);
+                }
+
                 if (adminIdx !== -1) {
-                    // 拒绝修改管理员用户名
-                    if (adminUsername && adminUsername !== users[adminIdx].username) {
+                    // 拒绝修改用户名（登录账号不可改，确保全局唯一）
+                    if (adminUsername && users[adminIdx].username !== String(adminUsername).trim()
+                        && !users.find(u => u.username === String(adminUsername).trim() || u.phone === String(adminUsername).trim())) {
                         return json({ success: false, error: '管理员登录账号不可修改（确保全局唯一和数据安全），仅可修改姓名和密码' }, 403);
                     }
                     if (adminName && adminName !== users[adminIdx].name) {
@@ -1135,13 +1160,15 @@ export async function onRequest(context) {
                         if (!/[a-zA-Z]/.test(adminPassword) || !/[0-9]/.test(adminPassword)) {
                             return json({ success: false, error: '密码必须同时包含字母和数字' }, 400);
                         }
-                        changes.push('password: updated');
+                        changes.push(`password: updated (${users[adminIdx].username})`);
                         const { passwordHash, salt } = await hashPassword(adminPassword);
                         users[adminIdx].passwordHash = passwordHash;
                         users[adminIdx].salt = salt;
                     }
                     users[adminIdx].updatedAt = now;
                     await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));
+                } else {
+                    return json({ success: false, error: '未找到可更新的管理员账号' }, 404);
                 }
             }
 
