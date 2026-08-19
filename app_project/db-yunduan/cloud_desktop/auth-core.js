@@ -2027,8 +2027,20 @@
     // 背景：index.html 已内置 .register-entry CSS 与 handleRegisterEntry()/updateRegisterEntry() 函数，
     //       但登录框 DOM 中缺少 id=registerEntry 元素，导致入口从未显示。此处运行时动态补建，不改 HTML 源码
     // 约束：仅 APP 端（Capacitor 环境、含 loginOverlay）注入；云端桌面/网页版无需激活（登录即可使用），不注入
+    // 登录框诊所名：显示打包 config.json 的 clinicName，而非静态硬编码"本能堂中医诊所"
+    // ★ 2026-08-19 修复：该同步不依赖 isApp，任何环境下都执行（配置品牌展示与是否 App 无关）
+    function syncLoginClinicName() {
+        try {
+            const lc = document.getElementById('loginClinicName');
+            const cc = (typeof CONFIG !== 'undefined' && CONFIG.clinicName) ? CONFIG.clinicName : '';
+            if (lc && cc) lc.textContent = cc;
+        } catch (e) {}
+    }
+
     function injectActivateLinkIntoLogin() {
         try {
+            // 登录框诊所名无条件同步（与 App/网页/桌面环境无关）
+            syncLoginClinicName();
             // 仅 APP 环境注入（参考离线APP：兼容 Capacitor 与 Android WebView）
             const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences)
                 || (typeof global.AndroidNative !== 'undefined')
@@ -2044,13 +2056,6 @@
             // 定位登录按钮区，在其下方插入"管理员激活"入口
             const container = overlay.querySelector('.login-buttons');
             if (!container) return;
-
-            // 登录框诊所名应显示打包 config.json 配置，而非静态 HTML 硬编码的"本能堂中医诊所"
-            try {
-                const lc = document.getElementById('loginClinicName');
-                const cc = (typeof CONFIG !== 'undefined' && CONFIG.clinicName) ? CONFIG.clinicName : '';
-                if (lc && cc) lc.textContent = cc;
-            } catch (e) {}
 
             const entry = document.createElement('div');
             entry.id = 'activateLoginEntry';
@@ -2509,6 +2514,9 @@
 
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
     function startLicenseCheck() {
+        // ★ 登录框诊所名：不依赖授权检查异步链路，随授权检查启动时立即同步。
+        //   避免 await checkLicenseAndShowActivate 在非 APP/弱网下阻塞或中断，导致登录框一直显示硬编码"本能堂中医诊所"
+        syncLoginClinicName();
         setTimeout(async () => {
             await checkLicenseAndShowActivate();
             // ★ 启动兜底检查（无论首次校验结果如何，都启动定时器）
