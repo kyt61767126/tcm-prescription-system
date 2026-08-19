@@ -331,6 +331,52 @@ export async function onRequest(context) {
             });
         }
 
+        // ===== 主动解锁 POST /users?action=unlock =====
+        // ★ P2-B 新增：管理员主动清除账号锁定状态
+        // 背景：登录失败 5 次后账号自动锁定 15 分钟，若管理员确认用户被误锁（如收银台共用、
+        //   输错键盘、暴力探测误伤），可主动解锁，无需等待 TTL 自然过期。
+        // 鉴权：仅 platform_admin；写审计日志（unlock_account）。
+        if (method === 'POST' && url.searchParams.get('action') === 'unlock') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isPlatformAdmin(authUser)) {
+                return json({ success: false, error: '未授权：仅平台总管理员可解锁账号' }, 401, context.request);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const unlockUsername = (body.username || '').trim();
+            if (!unlockUsername) {
+                return json({ success: false, error: '请提供要解锁的用户名' }, 400, context.request);
+            }
+
+            // 确认目标用户存在（platform_admins 或任一诊所用户）
+            const found = await findUserForLogin(kv, unlockUsername);
+            if (!found || !found.user) {
+                return json({ success: false, error: found?.error?.message || '用户不存在',
+                    errorCode: found?.error?.code || 'USER_NOT_FOUND' }, 404, context.request);
+            }
+
+            // 当前锁定状态
+            const failKey = 'login_fail:' + unlockUsername;
+            const lockCount = parseInt(await kv.get(failKey) || '0', 10);
+            const wasLocked = lockCount >= LOGIN_MAX_FAILURES;
+
+            // 清除失败计数（解锁）
+            await clearLoginFailures(kv, unlockUsername);
+
+            // 审计
+            await writeAuditLog(kv, found.clinicId || null, authUser.username, authUser.role,
+                'unlock_account', unlockUsername, context.request,
+                { lockedUserRole: found.user.role, wasLocked, lockCount });
+
+            return json({
+                success: true,
+                username: unlockUsername,
+                message: wasLocked ? '账号已解锁' : '账号本就未锁定（已清除失败计数）',
+                wasLocked,
+                clearedCount: lockCount
+            });
+        }
+
         // ===== 公开诊断端点 GET /users?diagnose=username&key=xxx =====
         // 用于临时排查账号问题，需要 DIAGNOSE_KEY 环境变量验证
         if (method === 'GET' && url.searchParams.get('diagnose')) {
