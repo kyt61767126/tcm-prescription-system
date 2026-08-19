@@ -130,6 +130,7 @@ export async function onRequest(context) {
             record.resolvedAt = new Date().toISOString();
             record.resolvedBy = currentUser.username;
             await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));
+            await kv.put('admin_phone:' + record.phone, JSON.stringify({ requestId, status: 'rejected' })).catch(e => {});
             console.log('[AdminApprove] 请求已拒绝:', requestId, 'reason=', record.rejectReason);
             return json({ success: true, status: 'rejected' });
         }
@@ -257,6 +258,8 @@ export async function onRequest(context) {
         record.licenseCode = code;
         record.licenseBase64 = licenseBase64;
         await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));
+        // ★ 2026-08-20 更新手机号→激活申请索引为已通过（供登录自愈补开账号）
+        await kv.put('admin_phone:' + record.phone, JSON.stringify({ requestId, status: 'activated' })).catch(e => {});
 
         console.log('[AdminApprove] 请求已通过:', requestId, 'code=', code, 'clinic=', clinicName);
 

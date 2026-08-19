@@ -190,6 +190,10 @@ export async function onRequest(context) {
 
         await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));
         await appendRequestIndex(kv, requestId);
+        // ★ 2026-08-20 手机号→最新激活申请索引（供登录自愈补开云端账号使用）
+        await kv.put('admin_phone:' + phone, JSON.stringify({ requestId, status: 'pending' })).catch(e => {
+            console.warn('[AdminSubmit] 手机号索引写入失败:', e.message);
+        });
 
         console.log('[AdminSubmit] 新激活请求:', requestId, 'clinic=', clinicName, 'machineId=', machineId.substring(0, 8) + '...');
 

@@ -6,6 +6,26 @@ import {
     ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR,
     KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS
 } from './_lib/auth.js';
+import { provisionCloudAccount } from './license/_lib/admin-account.js';
+
+// ★ 2026-08-20 登录自愈：手机号存在"管理员已审核通过"的激活申请但云端账号尚未开通时，
+//   自动补开账号（用户名=手机号、默认密码 admin）。仅在用户不存在且申请已通过时触发，
+//   幂等（provisionCloudAccount 已存在则跳过），不会覆盖已有账号密码，不构成枚举向量。
+async function maybeProvisionFromActivation(kv, username) {
+    try {
+        if (!/^1[3-9]\d{9}$/.test(username)) return false; // 仅手机号账号自愈
+        const idx = await kv.get('admin_phone:' + username, 'json');
+        if (!idx || !idx.requestId) return false;
+        if (idx.status !== 'activated' && idx.status !== 'approved') return false; // 仅已通过
+        const record = await kv.get('admin_req:' + idx.requestId, 'json');
+        if (!record) return false;
+        await provisionCloudAccount(kv, record);
+        return true;
+    } catch (e) {
+        console.warn('[Login] 激活自愈补开账号失败:', e.message);
+        return false;
+    }
+}
 
 // P1-6 安全增强：CORS 白名单（替代通配符 '*'）
 function getAllowedOrigins() {
@@ -632,7 +652,15 @@ export async function onRequest(context) {
                 return json({ success: false, error: '账户已被锁定，请 15 分钟后再试', code: 'ACCOUNT_LOCKED' }, 423, context.request);
             }
 
-            const found = await findUserForLogin(kv, username);
+            let found = await findUserForLogin(kv, username);
+            // ★ 2026-08-20 登录自愈：账号未找到时，若该手机号存在管理员已通过的激活申请，
+            //   自动补开云端账号并重试一次查找（解决激活通过后用户却无法登录的遗留问题）
+            if (!(found && found.user)) {
+                const selfHealed = await maybeProvisionFromActivation(kv, username);
+                if (selfHealed) {
+                    found = await findUserForLogin(kv, username);
+                }
+            }
             const { user, clinicId, clinicName, clinicStatus } = found || {};
 
             // ★ P1-6 防登录枚举：无论用户是否存在，统一走相同的密码验证流程并返回一致响应，
