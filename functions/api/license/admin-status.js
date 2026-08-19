@@ -14,6 +14,7 @@
 // ============================================================================
 
 import { getKV, checkRateLimit } from './_lib/license-core.js';
+import { provisionCloudAccount } from './_lib/admin-account.js';
 
 const ALLOWED_ORIGINS = [
     'https://tcm-prescription-system.pages.dev',
@@ -105,6 +106,15 @@ export async function onRequest(context) {
             return json({ success: true, status: 'pending' }, 200, origin);
         }
         if (status === 'activated') {
+            // ★ 2026-08-19 幂等补开：修复上线前已通过但未创建云端账号的历史激活请求
+            // admin-approve 的自动开通仅在审核通过那一刻执行；若当时该修复尚未部署，
+            // 该请求就没有云端账号，客户端用手机号登录会 401。这里每次轮询 activated
+            // 时都尝试补开（幂等，已存在则跳过），让历史激活直接可登录。
+            try {
+                await provisionCloudAccount(kv, record);
+            } catch (e) {
+                console.warn('[AdminStatus] 云端账号补开失败（不影响license读取）:', e.message);
+            }
             // ★ 关键：客户端检查 status === 'activated' 时会取 result.license 写入 license.dat
             return json({
                 success: true,
