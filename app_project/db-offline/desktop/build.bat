@@ -69,10 +69,10 @@ echo [3/9] Kill leftover processes...
 REM Kill old version processes that may hold locks (ASCII wildcard match)
 taskkill /F /IM "*offline*Setup*.exe" >nul 2>&1
 taskkill /F /IM "*Huikang*.exe" >nul 2>&1
-REM 2026-08-19 enhanced: kill Chinese-prefixed exe (ª›øµ*.exe), wmic path match
-taskkill /F /IM "ª›øµ*.exe" >nul 2>&1
+REM 2026-08-19 enhanced: kill Chinese-prefixed exe (ÊÉ†Â∫∑*.exe), wmic path match
+taskkill /F /IM "ÊÉ†Â∫∑*.exe" >nul 2>&1
 taskkill /F /IM "electron.exe" >nul 2>&1
-wmic process where "ExecutablePath like '%%db-offline%%desktop%%' or ExecutablePath like '%%ª›øµ%%'" call Terminate >nul 2>&1
+wmic process where "ExecutablePath like '%%db-offline%%desktop%%' or ExecutablePath like '%%ÊÉ†Â∫∑%%'" call Terminate >nul 2>&1
 REM Use PowerShell Get-Process (path-based exact match, ASCII safe) - kills processes from dist/build_output dirs
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Process | Where-Object { try { $_.Path -like '*db-offline\desktop\dist*' -or $_.Path -like '*db-offline\desktop\build_output*' } catch { $false } } | Stop-Process -Force -ErrorAction SilentlyContinue" 2>nul
 REM wait 2s for handles to be released by AV/minifilter
@@ -355,7 +355,7 @@ if exist "build_output_*" (
 
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  ¥Ú∞¸ÕÍ≥…£°' -ForegroundColor Yellow; Write-Host '  Started: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  Finished: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Total elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  ÊâìÂåÖÂÆåÊàêÔºÅ' -ForegroundColor Yellow; Write-Host '  Started: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  Finished: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Total elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
 if not defined NO_PAUSE (
     set "EXIT_KEY="
     set /p "EXIT_KEY=Press 0 or Enter to exit: "
