@@ -338,9 +338,9 @@
                 </div>
                 <div id="loginError" class="login-error"></div>
                 <div class="login-security"><span class="login-security-icon">🛡️</span><span>安全登录 · 数据加密保护</span></div>
-                <!-- ★ 激活入口：未激活用户可点击此处打开激活窗口 -->
-                <div style="text-align:center;margin-top:8px;">
-                    <a href="#" id="activateLink" onclick="openActivationWindow();return false;" style="font-size:9px;color:#667eea;text-decoration:none;">激活软件 / 管理员激活</a>
+                <!-- ★ 激活入口（2026-08-19 收敛）：登录框仅对未激活/试用到期用户显示极简提示，正式激活后洁净；激活入口已移至操作界面-基础设置底部 -->
+                <div id="activateHintWrap" style="display:none;text-align:center;margin-top:8px;">
+                    <a href="#" id="activateLink" onclick="openActivationWindow();return false;" style="font-size:9px;color:#e67e22;text-decoration:none;">⚠️ 尚未激活 / 试用已到期，点此激活</a>
                 </div>
             </div>
         </div>

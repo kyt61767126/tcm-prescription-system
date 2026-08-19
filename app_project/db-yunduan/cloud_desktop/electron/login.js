@@ -492,6 +492,8 @@
 
         // 显示试用期状态
         showTrialStatus();
+        // ★ 2026-08-19 激活入口收敛：按激活状态显示/隐藏登录框极简提示
+        updateLoginActivateHint();
 
         // ★ bnzc:// 一键激活：检查是否有待激活数据
         await checkBnzcPendingActivation(config);
@@ -625,6 +627,20 @@
         } else {
             alert('请在软件主菜单中选择「帮助 → 激活授权」打开激活窗口');
         }
+    }
+
+    // ★ 2026-08-19 登录框激活入口收敛：仅未激活/试用到期显示极简提示，正式激活登录框洁净
+    async function updateLoginActivateHint() {
+        try {
+            const wrap = document.getElementById('activateHintWrap');
+            if (!wrap) return;
+            let show = false;
+            if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.getStatus) {
+                const st = await window.electronAPI.license.getStatus();
+                if (st && st.valid === false) show = true;
+            }
+            wrap.style.display = show ? 'block' : 'none';
+        } catch (e) { console.warn('[login] 更新激活提示失败:', e); }
     }
 
     // ===== 首次启动检测与向导 =====
