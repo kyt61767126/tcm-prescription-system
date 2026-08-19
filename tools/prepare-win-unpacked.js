@@ -188,6 +188,17 @@ async function main() {
     } catch (e) {
       console.error(`  [WARN] exe 图标嵌入失败（不影响打包）: ${e.message}`);
     }
+
+    // ★ P1-[3.1] 嵌入 PE 自定义完整性区段 .bnzc（EXE 签名自校验第二路）
+    // 必须在 rcedit 图标嵌入之后执行（rcedit 会改动 exe 字节，先 embed 会被破坏）
+    try {
+      const peGuard = require('../shared/pe-guard.cjs');
+      const r = peGuard.embedZone(productExe);
+      console.log(`  [OK] 已嵌入 .bnzc 完整性区段（mode=${r.mode}）到 ${exeName}.exe`);
+    } catch (e) {
+      // 非阻塞告警：不影响打包，仅记录（符合"宁漏检不可误报"红线）
+      console.warn(`  [WARN] PE 完整性区段嵌入失败（不影响打包）: ${e.message}`);
+    }
   }
 
   console.log('Creating app.asar...');

@@ -36,4 +36,20 @@ exports.default = async ({ appOutDir, packager }) => {
   } catch (err) {
     console.error('[asarmor] Error applying patches:', err.message);
   }
+
+  // ★ P1-[3.1] 嵌入 PE 自定义完整性区段 .bnzc（EXE 签名自校验第二路）
+  // asarmor 只改 app.asar 不改 exe；此处对主 exe 嵌入完整性区段（非阻塞告警）。
+  try {
+    const peGuard = require('../../../shared/pe-guard.cjs');
+    const productFilename = packager.appInfo.productFilename;
+    const mainExe = join(appOutDir, productFilename + '.exe');
+    if (fs.existsSync(mainExe)) {
+      const r = peGuard.embedZone(mainExe);
+      console.log('[pe-guard] .bnzc 完整性区段嵌入成功 (mode=' + r.mode + ') -> ' + mainExe);
+    } else {
+      console.warn('[pe-guard] 未找到主 exe: ' + mainExe + '，跳过 .bnzc 嵌入');
+    }
+  } catch (err) {
+    console.warn('[pe-guard] PE 完整性区段嵌入失败（非阻塞）: ' + err.message);
+  }
 };

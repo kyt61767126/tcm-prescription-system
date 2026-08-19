@@ -16,6 +16,8 @@
 
 const { app } = require('electron');
 const { execFile } = require('child_process');
+// P1-[3.1] 第二路：PE .bnzc 完整性区段校验（shared/pe-guard.cjs，经 sync-all 同步）
+const peGuard = require('./pe-guard.cjs');
 
 // ★ 预留：发布代码签名的证书指纹（大写 SHA1）。当前未签名，留空则不比对。
 const EXPECTED_EXE_SIGNER_THUMBPRINT = '';
@@ -85,6 +87,41 @@ function runSelfCheck() {
             }
         }
     );
+
+    // P1-[3.1] 第二路：PE .bnzc 区段完整性校验（不依赖证书，打包时嵌入）
+    // 非阻塞：推迟到事件循环空闲执行，避免启动瞬间同步读 exe 阻塞窗口渲染
+    setImmediate(runPeZoneCheck);
+}
+
+/**
+ * 校验主 exe 的 .bnzc 完整性区段（第二路，不依赖证书）。
+ * 非阻塞：任何异常/未知状态仅记录，不弹窗、不退出。
+ *  - 无区段（旧版/开发环境）→ 记录 debug 后跳过
+ *  - 区段哈希一致 → 通过
+ *  - 区段哈希失配 → WARN（exe 可能被篡改）
+ */
+function runPeZoneCheck() {
+    if (!app.isPackaged) return;
+    let r;
+    try {
+        r = peGuard.verifyZone(process.execPath);
+    } catch (e) {
+        log('warn', 'PE 完整性区段校验执行异常（非致命）: ' + e.message);
+        return;
+    }
+    if (r.present === false) {
+        log('debug', 'exe 未嵌入 .bnzc 区段（旧版/开发环境，符合预期），跳过 PE 完整性校验');
+        return;
+    }
+    if (r.status === 'ok') {
+        log('debug', 'PE 完整性自校验通过（.bnzc 区段哈希一致）。');
+    } else if (r.status === 'bad-zone') {
+        log('WARN', 'exe 的 .bnzc 区段格式异常，完整性无法确认。');
+    } else if (r.status === 'mismatch') {
+        log('WARN', 'exe 可能被篡改：PE 完整性失配（存储=' + (r.stored || '') + ' 实际=' + (r.actual || '') + '）。');
+    } else {
+        log('warn', 'PE 完整性校验未知状态: ' + r.status);
+    }
 }
 
 module.exports = { runSelfCheck, EXPECTED_EXE_SIGNER_THUMBPRINT };

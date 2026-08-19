@@ -135,6 +135,13 @@ $ElectronLoggerTargets = @(
     'app_project/db-offline/desktop/electron'
 )
 
+# Group 10: pe-guard.cjs (P1-[3.1] PE .bnzc 完整性区段) -> 2 个 electron 目录
+# 与 self-check.js 配套使用：self-check.js 里 require('./pe-guard.cjs')
+$PeGuardTargets = @(
+    'app_project/db-yunduan/cloud_desktop/electron',
+    'app_project/db-offline/desktop/electron'
+)
+
 # ============================================================================
 # Helper: Get SHA256 hash of a file
 # ============================================================================
@@ -288,6 +295,11 @@ Write-Host ""
 
 # Group 9: electron-logger.cjs -> 2 electron dirs (P0-[6.3])
 $result = Sync-Group -GroupName 'electron-logger.cjs -> 2 electron dirs' -Files @('electron-logger.cjs') -Targets $ElectronLoggerTargets -VerifyOnly $VerifyOnly
+if (-not $result) { $allInSync = $false }
+Write-Host ""
+
+# Group 10: pe-guard.cjs -> 2 electron dirs (P1-[3.1])
+$result = Sync-Group -GroupName 'pe-guard.cjs -> 2 electron dirs' -Files @('pe-guard.cjs') -Targets $PeGuardTargets -VerifyOnly $VerifyOnly
 if (-not $result) { $allInSync = $false }
 Write-Host ""
 
