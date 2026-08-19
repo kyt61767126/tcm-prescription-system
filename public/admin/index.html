@@ -531,7 +531,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                     </tbody>
                 </table>
             </div>
-            <p style="margin-top:12px;color:#909399;font-size:12px;">提示：用户管理（创建/编辑/删除）请到对应诊所内操作，或使用主应用的用户管理界面。此处可查看所有用户列表，并对被锁定的账号执行「🔓 解锁」（登录连续失败 5 次会锁定 15 分钟，解锁立即恢复登录，操作会记入审计日志）。</p>
+            <p style="margin-top:12px;color:#909399;font-size:12px;">提示：用户管理（创建/编辑/删除）请到对应诊所内操作，或使用主应用的用户管理界面。此处可查看所有用户列表，并对被锁定的账号执行「🔓 解锁」（登录失败第 5 次起会逐步锁定，锁定期间无法登录，解锁立即恢复，操作会记入审计日志）。</p>
         </div>
 
         <!-- ★ 管理员激活审核标签页 -->
@@ -3356,7 +3356,7 @@ async function loadUsersList() {
 // ★ P2-B：管理员主动解锁账号（POST /users?action=unlock，后端 cecc9021 已就绪）
 // 幂等：账号未锁定时仅清除失败计数；操作写入 audit_log（unlock_account）
 async function unlockUser(username) {
-    if (!confirm('确认解锁账号「' + username + '」？\n\n将清除该账号的登录失败计数；若处于锁定状态（连续失败 5 次锁 15 分钟），解锁后立即可正常登录。\n本操作会记入审计日志。')) return;
+    if (!confirm('确认解锁账号「' + username + '」？\n\n将清除该账号的登录失败计数；若处于锁定状态（登录失败第 5 次起逐步锁定），解锁后立即可正常登录。\n本操作会记入审计日志。')) return;
     try {
         const res = await fetch(API_BASE + '/users?action=unlock', {
             method: 'POST',

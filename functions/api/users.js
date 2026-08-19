@@ -91,32 +91,48 @@ function json(data, status = 200, request = null) {
     return new Response(JSON.stringify(data), { status, headers: corsHeaders(request) });
 }
 
-// P1-1 安全增强：登录失败锁定（5 次失败后锁定 15 分钟）
-const LOGIN_MAX_FAILURES = 5;
-const LOGIN_LOCK_TTL = 15 * 60; // 15 分钟（秒）
+// P1-1 安全增强：登录失败渐进式锁定（阶梯递增，防爆破且不误伤正式用户）
+//   前 4 次失败不锁定（友好），第 5 次起按失败次数指数递增锁定时长，
+//   暴力破解代价高、正常手误可自然恢复。
+const LOGIN_MAX_FAILURES = 5;    // 达到该次数起进入锁定
+const LOGIN_LOCK_STEP = 5 * 60;         // 基础阶梯 5 分钟（秒）
+const LOGIN_LOCK_STEP_COUNT = 5;        // 每累计多少失败递增一档
+const LOGIN_LOCK_MAX = 60 * 60;         // 单次锁定最长 60 分钟
 
-// ★ P1-6 防登录枚举：哑验证参数（格式与真实 PBKDF2 哈希一致，SHA-256 输出 64 个十六进制字符）
-//   用户不存在/数据不完整时用它执行一次等代价的 PBKDF2 验证，对齐响应时间，防时序攻击
-const DUMMY_PASSWORD_HASH = 'pbkdf2$100000$' + '0'.repeat(64);
-const DUMMY_SALT = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
+// 渐进式锁定：根据失败次数计算应锁定的时长（秒）
+//   [0,4]   不锁定
+//   [5,9]   5 分钟
+//   [10,14] 10 分钟
+//   ...     封顶 1 小时
+function lockTtlForFailures(count) {
+    if (count < LOGIN_MAX_FAILURES) return 0;
+    const step = Math.floor((count - LOGIN_MAX_FAILURES) / LOGIN_LOCK_STEP_COUNT) + 1;
+    return Math.min(LOGIN_LOCK_STEP * step, LOGIN_LOCK_MAX);
+}
 
 async function recordLoginFailure(kv, username) {
     const key = 'login_fail:' + username;
     const count = parseInt(await kv.get(key) || '0', 10) + 1;
-    await kv.put(key, String(count), { expirationTtl: LOGIN_LOCK_TTL });
+    const ttl = lockTtlForFailures(count) > 0 ? lockTtlForFailures(count) : 24 * 3600;
+    await kv.put(key, String(count), { expirationTtl: ttl });
     return count;
 }
 
 async function checkLoginLocked(kv, username) {
     const key = 'login_fail:' + username;
     const count = parseInt(await kv.get(key) || '0', 10);
-    return count >= LOGIN_MAX_FAILURES;
+    return lockTtlForFailures(count) > 0;
 }
 
 async function clearLoginFailures(kv, username) {
     const key = 'login_fail:' + username;
     await kv.delete(key);
 }
+
+// ★ P1-6 防登录枚举：哑验证参数（格式与真实 PBKDF2 哈希一致，SHA-256 输出 64 个十六进制字符）
+//   用户不存在/数据不完整时用它执行一次等代价的 PBKDF2 验证，对齐响应时间，防时序攻击
+const DUMMY_PASSWORD_HASH = 'pbkdf2$100000$' + '0'.repeat(64);
+const DUMMY_SALT = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6';
 
 // P1-1 安全增强：IP 限流（10 次/分钟）
 const IP_RATE_LIMIT_MAX = 10;
@@ -672,7 +688,7 @@ export async function onRequest(context) {
             // P1-1：检查账户是否被锁定
             const isLocked = await checkLoginLocked(kv, username);
             if (isLocked) {
-                return json({ success: false, error: '账户已被锁定，请 15 分钟后再试', code: 'ACCOUNT_LOCKED' }, 423, context.request);
+                return json({ success: false, error: '尝试次数过多，账户暂时锁定，请稍后再试', code: 'ACCOUNT_LOCKED' }, 423, context.request);
             }
 
             let found = await findUserForLogin(kv, username);
@@ -714,8 +730,8 @@ export async function onRequest(context) {
                 );
                 const remaining = Math.max(0, LOGIN_MAX_FAILURES - failCount);
                 const errorMsg = remaining > 0
-                    ? `密码错误，剩余尝试次数：${remaining} 次（${failCount}/${LOGIN_MAX_FAILURES}）`
-                    : '密码错误次数过多，账户已被锁定 15 分钟，请稍后再试';
+                    ? `密码错误，剩余尝试次数：${remaining} 次`
+                    : '密码错误次数过多，账户已暂时锁定，请稍后再试';
                 const status = remaining > 0 ? 401 : 423;
                 return json({
                     success: false,

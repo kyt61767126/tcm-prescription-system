@@ -702,7 +702,7 @@
         }
     };
 
-    // ★ 优化3：密码错误锁定辅助工具（5次错误锁定30分钟）
+    // ★ 优化3：密码错误锁定辅助工具（前4次不锁定，第5次起锁定，登录成功自动清零）
     const LoginLockout = {
         _getStorage() {
             // 兼容 Capacitor Preferences 和 localStorage
@@ -717,7 +717,7 @@
             const lockUntil = parseInt(storage.getItem('auth:lockUntil:' + username) || '0', 10);
             if (lockUntil > Date.now()) {
                 const remainMin = Math.ceil((lockUntil - Date.now()) / 60000);
-                return '账号已被锁定，请 ' + remainMin + ' 分钟后重试';
+                return '尝试次数过多，请 ' + Math.max(1, remainMin) + ' 分钟后重试';
             }
             return null;
         },
@@ -729,7 +729,7 @@
             if (failCount >= 5) {
                 storage.setItem('auth:lockUntil:' + username, String(Date.now() + 30 * 60 * 1000));
                 storage.removeItem(failKey);
-                return '密码错误次数过多，账号已被锁定 30 分钟';
+                return '密码错误次数过多，账号已暂时锁定，请稍后再试';
             }
             storage.setItem(failKey, String(failCount));
             return '密码错误（剩余 ' + (5 - failCount) + ' 次尝试机会）';
