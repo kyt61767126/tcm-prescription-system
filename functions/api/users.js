@@ -265,11 +265,12 @@ async function findUserForLogin(kv, username) {
                 found = users.find(u => u.phone === trimmed);
             }
             if (found) {
-                foundClinicInfo = { 
-                    user: found, 
-                    clinicId: clinic.id, 
+                foundClinicInfo = {
+                    user: found,
+                    clinicId: clinic.id,
                     clinicName: clinic.name,
-                    clinicStatus: clinic.status || 'active'
+                    clinicStatus: clinic.status || 'active',
+                    clinicExpiresAt: clinic.expiresAt || null
                 };
                 if (clinic.status === 'disabled') {
                     foundInDisabledClinic = foundClinicInfo;
@@ -683,7 +684,7 @@ export async function onRequest(context) {
                     found = await findUserForLogin(kv, username);
                 }
             }
-            const { user, clinicId, clinicName, clinicStatus } = found || {};
+            const { user, clinicId, clinicName, clinicStatus, clinicExpiresAt } = found || {};
 
             // ★ P1-6 防登录枚举：无论用户是否存在，统一走相同的密码验证流程并返回一致响应，
             //   防止攻击者通过错误码/错误消息/响应时间差异探测有效用户名。
@@ -734,6 +735,32 @@ export async function onRequest(context) {
                     success: false,
                     error: '诊所已被禁用，请联系平台管理员',
                     code: 'CLINIC_DISABLED',
+                    clinicName: clinicName
+                }, 403, context.request);
+            }
+
+            // ★ 2026-08-20 注册审核闸门：自助注册的诊所（status=test）在管理员审核通过前禁止登录
+            //   检查位于密码验证成功之后（P1-6：不构成用户名枚举向量）
+            if (clinicStatus === 'test') {
+                console.error('[登录失败] 诊所待审核:', username, clinicName);
+                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_pending_approval', context.request, { clinicName });
+                return json({
+                    success: false,
+                    error: '账号已创建，管理员审核通过后即可登录使用（如有疑问请联系客服）',
+                    code: 'PENDING_APPROVAL',
+                    clinicName: clinicName
+                }, 403, context.request);
+            }
+
+            // ★ 2026-08-20 有效期闸门：诊所授权到期后禁止登录，续费（管理员重新设置有效期）即恢复
+            if (clinicExpiresAt && new Date(clinicExpiresAt).getTime() < Date.now()) {
+                const expiredAt = new Date(clinicExpiresAt).toISOString().slice(0, 10);
+                console.error('[登录失败] 诊所已到期:', username, clinicName, expiredAt);
+                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'clinic_expired', context.request, { clinicName, expiredAt });
+                return json({
+                    success: false,
+                    error: '使用授权已于 ' + expiredAt + ' 到期，请联系管理员续费后登录',
+                    code: 'CLINIC_EXPIRED',
                     clinicName: clinicName
                 }, 403, context.request);
             }
@@ -891,6 +918,8 @@ export async function onRequest(context) {
                     id: clinic.id,
                     name: clinic.name,
                     status: clinic.status,
+                    expiresAt: clinic.expiresAt || null,
+                    source: clinic.source || null,
                     adminUsername: admin ? admin.username : '-',
                     adminName: admin ? admin.name : '-',
                     doctorCount,
@@ -1004,7 +1033,7 @@ export async function onRequest(context) {
             }
 
             const body = await context.request.json().catch(() => ({}));
-            const { clinicId, status, name, adminUsername, adminName, adminPassword } = body;
+            const { clinicId, status, name, adminUsername, adminName, adminPassword, renewDays } = body;
             if (!clinicId) {
                 return json({ success: false, error: '缺少诊所ID' }, 400);
             }
@@ -1018,6 +1047,7 @@ export async function onRequest(context) {
             const now = getNowISO();
             const oldClinic = clinics[clinicIdx];
             const changes = [];
+            let expiresSetByApproval = false;
 
             // 更新诊所状态或名称
             if (status !== undefined && status !== oldClinic.status) {
@@ -1027,6 +1057,30 @@ export async function onRequest(context) {
                 }
                 changes.push(`status: ${oldClinic.status} → ${status}`);
                 clinics[clinicIdx].status = status;
+
+                // ★ 2026-08-20 审核通过即收费开通：test → active 首次转正时自动写入 365 天有效期
+                //   （未设置或已过期的有效期才写入，避免"停用→启用"误续期）
+                if (status === 'active') {
+                    const cur = clinics[clinicIdx].expiresAt ? new Date(clinics[clinicIdx].expiresAt).getTime() : 0;
+                    if (!cur || cur < Date.now()) {
+                        const days = (typeof renewDays === 'number' && renewDays > 0 && renewDays <= 3650) ? renewDays : 365;
+                        clinics[clinicIdx].expiresAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+                        changes.push(`expiresAt: → ${clinics[clinicIdx].expiresAt.slice(0, 10)}（+${days}天）`);
+                        expiresSetByApproval = true;
+                    }
+                }
+            }
+
+            // ★ 2026-08-20 续费：对已生效诊所叠加有效期（从当前到期日或今天起 +renewDays 天，默认365）
+            //   （转正时已写入有效期的不再叠加，避免同请求重复计算）
+            if (typeof renewDays === 'number' && renewDays > 0 && renewDays <= 3650 && !expiresSetByApproval) {
+                const cur = clinics[clinicIdx].expiresAt ? new Date(clinics[clinicIdx].expiresAt).getTime() : 0;
+                const base = (cur > Date.now()) ? cur : Date.now();
+                const newExp = new Date(base + renewDays * 24 * 60 * 60 * 1000).toISOString();
+                if (newExp !== clinics[clinicIdx].expiresAt) {
+                    changes.push(`expiresAt: ${(clinics[clinicIdx].expiresAt || '-').slice(0, 10)} → ${newExp.slice(0, 10)}（续费+${renewDays}天）`);
+                    clinics[clinicIdx].expiresAt = newExp;
+                }
             }
             if (name !== undefined && name !== oldClinic.name) {
                 if (!name.trim() || name.trim().length < 2 || name.trim().length > 50) {
@@ -1414,12 +1468,13 @@ export async function onRequest(context) {
             }, 200, context.request);
         }
 
-        // ===== 自助注册诊所用 POST /users?action=register-clinic =====
-        // 新诊所自助注册：创建诊所 + 下发诊所管理员账号
-        // 安全措施：IP限流(3次/小时) + 用户名全局唯一校验 + 密码强度校验
+        // ===== 自助注册诊所 POST /users?action=register-clinic =====
+        // ★ 2026-08-20 注册审核制：手机号即账号 + 自设密码，注册即时建号但诊所状态为 test（待审核），
+        //   管理员在平台后台"审核通过"（转正）后才能登录（登录闸门见 PENDING_APPROVAL 分支）
+        // 安全措施：IP限流(3次/小时) + 手机号全局唯一校验 + 密码强度校验
         if (method === 'POST' && url.searchParams.get('action') === 'register-clinic') {
             const body = await context.request.json().catch(() => ({}));
-            const { clinicName, adminUsername, adminPassword, adminName, contactPhone, wechat, clinicStatus } = body;
+            const { clinicName, phone, password, adminName } = body;
 
             // 1. IP限流（注册更严格：3次/小时）
             const registerAllowed = await checkIpRateLimit(kv, context.request);
@@ -1441,8 +1496,8 @@ export async function onRequest(context) {
             }
 
             // 2. 参数校验
-            if (!clinicName || !adminUsername || !adminPassword) {
-                return json({ success: false, error: '请填写诊所名称、管理员账号和密码' }, 400, context.request);
+            if (!clinicName || !phone || !password) {
+                return json({ success: false, error: '请填写诊所名称、手机号和密码' }, 400, context.request);
             }
             if (!clinicName.trim()) {
                 return json({ success: false, error: '诊所名称不能为空' }, 400, context.request);
@@ -1450,27 +1505,24 @@ export async function onRequest(context) {
             if (clinicName.trim().length < 2 || clinicName.trim().length > 50) {
                 return json({ success: false, error: '诊所名称长度需在 2-50 个字符之间' }, 400, context.request);
             }
-            if (/[\u4e00-\u9fa5]/.test(adminUsername)) {
-                return json({ success: false, error: '管理员登录账号不能使用中文' }, 400, context.request);
-            }
-            if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(adminUsername)) {
-                return json({ success: false, error: '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt），仅小写字母和数字，2-12位简码' }, 400, context.request);
+            if (!/^1[3-9]\d{9}$/.test(phone)) {
+                return json({ success: false, error: '请输入正确的11位手机号（登录账号即手机号）' }, 400, context.request);
             }
             // 密码强度校验（至少8位，含字母和数字）
-            if (adminPassword.length < 8) {
+            if (password.length < 8) {
                 return json({ success: false, error: '密码至少8位' }, 400, context.request);
             }
-            if (adminPassword.length > 128) {
+            if (password.length > 128) {
                 return json({ success: false, error: '密码过长（最多128位）' }, 400, context.request);
             }
-            if (!/[a-zA-Z]/.test(adminPassword) || !/[0-9]/.test(adminPassword)) {
+            if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
                 return json({ success: false, error: '密码必须同时包含字母和数字' }, 400, context.request);
             }
 
-            // 3. 用户名全局唯一校验（跨诊所 + platform_admins）
-            const existing = await findUserForLogin(kv, adminUsername);
-            if (existing) {
-                return json({ success: false, error: '登录账号已存在，请更换（admin_诊所简码 全局唯一）' }, 409, context.request);
+            // 3. 手机号全局唯一校验（跨诊所 username/phone + platform_admins）
+            const existing = await findUserForLogin(kv, phone);
+            if (existing && existing.user) {
+                return json({ success: false, error: '该手机号已注册，请直接登录；忘记密码请联系客服重置' }, 409, context.request);
             }
 
             // 4. 诊所名称重名检查
@@ -1480,33 +1532,30 @@ export async function onRequest(context) {
                 return json({ success: false, error: '该诊所名称已被注册，请使用其他名称或联系客服' }, 409, context.request);
             }
 
-            // 5. 创建诊所和管理员用户
+            // 5. 创建诊所（status=test 待审核）和管理员用户（账号=手机号，密码=自设密码）
             const clinicId = generateId('clinic');
             const now = getNowISO();
-            const { passwordHash, salt } = await hashPassword(adminPassword);
-
-            // ★ 优化：支持创建时指定诊所状态（active/test/disabled），默认 active
-            const validStatuses = ['active', 'test', 'disabled'];
-            const finalStatus = validStatuses.includes(clinicStatus) ? clinicStatus : 'active';
+            const { passwordHash, salt } = await hashPassword(password);
 
             const clinic = {
                 id: clinicId,
                 name: clinicName.trim(),
-                status: finalStatus,
+                status: 'test',
+                source: 'self-register',
                 createdAt: now,
                 updatedAt: now
             };
 
             const adminUser = {
-                username: adminUsername,
-                name: (adminName || adminUsername).trim(),
+                username: phone,
+                phone: phone,
+                name: (adminName || phone).trim(),
                 role: ROLE_CLINIC_ADMIN,
                 passwordHash,
                 salt,
                 allowedMode: 'both',
                 cloudEnabled: true,
                 allowSavePrescription: true,
-                phone: contactPhone || '',
                 createdAt: now,
                 updatedAt: now
             };
@@ -1517,40 +1566,36 @@ export async function onRequest(context) {
             await kv.put(`clinic:${clinicId}:users`, JSON.stringify([adminUser]));
 
             // 7. 审计日志
-            await writeAuditLog(kv, clinicId, adminUsername, ROLE_CLINIC_ADMIN, 'register_clinic', `clinic=${clinicName}`, context.request, {
-                contactPhone: contactPhone || null,
-                wechat: wechat || null,
+            await writeAuditLog(kv, clinicId, phone, ROLE_CLINIC_ADMIN, 'register_clinic', `clinic=${clinicName}`, context.request, {
+                phone: phone,
                 source: 'self-register'
             });
 
             return json({
                 success: true,
-                message: '诊所注册成功！请使用管理员账号登录',
-                clinic: { id: clinicId, name: clinic.name, status: 'active' },
+                message: '注册成功！管理员审核通过后即可登录使用',
+                clinic: { id: clinicId, name: clinic.name, status: 'test' },
                 admin: sanitizeUser(adminUser, clinicId, clinic.name),
-                nextStep: '请使用 admin_' + adminUsername.replace('admin_', '') + ' 账号登录系统'
+                nextStep: '请牢记登录账号（手机号）和密码，管理员审核通过后即可登录'
             }, 201, context.request);
         }
 
-        // ===== 注册预检：检查用户名是否可用 GET /users?check-register=username =====
+        // ===== 注册预检：检查手机号是否可用 GET /users?check-register=phone =====
         if (method === 'GET' && url.searchParams.get('check-register')) {
-            const username = url.searchParams.get('check-register');
-            if (!username) {
-                return json({ success: false, error: '请提供要检查的用户名' }, 400);
+            const phone = url.searchParams.get('check-register');
+            if (!phone) {
+                return json({ success: false, error: '请提供要检查的手机号' }, 400);
             }
             // 格式校验
-            if (/[\u4e00-\u9fa5]/.test(username)) {
-                return json({ available: false, reason: '用户名不能使用中文' });
-            }
-            if (!/^admin_[a-z][a-z0-9]{1,11}$/.test(username)) {
-                return json({ available: false, reason: '管理员账号必须为 admin_诊所简码 格式（如 admin_hkt）' });
+            if (!/^1[3-9]\d{9}$/.test(phone)) {
+                return json({ available: false, reason: '请输入正确的11位手机号' });
             }
             // 可用性检查
-            const found = await findUserForLogin(kv, username);
-            if (found) {
-                return json({ available: false, reason: '该账号已被占用，请更换', username });
+            const found = await findUserForLogin(kv, phone);
+            if (found && found.user) {
+                return json({ available: false, reason: '该手机号已注册，请直接登录', phone });
             }
-            return json({ available: true, username });
+            return json({ available: true, phone });
         }
 
         // ===== 注册规范查询 GET /users?registration-info=true =====
@@ -1559,18 +1604,18 @@ export async function onRequest(context) {
                 success: true,
                 rules: {
                     clinicName: { min: 2, max: 50, pattern: '中文/英文/数字' },
-                    adminUsername: { pattern: 'admin_诊所简码', example: 'admin_hkt', minLength: 7, maxLength: 15 },
-                    adminPassword: { minLength: 8, requirements: ['包含字母', '包含数字'] },
+                    phone: { pattern: '11位手机号，登录账号即手机号' },
+                    password: { minLength: 8, requirements: ['包含字母', '包含数字'] },
                     rateLimit: '3次/小时/IP'
                 },
                 endpoints: {
                     register: 'POST /api/users?action=register-clinic',
-                    checkAvailable: 'GET /api/users?check-register={username}',
+                    checkAvailable: 'GET /api/users?check-register={phone}',
                     validateActivation: 'POST /api/license/validate'
                 },
                 support: {
                     wechat: 'hktzy1688',
-                    note: '注册后立即获得云端管理员账号，可登录系统使用'
+                    note: '注册即时建号，管理员审核通过后即可登录使用'
                 }
             });
         }

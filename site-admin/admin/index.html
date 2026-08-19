@@ -2424,33 +2424,51 @@ async function loadClinicsList() {
                 return;
             }
             listEl.innerHTML = data.data.map(c => {
-                // ★ 优化：支持三种状态显示
+                // ★ 优化：支持三种状态显示（test=自助注册待审核）
                 let statusBadge, nextStatus, toggleText;
                 if (c.status === 'active') {
                     statusBadge = '<span style="color:#27ae60;font-weight:bold;">●正常</span>';
                     nextStatus = 'disabled';
                     toggleText = '停用';
                 } else if (c.status === 'test') {
-                    statusBadge = '<span style="color:#f39c12;font-weight:bold;">●测试</span>';
+                    statusBadge = '<span style="color:#f39c12;font-weight:bold;">●待审核</span>';
                     nextStatus = 'active';
-                    toggleText = '转正';
+                    toggleText = '审核通过';
                 } else {
                     statusBadge = '<span style="color:#e74c3c;font-weight:bold;">●已停用</span>';
                     nextStatus = 'active';
                     toggleText = '启用';
                 }
+                // ★ 2026-08-20 有效期显示：正常诊所显示到期日与剩余天数，临近到期（≤30天）黄色提醒
+                let expiryHtml = '长期有效';
+                if (c.expiresAt) {
+                    const exp = new Date(c.expiresAt);
+                    const days = Math.ceil((exp.getTime() - Date.now()) / 86400000);
+                    if (days < 0) {
+                        expiryHtml = '<span style="color:#e74c3c;font-weight:bold;">已到期 ' + (-days) + ' 天</span>';
+                    } else if (days <= 30) {
+                        expiryHtml = '<span style="color:#f39c12;font-weight:bold;">剩 ' + days + ' 天（' + exp.toISOString().slice(0, 10) + '）</span>';
+                    } else {
+                        expiryHtml = '剩 ' + days + ' 天（' + exp.toISOString().slice(0, 10) + '）';
+                    }
+                }
                 const toggleBtn = '<button class="btn btn-sm btn-warning" onclick="toggleClinicStatus(\'' + c.id + '\',\'' + nextStatus + '\')">' + toggleText + '</button>';
-                const testBtn = c.status !== 'test' 
-                    ? '<button class="btn btn-sm btn-info" onclick="toggleClinicStatus(\'' + c.id + '\',\'test\')">设为测试</button>'
+                const renewBtn = (c.status === 'active')
+                    ? '<button class="btn btn-sm btn-success" onclick="renewClinic(\'' + c.id + '\')">续费1年</button>'
+                    : '';
+                const testBtn = c.status !== 'test'
+                    ? '<button class="btn btn-sm btn-info" onclick="toggleClinicStatus(\'' + c.id + '\',\'test\')">设为待审核</button>'
                     : '';
                 const editBtn = '<button class="btn btn-sm" onclick=\'editClinic(' + JSON.stringify({id:c.id,name:c.name,adminUsername:c.adminUsername,adminName:c.adminName}).replace(/'/g, "&#39;") + ')\'>编辑</button>';
                 const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '-';
+                const srcTag = c.source === 'self-register' ? ' <span style="font-size:11px;color:#3498db;">自助注册</span>' : '';
                 return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
                     '<div style="flex:1;min-width:200px;">' +
-                        '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + statusBadge + '</div>' +
+                        '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + statusBadge + srcTag + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + escapeHtml(c.adminUsername || '-') + '</strong>（' + escapeHtml(c.adminName || '-') + '）| 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
+                        '<div style="font-size:12px;color:#909399;margin-top:2px;">有效期: ' + expiryHtml + '</div>' +
                     '</div>' +
-                    '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + '</div>' +
+                    '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + ' ' + renewBtn + '</div>' +
                 '</div>';
             }).join('');
         } else {
@@ -2790,8 +2808,19 @@ function clearClinicForm() {
 }
 
 async function toggleClinicStatus(clinicId, newStatus) {
-    const action = newStatus === 'active' ? '启用' : '停用';
-    if (!confirm('确定' + action + '该诊所？')) return;
+    // ★ 2026-08-20 审核制文案：待审核→active 是收费审核动作，确认时提示收款与自动写入365天有效期
+    let action, confirmMsg;
+    if (newStatus === 'active') {
+        action = '审核通过';
+        confirmMsg = '确定审核通过该诊所？\n\n请确认已完成线下收款。\n通过后自动开通 365 天有效期，用户即可用注册手机号登录。';
+    } else if (newStatus === 'test') {
+        action = '设为待审核';
+        confirmMsg = '确定将该诊所设为待审核？\n\n设置后该诊所所有用户将无法登录。';
+    } else {
+        action = '停用';
+        confirmMsg = '确定停用该诊所？\n\n停用后该诊所所有用户将无法登录。';
+    }
+    if (!confirm(confirmMsg)) return;
     try {
         const res = await fetch(API_BASE + '/users?clinic=update', {
             method: 'POST',
@@ -2800,10 +2829,33 @@ async function toggleClinicStatus(clinicId, newStatus) {
         });
         const data = await res.json();
         if (data.success) {
-            showAlert('clinicAlert', '诊所已' + action, 'success');
+            const exp = data.clinic && data.clinic.expiresAt ? '\n有效期至：' + data.clinic.expiresAt.slice(0, 10) : '';
+            showAlert('clinicAlert', '诊所已' + action + exp, 'success');
             loadClinicsList();
         } else {
             showAlert('clinicAlert', data.error || '操作失败', 'error');
+        }
+    } catch (e) {
+        showAlert('clinicAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ★ 2026-08-20 续费：对已生效诊所在当前有效期基础上叠加 365 天（收费后操作）
+async function renewClinic(clinicId) {
+    if (!confirm('确定为该诊所续费 1 年（365天）？\n\n请确认已完成线下收款。\n续费将在当前有效期基础上顺延 365 天。')) return;
+    try {
+        const res = await fetch(API_BASE + '/users?clinic=update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ clinicId, renewDays: 365 })
+        });
+        const data = await res.json();
+        if (data.success) {
+            const exp = data.clinic && data.clinic.expiresAt ? '，有效期至：' + data.clinic.expiresAt.slice(0, 10) : '';
+            showAlert('clinicAlert', '续费成功' + exp, 'success');
+            loadClinicsList();
+        } else {
+            showAlert('clinicAlert', data.error || '续费失败', 'error');
         }
     } catch (e) {
         showAlert('clinicAlert', '网络错误：' + e.message, 'error');

@@ -1217,16 +1217,16 @@
         },
 
         // 诊所自助注册（调用后端 /users?action=register-clinic）
+        // ★ 2026-08-20 注册审核制：手机号即登录账号 + 自设密码；注册即时建号，管理员审核通过后才能登录
         async registerClinic(params) {
-            const { clinicName, adminUsername, adminPassword, adminName, wechat } = params || {};
-            if (!clinicName || !adminUsername || !adminPassword) {
+            const { clinicName, phone, password, adminName } = params || {};
+            if (!clinicName || !phone || !password) {
                 return { success: false, error: '请填写完整的注册信息' };
             }
-            const usernameCheck = validateAdminUsername(adminUsername);
-            if (!usernameCheck.valid) {
-                return { success: false, error: usernameCheck.error };
+            if (!/^1[3-9]\d{9}$/.test(String(phone).trim())) {
+                return { success: false, error: '请输入正确的11位手机号（登录账号即手机号）' };
             }
-            const strength = this.validatePasswordStrength(adminPassword);
+            const strength = this.validatePasswordStrength(password);
             if (strength.errors.length > 0) {
                 return { success: false, error: strength.errors[0] };
             }
@@ -1237,10 +1237,9 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         clinicName: clinicName.trim(),
-                        adminUsername: adminUsername.trim(),
-                        adminPassword,
-                        adminName: (adminName || '').trim(),
-                        wechat: (wechat || '').trim()
+                        phone: String(phone).trim(),
+                        password: password,
+                        adminName: (adminName || '').trim()
                     })
                 });
                 const data = (response && typeof response.json === 'function')
@@ -2046,24 +2045,15 @@
         try {
             // 登录框诊所名无条件同步（与 App/网页/桌面环境无关）
             syncLoginClinicName();
-            // 云端APP环境注入（兼容 Capacitor 与 Android WebView）
-            const isApp = (typeof global.Capacitor !== 'undefined' && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences)
-                || (typeof global.AndroidNative !== 'undefined')
-                || (typeof global.electronAPI !== 'undefined' && global.electronAPI.isAndroidAPP === true)
-                || (typeof location !== 'undefined' && location.href.indexOf('android_asset') >= 0);
-            // ★ 2026-08-19 云端桌面同步：Electron 桌面版（存在 activate.showExpireAlert 桥接）也在登录框注入"软件激活"入口
-            const isCloudDesktop = (typeof global.electronAPI !== 'undefined' && global.electronAPI.activate
-                && typeof global.electronAPI.activate.showExpireAlert === 'function');
-            if (!isApp && !isCloudDesktop) return;
             const overlay = document.getElementById('loginOverlay');
             if (!overlay) return;
-            // ★ 2026-08-20 激活完成后自动隐藏：已登录/已激活过则不再显示"软件激活"入口
+            // ★ 2026-08-20 注册完成后自动隐藏：已登录/已注册过则不再显示"注册开通"入口
             if (isCloudActivationDone()) return;
             // 已注入过则跳过，避免重复
             if (document.getElementById('activateLoginEntry')) return;
 
-            // ★ 云端为 SaaS 登录制，无本地激活码授权；登录框仅保留"软件激活"入口（申请登录账号）
-            // 定位登录按钮区，在其下方插入"软件激活"入口
+            // ★ 2026-08-20 注册审核制：云端网页/APP/桌面三端统一在登录框注入"注册开通"入口
+            //   （云端为 SaaS 登录制，注册即时建号 + 管理员审核后登录，无本地激活码授权）
             const container = overlay.querySelector('.login-buttons');
             if (!container) return;
 
@@ -2072,11 +2062,11 @@
             entry.style.cssText =
                 'margin-top:12px;padding:0 4px;';
             entry.innerHTML =
-                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 软件激活</div>';
+                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openCloudRegister){window.openCloudRegister();}">📝 注册开通</div>';
             container.parentNode.insertBefore(entry, container.nextSibling);
-            console.log('[LicenseCheck] 登录界面已注入 软件激活 入口');
+            console.log('[LicenseCheck] 登录界面已注入 注册开通 入口');
         } catch (e) {
-            console.warn('[LicenseCheck] 注入登录 软件激活 入口失败:', e);
+            console.warn('[LicenseCheck] 注入登录 注册开通 入口失败:', e);
         }
     }
 
@@ -2097,6 +2087,188 @@
             const el = document.getElementById('activateLoginEntry');
             if (el) { el.style.display = 'none'; }
         } catch (e) {}
+    }
+
+    // ============================================================================
+    // ★ 2026-08-20 一页式"注册开通"弹窗（云端注册审核制）
+    //   手机号即登录账号 + 自设密码 → 注册即时建号（诊所待审核）→ 管理员审核通过后即可登录
+    //   不修改 HTML 源码，仅运行时动态注入 DOM，符合界面保护约束
+    // ============================================================================
+
+    global.openCloudRegister = function () {
+        try {
+            let clinicName = '';
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG.clinicName) clinicName = CONFIG.clinicName;
+            } catch (e) {}
+            showCloudRegisterModal(clinicName);
+        } catch (e) {
+            console.warn('[LicenseCheck] 打开注册开通弹窗失败:', e);
+        }
+    };
+
+    function showCloudRegisterModal(defaultClinicName) {
+        // 若已打开则忽略
+        if (document.getElementById('cloudRegisterOverlay')) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = 'cloudRegisterOverlay';
+        overlay.style.cssText =
+            'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:99999;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const card = document.createElement('div');
+        card.style.cssText =
+            'background:white;border-radius:14px;width:100%;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,0.3);max-height:92vh;overflow-y:auto;';
+
+        const INPUT_STYLE = 'width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;';
+
+        card.innerHTML =
+            // 标题（注册开通 · 绿色主题）
+            '<div style="background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);padding:18px;border-radius:14px 14px 0 0;text-align:center;">' +
+                '<div style="font-size:19px;font-weight:bold;color:white;">📝 注册开通</div>' +
+                '<div style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;">惠康中医诊所管理系统 · 云端版</div>' +
+            '</div>' +
+
+            // 表单（一页式）
+            '<div id="registerForm" style="padding:16px;">' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="regClinicName" placeholder="如：惠康中医诊所" value="' + String(defaultClinicName || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" autocomplete="off" spellcheck="false" maxlength="50" style="' + INPUT_STYLE + '">' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 必填，请填写您的诊所名称</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">管理员/医师姓名 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="regAdminName" placeholder="如：王医生" autocomplete="off" spellcheck="false" maxlength="30" style="' + INPUT_STYLE + '">' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 必填，请填写管理员/医师姓名</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">手机号 <span style="color:#e53935;">*</span>（登录账号）</label>' +
+                    '<input type="text" id="regPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="' + INPUT_STYLE + '">' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号，注册后即您的登录账号</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="password" id="regPassword" placeholder="至少8位，须包含字母和数字" autocomplete="new-password" data-lpignore="true" maxlength="32" style="' + INPUT_STYLE + '">' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 至少8位，须同时包含字母和数字</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">确认密码 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="password" id="regPassword2" placeholder="请再次输入登录密码" autocomplete="new-password" data-lpignore="true" maxlength="32" style="' + INPUT_STYLE + '">' +
+                '</div>' +
+                '<div id="regError" style="display:none;margin-bottom:12px;padding:10px 12px;border-radius:8px;background:#fdecea;color:#c0392b;font-size:13px;"></div>' +
+                '<button id="regSubmitBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">📤 提交注册</button>' +
+                '<div style="text-align:center;margin-top:10px;">' +
+                    '<span id="regCloseLink" style="font-size:13px;color:#909399;cursor:pointer;text-decoration:underline;">暂不注册，返回登录</span>' +
+                '</div>' +
+                '<div style="margin-top:12px;padding:10px 12px;border-radius:8px;background:#f4f6f8;font-size:12px;color:#606266;line-height:1.6;">注册说明：提交后账号即时创建，管理员审核通过后即可用手机号登录使用。如有疑问请联系客服微信 hktzy1688。</div>' +
+            '</div>' +
+
+            // 提交中（默认隐藏）
+            '<div id="regSubmitting" style="display:none;padding:40px 16px;text-align:center;">' +
+                '<div style="font-size:34px;">📡</div>' +
+                '<div style="font-size:15px;font-weight:bold;color:#333;margin-top:8px;">正在提交注册...</div>' +
+                '<div style="font-size:12px;color:#909399;margin-top:4px;">正在连接服务器，请稍候</div>' +
+            '</div>' +
+
+            // 注册成功（默认隐藏）
+            '<div id="regSuccess" style="display:none;padding:32px 16px;text-align:center;">' +
+                '<div style="font-size:44px;">✅</div>' +
+                '<div style="font-size:17px;font-weight:bold;color:#2c3e50;margin-top:10px;">注册成功！</div>' +
+                '<div style="font-size:13px;color:#606266;margin-top:8px;line-height:1.7;">账号已创建，管理员审核通过后即可登录。<br>登录账号：<b id="regSuccessPhone" style="color:#26a69a;"></b>（请牢记）</div>' +
+                '<div style="margin-top:14px;padding:10px 12px;border-radius:8px;background:#f4f6f8;font-size:12px;color:#909399;line-height:1.6;">审核通常在工作时间 1 小时内完成，请稍后使用手机号和您设置的密码登录。如有疑问请联系客服微信 hktzy1688。</div>' +
+                '<button id="regSuccessCloseBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">好的，返回登录</button>' +
+            '</div>';
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        const showError = function (msg) {
+            const el = document.getElementById('regError');
+            if (el) {
+                el.textContent = msg;
+                el.style.display = 'block';
+            }
+        };
+        const close = function () { if (overlay.parentNode) overlay.parentNode.removeChild(overlay); };
+
+        // 关闭入口
+        const closeLink = document.getElementById('regCloseLink');
+        if (closeLink) closeLink.addEventListener('click', close);
+        const successCloseBtn = document.getElementById('regSuccessCloseBtn');
+        if (successCloseBtn) successCloseBtn.addEventListener('click', close);
+
+        // 提交注册
+        const submitBtn = document.getElementById('regSubmitBtn');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', async function () {
+                try {
+                    const errEl = document.getElementById('regError');
+                    if (errEl) errEl.style.display = 'none';
+
+                    const clinicName = (document.getElementById('regClinicName') || {}).value || '';
+                    const adminName = (document.getElementById('regAdminName') || {}).value || '';
+                    const phone = (document.getElementById('regPhone') || {}).value || '';
+                    const password = (document.getElementById('regPassword') || {}).value || '';
+                    const password2 = (document.getElementById('regPassword2') || {}).value || '';
+
+                    // 客户端校验（与服务端规则一致）
+                    if (!clinicName.trim() || clinicName.trim().length < 2) { showError('请填写诊所名称（至少2个字符）'); return; }
+                    if (!adminName.trim()) { showError('请填写管理员/医师姓名'); return; }
+                    if (!/^1[3-9]\d{9}$/.test(phone.trim())) { showError('请输入正确的11位手机号（登录账号即手机号）'); return; }
+                    if (password.length < 8) { showError('密码至少8位'); return; }
+                    if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) { showError('密码必须同时包含字母和数字'); return; }
+                    if (password !== password2) { showError('两次输入的密码不一致'); return; }
+
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = '正在提交...';
+                    const formEl = document.getElementById('registerForm');
+                    const submittingEl = document.getElementById('regSubmitting');
+                    if (formEl) formEl.style.display = 'none';
+                    if (submittingEl) submittingEl.style.display = 'block';
+
+                    const adapter = (typeof AuthCore !== 'undefined') ? AuthCore : (global.AuthCore || null);
+                    let result;
+                    if (adapter && typeof adapter.registerClinic === 'function') {
+                        result = await adapter.registerClinic({ clinicName, phone, password, adminName });
+                    } else {
+                        const fetchFn = global.cloudFetch || global.fetch;
+                        const response = await fetchFn('https://tcm-prescription-system.pages.dev/api/users?action=register-clinic', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ clinicName: clinicName.trim(), phone: phone.trim(), password: password, adminName: adminName.trim() })
+                        });
+                        result = await response.json();
+                    }
+
+                    if (result && result.success) {
+                        // 注册成功：标记完成 + 隐藏登录框入口，显示成功页
+                        setCloudActivationDone();
+                        hideActivateLoginEntry();
+                        const phoneEl = document.getElementById('regSuccessPhone');
+                        if (phoneEl) phoneEl.textContent = phone.trim();
+                        if (submittingEl) submittingEl.style.display = 'none';
+                        const successEl = document.getElementById('regSuccess');
+                        if (successEl) successEl.style.display = 'block';
+                        console.log('[LicenseCheck] 注册成功，等待管理员审核:', phone.trim());
+                    } else {
+                        // 失败：返回表单并显示错误
+                        if (submittingEl) submittingEl.style.display = 'none';
+                        if (formEl) formEl.style.display = 'block';
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = '📤 提交注册';
+                        showError((result && result.error) ? result.error : '注册失败，请稍后重试');
+                    }
+                } catch (e) {
+                    const formEl = document.getElementById('registerForm');
+                    const submittingEl = document.getElementById('regSubmitting');
+                    if (submittingEl) submittingEl.style.display = 'none';
+                    if (formEl) formEl.style.display = 'block';
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '📤 提交注册';
+                    showError('注册请求失败：' + (e.message || '网络错误'));
+                }
+            });
+        }
     }
 
     // ============================================================================
