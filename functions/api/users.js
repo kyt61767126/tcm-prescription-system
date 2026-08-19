@@ -14,10 +14,31 @@ import { provisionCloudAccount } from './license/_lib/admin-account.js';
 async function maybeProvisionFromActivation(kv, username) {
     try {
         if (!/^1[3-9]\d{9}$/.test(username)) return false; // 仅手机号账号自愈
+        // 冷却：15 分钟内不重复探测（避免对未知手机号反复扫描 KV）
+        const cooled = await kv.get('admin_selfheal_cool:' + username, 'json');
+        const now = Date.now();
+        if (cooled && cooled.t > now) return false;
+
+        let requestId = null;
+        let st = '';
+        // 1) 优先用手机号索引（新激活申请走此路径，O(1)）
         const idx = await kv.get('admin_phone:' + username, 'json');
-        if (!idx || !idx.requestId) return false;
-        if (idx.status !== 'activated' && idx.status !== 'approved') return false; // 仅已通过
-        const record = await kv.get('admin_req:' + idx.requestId, 'json');
+        if (idx && idx.requestId) {
+            requestId = idx.requestId;
+            st = idx.status || '';
+        } else {
+            // 2) 兜底：扫描请求索引（最新优先，找到即停），兼容索引上线前的历史激活申请
+            const list = (await kv.get('admin_req_index', 'json')) || [];
+            for (const rid of list.slice(0, SCAN_LIMIT)) {
+                const rec = await kv.get('admin_req:' + rid, 'json');
+                if (rec && rec.phone === username) { requestId = rid; st = rec.status || ''; break; }
+            }
+        }
+        // 无论是否命中都写冷却标记，避免下一次失败登录再次全量扫描
+        await kv.put('admin_selfheal_cool:' + username, JSON.stringify({ t: now + 15 * 60 * 1000 })).catch(() => {});
+        if (!requestId) return false;
+        if (st !== 'activated' && st !== 'approved') return false; // 仅已通过
+        const record = await kv.get('admin_req:' + requestId, 'json');
         if (!record) return false;
         await provisionCloudAccount(kv, record);
         return true;
@@ -26,6 +47,7 @@ async function maybeProvisionFromActivation(kv, username) {
         return false;
     }
 }
+const SCAN_LIMIT = 300;
 
 // P1-6 安全增强：CORS 白名单（替代通配符 '*'）
 function getAllowedOrigins() {
