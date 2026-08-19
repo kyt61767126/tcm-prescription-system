@@ -24,12 +24,24 @@
   # 防止点击劫持
   X-Frame-Options: DENY
 
-# 静态资源：长缓存
+# 静态资源：业务 JS 一律 304 校验（max-age=0 + must-revalidate）
+# ★ 2026-08-20 教训：auth-core.js 曾被 max-age=86400 强缓存 24h，云端APP 两版更新不生效
+#   （登录框一直显示旧"管理员激活"入口）。业务 JS 更新频繁且影响功能逻辑，必须部署后立即生效；
+#   未变化时 etag 304 响应极小，性能影响可忽略。历史同类教训：video-recorder.js。
 /*.js
-  Cache-Control: public, max-age=86400
+  Cache-Control: public, max-age=0, must-revalidate
 
-# 媒体录像/拍照脚本：禁止长缓存（必须在部署后立即生效，
-# 否则 CDN 边缘仍回退旧版脚本，导致云端网页版录像照片无法保存/查看）
+# 第三方库（几乎不变，体积大）：保留长缓存
+/qrcode.min.js
+  Cache-Control: public, max-age=604800
+/xlsx.full.min.js
+  Cache-Control: public, max-age=604800
+
+# 站点配置（诊所名等）：始终重新校验，部署后立即生效
+/config.json
+  Cache-Control: no-cache, must-revalidate
+
+# 媒体录像/拍照脚本：禁止长缓存（历史教训，已并入上方 /*.js 规则，此处保留防回退）
 /electron/video-recorder.js
   Cache-Control: public, max-age=0, must-revalidate
 /*.css
