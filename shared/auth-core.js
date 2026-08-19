@@ -929,8 +929,10 @@
 
             // ★ 2026-08-20 登录成功即视为"软件已激活"，登录框的"软件激活"入口自动隐藏
             //   （登录框通常将随登录成功关闭；此处设置标记确保下次回到登录框时不再显示）
-            setCloudActivationDone();
-            hideActivateLoginEntry();
+            // ★ 2026-08-19 BUG修复：setCloudActivationDone/hideActivateLoginEntry 定义在 IIFE-B，
+            //   本处位于 IIFE-A，裸调用会报 "is not defined"；改经 global 取（IIFE-B 已挂载到 global）
+            global.setCloudActivationDone && global.setCloudActivationDone();
+            global.hideActivateLoginEntry && global.hideActivateLoginEntry();
 
             // P4-4: 登录成功后启动会话监控（8小时自动登出）
             // options.onSessionTimeout 可选外部回调（用于登出后跳转/刷新页面）
@@ -2088,6 +2090,12 @@
             if (el) { el.style.display = 'none'; }
         } catch (e) {}
     }
+
+    // ★ 2026-08-19 BUG修复：以上激活态标记函数位于 IIFE-B，但登录成功路径（IIFE-A）也会调用，
+    //   需挂载到 global 供跨作用域访问（配合 IIFE-A 的 global.setCloudActivationDone 调用）
+    global.isCloudActivationDone = isCloudActivationDone;
+    global.setCloudActivationDone = setCloudActivationDone;
+    global.hideActivateLoginEntry = hideActivateLoginEntry;
 
     // ============================================================================
     // ★ 2026-08-20 一页式"注册开通"弹窗（云端注册审核制）
