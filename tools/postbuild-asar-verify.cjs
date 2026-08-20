@@ -67,7 +67,22 @@ markers.push({ key: 'asar 版本号 ' + version, ok: versionRe.test(ISO), value:
 
 // D. 云端产品标识（若产品是云端机构版，锚点误伤保护必须存在）
 if (/云|cloud/i.test(pkg.name || '')) {
-    markers.push({ key: '云端锚点误伤保护 _isCloudProd', ok: /_isCloudProd/.test(ISO) });
+    markers.push({ key: '云端锚点误伤保护 _isCloudProd', ok: /_isCloudProd|anyCloudHint|isCloudProduct/.test(ISO) });
+    // D2. Arch 2.24（2026-08-21 机构版复发根治）专属 4 条修复标识
+    //     anyCloudHint    = 无 APP_MODE 也能判云端，防 isDesktopLocal 误判
+    //     _roleSaysAdmin  = localStorage 预登录管理员豁免，防 enforce 在登录前打 role=user
+    //     _mustNotDowngrade = admin/clinic_admin 身份永不降级
+    //     Arch 2.24       = 可观测水印（按钮 tooltip 上的架构版本）
+    var _d2_1 = /anyCloudHint/.test(ISO);
+    var _d2_2 = /_roleSaysAdmin/.test(ISO);
+    var _d2_3 = /_mustNotDowngrade/.test(ISO);
+    var _d2_4 = /Arch 2\.24/.test(ISO);
+    var _d2_ok = _d2_1 && _d2_2 && _d2_3 && _d2_4;
+    markers.push({ key: 'Arch 2.24 anyCloudHint 云端无APP_MODE判', ok: _d2_1 });
+    markers.push({ key: 'Arch 2.24 _roleSaysAdmin 存储管理员豁免', ok: _d2_2 });
+    markers.push({ key: 'Arch 2.24 _mustNotDowngrade 永不打user', ok: _d2_3 });
+    markers.push({ key: 'Arch 2.24 水印(按钮title含Arch2.24)', ok: _d2_4 });
+    markers.push({ key: 'Arch 2.24 云端复发修复 4 项标识(ALL)', ok: _d2_ok });
 }
 
 var fail = 0;

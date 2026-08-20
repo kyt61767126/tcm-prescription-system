@@ -90,9 +90,12 @@
         var umb = document.getElementById('userManageBtn');
         var cpb = document.getElementById('changePwdBtn');
         var cpr = document.getElementById('clinicPrescriptionBtn');
-        if (umb) { umb.style.display = p.canManage ? 'block' : 'none'; umb.style.visibility = p.canManage ? 'visible' : 'hidden'; }
-        if (cpb) { cpb.style.display = p.canChangePwd ? 'block' : 'none'; cpb.style.visibility = p.canChangePwd ? 'visible' : 'hidden'; }
-        if (cpr) { cpr.style.display = p.canManage ? 'block' : 'none'; cpr.style.visibility = p.canManage ? 'visible' : 'hidden'; }
+        // ─── Arch 2.24 可观测水印：把架构版本+修复 ID 写进 title，用户悬停按钮就能判断是否新包生效
+        //   （不改变视觉文字，只改 tooltip，避免 UI 基线 SHA256 漂移）
+        var _archWatermark = 'Arch 2.24 | isDesktopLocal=isElectron+anyCloudHint | roleDowngradeGuard | storageAdminExempt';
+        if (umb) { umb.style.display = p.canManage ? 'block' : 'none'; umb.style.visibility = p.canManage ? 'visible' : 'hidden'; umb.setAttribute('title', (umb.getAttribute('title') ? umb.getAttribute('title').split(' || ')[0] + ' || ' : '') + _archWatermark); }
+        if (cpb) { cpb.style.display = p.canChangePwd ? 'block' : 'none'; cpb.style.visibility = p.canChangePwd ? 'visible' : 'hidden'; cpb.setAttribute('title', (cpb.getAttribute('title') ? cpb.getAttribute('title').split(' || ')[0] + ' || ' : '') + _archWatermark); }
+        if (cpr) { cpr.style.display = p.canManage ? 'block' : 'none'; cpr.style.visibility = p.canManage ? 'visible' : 'hidden'; cpr.setAttribute('title', (cpr.getAttribute('title') ? cpr.getAttribute('title').split(' || ')[0] + ' || ' : '') + _archWatermark); }
         // 移动端按钮 btn2（【用户管理】→ 改密码在移动端是改密图标，无移动端时无此按钮）
         try {
             var btn2 = document.getElementById('mobileBtn2');
@@ -114,61 +117,89 @@
 
     // ──────────────── Setup 权威模式的 edition 纠正（只改状态不碰 DOM，DOM 由 __applyUserButtons 统一写） ────────────────
     function __enforceStandardEditionInner(reason) {
-        var isDesktopLocal = false;
-        try {
-            if (typeof IS_ELECTRON !== 'undefined' && IS_ELECTRON) isDesktopLocal = true;
-            if (global.electronAPI && global.electronAPI.isElectron) isDesktopLocal = true;
-            if (isDesktopLocal && global.APP_MODE && String(global.APP_MODE) !== 'offline') isDesktopLocal = false;
-            // 云端保护：APP_MODE=cloud 即使是 Electron 也不算惠康中医-本地权威
-            try { if (String(global.APP_MODE || '') === 'cloud') isDesktopLocal = false; } catch(_) {}
-        } catch(_) {}
-
+        // 先收集所有不依赖 window.APP_MODE 的云端/机构线索（APP_MODE 在 cloud_desktop/index.html L680+ 才定义，晚于本脚本）
         var tag = (typeof getEditionTag === 'function') ? String(getEditionTag()) : '';
         var globalProduct = (typeof window.PRODUCT_NAME !== 'undefined') ? String(window.PRODUCT_NAME) : '';
         var configProduct = ''; try { if (typeof CONFIG !== 'undefined') configProduct = String(CONFIG.productName || ''); } catch(_) {}
         var configEdition = ''; try { if (typeof CONFIG !== 'undefined') configEdition = String(CONFIG.edition || ''); } catch(_) {}
         var globalEdition = String(global.EDITION || '');
         var domMarker = !!(document.getElementById('_force_standard_edition_marker_'));
+        var permEdition = ''; try { if (global.Permission && Permission._edition) permEdition = String(Permission._edition); } catch(_) {}
+        var cloudApiBaseExists = (typeof CLOUD_API_BASE !== 'undefined');
+        var urlHasCloud = false;
+        try {
+            var _loc = String(document.location && document.location.href ? document.location.href : '');
+            var _path = String(document.location && document.location.pathname ? document.location.pathname : '');
+            urlHasCloud = (_loc.indexOf('db-yunduan') >= 0 || _path.indexOf('db-yunduan') >= 0 || _loc.indexOf('/cloud_') >= 0 || _path.indexOf('/cloud_') >= 0);
+        } catch(_) {}
+        var anyCloudHint = __isCloudEditionStr(configEdition) || __isCloudEditionStr(globalEdition) || __isCloudEditionStr(permEdition) || cloudApiBaseExists || urlHasCloud;
 
-        // ★ 2026-08-21 云端宽判：APP_MODE/PRODUCT_NAME 在 index.html 600+ 行定义，可能晚于本脚本加载，
-        //   必须用"不依赖提前声明"的证据：(a) 任一处 edition 值含 云端/cloud/yj/yb（__isCloudEditionStr）；
-        //   (b) URL/路径含 db-yunduan/cloud；(c) 云端专属全局 CLOUD_API_BASE 存在。
+        // ───── ① isDesktopLocal 重写：有任何云端/机构线索立即=false，不再等 APP_MODE ─────
+        var isDesktopLocal = false;
+        try {
+            var isElectronNow = false;
+            try { if (typeof IS_ELECTRON !== 'undefined' && IS_ELECTRON) isElectronNow = true; } catch(_) {}
+            try { if (global.electronAPI && global.electronAPI.isElectron) isElectronNow = true; } catch(_) {}
+            if (isElectronNow) {
+                // Electron 环境下判离线权威：必须显式 APP_MODE === 'offline'，或无任何云端线索
+                var appModeOffline = false;
+                try { appModeOffline = (String(global.APP_MODE || '') === 'offline'); } catch(_) {}
+                var appModeCloud = false;
+                try { appModeCloud = (String(global.APP_MODE || '') === 'cloud'); } catch(_) {}
+                if (appModeCloud || anyCloudHint) {
+                    // 有 APP_MODE=cloud 或任一条云端线索 → 明确是云端 Electron，不启用 Setup 离线权威
+                    isDesktopLocal = false;
+                } else if (appModeOffline) {
+                    isDesktopLocal = true;
+                } else if (globalProduct === '惠康中医-本地' || configProduct === '惠康中医-本地') {
+                    isDesktopLocal = true;
+                } else if (__isInstStr(configEdition) || __isInstStr(globalEdition) || __isInstStr(permEdition)) {
+                    // 任一处 edition 明确机构版 → 永远不启用权威离线强制（会误伤身份）
+                    isDesktopLocal = false;
+                } else if (tag.indexOf('云端') >= 0) {
+                    isDesktopLocal = false;
+                } else {
+                    // 最保守：APP_MODE 未定义又无任何云端线索 + 是 Electron → 暂保留 true（老离线项目）
+                    isDesktopLocal = true;
+                }
+            }
+        } catch(_) { isDesktopLocal = false; }
+
+        // ───── 云端宽判（保留，给 isStandardSoft 的 softMarker 用）─────
         var isCloudProduct = false;
         try {
             if (String(global.APP_MODE || '') === 'cloud') isCloudProduct = true;
             if (String(globalProduct) === '惠康中医-云端' || String(configProduct) === '惠康中医-云端') isCloudProduct = true;
-            if (!isCloudProduct && __isCloudEditionStr(configEdition)) isCloudProduct = true;
-            if (!isCloudProduct && __isCloudEditionStr(globalEdition)) isCloudProduct = true;
-            try { if (global.Permission && Permission._edition && __isCloudEditionStr(String(Permission._edition))) isCloudProduct = true; } catch(_) {}
-            if (!isCloudProduct && typeof CLOUD_API_BASE !== 'undefined') isCloudProduct = true;
-            try {
-                var _loc = String(document.location && document.location.href ? document.location.href : '');
-                var _path = String(document.location && document.location.pathname ? document.location.pathname : '');
-                if (_loc.indexOf('db-yunduan') >= 0 || _path.indexOf('db-yunduan') >= 0) isCloudProduct = true;
-                if (_loc.indexOf('/cloud_') >= 0 || _path.indexOf('/cloud_') >= 0) isCloudProduct = true;
-            } catch(_) {}
+            if (anyCloudHint) isCloudProduct = true;  // 汇总已有所有云端线索，避免重复判断
         } catch(_) {}
-        // ★ 云端宽判兜底：softMarker 在"明确为云端产品或任一处 edition 含云端/cloud"时一律禁用，
-        //   防止因 APP_MODE 晚定义而让「_force_standard_edition_marker_」误伤云端机构版。
-        var editionCloudHint = __isCloudEditionStr(configEdition) || __isCloudEditionStr(globalEdition);
-        try { if (global.Permission && Permission._edition && __isCloudEditionStr(String(Permission._edition))) editionCloudHint = true; } catch(_) {}
+        var editionCloudHint = __isCloudEditionStr(configEdition) || __isCloudEditionStr(globalEdition) || __isCloudEditionStr(permEdition);
         var softMarker = !isCloudProduct && !editionCloudHint && domMarker;
 
+        // ───── ② institutionExempt：增加 localStorage 预登录管理员豁免（防止登录前把 role 打成 user）─────
+        var _cfgIsInst = __isInstStr(configEdition);
+        var _winIsInst = __isInstStr(globalEdition);
+        var _permIsInst = __isInstStr(permEdition);
+        var _storedRole = '';
+        try {
+            var _usRaw = localStorage.getItem('currentUser');
+            if (_usRaw) { try { var _usObj = JSON.parse(_usRaw); _storedRole = String(_usObj.role || '').toLowerCase().trim(); } catch(_) {} }
+        } catch(_) {}
+        var _memoryRole = '';
+        try { if (typeof currentUser !== 'undefined' && currentUser) _memoryRole = String(currentUser.role || '').toLowerCase().trim(); } catch(_) {}
+        var _roleSaysAdmin = (_storedRole === 'admin' || _storedRole === 'clinic_admin' || _memoryRole === 'admin' || _memoryRole === 'clinic_admin');
+        var institutionExempt = _cfgIsInst || _winIsInst || _permIsInst || _roleSaysAdmin;
+
+        // ───── isStandardSoft：保留，但机构版豁免已含 role 线索 → 不会误触发标准版 ─────
         var isStandardSoft = false
             || (tag.indexOf('标准版') >= 0 && !__isInstStr(configEdition) && !__isInstStr(globalEdition))
             || (globalProduct === '惠康中医-本地')
             || (configProduct === '惠康中医-本地')
-            || ((['personal', 'offline_personal'].indexOf(configEdition) >= 0) && !__isInstStr(globalEdition))
-            || ((globalEdition === 'personal' || globalEdition === 'offline_personal') && !__isInstStr(configEdition))
+            || ((['personal', 'offline_personal'].indexOf(configEdition) >= 0) && !__isInstStr(globalEdition) && !_roleSaysAdmin)
+            || ((globalEdition === 'personal' || globalEdition === 'offline_personal') && !__isInstStr(configEdition) && !_roleSaysAdmin)
             || softMarker;
 
-        // ★ 机构版豁免（使用宽松判属：中文「云端机构版」「机构版」也命中，避免精确匹配漏网）
-        var _cfgIsInst = __isInstStr(configEdition);
-        var _winIsInst = __isInstStr(globalEdition);
-        var _permIsInst = false; try { if (global.Permission && Permission._edition && __isInstStr(String(Permission._edition))) _permIsInst = true; } catch(_) {}
-        var institutionExempt = _cfgIsInst || _winIsInst || _permIsInst;
-
         var mustEnforce = isDesktopLocal || isStandardSoft;
+
         if (!institutionExempt && mustEnforce) {
             // A) edition 强制 personal（通过归一化锁 setter 自动三写同步）
             try {
@@ -177,11 +208,17 @@
             } catch(_) { try { global.EDITION = 'personal'; } catch(_) {} }
             try { if (global.Permission && typeof Permission.setEdition === 'function') Permission.setEdition('personal'); } catch(_) {}
             try { if (global.Permission) Permission._edition = 'personal'; } catch(_) {}
-            // C) role 强制 user（单用户）
+            // ───── ③ role 强改写死保护：admin/clinic_admin 身份永不打 user ─────
             try {
-                if (typeof currentUser !== 'undefined' && currentUser) currentUser.role = 'user';
-                var _us = localStorage.getItem('currentUser');
-                if (_us) { try { var _u = JSON.parse(_us); _u.role = 'user'; localStorage.setItem('currentUser', JSON.stringify(_u)); } catch(_) {} }
+                var _mustNotDowngrade = _roleSaysAdmin;  // 存储或内存里有 admin/clinic_admin
+                // 额外：明确机构版 edition 的任何一处也不允许降权
+                if (!_mustNotDowngrade && (_cfgIsInst || _winIsInst || _permIsInst)) _mustNotDowngrade = true;
+                if (!_mustNotDowngrade) {
+                    // 只有"edition 全是个人版线索 + role 不是 admin/clinic_admin"时才允许降级
+                    if (typeof currentUser !== 'undefined' && currentUser) currentUser.role = 'user';
+                    var _us3 = localStorage.getItem('currentUser');
+                    if (_us3) { try { var _u3 = JSON.parse(_us3); _u3.role = 'user'; localStorage.setItem('currentUser', JSON.stringify(_u3)); } catch(_) {} }
+                }
             } catch(_) {}
         }
         // ★★★ 所有出口（豁免 OR 强制执行完毕）最后统一由 Single-Writer 对齐 DOM，永远一致
