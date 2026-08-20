@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>工单审批 · 惠康中医平台管理后台</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f7fa;color:#333;padding:24px;font-size:14px;line-height:1.7}
+.wrap{max-width:1200px;margin:0 auto}
+.top-bar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
+.top-bar h1{font-size:22px;color:#2c3e50}
+.top-bar .nav a{margin-left:14px;color:#606266;text-decoration:none}
+.top-bar .nav a.active{color:#3498db;font-weight:600}
+.alert{padding:10px 16px;border-radius:6px;margin-bottom:16px;background:#d1ecf1;color:#0c5460;border:1px solid #bee5eb}
+.table-box{background:white;border-radius:8px;box-shadow:0 1px 4px rgba(0,0,0,.06);overflow:hidden;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:960px}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid #ebeef5;font-size:13px}
+th{background:#f5f7fa;color:#606266;font-weight:600;white-space:nowrap}
+tr:hover{background:#f9fafc}
+.mono{font-family:"Courier New",monospace;color:#2c3e50}
+.tag{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:500}
+.tag-pending{background:#fff3cd;color:#856404}
+.tag-approved{background:#d4edda;color:#155724}
+.tag-rejected{background:#f8d7da;color:#721c24}
+.btn{padding:6px 14px;border:none;border-radius:4px;cursor:pointer;font-size:13px;margin:0 2px}
+.btn-approve{background:#27ae60;color:white}.btn-approve:hover{background:#229954}
+.btn-reject{background:#e74c3c;color:white}.btn-reject:hover{background:#c0392b}
+.btn-code{background:#3498db;color:white}.btn-code:hover{background:#2980b9}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-bar">
+    <h1>🗂️ 激活工单审批</h1>
+    <div class="nav">
+      <a href="index.html">激活码管理</a>
+      <a href="ticket-approval.html" class="active">工单审批</a>
+      <a href="build-queue.html">打包队列</a>
+    </div>
+  </div>
+  <div class="alert">
+    <strong>对接规则3：</strong>
+    客户提交的工单由 license-manager.submitActivationTicket 上传到此。
+    <br>⚠️ 列表中 machineId 显示前后各 6 位 + 中间打码（避免泄露完整哈希给操作员，规则3只上传加密串、不上原始硬件）。
+    <br>审批通过后自动调用 /api/license/activate-from-ticket 写入激活码并通过邮件/短信通知客户。
+  </div>
+  <div class="table-box">
+    <table>
+      <thead>
+        <tr><th>工单编号</th><th>提交时间</th><th>诊所名</th><th>版本</th>
+          <th>联系人</th><th>联系电话</th>
+          <th>设备标识（哈希，前后 6 位）</th>
+          <th>状态</th><th>操作</th></tr>
+      </thead>
+      <tbody id="ticket-tbody">
+        <tr><td colspan="9" style="text-align:center;color:#909399;padding:40px">加载中，请稍候...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+(function(){
+  var LIST='/api/license/ticket/list', APPR='/api/license/activate-from-ticket', REJ='/api/license/ticket/reject';
+  var tbody = document.getElementById('ticket-tbody');
+  function mask(id){ if(!id) return '-'; if(id.length<=12) return id; return id.slice(0,6)+'••••'+id.slice(-6); }
+  function tagHTML(s){
+    if(s==='submitted'||s==='pending') return '<span class="tag tag-pending">待审批</span>';
+    if(s==='approved') return '<span class="tag tag-approved">已通过</span>';
+    if(s==='rejected') return '<span class="tag tag-rejected">已拒绝</span>';
+    return '<span class="tag">'+s+'</span>';
+  }
+  function render(list){
+    if(!list||!list.length){
+      tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:#909399;padding:40px">暂无工单</td></tr>';
+      return;
+    }
+    tbody.innerHTML=list.map(function(t){
+      return '<tr>'+
+        '<td class="mono">'+(t.ticketNo||'-')+'</td>'+
+        '<td>'+(t.submittedAt||'-')+'</td>'+
+        '<td>'+(t.clinicName||'-')+'</td>'+
+        '<td>'+(t.edition||'-')+'</td>'+
+        '<td>'+(t.contactName||'-')+'</td>'+
+        '<td>'+(t.contactPhone||t.contactWechat||'-')+'</td>'+
+        '<td class="mono" title="完整哈希仅写入激活校验，不回显">'+mask(t.machineId)+'</td>'+
+        '<td>'+tagHTML(t.status)+'</td>'+
+        '<td>'+
+          ((t.status==='submitted'||t.status==='pending')
+            ? '<button class="btn btn-approve" data-no="'+t.ticketNo+'" data-action="approve">✅ 一键通过并生成激活码</button>'+
+              '<button class="btn btn-reject" data-no="'+t.ticketNo+'" data-action="reject">❌ 拒绝</button>'
+            : '<button class="btn btn-code" data-no="'+t.ticketNo+'" data-action="detail">📋 详情</button>')+
+        '</td></tr>';
+    }).join('');
+  }
+  async function load(){
+    try{
+      var r=await fetch(LIST,{credentials:'same-origin'});
+      var d=await r.json();
+      render(d&&d.list?d.list:[]);
+    }catch(e){
+      tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:#e74c3c;padding:40px">工单列表加载失败：'+e.message+'</td></tr>';
+    }
+  }
+  tbody.addEventListener('click', async function(e){
+    var btn=e.target.closest('button[data-action]'); if(!btn) return;
+    var no=btn.getAttribute('data-no'), act=btn.getAttribute('data-action');
+    try{
+      if(act==='approve'){
+        var r=await fetch(APPR,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({ticketNo:no})});
+        var d=await r.json();
+        alert(d.success?('通过成功，激活码：'+(d.code||'（已发送给客户）')):('失败：'+(d.error||'未知')));
+        if(d.success) load();
+      }else if(act==='reject'){
+        var reason=prompt('请输入拒绝原因（客户可见）：'); if(reason===null) return;
+        var r=await fetch(REJ,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({ticketNo:no,reason:reason})});
+        var d=await r.json();
+        alert(d.success?'已拒绝':('失败：'+(d.error||'未知')));
+        if(d.success) load();
+      }else{
+        alert('工单 '+no+' 详情接口待后端实现');
+      }
+    }catch(err){ alert('请求失败：'+err.message); }
+  });
+  load();
+})();
+</script></body></html>
