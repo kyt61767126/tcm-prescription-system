@@ -1279,6 +1279,24 @@ let currentUser = null;
         function saveUsers(users) {
             localStorage.setItem('local_systemUsers', simpleEncrypt(JSON.stringify(users)));
         }
+        // ★ 供 auth-core onAdminActivated 管理员激活成功后，把手机号登录账号同步到前端登录表
+        // （与 index-app.html 一致：JAVA/原生激活只把手机号账号写入本地 config，页面读不到，
+        //   登录 getUsers() 读 localStorage，需在此显式补入，登录才能成功）
+        window.addLocalActivationUser = function(u) {
+            try {
+                if (!u || !u.username) return;
+                const list = getUsers();
+                if (!Array.isArray(list)) return;
+                if (list.some(x => x && x.username === u.username)) return;
+                list.push({
+                    username: u.username,
+                    password: u.password || 'admin',
+                    name: u.name || u.username,
+                    role: u.role || 'admin'
+                });
+                saveUsers(list);
+            } catch (e) { console.warn('addLocalActivationUser:', e); }
+        };
 
         async function handleLogin() {
             try {

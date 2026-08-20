@@ -1282,6 +1282,24 @@ let currentUser = null;
         function saveUsers(users) {
             localStorage.setItem('local_systemUsers', simpleEncrypt(JSON.stringify(users)));
         }
+        // ★ 供 auth-core 管理员激活成功后，把手机号登录账号同步到前端用户表
+        // 根因：JAVA 激活把账号写入 filesDir(config.json)，而 WebView 页面读的是 assets 静态 config.json，
+        // 登录 getUsers() 读 localStorage，读不到手机号账号 → 需在此显式补入，登录才能成功
+        window.addLocalActivationUser = function(u) {
+            try {
+                if (!u || !u.username) return;
+                const list = getUsers();
+                if (!Array.isArray(list)) return;
+                if (list.some(x => x && x.username === u.username)) return;
+                list.push({
+                    username: u.username,
+                    password: u.password || 'admin',
+                    name: u.name || u.username,
+                    role: u.role || 'admin'
+                });
+                saveUsers(list);
+            } catch (e) { console.warn('addLocalActivationUser:', e); }
+        };
 
         async function handleLogin() {
             try {

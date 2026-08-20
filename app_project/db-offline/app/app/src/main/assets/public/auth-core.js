@@ -2510,6 +2510,19 @@
             const phone = state.phone;
             const descEl = document.getElementById('adminSuccessDesc');
             document.getElementById('adminSuccessPhone').textContent = phone;
+            // ★ 无条件同步登录账号到前端用户表（2026-08-20 修复登录"手机或密码错误"）
+            //   根因：JAVA 激活只把手机号账号写入 filesDir config.json，前端登录读 localStorage local_systemUsers，
+            //   读不到该账号 → 登录必然失败。故无论下方走 install / else / catch 哪个分支，
+            //   只要审核通过就先把手机号账号补入本地登录表，密码留空默认 admin。
+            try {
+                if (typeof window.addLocalActivationUser === 'function') {
+                    window.addLocalActivationUser({
+                        username: phone || state.adminName || '',
+                        password: state.password || 'admin',
+                        name: state.adminName || phone || '管理员'
+                    });
+                }
+            } catch (ea) { console.warn('同步激活登录账号到前端失败:', ea); }
             // 离线 APP：本地安装 license + 重启；云端 APP（无 installAdminLicense）：账号已在云端创建，提示登录
             if (global.electronAPI && global.electronAPI.activate &&
                 typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {
@@ -2522,6 +2535,17 @@
                         phone: phone
                     });
                     if (inst && inst.success) {
+                        // ★ 同步登录账号到前端用户表：JAVA 只把手机号账号写入 filesDir config.json，
+                        //   页面读不到(读 assets 静态 config.json)，必须在此补入 localStorage 才能登录
+                        try {
+                            if (typeof window.addLocalActivationUser === 'function') {
+                                window.addLocalActivationUser({
+                                    username: state.phone || state.adminName || '',
+                                    password: state.password || 'admin',
+                                    name: state.adminName || state.phone || '管理员'
+                                });
+                            }
+                        } catch (ea) { console.warn('同步激活登录账号到前端失败:', ea); }
                         descEl.innerHTML = '管理员已通过您的激活申请<br>软件即将重启，请使用手机号登录';
                         show('adminSuccess');
                         document.getElementById('adminSuccessBtn').textContent = '🔄 重启应用';
