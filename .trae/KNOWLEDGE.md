@@ -259,7 +259,53 @@
   3. electron-builder 相同 outputDir 重打包必然 asar 复用，必须清目录后重打。
 - **举一反三**：本修复同步覆盖 shared→10 份 permission.js 副本（哈希一致）+ 云端版 enforceStandardEditionButtons 副本（public/index.html / cloud_desktop/index.html）需按同样结构补 __healInstitutionBtns 兜底（如尚未修复）。
 
+### 2.23 【架构重构·四层根治】Setup 1.0.81 / 1.2.84（一劳永逸杜绝版本按钮类似问题）
+- **历史代价**：1.2.77 → 1.2.80 → 1.0.79 → 1.0.80，四轮补丁后分别又出现【改密码】/【两按钮全无】反方向现象。每次只解决"最近一条赋值路径"，但**架构级六大设计缺陷**不根除，新 bug 必然复发：
+  1. **多点写入竞态（最后写入赢）**：userManageBtn/changePwdBtn/clinicPrescriptionBtn 的 display 被 updateUserDisplay/enforce D 层 / applyRuntimePermissions / enforce catch 四处独立赋值，微任务调度顺序不定 → 按钮最终态是"随机函数"。
+  2. **edition 三处状态分道**：CONFIG.edition / window.EDITION / Permission._edition 三写不同读、异步时序不同步（2.18 节"显示离线标准版但改密按钮缺失"的根因）。
+  3. **代码副本膨胀人工点对**：11 permission.js + 11 auth-core.js + 3 个内嵌 enforceStandardEditionButtons，shared 修改后靠"人工哈希审计+整文件复制"，漏副本是必然事件（2.20 节检出 3 处漂移）。
+  4. **打包后无自动验证**：electron-builder 静默缓存/复用旧 asar（1.2.80 和 1.0.80 第一次重打）——修复代码未落位、用户却安装以为修复。
+  5. **两套强制逻辑打架**：`enforceStandardEditionButtons`（Setup 权威对齐）和 `Permission.applyRuntimePermissions`（运行时权限）彼此无通信、无优先级。
+  6. **DOM 锚点判据与权威模式混淆**：`_force_standard_edition_marker_` HTML 锚点与 Setup 权威 IS_DESKTOP_LOCAL 并列 OR → 2.19 节"云端机构版被误伤"。
 
+---
+
+#### A 层：Single-Writer 按钮写入源（shared/button-manager.js）
+- **设计原则**：三件套按钮的 display/visibility 只允许一个函数写入——`__applyUserButtons(user, edition)`。
+- 实现：内部计算 `canManage/canChangePwd`（优先 Permission 类，降级兼容）后统一落 DOM，移动端 btn2 图标/标签/action 一并重设。
+- **补丁入口**：`__patchOldCallers()`（DOMContentLoaded 后运行，确保内嵌函数已定义）运行时覆盖三个多写源：
+  1. 覆盖 `window.enforceStandardEditionButtons` → 新内部版先做 edition/role 纠正（不动 DOM）→ 最后统一 `__applyUserButtons`。
+  2. 覆盖 `Permission.applyRuntimePermissions` → 旧函数执行后再用 Single-Writer 对齐三件套（覆盖其不对称隐藏副作用），同步入口屏蔽（非按钮）保留。
+  3. Wrapper `updateUserDisplay` → 旧函数跑业务逻辑（用户名显示等）后再 Single-Writer 覆盖三件套，消掉其内部的多写赋值。
+- **结果**：任何异步回调执行顺序如何打乱，最终按钮永远由 `__applyUserButtons` 这同一计算逻辑落 DOM——**消除"最后写入赢"竞态**。
+
+#### B 层：Edition 归一化锁（shared/edition-lock.js，Object.defineProperty 拦截）
+- **设计原则**：CONFIG.edition 是唯一真源；setter 自动三写同步（CONFIG 存储槽 + window.EDITION + Permission._edition）。任何代码读取 edition 值永远同源。
+- 实现：`Object.defineProperty(CONFIG, 'edition', {get, set})`。
+  - getter 优先返回 `CONFIG.__authoritativeEdition`（由 electronAPI.getAppConfig 回调回写的权威插槽）→ 回落存储槽。
+  - setter 三写同步后主动 `__applyUserButtons()` 刷新按钮。
+  - CONFIG 是 `const` 对象但属性描述符默认可 configurable（对象字面量），拦截不抛错。
+- **降级兜底**：拦截抛异常时（极少）退化为 2s×10 轮询把三处值对齐，不崩溃。
+
+#### C 层：零 HTML 改动的入口注入（shared/permission.js 头部 + 构建文件复制）
+- **硬约束**：用户 profile 要求"禁止修改 index.html（界面基线 SHA256）"——因此不能加 `<script src>`。
+- **解决**：permission.js（index.html 已有 entry、已入库 files）最开头 `document.write` 同步插入两个脚本 `<script src="edition-lock.js">` + `<script src="button-manager.js">`。执行时 document.readyState==='loading'，补丁正确绑定 DOMContentLoaded。
+- **脚本分发**：从 shared/ 复制到 3 个桌面版根目录 + cloud_app/offline_app assets/public（与 permission.js 同目录），并加入 3 个 package.json build.files 列表。
+
+#### D 层：构建硬校验（tools/postbuild-asar-verify.cjs，失败即 exit 1 阻断 Setup 产出）
+- **9 项标识清单**（任何缺失=EXIT 1）：①Single-Writer ②__patchOldCallers ③Edition 锁 ④拦截 get/set ⑤__appConfigReady ⑥竞态自愈×2+ ⑦机构版兜底×1+ ⑧自动登录 await ⑨asar 版本号。云端机构版附加 `_isCloudProd` 锚点保护。
+- npm scripts.build 追加 `node ../../../tools/postbuild-asar-verify.cjs .`；builder 之后自动跑。支持 `--asar <path>` 覆盖默认 app.asar 路径（builder 自定义 output 时用）。
+- 本次 1.0.81 回归 9 项全部 PASS。零修改 HTML → check-interface 6 OK。
+- **生效**：cloud_desktop 升 1.2.84 / db-offline 升 1.0.81 / public 升 1.0.1；三张 package.json build.files + scripts.build 全部更新。
+
+---
+
+**结论**：六层设计缺陷全部闭环。后续新增任何按钮/版本相关功能：
+1. 禁止直接 `getElementById('userManageBtn').style.display` → 必须调 `window.__applyUserButtons()`。
+2. 禁止直接写 `window.EDITION = x` 或 `Permission._edition = x` → 必须 `CONFIG.edition = x`（走 setter 三写同步）。
+3. permission.js 结构修改后，10 份副本哈希一致验证（KNOWLEDGE 2.20 方法论）。
+4. 打包必须跑 postbuild-asar-verify.cjs，失败即不交付。
+违反以上任一 = 架构"红线"，可直接在代码 CR 时打回。
 
 ### 2.11 激活流程一键微信客服（提交 2e6fcee8）
 - **功能**：试用到期→激活提交全流程增加"一键联系微信客服"（复制微信号 hktzy1688 + 唤起微信 + 三步指引），等待审核面板与底部客服栏双入口。

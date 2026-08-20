@@ -1,4 +1,20 @@
 // ============================================================================
+// ★★★ 架构入口（A+B 层）：动态加载按钮单一写入源 + edition 归一化锁脚本
+// 说明：本 permission.js 是 index.html 的既有 entry，我们利用它"最早加载的外部脚本之一"
+//   的位置，document.write 同步插入两个架构新脚本到解析队列（位于 permission.js 之后、
+//   HTML 其余内嵌 <script> 之前），完全不修改 index.html（SHA256 基线零变更）。
+//   两个脚本在 document.readyState==='loading' 时运行，补丁函数会绑定 DOMContentLoaded 事件
+//   —— 此时内嵌 enforceStandardEditionButtons/updateUserDisplay 等函数已定义完毕，
+//   运行时覆盖生效；不会出现"补丁先打、定义后到"的失效情况。
+// ============================================================================
+try {
+    if (typeof document !== 'undefined' && document && typeof document.write === 'function') {
+        document.write('<script src="edition-lock.js" onerror="try{if(console)console.warn(\'[arch] edition-lock load failed\')}catch(e){}"><\/script>');
+        document.write('<script src="button-manager.js" onerror="try{if(console)console.warn(\'[arch] button-manager load failed\')}catch(e){}"><\/script>');
+    }
+} catch(_) {}
+
+// ============================================================================
 // permission.js — 版本权限控制模块
 // 根据 config.json 的 edition 字段控制字段读写权限
 // ============================================================================

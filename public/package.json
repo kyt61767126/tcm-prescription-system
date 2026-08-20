@@ -1,50 +1,52 @@
 {
-  "name": "tcm-prescription-system",
-  "version": "1.0.0",
-  "description": "惠康中医-云端",
-  "main": "electron/main.js",
-  "scripts": {
-    "start": "electron .",
-    "build": "electron-builder",
-    "build:win": "electron-builder --win",
-    "build:win:portable": "electron-builder --win portable"
-  },
-  "author": "惠康中医",
-  "license": "MIT",
-  "devDependencies": {
-    "asarmor": "^3.0.2",
-    "electron": "^35.0.0",
-    "electron-builder": "^24.9.1"
-  },
-  "build": {
-    "appId": "com.huikangtang.prescription",
-    "productName": "惠康中医-云端机构版",
-    "directories": {
-      "output": "dist"
-    },
-    "afterPack": "./afterPack.js",
-    "files": [
-      "electron/**/*",
-      "index.html",
-      "package.json",
-      "package-lock.json"
-    ],
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ],
-      "sign": null,
-      "signAndEditExecutable": false
-    },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
-    }
-  },
-  "dependencies": {
-    "fs-extra": "^11.3.5"
-  }
+    "name":  "tcm-prescription-system",
+    "version":  "1.0.1",
+    "description":  "惠康中医-云端",
+    "main":  "electron/main.js",
+    "scripts":  {
+                    "start":  "electron .",
+                    "build":  "electron-builder \u0026\u0026 node ../tools/postbuild-asar-verify.cjs .",
+                    "build:win":  "electron-builder --win",
+                    "build:win:portable":  "electron-builder --win portable"
+                },
+    "author":  "惠康中医",
+    "license":  "MIT",
+    "devDependencies":  {
+                            "asarmor":  "^3.0.2",
+                            "electron":  "^35.0.0",
+                            "electron-builder":  "^24.9.1"
+                        },
+    "build":  {
+                  "appId":  "com.huikangtang.prescription",
+                  "productName":  "惠康中医-云端机构版",
+                  "directories":  {
+                                      "output":  "dist"
+                                  },
+                  "afterPack":  "./afterPack.js",
+                  "files":  [
+                                "electron/**/*",
+                                "index.html",
+                                "package.json",
+                                "package-lock.json",
+                                "button-manager.js",
+                                "edition-lock.js"
+                            ],
+                  "win":  {
+                              "target":  [
+                                             "nsis",
+                                             "portable"
+                                         ],
+                              "sign":  null,
+                              "signAndEditExecutable":  false
+                          },
+                  "nsis":  {
+                               "oneClick":  false,
+                               "allowToChangeInstallationDirectory":  true,
+                               "createDesktopShortcut":  true,
+                               "createStartMenuShortcut":  true
+                           }
+              },
+    "dependencies":  {
+                         "fs-extra":  "^11.3.5"
+                     }
 }
