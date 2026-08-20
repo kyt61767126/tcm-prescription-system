@@ -121,7 +121,7 @@
                 // ★★ 2026-08-19 机构版授权豁免：若当前 edition 为机构版，永不强制标准版。
                 //   （离线/云端机构版激活后，主进程 get-app-config 将 config.edition 校正为机构版值，
                 //    若此处仍按 personal/产品名强制标准版，会让激活的机构版被错误降级为单用户标准版）
-                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic'];
+                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic','cloud'];
                 try {
                     var cfgInst = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ? String(CONFIG.edition) : '';
                     var winInst = String(global.EDITION || '');

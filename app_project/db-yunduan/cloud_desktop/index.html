@@ -2131,7 +2131,7 @@ let currentUser = null;
                 // ★★ 2026-08-19 机构版授权豁免：若当前 edition 为机构版，绝不执行标准版强制对齐。
                 //   （离线/云端机构版正式激活后，主进程 get-app-config 已将 config.edition 校正为机构版值；
                 //    此处若不豁免，权威强制模式(IS_DESKTOP_LOCAL/产品名/DOM锚点)仍会把它强行降级为标准版）
-                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic'];
+                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic','cloud'];
                 if (configEdition && INST_ED.indexOf(configEdition) >= 0) return;
                 if (globalEdition && INST_ED.indexOf(globalEdition) >= 0) return;
                 try { if (window.Permission && window.Permission._edition && INST_ED.indexOf(String(window.Permission._edition)) >= 0) return; } catch (_) {}

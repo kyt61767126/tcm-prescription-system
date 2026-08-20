@@ -68,7 +68,7 @@
         },
         // 是否为"机构版（多用户，管理子账号）"：YJ + LJ（兼容旧 clinic_custom/offline/clinic）
         isInstitutional() {
-            return ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic'].includes(this._edition);
+            return ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud'].includes(this._edition);
         },
         // 旧 API 兼容：isClinicCustom = isInstitutional
         isClinicCustom() {
@@ -121,7 +121,7 @@
                 // ★★ 2026-08-19 机构版授权豁免：若当前 edition 为机构版，永不强制标准版。
                 //   （离线/云端机构版激活后，主进程 get-app-config 将 config.edition 校正为机构版值，
                 //    若此处仍按 personal/产品名强制标准版，会让激活的机构版被错误降级为单用户标准版）
-                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic'];
+                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic','cloud'];
                 try {
                     var cfgInst = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ? String(CONFIG.edition) : '';
                     var winInst = String(global.EDITION || '');
