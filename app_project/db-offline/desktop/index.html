@@ -783,7 +783,18 @@ let currentUser = null;
         // ★ 异步加载 userData 中的 config.json（覆盖 asar 模板默认值，修复激活后版本标签不更新的问题）
         (function() {
             if (window.electronAPI && window.electronAPI.getAppConfig) {
-                window.electronAPI.getAppConfig().then(function(r) {
+                // ★★★ 2026-08-21 【Setup 竞态根治】userData 权威配置就绪 Promise 挂全局（800ms 兜底）。
+                //   竞态场景：checkLoginStatus 自动登录早于本回调返回 → CONFIG.edition 仍为 asar 默认 personal
+                //   → enforceStandardEditionButtons 权威模式降级 role + 隐藏【用户管理】且无人恢复。
+                //   自动登录路径 await 本 Promise 后再取用户，保证用权威 edition 判定按钮。
+                var _cfgPromise = window.electronAPI.getAppConfig();
+                try {
+                    window.__appConfigReady = Promise.race([
+                        _cfgPromise,
+                        new Promise(function(resolve){ setTimeout(function(){ resolve(null); }, 800); })
+                    ]);
+                } catch(_) {}
+                _cfgPromise.then(function(r) {
                     if (r && r.success && r.config) {
                         var cfg = r.config;
                         // ★★★ 2026-08-17 【根治刀1-D】异步 IPC 强制全字段同步（Object.assign），不再漏 productName/maxUsers！
@@ -805,6 +816,30 @@ let currentUser = null;
                         if (typeof enforceStandardEditionButtons === 'function') {
                             enforceStandardEditionButtons('after-getAppConfig-then');
                         }
+                        // ★★★ 2026-08-21 【Setup 竞态自愈】机构版配置就绪后，恢复被竞态窗口降级的角色并刷新按钮。
+                        //   竞态窗口：自动登录 updateUserDisplay-tail enforce 在配置就绪前执行 →
+                        //   IS_DESKTOP_LOCAL 权威模式把 currentUser.role 从 admin 降级为 user 且无人恢复。
+                        //   自愈源：localStorage currentUser / user_login_data（写入早于降级发生，保留权威 role）。
+                        try {
+                            var _healEd = String(CONFIG.edition || '');
+                            var _healInst = ['clinic','offline_clinic','clinic_custom','cloud_clinic'].indexOf(_healEd) >= 0;
+                            if (_healInst && typeof currentUser !== 'undefined' && currentUser && typeof updateUserDisplay === 'function') {
+                                try {
+                                    if (currentUser.role !== 'admin' && currentUser.role !== 'clinic_admin') {
+                                        var _lu = null;
+                                        try { _lu = JSON.parse(localStorage.getItem('currentUser') || 'null'); } catch(_) {}
+                                        if (!_lu || !(_lu.role === 'admin' || _lu.role === 'clinic_admin')) {
+                                            try { _lu = (JSON.parse(localStorage.getItem('user_login_data') || 'null') || {}).user || null; } catch(_) {}
+                                        }
+                                        if (_lu && (_lu.role === 'admin' || _lu.role === 'clinic_admin')) {
+                                            console.log('[CONFIG] 竞态自愈：恢复 role', currentUser.role, '->', _lu.role);
+                                            currentUser.role = _lu.role;
+                                        }
+                                    }
+                                } catch(_) {}
+                                setTimeout(function(){ try { updateUserDisplay(); } catch(_) {} }, 0);
+                            }
+                        } catch(_) {}
                     }
                 }).catch(function(e) {
                     console.warn('[CONFIG] 异步加载 userData 配置失败:', e.message);
@@ -2360,6 +2395,14 @@ let currentUser = null;
             // ★ 修复 2026-07-27：APP 端禁止自动登录（用户要求每次打开都必须输入用户名和密码）
             if (window.electronAPI && window.electronAPI.isElectron && !window.electronAPI.isAndroidAPP) {
                 try {
+                    // ★★★ 2026-08-21 【Setup 竞态根治】自动登录前先等 userData 权威配置就绪，
+                    //   确保 updateUserDisplay → Permission/enforce 用的是激活后的机构版 edition，
+                    //   而非 asar 默认 personal（曾致离线机构版管理员只显示【修改密码】）。
+                    try {
+                        if (window.__appConfigReady && typeof window.__appConfigReady.then === 'function') {
+                            await window.__appConfigReady;
+                        }
+                    } catch(_) {}
                     const electronUser = await window.electronAPI.getCurrentUser();
                     if (electronUser) {
                         currentUser = electronUser;
