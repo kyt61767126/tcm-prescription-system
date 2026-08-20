@@ -153,6 +153,7 @@
 ---
 
 ## 5. 教训速记（Lessons Learned）
+- ⚠️ `.bat` 用 UTF-8 + `chcp 65001` 时，**echo 含中文多字节 + 特定空格位置会触发 cmd 解析 bug**（双击全新 GBK 控制台时报 `'xxx' is not recognized`）。本项目 `学习经验.bat` / `同步推送经验.bat` 因此**输出全部用纯 ASCII**（文件名仍是中文），逻辑不变且任何系统代码页双击都稳定。**不要往这两个脚本里加中文 echo**。
 - `Edit` 编辑 `.ps1` 会剥掉 BOM，需重新补 BOM。
 - `git diff` 对含中文的 bat 显示为乱码（`惠康`→`鎯犲悍`）**不一定是损坏**，是 GBK/UTF-8 字节渲染伪象；判定以字节级为准（`node -e` 读 UTF-8）。
 - 打包产物目录 `build_output_*`、`_build_run*.err` 为构建噪音，勿 git add。
