@@ -1,0 +1,1 @@
+[{"url":"http://127.0.0.1:8765/__demo?st=login","out":"d:/trae_projects/kyt-zy/software_copyright/screenshots/shot1_login.png","width":1600,"height":900,"waitExpr":"(document.getElementById('loginVersionTag')||{}).textContent.indexOf('V1.0.0')>=0","waitTimeoutMs":12000,"settleMs":500}]

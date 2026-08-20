@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>惠康中医诊所管理系统 V1.0.0 四层技术架构</title>
+<style>
+  html,body{margin:0;padding:0;background:#ffffff;}
+  svg{display:block;}
+</style>
+</head>
+<body>
+<svg width="1440" height="1000" viewBox="0 0 1440 1000" xmlns="http://www.w3.org/2000/svg" font-family="Microsoft YaHei, PingFang SC, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#546E7A"/>
+    </marker>
+  </defs>
+
+  <!-- 背景 -->
+  <rect x="0" y="0" width="1440" height="1000" fill="#ffffff"/>
+
+  <!-- ===== 渲染进程层 ===== -->
+  <rect x="40" y="30" width="1360" height="310" rx="14" fill="#E3F2FD" stroke="#1976D2" stroke-width="2"/>
+  <rect x="40" y="30" width="220" height="44" rx="14" fill="#1976D2"/>
+  <rect x="40" y="52" width="220" height="22" fill="#1976D2"/>
+  <text x="150" y="59" text-anchor="middle" font-size="20" font-weight="bold" fill="#ffffff">渲染进程层</text>
+
+  <!-- 渲染层节点 3x3 -->
+  <g font-size="15" fill="#0D47A1">
+    <rect x="80"  y="100" width="400" height="64" rx="8" fill="#ffffff" stroke="#64B5F6" stroke-width="1.5"/><text x="280" y="128" text-anchor="middle" font-weight="bold">index.html</text><text x="280" y="150" text-anchor="middle" font-size="13" fill="#455A64">主界面</text>
+    <rect x="520" y="100" width="400" height="64" rx="8" fill="#ffffff" stroke="#64B5F6" stroke-width="1.5"/><text x="720" y="128" text-anchor="middle" font-weight="bold">prescription-core</text><text x="720" y="150" text-anchor="middle" font-size="13" fill="#455A64">自研处方业务</text>
+    <rect x="960" y="100" width="400" height="64" rx="8" fill="#ffffff" stroke="#64B5F6" stroke-width="1.5"/><text x="1160" y="128" text-anchor="middle" font-weight="bold">medicine-dict</text><text x="1160" y="150" text-anchor="middle" font-size="13" fill="#455A64">自研药品检索</text>
+
+    <rect x="80"  y="184" width="400" height="64" rx="8" fill="#ffffff" stroke="#64B5F6" stroke-width="1.5"/><text x="280" y="212" text-anchor="middle" font-weight="bold">auth-core</text><text x="280" y="234" text-anchor="middle" font-size="13" fill="#455A64">自研登录认证</text>
+    <rect x="520" y="184" width="400" height="64" rx="8" fill="#ffffff" stroke="#64B5F6" stroke-width="1.5"/><text x="720" y="212" text-anchor="middle" font-weight="bold">security-guard</text><text x="720" y="234" text-anchor="middle" font-size="13" fill="#455A64">自研安全防护</text>
+    <rect x="960" y="184" width="400" height="64" rx="8" fill="#ffffff" stroke="#64B5F6" stroke-width="1.5"/><text x="1160" y="212" text-anchor="middle" font-weight="bold">permission</text><text x="1160" y="234" text-anchor="middle" font-size="13" fill="#455A64">自研权限控制</text>
+
+    <rect x="80"  y="268" width="400" height="56" rx="8" fill="#ffffff" stroke="#64B5F6" stroke-width="1.5"/><text x="280" y="302" text-anchor="middle" font-weight="bold">patient-archive <tspan font-size="13" fill="#455A64">自研患者档案</tspan></text>
+    <rect x="520" y="268" width="400" height="56" rx="8" fill="#ffffff" stroke="#64B5F6" stroke-width="1.5"/><text x="720" y="302" text-anchor="middle" font-weight="bold">print-utils <tspan font-size="13" fill="#455A64">自研打印工具</tspan></text>
+    <rect x="960" y="268" width="400" height="56" rx="8" fill="#ffffff" stroke="#64B5F6" stroke-width="1.5"/><text x="1160" y="302" text-anchor="middle" font-weight="bold">db-adapter <tspan font-size="13" fill="#455A64">自研数据适配层</tspan></text>
+  </g>
+
+  <!-- 渲染层 -> 预加载层 -->
+  <line x1="720" y1="340" x2="720" y2="392" stroke="#546E7A" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- ===== 预加载脚本层 ===== -->
+  <rect x="40" y="396" width="1360" height="110" rx="14" fill="#FFF8E1" stroke="#F9A825" stroke-width="2"/>
+  <rect x="40" y="396" width="220" height="44" rx="14" fill="#F9A825"/>
+  <rect x="40" y="418" width="220" height="22" fill="#F9A825"/>
+  <text x="150" y="425" text-anchor="middle" font-size="20" font-weight="bold" fill="#ffffff">预加载脚本层</text>
+  <rect x="420" y="420" width="600" height="62" rx="8" fill="#ffffff" stroke="#FFD54F" stroke-width="1.5"/>
+  <text x="720" y="446" text-anchor="middle" font-size="16" font-weight="bold" fill="#E65100">preload.js</text>
+  <text x="720" y="470" text-anchor="middle" font-size="13" fill="#455A64">contextBridge 安全桥接</text>
+
+  <!-- 预加载层 -> 主进程层 -->
+  <line x1="720" y1="506" x2="720" y2="558" stroke="#546E7A" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+  <!-- ===== 主进程层 ===== -->
+  <rect x="40" y="562" width="1360" height="150" rx="14" fill="#E8F5E9" stroke="#388E3C" stroke-width="2"/>
+  <rect x="40" y="562" width="220" height="44" rx="14" fill="#388E3C"/>
+  <rect x="40" y="584" width="220" height="22" fill="#388E3C"/>
+  <text x="150" y="591" text-anchor="middle" font-size="20" font-weight="bold" fill="#ffffff">主进程层</text>
+  <g font-size="15" fill="#1B5E20">
+    <rect x="120"  y="620" width="360" height="64" rx="8" fill="#ffffff" stroke="#81C784" stroke-width="1.5"/><text x="300" y="648" text-anchor="middle" font-weight="bold">main.js</text><text x="300" y="670" text-anchor="middle" font-size="13" fill="#455A64">窗口管理 / IPC</text>
+    <rect x="540" y="620" width="360" height="64" rx="8" fill="#ffffff" stroke="#81C784" stroke-width="1.5"/><text x="720" y="648" text-anchor="middle" font-weight="bold">video-recorder</text><text x="720" y="670" text-anchor="middle" font-size="13" fill="#455A64">自研录像拍照</text>
+    <rect x="960" y="620" width="360" height="64" rx="8" fill="#ffffff" stroke="#81C784" stroke-width="1.5"/><text x="1140" y="648" text-anchor="middle" font-weight="bold">update-notifier</text><text x="1140" y="670" text-anchor="middle" font-size="13" fill="#455A64">更新通知</text>
+  </g>
+
+  <!-- ===== 数据存储层 ===== -->
+  <rect x="40" y="780" width="1360" height="150" rx="14" fill="#FCE4EC" stroke="#C2185B" stroke-width="2"/>
+  <rect x="40" y="780" width="220" height="44" rx="14" fill="#C2185B"/>
+  <rect x="40" y="802" width="220" height="22" fill="#C2185B"/>
+  <text x="150" y="809" text-anchor="middle" font-size="20" font-weight="bold" fill="#ffffff">数据存储层</text>
+  <g font-size="15" fill="#880E4F">
+    <rect x="120"  y="840" width="360" height="64" rx="8" fill="#ffffff" stroke="#F06292" stroke-width="1.5"/><text x="300" y="868" text-anchor="middle" font-weight="bold">IndexedDB</text><text x="300" y="890" text-anchor="middle" font-size="13" fill="#455A64">主存储</text>
+    <rect x="540" y="840" width="360" height="64" rx="8" fill="#ffffff" stroke="#F06292" stroke-width="1.5"/><text x="720" y="868" text-anchor="middle" font-weight="bold">localStorage</text><text x="720" y="890" text-anchor="middle" font-size="13" fill="#455A64">辅助存储</text>
+    <rect x="960" y="840" width="360" height="64" rx="8" fill="#ffffff" stroke="#F06292" stroke-width="1.5"/><text x="1140" y="868" text-anchor="middle" font-weight="bold">本地文件系统</text><text x="1140" y="890" text-anchor="middle" font-size="13" fill="#455A64">文件存储</text>
+  </g>
+
+  <!-- db-adapter -> 数据存储层（左侧连线路径） -->
+  <path d="M 1160 324 L 1160 360 L 1360 360 L 1360 872 L 1326 872" fill="none" stroke="#546E7A" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M 1160 324 L 1160 352 L 1330 352 L 1330 740 L 720 740 L 720 836" fill="none" stroke="#546E7A" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M 1160 324 L 1160 344 L 1300 344 L 1300 752 L 300 752 L 300 836" fill="none" stroke="#546E7A" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- 主进程 -> 本地文件系统 -->
+  <path d="M 1140 684 L 1140 700 L 1140 836" fill="none" stroke="#546E7A" stroke-width="2" marker-end="url(#arrow)"/>
+
+  <!-- 标题 -->
+  <text x="720" y="985" text-anchor="middle" font-size="16" fill="#455A64">惠康中医诊所管理系统 V1.0.0 · 四层技术架构图</text>
+</svg>
+</body>
+</html>

@@ -1,0 +1,57 @@
+[
+  {
+    "url": "http://127.0.0.1:8765/__demo?st=login",
+    "out": "d:/trae_projects/kyt-zy/software_copyright/screenshots/shot1_login.png",
+    "width": 1600, "height": 900,
+    "waitExpr": "(document.getElementById('loginVersionTag')||{}).textContent.indexOf('V1.0.0')>=0",
+    "waitTimeoutMs": 15000,
+    "settleMs": 800
+  },
+  {
+    "url": "http://127.0.0.1:8765/__demo?st=main",
+    "out": "d:/trae_projects/kyt-zy/software_copyright/screenshots/shot2_main.png",
+    "width": 1600, "height": 900,
+    "waitExpr": "(document.documentElement.getAttribute('data-demo')||'').indexOf('pose:main')>=0 && document.querySelectorAll('#prescriptionBody tr').length>=4",
+    "waitTimeoutMs": 25000,
+    "settleMs": 1000
+  },
+  {
+    "url": "http://127.0.0.1:8765/__demo?st=medicine",
+    "out": "d:/trae_projects/kyt-zy/software_copyright/screenshots/shot3_medicine.png",
+    "width": 1600, "height": 900,
+    "waitExpr": "(document.documentElement.getAttribute('data-demo')||'').indexOf('pose:medicine')>=0 && document.querySelectorAll('#medicineList table tr, #medicineList .medicine-item, #medicineList div').length>3",
+    "waitTimeoutMs": 25000,
+    "settleMs": 1000
+  },
+  {
+    "url": "http://127.0.0.1:8765/__demo?st=formula",
+    "out": "d:/trae_projects/kyt-zy/software_copyright/screenshots/shot4_formula.png",
+    "width": 1600, "height": 900,
+    "waitExpr": "(document.documentElement.getAttribute('data-demo')||'').indexOf('pose:formula')>=0 && document.getElementById('formulaList') && document.getElementById('formulaList').children.length>0",
+    "waitTimeoutMs": 25000,
+    "settleMs": 1000
+  },
+  {
+    "url": "http://127.0.0.1:8765/__demo?st=analytics",
+    "out": "d:/trae_projects/kyt-zy/software_copyright/screenshots/shot5_analytics.png",
+    "width": 1600, "height": 900,
+    "waitExpr": "(document.documentElement.getAttribute('data-demo')||'').indexOf('pose:analytics')>=0 && (document.getElementById('statTotalPatients')||{}).textContent !== '-'",
+    "waitTimeoutMs": 25000,
+    "settleMs": 2500
+  },
+  {
+    "url": "http://127.0.0.1:8765/__demo?st=main",
+    "out": "d:/trae_projects/kyt-zy/software_copyright/screenshots/shot6_mobile_app.png",
+    "width": 412, "height": 915,
+    "waitExpr": "(document.documentElement.getAttribute('data-demo')||'').indexOf('pose:main')>=0 && document.querySelectorAll('#prescriptionBody tr').length>=4",
+    "waitTimeoutMs": 25000,
+    "settleMs": 1200
+  },
+  {
+    "url": "http://127.0.0.1:8765/__print_preview",
+    "out": "d:/trae_projects/kyt-zy/software_copyright/screenshots/shot7_print_preview.png",
+    "width": 720, "height": 1040,
+    "waitExpr": null,
+    "settleMs": 800
+  }
+]

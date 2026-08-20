@@ -11,7 +11,8 @@
     "@capacitor/android": "^8.4.1",
     "@capacitor/cli": "^8.4.1",
     "@capacitor/core": "^8.4.1",
-    "@capacitor/preferences": "^8.0.1"
+    "@capacitor/preferences": "^8.0.1",
+    "puppeteer-core": "^25.8.0"
   },
   "devDependencies": {
     "javascript-obfuscator": "^5.4.7"
