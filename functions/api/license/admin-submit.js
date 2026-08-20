@@ -31,7 +31,7 @@
 
 import { getKV, checkRateLimit, checkDeviceVersion } from './_lib/license-core.js';
 import { provisionCloudAccount, normalizeActivationPassword } from './_lib/admin-account.js';
-import { findPhoneOccupancy } from '../../_lib/auth.js';
+import { findPhoneOccupancy } from '../_lib/auth.js';
 
 // ★ 2026-08-20 查找某手机号下最近一条"已通过"的激活申请
 //   - 优先手机号索引（O(1)）；索引指向 pending/rejected 时再兜底扫描请求索引
