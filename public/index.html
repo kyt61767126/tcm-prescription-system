@@ -1391,23 +1391,45 @@ let currentUser = null;
 
                     // ★ 2026-08-20 历史处方修复（与云端APP本地端一致）：本地登录成功后若缺少云端 token，
                     //   额外调云端 AuthCore.login 换取 token 写入 localStorage，保证读处方能拉到云端数据
+                    // ★★ 2026-08-20 角色权威修复：云端桌面/网页登录=纯本地表校验，本地表 role 常为默认值，
+                    //   机构版管理员（clinic_admin）被误判普通用户 → 【用户管理】按钮缺失。
+                    //   补拉成功时用云端权威 role/clinicId 覆盖并回写本地表；_cloudRoleSynced 标记保证
+                    //   每账号仅首次多一次调用（规避重复登录计数锁定风险），此后回到"无token才补拉"节奏。
                     try {
                         let hasToken = !!(user.token || (user.cloud_token));
                         if (!hasToken) {
                             try { const _au = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); hasToken = !!(_au.token); } catch(e) {}
                         }
-                        if (!hasToken && window.AuthCore && AuthCore.login && typeof window.CLOUD_API_BASE !== 'undefined') {
+                        const needRoleSync = !user._cloudRoleSynced;
+                        if ((!hasToken || needRoleSync) && window.AuthCore && AuthCore.login && typeof window.CLOUD_API_BASE !== 'undefined') {
                             const rescue = await AuthCore.login(matchedIdentifier || username, password, { adapter: AuthCore.cloudAdapter });
                             if (rescue && rescue.success && rescue.user && rescue.user.token) {
                                 const cloudUser = rescue.user;
                                 if (!user.token) user.token = cloudUser.token;
                                 if (!user.cloud_token) user.cloud_token = cloudUser.token;
+                                if (cloudUser.role && cloudUser.role !== user.role) {
+                                    console.log('[handleLogin] 云端角色同步:', user.role, '->', cloudUser.role);
+                                    user.role = cloudUser.role;
+                                }
+                                if (cloudUser.clinicId && !user.clinicId) user.clinicId = cloudUser.clinicId;
+                                if (cloudUser.name && !user.name) user.name = cloudUser.name;
+                                user._cloudRoleSynced = true;
+                                // 回写本地用户表：下次登录直接携带正确 role，无需再补拉
+                                try {
+                                    const allUsers = getUsers();
+                                    const idx = allUsers.findIndex(u => u.username === (user.username || matchedIdentifier) || String(u.phone || '') === String(matchedIdentifier || username));
+                                    if (idx >= 0) {
+                                        allUsers[idx].role = user.role;
+                                        allUsers[idx]._cloudRoleSynced = true;
+                                        saveUsers(allUsers);
+                                    }
+                                } catch(_) {}
                                 const fullData = JSON.stringify(user);
                                 try { localStorage.setItem('currentUser', fullData); } catch(e){}
                                 try { localStorage.setItem('cloud_currentUser', fullData); } catch(e){}
                                 try { localStorage.setItem('auth:currentUser', fullData); } catch(e){}
                                 try { sessionStorage.setItem('currentUser', fullData); } catch(e){}
-                                console.log('[handleLogin] ✅ 本地登录成功，已补拉云端token，历史处方将走云端API');
+                                console.log('[handleLogin] ✅ 本地登录成功，已同步云端token/角色，历史处方将走云端API');
                             } else {
                                 console.warn('[handleLogin] ⚠️ 本地登录成功但云端补拉token失败' + (rescue ? (':' + rescue.error) : ''));
                             }
