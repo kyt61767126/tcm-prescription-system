@@ -445,6 +445,16 @@ public class MainActivity extends BridgeActivity {
                 if ("content".equals(scheme)) {
                     return false; // 允许 ContentProvider
                 }
+                // ★ 一键联系微信客服：放行 weixin:// 协议，尝试唤起微信客户端
+                // 安全策略：仅 weixin:// 单一 scheme 白名单，Intent 由系统解析（无微信则静默失败，不影响 APP）
+                if ("weixin".equals(scheme)) {
+                    try {
+                        startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse("weixin://")));
+                    } catch (Exception e) {
+                        android.util.Log.w("MainActivity", "weixin:// 唤起微信失败（未安装？）: " + e.getMessage());
+                    }
+                    return true;
+                }
                 return true; // 拦截外部导航
             }
 

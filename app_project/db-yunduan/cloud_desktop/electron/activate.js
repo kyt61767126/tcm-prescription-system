@@ -15,7 +15,7 @@
 //    5. 提示激活成功 → 重启应用
 // ============================================================================
 
-const { BrowserWindow, app, dialog, safeStorage } = require('electron');
+const { BrowserWindow, app, dialog, safeStorage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -237,6 +237,15 @@ function showActivateWindow(parentWindow) {
     // 最高优先级置顶（screen-saver级 = 仅低于屏保）
     activateWindow.setAlwaysOnTop(true, 'screen-saver');
     activateWindow.center();
+
+    // ★ 一键联系微信客服：放行 weixin:// / https:// 协议唤起外部应用（微信客户端）
+    // 仅白名单协议走 shell.openExternal，其余一律拒绝，防止钓鱼跳转
+    activateWindow.webContents.setWindowOpenHandler(({ url }) => {
+        if (url.startsWith('weixin://') || url.startsWith('https://')) {
+            shell.openExternal(url);
+        }
+        return { action: 'deny' };
+    });
 
     // 加载激活窗口 HTML，通过 URL 参数传递机器 ID
     const htmlPath = path.join(__dirname, 'activate-window.html');

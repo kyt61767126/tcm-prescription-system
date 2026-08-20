@@ -429,6 +429,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
                 <div style="font-size:11px;color:#909399;margin-top:10px;line-height:1.5;">
                     💡 关闭窗口不影响审核<br>重新打开将自动恢复状态
                 </div>
+                <button class="btn" id="contactSupportBtn" style="margin-top:10px;background:linear-gradient(135deg,#07c160 0%,#06ad56 100%);box-shadow:0 4px 12px rgba(7,193,96,0.3);">💬 联系客服加速审核（一键加微信）</button>
                 <button class="btn btn-secondary" id="cancelBtn" style="margin-top:10px;background:#fff;color:#909399;border:1.5px solid #ddd;">取消等待</button>
             </div>
         </div>
@@ -539,8 +540,11 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
     <!-- Footer -->
     <div class="footer">
         <div class="divider">— 联系客服 —</div>
-        <div class="contact">
-            <strong>微信：</strong>hktzy1688<br>
+        <div class="contact" style="display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;">
+            <span><strong>微信：</strong>hktzy1688</span>
+            <button id="contactWxFooterBtn" style="border:none;padding:3px 12px;border-radius:5px;font-size:12px;cursor:pointer;background:#07c160;color:#fff;font-weight:600;">💬 一键联系</button>
+        </div>
+        <div class="contact" style="margin-top:4px;">
             <strong>官网：</strong>tcm-prescription-system.pages.dev
         </div>
         <div class="mid-compact">
@@ -1143,6 +1147,30 @@ document.getElementById('codeSubmitBtn').addEventListener('click', async () => {
         btn.disabled = false;
     }
 });
+
+// ============ 一键联系微信客服（复制微信号 + 唤起微信 + 指引） ============
+function contactSupport() {
+    const wx = 'hktzy1688';
+    // 1) 复制微信号（clipboard API 优先，execCommand 兜底）
+    const fallbackCopy = () => {
+        try {
+            const ta = document.createElement('textarea');
+            ta.value = wx;
+            ta.style.position = 'fixed'; ta.style.opacity = '0';
+            document.body.appendChild(ta); ta.select();
+            document.execCommand('copy'); document.body.removeChild(ta);
+        } catch (e) {}
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(wx).catch(fallbackCopy);
+    } else fallbackCopy();
+    // 2) 尝试唤起微信客户端（Electron 端由 main 进程 shell.openExternal 处理 weixin:// 协议）
+    try { window.open('weixin://', '_blank'); } catch (e) {}
+    // 3) 操作指引
+    alert('客服微信号 hktzy1688 已复制！\n\n若微信未自动打开，请手动打开微信：\n① 点击右上角 ＋ → 添加朋友\n② 长按搜索框粘贴微信号 hktzy1688\n③ 添加客服，说明"激活审核"即可优先处理');
+}
+document.getElementById('contactSupportBtn').addEventListener('click', contactSupport);
+document.getElementById('contactWxFooterBtn').addEventListener('click', contactSupport);
 
 // ============ Machine ID copy ============
 document.getElementById('copyMidBtn').addEventListener('click', function() {
