@@ -1,7 +1,14 @@
 # 交接：云端机构版桌面"修改密码"→"用户管理" 优化（未完成，待接续）
 
 > 日期：2026-08-20
-> 状态：**已定位根因、已写诊断，代码修改未完成、未提交**。切换到下一个 work 账户后，请先 Read 本文件再继续。
+> 状态：**已完成（提交 2e8af3a2，已推送 GitHub）**。此文档留档备查，无需再改。
+
+## 完成记录
+- 全部 11 份 permission.js：`isInstitutional` 与 `_isStandardEditionForced` 的 `INST_ED` 机构版列表补上 `'cloud'`（site-admin ×2 的 isInstitutional 此前已含 `'cloud'`，仅有 INST_ED 的 9 份补入）。
+- 云端 index.html 内部 `VAR INST_ED`：`cloud_desktop/index.html`（2134 行）、`public/index.html`（2469 行）补 `'cloud'`。
+- `check-interface.bat` 验证：6 OK（界面结构基线未破坏）。
+- 生效方式：云端网页版推 GitHub 自动部署；**云端桌面必须重新 `build.bat` 打包 exe 重装**。
+- ⚠️ 遗留提醒：`cloud_desktop/config.json` 当前 `edition="cloud_personal"`（标准版）。若该机构客户实为机构版，其激活/部署配置应为 `cloud_clinic`；机构版运行时 edition 解析为 `cloud`/`cloud_clinic` 时本次修复即生效。
 
 ## 一、用户诉求
 云端机构版桌面 登录后操作界面应显示【👥 用户管理】，却显示【🔐 修改密码】。要求优化改正并**举一反三**，让全部版本符合规范显示要求（机构版=用户管理，标准版=修改密码）。
