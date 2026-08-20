@@ -29,3 +29,14 @@
   ; 用户可通过安装界面的"浏览"按钮自行选择其他盘
   done:
 !macroend
+
+; ★ 接管 electron-builder 内置"应用运行检查"（templates/nsis/include/allowOnlyOneInstallerInstance.nsh:33）
+; 内置逻辑：taskkill 两轮后仍检测到进程 → 弹"惠康中医-本地无法关闭"死循环框（重试无效，只能取消）。
+; 接管后：强杀（/f /t 连子进程树）两轮 + 短等待，**永不弹框、永不阻塞安装**（宁漏检不可误报）。
+!macro customCheckAppRunning
+  DetailPrint `Closing running "${PRODUCT_NAME}"...`
+  nsExec::Exec 'taskkill /f /t /im "${APP_EXECUTABLE_FILENAME}"'
+  Sleep 800
+  nsExec::Exec 'taskkill /f /t /im "${APP_EXECUTABLE_FILENAME}"'
+  Sleep 500
+!macroend
