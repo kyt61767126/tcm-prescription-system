@@ -484,6 +484,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <!-- 诊所管理标签页 -->
         <div id="tabClinics" class="tab-content">
             <div id="clinicAlert" class="alert"></div>
+            <p style="color:#909399;font-size:13px;margin:0 0 12px;">本页管<b>诊所</b>：审核 / 续费 / 停用 / 有效期。账号密码与启停请点下方管理员账号跳转「用户管理」处理。</p>
             <h2>创建新诊所</h2>
             <div class="gen-box">
                 <div class="gen-row">
@@ -524,6 +525,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
         <!-- 用户管理标签页 -->
         <div id="tabUsers" class="tab-content">
             <div id="userAlert" class="alert"></div>
+            <p style="color:#909399;font-size:13px;margin:0 0 12px;">本页管<b>账号</b>：密码救援 / 启停 / 角色。诊所审核续费请去「诊所管理」（点诊所名可筛选本诊所账号）。</p>
             <div class="filter-bar">
                 <input type="text" id="userSearch" placeholder="搜索用户名/姓名/手机号" oninput="renderUsersTable()" style="flex:1;min-width:200px;">
                 <select id="userClinicFilter" onchange="renderUsersTable()">
@@ -1126,7 +1128,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
 
 <!-- ★ P0-3 诊所编辑弹窗：一次展示全部字段，替代 prompt 连环问 -->
 <div id="clinicEditModal" class="modal-overlay">
-    <div class="modal-box" style="max-width:560px;">
+    <div class="modal-box" style="max-width:520px;">
         <span class="modal-close" onclick="closeClinicEditModal()">&times;</span>
         <h3>编辑诊所信息</h3>
         <div id="clinicEditModalAlert" class="alert"></div>
@@ -1136,18 +1138,10 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 <label>诊所名称 *</label>
                 <input type="text" id="editClinicNameInput">
             </div>
-            <div class="form-group">
-                <label>管理员账号 *（按此账号定位修改，不可更改）</label>
-                <input type="text" id="editClinicAdminUsername">
-            </div>
-            <div class="form-group">
-                <label>管理员姓名</label>
-                <input type="text" id="editClinicAdminName">
-            </div>
-            <div class="form-group">
-                <label>新密码（留空表示不修改）</label>
-                <input type="password" id="editClinicAdminPassword" placeholder="至少8位，含字母和数字" autocomplete="new-password">
-            </div>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:#909399;line-height:1.8;">
+            管理员账号 / 姓名 / 密码属账号操作，已统一收口到「用户管理」：<br>
+            <a href="javascript:void(0)" id="clinicEditJumpUser" onclick="closeClinicEditModal(); jumpToUser(this.dataset.u)" style="color:#3498db;">→ 去用户管理处理该诊所管理员账号</a>
         </div>
         <div style="margin-top:12px;text-align:right;">
             <button class="btn" onclick="closeClinicEditModal()">取消</button>
@@ -2937,18 +2931,19 @@ async function loadClinicsList() {
                     ? '<button class="btn btn-sm btn-info" onclick="toggleClinicStatus(\'' + c.id + '\',\'test\')">设为待审核</button>'
                     : '';
                 const editBtn = '<button class="btn btn-sm" onclick="openClinicEditModal(\'' + c.id + '\')">编辑</button>';
-                const unlockBtn = (c.adminUsername)
-                    ? '<button class="btn btn-sm" onclick="openUserResetPwdModal(\'' + escapeHtml(c.adminUsername) + '\')">🔓解锁</button>'
-                    : '';
                 const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '-';
                 const srcTag = c.source === 'self-register' ? ' <span style="font-size:11px;color:#3498db;">自助注册</span>' : '';
+                // 管理员账号可点击 → 跳用户管理并定位该账号（账号操作统一收口到用户管理）
+                const adminLink = c.adminUsername
+                    ? '<a href="javascript:void(0)" onclick="jumpToUser(\'' + escapeHtml(c.adminUsername) + '\')" style="color:#3498db;text-decoration:underline;" title="到用户管理处理该账号">' + escapeHtml(c.adminUsername) + '</a>'
+                    : '-';
                 return '<div style="padding:12px;border-bottom:1px solid #ebeef5;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">' +
                     '<div style="flex:1;min-width:200px;">' +
                         '<div style="font-weight:600;color:#2c3e50;">' + escapeHtml(c.name) + ' ' + statusBadge + srcTag + '</div>' +
-                        '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + escapeHtml(c.adminUsername || '-') + '</strong>（' + escapeHtml(c.adminName || '-') + '）| 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
+                        '<div style="font-size:12px;color:#909399;margin-top:4px;">ID: ' + escapeHtml(c.id) + ' | 管理员: <strong>' + adminLink + '</strong>（' + escapeHtml(c.adminName || '-') + '）| 医师: ' + c.doctorCount + ' | 总账号: ' + c.userCount + ' | 创建: ' + escapeHtml(created) + '</div>' +
                         '<div style="font-size:12px;color:#909399;margin-top:2px;">有效期: ' + expiryHtml + '</div>' +
                     '</div>' +
-                    '<div style="white-space:nowrap;">' + editBtn + ' ' + unlockBtn + ' ' + testBtn + ' ' + toggleBtn + ' ' + renewBtn + '</div>' +
+                    '<div style="white-space:nowrap;">' + editBtn + ' ' + testBtn + ' ' + toggleBtn + ' ' + renewBtn + '</div>' +
                 '</div>';
             }).join('');
         } else {
@@ -3420,11 +3415,11 @@ function openClinicEditModal(clinicId) {
     _editClinicId = clinicId;   // 保存时通过 findClinicById4Edit() 取回
     document.getElementById('clinicEditSummary').innerHTML =
         '<div><strong>ID：</strong>' + escapeHtml(clinic.id) + '　<strong>当前状态：</strong>' + escapeHtml(clinic.status) + '　<strong>到期：</strong>' + clinicExpiryHtml(clinic) + '</div>' +
-        '<div style="font-size:12px;color:#e67e22;">管理员账号用于精确定位被改密的账号（不可修改登录账号本身）</div>';
+        '<div style="font-size:12px;">管理员：<strong>' + escapeHtml(clinic.adminUsername || '-') + '</strong>（' + escapeHtml(clinic.adminName || '-') + '）</div>';
     document.getElementById('editClinicNameInput').value = clinic.name || '';
-    document.getElementById('editClinicAdminUsername').value = clinic.adminUsername || '';
-    document.getElementById('editClinicAdminName').value = clinic.adminName || '';
-    document.getElementById('editClinicAdminPassword').value = '';
+    // 跳转链接绑定该诊所的管理员账号
+    const jump = document.getElementById('clinicEditJumpUser');
+    if (jump) jump.dataset.u = clinic.adminUsername || '';
     document.getElementById('clinicEditModalAlert').className = 'alert';
     document.getElementById('clinicEditModal').classList.add('show');
 }
@@ -3435,19 +3430,10 @@ function closeClinicEditModal() {
 
 async function submitClinicEdit() {
     const name = document.getElementById('editClinicNameInput').value.trim();
-    const adminUsername = document.getElementById('editClinicAdminUsername').value.trim();
-    const adminName = document.getElementById('editClinicAdminName').value.trim();
-    const adminPassword = document.getElementById('editClinicAdminPassword').value;
-    if (!name || !adminUsername) { showAlert('clinicEditModalAlert', '诊所名称和管理员账号不能为空', 'error'); return; }
-    if (adminPassword && (adminPassword.length < 8 || !/[a-zA-Z]/.test(adminPassword) || !/[0-9]/.test(adminPassword))) {
-        showAlert('clinicEditModalAlert', '新密码需至少8位且同时包含字母和数字', 'error');
-        return;
-    }
-    // ★ 必须始终传 adminUsername（后端按登录账号精确定位改密码，防误改他人）
-    const body = { clinicId: findClinicById4Edit(), name, adminUsername };
-    if (adminName) body.adminName = adminName;
-    if (adminPassword) body.adminPassword = adminPassword;
-    const ok = await doClinicUpdate(body, '诊所信息已更新', 'clinicEditModalAlert');
+    if (!name) { showAlert('clinicEditModalAlert', '诊所名称不能为空', 'error'); return; }
+    // 只更新诊所名称；账号字段已收口到用户管理（后端无 adminUsername/adminName/adminPassword 时不触碰用户表）
+    const body = { clinicId: findClinicById4Edit(), name };
+    const ok = await doClinicUpdate(body, '诊所名称已更新', 'clinicEditModalAlert');
     if (ok) {
         closeClinicEditModal();
         loadClinicsList();
@@ -3482,6 +3468,29 @@ async function doClinicUpdate(body, successMsg, alertId) {
 }
 
 // ===== 用户管理（P1-4：只读 → 可操作）=====
+
+// 跨 Tab 跳转：诊所管理 → 用户管理，按账号精确定位（自动加载用户数据并搜索）
+async function jumpToUser(username) {
+    switchTab('Users');
+    if (!_usersCache.length) await loadUsersList();
+    const input = document.getElementById('userSearch');
+    if (input) { input.value = username || ''; renderUsersTable(); }
+}
+
+// 点击诊所名 → 按该诊所筛选用户列表
+function filterUsersByClinic(name) {
+    const sel = document.getElementById('userClinicFilter');
+    if (!sel) return;
+    // 下拉里没有该诊所时补充一项（数据懒加载场景）
+    if (![...sel.options].some(o => o.value === name)) {
+        const opt = document.createElement('option');
+        opt.value = name; opt.textContent = name;
+        sel.appendChild(opt);
+    }
+    sel.value = name;
+    renderUsersTable();
+}
+
 let _usersCache = [];          // 用户缓存，renderUsersTable 就地过滤渲染
 let _pwdTargetUser = null;     // 重置密码弹窗当前目标用户
 
@@ -3548,12 +3557,18 @@ function renderUsersTable() {
             : (u.role === 'clinic_admin'
                 ? '<span class="tag tag-personal">' + roleNames[u.role] + '</span>'
                 : '<span class="tag tag-trial">' + roleNames[u.role] + '</span>');
-        // 状态：账号停用（红）＞诊所待审核（橙）＞诊所停用（灰）＞正常（绿）
-        let statusHtml;
-        if (u.disabled === true) statusHtml = '<span class="tag tag-disabled">已停用</span>';
-        else if (u.clinicStatus === 'test') statusHtml = '<span class="tag tag-trial">待审核</span>';
-        else if (u.clinicStatus === 'disabled') statusHtml = '<span class="tag tag-disabled">诊所停用</span>';
-        else statusHtml = '<span class="tag tag-used">正常</span>';
+        // 账号状态列：只看本账号是否被停用（诊所状态归诊所管理，在诊所列以小徽章提示）
+        const statusHtml = u.disabled === true
+            ? '<span class="tag tag-disabled">已停用</span>'
+            : '<span class="tag tag-used">正常</span>';
+        // 诊所列：诊所名可点击筛选 + 诊所状态小徽章（待审核/诊所停用属诊所维度）
+        let clinicHtml = '-';
+        if (u.clinicName) {
+            let clinicBadge = '';
+            if (u.clinicStatus === 'test') clinicBadge = ' <span class="tag tag-trial">诊所待审核</span>';
+            else if (u.clinicStatus === 'disabled') clinicBadge = ' <span class="tag tag-disabled">诊所停用</span>';
+            clinicHtml = '<a href="javascript:void(0)" onclick="filterUsersByClinic(\'' + escapeHtml(u.clinicName) + '\')" style="color:#3498db;" title="筛选该诊所全部账号">' + escapeHtml(u.clinicName) + '</a>' + clinicBadge;
+        }
         const created = u.createdAt ? new Date(u.createdAt).toLocaleString('zh-CN') : '-';
         // 平台管理员不给操作按钮（后端也拒绝，防止锁死管理入口）
         const actions = u.role === 'platform_admin'
@@ -3568,7 +3583,7 @@ function renderUsersTable() {
             '<td>' + escapeHtml(u.name || '-') + '</td>' +
             '<td>' + roleTag + '</td>' +
             '<td>' + escapeHtml(u.phone || '-') + '</td>' +
-            '<td>' + escapeHtml(u.clinicName || '-') + '</td>' +
+            '<td>' + clinicHtml + '</td>' +
             '<td style="white-space:nowrap;">' + escapeHtml(({ both: '云端+本地', cloud: '仅云端', local: '仅本地' })[u.allowedMode] || u.allowedMode || '-') + '</td>' +
             '<td>' + statusHtml + '</td>' +
             '<td style="white-space:nowrap;">' + escapeHtml(created) + '</td>' +
