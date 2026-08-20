@@ -47,6 +47,21 @@ class CdpTab {
 
 async function main() {
   const shots = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+  // 清理上次残留的调试 Edge（只杀占用 9333 的进程，不动用户自己开的浏览器）
+  try {
+    const r = await fetch(`http://127.0.0.1:${PORT}/json/version`, { signal: AbortSignal.timeout(1000) });
+    if (r.ok) {
+      const v = await r.json();
+      if (v.Browser) {
+        console.log('stale debug edge detected, killing...');
+        const { execSync } = require('child_process');
+        const out = execSync('netstat -ano | findstr ":9333" | findstr "LISTENING"').toString();
+        const pid = parseInt(out.trim().split(/\s+/).pop(), 10);
+        if (pid) { execSync(`taskkill /T /F /PID ${pid}`, { stdio: 'ignore' }); }
+        await sleep(1500);
+      }
+    }
+  } catch (e) {}
   const udd = fs.mkdtempSync(path.join(os.tmpdir(), 'cdp-shot-'));
   const edge = spawn(EDGE, [
     '--headless=new', '--disable-gpu', '--hide-scrollbars',
@@ -59,7 +74,7 @@ async function main() {
   try {
     await waitForDebugPort();
     for (const s of shots) {
-      const r = await fetch(`http://127.0.0.1:${PORT}/json/new?url=${encodeURIComponent(s.url)}`, { method: 'PUT' });
+      const r = await fetch(`http://127.0.0.1:${PORT}/json/new`, { method: 'PUT' });
       const tab = await r.json();
       const ws = new WebSocket(tab.webSocketDebuggerUrl);
       await new Promise((res, rej) => { ws.addEventListener('open', res); ws.addEventListener('error', rej); });
@@ -69,15 +84,13 @@ async function main() {
       await cdp.send('Emulation.setDeviceMetricsOverride', {
         width: s.width, height: s.height, deviceScaleFactor: 1, mobile: false
       });
-      // 等待加载完成
-      await new Promise(async (resolve) => {
-        let loaded = false;
-        const onEv = m => { if (m.method === 'Page.loadEventFired') loaded = true; };
-        cdp.onEvent(onEv);
-        const t0 = Date.now();
-        while (!loaded && Date.now() - t0 < 30000) await sleep(200);
-        resolve();
-      });
+      // 导航（/json/new 的 url 参数在本版 Edge 不生效，改用 Page.navigate）
+      let loaded = false;
+      const onEv = m => { if (m.method === 'Page.loadEventFired') loaded = true; };
+      cdp.onEvent(onEv);
+      await cdp.send('Page.navigate', { url: s.url });
+      const t0 = Date.now();
+      while (!loaded && Date.now() - t0 < 30000) await sleep(200);
       // 轮询等待表达式
       if (s.waitExpr) {
         const t0 = Date.now();
@@ -107,7 +120,7 @@ async function main() {
       await sleep(300);
     }
   } finally {
-    edge.kill();
+    try { const { execSync } = require('child_process'); execSync(`taskkill /T /F /PID ${edge.pid}`, { stdio: 'ignore' }); } catch (e) { try { edge.kill(); } catch (e2) {} }
     try { fs.rmSync(udd, { recursive: true, force: true }); } catch (e) {}
   }
 }
