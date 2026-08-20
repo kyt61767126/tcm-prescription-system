@@ -68,7 +68,7 @@
         },
         // 是否为"机构版（多用户，管理子账号）"：YJ + LJ（兼容旧 clinic_custom/offline/clinic）
         isInstitutional() {
-            return ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic'].includes(this._edition);
+            return ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud'].includes(this._edition);
         },
         // 旧 API 兼容：isClinicCustom = isInstitutional
         isClinicCustom() {
