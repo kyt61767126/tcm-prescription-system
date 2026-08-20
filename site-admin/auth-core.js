@@ -1966,6 +1966,12 @@
                     }
                 });
             }
+            // ★ 2026-08-20 双入口合并：底部静态「激活软件/管理员激活」按钮与授权区「管理员激活」功能重复 → 隐藏静态按钮，授权区为唯一入口
+            // （不动 index.html DOM；无 license 桥的纯网页环境不注入本按钮，静态按钮保留兜底）
+            try {
+                const legacyBtn = modalBody.querySelector('button[onclick*="openActivationFromSettings"]');
+                if (legacyBtn) legacyBtn.style.display = 'none';
+            } catch (e) { console.warn('[LicenseCheck] 隐藏重复激活入口失败:', e); }
         }
 
         // 异步加载 license 状态
