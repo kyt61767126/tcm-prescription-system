@@ -183,6 +183,12 @@
 - **验证方法（makensis 编译级）**：搭最小 .nsi（用户 nsh 在前 + include allowOnlyOneInstallerInstance.nsh + 插 CHECK_APP_RUNNING）用 electron-builder 缓存的 makensis 编译：①顺序错误时出现 `_GetProcessInfo not referenced`/`Var pid` 警告（走内置分支）；②顺序正确时警告消失 = 走接管分支。7za 无法解 NSIS 安装包脚本（Files: 0），字节搜索也无效（数据块压缩）。
 - 生效：云端桌面=**Setup 1.2.75**（dist 已产出，81.6MB）；离线桌面=下次重打包自动带上（此前自打的 1.0.78 为旧 nsh+旧 auth-core，建议重打）。
 
+### 2.14 F1 基础设置双激活入口合并（提交 52fe6905，2026-08-20 晚）
+- **现象**：基础设置弹窗同时出现「🔑 激活软件/管理员激活」（index.html 静态按钮→license.show 独立激活窗）与授权区「📋 管理员激活」（auth-core 注入→openAdminActivate 内嵌弹窗），均为 8-19 改动叠加所致。
+- **修复**：auth-core injectLicenseStatusSection 的 hasLicenseApi 分支追加 `modalBody.querySelector('button[onclick*="openActivationFromSettings"]').style.display='none'`——授权区为唯一入口；**不改 index.html**（界面基线 6/6 OK）；无 license 桥的纯网页环境不注入按钮，静态按钮保留兜底。
+- **流程**：改 shared/auth-core/{cloud,offline}.js 两权威源 → sync-auth-core.ps1 同步 11 副本 → node --check + check-interface.bat → 提交。**改 auth-core 必须走此流程**（2.12 铁律）。
+- 生效：云端网页版=推 GitHub 自动生效；云端桌面/离线桌面/离线APP=需重打包（各自 auth-core 内置）；云端APP=在线自动生效（WebView 载线上 public/）。
+
 
 ### 2.11 激活流程一键微信客服（提交 2e6fcee8）
 - **功能**：试用到期→激活提交全流程增加"一键联系微信客服"（复制微信号 hktzy1688 + 唤起微信 + 三步指引），等待审核面板与底部客服栏双入口。
