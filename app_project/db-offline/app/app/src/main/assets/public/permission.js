@@ -283,6 +283,33 @@
                 if (userManageBtn) userManageBtn.style.display = 'none';
                 // 标准版保留修改密码功能，不再隐藏 changePwdBtn
             }
+            // ★★★ 2026-08-21 机构版正向兜底：本函数只隐藏标准版的 userManageBtn，但相反场景（机构版）
+            //   若此前的异步回调已把 userManageBtn 隐藏，这里必须显式恢复，确保按钮显示永远和权限一致。
+            //   解决的 bug：updateUserDisplay 设置完 canManage→block 后，本函数异步执行，
+            //   若 isPersonal()=false 分支不做任何事（之前的实现），userManageBtn 可能停留在被隐藏的旧状态；
+            //   同时处方查阅按钮没有被任何地方覆盖，造成【处方查阅】显示/【用户管理】隐藏的诡异不一致。
+            try {
+                if (this.isInstitutional()) {
+                    const umb = document.getElementById('userManageBtn');
+                    const cpb = document.getElementById('changePwdBtn');
+                    const cpr = document.getElementById('clinicPrescriptionBtn');
+                    if (umb) {
+                        var canMgmt = this.shouldShowUserManage(global.currentUser);
+                        umb.style.display = canMgmt ? 'block' : 'none';
+                        umb.style.visibility = canMgmt ? 'visible' : 'hidden';
+                    }
+                    if (cpb) {
+                        var canChg = this.shouldShowChangePwd(global.currentUser);
+                        cpb.style.display = canChg ? 'block' : 'none';
+                        cpb.style.visibility = canChg ? 'visible' : 'hidden';
+                    }
+                    if (cpr) {
+                        var canCpr = this.shouldShowUserManage(global.currentUser);
+                        cpr.style.display = canCpr ? 'block' : 'none';
+                        cpr.style.visibility = canCpr ? 'visible' : 'hidden';
+                    }
+                }
+            } catch(_) {}
 
             // 同步入口屏蔽（非云端版）
             if (!this.isCloud()) {

@@ -247,6 +247,18 @@
 - **打包坑**：PowerShell `Set-Content -Encoding UTF8` 会写 BOM → electron-builder 报 `readObjectStart: expect { or n, but found ﻿`。改用 `[System.IO.File]::WriteAllText($f, $c, [UTF8Encoding]::new($false))`。
 - **方法论**：跨端同源 bug 修一头后，必须审计其它端"同结构代码路径"（本项目：自动登录+异步配置+enforce 三要素组合在离线桌面版完整复刻了云端 bug）。
 
+### 2.22 【按钮单隐根因+双保险正向兜底】Setup 1.0.80（提交 8d695b88 + 6c7dae45，2026-08-21）
+- **现象**：1.0.79 修复后依旧两个按钮都没显示，但【处方查阅】显示。代码层面 userManageBtn 与 clinicPrescriptionBtn 用**同一 canManage 变量同赋值**，理论必须同显同隐——单隐只可能是"后续异步代码单独改了 userManageBtn.display 却不碰 clinicPrescriptionBtn"。
+- **根因**：`Permission.applyRuntimePermissions()`（shared/permission.js 280-285 行）在 `isPersonal()` 时只隐藏 `userManageBtn`，完全不操作 `clinicPrescriptionBtn`。该回调在 Permission.init.then（异步）中触发，若发生在 `updateUserDisplay` 之后（微任务调度相对顺序未定），就把已经 `canManage→block` 的 `userManageBtn` 单独打回 `none`，而 `clinicPrescriptionBtn` 因从未被本函数触碰保持显示——**造成处方查阅=有、用户管理/改密码=全无的诡异三按钮不一致**。
+- **修复策略（双保险正向兜底，单一入口）**：定义 `__healInstitutionBtns()` 作为机构版按钮"最终正确态"的单一落地函数，在 enforceStandardEditionButtons 的**7个出口**全部调用：三处豁免 return（configEdition/globalEdition/Permission._edition 机构版）、mustEnforce=false return、强制正常尾巴、catch 异常尾巴、函数最末尾终极对齐。同时在 `applyRuntimePermissions`（shared/permission.js）追加 `isInstitutional()` 分支——反方向兜底：机构版时显式恢复三件套 display/visibility 与权限对齐。
+- **打包又一坑（asar 缓存复用）**：同一个 `output=dist_new` 目录重打 1.0.79→1.0.80，electron-builder 静默复用 appOutDir 下的旧 asar。验证显示版本号升了但修复标识（②自动登录await、⑤机构版正向兜底）全 False。**解方：每次重打必须 `Remove-Item -Recurse dist_new` 清空输出目录。**
+- **修复六标识（asar 必含）**：①__appConfigReady ②自动登录await ③竞态自愈×2 ④__healInstitutionBtns ⑤permission.js 机构版正向兜底×2 ⑥1.0.80。1.0.80 清空 dist_new 后重打全部 True。
+- **教训**：
+  1. 只要"同一变量同步赋值"的两个按钮出现显示不一致，必是**有第三段代码单独操作其一**——grep 那个 id 的所有 `style.display` 赋值点（9次命中就能定位 applyRuntimePermissions 这个不对称隐藏）。
+  2. 兜底策略必须"正反都覆盖"：不能只写 isPersonal→隐藏的单向路径，机构版反向恢复必须作为对称分支存在。
+  3. electron-builder 相同 outputDir 重打包必然 asar 复用，必须清目录后重打。
+- **举一反三**：本修复同步覆盖 shared→10 份 permission.js 副本（哈希一致）+ 云端版 enforceStandardEditionButtons 副本（public/index.html / cloud_desktop/index.html）需按同样结构补 __healInstitutionBtns 兜底（如尚未修复）。
+
 
 
 ### 2.11 激活流程一键微信客服（提交 2e6fcee8）

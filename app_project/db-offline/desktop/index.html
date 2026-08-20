@@ -2041,6 +2041,44 @@ let currentUser = null;
         //    C) currentUser.role 强制 user（admin/clinic_admin 一律降级，标准版永久单用户！）
         //    D) DOM 强制对齐：【修改密码】block / 【用户管理】none / 【处方查阅】none / 移动端btn2=改密
         function enforceStandardEditionButtons(reason) {
+            // ★★★ 2026-08-21 【机构版按钮正向对齐兜底】：无论因豁免还是软判据失败而提前退出，
+            //   只要当前是机构版 + 已登录管理员，就显式恢复三件套的正确显示。
+            //   解决的场景：applyRuntimePermissions() 只隐藏 userManageBtn（不动 clinicPrescriptionBtn），
+            //   若该回调在 updateUserDisplay 之后异步触发，就会出现【处方查阅】显示
+            //   但【用户管理】被单独隐藏的不一致现象。
+            var __healInstitutionBtns = function () {
+                try {
+                    var _cfg = (typeof CONFIG !== 'undefined') ? String((CONFIG && CONFIG.edition) || '') : '';
+                    var _win = String(window.EDITION || '');
+                    var _perm = '';
+                    try { if (window.Permission && window.Permission._edition) _perm = String(window.Permission._edition); } catch(_) {}
+                    var _INST = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic'];
+                    var _isInst = (_cfg && _INST.indexOf(_cfg) >= 0) || (_win && _INST.indexOf(_win) >= 0) || (_perm && _INST.indexOf(_perm) >= 0);
+                    if (_isInst) {
+                        var _user = null;
+                        try { if (typeof currentUser !== 'undefined') _user = currentUser; } catch(_) {}
+                        var _canMgmt = false;
+                        try {
+                            if (window.Permission && typeof Permission.shouldShowUserManage === 'function') _canMgmt = Permission.shouldShowUserManage(_user);
+                            else _canMgmt = (_user && (_user.role === 'admin' || _user.role === 'clinic_admin'));
+                        } catch(_) { _canMgmt = (_user && (_user.role === 'admin' || _user.role === 'clinic_admin')); }
+                        var __umb = document.getElementById('userManageBtn');
+                        var __cpb = document.getElementById('changePwdBtn');
+                        var __cpr = document.getElementById('clinicPrescriptionBtn');
+                        if (__umb) { __umb.style.display = _canMgmt ? 'block' : 'none'; __umb.style.visibility = _canMgmt ? 'visible' : 'hidden'; }
+                        if (__cpb) {
+                            var _canChg = true;
+                            try {
+                                if (window.Permission && typeof Permission.shouldShowChangePwd === 'function') _canChg = Permission.shouldShowChangePwd(_user);
+                                else _canChg = !_canMgmt;  // 机构版管理员：由用户管理覆盖，主按钮不显示
+                            } catch(_) { _canChg = !_canMgmt; }
+                            __cpb.style.display = _canChg ? 'block' : 'none';
+                            __cpb.style.visibility = _canChg ? 'visible' : 'hidden';
+                        }
+                        if (__cpr) { __cpr.style.display = _canMgmt ? 'block' : 'none'; __cpr.style.visibility = _canMgmt ? 'visible' : 'hidden'; }
+                    }
+                } catch(_) {}
+            };
             try {
                 // ─── 权威环境判定（Setup 1.0.38 新增！） ───
                 var IS_DESKTOP_LOCAL = false;
@@ -2071,13 +2109,13 @@ let currentUser = null;
                 //   （离线/云端机构版正式激活后，主进程 get-app-config 已将 config.edition 校正为机构版值；
                 //    此处若不豁免，权威强制模式(IS_DESKTOP_LOCAL/产品名=惠康中医-本地/DOM锚点)仍会把它强行降级为标准版）
                 var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic'];
-                if (configEdition && INST_ED.indexOf(configEdition) >= 0) return;
-                if (globalEdition && INST_ED.indexOf(globalEdition) >= 0) return;
-                try { if (window.Permission && window.Permission._edition && INST_ED.indexOf(String(window.Permission._edition)) >= 0) return; } catch (_) {}
+                if (configEdition && INST_ED.indexOf(configEdition) >= 0) { __healInstitutionBtns(); return; }
+                if (globalEdition && INST_ED.indexOf(globalEdition) >= 0) { __healInstitutionBtns(); return; }
+                try { if (window.Permission && window.Permission._edition && INST_ED.indexOf(String(window.Permission._edition)) >= 0) { __healInstitutionBtns(); return; } } catch (_) {}
 
                 // ─── 【Setup 权威强制模式】IS_DESKTOP_LOCAL=true → 不论软判据，一律强制执行！ ───
                 var mustEnforce = IS_DESKTOP_LOCAL || isStandardSoft;
-                if (!mustEnforce) return;
+                if (!mustEnforce) { __healInstitutionBtns(); return; }
 
                 // ========== 强制执行 ==========
 
@@ -2130,6 +2168,8 @@ let currentUser = null;
                 if (typeof console !== 'undefined' && console.log) {
                     console.log('[EnforceStandard] ✅ 强制执行OK | mode=' + (IS_DESKTOP_LOCAL ? 'DESKTOP_AUTHORITY' : 'SOFT_MATCH') + ' | reason=' + (reason || 'unknown') + ' | tag=' + tag + ' | marker=' + domMarker);
                 }
+                // ★★★ 2026-08-21 强制执行尾巴上也跑一次机构版自愈：防止后续异步回调再破坏 userManageBtn
+                try { __healInstitutionBtns(); } catch(_) {}
             } catch (outerError) {
                 try { if (typeof console !== 'undefined' && console.warn) console.warn('[EnforceStandard] 兜底异常（非致命，尝试DOM直接改）:', outerError); } catch (_) {}
                 // ★ 就算整个函数抛错，最后再用最外层 try 单独改一次 DOM（不能让函数整体失败导致按钮依旧缺失！）
@@ -2137,7 +2177,11 @@ let currentUser = null;
                     var c = document.getElementById('changePwdBtn'); if (c) { c.style.display = 'block'; c.style.visibility = 'visible'; }
                     var u = document.getElementById('userManageBtn'); if (u) { u.style.display = 'none'; u.style.visibility = 'hidden'; }
                 } catch(ee) {}
+                // ★★★ 2026-08-21 异常出口机构版自愈兜底（异常时以上硬性标准/个人版兜底会把机构版也盖错）
+                try { __healInstitutionBtns(); } catch(_) {}
             }
+            // ★★★ 2026-08-21 函数最末尾终极对齐：任何异步覆盖/重绘都最终一致
+            try { __healInstitutionBtns(); } catch(_) {}
         }
 
         function updateUserDisplay() {
