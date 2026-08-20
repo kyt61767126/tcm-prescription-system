@@ -1387,6 +1387,31 @@ let currentUser = null;
                             }
                         }
                     } catch (e) { console.warn('密码升级失败:', e); }
+
+                    // ★ 2026-08-20 历史处方修复（与云端APP本地端一致）：本地登录成功后若缺少云端 token，
+                    //   额外调云端 AuthCore.login 换取 token 写入 localStorage，保证读处方能拉到云端数据
+                    try {
+                        let hasToken = !!(user.token || (user.cloud_token));
+                        if (!hasToken) {
+                            try { const _au = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); hasToken = !!(_au.token); } catch(e) {}
+                        }
+                        if (!hasToken && window.AuthCore && AuthCore.login && typeof window.CLOUD_API_BASE !== 'undefined') {
+                            const rescue = await AuthCore.login(matchedIdentifier || username, password, { adapter: AuthCore.cloudAdapter });
+                            if (rescue && rescue.success && rescue.user && rescue.user.token) {
+                                const cloudUser = rescue.user;
+                                if (!user.token) user.token = cloudUser.token;
+                                if (!user.cloud_token) user.cloud_token = cloudUser.token;
+                                const fullData = JSON.stringify(user);
+                                try { localStorage.setItem('currentUser', fullData); } catch(e){}
+                                try { localStorage.setItem('cloud_currentUser', fullData); } catch(e){}
+                                try { localStorage.setItem('auth:currentUser', fullData); } catch(e){}
+                                try { sessionStorage.setItem('currentUser', fullData); } catch(e){}
+                                console.log('[handleLogin] ✅ 本地登录成功，已补拉云端token，历史处方将走云端API');
+                            } else {
+                                console.warn('[handleLogin] ⚠️ 本地登录成功但云端补拉token失败' + (rescue ? (':' + rescue.error) : ''));
+                            }
+                        }
+                    } catch (e) { console.warn('云端补拉token异常（不影响登录）:', e); }
                     
                     currentUser = user;
                     // 使用统一的 user_login_data 存储登录信息
