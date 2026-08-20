@@ -373,6 +373,27 @@
                 }
             } catch (e) { console.warn('[login] 版本匹配校验失败:', e); }
 
+            // ★ 2026-08-20 历史处方修复（桌面与云端APP/网页保持一致）：
+            //   本地密码校验通过时会走本地分支，user 可能没有云端 token，
+            //   导致主界 index.html 读处方时提取不到 token → 历史处方不显示。
+            //   这里在写登录态前，若缺 token 则用账号+密码调云端 AuthCore.login 补拉。
+            try {
+                let hasToken = !!(user.token || (user.cloud_token));
+                if (!hasToken && typeof window.AuthCore === 'object' && typeof AuthCore.login === 'function') {
+                    const rescue = await AuthCore.login(username, password, { adapter: AuthCore.cloudAdapter });
+                    if (rescue && rescue.success && rescue.user && rescue.user.token) {
+                        // 用云端返回的 token 补齐，保证后续云端 API 请求(Bearer)可用
+                        user.token = rescue.user.token;
+                        user.cloud_token = rescue.user.token;
+                        if (!user.name) user.name = rescue.user.name || '';
+                        if (!user.role) user.role = rescue.user.role || 'user';
+                        console.log('[login] ✅ 登录成功，已补拉云端token，历史处方将走云端API');
+                    } else {
+                        console.warn('[login] ⚠️ 登录成功但云端补拉token失败' + (rescue && rescue.error ? (':' + rescue.error) : ''));
+                    }
+                }
+            } catch (e) { console.warn('[login] 云端补拉token异常（不影响登录）:', e); }
+
             // ★ 优化：批量并行写入 AuthCore 存储
             // 云端账户回退登录时 user.token 来自云端 /users?login=true，必须保留，
             // 供主界面 index.html 构造 Bearer header（buildAuthHeader 依赖 user.token），
