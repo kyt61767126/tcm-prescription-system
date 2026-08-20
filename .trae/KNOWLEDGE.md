@@ -227,6 +227,12 @@
 - **修复覆盖场景**：新装机/换机无本地账号→云端直通✓；本地中文姓名账号+云端手机号账号→回退链同步✓；用手机号+云端密码登录任意端→云端直通+role 权威✓；纯本地旧账号→行为不变✓；离线→本地表容错✓。**唯一不覆盖**：本地账号与云端账号既无标识符交集、密码也不同——需用户用云端凭据登录一次。
 - 生效：云端桌面=**Setup 1.2.80 重装**；云端网页版/云端APP=推 GitHub 自动生效。
 
+### 2.19 【两大隐藏根因】1.2.80~1.2.82 全部"空包"（Setup 1.2.83 终版，提交 a49148d1）
+- **根因A（打包链路）**：`dist/win-unpacked/resources/app.asar` 被系统级句柄锁定（杀毒/索引器，无用户进程可查，杀 explorer 无效，删/改名均 EBUSY）。electron-builder 打包 1.2.82 时**静默复用旧 asar**→exe 时间戳是新的（23:54）但 asar 还是 1.2.80 的（23:18），用户装的三版全部不含修复。**验证法**：`[System.IO.File]::ReadAllText(asar, ISO-8859-1).Contains('__appConfigReady')`（英文标识可靠；中文注释须 UTF8 读）。**对策**：打不进去就换输出目录 `npx electron-builder --win --config.directories.output=dist_new`，不跟锁死磕。
+- **根因B（工作区脏改动）**：上次重构后工作区 auth-core.js 4 副本被删了 `global.CLOUD_API_BASE = CLOUD_API_BASE` 挂载（未提交、未记录），而 index.html 有 5 处判据 `typeof window.CLOUD_API_BASE !== 'undefined'`（rescue 登录 1382、角色同步 1442、云端改密 1773、云处方 5470/5504）→ 全部永假，2.17 的修复被无声废掉。**教训**：打包用的是**工作区**代码而非 HEAD！每次打包前必须 `git status` 看有没有未提交的 .js 改动；解包验证必须查"本次修复的标识串"是否在 asar 里。
+- **1.2.83 asar 五项验证全过**：①__appConfigReady ②isCloudProduct ③global.CLOUD_API_BASE 挂载 ④竞态自愈×2 ⑤1.2.83。
+- 生效：云端桌面=**Setup 1.2.83 重装**（dist_new 目录）；云端网页版/APP=推 GitHub 自动生效。
+
 
 ### 2.11 激活流程一键微信客服（提交 2e6fcee8）
 - **功能**：试用到期→激活提交全流程增加"一键联系微信客服"（复制微信号 hktzy1688 + 唤起微信 + 三步指引），等待审核面板与底部客服栏双入口。
