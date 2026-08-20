@@ -2510,6 +2510,19 @@
             const phone = state.phone;
             const descEl = document.getElementById('adminSuccessDesc');
             document.getElementById('adminSuccessPhone').textContent = phone;
+            // ★ 无条件同步登录账号到前端用户表（2026-08-20 修复登录"手机或密码错误"，
+            //   根因：原生/JAVA激活只把手机号账号写入本地 filesDir config，前端登录读 localStorage
+            //   local_systemUsers 读不到该账号 → 登录必然失败。无论下方走 install / else / catch
+            //   哪个分支，只要审核通过就先把手机号账号补入本地登录表，密码留空默认 admin。）
+            try {
+                if (typeof window.addLocalActivationUser === 'function') {
+                    window.addLocalActivationUser({
+                        username: phone || state.adminName || '',
+                        password: state.password || 'admin',
+                        name: state.adminName || phone || '管理员'
+                    });
+                }
+            } catch (ea) { console.warn('同步激活登录账号到前端失败:', ea); }
             // 离线 APP：本地安装 license + 重启；云端 APP（无 installAdminLicense）：账号已在云端创建，提示登录
             if (global.electronAPI && global.electronAPI.activate &&
                 typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {

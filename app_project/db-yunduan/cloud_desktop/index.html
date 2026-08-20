@@ -1329,9 +1329,10 @@ let currentUser = null;
                 // 使用 AuthCore.verifyPassword 支持 PBKDF2 + 旧 SHA-256 + 明文兼容
                 // ★ 支持手机号/用户名双模式登录：先按 username 查找，再按 phone 字段查找
                 let user = null;
+                let matchedIdentifier = username; // ★ 循环外声明（与云端APP一致）：供下方本地登录补拉token使用，const在循环内会因块级作用域ReferenceError
                 for (const u of users) {
                     if (u.username !== username && String(u.phone || '') !== username) continue;
-                    const matchedIdentifier = (u.username === username) ? u.username : (u.phone || username);
+                    matchedIdentifier = (u.username === username) ? u.username : (u.phone || username);
                     if (window.AuthCore && AuthCore.verifyPassword) {
                         if (await AuthCore.verifyPassword(password, u.password || '', matchedIdentifier)) { user = u; break; }
                     } else {
