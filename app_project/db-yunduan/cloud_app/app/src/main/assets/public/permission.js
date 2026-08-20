@@ -36,18 +36,46 @@
             // ★ 2026-08-17 关键修复：双源 edition 漂移防护
             //   CONFIG 由同步 XHR 从 asar/config.json 加载，本 Permission 由 electronAPI / localStorage 解析，
             //   可能不一致 → 顶部版本标签 vs 权限判断分道扬镳，造成「显示离线标准版但改密按钮缺失」。
-            //   解析后强制回写，让 getEditionTag / updateUserDisplay 永远读取同一个 edition。
+            // ★★★ 2026-08-20 方向反转：CONFIG.edition 为权威 → Permission 采纳 CONFIG 值（而非反向覆盖 CONFIG）。
+            //   旧的反向回写会把登录后已更新的机构版 CONFIG.edition 打回 init 时的旧值（cloud_personal），
+            //   造成机构版管理员看不到【用户管理】只看到【修改密码】（版本按钮反复失灵根因）。
             try {
-                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition !== this._edition) {
-                    CONFIG.edition = this._edition;
-                    console.log('[DBG] Permission synced CONFIG.edition ->', this._edition);
+                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition && String(CONFIG.edition) !== String(this._edition)) {
+                    this._edition = String(CONFIG.edition);
+                    console.log('[DBG] Permission adopted CONFIG.edition ->', this._edition);
                 }
             } catch (_) { /* ignore non-render env */ }
             console.log('[DBG] Permission initialized, edition:', this._edition);
         },
 
-        get edition() { return this._edition; },
+        get edition() { return this._currentEdition(); },
         get config() { return this._config; },
+
+        // ★★★ 2026-08-20 根治【版本状态双轨制】：edition 动态权威判定（单一读取链）
+        //   旧实现：_edition 在 init() 时锁死；登录机构版后 CONFIG.edition / window.EDITION 已被
+        //   getAppConfig/refreshVersionTags 更新为机构版，但 _edition 仍是初始 cloud_personal →
+        //   isInstitutional()=false → 机构版管理员看不到【用户管理】。
+        //   修复：每次判定实时读取 CONFIG.edition → window.EDITION → this._edition，
+        //   任何一处更新（登录/激活/配置同步）立即生效，标签与权限永远同轨。
+        _currentEdition() {
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) return String(CONFIG.edition);
+            } catch (_) {}
+            try {
+                if (global.EDITION) return String(global.EDITION);
+            } catch (_) {}
+            return String(this._edition || '');
+        },
+
+        // 主动同步 edition（登录后版本切换时可调用；三处同写保持单一权威）
+        setEdition(ed) {
+            var v = String(ed || '').trim();
+            if (!v) return;
+            this._edition = v;
+            try { if (this._config) this._config.edition = v; } catch (_) {}
+            try { if (typeof CONFIG !== 'undefined' && CONFIG) CONFIG.edition = v; } catch (_) {}
+            try { global.EDITION = v; } catch (_) {}
+        },
 
         // 版本判断（2026-08-08 规则1升级：只保留4个版本 YB/YJ/LB/LJ）
         //   YB = cloud_personal  云端标准版
@@ -55,20 +83,21 @@
         //   LB = personal/offline_personal  离线标准版
         //   LJ = clinic/offline_clinic      离线机构版
         // 旧 key（cloud / offline / clinic_custom）向后兼容
+        // ★ 2026-08-20 全部改为 _currentEdition() 动态判定（根治版本按钮反复失灵）
         isCloud() {
-            return ['cloud', 'cloud_personal', 'cloud_clinic'].includes(this._edition);
+            return ['cloud', 'cloud_personal', 'cloud_clinic'].includes(this._currentEdition());
         },
         isOffline() {
             return ['offline', 'personal', 'clinic_custom', 'clinic',
-                    'offline_personal', 'offline_clinic'].includes(this._edition);
+                    'offline_personal', 'offline_clinic'].includes(this._currentEdition());
         },
         // 是否为"标准版（单用户，不能建子账号）"：YB + LB
         isPersonal() {
-            return ['personal', 'cloud_personal', 'offline_personal'].includes(this._edition);
+            return ['personal', 'cloud_personal', 'offline_personal'].includes(this._currentEdition());
         },
         // 是否为"机构版（多用户，管理子账号）"：YJ + LJ（兼容旧 clinic_custom/offline/clinic）
         isInstitutional() {
-            return ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud'].includes(this._edition);
+            return ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud'].includes(this._currentEdition());
         },
         // 旧 API 兼容：isClinicCustom = isInstitutional
         isClinicCustom() {
@@ -127,7 +156,9 @@
                     var winInst = String(global.EDITION || '');
                     if (cfgInst && INST_ED.indexOf(cfgInst) >= 0) return false;
                     if (winInst && INST_ED.indexOf(winInst) >= 0) return false;
-                    if (this._edition && INST_ED.indexOf(String(this._edition)) >= 0) return false;
+                    // ★ 2026-08-20 动态判定：_currentEdition() 实时读 CONFIG/EDITION，登录后机构版立即豁免
+                    var curEd = this._currentEdition();
+                    if (curEd && INST_ED.indexOf(curEd) >= 0) return false;
                 } catch (_) {}
                 // 判据1：CONFIG/WINDOW.EDITION 是 personal
                 var cfgEd = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ? String(CONFIG.edition) : '';
@@ -207,7 +238,7 @@
 
         // 应用运行页权限控制
         applyRuntimePermissions() {
-            const edition = this._edition;
+            const edition = this._currentEdition();
             console.log('[DBG] Applying runtime permissions for edition:', edition);
 
             // 诊所名称字段（2026-07-31 新规范：所有版本允许修改诊所名称）
@@ -254,7 +285,7 @@
 
         // 应用登录页权限控制
         applyLoginPermissions() {
-            const edition = this._edition;
+            const edition = this._currentEdition();
 
             // 账号下拉框
             const dropdownBtn = document.getElementById('usernameDropdownBtn');
