@@ -2159,13 +2159,25 @@ function enforceEditionBinding() {
             console.log('[License] 版本绑定校正 edition:', from, '->', targetEdition);
         }
 
-        const targetRole = isInstitution ? 'admin' : 'user';
+        // ★ 2026-08-20 角色合规修复：机构版不再全员强制 admin（旧逻辑把医师也提权 → 医师登录也显示
+        //   【用户管理】，违反"机构版=管理员显示用户管理、医师不显示"规范）。机构版仅保证至少一名
+        //   管理员（防全表无 admin 锁死管理入口），其余角色保持用户管理设置；标准版仍全员 user（单用户规范）。
         if (Array.isArray(config.users) && config.users.length > 0) {
-            for (const u of config.users) {
-                if (u && u.role && u.role !== targetRole) {
-                    console.log('[License] 版本绑定校正用户角色:', u.username, u.role, '->', targetRole);
-                    u.role = targetRole;
+            if (isInstitution) {
+                const hasAdmin = config.users.some(u => u && (u.role === 'admin' || u.role === 'clinic_admin'));
+                if (!hasAdmin) {
+                    const first = config.users[0];
+                    console.log('[License] 版本绑定校正：机构版无管理员，提升首个用户', first.username, '-> admin');
+                    first.role = 'admin';
                     corrected = true;
+                }
+            } else {
+                for (const u of config.users) {
+                    if (u && u.role && u.role !== 'user') {
+                        console.log('[License] 版本绑定校正用户角色:', u.username, u.role, '-> user（标准版单用户）');
+                        u.role = 'user';
+                        corrected = true;
+                    }
                 }
             }
         }

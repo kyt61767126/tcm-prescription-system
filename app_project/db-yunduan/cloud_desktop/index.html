@@ -796,8 +796,12 @@ let currentUser = null;
         window.refreshVersionTags = function(forceEdition) {
             try {
                 var ed = forceEdition ? String(forceEdition) : '';
+                // ★★ 2026-08-20 fallback 链顺序修复：CONFIG.edition（getAppConfig 已同步 userData 权威值）
+                //   必须排在 Permission._edition（页面加载时静态快照）之前——旧顺序会让登录时
+                //   Permission._edition 的旧值（cloud_personal）反向覆盖已同步的机构版值（clinic 等），
+                //   随后 updateUserDisplay-tail 的 enforce 按标准版强制执行 → 机构版管理员看到【修改密码】。
+                if (!ed && typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ed = String(CONFIG.edition || '');
                 if (!ed && window.Permission && Permission._edition) ed = String(Permission._edition);
-                if (!ed && typeof CONFIG !== 'undefined' && CONFIG) ed = String(CONFIG.edition || '');
                 if (!ed) ed = String(window.EDITION || '');
                 if (typeof CONFIG !== 'undefined' && CONFIG && ed) CONFIG.edition = ed;
                 if (typeof CONFIG !== 'undefined' && CONFIG && ed) {

@@ -201,6 +201,21 @@
 - **副本纪律**：permission.js 权威源=shared/permission.js，客户端 8 副本（public×2/cloud_desktop×2/cloud_app/db-offline×3）必须同步；**site-admin 2 副本是后台精简版，不同步**（无版本按钮需求）。
 - 生效：云端网页版=推 GitHub 自动生效；云端APP=在线自动生效；云端桌面/离线桌面/离线APP=需重打包（permission.js 各自内置）。
 
+### 2.16 版本按钮缺失第二层根因 = 本地表 role 与云端不同步（提交 f198252b，Setup 1.2.77）
+- **现象**：装 1.2.76（含 2.15 permission 动态判定）后机构版管理员【用户管理】【修改密码】**两个按钮都没了**——比之前更糟。
+- **双层层因**：①云端桌面 handleLogin 是**纯本地 local_systemUsers 校验**（index.html 无独立云端登录分支，1441 else 直接报密码错误），账号进本地表时 role 是默认值（user），不是云端后台设置的 clinic_admin → isClinicAdmin=false → canManage=false；②2.15 修复让 isInstitutional()=true 生效 → canChangePwd=！isClinicAdmin=false（机构版管理员正确隐藏改密）→ 两按钮全隐藏。**改密消失恰是 permission 修复生效的证明**，断点在 role。
+- **修复（public/index.html + cloud_desktop + cloud_app assets 三副本同步）**：本地登录后的云端补拉分支——①补拉条件 `!hasToken` → `(!hasToken || !user._cloudRoleSynced)`（旧短路使第二次登录起补拉永远跳过，role 永无同步机会）；②补拉成功用云端权威 cloudUser 的 role/clinicId/name 覆盖 user 并**回写 local_systemUsers**（下次登录直接正确）；③_cloudRoleSynced 标记保证每账号仅首次多一次 login 调用，规避渐进锁定计数风险。
+- **举一反三**：本地表登录直通云端版时，**身份字段（role/clinicId）必须以云端为权威同步**，不能只同步 token（2.4 历史处方同理：token 缺失历史空白；role 缺失按钮空白）。
+- 生效：云端网页版/云端APP=推 GitHub 自动生效；云端桌面=**Setup 1.2.77**；存量用户下次登录自动触发一次角色同步，无需清数据。
+
+### 2.17 版本按钮缺失第三层（真正）根因 = window.CLOUD_API_BASE 未定义，2.16 角色同步从未执行（Setup 1.2.79）
+- **现象**：装 1.2.77（含 2.16 角色同步修复）后机构版管理员依旧只显示【修改密码】、无【用户管理】。
+- **根因**：云端桌面/云端APP 的 index.html **从未加载 cloud-api.js**（仅 684/694 行注释提及），而 `window.CLOUD_API_BASE` 只在 cloud-api.js 定义；auth-core.js 内部的 `const CLOUD_API_BASE` 是 IIFE 作用域。→ 2.16 的补拉判据 `typeof window.CLOUD_API_BASE !== 'undefined'` **三端中两端永假**（仅云端网页版加载了 cloud-api.js 幸免），rescue 从未执行过，role 永无同步机会。同被判据卡死的还有：云端改密 isCloudMode、云处方拉取（index.html 5370/5404）。
+- **修复（auth-core.js 4 副本同步：shared/public/cloud_desktop/cloud_app assets）**：导出节增加 `try { global.CLOUD_API_BASE = CLOUD_API_BASE; } catch (e) {}`——auth-core 三端均加载，一处挂全局全端生效；网页版 cloud-api.js 同值覆盖/被覆盖均无害。CSP 已放行 `connect-src https://tcm-prescription-system.pages.dev`，网络层无障碍。
+- **教训（三层根因叠加的复盘）**：2.15 修 permission 动态判定、2.16 修 role 同步逻辑，都正确但都没生效——**写 `typeof window.X !== 'undefined'` 判据前必须先 grep 确认 X 在本端真的有定义点**（脚本加载矩阵：public 有 cloud-api.js，另两端没有）。修完必须验证"修复代码路径可达"，而非仅验证"修复代码逻辑正确"。
+- 验证：build.bat 打包 1.2.79 + asar 解包确认 `global.CLOUD_API_BASE = CLOUD_API_BASE` 已进 exe；check-interface.bat 6/6 通过。
+- 生效：云端桌面=**Setup 1.2.79 重装**；云端网页版/云端APP=推 GitHub 自动生效（APP 从 URL 加载无需重打包）。
+
 
 ### 2.11 激活流程一键微信客服（提交 2e6fcee8）
 - **功能**：试用到期→激活提交全流程增加"一键联系微信客服"（复制微信号 hktzy1688 + 唤起微信 + 三步指引），等待审核面板与底部客服栏双入口。
