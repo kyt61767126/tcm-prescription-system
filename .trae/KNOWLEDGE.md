@@ -189,6 +189,18 @@
 - **流程**：改 shared/auth-core/{cloud,offline}.js 两权威源 → sync-auth-core.ps1 同步 11 副本 → node --check + check-interface.bat → 提交。**改 auth-core 必须走此流程**（2.12 铁律）。
 - 生效：云端网页版=推 GitHub 自动生效；云端桌面/离线桌面/离线APP=需重打包（各自 auth-core 内置）；云端APP=在线自动生效（WebView 载线上 public/）。
 
+### 2.15 版本按钮反复失灵终根因 = 版本状态双轨制（提交 8eedc2dc，2026-08-20 晚）
+- **现象**：云端桌面机构版管理员（王桂杰）登录后显示【修改密码】而非【用户管理】；顶部标签却正确显示"云端机构版"。
+- **根因（双轨制）**：版本标签走 `CONFIG.edition`（登录后 getAppConfig/refreshVersionTags 更新为 cloud_clinic）；按钮权限走 `Permission._edition`（**页面加载时 init 锁死**为 index.html 硬编码的 cloud_personal，且 init 的"漂移防护"还会反向把旧值写回 CONFIG）。→ isInstitutional()=false → shouldShowUserManage=false → 用户管理隐藏、改密显示。
+- **修复（shared/permission.js 权威源，8 客户端副本同步）**：
+  1. 新增 `_currentEdition()` 动态读取链：CONFIG.edition → window.EDITION → this._edition，每次判定实时读取，登录/激活/配置同步任何一处更新立即生效；
+  2. isCloud/isOffline/isPersonal/isInstitutional/_isStandardEditionForced/applyRuntimePermissions/applyLoginPermissions 全部改用动态值；
+  3. init 漂移防护方向反转：CONFIG.edition 权威 → Permission 采纳（不再反向覆盖）；
+  4. 新增 setEdition(ed) 三处同写（_edition/_config/CONFIG）。
+- **为什么这次能根治**：桌面 tab 按钮（updateUserDisplay）与 APP 底部按钮（updateMobileActionButtons）**全部**经 Permission.shouldShowUserManage → 修一处=桌面+APP 全端生效；标签与权限从此读同一来源，永不分道扬镳。
+- **副本纪律**：permission.js 权威源=shared/permission.js，客户端 8 副本（public×2/cloud_desktop×2/cloud_app/db-offline×3）必须同步；**site-admin 2 副本是后台精简版，不同步**（无版本按钮需求）。
+- 生效：云端网页版=推 GitHub 自动生效；云端APP=在线自动生效；云端桌面/离线桌面/离线APP=需重打包（permission.js 各自内置）。
+
 
 ### 2.11 激活流程一键微信客服（提交 2e6fcee8）
 - **功能**：试用到期→激活提交全流程增加"一键联系微信客服"（复制微信号 hktzy1688 + 唤起微信 + 三步指引），等待审核面板与底部客服栏双入口。
