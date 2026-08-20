@@ -819,7 +819,17 @@ let currentUser = null;
         //   Object.assign(CONFIG, cfg) 全字段同步；applyEditionTags() 必执行 + enforce 必执行；catch里也 enforce
         (function() {
             if (window.electronAPI && window.electronAPI.getAppConfig) {
-                window.electronAPI.getAppConfig().then(function(r) {
+                // ★★★ 2026-08-20 【Setup 1.2.81 竞态根治】userData 权威配置就绪 Promise 挂全局。
+                //   根因：checkLoginStatus 自动登录（loginWindow 登录后主窗口启动）常在本回调返回前执行
+                //   updateUserDisplay，此时 CONFIG.edition 仍是 asar config.json 的 'cloud_personal'
+                //   （不在机构版豁免列表）→ DOM 锚点判据命中 → 【用户管理】被强制隐藏 + role 内存降级；
+                //   本回调返回后标签纠正为"云端机构版"但无人再刷新按钮 → 永远显示【修改密码】。
+                //   修复：自动登录路径 await 此 Promise（带 800ms 超时兜底），保证判定用权威 edition。
+                window.__appConfigReady = Promise.race([
+                    window.electronAPI.getAppConfig(),
+                    new Promise(function(resolve){ setTimeout(function(){ resolve(null); }, 800); })
+                ]);
+                window.__appConfigReady.then(function(r) {
                     if (r && r.success && r.config) {
                         var cfg = r.config;
                         // ★ 全字段 Object.assign + 逐个字段兜底（不再漏 productName/versionLabel/maxUsers）
@@ -838,6 +848,24 @@ let currentUser = null;
                         if (typeof enforceStandardEditionButtons === 'function') {
                             enforceStandardEditionButtons('after-getAppConfig-sync');
                         }
+                        // ★★★ 2026-08-20 【Setup 1.2.81 竞态自愈】权威 edition 就位后，若用户已登录（自动登录
+                        //   抢跑场景）则重刷一次按钮显示——修复"按钮停留在强制标准版状态无人恢复"的残留。
+                        try {
+                            var _healEd = String(CONFIG.edition || '');
+                            var _healInst = ['clinic_custom','cloud','clinic','cloud_clinic','offline_clinic','institution'].indexOf(_healEd) >= 0;
+                            if (_healInst && typeof currentUser !== 'undefined' && currentUser && currentUser.username && typeof updateUserDisplay === 'function') {
+                                // 机构版身份：若此前竞态窗口把内存 role 降级过，从本地登录数据恢复权威值
+                                try {
+                                    if (currentUser.role !== 'admin' && currentUser.role !== 'clinic_admin') {
+                                        var _lu = null;
+                                        try { _lu = JSON.parse(localStorage.getItem('user_login_data') || 'null'); } catch(_) {}
+                                        var _srcRole = _lu && _lu.user && (_lu.user.role === 'admin' || _lu.user.role === 'clinic_admin') ? _lu.user.role : '';
+                                        if (_srcRole) { console.log('[CONFIG] 竞态自愈：恢复 role', currentUser.role, '->', _srcRole); currentUser.role = _srcRole; }
+                                    }
+                                } catch(_) {}
+                                setTimeout(function(){ try { updateUserDisplay(); } catch(_) {} }, 0);
+                            }
+                        } catch(_) {}
                         console.log('[CONFIG] 已从 userData 同步配置（全字段），edition=', CONFIG.edition, 'product=', CONFIG.productName);
                     }
                 }).catch(function(e) {
@@ -2179,7 +2207,17 @@ let currentUser = null;
                 var configProduct = (typeof CONFIG !== 'undefined') ? String((CONFIG && CONFIG.productName) || '') : '';
                 var configEdition = (typeof CONFIG !== 'undefined') ? String((CONFIG && CONFIG.edition) || '') : '';
                 var globalEdition = String(window.EDITION || '');
-                var domMarker = !!(document.getElementById('_force_standard_edition_marker_'));
+                // ★★★ 2026-08-20 【Setup 1.2.81 云端保护】DOM 锚点是"惠康中医-本地（离线标准版）"专属判据，
+                //   其硬编码文案明确写"惠康中医-本地=永久离线标准版"。云端版（APP_MODE=cloud）产品形态
+                //   （标准版/机构版由 userData 激活配置决定）绝不能被该锚点误判为标准版——
+                //   曾致机构版管理员【用户管理】被强制隐藏（getAppConfig 异步返回前的竞态窗口）。
+                var isCloudProduct = false;
+                try {
+                    if (String(window.APP_MODE || '') === 'cloud') isCloudProduct = true;
+                    if (String(globalProduct) === '惠康中医-云端' || String(configProduct) === '惠康中医-云端') isCloudProduct = true;
+                    if (!isCloudProduct && window.electronAPI && window.electronAPI.isElectron && window.APP_MODE && String(window.APP_MODE) !== 'offline') isCloudProduct = true;
+                } catch(_) {}
+                var domMarker = !isCloudProduct && !!(document.getElementById('_force_standard_edition_marker_'));
 
                 var isStandardSoft = false
                     || (tag.indexOf('标准版') >= 0)
@@ -2188,6 +2226,11 @@ let currentUser = null;
                     || (['personal', 'offline_personal'].indexOf(configEdition) >= 0)
                     || (globalEdition === 'personal' || globalEdition === 'offline_personal')
                     || domMarker;
+                // ★★★ 2026-08-20 【Setup 1.2.81 云端保护】云端产品（标准/机构形态由 userData 激活配置决定）
+                //   的按钮显隐完全走 Permission 正轨判定（shouldShowUserManage/shouldShowChangePwd），
+                //   软判据（标签文本/edition 中间态/asar 默认 cloud_personal/DOM 锚点）一律不作数——
+                //   消除 getAppConfig 异步返回前竞态窗口内的一切误强制。
+                if (isCloudProduct) isStandardSoft = false;
 
                 // ★ 2026-08-18 云端机构版保护：部署配置明确为机构版时，禁止被软判据（含 DOM 锚点）误判为标准版。
                 //   仅离线桌面权威模式（IS_DESKTOP_LOCAL=true）可强制；云端版（网页/APP_MODE=cloud）机构版配置一律放行。
@@ -2522,6 +2565,15 @@ let currentUser = null;
             // ★ 修复 2026-07-27：APP 端禁止自动登录（用户要求每次打开都必须输入用户名和密码）
             if (window.electronAPI && window.electronAPI.isElectron && !window.electronAPI.isAndroidAPP) {
                 try {
+                    // ★★★ 2026-08-20 【Setup 1.2.81 竞态根治】自动登录前先等 userData 权威配置就绪：
+                    //   loginWindow 登录成功 → 主窗口启动 → checkLoginStatus 常跑在 getAppConfig 回调之前，
+                    //   CONFIG.edition 仍是 asar 的 'cloud_personal'（不在机构版豁免列表）→ 按钮误判为标准版。
+                    //   await __appConfigReady（800ms 超时兜底，IPC 挂死也不卡登录）后再做按钮判定。
+                    try {
+                        if (window.__appConfigReady && typeof window.__appConfigReady.then === 'function') {
+                            await window.__appConfigReady;
+                        }
+                    } catch(_) {}
                     const electronUser = await window.electronAPI.getCurrentUser();
                     if (electronUser) {
                         currentUser = electronUser;
