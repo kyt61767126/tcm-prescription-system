@@ -7,6 +7,14 @@
 ;  注意：不强制 Abort，让用户通过 allowToChangeInstallationDirectory 自行选择
 ; ============================================================================
 !macro customInit
+  ; ★ 升级卡死修复（2026-08-20）：安装前自动关闭正在运行的旧版程序
+  ; 现象：旧版在后台运行（开机自启/最小化）时，安装器弹"惠康中医-本地无法关闭，请手动关闭"
+  ; 策略：先温和关闭（WM_CLOSE，等同用户手动点X，正常保存数据）→ 等1.5秒 → 仍存活才强制结束
+  ; 注：taskkill 失败（程序本就没运行）时静默忽略，不影响安装流程
+  nsExec::Exec 'taskkill /im "${APP_EXECUTABLE_FILENAME}"'
+  Sleep 1500
+  nsExec::Exec 'taskkill /f /im "${APP_EXECUTABLE_FILENAME}"'
+
   ; 优先 D 盘（用 D:\nul 检测更可靠，D:\ 在某些 NSIS 版本下不可靠）
   IfFileExists "D:\nul" 0 tryE
     StrCpy $INSTDIR "D:\Program Files\tcm-prescription-custom"

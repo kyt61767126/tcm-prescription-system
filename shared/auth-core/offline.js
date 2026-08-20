@@ -2266,6 +2266,7 @@
                     '<div id="adminWaitStatus" style="color:#26a69a;margin-top:4px;">正在等待管理员审核...</div>' +
                 '</div>' +
                 '<div style="font-size:11px;color:#909399;margin-top:10px;">💡 关闭窗口不影响审核，稍后重新打开可恢复状态</div>' +
+                '<button id="adminContactBtn" style="width:100%;margin-top:12px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#07c160 0%,#06ad56 100%);cursor:pointer;font-weight:bold;">💬 联系客服加速审核（一键加微信）</button>' +
             '</div>' +
 
             // 成功（默认隐藏）
@@ -2294,7 +2295,8 @@
                     '<span>🔑 机器 ID：<b style="color:#555;word-break:break-all;">' + (machineId || '未知') + '</b></span>' +
                     '<button id="adminCopyMidBtn" style="font-size:11px;padding:4px 10px;border:1px solid #ddd;border-radius:4px;background:#fff;color:#555;cursor:pointer;">复制</button>' +
                 '</div>' +
-                '<div style="margin-top:8px;">客服微信：<b style="color:#555;">hktzy1688</b> ｜ 官网：tcm-prescription-system.pages.dev</div>' +
+                '<div style="margin-top:8px;display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;">客服微信：<b style="color:#555;">hktzy1688</b><button id="adminContactBtn2" style="border:none;padding:3px 10px;border-radius:4px;font-size:11px;cursor:pointer;background:#07c160;color:#fff;font-weight:600;">💬 一键联系</button></div>' +
+                '<div style="margin-top:4px;">官网：tcm-prescription-system.pages.dev</div>' +
             '</div>' +
             '  <button id="adminCloseBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-top:1px solid #eee;color:#909399;background:#fafafa;cursor:pointer;border-radius:0 0 14px 14px;">关闭</button>';
 
@@ -2510,6 +2512,19 @@
             const phone = state.phone;
             const descEl = document.getElementById('adminSuccessDesc');
             document.getElementById('adminSuccessPhone').textContent = phone;
+            // ★ 无条件同步登录账号到前端用户表（2026-08-20 修复登录"手机或密码错误"，
+            //   根因：原生/JAVA激活只把手机号账号写入本地 filesDir config，前端登录读 localStorage
+            //   local_systemUsers 读不到该账号 → 登录必然失败。无论下方走 install / else / catch
+            //   哪个分支，只要审核通过就先把手机号账号补入本地登录表，密码留空默认 admin。）
+            try {
+                if (typeof window.addLocalActivationUser === 'function') {
+                    window.addLocalActivationUser({
+                        username: phone || state.adminName || '',
+                        password: state.password || 'admin',
+                        name: state.adminName || phone || '管理员'
+                    });
+                }
+            } catch (ea) { console.warn('同步激活登录账号到前端失败:', ea); }
             // 离线 APP：本地安装 license + 重启；云端 APP（无 installAdminLicense）：账号已在云端创建，提示登录
             if (global.electronAPI && global.electronAPI.activate &&
                 typeof global.electronAPI.activate.installAdminLicense === 'function' && license) {
@@ -2554,6 +2569,27 @@
             b.textContent = ok ? '✅' : '❌';
             setTimeout(function(){ b.textContent = '复制'; }, 1200);
         });
+        // ★ 一键联系微信客服：复制微信号 + 唤起微信 + 操作指引
+        // 桌面端：window.open('weixin://') 由 mainWindow setWindowOpenHandler → shell.openExternal 唤起
+        // APP端：由 MainActivity shouldOverrideUrlLoading 放行 weixin:// 协议唤起
+        function contactWxSupport() {
+            var wx = 'hktzy1688';
+            var fallbackCopy = function() {
+                try {
+                    var ta = document.createElement('textarea');
+                    ta.value = wx; ta.style.position = 'fixed'; ta.style.opacity = '0';
+                    document.body.appendChild(ta); ta.select();
+                    document.execCommand('copy'); document.body.removeChild(ta);
+                } catch (e) {}
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(wx).catch(fallbackCopy);
+            } else fallbackCopy();
+            try { window.open('weixin://', '_blank'); } catch (e) {}
+            alert('客服微信号 hktzy1688 已复制！\n\n若微信未自动打开，请手动打开微信：\n① 点击右上角 ＋ → 添加朋友\n② 长按搜索框粘贴微信号 hktzy1688\n③ 添加客服，说明"激活审核"即可优先处理');
+        }
+        document.getElementById('adminContactBtn').addEventListener('click', contactWxSupport);
+        document.getElementById('adminContactBtn2').addEventListener('click', contactWxSupport);
         document.getElementById('adminCloseBtn').addEventListener('click', cleanup);
         overlay.addEventListener('click', function(e) { if (e.target === overlay) cleanup(); });
 
