@@ -214,6 +214,8 @@ function sanitizeUser(user, clinicId, clinicName, clinicStatus) {
         username: user.username,
         name: user.name || user.username,
         role: user.role,
+        phone: user.phone || '',
+        disabled: user.disabled === true,
         clinicId: clinicId || user.clinicId || null,
         clinicName: clinicName || null,
         clinicStatus: effectiveStatus,
@@ -506,6 +508,91 @@ export async function onRequest(context) {
                 username: found.user.username,
                 clinicName: found.clinicName || null,
                 message: '密码已重置，可立即登录'
+            });
+        }
+
+        // ===== 平台管理员更新用户（启停/角色/姓名）POST /users?action=update-user =====
+        // ★ P0 2026-08-20 新增：后台"用户管理"从只读升级为可操作。
+        //   仅诊所用户可操作（platform_admin 拒绝，防止把自己锁死）；停用立即撤销全部 token；
+        //   角色仅允许 clinic_admin ↔ doctor 互转；全部写审计日志。
+        if (method === 'POST' && url.searchParams.get('action') === 'update-user') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isPlatformAdmin(authUser)) {
+                return json({ success: false, error: '未授权：仅平台总管理员可更新用户' }, 401, context.request);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const targetUsername = (body.username || '').trim();
+            const { disabled, role, name } = body;
+            if (!targetUsername) {
+                return json({ success: false, error: '请提供要更新的用户名' }, 400, context.request);
+            }
+            if (disabled !== undefined && typeof disabled !== 'boolean') {
+                return json({ success: false, error: 'disabled 参数无效（须为布尔值）' }, 400, context.request);
+            }
+            if (role !== undefined && ![ROLE_CLINIC_ADMIN, ROLE_DOCTOR].includes(role)) {
+                return json({ success: false, error: '角色仅允许设置为 诊所管理员/医师' }, 400, context.request);
+            }
+
+            const found = await findUserForLogin(kv, targetUsername);
+            if (!found || !found.user) {
+                return json({ success: false, error: '用户不存在', errorCode: 'USER_NOT_FOUND' }, 404, context.request);
+            }
+            const target = found.user;
+            if (target.role === ROLE_PLATFORM_ADMIN) {
+                return json({ success: false, error: '平台总管理员不支持在此启停/调整角色（防止锁死管理入口）' }, 403, context.request);
+            }
+            if (!found.clinicId) {
+                return json({ success: false, error: '目标用户数据异常（无所属诊所）' }, 500, context.request);
+            }
+
+            const clinicUsers = (await kv.get(`clinic:${found.clinicId}:users`, 'json')) || [];
+            const tIdx = clinicUsers.findIndex(u => u.username === target.username);
+            if (tIdx === -1) {
+                return json({ success: false, error: '诊所用户数据异常，未找到该账号' }, 500, context.request);
+            }
+
+            const changes = [];
+            if (disabled !== undefined && disabled !== (target.disabled === true)) {
+                target.disabled = disabled;
+                changes.push(disabled ? '停用账号' : '启用账号');
+            }
+            if (role !== undefined && role !== target.role) {
+                // 降级保护：该诊所最后一个 clinic_admin 不允许降为 doctor（诊所将无人可管）
+                if (target.role === ROLE_CLINIC_ADMIN && role === ROLE_DOCTOR) {
+                    const adminCount = clinicUsers.filter(u => u.role === ROLE_CLINIC_ADMIN).length;
+                    if (adminCount <= 1) {
+                        return json({ success: false, error: '该诊所仅此一名管理员，不允许降级为医师（诊所将无人可管理）' }, 400, context.request);
+                    }
+                }
+                changes.push(`role: ${target.role} → ${role}`);
+                target.role = role;
+            }
+            if (name !== undefined && String(name).trim() && String(name).trim() !== target.name) {
+                target.name = String(name).trim();
+                changes.push('name: → ' + target.name);
+            }
+            if (changes.length === 0) {
+                return json({ success: true, message: '无变更', user: sanitizeUser(target, found.clinicId, found.clinicName) }, 200, context.request);
+            }
+
+            target.updatedAt = getNowISO();
+            clinicUsers[tIdx] = target;
+            await kv.put(`clinic:${found.clinicId}:users`, JSON.stringify(clinicUsers));
+
+            // 停用立即生效：撤销该用户全部已签发 token（已登录的会话下次请求即 401）
+            if (disabled === true) {
+                try { await revokeAllUserTokens(kv, target.username); } catch (e) { console.error('revokeAllUserTokens error:', e); }
+            }
+
+            await writeAuditLog(kv, found.clinicId, authUser.username, authUser.role,
+                'update_user', target.username, context.request,
+                { changes: changes.join('; '), targetClinicName: found.clinicName || null });
+
+            return json({
+                success: true,
+                message: '已更新：' + changes.join('；'),
+                user: sanitizeUser(target, found.clinicId, found.clinicName)
             });
         }
 
@@ -837,6 +924,19 @@ export async function onRequest(context) {
                 }, 403, context.request);
             }
 
+            // ★ P0 2026-08-20 用户级停用闸门：管理后台"用户管理"可停用单个账号（user.disabled=true）。
+            //   仅识别显式 true（undefined/缺省一律视为正常），宁漏检不可误报；停用即撤销其所有 token。
+            if (user.disabled === true) {
+                console.error('[登录失败] 账号已被停用:', username, clinicName);
+                await writeAuditLog(kv, clinicId, username, user.role, 'login_failed', 'user_disabled', context.request, { clinicName });
+                return json({
+                    success: false,
+                    error: '该账号已被平台管理员停用，如有需要请联系管理员启用',
+                    code: 'USER_DISABLED',
+                    clinicName: clinicName
+                }, 403, context.request);
+            }
+
             // ★ 2026-08-20 注册审核闸门：自助注册的诊所（status=test）在管理员审核通过前禁止登录
             //   检查位于密码验证成功之后（P1-6：不构成用户名枚举向量）
             if (clinicStatus === 'test') {
@@ -1146,6 +1246,40 @@ export async function onRequest(context) {
             const oldClinic = clinics[clinicIdx];
             const changes = [];
             let expiresSetByApproval = false;
+
+            // ★ P0 2026-08-20 收费动作复核：待审核转正（test→active）与续费（renewDays>0）是收费动作，
+            //   必须携带管理员密码复核（confirmPassword）+ 收款备注（payNote，≥4字符），
+            //   防误操作、留痕审计。停用/设为待审核（非收费）必填 reason 说明原因。
+            const isFeeAction = (status === 'active' && oldClinic.status === 'test') ||
+                (typeof renewDays === 'number' && renewDays > 0);
+            if (isFeeAction) {
+                const payNote = String(body.payNote || '').trim();
+                const confirmPassword = String(body.confirmPassword || '');
+                if (payNote.length < 4) {
+                    return json({ success: false, error: '请填写收款备注（金额/支付单号，至少4个字符），用于收费留痕' }, 400);
+                }
+                if (!confirmPassword) {
+                    return json({ success: false, error: '收费操作需输入管理员密码复核' }, 401);
+                }
+                // 验证当前操作平台管理员的密码（verifyPassword 与登录同一校验链路）
+                const adminsArr = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+                const me = adminsArr.find(a => a.username === currentUser.username);
+                const meOk = me && me.passwordHash && me.salt &&
+                    (await verifyPassword(confirmPassword, me.passwordHash, me.salt));
+                if (!meOk) {
+                    await writeAuditLog(kv, clinicId, currentUser.username, ROLE_PLATFORM_ADMIN,
+                        'fee_confirm_failed', `clinic=${oldClinic.name}`, context.request, { payNote });
+                    return json({ success: false, error: '管理员密码复核失败，请重新输入' }, 403);
+                }
+                changes.push('payNote: ' + payNote);
+            } else if ((status === 'disabled') || (status === 'test' && oldClinic.status !== 'test')) {
+                // 停用 / 退回待审核：必填原因（留痕，防误操作）
+                const reason = String(body.reason || '').trim();
+                if (reason.length < 2) {
+                    return json({ success: false, error: '请填写操作原因（至少2个字符），将记入操作日志' }, 400);
+                }
+                changes.push('reason: ' + reason);
+            }
 
             // 更新诊所状态或名称
             if (status !== undefined && status !== oldClinic.status) {
