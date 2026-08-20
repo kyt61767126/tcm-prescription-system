@@ -233,6 +233,14 @@
 - **1.2.83 asar 五项验证全过**：①__appConfigReady ②isCloudProduct ③global.CLOUD_API_BASE 挂载 ④竞态自愈×2 ⑤1.2.83。
 - 生效：云端桌面=**Setup 1.2.83 重装**（dist_new 目录）；云端网页版/APP=推 GitHub 自动生效。
 
+### 2.20 【举一反三】1.2.83 后全量副本审计——3 处漂移同步（提交 5c8323f5，2026-08-21）
+- **审计法**：`Get-FileHash` MD5 对比全部源码副本 vs shared 权威版，10 分钟定位漂移，比逐文件 grep 快且无遗漏。
+- **副本矩阵**（源码级，排除 build intermediates）：permission.js×11 / auth-core.js×11。**加载路径真相**：各端 index.html 均加载**根目录**副本（`<script src="auth-core.js">`），electron/ 子目录是冗余备份；云端APP 从线上 pages.dev 加载（MainActivity CLOUD_URL），assets/public/ 仅本地容错。
+- **同步 3 处**（整文件复制+哈希验证）：①cloud_app assets/permission.js 缺判据3 云端保护（容错路径隐患）②cloud_desktop/electron/auth-core.js ③public/electron/auth-core.js（②③缺 CLOUD_API_BASE 挂载）。
+- **不动项（设计如此，勿"修复"）**：site-admin 双副本（API 硬编码不依赖 window 变量）；db-offline 全系 auth-core（离线无云端概念，无挂载=正确）；db-offline permission 已与 shared 一致（云端保护对离线版 `isCloudProd=false` 不生效，无害）。
+- **教训**：每次 shared/ 修复后必须全量哈希审计分发副本——本次 2.17 挂载修复只同步了 4 副本，2 个 electron 冗余副本漏网；若未来打包 files 配置改为加载 electron/ 路径就会复现"空修复"。
+
+
 
 ### 2.11 激活流程一键微信客服（提交 2e6fcee8）
 - **功能**：试用到期→激活提交全流程增加"一键联系微信客服"（复制微信号 hktzy1688 + 唤起微信 + 三步指引），等待审核面板与底部客服栏双入口。
