@@ -10,19 +10,19 @@ const DESK = 'd:/trae_projects/kyt-zy/app_project/db-offline/desktop';
 const OUT = path.join(SC, '惠康中医诊所管理系统V1.0.0_源程序.pdf');
 const EDGE = 'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe';
 
-// 自研业务模块（优先级顺序：处方核心 > 药典检索 > 认证 > 其余自研；不含 electron/ 框架代码）
+// 自研业务模块（前部：程序入口与核心业务；后部：权限校验+数据保存/备份恢复，保证后30页为完整闭合业务代码；
+// 不含 electron/ 框架代码与 afterPack.js 打包钩子——其引用第三方 asarmor，属构建层非业务层）
 const FILES = [
   'prescription-core.js',
   'medicine-dict.js',
   'auth-core.js',
   'security-guard.js',
-  'permission.js',
   'patient-archive.js',
   'print-utils.js',
-  'db-adapter.js',
   'performance-utils.js',
   'debug-logger.js',
-  'afterPack.js'
+  'permission.js',
+  'db-adapter.js'
 ];
 
 const HEADER = '惠康中医诊所管理系统 V1.0.0｜著作权人：高碑店惠康堂中医诊所有限公司';
@@ -65,6 +65,21 @@ function maskSecrets(line, file) {
   return n;
 }
 
+// ---- 清理 git 路径 / todo 注释 / 第三方 Copyright（注释已整体剥离，此处兜底清洗代码行内残留） ----
+const cleanLog = [];
+function scrubPath(line, file) {
+  let n = line;
+  const before = n;
+  // 本机 git 工作区路径
+  n = n.replace(/[A-Za-z]:[\\/][^'"`\s]*trae_projects[^'"`\s]*/g, '[路径]');
+  // 第三方仓库/文档链接
+  n = n.replace(/https?:\/\/(?:www\.)?github\.com\/[^\s'"`)]*/g, '[链接]');
+  // 行内 TODO/FIXME 标记（注释行已剥离，仅兜底）
+  if (/\b(TODO|FIXME)\b/.test(n)) { n = n.replace(/\b(TODO|FIXME)\b[^\n]*/g, ''); cleanLog.push(`${file}: TODO/FIXME`); }
+  if (n !== before && !/\b(TODO|FIXME)\b/.test(before)) cleanLog.push(`${file}: 路径/链接`);
+  return n;
+}
+
 // ---- 视觉宽（中文按2列） ----
 function vw(s) {
   const cjk = (s.match(/[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g) || []).length;
@@ -103,7 +118,7 @@ function wrapLine(line) {
 const all = [];
 for (const f of FILES) {
   const code = fs.readFileSync(path.join(DESK, f), 'utf8');
-  const lines = cleanLines(code).map(l => maskSecrets(l, f));
+  const lines = cleanLines(code).map(l => scrubPath(maskSecrets(l, f), f));
   all.push(`/* ========== 源文件：${f} ========== */`);
   for (const l of lines) all.push(...wrapLine(l));
 }
@@ -149,6 +164,7 @@ let minLines = 999;
 pages.forEach((pg, i) => { if (pg.length < minLines) minLines = pg.length; });
 console.log(`共 ${pages.length} 页，每页最少有效行数 ${minLines}${minLines < MIN_SRC_LINES ? '  !!低于50' : '  (≥50 达标)'}`);
 console.log(`涂黑 ${maskLog.length} 处：`); maskLog.slice(0, 20).forEach(m => console.log('  ' + m));
+console.log(`路径/TODO清理 ${cleanLog.length} 处：`); cleanLog.slice(0, 20).forEach(m => console.log('  ' + m));
 
 // ---- HTML（每页固定 A4，overflow hidden 保证页边界） ----
 function esc(s) { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
