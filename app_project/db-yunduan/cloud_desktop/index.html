@@ -1345,6 +1345,44 @@ let currentUser = null;
                     }
                 }
                 
+                // ★★★ 2026-08-20 【底层重构：云端身份权威登录】云端版三端统一架构（cloud_desktop/cloud_app/public）：
+                //   云端 API 优先——本地表未匹配时直接云端登录，成功即以云端 user（权威 role/clinicId/token）
+                //   作为登录身份并落地本地缓存。根治"本地表 role 与云端不同步 → 机构版管理员【用户管理】
+                //   按钮缺失"这一类问题：role 永远来自云端，本地表降级为缓存/离线容错，不再是身份权威。
+                //   云端失败（网络不可用/云端无此账号的旧本地账号）不阻断，回退下方本地表校验——零回归。
+                var _lastCloudLoginError = '';
+                if (!user && window.AuthCore && AuthCore.login && typeof window.CLOUD_API_BASE !== 'undefined') {
+                    try {
+                        const cloudResult = await AuthCore.login(username, password, { adapter: AuthCore.cloudAdapter });
+                        if (cloudResult && cloudResult.success && cloudResult.user && cloudResult.user.token) {
+                            user = cloudResult.user;
+                            user._cloudRoleSynced = true; // 云端权威身份，无需再补拉
+                            // 云端账号落地本地表（role=云端权威值；password 留空=本地永不通路径，后续登录始终云端权威）
+                            try {
+                                const allUsers = getUsers();
+                                const _uname = user.username || username;
+                                const cu = allUsers.find(u => u.username === _uname || String(u.phone || '') === (user.phone || username));
+                                const _phone = user.phone || (/^1[3-9]\d{9}$/.test(username) ? username : '');
+                                if (cu) {
+                                    cu.phone = _phone || cu.phone;
+                                    cu.name = user.name || cu.name;
+                                    cu.role = user.role || cu.role || 'user';
+                                    cu._cloudRoleSynced = true;
+                                } else {
+                                    allUsers.push({ username: _uname, phone: _phone, password: '', name: user.name || _uname, role: user.role || 'user', _cloudRoleSynced: true, createdAt: new Date().toISOString() });
+                                }
+                                saveUsers(allUsers);
+                            } catch (_) {}
+                            console.log('[handleLogin] ✅ 云端权威登录成功，role=' + (user.role || '') + '，已落地本地缓存');
+                        } else if (cloudResult && !cloudResult.success) {
+                            _lastCloudLoginError = String(cloudResult.error || '');
+                            console.warn('[handleLogin] 云端登录未成功（回退本地表校验）:', _lastCloudLoginError);
+                        }
+                    } catch (cloudErr) {
+                        console.warn('[handleLogin] 云端登录异常（回退本地表校验）:', cloudErr);
+                    }
+                }
+
                 if (user) {
                     // 密码自动升级：旧格式（SHA-256/明文）→ PBKDF2
                     try {
@@ -1374,7 +1412,16 @@ let currentUser = null;
                         }
                         const needRoleSync = !user._cloudRoleSynced;
                         if ((!hasToken || needRoleSync) && window.AuthCore && AuthCore.login && typeof window.CLOUD_API_BASE !== 'undefined') {
-                            const rescue = await AuthCore.login(matchedIdentifier || username, password, { adapter: AuthCore.cloudAdapter });
+                            // ★ 2026-08-20 标识符回退链：本地用户名（如中文姓名）在云端常无对应账号
+                            //   （云端注册账号=手机号），依次 matchedIdentifier → user.phone → user.username，
+                            //   任一成功即同步（云端失败计数按输入串分开记，不叠加锁定风险）
+                            var _ids = [];
+                            [matchedIdentifier || username, user.phone, user.username].forEach(function(v){ v = String(v || '').trim(); if (v && _ids.indexOf(v) < 0) _ids.push(v); });
+                            var rescue = null;
+                            for (var _ri = 0; _ri < _ids.length; _ri++) {
+                                try { rescue = await AuthCore.login(_ids[_ri], password, { adapter: AuthCore.cloudAdapter }); } catch (_) { rescue = null; }
+                                if (rescue && rescue.success && rescue.user && rescue.user.token) break;
+                            }
                             if (rescue && rescue.success && rescue.user && rescue.user.token) {
                                 const cloudUser = rescue.user;
                                 if (!user.token) user.token = cloudUser.token;
@@ -1465,7 +1512,8 @@ let currentUser = null;
                         } catch (outer) { console.warn('登录兜底定时器启动失败（非致命）:', outer); }
                     }
                 } else {
-                    errorDiv.textContent = '手机号/用户名或密码错误';
+                    // ★ 2026-08-20 云端返回的账号状态类错误（锁定/禁用/到期）优先展示，比通用错误更有指导性
+                    errorDiv.textContent = (/锁定|禁用|到期/.test(_lastCloudLoginError)) ? _lastCloudLoginError : '手机号/用户名或密码错误';
                     errorDiv.style.display = 'block';
                 }
             } catch (e) {
