@@ -240,6 +240,13 @@
 - **不动项（设计如此，勿"修复"）**：site-admin 双副本（API 硬编码不依赖 window 变量）；db-offline 全系 auth-core（离线无云端概念，无挂载=正确）；db-offline permission 已与 shared 一致（云端保护对离线版 `isCloudProd=false` 不生效，无害）。
 - **教训**：每次 shared/ 修复后必须全量哈希审计分发副本——本次 2.17 挂载修复只同步了 4 副本，2 个 electron 冗余副本漏网；若未来打包 files 配置改为加载 electron/ 路径就会复现"空修复"。
 
+### 2.21 【离线桌面版同款竞态】Setup 1.0.79（提交 cd972ae6，2026-08-21）
+- **根因**：与云端 1.2.83 同源但漏修——`checkLoginStatus` 自动登录跑在 `getAppConfig` 回调前，CONFIG.edition 仍为 asar 默认 personal → `enforceStandardEditionButtons` 命中 `IS_DESKTOP_LOCAL` 权威模式（离线版合法权威，云端保护不适用）→ role 降级 + 【用户管理】隐藏；配置就绪后豁免生效但**降级无人恢复**。
+- **修复三件套**（db-offline/desktop/index.html）：①785 行挂 `__appConfigReady`（复用同一 Promise，800ms 兜底）②自动登录分支 await ③回调机构版自愈（localStorage 恢复 role + updateUserDisplay 刷新）。
+- **排查确认无需改**：主进程 `get-app-config` 对正式机构版 license 正确返回 clinic+admin；**离线APP 版无此 bug**（config.json 走同步 XHR，无异步竞态，且每次手动登录）；permission.js 的 2026-08-19 机构版豁免已就位。
+- **打包坑**：PowerShell `Set-Content -Encoding UTF8` 会写 BOM → electron-builder 报 `readObjectStart: expect { or n, but found ﻿`。改用 `[System.IO.File]::WriteAllText($f, $c, [UTF8Encoding]::new($false))`。
+- **方法论**：跨端同源 bug 修一头后，必须审计其它端"同结构代码路径"（本项目：自动登录+异步配置+enforce 三要素组合在离线桌面版完整复刻了云端 bug）。
+
 
 
 ### 2.11 激活流程一键微信客服（提交 2e6fcee8）
