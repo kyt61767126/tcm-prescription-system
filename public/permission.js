@@ -172,8 +172,17 @@
                 if (cfgProd === '惠康中医-本地' || winProd === '惠康中医-本地') return true;
 
                 // 判据3：DOM权威锚点（HTML硬编码，JS全挂也能查到）
+                // ★ 2026-08-20 云端保护：锚点是"惠康中医-本地（永久离线标准版）"专属判据；
+                //   云端产品（APP_MODE=cloud / 产品名=惠康中医-云端）标准/机构形态由 userData
+                //   激活配置决定，绝不能被锚点误判（曾致机构版管理员【用户管理】缺失）。
                 try {
-                    if (global.document && document.getElementById && document.getElementById('_force_standard_edition_marker_')) return true;
+                    var _isCloudProd = false;
+                    try {
+                        if (String(global.APP_MODE || '') === 'cloud') _isCloudProd = true;
+                        if (String(global.PRODUCT_NAME || '') === '惠康中医-云端') _isCloudProd = true;
+                        if (typeof CONFIG !== 'undefined' && CONFIG && String(CONFIG.productName || '') === '惠康中医-云端') _isCloudProd = true;
+                    } catch(_) {}
+                    if (!_isCloudProd && global.document && document.getElementById && document.getElementById('_force_standard_edition_marker_')) return true;
                 } catch(_) {}
             } catch(_) {}
             return false;
