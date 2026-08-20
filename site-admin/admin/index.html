@@ -1086,23 +1086,23 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
     </div>
 </div>
 
-<!-- ★ P1-4 重置用户密码弹窗：自定义 or 随机生成 -->
+<!-- ★ P1-4 统一账号救援弹窗：留空密码=仅解锁；填密码=重置并解锁 -->
 <div id="userResetPwdModal" class="modal-overlay">
     <div class="modal-box" style="max-width:480px;">
         <span class="modal-close" onclick="closeUserResetPwdModal()">&times;</span>
-        <h3>重置用户密码</h3>
+        <h3>解锁 / 重置密码</h3>
         <div id="userResetPwdAlert" class="alert"></div>
         <div class="fee-summary" id="userResetPwdSummary"></div>
         <div class="form-group">
-            <label>新密码 *（8位以上，含字母和数字）</label>
+            <label>新密码（留空 = 仅解锁清除锁定；填写 = 重置密码并解锁）</label>
             <div style="display:flex;gap:6px;">
-                <input type="text" id="userResetPwdInput" style="flex:1;">
+                <input type="text" id="userResetPwdInput" style="flex:1;" placeholder="留空仅解锁 / 8位以上含字母和数字">
                 <button class="btn btn-sm" onclick="fillRandomPwd()">🎲 随机</button>
             </div>
         </div>
         <div style="margin-top:12px;text-align:right;">
             <button class="btn" onclick="closeUserResetPwdModal()">取消</button>
-            <button class="btn btn-warning" id="userResetPwdSubmitBtn" onclick="submitUserResetPwd()">确认重置</button>
+            <button class="btn btn-warning" id="userResetPwdSubmitBtn" onclick="submitUserResetPwd()">确认执行</button>
         </div>
     </div>
 </div>
@@ -2866,7 +2866,7 @@ async function loadClinicsList() {
                     : '';
                 const editBtn = '<button class="btn btn-sm" onclick="openClinicEditModal(\'' + c.id + '\')">编辑</button>';
                 const unlockBtn = (c.adminUsername)
-                    ? '<button class="btn btn-sm" onclick="unlockAccount(\'' + escapeHtml(c.adminUsername) + '\')">🔓解锁</button>'
+                    ? '<button class="btn btn-sm" onclick="openUserResetPwdModal(\'' + escapeHtml(c.adminUsername) + '\')">🔓解锁</button>'
                     : '';
                 const created = c.createdAt ? new Date(c.createdAt).toLocaleString('zh-CN') : '-';
                 const srcTag = c.source === 'self-register' ? ' <span style="font-size:11px;color:#3498db;">自助注册</span>' : '';
@@ -3409,26 +3409,6 @@ async function doClinicUpdate(body, successMsg, alertId) {
     }
 }
 
-// 解锁账号：调用后端 action=unlock 清除账号的 15 分钟锁定
-async function unlockAccount(username) {
-    if (!confirm('确定解锁账号「' + username + '」吗？\n清除其登录失败计数与锁定状态。')) return;
-    try {
-        const res = await fetch(API_BASE + '/users?action=unlock', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ username })
-        });
-        const data = await res.json();
-        if (data.success) {
-            showAlert('clinicAlert', data.message || '账号已解锁', 'success');
-        } else {
-            showAlert('clinicAlert', data.error || '解锁失败', 'error');
-        }
-    } catch (e) {
-        showAlert('clinicAlert', '网络错误：' + e.message, 'error');
-    }
-}
-
 // ===== 用户管理（P1-4：只读 → 可操作）=====
 let _usersCache = [];          // 用户缓存，renderUsersTable 就地过滤渲染
 let _pwdTargetUser = null;     // 重置密码弹窗当前目标用户
@@ -3507,10 +3487,9 @@ function renderUsersTable() {
         const actions = u.role === 'platform_admin'
             ? '<span style="color:#c0c4cc;font-size:12px;">—</span>'
             : '<div style="display:flex;gap:4px;flex-wrap:wrap;">' +
-              '<button class="btn btn-sm" onclick="openUserResetPwdModal(\'' + escapeHtml(u.username) + '\')">🔑 改密</button>' +
+              '<button class="btn btn-sm" onclick="openUserResetPwdModal(\'' + escapeHtml(u.username) + '\')">🔓/🔑 解锁重置</button>' +
               '<button class="btn btn-sm" onclick="toggleUserStatus(\'' + escapeHtml(u.username) + '\',' + (u.disabled !== true) + ')">' + (u.disabled === true ? '✅ 启用' : '🚫 停用') + '</button>' +
               '<button class="btn btn-sm" onclick="cycleUserRole(\'' + escapeHtml(u.username) + '\')">🔁 角色</button>' +
-              '<button class="btn btn-sm" onclick="unlockUserAccount(\'' + escapeHtml(u.username) + '\')">🔓 解锁</button>' +
               '</div>';
         return '<tr' + (u.disabled === true ? ' style="opacity:0.6;"' : '') + '>' +
             '<td class="code">' + escapeHtml(u.username) + '</td>' +
@@ -3525,14 +3504,15 @@ function renderUsersTable() {
     }).join('');
 }
 
-// ---- 重置密码弹窗（对接 userResetPwdModal）----
+// ---- 统一账号救援弹窗（解锁 / 重置密码）----
 function openUserResetPwdModal(username) {
-    const u = _usersCache.find(x => x.username === username);
-    if (!u) { showAlert('userAlert', '用户数据未加载，请刷新后重试', 'error'); return; }
+    // 诊所管理入口可能未加载用户缓存，兜底只按用户名操作
+    const u = _usersCache.find(x => x.username === username) || { username };
     _pwdTargetUser = u;
     document.getElementById('userResetPwdSummary').innerHTML =
-        '<strong>' + escapeHtml(u.name || u.username) + '</strong>（' + escapeHtml(u.username) + '）· ' +
-        escapeHtml(u.clinicName || '-');
+        '<strong>' + escapeHtml(u.name || u.username) + '</strong>（' + escapeHtml(u.username) + '）' +
+        (u.clinicName ? ' · ' + escapeHtml(u.clinicName) : '') +
+        '<div style="font-size:12px;color:#909399;margin-top:4px;">密码留空提交 = 仅解锁（清除登录锁定）；填写密码 = 重置密码并解锁</div>';
     document.getElementById('userResetPwdInput').value = '';
     document.getElementById('userResetPwdAlert').className = 'alert';
     document.getElementById('userResetPwdModal').classList.add('show');
@@ -3558,8 +3538,8 @@ function fillRandomPwd() {
 async function submitUserResetPwd() {
     if (!_pwdTargetUser) return;
     const pwd = document.getElementById('userResetPwdInput').value;
-    if (pwd.length < 8 || !/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)) {
-        showAlert('userResetPwdAlert', '密码需至少8位且同时包含字母和数字', 'error');
+    if (pwd && (pwd.length < 8 || !/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd))) {
+        showAlert('userResetPwdAlert', '密码需至少8位且同时包含字母和数字（留空则仅解锁）', 'error');
         return;
     }
     const btn = document.getElementById('userResetPwdSubmitBtn');
@@ -3568,15 +3548,15 @@ async function submitUserResetPwd() {
         const res = await fetch(API_BASE + '/users?action=reset-password', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ username: _pwdTargetUser.username, password: pwd })
+            body: JSON.stringify(pwd ? { username: _pwdTargetUser.username, password: pwd } : { username: _pwdTargetUser.username })
         });
         const data = await res.json();
         if (data.success) {
             const name = _pwdTargetUser.username;
             closeUserResetPwdModal();
-            showAlert('userAlert', '已重置「' + name + '」的密码（已自动解锁）', 'success');
+            showAlert('userAlert', '「' + name + '」' + (data.message || '操作成功'), 'success');
         } else {
-            showAlert('userResetPwdAlert', data.error || '重置失败', 'error');
+            showAlert('userResetPwdAlert', data.error || '操作失败', 'error');
         }
     } catch (e) {
         showAlert('userResetPwdAlert', '网络错误：' + e.message, 'error');
@@ -3633,26 +3613,6 @@ async function cycleUserRole(username) {
             loadUsersList();
         } else {
             showAlert('userAlert', data.error || '操作失败', 'error');
-        }
-    } catch (e) {
-        showAlert('userAlert', '网络错误：' + e.message, 'error');
-    }
-}
-
-// ---- 解锁账号（清除登录失败计数/锁定状态）----
-async function unlockUserAccount(username) {
-    if (!confirm('确定解锁账号「' + username + '」吗？\n将清除其登录失败计数与锁定状态。')) return;
-    try {
-        const res = await fetch(API_BASE + '/users?action=unlock', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ username })
-        });
-        const data = await res.json();
-        if (data.success) {
-            showAlert('userAlert', data.message || '账号已解锁', 'success');
-        } else {
-            showAlert('userAlert', data.error || '解锁失败', 'error');
         }
     } catch (e) {
         showAlert('userAlert', '网络错误：' + e.message, 'error');

@@ -393,75 +393,35 @@ export async function onRequest(context) {
             });
         }
 
-        // ===== 主动解锁 POST /users?action=unlock =====
-        // ★ P2-B 新增：管理员主动清除账号锁定状态
-        // 背景：登录失败 5 次后账号自动锁定 15 分钟，若管理员确认用户被误锁（如收银台共用、
-        //   输错键盘、暴力探测误伤），可主动解锁，无需等待 TTL 自然过期。
-        // 鉴权：仅 platform_admin；写审计日志（unlock_account）。
-        if (method === 'POST' && url.searchParams.get('action') === 'unlock') {
-            const authUser = await parseAuthHeader(context.request, context.env);
-            if (!authUser || !isPlatformAdmin(authUser)) {
-                return json({ success: false, error: '未授权：仅平台总管理员可解锁账号' }, 401, context.request);
-            }
-
-            const body = await context.request.json().catch(() => ({}));
-            const unlockUsername = (body.username || '').trim();
-            if (!unlockUsername) {
-                return json({ success: false, error: '请提供要解锁的用户名' }, 400, context.request);
-            }
-
-            // 确认目标用户存在（platform_admins 或任一诊所用户）
-            const found = await findUserForLogin(kv, unlockUsername);
-            if (!found || !found.user) {
-                return json({ success: false, error: found?.error?.message || '用户不存在',
-                    errorCode: found?.error?.code || 'USER_NOT_FOUND' }, 404, context.request);
-            }
-
-            // 当前锁定状态
-            const failKey = 'login_fail:' + unlockUsername;
-            const lockCount = parseInt(await kv.get(failKey) || '0', 10);
-            const wasLocked = lockCount >= LOGIN_MAX_FAILURES;
-
-            // 清除失败计数（解锁）
-            await clearLoginFailures(kv, unlockUsername);
-
-            // 审计
-            await writeAuditLog(kv, found.clinicId || null, authUser.username, authUser.role,
-                'unlock_account', unlockUsername, context.request,
-                { lockedUserRole: found.user.role, wasLocked, lockCount });
-
-            return json({
-                success: true,
-                username: unlockUsername,
-                message: wasLocked ? '账号已解锁' : '账号本就未锁定（已清除失败计数）',
-                wasLocked,
-                clearedCount: lockCount
-            });
-        }
-
-        // ===== 平台总管理员按用户名精确重置密码 POST /users?action=reset-password =====
-        // ★ 2026-08-20 新增：解决"改密码改错账号"问题。按 username 精确定位（username 或 phone 匹配），
-        //   平台管理员可直接重置任意诊所用户/平台管理员密码，不再依赖"诊所编辑弹窗找第一个 admin"。
+        // ===== 统一账号救援：解锁 / 重置密码 POST /users?action=reset-password =====
+        // ★ 2026-08-20 合并：原 action=unlock 与 action=reset-password 两个接口合并为一个统一操作。
+        //   body.password 留空 = 仅解锁（清除登录失败计数/锁定，无需等 TTL）；
+        //   body.password 提供且合法 = 重置密码（重置后自动解锁）。
+        //   按 username 精确定位（username 或 phone 匹配），平台管理员/诊所用户均适用。
+        // 鉴权：仅 platform_admin；写审计日志（unlock_account / reset_password）。
         if (method === 'POST' && url.searchParams.get('action') === 'reset-password') {
             const authUser = await parseAuthHeader(context.request, context.env);
             if (!authUser || !isPlatformAdmin(authUser)) {
-                return json({ success: false, error: '未授权：仅平台总管理员可重置密码' }, 401, context.request);
+                return json({ success: false, error: '未授权：仅平台总管理员可执行此操作' }, 401, context.request);
             }
 
             const body = await context.request.json().catch(() => ({}));
             const targetUsername = (body.username || '').trim();
             const newPassword = (body.password || '');
             if (!targetUsername) {
-                return json({ success: false, error: '请提供要重置密码的用户名' }, 400, context.request);
+                return json({ success: false, error: '请提供目标用户名' }, 400, context.request);
             }
-            if (newPassword.length < 8) {
-                return json({ success: false, error: '密码至少8位' }, 400, context.request);
-            }
-            if (newPassword.length > 128) {
-                return json({ success: false, error: '密码过长（最多128位）' }, 400, context.request);
-            }
-            if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-                return json({ success: false, error: '密码必须同时包含字母和数字' }, 400, context.request);
+            // 仅在提供了密码时校验格式（留空 = 仅解锁）
+            if (newPassword) {
+                if (newPassword.length < 8) {
+                    return json({ success: false, error: '密码至少8位' }, 400, context.request);
+                }
+                if (newPassword.length > 128) {
+                    return json({ success: false, error: '密码过长（最多128位）' }, 400, context.request);
+                }
+                if (!/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+                    return json({ success: false, error: '密码必须同时包含字母和数字' }, 400, context.request);
+                }
             }
 
             // 精确定位目标用户（平台管理员或任一诊所用户）
@@ -470,44 +430,54 @@ export async function onRequest(context) {
                 return json({ success: false, error: '用户不存在', errorCode: 'USER_NOT_FOUND' }, 404, context.request);
             }
 
-            const { passwordHash, salt } = await hashPassword(newPassword);
-            found.user.passwordHash = passwordHash;
-            found.user.salt = salt;
-            found.user.updatedAt = getNowISO();
+            let didReset = false;
+            if (newPassword) {
+                const { passwordHash, salt } = await hashPassword(newPassword);
+                found.user.passwordHash = passwordHash;
+                found.user.salt = salt;
+                found.user.updatedAt = getNowISO();
 
-            if (found.clinicId) {
-                const users = (await kv.get(`clinic:${found.clinicId}:users`, 'json')) || [];
-                const idx = users.findIndex(u => u.username === found.user.username);
-                if (idx !== -1) {
-                    users[idx] = found.user;
-                    await kv.put(`clinic:${found.clinicId}:users`, JSON.stringify(users));
+                if (found.clinicId) {
+                    const users = (await kv.get(`clinic:${found.clinicId}:users`, 'json')) || [];
+                    const idx = users.findIndex(u => u.username === found.user.username);
+                    if (idx !== -1) {
+                        users[idx] = found.user;
+                        await kv.put(`clinic:${found.clinicId}:users`, JSON.stringify(users));
+                    } else {
+                        return json({ success: false, error: '诊所用户数据异常，未写入' }, 500, context.request);
+                    }
                 } else {
-                    return json({ success: false, error: '诊所用户数据异常，未写入' }, 500, context.request);
+                    const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
+                    const idx = admins.findIndex(u => u.username === found.user.username);
+                    if (idx !== -1) {
+                        admins[idx] = found.user;
+                        await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(admins));
+                    } else {
+                        return json({ success: false, error: '平台管理员数据异常，未写入' }, 500, context.request);
+                    }
                 }
-            } else {
-                const admins = (await kv.get(KV_SYSTEM_PLATFORM_ADMINS, 'json')) || [];
-                const idx = admins.findIndex(u => u.username === found.user.username);
-                if (idx !== -1) {
-                    admins[idx] = found.user;
-                    await kv.put(KV_SYSTEM_PLATFORM_ADMINS, JSON.stringify(admins));
-                } else {
-                    return json({ success: false, error: '平台管理员数据异常，未写入' }, 500, context.request);
-                }
+                didReset = true;
             }
 
-            // 同时清除失败计数，避免重置后仍被锁定拦截
+            // 统一收尾：清除失败计数（重置密码后不再被锁定拦截；仅解锁模式即本操作本身）
+            const lockCount = parseInt(await kv.get('login_fail:' + found.user.username) || '0', 10);
+            const wasLocked = lockCount >= LOGIN_MAX_FAILURES;
             await clearLoginFailures(kv, found.user.username);
 
-            // 审计
+            // 审计：按实际动作分别记录
             await writeAuditLog(kv, found.clinicId || null, authUser.username, authUser.role,
-                'reset_password', found.user.username, context.request,
-                { targetClinicId: found.clinicId || null, targetClinicName: found.clinicName || null });
+                didReset ? 'reset_password' : 'unlock_account', found.user.username, context.request,
+                { targetClinicId: found.clinicId || null, targetClinicName: found.clinicName || null, wasLocked, lockCount });
 
             return json({
                 success: true,
                 username: found.user.username,
                 clinicName: found.clinicName || null,
-                message: '密码已重置，可立即登录'
+                reset: didReset,
+                wasLocked,
+                message: didReset
+                    ? '密码已重置并解锁，可立即登录'
+                    : (wasLocked ? '账号已解锁' : '账号本就未锁定（已清除失败计数）')
             });
         }
 
