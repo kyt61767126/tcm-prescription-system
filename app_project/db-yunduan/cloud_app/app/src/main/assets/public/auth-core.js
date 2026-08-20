@@ -1128,13 +1128,6 @@
 
     // ==================== 导出 ====================
 
-    // ★★★ 2026-08-20 【云端桌面/云端APP 用户管理按钮缺失根因修复】
-    //   这两端的 index.html 未加载 cloud-api.js → window.CLOUD_API_BASE 未定义 →
-    //   登录 rescue 云端角色权威同步（机构版管理员【用户管理】按钮依赖）、云端改密、
-    //   云处方拉取的判据 `typeof window.CLOUD_API_BASE !== 'undefined'` 永假，从未执行。
-    //   auth-core.js 三端均加载，此处统一挂到 global（网页版 cloud-api.js 同值覆盖/被覆盖均无害）。
-    try { global.CLOUD_API_BASE = CLOUD_API_BASE; } catch (e) {}
-
     global.AuthCore = {
         // 常量
         PASSWORD_SALT,

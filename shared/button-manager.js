@@ -12,15 +12,48 @@
 (function (global) {
     'use strict';
 
-    var INSTITUTIONAL_EDITIONS = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic','cloud','clinic_custom','institution'];
-    var PERSONAL_EDITIONS = ['personal','offline_personal','cloud_personal'];
+    var INSTITUTIONAL_EDITIONS = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic','cloud','clinic_custom','institution','云端机构版','机构版','云端机构版 YJ','离线机构版 LJ','机构版 YJ','机构版 LJ'];
+    var PERSONAL_EDITIONS = ['personal','offline_personal','cloud_personal','云端标准版','标准版','离线标准版','云端标准版 YB','离线标准版 LB','标准版 YB','标准版 LB'];
+
+    // ──────────────── 宽松判属：防 edition 被赋中文标签、APP_MODE/PRODUCT_NAME 晚于架构脚本定义 ────────────────
+    //   2026-08-21 云端机构版复发根因：(1) window.APP_MODE / window.PRODUCT_NAME 在 index.html 680+ 行，
+    //   架构脚本 document.write 先加载，isCloudProduct 取不到真值 → softMarker 误伤；(2) 某处把中文标签
+    //   「云端机构版」赋给 CONFIG.edition，INSTITUTIONAL_EDITIONS 精确匹配不命中 → isInst=false。
+    function __isInstStr(s) {
+        if (!s) return false;
+        var x = String(s).toLowerCase().trim();
+        if (INSTITUTIONAL_EDITIONS.indexOf(s) >= 0) return true;
+        if (x.indexOf('机构版') >= 0) return true;
+        if (x.indexOf('clinic') >= 0 && x.indexOf('personal') < 0) return true;
+        if (x.indexOf('institution') >= 0) return true;
+        if (x === 'cloud' || x === 'cloud_clinic') return true;
+        if (x === 'offline' || x === 'offline_clinic' || x === 'clinic_custom') return true;
+        return false;
+    }
+    function __isPersonalStr(s) {
+        if (!s) return false;
+        var x = String(s).toLowerCase().trim();
+        if (PERSONAL_EDITIONS.indexOf(s) >= 0) return true;
+        if (x.indexOf('标准版') >= 0) return true;
+        if (x.indexOf('personal') >= 0) return true;
+        if (x === 'cloud' || x === 'cloud_personal') return (x !== 'cloud_clinic');
+        return false;
+    }
+    function __isCloudEditionStr(s) {
+        if (!s) return false;
+        var x = String(s).toLowerCase().trim();
+        if (x.indexOf('云端') >= 0) return true;
+        if (x.indexOf('cloud') >= 0) return true;
+        if (x.indexOf('yj') >= 0 || x.indexOf('yb') >= 0) return true;
+        return false;
+    }
 
     // ──────────────── 单一计算：canManage / canChangePwd ────────────────
     function __computePermissions(user, edition) {
         user = user || (typeof currentUser !== 'undefined' ? currentUser : null) || null;
         var e = edition || __getEdition();
-        var isInst = INSTITUTIONAL_EDITIONS.indexOf(e) >= 0;
-        var isPersonal = PERSONAL_EDITIONS.indexOf(e) >= 0;
+        var isInst = __isInstStr(e);
+        var isPersonal = !isInst && __isPersonalStr(e);
 
         var canManage = false;
         var canChangePwd = true;
@@ -97,26 +130,42 @@
         var globalEdition = String(global.EDITION || '');
         var domMarker = !!(document.getElementById('_force_standard_edition_marker_'));
 
-        // ★ 2026-08-20 云端保护：HTML 锚点是"惠康中医-本地"专属判据，云端产品不应用
+        // ★ 2026-08-21 云端宽判：APP_MODE/PRODUCT_NAME 在 index.html 600+ 行定义，可能晚于本脚本加载，
+        //   必须用"不依赖提前声明"的证据：(a) 任一处 edition 值含 云端/cloud/yj/yb（__isCloudEditionStr）；
+        //   (b) URL/路径含 db-yunduan/cloud；(c) 云端专属全局 CLOUD_API_BASE 存在。
         var isCloudProduct = false;
         try {
             if (String(global.APP_MODE || '') === 'cloud') isCloudProduct = true;
             if (String(globalProduct) === '惠康中医-云端' || String(configProduct) === '惠康中医-云端') isCloudProduct = true;
+            if (!isCloudProduct && __isCloudEditionStr(configEdition)) isCloudProduct = true;
+            if (!isCloudProduct && __isCloudEditionStr(globalEdition)) isCloudProduct = true;
+            try { if (global.Permission && Permission._edition && __isCloudEditionStr(String(Permission._edition))) isCloudProduct = true; } catch(_) {}
+            if (!isCloudProduct && typeof CLOUD_API_BASE !== 'undefined') isCloudProduct = true;
+            try {
+                var _loc = String(document.location && document.location.href ? document.location.href : '');
+                var _path = String(document.location && document.location.pathname ? document.location.pathname : '');
+                if (_loc.indexOf('db-yunduan') >= 0 || _path.indexOf('db-yunduan') >= 0) isCloudProduct = true;
+                if (_loc.indexOf('/cloud_') >= 0 || _path.indexOf('/cloud_') >= 0) isCloudProduct = true;
+            } catch(_) {}
         } catch(_) {}
-        var softMarker = !isCloudProduct && domMarker;
+        // ★ 云端宽判兜底：softMarker 在"明确为云端产品或任一处 edition 含云端/cloud"时一律禁用，
+        //   防止因 APP_MODE 晚定义而让「_force_standard_edition_marker_」误伤云端机构版。
+        var editionCloudHint = __isCloudEditionStr(configEdition) || __isCloudEditionStr(globalEdition);
+        try { if (global.Permission && Permission._edition && __isCloudEditionStr(String(Permission._edition))) editionCloudHint = true; } catch(_) {}
+        var softMarker = !isCloudProduct && !editionCloudHint && domMarker;
 
         var isStandardSoft = false
-            || (tag.indexOf('标准版') >= 0)
+            || (tag.indexOf('标准版') >= 0 && !__isInstStr(configEdition) && !__isInstStr(globalEdition))
             || (globalProduct === '惠康中医-本地')
             || (configProduct === '惠康中医-本地')
-            || (['personal', 'offline_personal'].indexOf(configEdition) >= 0)
-            || (globalEdition === 'personal' || globalEdition === 'offline_personal')
+            || ((['personal', 'offline_personal'].indexOf(configEdition) >= 0) && !__isInstStr(globalEdition))
+            || ((globalEdition === 'personal' || globalEdition === 'offline_personal') && !__isInstStr(configEdition))
             || softMarker;
 
-        // ★ 机构版豁免（所有出口前最后统一由 __applyUserButtons 正向对齐）
-        var _cfgIsInst = configEdition && INSTITUTIONAL_EDITIONS.indexOf(configEdition) >= 0;
-        var _winIsInst = globalEdition && INSTITUTIONAL_EDITIONS.indexOf(globalEdition) >= 0;
-        var _permIsInst = false; try { if (global.Permission && Permission._edition && INSTITUTIONAL_EDITIONS.indexOf(String(Permission._edition)) >= 0) _permIsInst = true; } catch(_) {}
+        // ★ 机构版豁免（使用宽松判属：中文「云端机构版」「机构版」也命中，避免精确匹配漏网）
+        var _cfgIsInst = __isInstStr(configEdition);
+        var _winIsInst = __isInstStr(globalEdition);
+        var _permIsInst = false; try { if (global.Permission && Permission._edition && __isInstStr(String(Permission._edition))) _permIsInst = true; } catch(_) {}
         var institutionExempt = _cfgIsInst || _winIsInst || _permIsInst;
 
         var mustEnforce = isDesktopLocal || isStandardSoft;
@@ -160,7 +209,13 @@
                 // 同步入口屏蔽（非云端版）——旧逻辑，保留（非三件套按钮，不属于 Single-Writer 范围）
                 try {
                     var isCloudNow = false;
-                    try { if (typeof CONFIG !== 'undefined' && CONFIG) isCloudNow = ['cloud','cloud_personal','cloud_clinic','institution','clinic_custom'].indexOf(String(CONFIG.edition)) >= 0; } catch(_) {}
+                    try {
+                        if (typeof CONFIG !== 'undefined' && CONFIG) {
+                            var ed2 = String(CONFIG.edition || '');
+                            isCloudNow = __isCloudEditionStr(ed2) || __isInstStr(ed2) /* 机构版默认走云端同步权限显示 */ ||
+                                ['cloud','cloud_personal','cloud_clinic','institution','clinic_custom'].indexOf(ed2) >= 0;
+                        }
+                    } catch(_) {}
                     if (!isCloudNow) {
                         var nds = document.querySelectorAll('[onclick*=\"sync\"], #syncBtn, #cloudSyncBtn, #syncStatus');
                         if (nds && nds.forEach) nds.forEach(function(el){ try { el.style.display = 'none'; } catch(_){} });
