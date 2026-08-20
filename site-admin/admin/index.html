@@ -72,6 +72,21 @@ h2 { color: #34495e; margin: 20px 0 12px; font-size: 16px; border-left: 4px soli
 .gen-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 12px; }
 .gen-actions { display: flex; gap: 10px; margin-top: 12px; }
 
+/* ★ 卡片式列表（设备版本绑定等，自旧版后台移植） */
+.card-list { padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+.license-card {
+    background: #fff; border: 1px solid #ebeef5; border-radius: 10px;
+    padding: 14px 16px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+}
+.license-card:hover { box-shadow: 0 3px 10px rgba(52,152,219,0.12); border-color: #cfe6f7; }
+.license-card-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.license-card-top .code { font-size: 16px; font-weight: 700; font-family: "Courier New", monospace; color: #2c3e50; word-break: break-all; }
+.license-card-meta { display: flex; gap: 16px; flex-wrap: wrap; color: #606266; font-size: 13px; margin-bottom: 10px; }
+.license-card-meta .item b { color: #2c3e50; }
+.license-card-meta .item.clinic { color: #8e44ad; }
+.tag-cloud { background: #e8f0fe; color: #1a56db; }
+.card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
 /* 表格 */
 .table-box { background: white; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; min-width: 900px; }
@@ -276,6 +291,8 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
             <button class="tab-btn" data-tab="AdminActivate" onclick="switchTab('AdminActivate')">🔔 激活审核<span id="badgeActivate" class="tab-badge hidden">0</span></button>
             <button class="tab-btn" data-tab="Clinics" onclick="switchTab('Clinics')">🏥 诊所管理<span id="badgeClinics" class="tab-badge hidden">0</span></button>
             <button class="tab-btn" data-tab="Users" onclick="switchTab('Users')">👥 用户管理</button>
+            <button class="tab-btn" data-tab="TestMachine" onclick="switchTab('TestMachine')">🖥 测试机管理</button>
+            <button class="tab-btn" data-tab="DeviceVersion" onclick="switchTab('DeviceVersion')">🔓 设备绑定</button>
             <button class="tab-btn" data-tab="Logs" onclick="switchTab('Logs')">📜 操作日志</button>
         </div>
 
@@ -529,6 +546,7 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                             <th>角色</th>
                             <th>手机号</th>
                             <th>所属诊所</th>
+                            <th>允许模式</th>
                             <th>状态</th>
                             <th>创建时间</th>
                             <th>操作</th>
@@ -540,6 +558,58 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
                 </table>
             </div>
             <p style="margin-top:12px;color:#909399;font-size:12px;">提示：重置密码/启停/角色调整/解锁均会记入操作日志（📜 操作日志 Tab 可查）。平台总管理员不在此启停。</p>
+        </div>
+
+        <!-- ★ 测试机管理标签页（自旧版后台移植） -->
+        <div id="tabTestMachine" class="tab-content">
+            <div id="testMachineAlert" class="alert"></div>
+            <h2>测试机管理</h2>
+            <p style="color:#606266;font-size:13px;line-height:1.8;">
+                标记为测试机的设备<span style="color:#e67e22;font-weight:600;">仅放开"一台设备一个版本"绑定校验</span>，
+                可自由切换测试标准版/机构版的注册激活流程。<br>
+                客户设备不受影响，仍严格执行<b>一台设备一个版本</b>。
+            </p>
+            <div class="filter-bar">
+                <input type="text" id="testMachineId" placeholder="机器码（32位十六进制）" style="flex:2;min-width:260px;font-family:Courier New,monospace;">
+                <input type="text" id="testMachineNote" placeholder="备注（如：本机测试）" style="flex:1;min-width:140px;">
+                <button class="btn btn-sm" onclick="addTestMachine()">＋ 标记为测试机</button>
+                <button class="btn btn-sm" onclick="loadTestMachines()">刷新</button>
+            </div>
+            <div class="table-box">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>机器码</th>
+                            <th>备注</th>
+                            <th>标记时间</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="testMachineListBody">
+                        <tr><td colspan="4" class="loading">加载中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <!-- ★ 设备版本绑定管理标签页（自旧版后台移植） -->
+        <div id="tabDeviceVersion" class="tab-content">
+            <div id="deviceVersionAlert" class="alert"></div>
+            <h2>设备版本绑定管理</h2>
+            <p style="color:#606266;font-size:13px;line-height:1.8;">
+                查询/解除某台设备的<b>版本绑定</b>。解除后该设备可重新激活<b>任意版本</b>，
+                用于客户<b>换机、降级、紧急调整</b>等场景。<br>
+                <span style="color:#e67e22;font-weight:600;">操作仅限总管理员，解除前请二次确认。</span>
+            </p>
+            <div class="filter-bar">
+                <input type="text" id="deviceVersionQueryInput" placeholder="输入机器码查询（32位十六进制）" style="flex:2;min-width:260px;font-family:Courier New,monospace;">
+                <button class="btn btn-sm" onclick="queryDeviceBinding()">查询绑定</button>
+                <button class="btn btn-sm" onclick="loadDeviceBindings()">刷新全部绑定</button>
+            </div>
+            <div class="table-box">
+                <div id="deviceVersionListBody" class="card-list">
+                    <div class="empty">加载中...</div>
+                </div>
+            </div>
         </div>
 
         <!-- ★ P2-8 操作日志标签页 -->
@@ -2257,6 +2327,8 @@ function switchTab(tabName) {
     else if (tabName === 'Users') loadUsersList();
     else if (tabName === 'License') loadList();
     else if (tabName === 'AdminActivate') loadAdminActivateList();
+    else if (tabName === 'TestMachine') loadTestMachines();
+    else if (tabName === 'DeviceVersion') loadDeviceBindings();
     else if (tabName === 'Logs') { /* 查询按钮触发，不自动拉 */ }
 }
 
@@ -3416,7 +3488,7 @@ let _pwdTargetUser = null;     // 重置密码弹窗当前目标用户
 async function loadUsersList() {
     const tbody = document.getElementById('usersListBody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="8" class="loading">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="loading">加载中...</td></tr>';
     try {
         const res = await fetch(API_BASE + '/users', {
             headers: { 'Authorization': 'Bearer ' + token }
@@ -3432,10 +3504,10 @@ async function loadUsersList() {
             fillUserClinicFilter();
             renderUsersTable();
         } else {
-            tbody.innerHTML = '<tr><td colspan="8" class="empty">' + escapeHtml(data.error || '加载失败') + '</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="empty">' + escapeHtml(data.error || '加载失败') + '</td></tr>';
         }
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="empty">网络错误：' + escapeHtml(e.message) + '</td></tr>';
     }
 }
 
@@ -3467,7 +3539,7 @@ function renderUsersTable() {
         return true;
     });
     if (list.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty">' + (_usersCache.length ? '无匹配用户' : '暂无用户') + '</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="empty">' + (_usersCache.length ? '无匹配用户' : '暂无用户') + '</td></tr>';
         return;
     }
     tbody.innerHTML = list.map(u => {
@@ -3497,6 +3569,7 @@ function renderUsersTable() {
             '<td>' + roleTag + '</td>' +
             '<td>' + escapeHtml(u.phone || '-') + '</td>' +
             '<td>' + escapeHtml(u.clinicName || '-') + '</td>' +
+            '<td style="white-space:nowrap;">' + escapeHtml(({ both: '云端+本地', cloud: '仅云端', local: '仅本地' })[u.allowedMode] || u.allowedMode || '-') + '</td>' +
             '<td>' + statusHtml + '</td>' +
             '<td style="white-space:nowrap;">' + escapeHtml(created) + '</td>' +
             '<td>' + actions + '</td>' +
@@ -3616,6 +3689,230 @@ async function cycleUserRole(username) {
         }
     } catch (e) {
         showAlert('userAlert', '网络错误：' + e.message, 'error');
+    }
+}
+
+// ============================================================================
+// ★ 测试机管理 + 设备版本绑定管理（自旧版后台移植，后端 /license/admin-test-machine
+//   与 /license/admin-device-version 接口未变）
+// ============================================================================
+
+// 端形态格式化（云端/离线 × 桌面/APP）→ 中文徽章
+function fmtEndTag(productClass, clientClass) {
+    if (!productClass && !clientClass) return '';
+    const prod = productClass === 'offline' ? '离线' : (productClass === 'cloud' ? '云端' : '');
+    const cli = clientClass === 'app' ? 'APP' : (clientClass === 'desktop' ? '桌面' : '');
+    const label = (prod + (prod && cli ? '·' : '') + cli) || (prod || cli);
+    if (!label) return '';
+    return '<span class="tag tag-cloud">📟 ' + escapeHtml(label) + '</span>';
+}
+
+// ===== 设备版本绑定管理 =====
+async function loadDeviceBindings() {
+    const el = document.getElementById('deviceVersionListBody');
+    if (!el) return;
+    el.innerHTML = '<div class="empty">加载中...</div>';
+    try {
+        const listRes = await fetch(API_BASE + '/license/admin-device-version', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'list' })
+        });
+        const listData = await listRes.json();
+        if (!listData.success) throw new Error(listData.error || '加载失败');
+        const bindings = listData.bindings || [];
+
+        // 测试机白名单（标记同一台设备）
+        let testSet = {};
+        try {
+            const tRes = await fetch(API_BASE + '/license/admin-test-machine', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ action: 'list' })
+            });
+            const tData = await tRes.json();
+            if (tData.success) {
+                (tData.machines || []).forEach(function (m) { testSet[m.machineId] = m; });
+            }
+        } catch (e) { /* 测试机列表加载失败不影响主列表 */ }
+
+        const alertEl = document.getElementById('deviceVersionAlert');
+        if (alertEl) alertEl.style.display = 'none';
+
+        if (bindings.length === 0) {
+            el.innerHTML = '<div class="empty">暂无设备版本绑定</div>';
+            return;
+        }
+        const versionTag = function (v) {
+            const name = (v === 'institution') ? '机构版' : '标准版';
+            return '<span class="tag ' + (v === 'institution' ? 'tag-pro' : 'tag-personal') + '">' + name + '</span>';
+        };
+        el.innerHTML = bindings.map((b) => {
+            const test = testSet[b.machineId];
+            const testTag = test ? '<span class="tag tag-trial" title="测试机：' + escapeHtml((test.note || '') + ' ' + (test.addedAt || '')) + '">🖥 测试机</span>' : '';
+            const ops =
+                '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button>';
+            return '<div class="license-card">' +
+                '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' +
+                    (b.versionLabel || b.version ? versionTag(b.version) : '') + testTag + fmtEndTag(b.productClass, b.clientClass) + '</div>' +
+                '<div class="license-card-meta">' +
+                    '<span class="item"><b>激活码：</b>' + escapeHtml(b.licenseCode || '-') + '</span>' +
+                    '<span class="item"><b>诊所：</b>' + escapeHtml(b.clinicName || '-') + '</span>' +
+                    '<span class="item"><b>绑定时间：</b>' + escapeHtml(b.boundAt || '-') + '</span>' +
+                '</div>' +
+                '<div class="card-actions">' + ops + '</div>' +
+            '</div>';
+        }).join('');
+    } catch (e) {
+        el.innerHTML = '<div class="empty" style="color:#ff4d4f;">' + escapeHtml(e.message) + '</div>';
+    }
+}
+
+// 单台设备版本绑定 → 卡片（版本徽章 + 测试机标记复用）
+function renderSingleDeviceBindingCard(b) {
+    const versionTag = (b.version || b.versionLabel)
+        ? '<span class="tag ' + (b.version === 'institution' ? 'tag-pro' : 'tag-personal') + '">' + escapeHtml(b.versionLabel || (b.version === 'institution' ? '机构版' : '标准版')) + '</span>'
+        : '';
+    const ops = '<button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="unbindDeviceBinding(\'' + escapeHtml(b.machineId) + '\')">解除绑定</button>';
+    return '<div class="license-card">' +
+        '<div class="license-card-top"><span class="code" style="font-size:14px;">' + escapeHtml(b.machineId || '-') + '</span>' + versionTag + fmtEndTag(b.productClass, b.clientClass) + '</div>' +
+        '<div class="license-card-meta">' +
+            '<span class="item"><b>激活码：</b>' + escapeHtml(b.licenseCode || '-') + '</span>' +
+            '<span class="item"><b>诊所：</b>' + escapeHtml(b.clinicName || '-') + '</span>' +
+            '<span class="item"><b>绑定时间：</b>' + escapeHtml(b.boundAt || '-') + '</span>' +
+        '</div>' +
+        '<div class="card-actions">' + ops + '</div>' +
+    '</div>';
+}
+
+async function queryDeviceBinding() {
+    const machineId = document.getElementById('deviceVersionQueryInput').value.trim();
+    const alertEl = document.getElementById('deviceVersionAlert');
+    const tb = document.getElementById('deviceVersionListBody');
+    if (!machineId) {
+        alertEl.className = 'alert alert-error'; alertEl.style.display = 'block';
+        alertEl.textContent = '请输入机器码'; return;
+    }
+    try {
+        const res = await fetch(API_BASE + '/license/admin-device-version', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'query', machineId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '查询失败');
+        if (!data.found) {
+            alertEl.className = 'alert'; alertEl.style.display = 'block';
+            alertEl.textContent = '该设备暂无版本绑定记录，可正常激活任意版本。';
+            tb.innerHTML = '<div class="empty">无绑定记录</div>';
+            return;
+        }
+        alertEl.style.display = 'none';
+        const b = data.binding;
+        // ★ 复用卡片式渲染（含版本徽章）
+        tb.innerHTML = renderSingleDeviceBindingCard(b);
+    } catch (e) {
+        alertEl.className = 'alert alert-error'; alertEl.style.display = 'block';
+        alertEl.textContent = '⚠️ ' + e.message;
+    }
+}
+
+async function unbindDeviceBinding(machineId) {
+    if (!confirm('确认解除该设备的版本绑定？\n机器码：' + machineId + '\n解除后该设备可重新激活任意版本（标准版/机构版）。')) return;
+    try {
+        const res = await fetch(API_BASE + '/license/admin-device-version', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'unbind', machineId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '解除失败');
+        const alertEl = document.getElementById('deviceVersionAlert');
+        alertEl.className = 'alert alert-success'; alertEl.style.display = 'block';
+        alertEl.textContent = '✅ 已解除该设备版本绑定' + (data.previous ? '（原绑定：' + data.previous + '）' : '') + '。该设备可重新激活任意版本。';
+        loadDeviceBindings();
+    } catch (e) {
+        alert('⚠️ ' + e.message);
+    }
+}
+
+// ===== 测试机管理 =====
+async function loadTestMachines() {
+    const tbody = document.getElementById('testMachineListBody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4" class="loading">加载中...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + '/license/admin-test-machine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'list' })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '加载失败');
+        const machines = data.machines || [];
+        const alertEl = document.getElementById('testMachineAlert');
+        if (alertEl) alertEl.style.display = 'none';
+        if (machines.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="loading">暂无测试机</td></tr>';
+            return;
+        }
+        tbody.innerHTML = machines.map((m) =>
+            '<tr>' +
+            '<td style="font-family:Courier New,monospace;font-size:11px;">' + escapeHtml(m.machineId || '-') + '</td>' +
+            '<td>' + escapeHtml(m.note || '-') + '</td>' +
+            '<td>' + escapeHtml(m.addedAt || '-') + '</td>' +
+            '<td><button class="btn btn-sm" style="background:#ff4d4f;color:#fff;" onclick="removeTestMachine(\'' + escapeHtml(m.machineId) + '\')">移除</button></td>' +
+            '</tr>'
+        ).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="4" class="loading" style="color:#ff4d4f;">' + escapeHtml(e.message) + '</td></tr>';
+    }
+}
+
+async function addTestMachine() {
+    const machineId = document.getElementById('testMachineId').value.trim();
+    const note = document.getElementById('testMachineNote').value.trim();
+    const alertEl = document.getElementById('testMachineAlert');
+    if (!machineId) {
+        alertEl.className = 'alert alert-error'; alertEl.style.display = 'block';
+        alertEl.textContent = '请填写机器码'; return;
+    }
+    if (!/^[a-f0-9]{32}$/i.test(machineId)) {
+        alertEl.className = 'alert alert-error'; alertEl.style.display = 'block';
+        alertEl.textContent = '机器码格式错误（应为32位十六进制）'; return;
+    }
+    try {
+        const res = await fetch(API_BASE + '/license/admin-test-machine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'add', machineId, note })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '添加失败');
+        alertEl.className = 'alert alert-success'; alertEl.style.display = 'block';
+        alertEl.textContent = '✅ 已标记为测试机：' + machineId;
+        document.getElementById('testMachineId').value = '';
+        document.getElementById('testMachineNote').value = '';
+        loadTestMachines();
+    } catch (e) {
+        alertEl.className = 'alert alert-error'; alertEl.style.display = 'block';
+        alertEl.textContent = '⚠️ ' + e.message;
+    }
+}
+
+async function removeTestMachine(machineId) {
+    if (!confirm('确认移除该测试机？\n机器码：' + machineId + '\n移除后该设备将恢复"一台设备一个版本"限制。')) return;
+    try {
+        const res = await fetch(API_BASE + '/license/admin-test-machine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'remove', machineId })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '移除失败');
+        loadTestMachines();
+    } catch (e) {
+        alert('⚠️ ' + e.message);
     }
 }
 
