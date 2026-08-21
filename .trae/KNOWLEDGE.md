@@ -1,7 +1,7 @@
 # 惠康中医项目 · 共享经验知识库（PROJECT KNOWLEDGE）
 
 > 本项目**跨 work 账户共享的"统一大脑"**。任何账户打开本项目，第一步先 Read 本文件。
-> 最后更新：2026-08-20
+> 最后更新：2026-08-21
 > 配套脚本：`学习经验.bat`（灌入本地记忆实现自动学习）、`同步推送经验.bat`（优化完推回共享库）
 
 ---
@@ -396,6 +396,17 @@
 - 通用支持：`--pkg` 指向桌面项目目录（dist\*.exe）或 APP 根目录（*.apk，自动探测端类型；APK 无 build-meta.json 时降级提示手工核对）。
 - 手工生成：`node tools/delivery-report.cjs --pkg app_project\db-yunduan\cloud_desktop`。
 - 交付习惯（新）：向用户交付 exe/APK 时，把同目录核对单一起交付，用户照"安装自检三步"30 秒自证真假包。
+
+### 2.29 【症状快捷录入首版】舌脉体征词典+快捷面板（提交 4142c8a4，2026-08-21）
+
+- 需求：病史症状输入框快速录入中医症状学舌脉等体征。方案文档 `.trae/documents/symptom-quick-input-impl.md`（经 Seed-2.1-Pro 独立审查后定稿）。
+- 交付物：`shared/symptom-dict.js` 权威源（6 分类 120 词条：组合模板/舌质/舌苔/脉象/望诊/问诊）+ 简码前缀搜索 + 分组拼接（同分类顿号、跨分类逗号）+ 频次记忆 + Alt+S 快捷面板。
+- **界面零改动铁律落地**：面板完全运行时注入 DOM（无任何 index.html `<body>`/`<style>` 结构改动），check-interface 6/6 通过；script 引用行追加在既有 `<script src>` 链尾部（medicine-dict.js 之后），不破坏基线特征。
+- 分发矩阵：symptom-dict.js 共 8 处副本（shared 权威源 + public/public.electron + cloud_desktop/cloud_desktop.electron + db-offline.desktop + 两个 APP assets）；7 份 index.html/index-app.html 加引用行（注意 index-app.html 文件名不匹配 `**/index.html` glob，Grep 统计时易漏）。
+- 配套：sync-all.ps1 BusinessJsFiles 注册；两处桌面 package.json build.files 纳入；public/_headers 给 symptom-dict.js 单独 1 天缓存（区别于业务 JS 的 max-age=0，修订词条时 bump `SYMPTOM_DICT.version` 破缓存）。
+- 铁闸：smoke-runtime 新增 S1-S8（词典结构/简码搜索/拼接/排序/毒频次+无 DOM 加载）26/26；copy-consistency 42/42；e2e 3/3；check-interface 6/6。
+- 排序坑（Y6）：`(order[a.cat] || 99)` 在 order=0 时 falsy 变 99 导致首分类排错；必须用 `cat in _orderIndex` 显式判存在。
+- 生效：云端网页/云端APP 推 GitHub 自动生效；云端桌面/离线桌面/离线APP 需重打包。
 
 ---
 
