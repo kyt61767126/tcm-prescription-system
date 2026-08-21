@@ -119,16 +119,11 @@ goto :main
 
     echo.
 
-    if not defined NO_PAUSE (
-
-        set "EXIT_KEY="
-
-        set /p "EXIT_KEY=Press Enter to exit..."
-
-    )
-
     exit /b %EXIT_CODE%
 
+
+
+:check_node
 
 
 :main
@@ -199,14 +194,6 @@ goto :main
     echo ================================================
 
     echo.
-
-    if not defined NO_PAUSE (
-
-        set "EXIT_KEY="
-
-        set /p "EXIT_KEY=Press Enter to exit..."
-
-    )
 
     goto :eof
 

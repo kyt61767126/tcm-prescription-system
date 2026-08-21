@@ -423,9 +423,4 @@ for /f "delims=" %%e in ('powershell -NoProfile -Command "[Console]::OutputEncod
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  打包完成！' -ForegroundColor Yellow; Write-Host '  Started: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  Finished: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Total elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
 REM 清理临时 asar 备份
 if exist "%BACKUP_ASAR_DIR%" rmdir /s /q "%BACKUP_ASAR_DIR%" 2>nul
-if not defined NO_PAUSE (
-    set "EXIT_KEY="
-    set "EXIT_KEY="
-    set /p "EXIT_KEY=Press 0 or Enter to exit: "
-)
 exit /b 0
