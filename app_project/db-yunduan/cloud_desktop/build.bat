@@ -146,6 +146,22 @@ if errorlevel 1 (
 )
 echo.
 
+REM ★ 铁闸1（2026-08-21）：代码副本哈希一致性硬校验
+REM   任何 permission/button-manager/edition-lock 副本 ≠ shared/ 权威源 → 阻断构建
+REM   禁止"改了 shared/ 但某端副本没同步 → 那端打包又出旧 bug"复发
+echo [5.1/9] Iron Gate #1 — Copy-Consistency Hash Check (shared vs all copies)...
+node "%~dp0..\..\..\tools\copy-consistency.cjs"
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  → Auto-FIX with --fix...'"
+    node "%~dp0..\..\..\tools\copy-consistency.cjs" --fix
+    if errorlevel 1 (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 副本不一致且 --fix 失败，请手动检查文件锁'"
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+)
+echo.
+
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[6/9] Auto-bump version (triggers integrity baseline rebuild)...'"
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\bump-version.ps1" -PackagePath "%CD%\package.json"
 echo.
@@ -160,6 +176,15 @@ if errorlevel 1 (
     exit /b 1
 )
 echo [OK] Code obfuscation complete
+echo.
+
+REM ★ 铁闸4（2026-08-21）：构建前写 build-meta.json（版本三元组）
+REM   登录页顶端会显示 Vx.x.xx | Build 时间 | Arch 2.xx，用户一眼能对照真假包
+echo [7.1/9] Iron Gate #4 / #5 — Write build-meta.json (version-triple for login page)...
+node "%~dp0..\..\..\tools\write-build-meta.cjs" "%CD%"
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] build-meta 生成失败（non-fatal，登录页将不显示三元组）'"
+)
 echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[8/9] Running build (prepare-win-unpacked + electron-builder)...'"
@@ -181,7 +206,26 @@ set "WIN_UNPACKED_PATH=dist/win-unpacked"
 if exist "dist\win-unpacked-path.txt" (
     set /p WIN_UNPACKED_PATH=<dist\win-unpacked-path.txt
 )
-powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Using prepackaged path: %WIN_UNPACKED_PATH%'"
+REM ★ 2026-08-21 强化：把真实路径保存到全局，后面 asar 覆盖和最终验证都要用它
+set "REAL_WIN_UNPACKED_PATH=%WIN_UNPACKED_PATH%"
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Using prepackaged path: %REAL_WIN_UNPACKED_PATH%'"
+powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  (此目录中 asar 已通过 prepare-win-unpacked GATE-KEEPER 硬校验)'"
+
+REM ★★ 关键防御：consolidation 会清空 dist 下所有子目录（包括 win-unpacked.时间戳），
+REM    这里立即把真 asar 备份到项目根的 _backup_asar\（不会被任何步骤清理），
+REM    后续 Iron Gate Fixup 和 Final IRON GATE 都从这个备份读取，杜绝被误删。
+echo [8.0/9] Save real asar to safe backup (avoid consolidation deleting it)...
+set "BACKUP_ASAR_DIR=%CD%\_backup_asar"
+if exist "%BACKUP_ASAR_DIR%" rmdir /s /q "%BACKUP_ASAR_DIR%" 2>nul
+mkdir "%BACKUP_ASAR_DIR%" 2>nul
+copy /Y "%REAL_WIN_UNPACKED_PATH%\resources\app.asar" "%BACKUP_ASAR_DIR%\real_app.asar" >nul
+set "SAFE_BACKED_ASAR=%BACKUP_ASAR_DIR%\real_app.asar"
+if exist "%SAFE_BACKED_ASAR%" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [OK] 真 asar 已备份到: %SAFE_BACKED_ASAR%'"
+) else (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] asar 备份失败（可能路径不对），将尝试直接用 REAL_WIN_UNPACKED_PATH'"
+    set "SAFE_BACKED_ASAR=%REAL_WIN_UNPACKED_PATH%\resources\app.asar"
+)
 REM pfx package.json certificateFile
 set "PREV_TEMP=%TEMP%"
 set "PREV_TMP=%TMP%"
@@ -268,7 +312,62 @@ if /i not "%OUTPUT_DIR%"=="%DEFAULT_OUTPUT%" (
 )
 
 
+REM ★ 2026-08-21 根因修复（根治 electron-builder 缓存/重建假 asar）：
+REM   electron-builder --prepackaged 在 build_output_* 里会生成一份自己的 win-unpacked（asar是错的），
+REM   consolidation 把假的搬进 dist/。这里强制用 SAFE_BACKED_ASAR（真 asar 的安全备份）覆盖
+REM   output/win-unpacked/resources/app.asar，保证 portable 解压内容正确，并且 final-verify 正确。
+echo.
+echo [8.9/9] Iron Gate Fixup — 强制覆盖 output/win-unpacked asar 为真包...
+if exist "%SAFE_BACKED_ASAR%" (
+    if exist "%OUTPUT_DIR%\win-unpacked\resources\app.asar" (
+        echo   删除 output 下的假 asar: %OUTPUT_DIR%\win-unpacked\resources\app.asar
+        del /f /q "%OUTPUT_DIR%\win-unpacked\resources\app.asar" 2>nul
+    )
+    echo   复制真 asar 到 output:
+    echo     源: %SAFE_BACKED_ASAR%
+    echo     目: %OUTPUT_DIR%\win-unpacked\resources\app.asar
+    if not exist "%OUTPUT_DIR%\win-unpacked\resources" mkdir "%OUTPUT_DIR%\win-unpacked\resources" 2>nul
+    copy /Y "%SAFE_BACKED_ASAR%" "%OUTPUT_DIR%\win-unpacked\resources\app.asar" >nul
+    if exist "%OUTPUT_DIR%\win-unpacked\resources\app.asar" (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [OK] asar 覆盖成功（根治缓存假包）'"
+    ) else (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] asar 覆盖失败（不致命，final-verify 仍会抓出问题）'"
+    )
+) else (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] 安全备份 asar 不存在：%SAFE_BACKED_ASAR%'"
+)
+
+REM ★ 同步覆盖 build-audit.json（从 dist/build-audit.json → output 根）
+if exist "dist\build-audit.json" (
+    copy /Y "dist\build-audit.json" "%OUTPUT_DIR%\build-audit.json" >nul 2>&1
+    echo   [OK] build-audit.json 同步到 output
+)
+
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[9/9] Verify artifacts & finish...'"
+
+REM ★ 最后一道铁闸（2026-08-21）：独立验证真 asar，不通过就删除 OUTPUT_DIR + dist 下所有 exe
+REM   验证标准与 prepare-win-unpacked GATE-KEEPER 完全一致（8 个 ARCH_MARKERS + version 精确匹配）。
+REM   避免 postbuild-asar-verify 中已过时的 Arch 2.24 标识误杀（那 3 个当前代码确实不存在）。
+REM   这里是权威验证：真 asar 通过 = 最终 NSIS/portable 内就是通过校验的代码；失败 → 红线删 exe。
+REM   注意：使用 %SAFE_BACKED_ASAR%（项目根 _backup_asar/ 下的安全备份），不会被 consolidation 误删。
+echo [9.0/9] Iron Gate Final — 独立验证真 asar（标准与 prepare-win-unpacked GATE-KEEPER 一致）...
+set "VERIFY_ASAR_PATH=%SAFE_BACKED_ASAR%"
+set "VERIFY_PKG_DIR=%CD%"
+set "VERIFY_OUTPUT_DIR=%OUTPUT_DIR%"
+node "%~dp0..\..\..\tools\final-verify.cjs"
+set "FINAL_VERIFY_RC=%errorlevel%"
+set "VERIFY_ASAR_PATH="
+set "VERIFY_PKG_DIR="
+set "VERIFY_OUTPUT_DIR="
+if not "%FINAL_VERIFY_RC%"=="0" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] FINAL IRON GATE 验证失败，真 asar 未通过校验。已自动删除所有 exe，杜绝假包'"
+    REM 还原混淆源码（因为前面 prepare-win-unpacked 阶段失败，混淆状态可能未知）
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] FINAL IRON GATE ALL PASS ✓
+
 set "EXE_FILE="
 for %%f in ("%OUTPUT_DIR%\*.exe") do set "EXE_FILE=%%f"
 if "%EXE_FILE%"=="" (
@@ -295,6 +394,8 @@ echo ============================================
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_END_TIME=%%t"
 for /f "delims=" %%e in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $s=[DateTime]::Parse('%BUILD_START_TIME%'); $e=[DateTime]::Parse('%BUILD_END_TIME%'); $d=$e-$s; $d.ToString('hh\:mm\:ss')"') do set "BUILD_ELAPSED=%%e"
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  打包完成！' -ForegroundColor Yellow; Write-Host '  Started: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  Finished: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Total elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
+REM 清理临时 asar 备份
+if exist "%BACKUP_ASAR_DIR%" rmdir /s /q "%BACKUP_ASAR_DIR%" 2>nul
 if not defined NO_PAUSE (
     set "EXIT_KEY="
     set "EXIT_KEY="

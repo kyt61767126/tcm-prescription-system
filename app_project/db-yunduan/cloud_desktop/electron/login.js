@@ -150,23 +150,58 @@
     }
 
     // ★ 2026-08-19 登录前保持「登录后显示版本」待登录提示，登录成功后置 _loggedIn 再刷新真实版本
+    // ★ 铁闸4（2026-08-21）：启动画面自证真伪三元组 = Vx.x.xx | Build 时间戳 | Arch 2.xx
+    //   build-meta.json 由构建阶段 tools/write-build-meta.cjs 写入，嵌入 asar 内。
+    //   用户登录前就能看到真实版本/构建时间/Arch水印，装了假包一眼就能识破（三元组对不上）。
     let _loggedIn = false;
     let _configForTag = null;
+    let _buildMeta = null;
 
-    function applyEditionTag(config) {
+    function loadBuildMeta() {
+        // file://asar 内直接 fetch 相对路径即可（asarmor 不拦截同域 get 请求）
+        try {
+            fetch('./build-meta.json', { cache: 'no-store' })
+                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                .then(function (m) {
+                    _buildMeta = m;
+                    // 立刻刷新一次标签（即使未登录也显示三元组在"登录后显示版本"位置）
+                    try { applyEditionTag(_configForTag, true); } catch (_) {}
+                })
+                .catch(function (e) {
+                    console.warn('[login] build-meta.json 缺失（可能是非构建环境/开发模式）：', e && e.message);
+                });
+        } catch (e) { /* fetch 未定义（理论不会） */ }
+    }
+
+    function applyEditionTag(config, forceShow) {
         var tag = document.querySelector('.version-tag');
         if (!tag) return;
-        // ★ 登录前不写真实版本（保持待登录提示），登录成功后才刷新
-        if (!_loggedIn) return;
-        // ★ 云端产品版本标签必须带"云端"前缀：优先取配置 versionLabel，缺失则按 edition 推断
-        var vl = (config && config.versionLabel) ? String(config.versionLabel) : '';
-        if (vl && vl.indexOf('云端') >= 0) {
-            tag.textContent = '【' + vl + '】';
+        _configForTag = config || _configForTag;
+
+        // ★ 铁闸4：有 buildMeta 时，登录前也显示"待登录提示+三元组"（自证真伪）
+        var metaHtml = '';
+        if (_buildMeta) {
+            metaHtml = '<br><span style="font-size:10px;color:#888;font-weight:normal;">' +
+                       'V' + _buildMeta.version + ' · Build ' +
+                       (_buildMeta.buildTimeLocal || '') + ' · ' +
+                       (_buildMeta.archMarker || '') +
+                       '</span>';
+        }
+
+        if (!_loggedIn && !forceShow) {
+            // 登录前保持骨架提示，但附加三元组（装了假包 → 用户立刻看出 Arch 版本对不上）
+            tag.innerHTML = '【登录后显示版本】' + metaHtml;
             return;
         }
-        var e = (config && config.edition) || '';
+        // ★ 云端产品版本标签必须带"云端"前缀：优先取配置 versionLabel，缺失则按 edition 推断
+        var vl = (_configForTag && _configForTag.versionLabel) ? String(_configForTag.versionLabel) : '';
+        if (vl && vl.indexOf('云端') >= 0) {
+            tag.innerHTML = '【' + vl + '】' + metaHtml;
+            return;
+        }
+        var e = (_configForTag && _configForTag.edition) || '';
         var inst = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'].indexOf(e) >= 0;
-        tag.textContent = '【' + (inst ? '云端机构版' : '云端标准版') + '】';
+        tag.innerHTML = '【' + (inst ? '云端机构版' : '云端标准版') + '】' + metaHtml;
     }
 
     let _users = [];
@@ -495,6 +530,7 @@
         loadClinicName(config);
         _configForTag = config;
         applyEditionTag(config); // 登录前 _loggedIn=false 保持「登录后显示版本」待登录提示
+        loadBuildMeta(); // ★ 铁闸4：启动画面自证真伪三元组（asar内build-meta.json）
         initLoginInput(config);
         initLoginPermissions();
         // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码

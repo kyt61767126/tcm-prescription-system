@@ -5,6 +5,21 @@
 // renames exe, creates app.asar from source files.
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+
+// ★ 与 afterPack.js 保持一致的关键标识集（铁闸2用）
+//   任何一项缺失 → process.exit(1) 阻断 electron-builder，绝不产出假包
+const ARCH_MARKERS = [
+  ['Single-Writer 按钮写入源 __applyUserButtons', /__applyUserButtons/],
+  ['补丁入口 __patchOldCallers',               /__patchOldCallers/],
+  ['Edition 归一化锁 __editionLocked',          /__editionLocked/],
+  ['Edition 拦截 get/set __authoritativeEdition', /__authoritativeEdition/],
+  ['Arch 2.25 _normalizeEdition 别名归一化',    /_normalizeEdition/],
+  ['Arch 2.25 水印',                            /Arch 2\.2[5-9]/],
+  ['Arch 2.25 instAdminAssert 机构管理员断言',   /instAdminAssert/],
+  ['Arch 2.25 editionNormalize 标识',            /editionNormalize/],
+];
+function sha256Buf(buf) { return crypto.createHash('sha256').update(buf).digest('hex'); }
 
 // Use @electron/asar from the version directory's node_modules.
 // Use Module.createRequire() with a sentinel context file so Node honors the package.json
@@ -255,6 +270,100 @@ async function main() {
     console.error('  ASAR anti-extraction protection not active! app.asar can be extracted to view source code.');
     // Non-fatal: app still works, just without anti-extraction protection
   }
+
+  // =====================================================================
+  // ★ 铁闸2（prepare-win-unpacked 硬校验）★
+  // 背景：electron-builder 以 --prepackaged 模式运行时，package.json 的
+  //       afterPack 钩子**不会被调用**（prepare-win-unpacked.js 第 237 行
+  //       已经注释说明这一点）。所以必须在这里，asar 刚刚被创建+asarmor
+  //       之后、electron-builder 还未开始之前，做二进制全文关键标识检查。
+  //
+  // 失败策略：process.exit(1) 中断 prepare-win-unpacked → build.bat 会立刻
+  //           检测到非零退出码 → 还原混淆源码并退出 → 绝对不会进入
+  //           electron-builder 阶段 → 不会有任何假 Setup exe 流出。
+  // =====================================================================
+  console.log('');
+  console.log('═══════════════════════════════════════════════════════');
+  console.log('  prepare-win-unpacked GATE-KEEPER（铁闸2）硬校验');
+  console.log('  package.json 期望版本: ' + pkg.version);
+  console.log('  asar路径: ' + asarPath);
+  console.log('═══════════════════════════════════════════════════════');
+
+  if (!fs.existsSync(asarPath)) {
+    console.error('[GATE-KEEPER FAIL] app.asar 文件不存在');
+    process.exit(1);
+  }
+  const asarStat = fs.statSync(asarPath);
+  // 正常包约 3.39MB~15.5MB，低于 2MB 必然是空包/缓存复用
+  if (asarStat.size < 2_000_000) {
+    console.error(`[GATE-KEEPER FAIL] app.asar 过小 (${asarStat.size} bytes)，极可能是空包/缓存复用旧asar`);
+    process.exit(1);
+  }
+  const asarISO = fs.readFileSync(asarPath, 'latin1');
+
+  // ① package.json version 必须出现在 asar 二进制中（杜绝旧 asar 缓存复用）
+  const versionRe = new RegExp(('"version": "' + pkg.version + '"').replace(/\./g, '\\.'));
+  if (!versionRe.test(asarISO)) {
+    console.error(`[GATE-KEEPER FAIL] asar 内无 package.json version = ${pkg.version} 字符串`);
+    console.error('  → 这说明 build.files 引用了旧文件，或 asar 步骤复制的是 dist 缓存');
+    console.error('  → 请杀尽旧进程、清空 dist* 目录、重打包');
+    process.exit(1);
+  }
+  console.log('  [PASS] asar 内 version = ' + pkg.version);
+
+  // ② 逐一检查架构修复标识（一个都不能少）
+  const auditMarkers = {};
+  let allMarkersOk = true;
+  for (const [name, re] of ARCH_MARKERS) {
+    const ok = re.test(asarISO);
+    auditMarkers[name] = ok ? 'PASS' : 'FAIL';
+    if (!ok) {
+      console.error(`[GATE-KEEPER FAIL] 关键标识缺失: ${name}`);
+      console.error('  → 请先运行: node tools/copy-consistency.cjs --fix  同步副本');
+      allMarkersOk = false;
+    } else {
+      console.log('  [PASS] ' + name);
+    }
+  }
+  if (!allMarkersOk) process.exit(1);
+
+  // =====================================================================
+  // ★ 铁闸5（构建审计报告 build-audit.json）★
+  // 在 versionDir/dist/ 下写报告，build.bat 完成后会随 consolidation
+  // 一并搬入最终 output，用户可对照验证。
+  // =====================================================================
+  const buildTime = new Date().toISOString();
+  const archMatch = (asarISO.match(/Arch 2\.\d+/g) || []);
+  const postAsarmorSize = fs.statSync(asarPath).size;
+  const postAsarmorSha256 = sha256Buf(fs.readFileSync(asarPath));
+  const audit = {
+    version: pkg.version,
+    buildTime: buildTime,
+    winUnpackedPath: actualWinUnpacked,
+    asarSize: asarStat.size,
+    asarSha256: sha256Buf(fs.readFileSync(asarPath)),
+    postAsarmorSize: postAsarmorSize,
+    postAsarmorSha256: postAsarmorSha256,
+    markers: auditMarkers,
+    pass: true,
+    versionTriple: 'V' + pkg.version + ' | Build ' + new Date(buildTime).toLocaleString('zh-CN', { hour12: false }) +
+                   ' | ' + (archMatch.length ? archMatch[archMatch.length - 1] : 'UNKNOWN'),
+  };
+  const distDir = path.join(versionDir, 'dist');
+  fs.mkdirSync(distDir, { recursive: true });
+  const auditPath = path.join(distDir, 'build-audit.json');
+  try {
+    fs.writeFileSync(auditPath, JSON.stringify(audit, null, 2), 'utf8');
+    console.log('');
+    console.log('[GATE-KEEPER] 铁闸5 构建审计报告写入: ' + auditPath);
+    console.log('[GATE-KEEPER] 版本三元组: ' + audit.versionTriple);
+  } catch (e) {
+    console.warn('[GATE-KEEPER WARN] 审计报告写入失败 (non-fatal):', e.message);
+  }
+  console.log('');
+  console.log('[GATE-KEEPER] ALL CHECKS PASS ✓ — 允许进入 electron-builder --prepackaged 阶段');
+  console.log('═══════════════════════════════════════════════════════');
+  console.log('');
 
   const ok = fs.existsSync(productExe) && fs.existsSync(asarPath) &&
              fs.existsSync(path.join(actualResourcesDir, 'default_app.asar')) &&

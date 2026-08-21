@@ -6,9 +6,38 @@
 //   · getter 永远返回 userData 权威值（经 electronAPI.getAppConfig 最新回写的 CONFIG.__authoritativeEdition 缓存）
 //   · setter 自动三写同步：同时写 CONFIG 存储槽 + window.EDITION + Permission._edition
 //   · 任何代码读取 edition 值永远同源，再无"某一处更新后另一处还是旧值"。
+//
+//  ★ 铁闸3（2026-08-21）：edition 写入端归一化双保险
+//     真根因：激活/版本切换流程到处写 institution/standard/中文标签 等别名，
+//     Permission 读取端要做一万种兼容还会漏。
+//     根治：CONFIG.edition setter 在写入前先 __normalizeEdition 归一化到规范 key，
+//     三写同步全是规范 key，config.json 落地文件也是规范 key。
+//     同时 get 端再加一次 __normalizeEdition 兜底（防止绕过 setter 直写 __authoritativeEdition）。
 // ============================================================================
 (function (global) {
     'use strict';
+
+    // ── 与 shared/permission.js 保持一致的归一化函数（两处硬编码，故意冗余） ──
+    //   不 require/import，兼容 <script> 直接加载；与 Permission 实现逐行同步修改
+    function __normalizeEdition(e) {
+        var s = String(e || '').trim();
+        if (!s) return s;
+        var x = s.toLowerCase();
+        if (x === 'institution' || x === 'institutional' || x === 'jigou') return 'cloud_clinic';
+        if (x === 'standard') return 'personal';
+        if (x === 'yj') return 'cloud_clinic';
+        if (x === 'yb') return 'cloud_personal';
+        if (x === 'lj') return 'offline_clinic';
+        if (x === 'lb') return 'offline_personal';
+        if (x.indexOf('云端机构') >= 0) return 'cloud_clinic';
+        if (x.indexOf('云端标准') >= 0) return 'cloud_personal';
+        if (x.indexOf('离线机构') >= 0) return 'offline_clinic';
+        if (x.indexOf('离线标准') >= 0) return 'offline_personal';
+        if (x.indexOf('机构版') >= 0) return 'clinic';
+        if (x.indexOf('标准版') >= 0) return 'personal';
+        return s;
+    }
+    global.__normalizeEdition = __normalizeEdition;
 
     // ── CONFIG 对象可能在 HTML 内嵌 <script> 中已定义（const 不影响属性拦截）──
     function tryInstallLock() {
@@ -16,6 +45,8 @@
         if (CONFIG.__editionLocked) return true; // 已安装
 
         var _slot = CONFIG.edition || '';
+        // 安装锁的同时立即归一化现有槽值（否则旧 config.json 中的 institution 不会被纠正）
+        _slot = __normalizeEdition(_slot);
 
         // 重新定义 CONFIG.edition 属性（CONFIG 是 const 变量，但其属性描述符可以改）
         try {
@@ -23,13 +54,17 @@
                 configurable: true,
                 enumerable: true,
                 get: function () {
+                    var v = '';
                     // 1. 优先返回权威插槽（由 electronAPI.getAppConfig 回写 __authoritativeEdition 激活）
-                    try { if (CONFIG.__authoritativeEdition) return String(CONFIG.__authoritativeEdition); } catch(_) {}
+                    try { if (CONFIG.__authoritativeEdition) v = String(CONFIG.__authoritativeEdition); } catch(_) {}
                     // 2. 否则回落到存储槽
-                    return String(_slot || '');
+                    if (!v) v = String(_slot || '');
+                    // ★ 铁闸3 getter 兜底：绕过 setter 直写 __authoritativeEdition 的值也要归一化
+                    return __normalizeEdition(v);
                 },
                 set: function (v) {
-                    var val = String(v || '').trim();
+                    // ★ 铁闸3 setter 归一化：任何写 CONFIG.edition 的代码都会自动写规范 key
+                    var val = __normalizeEdition(String(v || '').trim());
                     _slot = val;
                     // 三写同步，保持向后兼容
                     try { global.EDITION = val; } catch(_) {}

@@ -1,6 +1,6 @@
 {
     "name":  "tcm-prescription-cloud",
-    "version": "1.2.90",
+    "version": "1.2.96",
     "description":  "惠康中医-云端",
     "main":  "electron/main.js",
     "scripts":  {
@@ -22,7 +22,7 @@
                   "appId":  "com.tcm.prescription.cloud",
                   "productName":  "惠康中医-云端",
                   "directories":  {
-                                      "output": "dist_125"
+                                      "output": "dist_126"
                                   },
                   "afterPack":  "./afterPack.js",
                   "asarUnpack":  [
@@ -50,7 +50,8 @@
                                 "sync-engine.js",
                                 "build/icon.ico",
                                 "button-manager.js",
-                                "edition-lock.js"
+                                "edition-lock.js",
+                                "build-meta.json"
                             ],
                   "win":  {
                               "target":  [
