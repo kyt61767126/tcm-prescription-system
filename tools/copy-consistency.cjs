@@ -154,6 +154,10 @@ for (var gi = 0; gi < GROUPS.length; gi++) {
         _anyBad: anyCopyBad
     });
 }
+// ★ T3（2026-08-21）：USER-STORE 标记块一致性 —— shared/user-store.js 权威源
+//   内联到 7 份 index.html 的标记块，哈希必须与权威源生成物一致，漂移即失败
+//   （调用点在 totalCopies 声明之后，见下方 checkUserStoreBlocks()）
+
 // DO_FIX 模式下：修正 failGroups 统计（上面对 anyCopyBad==false 且刚 FIXED 的组错误计数了）
 if (DO_FIX) {
     failGroups = 0;
@@ -169,6 +173,15 @@ if (DO_FIX) {
         }
         if (anyBadNow) failGroups++;
     }
+}
+
+// ★ T3（2026-08-21）：USER-STORE 标记块一致性 —— shared/user-store.js 权威源
+//   内联到 7 份 index.html 的标记块，哈希必须与权威源生成物一致，漂移即失败
+function checkUserStoreBlocks() {
+    var sbm = require('./sync-shared-blocks.cjs');
+    var ok = sbm.run(!DO_FIX); // check 模式；DO_FIX 模式下直接重新同步
+    if (!ok) failGroups++;
+    totalCopies += sbm.HTML_FILES.length;
 }
 
 // ── 输出 ──
@@ -208,13 +221,18 @@ for (var i = 0; i < results.length; i++) {
 }
 
 console.log('────────────────────────────────────────────');
+
+// ★ T3：USER-STORE 标记块校验（在 totalCopies 汇总之后执行，单独打印）
+checkUserStoreBlocks();
+
 console.log('总副本数: ' + totalCopies + ' | 失败: ' + failCopies + ' | 文件组: ' + results.length + ' / 失败组: ' + failGroups);
 
 if (failGroups > 0) {
     console.log('');
     console.log('[FAIL] 有副本不一致或缺失，阻断构建！');
     console.log('       修复方式：node tools/copy-consistency.cjs --fix');
-    console.log('       （--fix 会用 shared/ 权威源覆盖所有不一致副本）');
+    console.log('       （--fix 会用 shared/ 权威源覆盖所有不一致副本；');
+    console.log('        USER-STORE 标记块漂移则运行 node tools/sync-shared-blocks.cjs）');
     process.exit(1);
 }
 

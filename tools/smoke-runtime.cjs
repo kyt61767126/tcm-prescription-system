@@ -63,8 +63,9 @@ function extractAsarIndexHtml(asarPath) {
   const off = dataStart + Number(entry.offset);
   return {
     path: base,
-    // latin1 逐字节读：JS 代码为 ASCII，中文仅存在于字符串字面量，不影响函数提取与执行
-    content: buf.slice(off, off + entry.size).toString('latin1'),
+    // utf8 读取：index.html 是 UTF-8 文件；USER-STORE 标记块含中文注释，
+    // latin1 会乱码导致 extractBlock 匹配失败（JS 标识符均为 ASCII，utf8 同样安全）
+    content: buf.slice(off, off + entry.size).toString('utf8'),
   };
 }
 
@@ -224,56 +225,88 @@ function run({ asarPath, htmlPath }) {
   lines.push('[SMOKE] ── 铁闸8 运行时冒烟（坏数据注入 + 用户管理链路）──');
   lines.push('[SMOKE] 目标: ' + label);
 
-  // 5.1 提取所有副本的所有函数体
-  const allBodies = {};
-  let missing = [];
-  for (const fn of REQUIRED_FUNCS) {
-    let bodies;
-    try { bodies = extractAllFunctions(src, fn); }
-    catch (e) {
-      lines.push('[SMOKE][FAIL] ' + fn + ' 提取异常: ' + e.message);
+  // 5.2 执行断言 —— 双路径
+  //   新路径：T3 标记块（USER-STORE）自包含（含 IIFE+薄包装），整块执行
+  //   旧路径：多副本提取 + PASSWORD_SALT 前置注入（未同步标记块的产物兼容）
+  const { extractBlock } = require('./sync-shared-blocks.cjs');
+  const block = extractBlock(src);
+  let pass = 0, fail = 0, total = 0;
+
+  if (block) {
+    lines.push('[SMOKE] 检测到 USER-STORE 标记块 → 整块执行（自包含）');
+    // 存在性：块内必须有 5 个函数（含嵌套定义与包装）
+    let missingFn = REQUIRED_FUNCS.filter(fn => !new RegExp('function\\s+' + fn + '\\s*\\(').test(block));
+    if (missingFn.length) {
+      total++; fail++;
+      lines.push('[SMOKE][FAIL] 标记块缺少函数: ' + missingFn.join(', '));
+    } else {
+      for (const c of CASES) {
+        total++;
+        const sb = makeSandbox();
+        try {
+          vm.createContext(sb);
+          vm.runInContext(block, sb, { filename: 'user-store-block.js' });
+          c.setup(sb);
+          const result = c.call(sb);
+          const ok = Array.isArray(result) && (c.assert ? !!c.assert(result) : result.length >= 0);
+          if (ok) { pass++; lines.push('[SMOKE][PASS] ' + c.name + ' → Array(' + result.length + ')'); }
+          else { fail++; lines.push('[SMOKE][FAIL] ' + c.name + ' → 返回类型 ' + Object.prototype.toString.call(result)); }
+        } catch (e) {
+          fail++;
+          lines.push('[SMOKE][FAIL] ' + c.name + ' → 抛错: ' + (e && e.message ? e.message : String(e)));
+        }
+      }
+    }
+    // 5.2b 旧路径变量占位（N/W 段继续使用同一累计器）
+    const copyCount = 0, allBodies = {}, saltMatch = null;
+  } else {
+    // —— 旧路径：提取所有副本的所有函数体 ——
+    const allBodies = {};
+    const missing = [];
+    for (const fn of REQUIRED_FUNCS) {
+      let bodies;
+      try { bodies = extractAllFunctions(src, fn); }
+      catch (e) {
+        lines.push('[SMOKE][FAIL] ' + fn + ' 提取异常: ' + e.message);
+        return { total: 1, pass: 0, fail: 1, lines };
+      }
+      if (bodies.length === 0) missing.push(fn);
+      allBodies[fn] = bodies;
+    }
+    if (missing.length) {
+      lines.push('[SMOKE][FAIL] 产物中缺少关键函数: ' + missing.join(', ') + ' —— 修复代码未落位');
       return { total: 1, pass: 0, fail: 1, lines };
     }
-    if (bodies.length === 0) missing.push(fn);
-    allBodies[fn] = bodies;
-  }
-  if (missing.length) {
-    lines.push('[SMOKE][FAIL] 产物中缺少关键函数: ' + missing.join(', ') + ' —— 修复代码未落位');
-    return { total: 1, pass: 0, fail: 1, lines };
-  }
+    const copyCount = Math.max(...REQUIRED_FUNCS.map(f => allBodies[f].length));
+    lines.push('[SMOKE] 提取函数副本数: ' + REQUIRED_FUNCS.map(f => f + '×' + allBodies[f].length).join(' '));
 
-  const copyCount = Math.max(...REQUIRED_FUNCS.map(f => allBodies[f].length));
-  lines.push('[SMOKE] 提取函数副本数: ' + REQUIRED_FUNCS.map(f => f + '×' + allBodies[f].length).join(' '));
+    const saltMatch = src.match(/(?:const|var)\s+PASSWORD_SALT\s*=\s*(['"])([^'"]*)\1\s*;/);
+    if (!saltMatch) {
+      lines.push('[SMOKE][FAIL] 产物中缺少 PASSWORD_SALT 声明 —— 加密函数将无法运行');
+      return { total: 1, pass: 0, fail: 1, lines };
+    }
 
-  // 5.1.1 提取 simpleEncrypt/simpleDecrypt 依赖的外部常量 PASSWORD_SALT
-  const saltMatch = src.match(/const\s+PASSWORD_SALT\s*=\s*(['"])([^'"]*)\1\s*;/);
-  if (!saltMatch) {
-    lines.push('[SMOKE][FAIL] 产物中缺少 const PASSWORD_SALT 声明 —— 加密函数将无法运行');
-    return { total: 1, pass: 0, fail: 1, lines };
-  }
-
-  // 5.2 对每一份副本 × 每个用例执行断言
-  let pass = 0, fail = 0, total = 0;
-  for (let copyIdx = 0; copyIdx < copyCount; copyIdx++) {
-    // 提取结果已含完整函数声明头，salt 常量前置注入
-    const bundle = saltMatch[0] + '\n' + REQUIRED_FUNCS
-      .map(f => allBodies[f][Math.min(copyIdx, allBodies[f].length - 1)])
-      .join('\n');
-    const copyTag = copyCount > 1 ? ('副本#' + (copyIdx + 1) + ' ') : '';
-    for (const c of CASES) {
-      total++;
-      const sb = makeSandbox();
-      try {
-        vm.createContext(sb);
-        vm.runInContext(bundle, sb, { filename: 'smoke-extract.js' });
-        c.setup(sb);
-        const result = c.call(sb);
-        const ok = Array.isArray(result) && (c.assert ? !!c.assert(result) : result.length >= 0);
-        if (ok) { pass++; lines.push('[SMOKE][PASS] ' + copyTag + c.name + (Array.isArray(result) ? ' → Array(' + result.length + ')' : '')); }
-        else { fail++; lines.push('[SMOKE][FAIL] ' + copyTag + c.name + ' → 返回类型 ' + Object.prototype.toString.call(result)); }
-      } catch (e) {
-        fail++;
-        lines.push('[SMOKE][FAIL] ' + copyTag + c.name + ' → 抛错: ' + (e && e.message ? e.message : String(e)));
+    for (let copyIdx = 0; copyIdx < copyCount; copyIdx++) {
+      // 提取结果已含完整函数声明头，salt 常量前置注入
+      const bundle = saltMatch[0] + '\n' + REQUIRED_FUNCS
+        .map(f => allBodies[f][Math.min(copyIdx, allBodies[f].length - 1)])
+        .join('\n');
+      const copyTag = copyCount > 1 ? ('副本#' + (copyIdx + 1) + ' ') : '';
+      for (const c of CASES) {
+        total++;
+        const sb = makeSandbox();
+        try {
+          vm.createContext(sb);
+          vm.runInContext(bundle, sb, { filename: 'smoke-extract.js' });
+          c.setup(sb);
+          const result = c.call(sb);
+          const ok = Array.isArray(result) && (c.assert ? !!c.assert(result) : result.length >= 0);
+          if (ok) { pass++; lines.push('[SMOKE][PASS] ' + copyTag + c.name + (Array.isArray(result) ? ' → Array(' + result.length + ')' : '')); }
+          else { fail++; lines.push('[SMOKE][FAIL] ' + copyTag + c.name + ' → 返回类型 ' + Object.prototype.toString.call(result)); }
+        } catch (e) {
+          fail++;
+          lines.push('[SMOKE][FAIL] ' + copyTag + c.name + ' → 抛错: ' + (e && e.message ? e.message : String(e)));
+        }
       }
     }
   }
