@@ -4,16 +4,17 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 REM ============================================================
-REM pack-app.bat - Cloud APP (Standard, 普通模式)
-REM 委托到 build-pack.bat app（普通模式，无 standard 参数）
-REM 严格模式请使用 pack-app-strict.bat
+REM pack-app.bat - Cloud APP (Standard Strict mode)
+REM Delegates to: build-pack.bat app-strict (same standard as one-click pack)
+REM 2026-08-21: manual pack unified to STRICT standard
+REM   (signature hash refresh failure = hard abort)
 REM ============================================================
 
 echo ============================================
-echo   Cloud APP Builder (Standard)
+echo   Cloud APP Builder (Standard Strict)
 echo ============================================
 echo.
 
-echo [pack-app.bat] Cloud APP (Standard)...
-call build-pack.bat app
+echo [pack-app.bat] Cloud APP (Standard Strict)...
+call build-pack.bat app-strict
 exit /b %errorlevel%

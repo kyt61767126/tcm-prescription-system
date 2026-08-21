@@ -180,7 +180,7 @@ goto :main
 
     echo [APP]
 
-    echo   app               - Offline APP (Unified)
+    echo   app               - Offline APP (Unified, Strict)
 
     echo   app-strict        - Offline APP (Standard Strict)
 
@@ -247,7 +247,7 @@ goto :main
 
 :mode_app
 
-    call :log_title "Offline APP Builder (Unified)"
+    call :log_title "Offline APP Builder (Unified Strict)"
 
     call :check_node || call :finalize 1 "Node.js check failed"
 
@@ -267,12 +267,14 @@ goto :main
 
     call :check_file "app\build-app.bat" "%CAP_DIR%\build-app.bat" || call :finalize 1 "Script not found"
 
+    REM ★ 2026-08-21 手动打包统一严格标准：app 模式显式传 standard（严格），
+    REM   与 app-strict 等价，杜绝手动入口哈希刷新失败仍出包
     REM ★ 2026-08-21 手动打包失败闪退修复：不再强制 NO_PAUSE=1（同 mode_desktop）
-    call "%CAP_DIR%\build-app.bat"
+    call "%CAP_DIR%\build-app.bat" standard
 
     set "TEMP_RC=%errorlevel%"
 
-    call :finalize %TEMP_RC% "离线APP（普通模式）打包完成" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
+    call :finalize %TEMP_RC% "离线APP（严格模式）打包完成" "Output: %~dp0惠康中医-本地.apk" "APK: 惠康中医-本地.apk"
 
     goto :eof
 

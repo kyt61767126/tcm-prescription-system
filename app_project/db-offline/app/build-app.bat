@@ -3,13 +3,15 @@ chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 title Huikang-TCM Build Tool
 
-REM 模式识别：standard = 严格模式（哈希失败强制中断），无参 = 普通模式
-REM 两者均启用签名哈希刷新 + Java 层混淆 + 签名校验；strict 额外对哈希失败做强校验
-set "STRICT_MODE="
-set "MODE_LABEL=普通模式"
-if /i "%~1"=="standard" (
-    set "STRICT_MODE=1"
-    set "MODE_LABEL=严格模式"
+REM 模式识别：默认 = 严格模式（哈希失败强制中断），standard 参数保留兼容（等价严格）
+REM 两者均启用签名哈希刷新 + Java 层混淆 + 签名校验；严格模式对哈希失败做强校验
+REM ★ 2026-08-21 手动打包统一严格标准：无参（手动双击/脚本直调）不再降级为普通模式，
+REM   与一键打包 app-strict 同一标准，杜绝"手动打包哈希刷新失败仍出包"的隐患
+set "STRICT_MODE=1"
+set "MODE_LABEL=严格模式"
+if /i "%~1"=="normal" (
+    set "STRICT_MODE="
+    set "MODE_LABEL=普通模式(降级)"
 )
 
 REM

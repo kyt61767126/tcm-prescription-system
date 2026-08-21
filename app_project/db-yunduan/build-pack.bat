@@ -185,7 +185,7 @@ goto :main
 
     echo [APP]
 
-    echo   app               - Cloud APP (Unified)
+    echo   app               - Cloud APP (Unified, Strict)
 
     echo   app-strict        - Cloud APP Strict
 
@@ -244,7 +244,7 @@ goto :main
 
 :mode_app
 
-    call :log_title "Cloud APP Builder (Unified)"
+    call :log_title "Cloud APP Builder (Unified Strict)"
 
     call :check_node || call :finalize 1 "Node.js check failed"
 
@@ -264,12 +264,14 @@ goto :main
 
     call :check_file "build-app.bat" "%BUILD_APP%" || call :finalize 1 "Script not found"
 
+    REM ★ 2026-08-21 手动打包统一严格标准：app 模式显式传 standard（严格），
+    REM   与 app-strict 等价，杜绝手动入口哈希刷新失败仍出包
     REM ★ 2026-08-21 手动打包失败闪退修复：不再强制 NO_PAUSE=1（同 mode_desktop）
-    call "%BUILD_APP%"
+    call "%BUILD_APP%" standard
 
     set "TEMP_RC=%errorlevel%"
 
-    call :finalize %TEMP_RC% "云端APP（普通模式）打包完成" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
+    call :finalize %TEMP_RC% "云端APP（严格模式）打包完成" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
 
     goto :eof
 
