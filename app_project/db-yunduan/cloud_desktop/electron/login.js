@@ -183,16 +183,25 @@
         _configForTag = config || _configForTag;
 
         // ★ 铁闸4：有 buildMeta 时，登录前也显示"待登录提示+三元组"（自证真伪）
-        var metaText = '';
+        //   注意：登录窗口仅 260×400，必须换行紧凑显示避免被裁切
+        var shortBuildTime = '';
+        var metaTextLine1 = '';
+        var metaTextLine2 = '';
         if (_buildMeta) {
-            metaText = 'V' + _buildMeta.version + ' · Build ' +
-                       (_buildMeta.buildTimeLocal || '') + ' · ' +
-                       (_buildMeta.archMarker || '');
+            // 压缩时间格式：Build 2026/8/21 09:15（去掉秒，节省 ~4 字符宽度）
+            var bt = _buildMeta.buildTimeLocal || '';
+            var m = bt.match(/(\d{4}\/\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{1,2})/);
+            shortBuildTime = m ? (m[1] + ' ' + m[2]) : bt;
+            // 分两行：第一行版本 + Arch（最关键的真伪标识），第二行 Build 时间
+            metaTextLine1 = 'V' + _buildMeta.version + ' · ' + (_buildMeta.archMarker || '');
+            metaTextLine2 = shortBuildTime ? ('Build ' + shortBuildTime) : '';
         }
-        var metaHtml = metaText ?
-            ('<br><span style="font-size:10px;color:#888;font-weight:normal;">' + metaText + '</span>') : '';
+        var metaHtml = metaTextLine1 ?
+            ('<br><span style="font-size:9px;color:#888;font-weight:normal;line-height:1.3;">' +
+             metaTextLine1 + (metaTextLine2 ? ('<br>' + metaTextLine2) : '') +
+             '</span>') : '';
 
-        // ★ 挂载点1：原有 header-section 内的 .version-tag（云端标准登录页使用）
+        // ★ 挂载点1：原有 header-section 内的 .version-tag（云端标准登录页使用，窗口足够宽时显示）
         var tag = document.querySelector('.version-tag');
         if (tag) {
             if (!_loggedIn && !forceShow) {
@@ -209,23 +218,32 @@
             }
         }
 
-        // ★ 挂载点2：登录框底部 .login-security 下方（激活后简化登录页必显示，防止 .header-section 被隐藏时三元组丢失）
-        //    固定显示版本三元组（独立于 header-section），位置在用户截图的「🛡️安全登录·数据加密保护」正下方，一定可见。
+        // ★ 挂载点2：登录框底部 .login-security 下方（激活后简化登录页必显示，窗口 260 窄场景主用）
+        //    两行格式 + 小字号 + 窄间距，确保 260px 宽不被裁切。
         var security = document.querySelector('.login-security');
         if (security) {
             var bottomTag = document.getElementById('loginVersionTagBottom');
             if (!bottomTag) {
                 bottomTag = document.createElement('div');
                 bottomTag.id = 'loginVersionTagBottom';
-                bottomTag.style.marginTop = '8px';
-                bottomTag.style.fontSize = '10px';
+                bottomTag.style.marginTop = '3px';
+                bottomTag.style.marginBottom = '2px';
+                bottomTag.style.fontSize = '9px';
                 bottomTag.style.color = '#999';
                 bottomTag.style.textAlign = 'center';
                 bottomTag.style.fontWeight = '600';
-                bottomTag.style.letterSpacing = '0.3px';
+                bottomTag.style.lineHeight = '1.25';
+                bottomTag.style.letterSpacing = '0.1px';
+                bottomTag.style.wordBreak = 'keep-all';
                 security.parentNode.insertBefore(bottomTag, security.nextSibling);
             }
-            bottomTag.textContent = metaText || '【开发模式：未找到 build-meta.json】';
+            if (metaTextLine1) {
+                bottomTag.innerHTML =
+                    '<div style="font-size:9px;line-height:1.25;">' + metaTextLine1 + '</div>' +
+                    (metaTextLine2 ? '<div style="font-size:9px;line-height:1.25;color:#aab;">' + metaTextLine2 + '</div>' : '');
+            } else {
+                bottomTag.textContent = '【开发模式：未找到 build-meta.json】';
+            }
         }
     }
 
