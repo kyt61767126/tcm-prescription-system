@@ -411,6 +411,10 @@ if not "%E2E_RC%"=="0" (
 )
 echo [OK] E2E 3/3 PASS - 用户管理按钮链路真实可点
 
+REM ★ [9.7/9] P4 交付核对单自动生成（2026-08-21）：一页纸聚合三元组+产物哈希+关卡清单+安装自检三步+生效方式
+REM   只读聚合不改动产物；生成失败仅 WARN 不阻断交付（产物已过全部铁闸）
+node "%~dp0..\..\..\tools\delivery-report.cjs" --pkg "%CD%"
+
 echo.
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Output directory: %CD%\%OUTPUT_DIR%'"
 echo ============================================
