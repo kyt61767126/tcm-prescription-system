@@ -927,6 +927,68 @@
                 await StorageAdapter.setItem('auth:clinicName', user.clinicName);
             }
 
+            // ★★★ 2026-08-21 根治【机构版登入仍显示修改密码】：
+            //   登录成功后必须即时把后端返回的 clinicEdition 同步到 CONFIG.edition + window.EDITION，
+            //   否则 Permission._currentEdition() 继续读取 config.json 默认值 personal →
+            //   isInstitutional()=false → 只显示【修改密码】不显示【用户管理】。
+            //   同时缓存到 localStorage，刷新页面时自动恢复，避免状态丢失。
+            try {
+                const rawCE = user.clinicEdition || user.edition || '';
+                const rawName = user.clinicName || '';
+                let targetEd = '';
+                const CE = String(rawCE);
+                if (['cloud_clinic', 'institution', 'institutional', 'clinic', 'offline', 'clinic_custom', 'offline_clinic', 'cloud'].includes(CE)) {
+                    targetEd = 'cloud_clinic';
+                } else if (['cloud_personal', 'personal', 'standard', 'single'].includes(CE)) {
+                    targetEd = 'cloud_personal';
+                }
+                if (targetEd) {
+                    try {
+                        if (typeof CONFIG !== 'undefined' && CONFIG) {
+                            CONFIG.edition = targetEd;
+                            if (rawName) CONFIG.clinicName = rawName;
+                        }
+                    } catch (_) {}
+                    try { global.EDITION = targetEd; } catch (_) {}
+                    try {
+                        if (rawName && typeof CONFIG !== 'undefined' && CONFIG && !CONFIG.__editionFromLogin) {
+                            CONFIG.__editionFromLogin = true;
+                        }
+                    } catch (_) {}
+                    const productName = (targetEd === 'cloud_clinic') ? '惠康中医-云端机构版' :
+                                        (targetEd === 'cloud_personal') ? '惠康中医-云端标准版' : null;
+                    if (productName) {
+                        try { global.PRODUCT_NAME = productName; } catch (_) {}
+                        try {
+                            if (typeof CONFIG !== 'undefined' && CONFIG) {
+                                CONFIG.productName = productName;
+                                if (typeof document !== 'undefined' && document.title) {
+                                    document.title = productName;
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                    await StorageAdapter.setItem('auth:runtimeEdition', targetEd);
+                    if (rawName) await StorageAdapter.setItem('auth:runtimeClinicName', rawName);
+                    if (productName) await StorageAdapter.setItem('auth:runtimeProductName', productName);
+                    try {
+                        console.log('[AuthCore] login edition-sync step-1 backend:', JSON.stringify({ clinicEdition: rawCE, edition: user.edition, role: user.role, clinicName: rawName }));
+                        console.log('[AuthCore] login edition-sync step-2 UPDATED ->', JSON.stringify({
+                            targetEd,
+                            CONFIG: (typeof CONFIG !== 'undefined') ? { edition: CONFIG.edition, clinicName: CONFIG.clinicName } : null,
+                            windowEDITION: global.EDITION,
+                            title: typeof document !== 'undefined' ? document.title : null
+                        }));
+                    } catch (e) {}
+                } else {
+                    try {
+                        console.warn('[AuthCore] login edition-sync SKIPPED (unrecognized clinicEdition):', JSON.stringify({ clinicEdition: rawCE, userEdition: user.edition, role: user.role }));
+                    } catch (e) {}
+                }
+            } catch (hookErr) {
+                try { console.error('[AuthCore] login edition-sync hook FAILED:', hookErr && hookErr.message || hookErr); } catch (_) {}
+            }
+
             // ★ 2026-08-20 登录成功即视为"软件已激活"，登录框的"软件激活"入口自动隐藏
             //   （登录框通常将随登录成功关闭；此处设置标记确保下次回到登录框时不再显示）
             // ★ 2026-08-19 BUG修复：setCloudActivationDone/hideActivateLoginEntry 定义在 IIFE-B，
@@ -962,12 +1024,24 @@
             // ★ 离线登录缓存：退出时清除（下次需在线登录重新缓存）
             'auth:offlineLoginCache',
             // P3-3: 清除历史遗留的记住密码
-            'auth:savedPassword'
+            'auth:savedPassword',
+            // ★ 2026-08-21 登出时清除 edition/clinic 运行时缓存，避免跨账号残留（机构版/标准版切换错漏）
+            'auth:runtimeEdition',
+            'auth:runtimeClinicName',
+            'auth:runtimeProductName'
         ];
         for (const key of allKeys) {
             await StorageAdapter.removeItem(key);
             StorageAdapter.removeSessionItem(key);
         }
+        // 同步复位 CONFIG.edition 和 window.EDITION（避免登出后UI仍显示上一账号的机构版/标准版）
+        try {
+            if (typeof CONFIG !== 'undefined' && CONFIG) {
+                CONFIG.edition = 'personal';
+                CONFIG.__editionFromLogin = false;
+            }
+        } catch (_) {}
+        try { global.EDITION = 'personal'; } catch (_) {}
     }
 
     // ==================== 离线登录缓存 ====================
@@ -1107,6 +1181,66 @@
 
     // 自动执行旧key迁移
     migrateOldKeys().catch(e => console.warn('Key迁移失败:', e));
+
+    // ★★★ 2026-08-21 根治【刷新页面机构版回退标准版】：
+    //   页面启动时从 localStorage 的登录缓存恢复 CONFIG.edition / window.EDITION / CONFIG.clinicName /
+    //   PRODUCT_NAME，确保刷新页面后机构版状态不被 config.json 的默认值 personal 打回。
+    //   恢复优先级：1) 缓存的 currentUser.clinicEdition；2) 上次登录写入的 auth:runtimeEdition
+    (async function restoreEditionFromCache() {
+        try {
+            let editionFromCache = '';
+            let clinicFromCache = '';
+            let productFromCache = '';
+            try {
+                const userStr = await StorageAdapter.getItem('auth:currentUser');
+                if (userStr) {
+                    const u = JSON.parse(userStr);
+                    if (u && u.clinicEdition) {
+                        const CE = String(u.clinicEdition);
+                        if (['cloud_clinic', 'institution', 'institutional', 'clinic', 'offline', 'clinic_custom', 'offline_clinic', 'cloud'].includes(CE)) {
+                            editionFromCache = 'cloud_clinic';
+                        } else if (['cloud_personal', 'personal', 'standard', 'single'].includes(CE)) {
+                            editionFromCache = 'cloud_personal';
+                        }
+                    }
+                    if (u && u.clinicName) clinicFromCache = u.clinicName;
+                }
+            } catch (_) {}
+            if (!editionFromCache) editionFromCache = await StorageAdapter.getItem('auth:runtimeEdition') || '';
+            if (!clinicFromCache) clinicFromCache = await StorageAdapter.getItem('auth:runtimeClinicName') || '';
+            productFromCache = await StorageAdapter.getItem('auth:runtimeProductName') || '';
+
+            const normEd = String(editionFromCache).trim();
+            if (normEd === 'cloud_clinic' || normEd === 'cloud_personal') {
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG) {
+                        CONFIG.edition = normEd;
+                        if (clinicFromCache) CONFIG.clinicName = clinicFromCache;
+                        if (productFromCache) CONFIG.productName = productFromCache;
+                    }
+                } catch (_) {}
+                try { global.EDITION = normEd; } catch (_) {}
+                if (productFromCache) {
+                    try { global.PRODUCT_NAME = productFromCache; } catch (_) {}
+                    try {
+                        if (typeof document !== 'undefined' && document.title) document.title = productFromCache;
+                    } catch (_) {}
+                }
+                try {
+                    console.log('[AuthCore] startup edition-restore:', JSON.stringify({
+                        edition: normEd,
+                        clinic: clinicFromCache || '(default)',
+                        product: productFromCache || '(default)',
+                        CONFIG: (typeof CONFIG !== 'undefined') ? { edition: CONFIG.edition, clinicName: CONFIG.clinicName } : null
+                    }));
+                } catch (_) {}
+            } else {
+                try { console.log('[AuthCore] startup edition-restore SKIPPED (no edition cache).'); } catch (_) {}
+            }
+        } catch (e) {
+            try { console.warn('[AuthCore] startup edition-restore failed:', e && e.message || e); } catch (_) {}
+        }
+    })();
 
     // ★ P1-3: 自动从主进程获取 license.masterKey 并注入
     // 用途：让密码哈希盐基于 masterKey 派生（每个安装不同），避免硬编码盐被破解
