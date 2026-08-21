@@ -2,12 +2,74 @@ import { getKV } from './_lib/kv.js';
 import {
     parseAuthHeader, hashPassword, verifyPassword, signToken,
     isPlatformAdmin, isClinicAdmin, isAdmin, isLegacyPasswordHash,
-    revokeAllUserTokens,
+    revokeAllUserTokens, writeUserSession, clearUserSession, getUserSession,
     ROLE_PLATFORM_ADMIN, ROLE_CLINIC_ADMIN, ROLE_DOCTOR,
     KV_SYSTEM_CLINICS, KV_SYSTEM_PLATFORM_ADMINS,
     findPhoneOccupancy
 } from './_lib/auth.js';
 import { provisionCloudAccount } from './license/_lib/admin-account.js';
+
+// ============================================================================
+// ★★★ 2026-08-21 账号级设备授权（一个云端管理员最多绑定 2 台设备：桌面/APP）
+//   KV key: user_devices:{username} -> { maxDevices, devices: [{machineId, clientClass, boundAt, lastSeenAt}] }
+//   规则：
+//     - 仅 clientClass = desktop / app 的真实设备指纹计入绑定（网页版数据全在云端，
+//       不占设备名额，可随时从任意浏览器登录管理）
+//     - 未绑定新设备且已满 2 台 → 拒绝登录（DEVICE_LIMIT），提示解绑后重试
+//     - 解绑：本人在任意已登录设备调用 action=unbind-device 自助解绑
+// ============================================================================
+const KV_USER_DEVICES_PREFIX = 'user_devices:';
+const MAX_DEVICES_PER_ACCOUNT = 2;
+
+function sanitizeDevices(record) {
+    const max = record && record.maxDevices ? record.maxDevices : MAX_DEVICES_PER_ACCOUNT;
+    const devices = (record && Array.isArray(record.devices)) ? record.devices : [];
+    return {
+        maxDevices: max,
+        devicesCount: devices.length,
+        devices: devices.map(d => ({
+            machineId: d.machineId ? String(d.machineId).substring(0, 8) + '...' : null, // 脱敏：仅前 8 位
+            clientClass: d.clientClass || null,
+            boundAt: d.boundAt || null,
+            lastSeenAt: d.lastSeenAt || null
+        }))
+    };
+}
+
+// 绑定/更新设备（返回 { ok, record } 或 { ok:false, code:'DEVICE_LIMIT', record }）
+async function bindUserDevice(kv, username, machineId, clientClass, nowIso) {
+    const record = (await kv.get(KV_USER_DEVICES_PREFIX + username, 'json')) || {
+        maxDevices: MAX_DEVICES_PER_ACCOUNT,
+        devices: []
+    };
+    if (!Array.isArray(record.devices)) record.devices = [];
+    record.maxDevices = MAX_DEVICES_PER_ACCOUNT;
+
+    const mid = String(machineId || '').trim();
+    if (!mid || mid.length < 8 || mid === 'unknown') {
+        // 无有效设备指纹（旧客户端/网页未升级）：放行不绑定，仅做在线互斥
+        return { ok: true, record };
+    }
+
+    const existing = record.devices.find(d => d.machineId === mid);
+    if (existing) {
+        existing.lastSeenAt = nowIso;
+        if (clientClass) existing.clientClass = clientClass;
+    } else {
+        if (record.devices.length >= record.maxDevices) {
+            return { ok: false, code: 'DEVICE_LIMIT', record };
+        }
+        record.devices.push({
+            machineId: mid,
+            clientClass: clientClass || 'desktop',
+            boundAt: nowIso,
+            lastSeenAt: nowIso
+        });
+    }
+    await kv.put(KV_USER_DEVICES_PREFIX + username, JSON.stringify(record));
+    return { ok: true, record };
+}
+// （end 设备授权）
 
 // ★ 2026-08-20 登录自愈：手机号存在"管理员已审核通过"的激活申请但云端账号尚未开通时，
 //   自动补开账号（用户名=手机号、默认密码 admin）。仅在用户不存在且申请已通过时触发，
@@ -854,7 +916,7 @@ export async function onRequest(context) {
             const bodyText = await context.request.text();
             let body = {};
             try { body = JSON.parse(bodyText); } catch (e) {}
-            const { username, password } = body;
+            const { username, password, machineId, clientClass } = body;
             if (!username || !password) {
                 return json({ success: false, error: '手机号/用户名或密码不能为空', code: 'MISSING_CREDENTIALS' }, 400, context.request);
             }
@@ -1029,10 +1091,41 @@ export async function onRequest(context) {
             // P1-2：记录登录成功审计日志
             await writeAuditLog(kv, clinicId, user.username, user.role, 'login_success', 'auth', context.request);
 
+            // ★★★ 2026-08-21 账号级设备授权：桌面/APP 设备指纹计入 2 台上限
+            //   （网页版 clientClass=web 不占名额；旧客户端无 machineId 放行仅互斥）
+            const nowIso = getNowISO();
+            const effClientClass = ['desktop', 'app', 'web'].includes(clientClass) ? clientClass : 'web';
+            let deviceSummary = null;
+            if (effClientClass === 'desktop' || effClientClass === 'app') {
+                const bind = await bindUserDevice(kv, user.username, machineId, effClientClass, nowIso);
+                if (!bind.ok && bind.code === 'DEVICE_LIMIT') {
+                    await writeAuditLog(kv, clinicId, user.username, user.role, 'login_failed', 'device_limit', context.request, {
+                        machineId: String(machineId || '').substring(0, 8) + '...',
+                        clientClass: effClientClass,
+                        bound: bind.record.devices.length
+                    });
+                    return json({
+                        success: false,
+                        error: '设备数已达上限（每个账号最多授权 2 台设备：桌面/APP）。请先在已绑定设备上解绑，或联系管理员处理',
+                        code: 'DEVICE_LIMIT',
+                        devices: sanitizeDevices(bind.record)
+                    }, 403, context.request);
+                }
+                deviceSummary = sanitizeDevices(bind.record);
+            }
+
+            // ★★★ 2026-08-21 单设备在线互斥：写入当前唯一有效 session（顶掉旧设备）
+            //   旧设备持有的 token 在下一次任意 API 调用时被 verifyToken 拒绝（401）
+            await writeUserSession(kv, user.username, token, {
+                machineId: machineId || null,
+                clientClass: effClientClass
+            });
+
             return json({
                 success: true,
                 token,
-                user: sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition)
+                user: sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition),
+                device: deviceSummary
             }, 200, context.request);
         }
 
@@ -1042,6 +1135,58 @@ export async function onRequest(context) {
         // 或由 clinic_admin/platform_admin 通过用户管理界面重置（已具备权限）。
         if (method === 'POST' && url.searchParams.get('action') === 'reset-public') {
             return json({ success: false, error: '该端点已废弃，请使用 change-password 或联系管理员重置' }, 410);
+        }
+
+        // ===== 设备管理：查看本人已绑定设备 GET /users?action=list-devices =====
+        // ★ 2026-08-21 账号级设备授权配套：管理员自助查看 2 台授权设备（脱敏展示）
+        if (method === 'GET' && url.searchParams.get('action') === 'list-devices') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser) {
+                return json({ success: false, error: '未登录或登录已失效' }, 401, context.request);
+            }
+            const record = (await kv.get(KV_USER_DEVICES_PREFIX + authUser.username, 'json')) || null;
+            const session = await getUserSession(kv, authUser.username);
+            return json({
+                success: true,
+                devices: sanitizeDevices(record),
+                onlineSession: session ? {
+                    clientClass: session.clientClass,
+                    machineId: session.machineId ? String(session.machineId).substring(0, 8) + '...' : null,
+                    loginAt: session.loginAt
+                } : null
+            }, 200, context.request);
+        }
+
+        // ===== 设备管理：解绑本人设备 POST /users?action=unbind-device =====
+        // body: { machineId }（解绑指定设备；换新手机/电脑时自助释放名额）
+        // 安全：仅能解绑自己账号名下的设备（token 鉴权）；解绑后该设备下次登录需重新占名额
+        if (method === 'POST' && url.searchParams.get('action') === 'unbind-device') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser) {
+                return json({ success: false, error: '未登录或登录已失效' }, 401, context.request);
+            }
+            const body = await context.request.json().catch(() => ({}));
+            const machineId = String(body.machineId || '').trim();
+            if (!machineId) {
+                return json({ success: false, error: '缺少 machineId 参数' }, 400, context.request);
+            }
+            const record = (await kv.get(KV_USER_DEVICES_PREFIX + authUser.username, 'json')) || { devices: [] };
+            if (!Array.isArray(record.devices)) record.devices = [];
+            const idx = record.devices.findIndex(d => d.machineId === machineId);
+            if (idx === -1) {
+                return json({ success: false, error: '该设备未绑定在当前账号下' }, 404, context.request);
+            }
+            const removed = record.devices.splice(idx, 1)[0];
+            await kv.put(KV_USER_DEVICES_PREFIX + authUser.username, JSON.stringify(record));
+            await writeAuditLog(kv, authUser.clinicId, authUser.username, authUser.role, 'device_unbind', 'auth', context.request, {
+                machineId: machineId.substring(0, 8) + '...',
+                clientClass: removed.clientClass || null
+            });
+            return json({
+                success: true,
+                message: '设备已解绑',
+                devices: sanitizeDevices(record)
+            }, 200, context.request);
         }
 
         // ===== 修改密码端点 POST /users?action=change-password =====
@@ -1300,12 +1445,15 @@ export async function onRequest(context) {
                 clinics[clinicIdx].status = status;
 
                 // ★ 2026-08-22 统一 edition：test → active 自助注册转正时，必须补 edition
-                //   若管理员传了 edition 参数，用参数；否则默认机构版（早期用户都是机构版）
+                //   优先级：管理员显式传参 > 注册时用户意向（requestedEdition）> 默认机构版
                 if (status === 'active' && oldClinic.status === 'test' && !clinics[clinicIdx].edition) {
-                    const edVal = edition || 'cloud_clinic';
+                    const fallbackEd = (oldClinic.requestedEdition === 'personal') ? 'cloud_personal'
+                        : (oldClinic.requestedEdition === 'institution') ? 'cloud_clinic'
+                        : 'cloud_clinic';
+                    const edVal = edition || fallbackEd;
                     const edNorm = normalizeClinicEdition(edVal, 'active');
                     clinics[clinicIdx].edition = edNorm;
-                    changes.push(`edition: → ${edNorm}`);
+                    changes.push(`edition: → ${edNorm}` + (oldClinic.requestedEdition ? `（注册意向: ${oldClinic.requestedEdition}）` : ''));
                 }
 
                 // ★ 2026-08-20 审核通过即收费开通：test → active 首次转正时自动写入 365 天有效期
@@ -1756,7 +1904,10 @@ export async function onRequest(context) {
         // 安全措施：IP限流(3次/小时) + 手机号全局唯一校验 + 密码强度校验
         if (method === 'POST' && url.searchParams.get('action') === 'register-clinic') {
             const body = await context.request.json().catch(() => ({}));
-            const { clinicName, phone, password, adminName } = body;
+            const { clinicName, phone, password, adminName, edition } = body;
+
+            // ★ 2026-08-21 版本意向：注册时用户自选标准版/机构版（枚举白名单，其余一律按标准版）
+            const requestedEdition = (edition === 'institution') ? 'institution' : 'personal';
 
             // 1. IP限流（注册更严格：3次/小时）
             const registerAllowed = await checkIpRateLimit(kv, context.request);
@@ -1834,6 +1985,7 @@ export async function onRequest(context) {
                 name: clinicName.trim(),
                 status: 'test',
                 source: 'self-register',
+                requestedEdition: requestedEdition,   // ★ 2026-08-21 注册时的版本意向（转正时优先采用）
                 createdAt: now,
                 updatedAt: now
             };
@@ -1860,7 +2012,8 @@ export async function onRequest(context) {
             // 7. 审计日志
             await writeAuditLog(kv, clinicId, phone, ROLE_CLINIC_ADMIN, 'register_clinic', `clinic=${clinicName}`, context.request, {
                 phone: phone,
-                source: 'self-register'
+                source: 'self-register',
+                requestedEdition: requestedEdition
             });
 
             return json({

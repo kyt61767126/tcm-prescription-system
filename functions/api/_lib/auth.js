@@ -289,6 +289,19 @@ export async function verifyToken(token, env) {
                 console.warn('[安全] 已撤销的 Token 被拒绝:', payload.u);
                 return null;
             }
+
+            // ★★★ 2026-08-21 单设备在线互斥：签名/黑名单均通过后，比对在线 session。
+            //   session 记录的是该账号当前唯一有效 tokenHash；本 token 不匹配
+            //   = 已有更新的登录（本设备已被顶下线）→ 立即失效。
+            //   KV 故障时放行（与其他校验一致的故障开放策略）。
+            try {
+                const session = await kv.get(KV_USER_SESSION_PREFIX + payload.u, 'json');
+                if (session && session.tokenHash && session.tokenHash !== tokenHash) {
+                    console.warn('[安全] 单设备在线互斥：旧会话已被新登录顶下线:', payload.u,
+                        '(当前在线端:', session.clientClass, '| 本token签发于更早)');
+                    return null;
+                }
+            } catch (e) { /* KV 读取失败放行 */ }
         }
 
         return {
@@ -324,10 +337,64 @@ export async function revokeAllUserTokens(kv, username) {
         const versionKey = 'user_token_version:' + username;
         const currentVersion = parseInt(await kv.get(versionKey) || '0', 10);
         await kv.put(versionKey, String(currentVersion + 1));
+        // ★ 2026-08-21 单设备在线：改密/撤销时同时清除在线 session，
+        //   防止 session 中残留的旧 tokenHash 遮蔽新登录（否则改密后重新登录也会被误踢）
+        try { await kv.delete(KV_USER_SESSION_PREFIX + username); } catch (e) {}
         return true;
     } catch (e) {
         console.error('revokeAllUserTokens error:', e);
         return false;
+    }
+}
+
+// ============================================================================
+// ★★★ 2026-08-21 单设备在线互斥（同一账号同一时间仅 1 台设备在线）
+//   KV key: user_session:{username} -> { tokenHash, machineId, clientClass, loginAt }
+//   机制：登录成功后写入当前唯一有效 token 的 SHA-256；verifyToken 校验签名通过后
+//         再比对 session.tokenHash —— 不匹配说明有更新的登录（本 token 已被顶下线）→ 拒绝。
+//   TTL：8 天（≥ token 7 天 TTL，session 永不先于 token 过期造成"真空期"）。
+//   降级：KV 读取异常时放行（与 tokenVersion 检查一致的故障开放策略，避免 KV 抖动全站不可用）。
+// ============================================================================
+const KV_USER_SESSION_PREFIX = 'user_session:';
+const USER_SESSION_TTL_SECONDS = 8 * 24 * 60 * 60; // 8 天
+
+// 写入当前账号唯一在线 session（新登录调用；自动顶掉旧设备）
+export async function writeUserSession(kv, username, token, meta = {}) {
+    if (!kv || !username || !token) return false;
+    try {
+        const tokenHash = await sha256(token);
+        const session = {
+            tokenHash: tokenHash,
+            machineId: meta.machineId || null,
+            clientClass: meta.clientClass || 'web',
+            loginAt: new Date().toISOString()
+        };
+        await kv.put(KV_USER_SESSION_PREFIX + username, JSON.stringify(session), { expirationTtl: USER_SESSION_TTL_SECONDS });
+        return true;
+    } catch (e) {
+        console.error('[UserSession] 写入失败:', e.message);
+        return false;
+    }
+}
+
+// 清除在线 session（登出调用）
+export async function clearUserSession(kv, username) {
+    if (!kv || !username) return false;
+    try {
+        await kv.delete(KV_USER_SESSION_PREFIX + username);
+        return true;
+    } catch (e) {
+        return false;
+    }
+}
+
+// 读取在线 session（诊断/管理端点用）
+export async function getUserSession(kv, username) {
+    if (!kv || !username) return null;
+    try {
+        return await kv.get(KV_USER_SESSION_PREFIX + username, 'json');
+    } catch (e) {
+        return null;
     }
 }
 

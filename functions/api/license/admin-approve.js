@@ -158,8 +158,8 @@ export async function onRequest(context) {
             return json({ success: false, error: deviceCheck.error }, 403);
         }
 
-        // 校验 maxDevices（可选，默认 1）
-        let parsedMaxDevices = 1;
+        // 校验 maxDevices（★ 2026-08-21 云端产品策略：一个管理员默认授权 2 台设备——桌面+APP）
+        let parsedMaxDevices = 2;
         if (maxDevices !== undefined && maxDevices !== null) {
             parsedMaxDevices = parseInt(maxDevices, 10);
             if (isNaN(parsedMaxDevices) || parsedMaxDevices < 1 || parsedMaxDevices > 10) {

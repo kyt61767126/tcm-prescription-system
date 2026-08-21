@@ -660,21 +660,74 @@
 
     // ==================== 登录调度层 ====================
 
+    // ★★★ 2026-08-21 设备身份采集（账号级设备授权 + 单设备在线互斥）
+    //   桌面版：electronAPI.activate.getMachineId()（真实机器指纹，计入 2 台授权名额）
+    //   APP 端：持久化随机指纹（Capacitor Preferences / localStorage，计入 2 台授权名额）
+    //   网页版：浏览器持久化指纹（browser-xxx，不计入名额，仅参与在线互斥）
+    async function collectDeviceIdentity() {
+        let clientClass = 'web';
+        let machineId = '';
+        try {
+            if (global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.getMachineId === 'function') {
+                machineId = await global.electronAPI.activate.getMachineId();
+                clientClass = 'desktop';
+            } else if (global.Capacitor) {
+                clientClass = 'app';
+            }
+        } catch (e) { /* 采集失败继续走指纹兜底 */ }
+
+        const mid = String(machineId || '').trim();
+        if (mid && mid.length >= 8 && mid !== 'unknown') {
+            return { machineId: mid, clientClass: clientClass };
+        }
+
+        // 指纹兜底：持久化随机指纹（同一浏览器/设备重复登录指纹不变，不重复占用名额）
+        const FINGERPRINT_KEY = 'auth:deviceMachineId';
+        try {
+            let fp = '';
+            try { fp = await StorageAdapter.getItem(FINGERPRINT_KEY); } catch (e) {}
+            if (!fp || String(fp).length < 8) {
+                const rnd = Array.from(crypto.getRandomValues(new Uint8Array(9)))
+                    .map(b => b.toString(16).padStart(2, '0')).join('');
+                fp = 'browser-' + rnd;
+                await StorageAdapter.setItem(FINGERPRINT_KEY, fp);
+            }
+            return { machineId: fp, clientClass: clientClass };
+        } catch (e) {
+            return {
+                machineId: 'browser-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+                clientClass: clientClass
+            };
+        }
+    }
+
     // 云端适配器
     const cloudAdapter = {
         async authenticate(username, password) {
             try {
                 const fetchFn = global.cloudFetch || global.fetch;
+                // ★ 2026-08-21 上报设备身份：后端据此做设备绑定（2台上限）+ 单点在线互斥
+                const identity = await collectDeviceIdentity();
                 const response = await fetchFn(`${CLOUD_API_BASE}/users?login=true`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({
+                        username,
+                        password,
+                        machineId: identity.machineId,
+                        clientClass: identity.clientClass
+                    })
                 });
                 // cloudFetch 返回已解析的 JS 对象，原生 fetch 返回 Response 对象
                 const data = (response && typeof response.json === 'function')
                     ? await response.json()
                     : response;
                 if (!data || !data.success || !data.user) {
+                    // ★ 设备数超限：明确提示（403 DEVICE_LIMIT）
+                    if (data && data.code === 'DEVICE_LIMIT') {
+                        return { success: false, error: data.error || '设备数已达上限（最多授权 2 台设备），请先解绑旧设备', code: 'DEVICE_LIMIT' };
+                    }
                     return { success: false, error: (data && data.error) || '手机号/用户名或密码错误' };
                 }
                 // ★ P0 修复：保留 API 返回的 token，附加到 user 对象
@@ -1354,8 +1407,10 @@
 
         // 诊所自助注册（调用后端 /users?action=register-clinic）
         // ★ 2026-08-20 注册审核制：手机号即登录账号 + 自设密码；注册即时建号，管理员审核通过后才能登录
+        // ★ 2026-08-21 新增 edition 参数：注册时选择的版本意向（personal/institution），
+        //   后端存 clinic.requestedEdition，管理员审核转正时优先采用
         async registerClinic(params) {
-            const { clinicName, phone, password, adminName } = params || {};
+            const { clinicName, phone, password, adminName, edition } = params || {};
             if (!clinicName || !phone || !password) {
                 return { success: false, error: '请填写完整的注册信息' };
             }
@@ -1375,7 +1430,8 @@
                         clinicName: clinicName.trim(),
                         phone: String(phone).trim(),
                         password: password,
-                        adminName: (adminName || '').trim()
+                        adminName: (adminName || '').trim(),
+                        edition: (edition === 'institution') ? 'institution' : 'personal'
                     })
                 });
                 const data = (response && typeof response.json === 'function')
@@ -2280,6 +2336,20 @@
             // 表单（一页式）
             '<div id="registerForm" style="padding:16px;">' +
                 '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">版本类型 <span style="color:#e53935;">*</span></label>' +
+                    '<div style="display:flex;gap:10px;">' +
+                        '<div id="regEdPersonal" data-edition="personal" style="flex:1;padding:12px;border:2px solid #26a69a;border-radius:10px;text-align:center;cursor:pointer;background:#26a69a;color:#fff;">' +
+                            '<div style="font-size:15px;font-weight:bold;">👤 标准版</div>' +
+                            '<div style="font-size:11px;margin-top:3px;opacity:0.9;">单用户 · 处方开单</div>' +
+                        '</div>' +
+                        '<div id="regEdInstitution" data-edition="institution" style="flex:1;padding:12px;border:2px solid #ddd;border-radius:10px;text-align:center;cursor:pointer;background:#fff;color:#333;">' +
+                            '<div style="font-size:15px;font-weight:bold;">🏥 机构版</div>' +
+                            '<div style="font-size:11px;margin-top:3px;color:#909399;">多用户 · 子账号管理</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 注册时选版本意向，管理员审核时最终确认</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
                     '<input type="text" id="regClinicName" placeholder="如：惠康中医诊所" value="' + String(defaultClinicName || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" autocomplete="off" spellcheck="false" maxlength="50" style="' + INPUT_STYLE + '">' +
                     '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 必填，请填写您的诊所名称</div>' +
@@ -2345,6 +2415,29 @@
         const successCloseBtn = document.getElementById('regSuccessCloseBtn');
         if (successCloseBtn) successCloseBtn.addEventListener('click', close);
 
+        // ★ 2026-08-21 版本选择（标准版/机构版意向，提交后端存 requestedEdition）
+        let regEdition = 'personal';
+        ['regEdPersonal', 'regEdInstitution'].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('click', function () {
+                regEdition = this.getAttribute('data-edition') || 'personal';
+                const isPersonal = regEdition === 'personal';
+                const p = document.getElementById('regEdPersonal');
+                const i = document.getElementById('regEdInstitution');
+                if (p) {
+                    p.style.borderColor = isPersonal ? '#26a69a' : '#ddd';
+                    p.style.background = isPersonal ? '#26a69a' : '#fff';
+                    p.style.color = isPersonal ? '#fff' : '#333';
+                }
+                if (i) {
+                    i.style.borderColor = isPersonal ? '#ddd' : '#26a69a';
+                    i.style.background = isPersonal ? '#fff' : '#26a69a';
+                    i.style.color = isPersonal ? '#333' : '#fff';
+                }
+            });
+        });
+
         // 提交注册
         const submitBtn = document.getElementById('regSubmitBtn');
         if (submitBtn) {
@@ -2377,13 +2470,13 @@
                     const adapter = (typeof AuthCore !== 'undefined') ? AuthCore : (global.AuthCore || null);
                     let result;
                     if (adapter && typeof adapter.registerClinic === 'function') {
-                        result = await adapter.registerClinic({ clinicName, phone, password, adminName });
+                        result = await adapter.registerClinic({ clinicName, phone, password, adminName, edition: regEdition });
                     } else {
                         const fetchFn = global.cloudFetch || global.fetch;
                         const response = await fetchFn('https://tcm-prescription-system.pages.dev/api/users?action=register-clinic', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ clinicName: clinicName.trim(), phone: phone.trim(), password: password, adminName: adminName.trim() })
+                            body: JSON.stringify({ clinicName: clinicName.trim(), phone: phone.trim(), password: password, adminName: adminName.trim(), edition: regEdition })
                         });
                         result = await response.json();
                     }

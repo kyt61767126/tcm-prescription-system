@@ -5,7 +5,7 @@
 //    - window.CLOUD_API_BASE: 云端 API 基础 URL
 //    - window.cloudFetch(): 带认证、超时、错误处理的云端请求函数
 //
-//  兼容：自动适配 window._cloudReachable / updateModeStatus 缺失场景
+//  兼容：自动适配 window._cloudReachable / window.updateModeStatus 缺失场景
 // ============================================================================
 
 // Cloudflare KV API 地址
@@ -47,26 +47,31 @@ window.cloudFetch = async function(url, options = {}) {
             const errorText = await response.text();
             console.error('Cloud fetch HTTP error, status:', response.status);
             // 检测 401 认证失效：自动清除登录状态并跳转登录界面
+            // ★ 2026-08-21 单设备在线互斥：任何 401（token 过期/被撤销/已被新设备顶下线）
+            //   统一触发重新登录 —— 旧设备持有者的下一次 API 调用即被踢回登录框
             if (response.status === 401) {
                 let parsed = null;
                 try { parsed = JSON.parse(errorText.replace(/^\uFEFF/, '').trim()); } catch(e) {}
-                if (parsed && parsed.requireAuth === true) {
-                    console.warn('[Auth] Token 已过期或无效，触发重新登录');
-                    try {
-                        currentUser = null;
-                        if (window.AuthCore && AuthCore.logout) {
-                            AuthCore.logout().catch(e => console.warn('AuthCore.logout failed:', e));
-                        }
-                        localStorage.removeItem('cloud_currentUser');
-                        localStorage.removeItem('cloud_isLoggedIn');
-                        localStorage.removeItem('currentUser');
-                        localStorage.removeItem('isLoggedIn');
-                        sessionStorage.removeItem('currentUser');
-                    } catch(e) {}
-                    const overlay = document.getElementById('loginOverlay');
-                    if (overlay) overlay.style.display = 'flex';
-                    return { success: false, error: '登录已过期，请重新登录', requireAuth: true, fromCloud: true };
-                }
+                console.warn('[Auth] Token 已失效（可能过期或账号已在其他设备登录），触发重新登录');
+                try {
+                    currentUser = null;
+                    if (window.AuthCore && AuthCore.logout) {
+                        AuthCore.logout().catch(e => console.warn('AuthCore.logout failed:', e));
+                    }
+                    localStorage.removeItem('cloud_currentUser');
+                    localStorage.removeItem('cloud_isLoggedIn');
+                    localStorage.removeItem('currentUser');
+                    localStorage.removeItem('isLoggedIn');
+                    sessionStorage.removeItem('currentUser');
+                } catch(e) {}
+                const overlay = document.getElementById('loginOverlay');
+                if (overlay) overlay.style.display = 'flex';
+                return {
+                    success: false,
+                    error: (parsed && parsed.error) || '登录已失效（账号可能在其他设备登录），请重新登录',
+                    requireAuth: true,
+                    fromCloud: true
+                };
             }
             throw new Error('HTTP error! status: ' + response.status);
         }
