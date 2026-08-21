@@ -408,6 +408,15 @@
 - 排序坑（Y6）：`(order[a.cat] || 99)` 在 order=0 时 falsy 变 99 导致首分类排错；必须用 `cat in _orderIndex` 显式判存在。
 - 生效：云端网页/云端APP 推 GitHub 自动生效；云端桌面/离线桌面/离线APP 需重打包。
 
+### 2.30 【S1 模板表面误杀构建】final-verify FAIL 1 项→误删 exe（提交 5ff60118，2026-08-21）
+
+- 现象：离线桌面打包 `FINAL GATE FAIL 1 项`，红线删掉所有 exe。复现定位为铁闸8c 全表面冒烟对根 `index.html` 和 `index-app.html`（源模板表面）报 `S1 产物中缺少 symptom-dict.js`。
+- 根因：`runAll()` 对 7 份 index.html 逐份 htmlPath S1 校验要求**同目录**有 symptom-dict.js；但根 index.html/index-app.html 是**源模板/母版表面**，同目录连 medicine-dict.js 都不存在（词典由 sync-all.ps1 分发到产物目录 desktop/public/APP assets）。5 份产物表面本就 26/26 过，模板表面误报 FAIL 触发红线误删 exe。
+- 修复：smoke-runtime.cjs S 区块若**同目录无 medicine-dict.js** 即判为模板表面，S1 降级 SKIP（不参与 fail 统计）；随包交付硬校验仍由 asarPath 产物闸门保证。final-verify 176/176 全绿。
+- 通用判别法：对"产物存在性"类校验，先确认目标文件在哪些表面是**同目录交付**、哪些是**分发到产物目录**；模板/母版表面路径与产物目录路径不一致时，不能直接要求同目录存在，须降级 SKIP 由产物闸门兜底。
+- 重打产物：`惠康中医-本地 1.0.87.exe` + `Setup 1.0.87.exe`，symbol 三闸门+e2e 3/3+交付核对单全 PASS。
+- 生效：离线桌面版需重装新版；离线APP/云端桌面/云端APP 按各自生效方式重打包或待部署。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
