@@ -1741,19 +1741,91 @@ let currentUser = null;
             if (e === 'cloud_personal' || e === 'clinic_standard') return '云端标准版';
             return '云端机构版';
         }
+
+        // ★ 铁闸4（2026-08-21 全局推广至H5/APP内嵌登录遮罩层）：自证真伪三元组
+        //   注意：H5/APP端通常没有构建时生成的 build-meta.json，fetch失败会显示「开发模式：未找到...」
+        let _buildMeta = null;
+        function loadBuildMeta() {
+            var tryPaths = ['./build-meta.json', '/build-meta.json', './electron/../build-meta.json'];
+            var tryIdx = 0;
+            function tryNext() {
+                if (tryIdx >= tryPaths.length) return;
+                var p = tryPaths[tryIdx++];
+                try {
+                    fetch(p, { cache: 'no-store' })
+                        .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                        .then(function (m) {
+                            _buildMeta = m;
+                            try { applyEditionTags(); } catch (_) {}
+                        })
+                        .catch(function () { tryNext(); });
+                } catch (e) { tryNext(); }
+            }
+            tryNext();
+        }
+
         function applyEditionTags() {
             var label = getEditionTag();
-            // ★ 2026-08-19 登录前不覆盖登录框标签文本（保持「待登录」提示），登录后 overlay 隐藏才写入真实版本
+            // ★ 铁闸4两行紧凑三元组（适配 260~360px 窄登录框，不被裁切）
+            var shortBuildTime = '';
+            var metaTextLine1 = '';
+            var metaTextLine2 = '';
+            if (_buildMeta) {
+                var bt = _buildMeta.buildTimeLocal || '';
+                var m_bt = bt.match(/(\d{4}\/\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{1,2})/);
+                shortBuildTime = m_bt ? (m_bt[1] + ' ' + m_bt[2]) : bt;
+                metaTextLine1 = 'V' + _buildMeta.version + ' · ' + (_buildMeta.archMarker || '');
+                metaTextLine2 = shortBuildTime ? ('Build ' + shortBuildTime) : '';
+            }
+            var metaHtml = metaTextLine1 ?
+                ('<br><span style="font-size:9px;color:rgba(255,255,255,0.85);font-weight:normal;line-height:1.3;">' +
+                 metaTextLine1 + (metaTextLine2 ? ('<br>' + metaTextLine2) : '') +
+                 '</span>') : '';
+
+            // ★ 挂载点1：.version-tag（紫色header内，登录遮罩层显示）
             var tag = document.querySelector('.version-tag');
             var _loEl = document.getElementById('loginOverlay');
-            var _loginVisible = !!( _loEl && _loEl.style.display !== 'none');
-            if (tag && !_loginVisible) tag.textContent = '【' + label + '】 V1.0.0';
+            var _loginVisible = !!(_loEl && _loEl.style.display !== 'none');
+            if (tag) {
+                if (!_loginVisible) {
+                    tag.innerHTML = '【' + label + '】' + metaHtml;
+                } else {
+                    tag.innerHTML = '【云端 · 登录后显示版本】' + metaHtml;
+                }
+            }
+            // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时丢失）
+            var security = document.querySelector('.login-security');
+            if (security) {
+                var bottomTag = document.getElementById('loginVersionTagBottom');
+                if (!bottomTag) {
+                    bottomTag = document.createElement('div');
+                    bottomTag.id = 'loginVersionTagBottom';
+                    bottomTag.style.marginTop = '3px';
+                    bottomTag.style.marginBottom = '2px';
+                    bottomTag.style.fontSize = '9px';
+                    bottomTag.style.color = '#999';
+                    bottomTag.style.textAlign = 'center';
+                    bottomTag.style.fontWeight = '600';
+                    bottomTag.style.lineHeight = '1.25';
+                    bottomTag.style.letterSpacing = '0.1px';
+                    security.parentNode.insertBefore(bottomTag, security.nextSibling);
+                }
+                if (metaTextLine1) {
+                    bottomTag.innerHTML =
+                        '<div style="font-size:9px;line-height:1.25;">' + metaTextLine1 + '</div>' +
+                        (metaTextLine2 ? '<div style="font-size:9px;line-height:1.25;color:#aab;">' + metaTextLine2 + '</div>' : '');
+                } else {
+                    bottomTag.textContent = '【开发模式：未找到 build-meta.json】';
+                }
+            }
             var tv = document.getElementById('topVersionTag');
             if (tv) tv.textContent = '【' + label + '】';
             var et = document.getElementById('editionTag');
             if (et) et.textContent = '【' + label + '】';
             document.title = '惠康中医-' + label;
-            console.log('%c惠康中医' + label + ' V1.0.0', 'color:#667eea;font-size:14px;font-weight:bold');
+            var logText = '惠康中医' + label + ' V1.0.0' +
+                (_buildMeta ? ('  |  构建: ' + metaTextLine1 + (metaTextLine2 ? (' | ' + metaTextLine2) : '')) : '');
+            console.log('%c' + logText, 'color:#667eea;font-size:14px;font-weight:bold');
             // ★★★ 2026-08-17 【根治刀2-B】每次标签变动后强制 enforce（防止 applyEditionTags 后标签变标准版但按钮没同步）
             if (typeof enforceStandardEditionButtons === 'function') {
                 enforceStandardEditionButtons('after-applyEditionTags');
@@ -1800,6 +1872,7 @@ let currentUser = null;
         // 版本标签统一显示 V1.0.0（按实际注册版本动态），置于分类函数定义之后执行
         // ★ 2026-08-17 【根治刀2-B】：调用统一的 applyEditionTags()（内部会自动 enforce）
         (function() { applyEditionTags(); })();
+        try { loadBuildMeta(); } catch(_) {} // ★ 铁闸4：主动拉取 build-meta.json 显示三元组（未登录也可见）
 
         // 初始化登录界面
         window.initLoginUI = function() {
