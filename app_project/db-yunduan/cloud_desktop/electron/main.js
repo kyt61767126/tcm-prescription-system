@@ -67,6 +67,29 @@ app.commandLine.appendSwitch('allow-file-access-from-files');
 //  修复：检测到调试参数立即退出程序
 // ============================================================================
 (function blockRemoteDebugging() {
+    // ★ E2E 专用旁路（2026-08-21 T4）：放行远程调试需【同时】满足两个条件：
+    //   ① 环境变量 BNZC_E2E=1（外部攻击者无法在用户机器上预设）
+    //   ② exe 同级目录存在 e2e-enabled.marker 文件（仅本地构建管线在 dist\win-unpacked
+    //      跑 e2e 前临时写入、跑完即删；NSIS Setup / portable 产物永不携带此文件）
+    //   任一条件缺失都按原逻辑阻断 —— 生产包的远程调试防护保持 100% 生效。
+    try {
+        if (process.env.BNZC_E2E === '1') {
+            const fsSync = require('fs');
+            const markerPath = path.join(path.dirname(process.execPath), 'e2e-enabled.marker');
+            if (fsSync.existsSync(markerPath)) {
+                console.warn('[E2E] 命中 e2e 旁路（BNZC_E2E=1 + marker），放行远程调试');
+                // 顺带隔离 userData，避免 e2e 读写污染开发者/用户真实数据目录
+                if (process.env.BNZC_E2E_DATA) {
+                    try {
+                        fsSync.mkdirSync(process.env.BNZC_E2E_DATA, { recursive: true });
+                        app.setPath('userData', process.env.BNZC_E2E_DATA);
+                        console.warn('[E2E] userData 已隔离至: ' + process.env.BNZC_E2E_DATA);
+                    } catch (e) { console.warn('[E2E] userData 隔离失败:', e.message); }
+                }
+                return;
+            }
+        }
+    } catch (e) { /* 旁路检查异常则按原逻辑继续阻断 */ }
     const argv = process.argv.join(' ').toLowerCase();
     const debugPatterns = [
         '--inspect',           // Node.js Inspector

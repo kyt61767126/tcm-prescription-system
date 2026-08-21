@@ -388,6 +388,29 @@ for %%A in ("%EXE_FILE%") do (
     )
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] %%~nxA  %%~zA bytes'"
 )
+
+REM ★ [9.5/9] T4 e2e 端到端回归（2026-08-21）：对 dist\win-unpacked 真实产物跑 3 条固定用例
+REM   E1 机构版管理员点开【用户管理】弹窗 / E2 标准版按钮权限矩阵 / E3 毒数据注入非静默
+REM   机制：run-e2e.cjs 在 win-unpacked 内临时写 e2e-enabled.marker（跑完即删）；
+REM         NSIS Setup 在本步骤【之前】已打包完成，产物永不携带 marker → 生产包远程调试防护不受影响。
+echo [9.5/9] E2E regression — 3 fixed cases on real win-unpacked...
+if not exist "node_modules\playwright" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] playwright 未安装，自动安装（一次性）...'"
+    call npm i -D playwright --no-fund --no-audit
+)
+node "e2e\run-e2e.cjs"
+set "E2E_RC=%errorlevel%"
+if not "%E2E_RC%"=="0" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] E2E 回归失败，红线删除所有 exe，杜绝带病交付'"
+    del /q "%OUTPUT_DIR%\*.exe" >nul 2>&1
+    del /q "dist\*.exe" >nul 2>&1
+    del /q "dist\win-unpacked\e2e-enabled.marker" >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] E2E 3/3 PASS - 用户管理按钮链路真实可点
+
 echo.
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Output directory: %CD%\%OUTPUT_DIR%'"
 echo ============================================

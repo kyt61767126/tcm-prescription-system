@@ -1,95 +1,97 @@
 {
-    "name":  "tcm-prescription-cloud",
-    "version": "1.2.105",
-    "description":  "惠康中医-云端",
-    "main":  "electron/main.js",
-    "scripts":  {
-                    "start":  "electron .",
-                    "build":  "electron-builder \u0026\u0026 node ../../../tools/postbuild-asar-verify.cjs .",
-                    "build:win":  "electron-builder --win",
-                    "build:win:portable":  "electron-builder --win portable"
-                },
-    "author":  "惠康中医",
-    "license":  "MIT",
-    "devDependencies":  {
-                            "@electron/asar":  "^4.2.1",
-                            "archiver":  "^7.0.1",
-                            "asarmor":  "^3.0.2",
-                            "electron":  "^35.0.0",
-                            "electron-builder":  "24.13.3"
-                        },
-    "build":  {
-                  "appId":  "com.tcm.prescription.cloud",
-                  "productName":  "惠康中医-云端",
-                  "directories":  {
-                                      "output": "dist_126"
-                                  },
-                  "afterPack":  "./afterPack.js",
-                  "asarUnpack":  [
-                                     "**/node_modules/better-sqlite3/**"
-                                 ],
-                  "files":  [
-                                "electron/**/*",
-                                "index.html",
-                                "xlsx.full.min.js",
-                                "package.json",
-                                "**/node_modules/better-sqlite3/**/*",
-                                "**/node_modules/fs-extra/**/*",
-                                "auth-core.js",
-                                "permission.js",
-                                "debug-logger.js",
-                                "print-utils.js",
-                                "medicine-dict.js",
-                                "db-adapter.js",
-                                "performance-utils.js",
-                                "prescription-core.js",
-                                "patient-archive.js",
-                                "security-guard.js",
-                                "cloud-api.js",
-                                "local-db.js",
-                                "sync-engine.js",
-                                "build/icon.ico",
-                                "button-manager.js",
-                                "edition-lock.js",
-                                "build-meta.json"
-                            ],
-                  "win":  {
-                              "target":  [
-                                             "nsis",
-                                             "portable"
-                                         ],
-                              "protocols":  [
-                                                {
-                                                    "name":  "惠康中医激活协议",
-                                                    "schemes":  [
-                                                                    "bnzc"
-                                                                ],
-                                                    "role":  "Editor"
-                                                }
-                                            ],
-                              "icon":  "build/icon.ico"
-                          },
-                  "protocols":  [
-                                    {
-                                        "name":  "惠康中医激活协议",
-                                        "schemes":  [
-                                                        "bnzc"
-                                                    ],
-                                        "role":  "Editor"
-                                    }
-                                ],
-                  "nsis":  {
-                               "oneClick":  false,
-                               "perMachine":  true,
-                               "allowToChangeInstallationDirectory":  true,
-                               "createDesktopShortcut":  true,
-                               "createStartMenuShortcut":  true,
-                               "include":  "installer.nsh",
-                               "differentialPackage":  false
-                           }
-              },
-    "dependencies":  {
-                         "better-sqlite3":  "^11.10.0",
-                         "fs-extra":  "^11.3.5"
-                     }
+    "name": "tcm-prescription-cloud",
+    "version": "1.2.107",
+    "description": "惠康中医-云端",
+    "main": "electron/main.js",
+    "scripts": {
+        "start": "electron .",
+        "build": "electron-builder && node ../../../tools/postbuild-asar-verify.cjs .",
+        "build:win": "electron-builder --win",
+        "build:win:portable": "electron-builder --win portable",
+        "e2e": "node e2e/run-e2e.cjs"
+    },
+    "author": "惠康中医",
+    "license": "MIT",
+    "devDependencies": {
+        "@electron/asar": "^4.2.1",
+        "archiver": "^7.0.1",
+        "asarmor": "^3.0.2",
+        "electron": "^35.0.0",
+        "electron-builder": "24.13.3",
+        "playwright": "^1.62.1"
+    },
+    "build": {
+        "appId": "com.tcm.prescription.cloud",
+        "productName": "惠康中医-云端",
+        "directories": {
+            "output": "dist_126"
+        },
+        "afterPack": "./afterPack.js",
+        "asarUnpack": [
+            "**/node_modules/better-sqlite3/**"
+        ],
+        "files": [
+            "electron/**/*",
+            "index.html",
+            "xlsx.full.min.js",
+            "package.json",
+            "**/node_modules/better-sqlite3/**/*",
+            "**/node_modules/fs-extra/**/*",
+            "auth-core.js",
+            "permission.js",
+            "debug-logger.js",
+            "print-utils.js",
+            "medicine-dict.js",
+            "db-adapter.js",
+            "performance-utils.js",
+            "prescription-core.js",
+            "patient-archive.js",
+            "security-guard.js",
+            "cloud-api.js",
+            "local-db.js",
+            "sync-engine.js",
+            "build/icon.ico",
+            "button-manager.js",
+            "edition-lock.js",
+            "build-meta.json"
+        ],
+        "win": {
+            "target": [
+                "nsis",
+                "portable"
+            ],
+            "protocols": [
+                {
+                    "name": "惠康中医激活协议",
+                    "schemes": [
+                        "bnzc"
+                    ],
+                    "role": "Editor"
+                }
+            ],
+            "icon": "build/icon.ico"
+        },
+        "protocols": [
+            {
+                "name": "惠康中医激活协议",
+                "schemes": [
+                    "bnzc"
+                ],
+                "role": "Editor"
+            }
+        ],
+        "nsis": {
+            "oneClick": false,
+            "perMachine": true,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "include": "installer.nsh",
+            "differentialPackage": false
+        }
+    },
+    "dependencies": {
+        "better-sqlite3": "^11.10.0",
+        "fs-extra": "^11.3.5"
+    }
 }
