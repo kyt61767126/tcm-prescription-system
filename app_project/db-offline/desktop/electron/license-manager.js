@@ -1378,6 +1378,12 @@ function isDebuggerAttached() {
         // 仅在打包后启用检测（开发模式下跳过，避免误报）
         if (!app.isPackaged) return false;
 
+        // ★ E2E 旁路（P3，2026-08-21）：构建管线 e2e 用 Playwright CDP 驱动真实 exe，
+        //   CDP 参数会被下方规则命中导致 license 判无效 → 永远弹"到期提示"而非登录窗。
+        //   标志 __BNZC_E2E_BYPASS 仅在 main.js 校验「BNZC_E2E=1 + exe 同级 marker」
+        //   双条件通过后置位（生产包永不携带 marker），此处跳过仅影响 e2e 会话。
+        if (global.__BNZC_E2E_BYPASS === true) return false;
+
         // 1. 检测 --inspect / --inspect-brk / --remote-debugging-port 命令行参数
         const argv = process.argv.join(' ');
         if (argv.includes('--inspect') || argv.includes('--inspect-brk') ||

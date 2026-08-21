@@ -1,88 +1,89 @@
 {
-    "name":  "tcm-prescription",
-    "version": "1.0.83",
-    "description":  "惠康中医-本地",
-    "main":  "electron/main.js",
-    "scripts":  {
-                    "start":  "electron .",
-                    "build":  "electron-builder \u0026\u0026 node ../../../tools/postbuild-asar-verify.cjs ."
-                },
-    "author":  "惠康中医",
-    "license":  "MIT",
-    "devDependencies":  {
-                            "@electron/asar":  "^4.2.1",
-                            "archiver":  "^7.0.1",
-                            "asarmor":  "^3.0.2",
-                            "electron":  "^35.0.0",
-                            "electron-builder":  "24.13.3"
-                        },
-    "build":  {
-                  "appId":  "com.benneng.prescription",
-                  "productName":  "惠康中医-本地",
-                  "directories":  {
-                                      "output":  "dist"
-                                  },
-                  "afterPack":  "./afterPack.js",
-                  "files":  [
-                                "electron/**/*",
-                                "index.html",
-                                "config.json",
-                                "vendor/**/*",
-                                "package.json",
-                                "auth-core.js",
-                                "permission.js",
-                                "normalize-config.js",
-                                "debug-logger.js",
-                                "print-utils.js",
-                                "medicine-dict.js",
-                                "db-adapter.js",
-                                "performance-utils.js",
-                                "prescription-core.js",
-                                "patient-archive.js",
-                                "security-guard.js",
-                                "build/icon.ico",
-                                "button-manager.js",
-                                "edition-lock.js",
-                                "build-meta.json"
-                            ],
-                  "win":  {
-                              "target":  [
-                                             "nsis",
-                                             "portable"
-                                         ],
-                              "protocols":  [
-                                                {
-                                                    "name":  "惠康中医激活协议",
-                                                    "schemes":  [
-                                                                    "bnzc"
-                                                                ],
-                                                    "role":  "Editor"
-                                                }
-                                            ],
-                              "icon":  "build/icon.ico"
-                          },
-                  "protocols":  [
-                                    {
-                                        "name":  "惠康中医激活协议",
-                                        "schemes":  [
-                                                        "bnzc"
-                                                    ],
-                                        "role":  "Editor"
-                                    }
-                                ],
-                  "nsis":  {
-                               "oneClick":  false,
-                               "perMachine":  true,
-                               "allowElevation":  true,
-                               "allowToChangeInstallationDirectory":  true,
-                               "createDesktopShortcut":  true,
-                               "createStartMenuShortcut":  true,
-                               "unicode":  true,
-                               "include":  "installer.nsh",
-                               "differentialPackage":  false
-                           }
-              },
-    "dependencies":  {
-                         "fs-extra":  "^11.3.5"
-                     }
+    "name": "tcm-prescription",
+    "version": "1.0.85",
+    "description": "惠康中医-本地",
+    "main": "electron/main.js",
+    "scripts": {
+        "start": "electron .",
+        "build": "electron-builder && node ../../../tools/postbuild-asar-verify.cjs ."
+    },
+    "author": "惠康中医",
+    "license": "MIT",
+    "devDependencies": {
+        "@electron/asar": "^4.2.1",
+        "archiver": "^7.0.1",
+        "asarmor": "^3.0.2",
+        "electron": "^35.0.0",
+        "electron-builder": "24.13.3",
+        "playwright": "^1.62.1"
+    },
+    "build": {
+        "appId": "com.benneng.prescription",
+        "productName": "惠康中医-本地",
+        "directories": {
+            "output": "dist"
+        },
+        "afterPack": "./afterPack.js",
+        "files": [
+            "electron/**/*",
+            "index.html",
+            "config.json",
+            "vendor/**/*",
+            "package.json",
+            "auth-core.js",
+            "permission.js",
+            "normalize-config.js",
+            "debug-logger.js",
+            "print-utils.js",
+            "medicine-dict.js",
+            "db-adapter.js",
+            "performance-utils.js",
+            "prescription-core.js",
+            "patient-archive.js",
+            "security-guard.js",
+            "build/icon.ico",
+            "button-manager.js",
+            "edition-lock.js",
+            "build-meta.json"
+        ],
+        "win": {
+            "target": [
+                "nsis",
+                "portable"
+            ],
+            "protocols": [
+                {
+                    "name": "惠康中医激活协议",
+                    "schemes": [
+                        "bnzc"
+                    ],
+                    "role": "Editor"
+                }
+            ],
+            "icon": "build/icon.ico"
+        },
+        "protocols": [
+            {
+                "name": "惠康中医激活协议",
+                "schemes": [
+                    "bnzc"
+                ],
+                "role": "Editor"
+            }
+        ],
+        "nsis": {
+            "oneClick": false,
+            "perMachine": true,
+            "allowElevation": true,
+            "allowToChangeInstallationDirectory": true,
+            "createDesktopShortcut": true,
+            "createStartMenuShortcut": true,
+            "unicode": true,
+            "include": "installer.nsh",
+            "differentialPackage": false
+        }
+    },
+    "dependencies": {
+        "fs-extra": "^11.3.5"
+    }
 }

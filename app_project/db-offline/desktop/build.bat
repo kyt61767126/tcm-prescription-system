@@ -421,6 +421,29 @@ if not "%FINAL_VERIFY_RC%"=="0" (
 echo [OK] FINAL IRON GATE ALL PASS ✓ — 7 道铁闸全部生效（离线版）
 echo.
 
+REM ★ [9.6/9] P3 e2e 端到端回归（2026-08-21，与云端版同款红线设计）：
+REM   E1 本地账号明文登录链路 / E2 试用期强制标准版反向断言 / E3 毒数据 UserStore 兜底
+REM   机制：run-e2e.cjs 在 win-unpacked 内临时写 e2e-enabled.marker（跑完即删）；
+REM         NSIS Setup 在本步骤【之前】已打包完成，产物永不携带 marker → 生产包远程调试防护不受影响。
+echo [9.6/9] E2E regression — 3 fixed offline cases on real win-unpacked...
+if not exist "node_modules\playwright" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] playwright 未安装，自动安装（一次性）...'"
+    call npm i -D playwright --no-fund --no-audit
+)
+node "e2e\run-e2e.cjs"
+set "E2E_RC=%errorlevel%"
+if not "%E2E_RC%"=="0" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] E2E 回归失败，红线删除所有 exe，杜绝带病交付'"
+    del /q "%OUTPUT_DIR%\*.exe" >nul 2>&1
+    del /q "dist\*.exe" >nul 2>&1
+    del /q "dist\win-unpacked\e2e-enabled.marker" >nul 2>&1
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] E2E 3/3 PASS - 离线登录/试用期降级/UserStore 兜底真实可点
+echo.
+
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Output directory: %CD%\%OUTPUT_DIR%'"
 echo ============================================
 if exist "dist_old_*" (
