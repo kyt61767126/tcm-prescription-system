@@ -32,9 +32,14 @@
         }
     }
 
-    // 与 index.html 的 simpleDecrypt 保持一致，用于解密 local_systemUsers（XORv1 格式）
-    // 避免登录读不到修改后的密码（修改密码保存到 local_systemUsers 是加密的）
+    // ★ P1（2026-08-21）：加解密原语优先委托 UserStore 权威源（login.html 已加载 user-store.js）。
+    //   消除 login.js 独立 XORv1 实现这一旁路——若权威源升级格式，此处自动跟随，
+    //   不会再出现"主界面能读、登录窗口读不到"的分裂。本地实现仅作 UserStore
+    //   加载失败时的兜底（防御式惯例，行为与权威源逐字节等价）。
     function simpleDecrypt(stored) {
+        if (window.UserStore && typeof window.UserStore.simpleDecrypt === 'function') {
+            return window.UserStore.simpleDecrypt(stored);
+        }
         if (!stored || typeof stored !== 'string') return stored;
         if (!stored.startsWith('XORv1:')) return stored;
         try {
@@ -47,8 +52,10 @@
             return result;
         } catch(e) { return stored; }
     }
-    // 与 index.html 的 simpleEncrypt 保持一致，用于加密 local_systemUsers
     function simpleEncrypt(text) {
+        if (window.UserStore && typeof window.UserStore.simpleEncrypt === 'function') {
+            return window.UserStore.simpleEncrypt(text);
+        }
         if (!text) return '';
         const key = PASSWORD_SALT;
         let result = '';

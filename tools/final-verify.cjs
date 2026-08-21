@@ -86,6 +86,16 @@ try {
 }
 check('铁闸8 运行时冒烟：坏数据注入 ' + smokePass + '/' + smokeTotal + ' 用例通过', smokeFail === 0);
 
+// ④b 铁闸8b（P1 2026-08-21）：登录窗口旁路检测 —— login.js 加解密必须委托 UserStore
+//     防"登录窗口独立实现 XORv1 直读 local_systemUsers"旁路复发（主界面/登录窗数据分裂根源）
+try {
+  const lb = smoke.checkLoginBypass();
+  for (const l of lb.lines) console.log(l);
+  check('铁闸8b 登录窗口旁路：login.js 委托 UserStore ' + lb.pass + '/' + lb.total, lb.fail === 0);
+} catch (e) {
+  check('铁闸8b 登录窗口旁路检测异常: ' + (e && e.message ? e.message : String(e)), false);
+}
+
 console.log('');
 
 if (fail > 0) {

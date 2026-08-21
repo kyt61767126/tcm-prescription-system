@@ -79,6 +79,16 @@ const GROUPS = [
             'app_project/db-offline/desktop/edition-lock.js',
             'app_project/db-offline/app/app/src/main/assets/public/edition-lock.js'
         ]
+    },
+    {
+        // ★ P1（2026-08-21）：user-store.js 独立文件分发（登录窗口 login.html <script> 加载）。
+        //   index.html 走标记块内联（见 checkUserStoreBlocks），登录窗口走独立文件，
+        //   两条分发路径都锚定同一权威源，漂移即阻断构建。
+        authority: 'shared/user-store.js',
+        copies: [
+            'app_project/db-yunduan/cloud_desktop/electron/user-store.js',
+            'app_project/db-offline/desktop/electron/user-store.js'
+        ]
     }
 ];
 

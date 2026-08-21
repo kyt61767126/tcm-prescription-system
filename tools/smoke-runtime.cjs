@@ -19,6 +19,8 @@
 //   fail > 0 即视为构建失败。
 // ============================================================================
 const fs = require('fs');
+const path = require('path');
+const ROOT = path.resolve(__dirname, '..');
 const vm = require('vm');
 
 // —— 必须存在于产物中并通过冒烟的函数（用户管理点击链路）——
@@ -375,16 +377,53 @@ function run({ asarPath, htmlPath }) {
 // ============================================================================
 // 6. CLI 入口
 // ============================================================================
+// ★ P1（2026-08-21）--login 模式：登录窗口旁路检测。
+//   login.js 历史上独立实现 XORv1 加解密直读 local_systemUsers（绕过 UserStore
+//   权威源）。P1 已改为优先委托 window.UserStore；此检测防止任何人再把委托
+//   删掉回到旁路状态。两份 login.js（云端/离线桌面）+ 对应 login.html 全查。
+function checkLoginBypass() {
+  const lines = [];
+  let pass = 0, fail = 0, total = 0;
+  const PAIRS = [
+    ['app_project/db-yunduan/cloud_desktop/electron', '云端桌面'],
+    ['app_project/db-offline/desktop/electron', '离线桌面'],
+  ];
+  for (const [dir, label] of PAIRS) {
+    const jsPath = path.join(ROOT, dir, 'login.js');
+    const htmlPath = path.join(ROOT, dir, 'login.html');
+    const usPath = path.join(ROOT, dir, 'user-store.js');
+    let js = '', html = '';
+    try { js = fs.readFileSync(jsPath, 'utf8'); } catch (e) { js = ''; }
+    try { html = fs.readFileSync(htmlPath, 'utf8'); } catch (e) { html = ''; }
+    const checks = [
+      ['L1 ' + label + ' login.js simpleDecrypt 委托 UserStore', js.includes('window.UserStore.simpleDecrypt')],
+      ['L2 ' + label + ' login.js simpleEncrypt 委托 UserStore', js.includes('window.UserStore.simpleEncrypt')],
+      ['L3 ' + label + ' login.html 已加载 user-store.js', html.includes('user-store.js')],
+      ['L4 ' + label + ' electron/user-store.js 文件存在', fs.existsSync(usPath)],
+    ];
+    for (const [nm, ok] of checks) {
+      total++;
+      if (ok) { pass++; lines.push('[SMOKE][PASS] ' + nm); }
+      else { fail++; lines.push('[SMOKE][FAIL] ' + nm); }
+    }
+  }
+  return { total, pass, fail, lines };
+}
+
 if (require.main === module) {
   const args = process.argv.slice(2);
   const asarIdx = args.indexOf('--asar');
   const htmlIdx = args.indexOf('--html');
   let result;
   try {
-    result = run({
-      asarPath: asarIdx >= 0 ? args[asarIdx + 1] : undefined,
-      htmlPath: htmlIdx >= 0 ? args[htmlIdx + 1] : undefined,
-    });
+    if (args.includes('--login')) {
+      result = checkLoginBypass();
+    } else {
+      result = run({
+        asarPath: asarIdx >= 0 ? args[asarIdx + 1] : undefined,
+        htmlPath: htmlIdx >= 0 ? args[htmlIdx + 1] : undefined,
+      });
+    }
   } catch (e) {
     console.error('[SMOKE][FAIL] ' + (e && e.message ? e.message : String(e)));
     process.exit(1);
@@ -394,4 +433,4 @@ if (require.main === module) {
   process.exit(result.fail > 0 ? 1 : 0);
 }
 
-module.exports = { run };
+module.exports = { run, checkLoginBypass };
