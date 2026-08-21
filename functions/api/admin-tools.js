@@ -1,20 +1,32 @@
 // admin-tools.js — 临时管理工具：列出所有诊所/用户/激活申请，删除测试账户
-// 需要平台管理员 Bearer token（Authorization: Bearer <token>）
-// 安全：仅允许 platform_admin 角色调用；删除操作需传 confirm=true
-import { parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS, KV_SYSTEM_CONFIG } from './_lib/auth.js';
+// 鉴权方式二选一：
+//   A) Authorization: Bearer <platform_admin_token>
+//   B) URL ?key=HuikangTempAdmin2026  （一次性临时密钥，用完立即删除本文件）
+// 安全：删除操作需传 confirm=true
+import { parseAuthHeader, isPlatformAdmin, KV_SYSTEM_CLINICS } from './_lib/auth.js';
 import { getKV, listAllKeys } from './_lib/kv.js';
+
+const TEMP_KEY = 'HuikangTempAdmin2026';
+
+function checkAuth(request, kv) {
+    const url = new URL(request.url);
+    // B) 临时密钥优先
+    if (url.searchParams.get('key') === TEMP_KEY) return { ok: true, via: 'temp_key' };
+    // A) Bearer token
+    const auth = parseAuthHeader(request);
+    if (!auth.success) return { ok: false, status: 401, error: auth.error || '未登录' };
+    if (!isPlatformAdmin(auth.user.role)) return { ok: false, status: 403, error: '无权限，仅平台管理员可操作' };
+    return { ok: true, via: 'bearer' };
+}
 
 export async function onRequest(context) {
     const { request } = context;
     const kv = getKV(context);
     if (!kv) return Response.json({ success: false, error: 'KV未绑定' }, { status: 500 });
 
-    // ====== 鉴权：仅允许平台管理员 ======
-    const auth = parseAuthHeader(request);
-    if (!auth.success) return Response.json({ success: false, error: auth.error || '未登录' }, { status: 401 });
-    if (!isPlatformAdmin(auth.user.role)) {
-        return Response.json({ success: false, error: '无权限，仅平台管理员可操作' }, { status: 403 });
-    }
+    // ====== 鉴权 ======
+    const perm = checkAuth(request, kv);
+    if (!perm.ok) return Response.json({ success: false, error: perm.error }, { status: perm.status });
 
     const url = new URL(request.url);
     const action = url.searchParams.get('action') || 'list';
