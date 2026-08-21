@@ -444,6 +444,15 @@
 - **遗留**：客户端 UI 尚无 submitActivationTicket 调用入口（规则 3 对接最后一步，后续接入时随包更新）；邮件/短信通知未接（alert 显示激活码由操作员人工通知，与 admin-approve 现状一致）。
 - **生效方式**：云端后台/网页=推 GitHub 自动部署生效（已上线）；离线桌面/APP=待客户端接入提交入口时随包更新。
 
+### 2.33 【注册支持用户名登录】注册表单新增用户名选填（提交 6d79b318，2026-08-21）
+
+- **需求**：登录框早已支持"手机号/用户名"双模式（placeholder 即"请输入手机号或用户名"，后端 findUserForLogin 按 username 优先+phone 兜底），但注册弹窗只有手机号、后端写死 `username: phone`，导致只能手机号注册。用户选定方案：**用户名选填**（填了用户名则以用户名为登录账号，不填默认手机号）。
+- **前端（cloud.js 权威源，运行时注入不改 index.html）**：注册表单在手机号上方新增"用户名（选填，登录账号）"输入框；提交读取并校验格式（2-30 字符，仅允许中文/字母/数字/下划线/连字符，与服务端规则一致）；`adapter.registerClinic` 与直连 fetch 两条提交路径都透传 `username`；成功页"登录账号"显示 `uname || phone`（用户名优先）；`AuthCore.registerClinic` 也接收 username 并做同规则客户端校验。
+- **后端（users.js register-clinic）**：接收 `username` 参数 → 格式校验（选填，规则同上）→ **用户名全局唯一校验**（`findUserForLogin(kv, regUsername)` 命中即拒绝，防止与其他用户 username/phone 冲突）→ `adminUser.username = regUsername || phone`、`name = adminName || regUsername || phone` → nextStep 提示"登录账号（用户名或手机号）"。
+- **双模式登录兼容**：登录匹配链路两端均已支持——后端 `findUserForLogin`（username 优先+phone 兜底）、客户端 `findUserByIdentifier`（username/phone 双匹配），故注册存 username 后无需改登录逻辑，用户用用户名或手机号都能登录。
+- **同步**：改权威源 `shared/auth-core/cloud.js` 后必须跑 `tools/sync-auth-core.ps1`（云 8 副本 + 根镜像；离线 3 副本不受影响，注册弹窗为云端专用）。任何一次 cloud.js 改动后都要重跑 sync，勿只改单一副本（2026-08 打包回退教训）。
+- **生效方式**：云端网页版/云端APP=推 GitHub 自动生效；云端桌面版=需重打 Setup 并重装；离线版不受影响（无注册弹窗）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
