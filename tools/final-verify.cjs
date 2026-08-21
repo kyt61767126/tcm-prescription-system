@@ -88,10 +88,11 @@ check('铁闸8 运行时冒烟：坏数据注入 ' + smokePass + '/' + smokeTota
 
 // ④b 铁闸8b（P1 2026-08-21）：登录窗口旁路检测 —— login.js 加解密必须委托 UserStore
 //     防"登录窗口独立实现 XORv1 直读 local_systemUsers"旁路复发（主界面/登录窗数据分裂根源）
+//     注意：必须独立 require（上面的 smoke 是 try 块内 const，块外不可见——首个 1.2.111 构建因此误报）
 try {
-  const lb = smoke.checkLoginBypass();
-  for (const l of lb.lines) console.log(l);
-  check('铁闸8b 登录窗口旁路：login.js 委托 UserStore ' + lb.pass + '/' + lb.total, lb.fail === 0);
+  const lb2 = require('./smoke-runtime.cjs').checkLoginBypass();
+  for (const l of lb2.lines) console.log(l);
+  check('铁闸8b 登录窗口旁路：login.js 委托 UserStore ' + lb2.pass + '/' + lb2.total, lb2.fail === 0);
 } catch (e) {
   check('铁闸8b 登录窗口旁路检测异常: ' + (e && e.message ? e.message : String(e)), false);
 }

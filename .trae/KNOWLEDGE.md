@@ -341,6 +341,26 @@
 
 **生效**：云端网页/云端APP=推 GitHub 自动；云端桌面=装 Setup 1.2.110（核对三元组 V1.2.110|Build 2026/8/21|Arch 2.26）；离线桌面/离线APP=需重打包（标记块已入源码）。
 
+### 2.25 【P1 登录窗口旁路收编】login.js 委托 UserStore（Setup 1.2.112 / 1.0.83，提交 0f3a1e0d）
+
+**审计结论（全库扫 local_systemUsers + XORv1 实现）**：
+- 真旁路仅一处家族：**两份 electron/login.js**（云端+离线桌面）独立实现 XORv1 加解密 + 3 处直读 local_systemUsers（读解密 getUsersFromStorage / 登录后写 / 启动清理遗留账号）——主界面与登录窗数据逻辑分裂的根源（"激活后登录窗读不到账号"类问题的隐患模式）。
+- 判定为合法的：main.js node 侧 cfg.users（Array.isArray 守卫齐全，config.json 管护域）；auth-core XORv2/PWDv2（密码哈希域，不碰 users 列表存储）。
+
+**修复（双路径分发，都锚定 shared/user-store.js）**：
+- index.html 路径 = 标记块内联（T3 已建）；登录窗口路径 = **独立文件**分发到两处 electron/（login.html `<script src="user-store.js">`，package.json `electron/**/*` 通配自动打包，无需改 build.files）。
+- 两份 login.js 的 simpleDecrypt/simpleEncrypt 函数体改为**优先委托 window.UserStore**，本地实现降级为加载失败兜底（行为逐字节等价，防御式惯例）。getUsers 合并语义（config 主+localStorage 补）保持不变，只收编加解密原语。
+
+**新关卡**：
+- copy-consistency 第 5 文件组 user-store.js（2 副本），总副本 39→41。
+- smoke-runtime 新增 `--login` 模式（L1-L4 ×2：委托解密/委托加密/html 加载/文件存在），接入 final-verify 成**铁闸8b**，每次构建自动跑，旁路复发即红线删 exe。
+
+**新坑（务必牢记）**：final-verify.cjs 里引用 try 块内的 `const smoke` 会 `smoke is not defined`（块级作用域）——首个 1.2.111 构建被自己红线拦下（机制按设计工作：FAIL 即删 exe 杜绝假包）。修复：铁闸8b 独立 `require('./smoke-runtime.cjs')`。**教训：给 final-verify 加检测时，别引用上面 try 块内的局部变量。**
+
+**验证矩阵**：一致性 41/41；冒烟 18/18（html）+ 8/8（login）；界面基线 6/6（script 标签不算 UI 变更，不触发 WARN）；e2e 3/3（E1 登录 PASS=委托改造未破坏链路）；asar 独立抽查两端 login.js 委托 + user-store.js 文件双确认。
+
+**生效**：云端桌面=装 Setup **1.2.112**（三元组 V1.2.112）；离线桌面=装 Setup **1.0.83**；APP/网页端不涉及（login.js 仅桌面端），无需操作。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
