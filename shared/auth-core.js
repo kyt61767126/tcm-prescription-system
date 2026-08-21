@@ -1410,12 +1410,22 @@
         // ★ 2026-08-21 新增 edition 参数：注册时选择的版本意向（personal/institution），
         //   后端存 clinic.requestedEdition，管理员审核转正时优先采用
         async registerClinic(params) {
-            const { clinicName, phone, password, adminName, edition } = params || {};
+            const { clinicName, phone, password, adminName, edition, username } = params || {};
             if (!clinicName || !phone || !password) {
                 return { success: false, error: '请填写完整的注册信息' };
             }
             if (!/^1[3-9]\d{9}$/.test(String(phone).trim())) {
-                return { success: false, error: '请输入正确的11位手机号（登录账号即手机号）' };
+                return { success: false, error: '请输入正确的11位手机号（用于管理员审核联系）' };
+            }
+            // 用户名（选填）：填写后作为登录账号；格式与服务端规则一致
+            const uname = String(username || '').trim();
+            if (uname) {
+                if (uname.length < 2 || uname.length > 30) {
+                    return { success: false, error: '用户名长度需 2-30 个字符' };
+                }
+                if (!/^[\u4e00-\u9fa5a-zA-Z0-9_-]+$/.test(uname)) {
+                    return { success: false, error: '用户名仅允许中文、字母、数字、下划线或连字符' };
+                }
             }
             const strength = this.validatePasswordStrength(password);
             if (strength.errors.length > 0) {
@@ -1431,7 +1441,8 @@
                         phone: String(phone).trim(),
                         password: password,
                         adminName: (adminName || '').trim(),
-                        edition: (edition === 'institution') ? 'institution' : 'personal'
+                        edition: (edition === 'institution') ? 'institution' : 'personal',
+                        username: uname
                     })
                 });
                 const data = (response && typeof response.json === 'function')
@@ -2371,9 +2382,14 @@
                     '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 必填，请填写管理员/医师姓名</div>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
-                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">手机号 <span style="color:#e53935;">*</span>（登录账号）</label>' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">用户名（选填，登录账号）</label>' +
+                    '<input type="text" id="regUsername" placeholder="如：zhangyisheng" autocomplete="off" spellcheck="false" maxlength="30" style="' + INPUT_STYLE + '">' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 选填；填写后可用用户名登录，不填则默认用手机号登录</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">手机号 <span style="color:#e53935;">*</span>（登录账号/联系）</label>' +
                     '<input type="text" id="regPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="' + INPUT_STYLE + '">' +
-                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号，注册后即您的登录账号</div>' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 11位手机号，用于管理员审核联系；未填用户名时即登录账号</div>' +
                 '</div>' +
                 '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">登录密码 <span style="color:#e53935;">*</span></label>' +
@@ -2404,7 +2420,7 @@
                 '<div style="font-size:44px;">✅</div>' +
                 '<div style="font-size:17px;font-weight:bold;color:#2c3e50;margin-top:10px;">注册成功！</div>' +
                 '<div style="font-size:13px;color:#606266;margin-top:8px;line-height:1.7;">账号已创建，管理员审核通过后即可登录。<br>登录账号：<b id="regSuccessPhone" style="color:#26a69a;"></b>（请牢记）</div>' +
-                '<div style="margin-top:14px;padding:10px 12px;border-radius:8px;background:#f4f6f8;font-size:12px;color:#909399;line-height:1.6;">审核通常在工作时间 1 小时内完成，请稍后使用手机号和您设置的密码登录。如有疑问请联系客服微信 hktzy1688。</div>' +
+                '<div style="margin-top:14px;padding:10px 12px;border-radius:8px;background:#f4f6f8;font-size:12px;color:#909399;line-height:1.6;">审核通常在工作时间 1 小时内完成，请稍后使用登录账号（用户名或手机号）和您设置的密码登录。如有疑问请联系客服微信 hktzy1688。</div>' +
                 '<button id="regSuccessCloseBtn" style="width:100%;margin-top:16px;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">好的，返回登录</button>' +
             '</div>';
 
@@ -2459,14 +2475,22 @@
 
                     const clinicName = (document.getElementById('regClinicName') || {}).value || '';
                     const adminName = (document.getElementById('regAdminName') || {}).value || '';
+                    const username = (document.getElementById('regUsername') || {}).value || '';
                     const phone = (document.getElementById('regPhone') || {}).value || '';
                     const password = (document.getElementById('regPassword') || {}).value || '';
                     const password2 = (document.getElementById('regPassword2') || {}).value || '';
 
+                    // 用户名（选填）：填写后作为登录账号；格式与服务端规则一致
+                    const uname = String(username).trim();
+                    if (uname) {
+                        if (uname.length < 2 || uname.length > 30) { showError('用户名长度需 2-30 个字符'); return; }
+                        if (!/^[\u4e00-\u9fa5a-zA-Z0-9_-]+$/.test(uname)) { showError('用户名仅允许中文、字母、数字、下划线或连字符'); return; }
+                    }
+
                     // 客户端校验（与服务端规则一致）
                     if (!clinicName.trim() || clinicName.trim().length < 2) { showError('请填写诊所名称（至少2个字符）'); return; }
                     if (!adminName.trim()) { showError('请填写管理员/医师姓名'); return; }
-                    if (!/^1[3-9]\d{9}$/.test(phone.trim())) { showError('请输入正确的11位手机号（登录账号即手机号）'); return; }
+                    if (!/^1[3-9]\d{9}$/.test(phone.trim())) { showError('请输入正确的11位手机号（用于管理员审核联系）'); return; }
                     if (password.length < 8) { showError('密码至少8位'); return; }
                     if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) { showError('密码必须同时包含字母和数字'); return; }
                     if (password !== password2) { showError('两次输入的密码不一致'); return; }
@@ -2481,13 +2505,13 @@
                     const adapter = (typeof AuthCore !== 'undefined') ? AuthCore : (global.AuthCore || null);
                     let result;
                     if (adapter && typeof adapter.registerClinic === 'function') {
-                        result = await adapter.registerClinic({ clinicName, phone, password, adminName, edition: regEdition });
+                        result = await adapter.registerClinic({ clinicName, phone, password, adminName, edition: regEdition, username: uname });
                     } else {
                         const fetchFn = global.cloudFetch || global.fetch;
                         const response = await fetchFn('https://tcm-prescription-system.pages.dev/api/users?action=register-clinic', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ clinicName: clinicName.trim(), phone: phone.trim(), password: password, adminName: adminName.trim(), edition: regEdition })
+                            body: JSON.stringify({ clinicName: clinicName.trim(), phone: phone.trim(), password: password, adminName: adminName.trim(), edition: regEdition, username: uname })
                         });
                         result = await response.json();
                     }
@@ -2496,12 +2520,13 @@
                         // 注册成功：标记完成 + 隐藏登录框入口，显示成功页
                         setCloudActivationDone();
                         hideActivateLoginEntry();
+                        const loginAccount = uname || phone.trim();
                         const phoneEl = document.getElementById('regSuccessPhone');
-                        if (phoneEl) phoneEl.textContent = phone.trim();
+                        if (phoneEl) phoneEl.textContent = loginAccount;
                         if (submittingEl) submittingEl.style.display = 'none';
                         const successEl = document.getElementById('regSuccess');
                         if (successEl) successEl.style.display = 'block';
-                        console.log('[LicenseCheck] 注册成功，等待管理员审核:', phone.trim());
+                        console.log('[LicenseCheck] 注册成功，等待管理员审核，登录账号:', loginAccount);
                     } else {
                         // 失败：返回表单并显示错误
                         if (submittingEl) submittingEl.style.display = 'none';

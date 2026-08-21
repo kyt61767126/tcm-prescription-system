@@ -1904,10 +1904,13 @@ export async function onRequest(context) {
         // 安全措施：IP限流(3次/小时) + 手机号全局唯一校验 + 密码强度校验
         if (method === 'POST' && url.searchParams.get('action') === 'register-clinic') {
             const body = await context.request.json().catch(() => ({}));
-            const { clinicName, phone, password, adminName, edition } = body;
+            const { clinicName, phone, password, adminName, edition, username } = body;
 
             // ★ 2026-08-21 版本意向：注册时用户自选标准版/机构版（枚举白名单，其余一律按标准版）
             const requestedEdition = (edition === 'institution') ? 'institution' : 'personal';
+
+            // ★ 2026-08-21 用户名（选填）：填写后作为登录账号，未填则默认用手机号
+            const regUsername = String(username || '').trim();
 
             // 1. IP限流（注册更严格：3次/小时）
             const registerAllowed = await checkIpRateLimit(kv, context.request);
@@ -1939,7 +1942,7 @@ export async function onRequest(context) {
                 return json({ success: false, error: '诊所名称长度需在 2-50 个字符之间' }, 400, context.request);
             }
             if (!/^1[3-9]\d{9}$/.test(phone)) {
-                return json({ success: false, error: '请输入正确的11位手机号（登录账号即手机号）' }, 400, context.request);
+                return json({ success: false, error: '请输入正确的11位手机号（用于管理员审核联系）' }, 400, context.request);
             }
             // 密码强度校验（至少8位，含字母和数字）
             if (password.length < 8) {
@@ -1951,11 +1954,28 @@ export async function onRequest(context) {
             if (!/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
                 return json({ success: false, error: '密码必须同时包含字母和数字' }, 400, context.request);
             }
+            // 用户名（选填）格式校验：2-30 字符，仅允许中文/字母/数字/下划线/连字符
+            if (regUsername) {
+                if (regUsername.length < 2 || regUsername.length > 30) {
+                    return json({ success: false, error: '用户名长度需 2-30 个字符' }, 400, context.request);
+                }
+                if (!/^[\u4e00-\u9fa5a-zA-Z0-9_-]+$/.test(regUsername)) {
+                    return json({ success: false, error: '用户名仅允许中文、字母、数字、下划线或连字符' }, 400, context.request);
+                }
+            }
 
             // 3. 手机号全局唯一校验（跨诊所 username/phone + platform_admins）
             const existing = await findUserForLogin(kv, phone);
             if (existing && existing.user) {
                 return json({ success: false, error: '该手机号已注册，请直接登录；忘记密码请联系客服重置' }, 409, context.request);
+            }
+
+            // ★ 2026-08-21 用户名唯一校验：填写了用户名时，不能与其他用户的 username/phone 冲突
+            if (regUsername) {
+                const unameTaken = await findUserForLogin(kv, regUsername);
+                if (unameTaken && unameTaken.user) {
+                    return json({ success: false, error: '该用户名已被使用，请更换或留空使用手机号登录' }, 409, context.request);
+                }
             }
 
             // ★ 2026-08-20 手机号激活申请占位拦截（一个号码只能注册一次，避免与激活流程冲突）：
@@ -1991,9 +2011,9 @@ export async function onRequest(context) {
             };
 
             const adminUser = {
-                username: phone,
+                username: regUsername || phone,   // ★ 2026-08-21 用户名选填：填了用户名则以用户名为登录账号，否则默认手机号
                 phone: phone,
-                name: (adminName || phone).trim(),
+                name: (adminName || regUsername || phone).trim(),
                 role: ROLE_CLINIC_ADMIN,
                 passwordHash,
                 salt,
@@ -2021,7 +2041,7 @@ export async function onRequest(context) {
                 message: '注册成功！管理员审核通过后即可登录使用',
                 clinic: { id: clinicId, name: clinic.name, status: 'test' },
                 admin: sanitizeUser(adminUser, clinicId, clinic.name),
-                nextStep: '请牢记登录账号（手机号）和密码，管理员审核通过后即可登录'
+                nextStep: '请牢记登录账号（用户名或手机号）和密码，管理员审核通过后即可登录'
             }, 201, context.request);
         }
 
