@@ -56,7 +56,9 @@ const GROUPS = [
         copies: [
             // ★ 复查补漏（2026-08-21）：根目录 index.html 有 script 标签但缺文件（smoke W 段抓到），
             //   补分发并纳入铁闸，防止再次漏同步
+            // ★ P2 补漏（2026-08-21）：db-offline/index-app.html 同款问题（smoke --all 首跑抓到）
             'normalize-config.js',
+            'app_project/db-offline/normalize-config.js',
             'public/normalize-config.js',
             'public/electron/normalize-config.js',
             'site-admin/normalize-config.js',

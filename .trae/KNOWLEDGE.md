@@ -361,6 +361,14 @@
 
 **生效**：云端桌面=装 Setup **1.2.112**（三元组 V1.2.112）；离线桌面=装 Setup **1.0.83**；APP/网页端不涉及（login.js 仅桌面端），无需操作。
 
+### 2.26 【P2 全表面冒烟进红线】铁闸8c（2026-08-21）
+
+- smoke-runtime 新增 `--all` 模式：**复用 sync-shared-blocks.cjs 的 HTML_FILES 单一清单**循环 7 份 index.html（新增表面只改一处），聚合 login 旁路检测，输出只打 FAIL 行+每表面一行汇总防刷屏。
+- final-verify 新增**铁闸8c**（紧随 8b）：每次构建自动跑 7 表面 + login = 134 用例，任一表面 fail 即红线删 exe。final-verify 用**环境变量** VERIFY_ASAR_PATH/VERIFY_PKG_DIR 传参（不是 --asar 命令行参数，手工验证时注意）。
+- **--all 首跑即抓到漏网**：db-offline/index-app.html 旁边缺 normalize-config.js（与根目录 index.html 同款问题，两处都是"html 有标签但文件没分发"）→ 补分发 + 入 copy-consistency（总副本 42）。证明关卡价值：这类漏网靠人肉记忆必漏，机器一扫就出。
+- 纯构建工具层改动（tools/），不影响 exe 产物内容，**无需重打包**；下次任何端构建自动生效。
+- 手工跑法：`node tools/smoke-runtime.cjs --all`（134/134）；final-verify 单测：设 VERIFY_ASAR_PATH/VERIFY_PKG_DIR 环境变量后 `node tools/final-verify.cjs`。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）

@@ -97,6 +97,17 @@ try {
   check('铁闸8b 登录窗口旁路检测异常: ' + (e && e.message ? e.message : String(e)), false);
 }
 
+// ④c 铁闸8c（P2 2026-08-21）：全表面冒烟 —— 7 份 index.html 源级循环 + login 聚合
+//     防止"只改了主表面，另一表面缺 normalize-config.js / 标记块漂移"（P2 首跑即抓到
+//     db-offline/index-app.html 缺文件）。任一表面 fail 即构建失败。
+try {
+  const ra = require('./smoke-runtime.cjs').runAll();
+  for (const l of ra.lines) if (l.indexOf('[FAIL]') >= 0 || l.indexOf('SMOKE-ALL') >= 0) console.log(l);
+  check('铁闸8c 全表面冒烟：7 html + login ' + ra.pass + '/' + ra.total, ra.fail === 0);
+} catch (e) {
+  check('铁闸8c 全表面冒烟检测异常: ' + (e && e.message ? e.message : String(e)), false);
+}
+
 console.log('');
 
 if (fail > 0) {

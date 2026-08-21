@@ -375,6 +375,41 @@ function run({ asarPath, htmlPath }) {
 }
 
 // ============================================================================
+// 5.5 --all 模式（P2 · 2026-08-21）：循环全部 7 表面 + login 旁路
+//   复用 sync-shared-blocks.cjs 的 HTML_FILES 单一清单（新增表面只改一处）。
+//   任一表面 fail > 0 → 聚合 fail，构建红线阻断。
+// ============================================================================
+function runAll() {
+  const lines = [];
+  let pass = 0, fail = 0, total = 0;
+  const HTML_FILES = require('./sync-shared-blocks.cjs').HTML_FILES;
+  for (const rel of HTML_FILES) {
+    const abs = path.join(ROOT, rel);
+    lines.push('');
+    lines.push('[SMOKE-ALL] ── 表面: ' + rel + ' ──');
+    let r;
+    try {
+      r = run({ htmlPath: abs });
+    } catch (e) {
+      total++;
+      fail++;
+      lines.push('[SMOKE][FAIL] 表面执行异常: ' + (e && e.message ? e.message : String(e)));
+      continue;
+    }
+    total += r.total; pass += r.pass; fail += r.fail;
+    // 只打印 FAIL 行与汇总，避免 7×18 行刷屏
+    for (const l of r.lines) if (l.indexOf('[FAIL]') >= 0) lines.push(l);
+    lines.push('[SMOKE-ALL] ' + rel + ' → ' + r.pass + '/' + r.total + (r.fail ? ' !!FAIL!!' : ' ✓'));
+  }
+  // login 旁路检测一并聚合（构建时 final-verify 8b 也单独跑，这里保证 --all 单独可用时全覆盖）
+  const lb = checkLoginBypass();
+  total += lb.total; pass += lb.pass; fail += lb.fail;
+  for (const l of lb.lines) if (l.indexOf('[FAIL]') >= 0) lines.push(l);
+  lines.push('[SMOKE-ALL] login-bypass → ' + lb.pass + '/' + lb.total + (lb.fail ? ' !!FAIL!!' : ' ✓'));
+  return { total, pass, fail, lines };
+}
+
+// ============================================================================
 // 6. CLI 入口
 // ============================================================================
 // ★ P1（2026-08-21）--login 模式：登录窗口旁路检测。
@@ -416,7 +451,9 @@ if (require.main === module) {
   const htmlIdx = args.indexOf('--html');
   let result;
   try {
-    if (args.includes('--login')) {
+    if (args.includes('--all')) {
+      result = runAll();
+    } else if (args.includes('--login')) {
       result = checkLoginBypass();
     } else {
       result = run({
@@ -433,4 +470,4 @@ if (require.main === module) {
   process.exit(result.fail > 0 ? 1 : 0);
 }
 
-module.exports = { run, checkLoginBypass };
+module.exports = { run, checkLoginBypass, runAll };
