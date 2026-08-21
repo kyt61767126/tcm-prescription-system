@@ -462,6 +462,15 @@
 - **举一反三**：涉及"角色显示/权限"的修改，必须全端（public/ + cloud_desktop/ + cloud_app assets）同步，且用 Grep 全量扫 `role === 'admin'` / `role !== 'admin'` 单角色判断，逐处确认是否需扩展 clinic_admin/platform_admin；三端副本必须一致（本次 3 文件各 6 处完全对齐）。
 - **生效方式**：云端网页版 public/index.html=推 GitHub 自动部署即时生效；云端桌面版 cloud_desktop/index.html=需重新 build.bat 打包 exe 并重装；云端 APP assets/public/index.html=需重新打包 APK。
 
+### 2.35 【唯一管理员设计】桌面登入多个注册管理员致角色混乱 → 内置 admin 过滤三端同步（2026-08-22）
+
+- **表象**：云端桌面用户管理界面出现"管理员(admin)[正] + 普通用户:王桂杰(wgj)"并排，机构版管理员(wgj, clinic_admin)被误显"普通用户"，用户困惑"都是普通管理员"。
+- **用户定调**：要求恢复早期设计——"一个注册账户唯一的管理员，可以编辑增加普通用户的模式"。用户自诊"是一个桌面登入了多个注册管理员造成的"。
+- **根因**：云端桌面用户管理读取**本地用户表**（localStorage local_systemUsers），云端登录用户会被补拉进本地表（见 handleLogin 云端身份权威登录）。本地内置默认 admin（username='admin', role='admin', 无 _cloudRoleSynced）+ 多个云端注册 clinic_admin 登录过后，本地表堆积多个"管理员"账号 → 角色显示混乱。
+- **修复（三端各 5 处，完全对齐）**：新增 `isBuiltinDefaultAdmin(u)` = `u.username==='admin' && u.role==='admin' && !u._cloudRoleSynced`（云端注册的 clinic_admin 带 _cloudRoleSynced=true 不会被误判）。①UserStore.get() 过滤内置 admin 并落盘清理；②renderUserList 显式 filter（双保险，覆盖未加密旧数据 fallback 路径）；③UserStore export + 兼容薄包装。云端注册的 clinic_admin 仍显示"管理员"（2.34 角色显示修复），普通用户显示"普通用户"，本地内置 admin 不再出现。仅改 JS 逻辑，HTML 结构零改动（check-interface 6/6 OK）。
+- **教训（并行 Edit 静默失败复现）**：同一文件并行两次 Edit，一处成功一处被吞——cloud_app 的 UserStore export 行、cloud_desktop 的薄包装 wrapper 行均首轮"显示成功"实则丢失。**三端同步修改禁止并行 Edit 同一文件，且每次 Edit 后必须 Grep 全量验证 5 处全部到位**。
+- **生效方式**：云端网页版 public/index.html=推 GitHub 自动部署即时生效（强制刷新 Ctrl+F5）；云端桌面版 cloud_desktop/index.html=需重新 build.bat 打包 exe 并重装；云端 APP assets/public/index.html=需重新打包 APK。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
