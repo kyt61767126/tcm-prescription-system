@@ -4707,14 +4707,9 @@ let currentUser = null;
             var role = (currentUser.role || '').toLowerCase();
             if (role === 'admin' || role === 'clinic_admin') return prescriptions;
             var filtered = prescriptions.filter(function(p) { return p.createdBy === currentUser.username; });
-            // ★修复"重新登入后历史处方不显示"：与 getAllUserPrescriptions 防护逻辑保持一致，
-            // 过滤后为空但原始数据不为空时保留原始数据，避免因 createdBy 不匹配导致处方消失。
-            // 这通常发生在用户名曾修改过、或早期数据 createdBy 字段为空的情况。
-            if (filtered.length === 0 && Array.isArray(prescriptions) && prescriptions.length > 0) {
-                console.warn('[filterPrescriptionsByPermission] currentUser=' + currentUser.username +
-                             ' 过滤后为空，但原始有 ' + prescriptions.length + ' 条处方，保留全部数据避免处方消失');
-                return prescriptions;
-            }
+            // ★安全修复（2026-08-21）：普通用户仅能查看本人处方（createdBy === username）。
+            // "历史处方消失"由服务端按用户隔离 + 本机缓存按用户归并解决；
+            // 此处严禁"过滤为空时回退全量"——否则会把全诊所其他医生的处方泄露给该用户。
             return filtered;
         }
 
@@ -7133,18 +7128,10 @@ let currentUser = null;
 
             // 如果指定了用户名，过滤该用户的处方
             if (filterUsername) {
-                const filtered = allPrescriptions.filter(p => p.createdBy === filterUsername);
-                // ★修复历史处方消失：如果按 username 过滤后为空，但原始数据不为空，
-                // 说明处方保存时的 createdBy 与当前 filterUsername 不匹配（可能用户名曾修改过）。
-                // 此时保留原始数据，让 UI 层的 filterPrescriptionsByPermission 再处理。
-                // 这样可以避免"退出登入后再次登入历史处方消失"的问题。
-                if (filtered.length > 0 || allPrescriptions.length === 0) {
-                    allPrescriptions = filtered;
-                } else {
-                    console.warn('[getAllUserPrescriptions] filterUsername=' + filterUsername +
-                                 ' 过滤后为空，但 IndexedDB 有 ' + allPrescriptions.length +
-                                 ' 条处方，保留全部数据避免处方消失');
-                }
+                // ★安全修复（2026-08-21）：显式指定 filterUsername 时，必须严格过滤为本人处方。
+                // 严禁"过滤为空时回退全量"——否则会把其他医生的处方泄露给该用户。
+                // "历史处方消失"由服务端按用户隔离 + 本机缓存按用户归并解决。
+                allPrescriptions = allPrescriptions.filter(p => p.createdBy === filterUsername);
             }
 
             // 按时间倒序排序：最新的排在最上面（自上而下）
