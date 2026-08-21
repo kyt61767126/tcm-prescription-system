@@ -167,9 +167,41 @@ export async function onRequest(context) {
             });
         }
 
+        // ====== 4) SET_CLINIC_EDITION：更新指定诊所的 edition 字段（修复早期空edition导致用户管理按钮不显示）======
+        if (action === 'set_clinic_edition') {
+            const clinicId = (url.searchParams.get('clinicId') || '').trim();
+            const edition = (url.searchParams.get('edition') || '').trim(); // cloud_clinic / cloud_personal
+            const confirm = url.searchParams.get('confirm') === 'true';
+            if (!clinicId) return Response.json({ success: false, error: '缺少clinicId' }, { status: 400 });
+            if (!['cloud_clinic', 'cloud_personal'].includes(edition)) {
+                return Response.json({ success: false, error: 'edition必须是 cloud_clinic 或 cloud_personal' }, { status: 400 });
+            }
+
+            const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
+            const clinic = clinics.find(c => c.id === clinicId);
+            if (!clinic) return Response.json({ success: false, error: '诊所不存在' }, { status: 404 });
+
+            const before = clinic.edition || '(empty)';
+            const changed = before !== edition;
+
+            if (confirm && changed) {
+                clinic.edition = edition;
+                clinic.updatedAt = new Date().toISOString();
+                await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
+            }
+
+            return Response.json({
+                success: true,
+                confirmed: confirm,
+                changed,
+                before: { name: clinic.name, id: clinic.id, edition: before },
+                after: confirm ? { edition: clinic.edition, updatedAt: clinic.updatedAt } : `若传confirm=true，将更新为 ${edition}`
+            });
+        }
+
         return Response.json({
             success: false,
-            error: '未知action，支持：list / delete_clinic / delete_request'
+            error: '未知action，支持：list / delete_clinic / delete_request / set_clinic_edition'
         }, { status: 400 });
 
     } catch (e) {
