@@ -57,19 +57,34 @@ export async function provisionCloudAccount(kv, record) {
     if (!phone || !clinicName) return false;
 
     const now = new Date().toISOString();
-    // ★ 2026-08-22 统一 edition：根据激活 type=pro/personal 生成规范 edition key
-    const targetEdition = mapActivationTypeToEdition(record.type);
+    // ★ 2026-08-22 统一 edition：根据激活类型生成规范 edition key
+    //   优先级：record.type（管理员审核最终确认的 pro/personal）
+    //         > record.edition（前端提交时用户自选的 institution/personal，兼容老记录）
+    //   两者都没有时，mapActivationTypeToEdition 内部兜底为 cloud_personal（标准版）
+    const rawActivation = record.type || record.edition;
+    const targetEdition = mapActivationTypeToEdition(rawActivation);
     const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
     let clinic = clinics.find(c => c.name === clinicName);
     let clinicsDirty = false;
 
-    // 1) 存在同名诊所 → 检查是否需要补 edition（早期遗留诊所无该字段），再补充账号
+    // 1) 存在同名诊所 → 补齐 / 更新 edition，再补充账号
+    //   规则：
+    //     - 早期遗留（clinic.edition 空）→ 补为 targetEdition
+    //     - 已有 edition 但与本次 targetEdition 不一致 → **强制更新为本次 targetEdition**
+    //       （以最近一次管理员审核的激活类型为准；例如第一次审错了标准版，第二次改回机构
+    //        版，必须覆盖，否则诊所 edition 永远卡死为标准版）
     if (clinic) {
-        if (!clinic.edition) {
+        const needPatchEdition = !clinic.edition || (clinic.edition !== targetEdition);
+        if (needPatchEdition) {
+            const oldEd = clinic.edition || '(empty)';
             clinic.edition = targetEdition;
             clinic.updatedAt = now;
+            // 同时同步 activationType 字段，保持与 edition 口径一致
+            if (record.type) clinic.activationType = record.type;
+            else if (record.edition) clinic.activationType = record.edition;
             clinicsDirty = true;
-            console.log('[AdminAccount] 历史诊所补 edition:', clinicName, '→', targetEdition);
+            console.log('[AdminAccount] 诊所 edition 更新:', clinicName, oldEd, '→', targetEdition,
+                '(source:', rawActivation, 'clinic.status=', clinic.status, ')');
         }
         if (clinicsDirty) {
             await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
