@@ -143,6 +143,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getMachineId: () => ipcRenderer.invoke('license:get-machine-id'),
         // ★ 管理员一键激活相关API
         submitAdminRequest: (data) => ipcRenderer.invoke('license:submit-admin-request', data),
+        // ★ 激活工单（规则3）：提交激活申请工单，管理员在后台工单审批页一键审批发码
+        submitTicket: (payload) => ipcRenderer.invoke('license:submit-ticket', payload),
         checkAdminStatus: (requestId) => ipcRenderer.invoke('license:check-admin-status', requestId),
         saveLicense: (licenseBase64) => ipcRenderer.invoke('license:save-license', licenseBase64),
         cancelAdminRequest: (requestId) => ipcRenderer.invoke('license:cancel-admin-request', requestId),

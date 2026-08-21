@@ -1483,6 +1483,20 @@ ipcMain.handle('license:submit-admin-request', async (event, data) => {
     }
 });
 
+// ★ 激活工单（规则3）：license-manager.submitActivationTicket → 云端 KV ticket → 后台工单审批页一键审批发码
+ipcMain.handle('license:submit-ticket', async (event, payload) => {
+    try {
+        if (!licenseManager || typeof licenseManager.submitActivationTicket !== 'function') {
+            return { success: false, error: '工单模块不可用' };
+        }
+        const result = await licenseManager.submitActivationTicket(payload);
+        return result;
+    } catch (e) {
+        console.error('[IPC] submit-ticket 异常:', e);
+        return { success: false, error: e && e.message ? e.message : '提交工单失败' };
+    }
+});
+
 // ★ 管理员一键激活 - 检查激活状态
 ipcMain.handle('license:check-admin-status', async (event, requestId) => {
     try {

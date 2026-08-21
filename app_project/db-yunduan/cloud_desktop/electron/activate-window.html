@@ -340,6 +340,7 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
     <div class="tabs">
         <div class="tab active" data-tab="admin" onclick="switchTab('admin')">📋 管理员激活</div>
         <div class="tab" data-tab="code" onclick="switchTab('code')">🔑 激活码激活</div>
+        <div class="tab" data-tab="ticket" onclick="switchTab('ticket')">📨 工单申请</div>
     </div>
 
     <!-- ====== 管理员一键激活 ====== -->
@@ -532,6 +533,68 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
         </div>
     </div>
 
+    <!-- ====== 工单申请（规则3：提交激活工单，管理员在工单审批页一键审批发码） ====== -->
+    <div id="tab-ticket" class="tab-content">
+        <!-- 工单表单 -->
+        <div id="ticketForm" class="slide-in">
+            <div class="form-group">
+                <label>诊所名称 <span class="req">*</span></label>
+                <input type="text" id="ticketClinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+                <label>联系人姓名 <span class="req">*</span></label>
+                <input type="text" id="ticketContactName" placeholder="如：王医生" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="form-group">
+                <label>联系电话 <span class="req">*</span></label>
+                <input type="text" id="ticketContactPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11">
+                <div class="field-hint" id="ticketPhoneHint">💡 管理员审批后激活码将发送到此手机号/微信</div>
+            </div>
+            <div class="form-group">
+                <label>微信号（选填）</label>
+                <input type="text" id="ticketContactWechat" placeholder="方便客服联系您" autocomplete="off" maxlength="50">
+            </div>
+            <div class="form-group">
+                <label>备注（选填）</label>
+                <input type="text" id="ticketRemark" placeholder="如：需要几个账号、发票抬头等" autocomplete="off" maxlength="200">
+            </div>
+            <div class="mid-compact" style="margin-bottom:6px;">
+                <span>🔒 设备标识：<span class="mid-val">自动附带（脱敏提交）</span></span>
+            </div>
+            <button class="btn" id="ticketSubmitBtn">📤 提交激活工单</button>
+            <div class="field-hint" style="margin-top:6px;line-height:1.6;">💡 提交后平台管理员审批，激活码将通过电话/微信发送给您；收到后请切换到「激活码激活」页输入完成激活</div>
+        </div>
+
+        <!-- 提交中 -->
+        <div id="ticketSubmitting" style="display:none;">
+            <div class="panel">
+                <div class="icon">📡</div>
+                <div class="title">正在提交工单...</div>
+                <div class="desc">正在连接服务器，请稍候</div>
+                <div class="status-box loading show" style="margin-top:14px;">
+                    <span class="spinner"></span>
+                    <span id="ticketSubmitStatus">正在提交工单...</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- 提交成功 -->
+        <div id="ticketSuccess" style="display:none;">
+            <div class="panel success">
+                <div class="icon">📨</div>
+                <div class="title">工单提交成功！</div>
+                <div class="desc">管理员审批后激活码将发送给您<br>收到激活码后请回到「激活码激活」页输入</div>
+                <div class="info-row">
+                    <div>📋 工单编号：<b id="ticketNoDisplay">--</b></div>
+                    <div>🕐 提交时间：<b id="ticketSubmitTime">--</b></div>
+                    <div>📞 联系电话：<b id="ticketSavedPhone">--</b></div>
+                </div>
+                <div class="status-text" style="background:#fff;color:#2e7d32;">⏳ 请耐心等待管理员审批（工作时间内通常 1 小时内处理）</div>
+                <button class="btn btn-secondary" id="ticketNewBtn" style="margin-top:10px;">提交新工单 / 返回</button>
+            </div>
+        </div>
+    </div>
+
     </div><!-- /tabContainer -->
 
     <!-- 通用错误提示（内联） -->
@@ -621,12 +684,14 @@ function selectEdition(edition) {
                 if (cfg.clinicName) {
                     document.getElementById('clinicName').value = cfg.clinicName;
                     document.getElementById('codeClinicName').value = cfg.clinicName;
+                    document.getElementById('ticketClinicName').value = cfg.clinicName;
                     state.clinicName = cfg.clinicName;
                     codeState.clinicName = cfg.clinicName;
                 }
                 if (cfg.doctorName) {
                     document.getElementById('adminName').value = cfg.doctorName;
                     document.getElementById('codeAdminName').value = cfg.doctorName;
+                    document.getElementById('ticketContactName').value = cfg.doctorName;
                     state.adminName = cfg.doctorName;
                     codeState.adminName = cfg.doctorName;
                 }
@@ -647,6 +712,8 @@ function switchTab(tab) {
     // 重置到步骤1
     if (tab === 'admin') {
         resetAdminToStep1();
+    } else if (tab === 'ticket') {
+        resetTicketForm();
     } else {
         resetCodeToStep1();
     }
@@ -1204,6 +1271,92 @@ document.addEventListener('keydown', e => {
 // Clear invalid class on input
 document.querySelectorAll('input').forEach(input => {
     input.addEventListener('input', () => input.classList.remove('invalid'));
+});
+
+// ============ 工单申请（规则3：license-manager.submitActivationTicket → 后台工单审批页） ============
+function showTicketPanel(which) {
+    ['ticketForm','ticketSubmitting','ticketSuccess'].forEach(id => {
+        document.getElementById(id).style.display = 'none';
+    });
+    const el = document.getElementById(which);
+    el.style.display = 'block';
+    el.classList.remove('slide-in','fade-in');
+    void el.offsetWidth;
+    el.classList.add('slide-in');
+}
+function resetTicketForm() {
+    showTicketPanel('ticketForm');
+}
+
+// 手机号即时校验提示
+document.getElementById('ticketContactPhone').addEventListener('input', e => {
+    e.target.value = V.sanitizePhone(e.target.value);
+    const hint = document.getElementById('ticketPhoneHint');
+    const v = e.target.value;
+    if (!v) {
+        hint.textContent = '💡 管理员审批后激活码将发送到此手机号/微信';
+        hint.className = 'field-hint';
+    } else if (!V.PHONE_RE.test(v)) {
+        hint.textContent = '⚠ 请输入正确的11位手机号';
+        hint.className = 'field-hint error';
+    } else {
+        hint.textContent = '✓ 手机号格式正确';
+        hint.className = 'field-hint ok';
+    }
+});
+
+// 提交工单
+document.getElementById('ticketSubmitBtn').addEventListener('click', async () => {
+    hideGlobalError();
+    const clinicName = document.getElementById('ticketClinicName').value.trim();
+    const contactName = document.getElementById('ticketContactName').value.trim();
+    const contactPhone = document.getElementById('ticketContactPhone').value.trim();
+    const contactWechat = document.getElementById('ticketContactWechat').value.trim();
+    const remark = document.getElementById('ticketRemark').value.trim();
+
+    let firstErr = null;
+    if (!clinicName) firstErr = { msg: '请填写诊所名称', id: 'ticketClinicName' };
+    else if (!contactName) firstErr = { msg: '请填写联系人姓名', id: 'ticketContactName' };
+    else if (!contactPhone && !contactWechat) firstErr = { msg: '请至少填写一种联系方式（手机号/微信号）', id: 'ticketContactPhone' };
+    else if (contactPhone && !V.PHONE_RE.test(contactPhone)) firstErr = { msg: '请输入正确的11位手机号', id: 'ticketContactPhone' };
+
+    if (firstErr) { showFieldError(firstErr.id, firstErr.msg); return; }
+
+    const btn = document.getElementById('ticketSubmitBtn');
+    btn.disabled = true;
+    showTicketPanel('ticketSubmitting');
+    document.getElementById('ticketSubmitStatus').textContent = '正在提交工单...';
+
+    try {
+        const payload = {
+            clinicName: clinicName,
+            contactName: contactName,
+            contactPhone: contactPhone,
+            contactWechat: contactWechat,
+            edition: state.edition || 'personal', // 顶部选择的版本意向
+            remark: remark
+        };
+        const result = await window.electronAPI.activate.submitTicket(payload);
+        if (result && result.success) {
+            document.getElementById('ticketNoDisplay').textContent = result.ticketNo || '--';
+            document.getElementById('ticketSubmitTime').textContent = new Date().toLocaleString('zh-CN');
+            document.getElementById('ticketSavedPhone').textContent = contactPhone || contactWechat || '--';
+            showTicketPanel('ticketSuccess');
+        } else {
+            showGlobalError((result && result.error) || '工单提交失败，请稍后重试');
+            showTicketPanel('ticketForm');
+        }
+    } catch (e) {
+        showGlobalError('网络错误：' + (e && e.message ? e.message : '请检查网络连接'));
+        showTicketPanel('ticketForm');
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+// 提交成功后返回表单
+document.getElementById('ticketNewBtn').addEventListener('click', () => {
+    resetTicketForm();
 });
 </script>
 </body>

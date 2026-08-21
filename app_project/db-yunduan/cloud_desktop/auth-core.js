@@ -1905,6 +1905,9 @@
                     // 官网购买按钮
                     '<a href="https://tcm-prescription-system.pages.dev/download" target="_blank" style="display:block;text-align:center;padding:10px;margin-bottom:8px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:bold;">🌐 前往官网购买激活码</a>' +
                     '<div style="font-size:11px;color:#999;text-align:center;margin-bottom:8px;">官网"购买激活码"Tab 可一键生成订单信息</div>' +
+                    // ★ 规则3：激活工单在线申请入口（管理员在后台工单审批页一键审批发码）
+                    '<button id="ticketApplyBtn" style="display:block;width:100%;padding:10px;margin-bottom:4px;background:linear-gradient(135deg,#07c160 0%,#06ad56 100%);color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">📩 提交激活工单（在线申请）</button>' +
+                    '<div style="font-size:11px;color:#999;text-align:center;margin-bottom:8px;">提交后管理员审批，激活码将通过电话/微信发送给您</div>' +
                     // 联系客服
                     '<div style="border-top:1px dashed #ffe082;padding-top:8px;">' +
                         '<div style="font-size:12px;color:#555;line-height:1.8;">' +
@@ -1958,6 +1961,14 @@
                 copyMachineIdBtn.textContent = ok ? '✅ 已复制' : '❌ 失败';
                 setTimeout(function() { copyMachineIdBtn.textContent = '复制ID'; }, 1500);
             });
+
+            // ★ 规则3：激活工单入口（叠加层弹窗，不关闭当前激活码输入框，提交成功后回来输码）
+            const ticketApplyBtn = card.querySelector('#ticketApplyBtn');
+            if (ticketApplyBtn) {
+                ticketApplyBtn.addEventListener('click', function() {
+                    showTicketFormModal(machineId, clinicName);
+                });
+            }
 
             // ★ 一键复制全部信息（设备识别码+诊所名，方便客户发给客服）
             const copyAllInfoBtn = card.querySelector('#copyAllInfoBtn');
@@ -2520,6 +2531,247 @@
     // ============================================================================
     const ADMIN_SUBMIT_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-submit';
     const ADMIN_STATUS_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-status';
+    // ★ 规则3：激活工单提交 API（客户在线申请激活码，管理员在后台工单审批页一键审批）
+    const ACTIVATION_TICKET_SUBMIT_URL = 'https://tcm-prescription-system.pages.dev/api/license/ticket/submit';
+
+    // ============================================================================
+    // ★ 规则3：激活工单申请弹窗（叠加在激活码弹窗之上，z-index 100000）
+    // 客户填写联系方式 → fetch ticket/submit → 管理员在后台工单审批页一键审批发码
+    // 提交成功后关闭本弹窗，回到底下的激活码输入弹窗继续输码
+    // 不修改 HTML 源码，仅运行时动态注入 DOM，符合界面保护约束
+    // ============================================================================
+    function showTicketFormModal(machineId, clinicName) {
+        // 若已打开则忽略
+        if (document.getElementById('ticketFormOverlay')) return;
+
+        const PHONE_RE = /^1[3-9]\d{9}$/;
+
+        // 版本意向归一化（institution/personal，仅供管理员参考，审批时最终确认）
+        var editionIntent = '';
+        try {
+            var ed = String(CONFIG.edition || '').toLowerCase();
+            if (['institution', 'local_institution', 'cloud_institution', 'cloud_clinic', 'clinic', 'org'].indexOf(ed) >= 0) {
+                editionIntent = 'institution';
+            } else if (['personal', 'local_personal', 'cloud_personal', 'standard', 'local', 'cloud'].indexOf(ed) >= 0) {
+                editionIntent = 'personal';
+            }
+        } catch (e) {}
+
+        const overlay = document.createElement('div');
+        overlay.id = 'ticketFormOverlay';
+        overlay.style.cssText =
+            'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const card = document.createElement('div');
+        card.style.cssText =
+            'background:white;border-radius:14px;width:100%;max-width:400px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);max-height:92vh;overflow-y:auto;';
+
+        card.innerHTML =
+            // 标题（绿色主题，呼应工单按钮）
+            '<div style="background:linear-gradient(135deg,#07c160 0%,#06ad56 100%);margin:-20px -20px 16px -20px;padding:18px;border-radius:14px 14px 0 0;text-align:center;">' +
+                '<div style="font-size:19px;font-weight:bold;color:white;">📩 激活工单申请</div>' +
+                '<div style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;">提交后管理员审批，激活码通过电话/微信发送</div>' +
+            '</div>' +
+
+            // 提示条
+            '<div style="background:#f0faf4;border:1px solid #d4f0e0;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#0a7a43;line-height:1.7;">' +
+                '💡 填写以下信息提交工单，管理员审批后激活码将发送给您；<b>收到激活码后回到上一窗口输入即可激活</b>' +
+            '</div>' +
+
+            // 表单区（容器，成功后整体隐藏）
+            '<div id="ticketFormArea">' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="ticketClinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">联系人姓名 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="ticketContactName" placeholder="如：王医生" autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">联系电话 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="ticketContactPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div id="ticketPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 管理员审批后激活码将发送到此手机号</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">微信号（选填）</label>' +
+                    '<input type="text" id="ticketContactWechat" placeholder="方便客服联系您" autocomplete="off" maxlength="50" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                '</div>' +
+                '<div style="margin-bottom:14px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">备注（选填）</label>' +
+                    '<input type="text" id="ticketRemark" placeholder="如：需要几个账号、发票抬头等" autocomplete="off" maxlength="200" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                '</div>' +
+                // 设备标识提示（自动附带，脱敏展示前12位）
+                '<div style="font-size:11px;color:#909399;margin-bottom:14px;background:#f9f9f9;border-radius:6px;padding:8px 10px;">' +
+                    '🔒 设备标识将自动附带提交：<span style="font-family:monospace;color:#555;">' + (machineId ? String(machineId).substring(0, 12) + '...' : '未获取') + '</span>' +
+                '</div>' +
+            '</div>' +
+
+            // 错误提示（默认隐藏）
+            '<div id="ticketErrorBox" style="display:none;background:#fdecea;border:1px solid #f5c6cb;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#c0392b;line-height:1.6;"></div>' +
+
+            // loading（默认隐藏）
+            '<div id="ticketLoadingBox" style="display:none;text-align:center;padding:14px;margin-bottom:12px;">' +
+                '<div style="display:inline-block;width:20px;height:20px;border:2px solid #ddd;border-top-color:#07c160;border-radius:50%;animation:ticketSpin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></div>' +
+                '<span style="font-size:13px;color:#07c160;vertical-align:middle;">正在提交工单，请稍候...</span>' +
+            '</div>' +
+
+            // 成功面板（默认隐藏）
+            '<div id="ticketSuccessBox" style="display:none;text-align:center;padding:10px 0;">' +
+                '<div style="font-size:40px;">📨</div>' +
+                '<div style="font-size:16px;font-weight:bold;color:#0a7a43;margin:8px 0;">工单提交成功！</div>' +
+                '<div style="font-size:12px;color:#666;line-height:1.8;">管理员审批后激活码将通过电话/微信发送给您<br>收到后请回到上一窗口输入激活</div>' +
+                '<div style="background:#f0faf4;border-radius:8px;padding:10px;margin:12px 0;font-size:12px;color:#333;text-align:left;">' +
+                    '<div>📋 工单编号：<b id="ticketNoText" style="font-family:monospace;color:#07c160;">--</b></div>' +
+                    '<div style="margin-top:4px;">🕐 提交时间：<b id="ticketTimeText">--</b></div>' +
+                '</div>' +
+                '<div style="font-size:11px;color:#909399;">⏳ 工作时间内通常 1 小时内处理，请耐心等待</div>' +
+            '</div>' +
+
+            // 按钮区
+            '<div style="display:flex;gap:10px;">' +
+                '<button id="ticketCancelBtn" style="flex:1;padding:12px;font-size:15px;border:1px solid #ddd;border-radius:8px;color:#666;background:white;cursor:pointer;">取消</button>' +
+                '<button id="ticketSubmitBtn" style="flex:1;padding:12px;font-size:15px;border:none;border-radius:8px;color:white;background:linear-gradient(135deg,#07c160 0%,#06ad56 100%);cursor:pointer;font-weight:bold;">📤 提交工单</button>' +
+            '</div>';
+
+        // 注入 spinner 动画（仅一次）
+        if (!document.getElementById('ticketSpinKeyframes')) {
+            const styleEl = document.createElement('style');
+            styleEl.id = 'ticketSpinKeyframes';
+            styleEl.textContent = '@keyframes ticketSpin{to{transform:rotate(360deg);}}';
+            document.head.appendChild(styleEl);
+        }
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        // 预填诊所名
+        if (clinicName) {
+            try { document.getElementById('ticketClinicName').value = clinicName; } catch (e) {}
+        }
+
+        function cleanup() {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        }
+
+        function showErr(msg) {
+            const box = document.getElementById('ticketErrorBox');
+            if (box) { box.textContent = '⚠ ' + msg; box.style.display = 'block'; }
+        }
+        function hideErr() {
+            const box = document.getElementById('ticketErrorBox');
+            if (box) { box.style.display = 'none'; }
+        }
+        function markInvalid(id) {
+            const el = document.getElementById(id);
+            if (el) el.style.borderColor = '#e53935';
+        }
+        function resetBorders() {
+            ['ticketClinicName', 'ticketContactName', 'ticketContactPhone'].forEach(function(id) {
+                const el = document.getElementById(id);
+                if (el) el.style.borderColor = '#ddd';
+            });
+        }
+
+        // 手机号实时校验
+        document.getElementById('ticketContactPhone').addEventListener('input', function() {
+            this.value = this.value.replace(/[^\d]/g, '').slice(0, 11);
+            const hint = document.getElementById('ticketPhoneHint');
+            const v = this.value;
+            if (!v) {
+                hint.textContent = '💡 管理员审批后激活码将发送到此手机号';
+                hint.style.color = '#909399';
+            } else if (!PHONE_RE.test(v)) {
+                hint.textContent = '⚠ 请输入正确的11位手机号';
+                hint.style.color = '#e53935';
+            } else {
+                hint.textContent = '✓ 手机号格式正确';
+                hint.style.color = '#07c160';
+            }
+        });
+
+        // 取消
+        document.getElementById('ticketCancelBtn').addEventListener('click', cleanup);
+
+        // 提交
+        let ticketSubmitted = false; // 成功后按钮变为"完成"，点击关闭弹窗
+        document.getElementById('ticketSubmitBtn').addEventListener('click', async function() {
+            if (ticketSubmitted) { cleanup(); return; }
+            hideErr();
+            resetBorders();
+
+            const clinicNameV = document.getElementById('ticketClinicName').value.trim();
+            const contactNameV = document.getElementById('ticketContactName').value.trim();
+            const contactPhoneV = document.getElementById('ticketContactPhone').value.trim();
+            const contactWechatV = document.getElementById('ticketContactWechat').value.trim();
+            const remarkV = document.getElementById('ticketRemark').value.trim();
+
+            // 前端校验（与后端 API 口径一致）
+            if (!clinicNameV) { markInvalid('ticketClinicName'); showErr('请填写诊所名称'); return; }
+            if (!contactNameV) { markInvalid('ticketContactName'); showErr('请填写联系人姓名'); return; }
+            if (!contactPhoneV && !contactWechatV) { markInvalid('ticketContactPhone'); showErr('请至少填写一种联系方式（手机号/微信号）'); return; }
+            if (contactPhoneV && !PHONE_RE.test(contactPhoneV)) { markInvalid('ticketContactPhone'); showErr('请输入正确的11位手机号'); return; }
+            if (!machineId || String(machineId).length < 8 || machineId === 'unknown') {
+                showErr('设备标识无效，请重启应用后重试');
+                return;
+            }
+
+            const btn = document.getElementById('ticketSubmitBtn');
+            const cancelBtn = document.getElementById('ticketCancelBtn');
+            btn.disabled = true;
+            cancelBtn.disabled = true;
+            document.getElementById('ticketLoadingBox').style.display = 'block';
+
+            const payload = {
+                machineId: String(machineId), // 只传哈希串，不传原始硬件
+                edition: editionIntent,
+                clinicName: clinicNameV,
+                contactName: contactNameV,
+                contactPhone: contactPhoneV,
+                contactWechat: contactWechatV,
+                remark: remarkV,
+                submittedAt: new Date().toISOString()
+            };
+
+            try {
+                const controller = new AbortController();
+                const t = setTimeout(function() { try { controller.abort(); } catch (e) {} }, 20000);
+                let res;
+                try {
+                    const r = await fetch(ACTIVATION_TICKET_SUBMIT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                        signal: controller.signal
+                    });
+                    res = await r.json();
+                } finally { clearTimeout(t); }
+
+                if (res && res.success) {
+                    ticketSubmitted = true;
+                    document.getElementById('ticketFormArea').style.display = 'none';
+                    document.getElementById('ticketLoadingBox').style.display = 'none';
+                    document.getElementById('ticketSuccessBox').style.display = 'block';
+                    document.getElementById('ticketNoText').textContent = res.ticketNo || '--';
+                    document.getElementById('ticketTimeText').textContent = new Date().toLocaleString('zh-CN');
+                    // 成功后：取消按钮隐藏，提交按钮变为"完成"
+                    cancelBtn.style.display = 'none';
+                    btn.disabled = false;
+                    btn.textContent = '✅ 完成，回到激活窗口';
+                } else {
+                    btn.disabled = false;
+                    cancelBtn.disabled = false;
+                    document.getElementById('ticketLoadingBox').style.display = 'none';
+                    showErr((res && res.error) ? res.error : '提交失败，请稍后重试');
+                }
+            } catch (e) {
+                btn.disabled = false;
+                cancelBtn.disabled = false;
+                document.getElementById('ticketLoadingBox').style.display = 'none';
+                showErr('网络错误，提交失败：' + ((e && e.message) ? e.message : '请检查网络连接'));
+            }
+        });
+    }
 
     global.openAdminActivate = async function () {
         try {
