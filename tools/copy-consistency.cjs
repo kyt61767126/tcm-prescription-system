@@ -54,6 +54,9 @@ const GROUPS = [
         // ★ T2（2026-08-21）CONFIG 入口归一化关卡 —— 与 permission.js 同位分发的权威源
         authority: 'shared/normalize-config.js',
         copies: [
+            // ★ 复查补漏（2026-08-21）：根目录 index.html 有 script 标签但缺文件（smoke W 段抓到），
+            //   补分发并纳入铁闸，防止再次漏同步
+            'normalize-config.js',
             'public/normalize-config.js',
             'public/electron/normalize-config.js',
             'site-admin/normalize-config.js',
