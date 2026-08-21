@@ -428,6 +428,22 @@
 - **排查坑**：测试账号连续错密码会累积 login_fail 计数（提示"剩余尝试次数 N 次"），剩 2 次时立即停手换已知密码账号（wgj/admin123），勿盲试触发锁定。
 - **生效方式**：云端网页版/APP=推 GitHub 自动生效（已验证）；云端桌面版=需重打 Setup 并重装；离线版=需重打包（不受此云端策略影响）。
 
+### 2.32 【激活工单审批】后端 4 API 全缺失致列表加载失败（提交 00e64290，2026-08-21）
+
+- **现象**：后台工单审批页报 `工单列表加载失败：Unexpected token '<'`。
+- **根因**：前端页面（public/admin + site-admin/admin + _build_sites.cjs 模板三副本）早已部署，但后端 4 个 API 路由**从未实现**（`ticket/submit`、`ticket/list`、`ticket/reject`、`activate-from-ticket`）。Cloudflare Pages 无函数无静态资源 → 回退返回 HTML（SPA fallback/404 页）→ 前端 `r.json()` 解析到 `<` 报错。**`Unexpected token '<'` = 期望 JSON 收到 HTML = API 路由不存在/异常，这是固定判别法。**
+- **新增 4 API**（KV `ticket:{no}` + `ticket_index` 最新在前上限 500，与 admin_req 模式对齐）：
+  - `POST /api/license/ticket/submit`：公开+IP 限流 10 次/时+字段清洗截断+必填校验；ticketNo=`TK-YYYYMMDD-6位随机`；提交时间以服务端为准。
+  - `GET /api/license/ticket/list`：platform_admin Bearer；**服务端脱敏** machineId 前后 6 位+打码（规则 3 双保险，前端被篡改也不泄露完整哈希）。
+  - `POST /api/license/ticket/reject`：platform_admin；写客户可见拒绝原因。
+  - `POST /api/license/activate-from-ticket`：**复用 admin-approve 全链路**——edition 意向映射 type（机构系→pro，标准系→personal，管理员可覆盖）、checkDeviceVersion、生成激活码（默认 365 天/2 台设备）、provisionCloudAccount 开云端账号（compatRecord: phone=contactPhone, adminName=contactName）、normalizeActivationPassword、setDeviceVersion、licenseBase64、回写工单管理员最终决策。
+- **前端 3 副本补鉴权**：token 取 `sessionStorage.admin_console_token`（与 admin/index.html P2-7 口径一致，兼容旧 localStorage 迁移）；401/403 友好提示重新登录；未登录引导到激活码管理页登录；XSS 转义 esc()；审批 confirm 二次确认+alert 显示激活码。
+- **import 路径三连坑（本次连续踩 2 次，全靠 build 门禁拦下）**：ticket/ 子目录到 `functions/api/_lib/auth.js` 是 `../../_lib/auth.js`（不是三层）；activate-from-ticket.js 在 license/ 根与 admin-approve 同层（`../_lib/auth.js` + `./_lib/*`）。**先写文件再跑 `npx wrangler pages functions build functions` 验证，且修正路径后必须重跑**（首次验证通过的快照不覆盖后续修改）。
+- **模板字符串转义坑**：_build_sites.cjs 内嵌 HTML 模板中 JS 源码的 `\n` 必须写 `\\n`，否则模板求值后生成 HTML 里 JS 字符串跨行=语法错误。
+- **线上实测 6/6**：①提交工单 200（TK-20260821-FSME9C）②无 token list 403 ③clinic_admin list 403（权限分层正确）④clinic_admin 审批 403 ⑤无 token 审批 403 ⑥页面新版鉴权 JS 已上线。审批"一键通过"完整链路（生成激活码+开通账号）由用户在后台页面点击实测。
+- **遗留**：客户端 UI 尚无 submitActivationTicket 调用入口（规则 3 对接最后一步，后续接入时随包更新）；邮件/短信通知未接（alert 显示激活码由操作员人工通知，与 admin-approve 现状一致）。
+- **生效方式**：云端后台/网页=推 GitHub 自动部署生效（已上线）；离线桌面/APP=待客户端接入提交入口时随包更新。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
