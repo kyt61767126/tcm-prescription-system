@@ -150,18 +150,96 @@
     }
 
     // ★ 2026-08-19 登录前保持「登录后显示版本」待登录提示，登录成功后置 _loggedIn 再刷新真实版本
+    // ★ 铁闸4（2026-08-21 全局推广至离线版）：启动画面自证真伪三元组 = Vx.x.xx | Build 时间戳 | Arch 2.xx
+    //   build-meta.json 由构建阶段 tools/write-build-meta.cjs 写入，嵌入 asar 内。
     let _loggedIn = false;
     let _configForTag = null;
+    let _buildMeta = null;
+
+    function loadBuildMeta() {
+        // electron/login.html 在 asar 内路径 = /electron/login.html，build-meta.json 在根 = /build-meta.json
+        // 所以相对路径必须是 ../build-meta.json（./build-meta.json 会去找 electron/build-meta.json，不存在）
+        var tryPaths = ['../build-meta.json', './build-meta.json', '/build-meta.json'];
+        var tryIdx = 0;
+        function tryNext() {
+            if (tryIdx >= tryPaths.length) return;
+            var p = tryPaths[tryIdx++];
+            try {
+                fetch(p, { cache: 'no-store' })
+                    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                    .then(function (m) {
+                        _buildMeta = m;
+                        // 立刻刷新一次标签（即使未登录也显示三元组，铁闸4自证真伪）
+                        try { applyEditionTag(_configForTag, true); } catch (_) {}
+                    })
+                    .catch(function () { tryNext(); });
+            } catch (e) { tryNext(); }
+        }
+        tryNext();
+    }
 
     // ★ 统一安装包：登录窗口版本标签按 config.edition 动态显示（离线标准版/离线机构版）
-    function applyEditionTag(config) {
+    function applyEditionTag(config, forceShow) {
+        _configForTag = config || _configForTag;
+
+        // ★ 铁闸4：两行紧凑格式（离线窗口同样 260 宽，单行会换行裁切）
+        var shortBuildTime = '';
+        var metaTextLine1 = '';
+        var metaTextLine2 = '';
+        if (_buildMeta) {
+            var bt = _buildMeta.buildTimeLocal || '';
+            var m = bt.match(/(\d{4}\/\d{1,2}\/\d{1,2})\s+(\d{1,2}:\d{1,2})/);
+            shortBuildTime = m ? (m[1] + ' ' + m[2]) : bt;
+            metaTextLine1 = 'V' + _buildMeta.version + ' · ' + (_buildMeta.archMarker || '');
+            metaTextLine2 = shortBuildTime ? ('Build ' + shortBuildTime) : '';
+        }
+        var metaHtml = metaTextLine1 ?
+            ('<br><span style="font-size:9px;color:#888;font-weight:normal;line-height:1.3;">' +
+             metaTextLine1 + (metaTextLine2 ? ('<br>' + metaTextLine2) : '') +
+             '</span>') : '';
+
+        // ★ 挂载点1：原有 header-section 内的 .version-tag
         var tag = document.querySelector('.version-tag');
-        if (!tag) return;
-        // ★ 登录前不写真实版本（保持待登录提示），登录成功后才刷新
-        if (!_loggedIn) return;
-        var e = (config && config.edition) || '';
-        var inst = ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'].indexOf(e) >= 0;
-        tag.textContent = '【' + (inst ? '离线机构版' : '离线标准版') + '】';
+        if (tag) {
+            if (!_loggedIn && !forceShow) {
+                tag.innerHTML = '【登录后显示版本】' + metaHtml;
+            } else {
+                var vl = (_configForTag && _configForTag.versionLabel) ? String(_configForTag.versionLabel) : '';
+                if (vl && vl.indexOf('离线') >= 0) {
+                    tag.innerHTML = '【' + vl + '】' + metaHtml;
+                } else {
+                    var e = (_configForTag && _configForTag.edition) || '';
+                    var inst = ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'].indexOf(e) >= 0;
+                    tag.innerHTML = '【' + (inst ? '离线机构版' : '离线标准版') + '】' + metaHtml;
+                }
+            }
+        }
+
+        // ★ 挂载点2：登录框底部 .login-security 下方（激活后简化登录页必显示，260窄窗口主用）
+        var security = document.querySelector('.login-security');
+        if (security) {
+            var bottomTag = document.getElementById('loginVersionTagBottom');
+            if (!bottomTag) {
+                bottomTag = document.createElement('div');
+                bottomTag.id = 'loginVersionTagBottom';
+                bottomTag.style.marginTop = '3px';
+                bottomTag.style.marginBottom = '2px';
+                bottomTag.style.fontSize = '9px';
+                bottomTag.style.color = '#999';
+                bottomTag.style.textAlign = 'center';
+                bottomTag.style.fontWeight = '600';
+                bottomTag.style.lineHeight = '1.25';
+                bottomTag.style.letterSpacing = '0.1px';
+                security.parentNode.insertBefore(bottomTag, security.nextSibling);
+            }
+            if (metaTextLine1) {
+                bottomTag.innerHTML =
+                    '<div style="font-size:9px;line-height:1.25;">' + metaTextLine1 + '</div>' +
+                    (metaTextLine2 ? '<div style="font-size:9px;line-height:1.25;color:#aab;">' + metaTextLine2 + '</div>' : '');
+            } else {
+                bottomTag.textContent = '【开发模式：未找到 build-meta.json】';
+            }
+        }
     }
 
     let _users = [];
@@ -423,6 +501,7 @@
         loadClinicName(config);
         _configForTag = config;
         applyEditionTag(config); // 登录前 _loggedIn=false 保持「登录后显示版本」待登录提示
+        loadBuildMeta(); // ★ 铁闸4（离线版全局推广）：启动画面自证真伪三元组（asar内build-meta.json）
         initLoginInput(config);
         initLoginPermissions();
         // P3-3: 安全升级（2026-08-08）：移除记住密码功能，规则5强制每次手动输密码

@@ -74,7 +74,7 @@
                 if (isInst) canChangePwd = !(user && (user.role === 'admin' || user.role === 'clinic_admin')); // 机构版管理员走用户管理
             }
         } catch(_) {}
-        // ★★★ Arch 2.25 断言（Single-Writer 最终权威）：机构版 + 管理员身份 →
+        // ★★★ Arch 2.26 断言（Single-Writer 最终权威）：机构版 + 管理员身份 →
         //   canManage 必为 true、canChangePwd 必为 false。无论 Permission 内部
         //   任何精确匹配漏判 edition 别名（institution/standard/中文标签），
         //   三件套按钮最终显示由本断言锁定，杜绝"标签机构版、按钮标准版"。
@@ -105,10 +105,11 @@
         var umb = document.getElementById('userManageBtn');
         var cpb = document.getElementById('changePwdBtn');
         var cpr = document.getElementById('clinicPrescriptionBtn');
-        // ─── Arch 2.25 可观测水印：把架构版本+修复 ID 写进 title，用户悬停按钮就能判断是否新包生效
+        // ─── Arch 2.26 可观测水印：把架构版本+修复 ID 写进 title，用户悬停按钮就能判断是否新包生效
         //   （不改变视觉文字，只改 tooltip，避免 UI 基线 SHA256 漂移）
         //   2.25 = edition 别名归一化（institution/standard/中文→规范key）+ Single-Writer 断言
-        var _archWatermark = 'Arch 2.25 | editionNormalize | instAdminAssert | roleDowngradeGuard';
+        //   2.26 = 登录页三元组双挂载点 + 两行紧凑布局 + 窗口加高30px + 全局推广到db-offline
+        var _archWatermark = 'Arch 2.26 | editionNormalize | instAdminAssert | roleDowngradeGuard';
         if (umb) { umb.style.display = p.canManage ? 'block' : 'none'; umb.style.visibility = p.canManage ? 'visible' : 'hidden'; umb.setAttribute('title', (umb.getAttribute('title') ? umb.getAttribute('title').split(' || ')[0] + ' || ' : '') + _archWatermark); }
         if (cpb) { cpb.style.display = p.canChangePwd ? 'block' : 'none'; cpb.style.visibility = p.canChangePwd ? 'visible' : 'hidden'; cpb.setAttribute('title', (cpb.getAttribute('title') ? cpb.getAttribute('title').split(' || ')[0] + ' || ' : '') + _archWatermark); }
         if (cpr) { cpr.style.display = p.canManage ? 'block' : 'none'; cpr.style.visibility = p.canManage ? 'visible' : 'hidden'; cpr.setAttribute('title', (cpr.getAttribute('title') ? cpr.getAttribute('title').split(' || ')[0] + ' || ' : '') + _archWatermark); }
