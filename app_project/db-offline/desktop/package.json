@@ -31,6 +31,7 @@
                                 "package.json",
                                 "auth-core.js",
                                 "permission.js",
+                                "normalize-config.js",
                                 "debug-logger.js",
                                 "print-utils.js",
                                 "medicine-dict.js",

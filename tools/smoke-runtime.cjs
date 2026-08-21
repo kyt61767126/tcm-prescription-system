@@ -68,6 +68,26 @@ function extractAsarIndexHtml(asarPath) {
   };
 }
 
+// 提取 asar 内任意文件（T2：normalize-config.js 为独立文件条目，不在 index.html 内联）
+function extractAsarFile(asarPath, fileName) {
+  const buf = fs.readFileSync(asarPath);
+  const headerSize = buf.readUInt32LE(4);
+  const jsonLen = buf.readUInt32LE(12);
+  const header = JSON.parse(buf.slice(16, 16 + jsonLen).toString('utf8'));
+  let found = null;
+  const walk = (files) => {
+    for (const [name, node] of Object.entries(files || {})) {
+      if (node.files) walk(node.files);
+      else if (name === fileName && node.offset !== undefined) found = node;
+    }
+  };
+  walk(header.files);
+  if (!found) return null;
+  const dataStart = 8 + headerSize;
+  const off = dataStart + Number(found.offset);
+  return buf.slice(off, off + found.size).toString('utf8');
+}
+
 function readSource({ asarPath, htmlPath }) {
   if (asarPath) {
     if (!fs.existsSync(asarPath)) throw new Error('asar 不存在: ' + asarPath);
@@ -257,6 +277,65 @@ function run({ asarPath, htmlPath }) {
       }
     }
   }
+
+  // 5.3 T2 关卡测试：__normalizeIncomingConfig（入口归一化）+ 接线存在性
+  let ncSrc = null;
+  if (asarPath) {
+    ncSrc = extractAsarFile(asarPath, 'normalize-config.js');
+  } else if (htmlPath) {
+    const p = require('path').join(require('path').dirname(htmlPath), 'normalize-config.js');
+    if (fs.existsSync(p)) ncSrc = fs.readFileSync(p, 'utf8');
+  }
+
+  if (!ncSrc) {
+    total++; fail++;
+    lines.push('[SMOKE][FAIL] 产物中缺少 normalize-config.js —— T2 入口关卡未随包交付');
+  } else if (ncSrc.indexOf('__normalizeIncomingConfig') < 0) {
+    total++; fail++;
+    lines.push('[SMOKE][FAIL] normalize-config.js 未导出 __normalizeIncomingConfig');
+  } else {
+    // N 用例：沙箱执行整文件，测关卡行为
+    const NC_CASES = [
+      ['N1 users=毒字符串 → 丢弃且不伤及其他字段', (f) => { const o = f({ users: 'garbage-len>0', clinicName: 'X' }); return o.clinicName === 'X' && !('users' in o); }],
+      ['N2 users=伪数组对象 → 丢弃', (f) => { const o = f({ users: { 0: 'a', length: 1 } }); return !('users' in o); }],
+      ['N3 users 含脏条目 → 过滤后保留合法项', (f) => { const o = f({ users: [{ username: 'ok' }, { bad: 1 }, { username: '' }] }); return Array.isArray(o.users) && o.users.length === 1 && o.users[0].username === 'ok'; }],
+      ['N4 edition 别名归一 institution→cloud_clinic', (f) => f({ edition: 'institution' }).edition === 'cloud_clinic'],
+      ['N5 edition 别名归一 standard→personal', (f) => f({ edition: 'standard' }).edition === 'personal'],
+      ['N6 cfg 非对象 → {}', (f) => Object.keys(f(null)).length === 0 && Object.keys(f('str')).length === 0],
+      ['N7 maxUsers 非数字 → 丢弃', (f) => { const o = f({ maxUsers: '5' }); return !('maxUsers' in o); }],
+      ['N8 合法 users 原样透传', (f) => { const u = [{ username: 'a', password: 'p', role: 'admin' }]; const o = f({ users: u }); return Array.isArray(o.users) && o.users.length === 1 && o.users[0].role === 'admin'; }],
+    ];
+    const sb = makeSandbox();
+    try {
+      vm.createContext(sb);
+      vm.runInContext(ncSrc, sb, { filename: 'normalize-config.js' });
+      const fn = sb.__normalizeIncomingConfig;
+      if (typeof fn !== 'function') throw new Error('__normalizeIncomingConfig 未挂到全局');
+      for (const [nm, chk] of NC_CASES) {
+        total++;
+        let ok = false;
+        try { ok = !!chk(fn); } catch (e) { lines.push('[SMOKE][FAIL] ' + nm + ' → 抛错: ' + e.message); fail++; continue; }
+        if (ok) { pass++; lines.push('[SMOKE][PASS] ' + nm); }
+        else { fail++; lines.push('[SMOKE][FAIL] ' + nm + ' → 行为不符合契约'); }
+      }
+    } catch (e) {
+      total++; fail++;
+      lines.push('[SMOKE][FAIL] normalize-config.js 沙箱执行异常: ' + e.message);
+    }
+  }
+
+  // W 接线检查：index.html 必须真正调用关卡且无旁路弱写入
+  const W_CHECKS = [
+    ['W1 index.html 已调用 __normalizeIncomingConfig', src.includes('__normalizeIncomingConfig(cfg')],
+    ['W2 index.html 已加载 normalize-config.js 标签', src.includes('normalize-config.js')],
+    ['W3 无旁路弱写入 if (cfg.users) CONFIG.users', !src.includes('if (cfg.users) CONFIG.users')],
+  ];
+  for (const [nm, ok] of W_CHECKS) {
+    total++;
+    if (ok) { pass++; lines.push('[SMOKE][PASS] ' + nm); }
+    else { fail++; lines.push('[SMOKE][FAIL] ' + nm); }
+  }
+
   return { total, pass, fail, lines };
 }
 

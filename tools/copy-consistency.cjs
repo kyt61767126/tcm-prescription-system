@@ -51,6 +51,22 @@ const GROUPS = [
         ]
     },
     {
+        // ★ T2（2026-08-21）CONFIG 入口归一化关卡 —— 与 permission.js 同位分发的权威源
+        authority: 'shared/normalize-config.js',
+        copies: [
+            'public/normalize-config.js',
+            'public/electron/normalize-config.js',
+            'site-admin/normalize-config.js',
+            'site-admin/electron/normalize-config.js',
+            'app_project/db-yunduan/cloud_desktop/normalize-config.js',
+            'app_project/db-yunduan/cloud_desktop/electron/normalize-config.js',
+            'app_project/db-yunduan/cloud_app/app/src/main/assets/public/normalize-config.js',
+            'app_project/db-offline/desktop/normalize-config.js',
+            'app_project/db-offline/desktop/electron/normalize-config.js',
+            'app_project/db-offline/app/app/src/main/assets/public/normalize-config.js'
+        ]
+    },
+    {
         authority: 'shared/edition-lock.js',
         copies: [
             'public/edition-lock.js',

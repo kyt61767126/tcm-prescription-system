@@ -1,6 +1,6 @@
 {
     "name": "tcm-prescription-cloud",
-    "version": "1.2.107",
+    "version": "1.2.108",
     "description": "惠康中医-云端",
     "main": "electron/main.js",
     "scripts": {
@@ -39,6 +39,7 @@
             "**/node_modules/fs-extra/**/*",
             "auth-core.js",
             "permission.js",
+            "normalize-config.js",
             "debug-logger.js",
             "print-utils.js",
             "medicine-dict.js",
