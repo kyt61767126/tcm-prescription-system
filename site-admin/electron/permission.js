@@ -73,14 +73,43 @@ try {
         //   isInstitutional()=false → 机构版管理员看不到【用户管理】。
         //   修复：每次判定实时读取 CONFIG.edition → window.EDITION → this._edition，
         //   任何一处更新（登录/激活/配置同步）立即生效，标签与权限永远同轨。
+        // ★★★ 2026-08-21 Arch 2.25 根治【edition 别名漏判——云端机构版按钮复发真根因】：
+        //   激活流程（activate-schema.js/auth-core.js/activate-window.html）写入 userData 的
+        //   edition 值是 'institution'（机构）/ 'standard'（标准）/ 中文标签（云端机构版…），
+        //   而 enforceEditionBinding() 只在有"验签通过的正式 license"时才纠正为规范 key。
+        //   无 license 的云端激活 → userData config.json 永远是 'institution' →
+        //   isInstitutional() 精确列表不命中 → canManageUsersByRole()=false、
+        //   canChangePassword()=true → 管理员看到【修改密码】而非【用户管理】，
+        //   同时 refreshVersionTags 的列表含 'institution' → 标签却显示【云端机构版】。
+        //   修复：_currentEdition() 统一归一化（单一读取链），所有谓词自动拿到规范 key。
+        _normalizeEdition(e) {
+            var s = String(e || '').trim();
+            if (!s) return s;
+            var x = s.toLowerCase();
+            if (x === 'institution' || x === 'institutional' || x === 'jigou') return 'cloud_clinic';
+            if (x === 'standard') return 'personal';
+            if (x === 'yj') return 'cloud_clinic';
+            if (x === 'yb') return 'cloud_personal';
+            if (x === 'lj') return 'offline_clinic';
+            if (x === 'lb') return 'offline_personal';
+            if (x.indexOf('云端机构') >= 0) return 'cloud_clinic';
+            if (x.indexOf('云端标准') >= 0) return 'cloud_personal';
+            if (x.indexOf('离线机构') >= 0) return 'offline_clinic';
+            if (x.indexOf('离线标准') >= 0) return 'offline_personal';
+            if (x.indexOf('机构版') >= 0) return 'clinic';
+            if (x.indexOf('标准版') >= 0) return 'personal';
+            return s;
+        },
         _currentEdition() {
+            var v = '';
             try {
-                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) return String(CONFIG.edition);
+                if (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) v = String(CONFIG.edition);
             } catch (_) {}
             try {
-                if (global.EDITION) return String(global.EDITION);
+                if (!v && global.EDITION) v = String(global.EDITION);
             } catch (_) {}
-            return String(this._edition || '');
+            if (!v) v = String(this._edition || '');
+            return this._normalizeEdition(v);
         },
 
         // 主动同步 edition（登录后版本切换时可调用；三处同写保持单一权威）
@@ -101,19 +130,44 @@ try {
         // 旧 key（cloud / offline / clinic_custom）向后兼容
         // ★ 2026-08-20 全部改为 _currentEdition() 动态判定（根治版本按钮反复失灵）
         isCloud() {
-            return ['cloud', 'cloud_personal', 'cloud_clinic'].includes(this._currentEdition());
+            var e = this._currentEdition();
+            if (['cloud', 'cloud_personal', 'cloud_clinic'].includes(e)) return true;
+            // Arch 2.25 宽松兜底：别名/未知值按产品形态判（云端桌面/网页必然 APP_MODE=cloud）
+            var x = String(e).toLowerCase();
+            if (x.indexOf('cloud') >= 0 || x.indexOf('云端') >= 0) return true;
+            try { if (String(global.APP_MODE || '') === 'cloud') return true; } catch (_) {}
+            try { if (String(global.PRODUCT_NAME || '') === '惠康中医-云端') return true; } catch (_) {}
+            return false;
         },
         isOffline() {
-            return ['offline', 'personal', 'clinic_custom', 'clinic',
-                    'offline_personal', 'offline_clinic'].includes(this._currentEdition());
+            var e = this._currentEdition();
+            if (['offline', 'personal', 'clinic_custom', 'clinic',
+                    'offline_personal', 'offline_clinic'].includes(e)) return true;
+            var x = String(e).toLowerCase();
+            if (x.indexOf('offline') >= 0 || x.indexOf('离线') >= 0) return true;
+            try { if (String(global.APP_MODE || '') === 'offline') return true; } catch (_) {}
+            try { if (String(global.PRODUCT_NAME || '') === '惠康中医-本地') return true; } catch (_) {}
+            return false;
         },
         // 是否为"标准版（单用户，不能建子账号）"：YB + LB
         isPersonal() {
-            return ['personal', 'cloud_personal', 'offline_personal'].includes(this._currentEdition());
+            var e = this._currentEdition();
+            if (['personal', 'cloud_personal', 'offline_personal', 'standard'].includes(e)) return true;
+            var x = String(e).toLowerCase();
+            if (x.indexOf('标准版') >= 0 || x.indexOf('personal') >= 0) return true;
+            return false;
         },
         // 是否为"机构版（多用户，管理子账号）"：YJ + LJ（兼容旧 clinic_custom/offline/clinic）
+        // ★ Arch 2.25：归一化后 institution→cloud_clinic 已命中；再加宽松兜底防未知别名漏判
         isInstitutional() {
-            return ['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud'].includes(this._currentEdition());
+            var e = this._currentEdition();
+            if (['clinic_custom', 'offline', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud',
+                    'institution', 'institutional'].includes(e)) return true;
+            var x = String(e).toLowerCase();
+            if (x.indexOf('机构版') >= 0) return true;
+            if (x.indexOf('clinic') >= 0 && x.indexOf('personal') < 0) return true;
+            if (x.indexOf('institution') >= 0) return true;
+            return false;
         },
         // 旧 API 兼容：isClinicCustom = isInstitutional
         isClinicCustom() {
@@ -166,19 +220,19 @@ try {
                 // ★★ 2026-08-19 机构版授权豁免：若当前 edition 为机构版，永不强制标准版。
                 //   （离线/云端机构版激活后，主进程 get-app-config 将 config.edition 校正为机构版值，
                 //    若此处仍按 personal/产品名强制标准版，会让激活的机构版被错误降级为单用户标准版）
-                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic','cloud'];
+                var INST_ED = ['clinic','offline_clinic','clinic_custom','offline','cloud_clinic','cloud','institution','institutional'];
                 try {
-                    var cfgInst = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ? String(CONFIG.edition) : '';
-                    var winInst = String(global.EDITION || '');
+                    var cfgInst = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ? this._normalizeEdition(String(CONFIG.edition)) : '';
+                    var winInst = this._normalizeEdition(String(global.EDITION || ''));
                     if (cfgInst && INST_ED.indexOf(cfgInst) >= 0) return false;
                     if (winInst && INST_ED.indexOf(winInst) >= 0) return false;
                     // ★ 2026-08-20 动态判定：_currentEdition() 实时读 CONFIG/EDITION，登录后机构版立即豁免
                     var curEd = this._currentEdition();
                     if (curEd && INST_ED.indexOf(curEd) >= 0) return false;
                 } catch (_) {}
-                // 判据1：CONFIG/WINDOW.EDITION 是 personal
-                var cfgEd = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ? String(CONFIG.edition) : '';
-                var winEd = String(global.EDITION || '');
+                // 判据1：CONFIG/WINDOW.EDITION 是 personal（Arch 2.25：standard/标准版 归一为 personal）
+                var cfgEd = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.edition) ? this._normalizeEdition(String(CONFIG.edition)) : '';
+                var winEd = this._normalizeEdition(String(global.EDITION || ''));
                 if (['personal','offline_personal'].indexOf(cfgEd) >= 0) return true;
                 if (['personal','offline_personal'].indexOf(winEd) >= 0) return true;
 

@@ -68,21 +68,21 @@ markers.push({ key: 'asar 版本号 ' + version, ok: versionRe.test(ISO), value:
 // D. 云端产品标识（若产品是云端机构版，锚点误伤保护必须存在）
 if (/云|cloud/i.test(pkg.name || '')) {
     markers.push({ key: '云端锚点误伤保护 _isCloudProd', ok: /_isCloudProd|anyCloudHint|isCloudProduct/.test(ISO) });
-    // D2. Arch 2.24（2026-08-21 机构版复发根治）专属 4 条修复标识
-    //     anyCloudHint    = 无 APP_MODE 也能判云端，防 isDesktopLocal 误判
-    //     _roleSaysAdmin  = localStorage 预登录管理员豁免，防 enforce 在登录前打 role=user
-    //     _mustNotDowngrade = admin/clinic_admin 身份永不降级
-    //     Arch 2.24       = 可观测水印（按钮 tooltip 上的架构版本）
-    var _d2_1 = /anyCloudHint/.test(ISO);
-    var _d2_2 = /_roleSaysAdmin/.test(ISO);
-    var _d2_3 = /_mustNotDowngrade/.test(ISO);
-    var _d2_4 = /Arch 2\.24/.test(ISO);
-    var _d2_ok = _d2_1 && _d2_2 && _d2_3 && _d2_4;
-    markers.push({ key: 'Arch 2.24 anyCloudHint 云端无APP_MODE判', ok: _d2_1 });
-    markers.push({ key: 'Arch 2.24 _roleSaysAdmin 存储管理员豁免', ok: _d2_2 });
-    markers.push({ key: 'Arch 2.24 _mustNotDowngrade 永不打user', ok: _d2_3 });
-    markers.push({ key: 'Arch 2.24 水印(按钮title含Arch2.24)', ok: _d2_4 });
-    markers.push({ key: 'Arch 2.24 云端复发修复 4 项标识(ALL)', ok: _d2_ok });
+    // D2. Arch 2.24（2026-08-21 上午）4 条修复标识
+    markers.push({ key: 'Arch 2.24 anyCloudHint 云端无APP_MODE判', ok: /anyCloudHint/.test(ISO) });
+    markers.push({ key: 'Arch 2.24 _roleSaysAdmin 存储管理员豁免', ok: /_roleSaysAdmin/.test(ISO) });
+    markers.push({ key: 'Arch 2.24 _mustNotDowngrade 永不打user', ok: /_mustNotDowngrade/.test(ISO) });
+    // D3. Arch 2.25（2026-08-21 真根因修复）3 条标识
+    //     _normalizeEdition = Permission 归一化 institution/standard/中文标签→规范key
+    //     （激活写入 edition='institution'，isInstitutional() 精确表不认 → 按钮判标准版真根因）
+    //     Arch 2.25 水印 = 按钮可观测版本（悬停 tooltip 出现即新包生效）
+    var _d3_1 = /_normalizeEdition/.test(ISO);
+    var _d3_2 = /Arch 2\.25/.test(ISO);
+    var _d3_3 = /instAdminAssert/.test(ISO);
+    markers.push({ key: 'Arch 2.25 _normalizeEdition 别名归一化', ok: _d3_1 });
+    markers.push({ key: 'Arch 2.25 水印(按钮title含Arch2.25)', ok: _d3_2 });
+    markers.push({ key: 'Arch 2.25 instAdminAssert 机构管理员断言', ok: _d3_3 });
+    markers.push({ key: 'Arch 2.25 云端真根因修复 3 项(ALL)', ok: _d3_1 && _d3_2 && _d3_3 });
 }
 
 var fail = 0;
@@ -108,6 +108,30 @@ if (fail > 0) {
     console.error('  · build.files 列表是否包含 button-manager.js / edition-lock.js？');
     console.error('  · 新版本修复代码是否在 shared/permission.js auth-core.js 中同步完毕？');
     console.error('  · 重打前是否 Remove-Item dist_new（asar 缓存复用会复用旧包！）');
+    // ★★★ Arch 2.25 红线强制：electron-builder 已产出的 Setup exe 一律删除，
+    //   杜绝"校验失败但 exe 还在 dist 里被拿去安装"（1.2.88 事故：验证 FAIL 6 项，
+    //   用户仍装上了无 Arch 2.24 修复的旧 asar 包）。失败构建 = 不可交付。
+    try {
+        // appOutDir = <output>/win-unpacked/resources/app.asar → output 根 = 上三级
+        var outputRoot = path.dirname(path.dirname(path.dirname(appOutDir)));
+        var quarantined = [];
+        fs.readdirSync(outputRoot).forEach(function (f) {
+            if (/\.exe$/i.test(f)) {
+                try {
+                    var fp = path.join(outputRoot, f);
+                    fs.unlinkSync(fp);
+                    quarantined.push(f);
+                } catch (e) { /* exe 被占用（可能正在安装）→ 无法删除，仅提示 */ }
+            }
+        });
+        if (quarantined.length > 0) {
+            console.error('  ★ 红线：已删除不可交付的 exe → ' + quarantined.join(' | '));
+        } else {
+            console.error('  ★ 红线：output 根目录无 exe（或被占用无法删除，请手动删除后再重打包）');
+        }
+    } catch (e) {
+        console.error('  ★ 红线删除 exe 失败（忽略）:', e.message || e);
+    }
     process.exit(1);
 }
 
