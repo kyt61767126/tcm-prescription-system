@@ -158,50 +158,75 @@
     let _buildMeta = null;
 
     function loadBuildMeta() {
-        // file://asar 内直接 fetch 相对路径即可（asarmor 不拦截同域 get 请求）
-        try {
-            fetch('./build-meta.json', { cache: 'no-store' })
-                .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-                .then(function (m) {
-                    _buildMeta = m;
-                    // 立刻刷新一次标签（即使未登录也显示三元组在"登录后显示版本"位置）
-                    try { applyEditionTag(_configForTag, true); } catch (_) {}
-                })
-                .catch(function (e) {
-                    console.warn('[login] build-meta.json 缺失（可能是非构建环境/开发模式）：', e && e.message);
-                });
-        } catch (e) { /* fetch 未定义（理论不会） */ }
+        // electron/login.html 在 asar 内路径 = /electron/login.html，build-meta.json 在根 = /build-meta.json
+        // 所以相对路径必须是 ../build-meta.json（./build-meta.json 会去找 electron/build-meta.json，不存在）
+        var tryPaths = ['../build-meta.json', './build-meta.json', '/build-meta.json'];
+        var tryIdx = 0;
+        function tryNext() {
+            if (tryIdx >= tryPaths.length) return;
+            var p = tryPaths[tryIdx++];
+            try {
+                fetch(p, { cache: 'no-store' })
+                    .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+                    .then(function (m) {
+                        _buildMeta = m;
+                        // 立刻刷新一次标签（即使未登录也显示三元组在"登录后显示版本"位置）
+                        try { applyEditionTag(_configForTag, true); } catch (_) {}
+                    })
+                    .catch(function () { tryNext(); });
+            } catch (e) { tryNext(); }
+        }
+        tryNext();
     }
 
     function applyEditionTag(config, forceShow) {
-        var tag = document.querySelector('.version-tag');
-        if (!tag) return;
         _configForTag = config || _configForTag;
 
         // ★ 铁闸4：有 buildMeta 时，登录前也显示"待登录提示+三元组"（自证真伪）
-        var metaHtml = '';
+        var metaText = '';
         if (_buildMeta) {
-            metaHtml = '<br><span style="font-size:10px;color:#888;font-weight:normal;">' +
-                       'V' + _buildMeta.version + ' · Build ' +
+            metaText = 'V' + _buildMeta.version + ' · Build ' +
                        (_buildMeta.buildTimeLocal || '') + ' · ' +
-                       (_buildMeta.archMarker || '') +
-                       '</span>';
+                       (_buildMeta.archMarker || '');
+        }
+        var metaHtml = metaText ?
+            ('<br><span style="font-size:10px;color:#888;font-weight:normal;">' + metaText + '</span>') : '';
+
+        // ★ 挂载点1：原有 header-section 内的 .version-tag（云端标准登录页使用）
+        var tag = document.querySelector('.version-tag');
+        if (tag) {
+            if (!_loggedIn && !forceShow) {
+                tag.innerHTML = '【登录后显示版本】' + metaHtml;
+            } else {
+                var vl = (_configForTag && _configForTag.versionLabel) ? String(_configForTag.versionLabel) : '';
+                if (vl && vl.indexOf('云端') >= 0) {
+                    tag.innerHTML = '【' + vl + '】' + metaHtml;
+                } else {
+                    var e = (_configForTag && _configForTag.edition) || '';
+                    var inst = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'].indexOf(e) >= 0;
+                    tag.innerHTML = '【' + (inst ? '云端机构版' : '云端标准版') + '】' + metaHtml;
+                }
+            }
         }
 
-        if (!_loggedIn && !forceShow) {
-            // 登录前保持骨架提示，但附加三元组（装了假包 → 用户立刻看出 Arch 版本对不上）
-            tag.innerHTML = '【登录后显示版本】' + metaHtml;
-            return;
+        // ★ 挂载点2：登录框底部 .login-security 下方（激活后简化登录页必显示，防止 .header-section 被隐藏时三元组丢失）
+        //    固定显示版本三元组（独立于 header-section），位置在用户截图的「🛡️安全登录·数据加密保护」正下方，一定可见。
+        var security = document.querySelector('.login-security');
+        if (security) {
+            var bottomTag = document.getElementById('loginVersionTagBottom');
+            if (!bottomTag) {
+                bottomTag = document.createElement('div');
+                bottomTag.id = 'loginVersionTagBottom';
+                bottomTag.style.marginTop = '8px';
+                bottomTag.style.fontSize = '10px';
+                bottomTag.style.color = '#999';
+                bottomTag.style.textAlign = 'center';
+                bottomTag.style.fontWeight = '600';
+                bottomTag.style.letterSpacing = '0.3px';
+                security.parentNode.insertBefore(bottomTag, security.nextSibling);
+            }
+            bottomTag.textContent = metaText || '【开发模式：未找到 build-meta.json】';
         }
-        // ★ 云端产品版本标签必须带"云端"前缀：优先取配置 versionLabel，缺失则按 edition 推断
-        var vl = (_configForTag && _configForTag.versionLabel) ? String(_configForTag.versionLabel) : '';
-        if (vl && vl.indexOf('云端') >= 0) {
-            tag.innerHTML = '【' + vl + '】' + metaHtml;
-            return;
-        }
-        var e = (_configForTag && _configForTag.edition) || '';
-        var inst = ['clinic_custom', 'cloud', 'clinic', 'cloud_clinic', 'offline_clinic', 'institution'].indexOf(e) >= 0;
-        tag.innerHTML = '【' + (inst ? '云端机构版' : '云端标准版') + '】' + metaHtml;
     }
 
     let _users = [];
