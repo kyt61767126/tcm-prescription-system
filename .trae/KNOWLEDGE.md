@@ -314,6 +314,33 @@
 - **教训**：PowerShell 无 bash heredoc，多行 commit message 用临时文件 `git commit -F`（首条命令 parse error 时**整条命令含前面的 git add 都不执行**，重跑必须从 add 开始）。
 - 生效：离线桌面/云端桌面=重打包 exe；离线 APP=重打 APK（MainActivity+assets 都改了）；云端网页版零改动。
 
+### 2.24 【2026-08-21 全天】机构版按钮三连事故 → 最小充分集 T1-T4 根治（Setup 1.2.110，提交 f91e52c7/443c054c/d7d2e41d/674b7b8c）
+
+**事故链（按时间）**：
+- ①1.2.89 假包：dist 被 4 个旧惠康进程锁定 → asar 写失败 → NSIS 用旧 win-unpacked 打出"新版号+旧内容"。教训：打包前必杀 `Get-Process *惠康*`；用户报"新版无效"先看按钮 tooltip 的 Arch 水印，水印旧=假包/旧进程，别改代码；交付版本号必须跳号。
+- ②1.2.96：7 道铁闸（copy-consistency 哈希、CONFIG.edition 写入端归一化、GATE-KEEPER 9 项、asar 备份恢复、final-verify 红线等）。
+- ③1.2.98/Arch 2.26：登录页三元组（版本|Build时间|Arch水印）两行紧凑显示，登录窗 400→430px，fetch 3 路径重试，双挂载点。用户靠三元组自辨包真伪。
+- ④1.2.101 用户管理按钮打不开：`getDefaultUsers()` 对 CONFIG.users 弱检查（`&& length>0`），非数组时 `.map` 抛 TypeError 且四层调用链无兜底 → 静默失败。
+
+**最小充分集方案（T1-T4，全部完成）**：
+- T1 构建冒烟闸：`tools/smoke-runtime.cjs`（铁闸8），零依赖 vm 沙箱 + 毒数据注入（C1-C7：非数组字符串/伪数组对象/undefined/毒 localStorage/坏 base64/往返）。
+- T4 e2e×3：`e2e/run-e2e.cjs` Playwright，E1 登录、E2 用户管理开合、E3 毒数据注入后 modal 仍渲染兜底管理员。已接构建红线。
+- T2 入口归一化：`shared/normalize-config.js`（`__normalizeIncomingConfig`），users/edition/maxUsers 单一收口净化，N1-N8 用例。
+- T3 UserStore 权威源：`shared/user-store.js` + **标记块内联分发**（详见下）。
+
+**T3 标记块架构（本次核心）**：
+- 权威源 `shared/user-store.js` 生成自包含块（IIFE+薄包装），以 `// >>> USER-STORE` / `// <<< USER-STORE-END` 行首注释锚点内联到 **7 份 index.html**（根/index-app/public/离线桌面/离线APP/云端桌面/云端APP），替换散落的 getDefaultUsers/getUsers/saveUsers/simpleEncrypt/simpleDecrypt。
+- `tools/sync-shared-blocks.cjs`：`--check` 校验 / 默认同步；`copy-consistency.cjs` 铁闸1 已扩展——标记块哈希≠权威源即构建失败（总副本 38）。
+- `smoke-runtime.cjs` 新路径：检测到标记块→整块 vm 执行（自包含），旧路径兼容未同步产物。
+
+**T3 两个坑（务必牢记）**：
+- asar 内 index.html 用 latin1 读 → 中文注释乱码 → extractBlock 匹配失败。**必须 utf8 读**。
+- 权威源文档注释里出现锚点文字（括号说明）→ 裸 `indexOf` 误匹配截断块。**必须用行首注释形式的 ASCII 锚点**（`'\n        // >>> USER-STORE'`）精确匹配。
+
+**验证矩阵（T3 交付前）**：copy-consistency 38/38 ✓；smoke 18/18（html+asar 双通道）✓；e2e 3/3（含 E3 毒数据）✓；Setup 1.2.110 产出 ✓。
+
+**生效**：云端网页/云端APP=推 GitHub 自动；云端桌面=装 Setup 1.2.110（核对三元组 V1.2.110|Build 2026/8/21|Arch 2.26）；离线桌面/离线APP=需重打包（标记块已入源码）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
