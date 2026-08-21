@@ -471,6 +471,17 @@
 - **教训（并行 Edit 静默失败复现）**：同一文件并行两次 Edit，一处成功一处被吞——cloud_app 的 UserStore export 行、cloud_desktop 的薄包装 wrapper 行均首轮"显示成功"实则丢失。**三端同步修改禁止并行 Edit 同一文件，且每次 Edit 后必须 Grep 全量验证 5 处全部到位**。
 - **生效方式**：云端网页版 public/index.html=推 GitHub 自动部署即时生效（强制刷新 Ctrl+F5）；云端桌面版 cloud_desktop/index.html=需重新 build.bat 打包 exe 并重装；云端 APP assets/public/index.html=需重新打包 APK。
 
+### 2.36 【彻底锁死唯一管理员】7端全局禁止把普通用户改成管理员（提交 9559f2ed，2026-08-22）
+
+- **需求**：用户要求"彻底禁止在添加/编辑用户时把普通用户改成管理员，彻底锁死唯一管理员"，并统一全局、更新离线各端。
+- **实现（7 端完全对齐）**：云端网页(public)、云端桌面(cloud_desktop)、云端APP(cloud_app assets)、离线桌面(desktop)、离线APP(index-app + app assets)、根目录版(index.html) 共 7 个 index.html，三重保障：
+  1. **运行时移除选项**：`showUserManageModal()` 打开时循环删除 `#newUserRole` 下拉里 `value==='admin'` 的 option（DOM 操作，不改静态 HTML）；
+  2. **编辑只读**：编辑弹窗 `#editUserRole` 加 `disabled` 属性（readonly 展示，已存在的 admin/clinic_admin/platform_admin 只是展示不变）；
+  3. **代码硬编码**：`handleAddUser()` 中 `const newRole = 'user'`（新增一律普通用户）；`confirmEditUser()` 保存时 `role = (已是admin/clinic_admin/platform_admin) ? 原角色 : 'user'`（普通用户永远无法被改成管理员）。
+- **验证**：check-interface 6/6 OK（仅 JS 逻辑改动，静态 body 零变化）；全部 7 文件 acorn 语法全量解析通过（marker 块均 OK）。
+- **教训（语法校验工具自身 bug 引发误报）**：`_check_js_tmp.cjs` 初版用 `html.indexOf('<script', i)` 找脚本块，会命中 **HTML 注释内的字面 `<script>` 字符串**（如 `<!-- ★ 双重保障：通过 <script> 标签加载... -->`），把大段 HTML 误当 JS 提取导致 "Unexpected token (1:6)" 假报错。修复：扫描循环里取最近的 `<!--` 与 `<script` 位置，注释优先跳过（注意注释前常有换行，`startsWith('<!--')` 会漏判，必须用 `indexOf` 比较位置）。**写 HTML 内联脚本提取工具必须先跳过 HTML 注释，否则注释里含 `<script>` 字样必误报**。
+- **生效方式**：云端网页版=推 GitHub 自动部署即时生效（Ctrl+F5 强刷）；云端桌面版=重新 build.bat 打包 exe 重装；云端APP=重新打包 APK 重装；离线桌面版=重新 build.bat 打包 exe；离线APP=重新打包 惠康中医-本地.apk 重装。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
