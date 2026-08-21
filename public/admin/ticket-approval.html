@@ -63,6 +63,9 @@ tr:hover{background:#f9fafc}
 (function(){
   var LIST='/api/license/ticket/list', APPR='/api/license/activate-from-ticket', REJ='/api/license/ticket/reject';
   var tbody = document.getElementById('ticket-tbody');
+  // ★ 鉴权：与 admin/index.html 同源会话（sessionStorage，P2-7 口径），兼容旧 localStorage 迁移
+  var token = sessionStorage.getItem('admin_console_token') || localStorage.getItem('license_admin_token') || '';
+  function authHeaders(extra){ var h = extra||{}; if(token) h['Authorization']='Bearer '+token; return h; }
   function mask(id){ if(!id) return '-'; if(id.length<=12) return id; return id.slice(0,6)+'••••'+id.slice(-6); }
   function tagHTML(s){
     if(s==='submitted'||s==='pending') return '<span class="tag tag-pending">待审批</span>';
@@ -79,10 +82,10 @@ tr:hover{background:#f9fafc}
       return '<tr>'+
         '<td class="mono">'+(t.ticketNo||'-')+'</td>'+
         '<td>'+(t.submittedAt||'-')+'</td>'+
-        '<td>'+(t.clinicName||'-')+'</td>'+
-        '<td>'+(t.edition||'-')+'</td>'+
-        '<td>'+(t.contactName||'-')+'</td>'+
-        '<td>'+(t.contactPhone||t.contactWechat||'-')+'</td>'+
+        '<td>'+esc(t.clinicName)+'</td>'+
+        '<td>'+esc(t.edition)+'</td>'+
+        '<td>'+esc(t.contactName)+'</td>'+
+        '<td>'+esc(t.contactPhone||t.contactWechat)+'</td>'+
         '<td class="mono" title="完整哈希仅写入激活校验，不回显">'+mask(t.machineId)+'</td>'+
         '<td>'+tagHTML(t.status)+'</td>'+
         '<td>'+
@@ -93,9 +96,19 @@ tr:hover{background:#f9fafc}
         '</td></tr>';
     }).join('');
   }
+  function esc(s){ if(!s) return '-'; return String(s).replace(/[&<>"']/g, function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
   async function load(){
     try{
-      var r=await fetch(LIST,{credentials:'same-origin'});
+      if(!token){
+        tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:#e67e22;padding:40px">未登录：请先在 <a href="index.html">激活码管理</a> 页登录平台管理员后再查看工单</td></tr>';
+        return;
+      }
+      var r=await fetch(LIST,{credentials:'same-origin',headers:authHeaders()});
+      if(r.status===401||r.status===403){
+        var d0=await r.json().catch(function(){return {};});
+        tbody.innerHTML='<tr><td colspan="9" style="text-align:center;color:#e67e22;padding:40px">鉴权失败：'+(d0.error||('HTTP '+r.status))+'，请重新登录后台</td></tr>';
+        return;
+      }
       var d=await r.json();
       render(d&&d.list?d.list:[]);
     }catch(e){
@@ -107,13 +120,16 @@ tr:hover{background:#f9fafc}
     var no=btn.getAttribute('data-no'), act=btn.getAttribute('data-action');
     try{
       if(act==='approve'){
-        var r=await fetch(APPR,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({ticketNo:no})});
+        if(!confirm('确认通过工单 '+no+'？将自动生成激活码（默认365天/2台设备）并开通云端账号。')) return;
+        var r=await fetch(APPR,{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),credentials:'same-origin',body:JSON.stringify({ticketNo:no})});
         var d=await r.json();
-        alert(d.success?('通过成功，激活码：'+(d.code||'（已发送给客户）')):('失败：'+(d.error||'未知')));
+        alert(d.success
+          ? ('✅ 审批通过\n激活码：'+(d.code||'（见详情）')+'\n\n请将激活码告知客户（客户也可直接用注册手机号+默认密码 admin 登录云端）。')
+          : ('失败：'+(d.error||'未知')));
         if(d.success) load();
       }else if(act==='reject'){
         var reason=prompt('请输入拒绝原因（客户可见）：'); if(reason===null) return;
-        var r=await fetch(REJ,{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({ticketNo:no,reason:reason})});
+        var r=await fetch(REJ,{method:'POST',headers:authHeaders({'Content-Type':'application/json'}),credentials:'same-origin',body:JSON.stringify({ticketNo:no,reason:reason})});
         var d=await r.json();
         alert(d.success?'已拒绝':('失败：'+(d.error||'未知')));
         if(d.success) load();
