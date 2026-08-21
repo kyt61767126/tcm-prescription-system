@@ -374,11 +374,20 @@ function run({ asarPath, htmlPath }) {
   // S 区块：症状词典（symptom-dict.js）冒烟 —— 2026-08-21 舌脉快捷录入
   //   asar 模式取包内文件；html 模式取同目录文件；任一表面缺失即红线。
   let sdSrc = null;
+  let sdTemplateSurface = false;
   if (asarPath) {
     try { sdSrc = extractAsarFile(asarPath, 'symptom-dict.js'); } catch (e) { sdSrc = null; }
   } else if (htmlPath) {
-    const p = path.join(path.dirname(htmlPath), 'symptom-dict.js');
-    if (fs.existsSync(p)) sdSrc = fs.readFileSync(p, 'utf8');
+    const dir = path.dirname(htmlPath);
+    const sdPath = path.join(dir, 'symptom-dict.js');
+    if (fs.existsSync(sdPath)) {
+      sdSrc = fs.readFileSync(sdPath, 'utf8');
+    } else if (!fs.existsSync(path.join(dir, 'medicine-dict.js'))) {
+      // 源模板/母版表面（如根 index.html、index-app.html）：同目录连 medicine-dict.js 都没有，
+      // 词典文件由 sync-all.ps1 分发到真实产物目录（desktop/ public/ APP assets），并非本目录交付。
+      // 随包交付硬校验由 asar 产物闸门（asarPath 模式）承担；此表面降级为 SKIP，宁可漏检不可误报。
+      sdTemplateSurface = true;
+    }
   }
 
   // S8 接线：index.html 必须加载词典
@@ -387,8 +396,13 @@ function run({ asarPath, htmlPath }) {
   else { fail++; lines.push('[SMOKE][FAIL] S8 index.html 缺 symptom-dict.js 标签 —— 舌脉快捷录入未接线'); }
 
   if (!sdSrc) {
-    total++; fail++;
-    lines.push('[SMOKE][FAIL] S1 产物中缺少 symptom-dict.js —— 舌脉词典未随包交付');
+    if (!sdTemplateSurface) {
+      total++; fail++;
+      lines.push('[SMOKE][FAIL] S1 产物中缺少 symptom-dict.js —— 舌脉词典未随包交付');
+    } else {
+      // 源模板/母版表面：允许 SKIP（不参与 fail 统计），随包交付由 asar 闸门保证
+      lines.push('[SMOKE][SKIP] S1 源模板表面跳过 symptom-dict 存在性（产物目录分发，随包由 asar 闸门校验）');
+    }
   } else {
     // 专用沙箱：无 DOM 环境（querySelector/getElementById 均返回 null，组件走安全重试路径）
     const elStub = () => ({ style: {}, addEventListener() {}, appendChild() {}, innerHTML: '' });
