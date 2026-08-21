@@ -453,6 +453,15 @@
 - **同步**：改权威源 `shared/auth-core/cloud.js` 后必须跑 `tools/sync-auth-core.ps1`（云 8 副本 + 根镜像；离线 3 副本不受影响，注册弹窗为云端专用）。任何一次 cloud.js 改动后都要重跑 sync，勿只改单一副本（2026-08 打包回退教训）。
 - **生效方式**：云端网页版/云端APP=推 GitHub 自动生效；云端桌面版=需重打 Setup 并重装；离线版不受影响（无注册弹窗）。
 
+### 2.34 【用户管理角色显示】机构版管理员(clinic_admin)被误显"普通用户"（提交 7e066365，2026-08-22）
+
+- **表象**：云端网页/桌面/APP 三端用户管理界面，机构版管理员 wgj（角色 clinic_admin）明明能进入【用户管理】，角色栏却显示"普通用户"，用户困惑"都是普通管理员"。admin 显示"管理员"正常。
+- **根因**：三端 `renderUserList` 的角色显示逻辑只认 `role === 'admin'` 才显示"管理员"，其余一律"普通用户"；编辑弹窗角色下拉选中、查看他人处方权限、删除用户权限、导出数据 userRoleDisplay 共 6 处同样是"只认 admin"的单角色判断，未覆盖 clinic_admin / platform_admin。
+- **判定铁证**：能进【用户管理】= 必为 admin 或 clinic_admin（permission.js canManageUsersByRole 只放行这两类+机构版），而旧逻辑又显示其"普通用户"，二者矛盾 → 数据端角色必是 clinic_admin，是显示逻辑漏判而非数据问题。
+- **修复**：6 处角色判断统一扩展为"platform_admin→平台总管理员；clinic_admin||admin→管理员；其余→普通用户"，并同步到查看/删除权限、下拉选中、导出角色。仅改 JS 逻辑，HTML 结构零改动（check-interface 6/6 OK）。
+- **举一反三**：涉及"角色显示/权限"的修改，必须全端（public/ + cloud_desktop/ + cloud_app assets）同步，且用 Grep 全量扫 `role === 'admin'` / `role !== 'admin'` 单角色判断，逐处确认是否需扩展 clinic_admin/platform_admin；三端副本必须一致（本次 3 文件各 6 处完全对齐）。
+- **生效方式**：云端网页版 public/index.html=推 GitHub 自动部署即时生效；云端桌面版 cloud_desktop/index.html=需重新 build.bat 打包 exe 并重装；云端 APP assets/public/index.html=需重新打包 APK。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
