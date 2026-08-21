@@ -2080,6 +2080,15 @@ let currentUser = null;
                 try { document.getElementById('newUserName').value = ''; } catch(_){}
                 const modal = document.getElementById('userManageModal');
                 if (!modal) { alert('用户管理模态框DOM未找到'); return; }
+                // ★ 唯一管理员锁死：打开用户管理时移除"管理员"选项，新增用户只能是普通用户
+                try {
+                    var _addRoleSel = document.getElementById('newUserRole');
+                    if (_addRoleSel) {
+                        for (var _ri = _addRoleSel.options.length - 1; _ri >= 0; _ri--) {
+                            if (_addRoleSel.options[_ri].value === 'admin') _addRoleSel.remove(_ri);
+                        }
+                    }
+                } catch (_) {}
                 modal.style.display = 'flex';
             } catch (e) {
                 console.error('打开用户管理失败:', e);
@@ -2136,7 +2145,7 @@ let currentUser = null;
                 '<div class="form-group" style="margin-top:10px;"><label>新密码（留空则不修改）</label>' +
                 '<input type="password" id="editUserPassword" placeholder="留空则不修改"></div>' +
                 '<div class="form-group" style="margin-top:10px;"><label>角色</label>' +
-                '<select id="editUserRole" style="width:100%;padding:5px;">' +
+                '<select id="editUserRole" style="width:100%;padding:5px;" disabled>' +
                 '<option value="user"' + (user.role === 'user' ? ' selected' : '') + '>普通用户</option>' +
                 '<option value="admin"' + ((user.role === 'admin' || user.role === 'clinic_admin' || user.role === 'platform_admin') ? ' selected' : '') + '>管理员</option>' +
                 '</select></div>' +
@@ -2160,7 +2169,7 @@ let currentUser = null;
                 const newUsername = document.getElementById('editUserUsername').value.trim();
                 const newName = document.getElementById('editUserName').value.trim();
                 const newPassword = document.getElementById('editUserPassword').value;
-                const newRole = document.getElementById('editUserRole').value;
+                // 角色由"唯一管理员锁死"逻辑统一控制（editUserRole 下拉为只读展示，不允许修改角色）
                 const newUserType = document.getElementById('editUserType').value || 'production';
 
                 if (!newUsername) { alert('用户名不能为空'); return; }
@@ -2191,7 +2200,8 @@ let currentUser = null;
 
                 users[userIndex].username = newUsername;
                 users[userIndex].name = newName;
-                users[userIndex].role = newRole;
+                // ★ 唯一管理员锁死：编辑时禁止把普通用户改成管理员（仅已注册管理员/内置admin可保留原角色）
+                users[userIndex].role = (users[userIndex].role === 'admin' || users[userIndex].role === 'clinic_admin' || users[userIndex].role === 'platform_admin') ? users[userIndex].role : 'user';
                 users[userIndex].userType = newUserType;
                 if (newPassword.trim()) {
                     users[userIndex].password = await hashPassword(newPassword.trim());
@@ -2273,7 +2283,7 @@ let currentUser = null;
                 return;
             }
 
-            const newRole = document.getElementById('newUserRole').value;
+            const newRole = 'user'; // ★ 唯一管理员锁死：新添加用户固定为普通用户，禁止改成管理员
             const newUserType = document.getElementById('newUserType').value || 'production';
             users.push({
                 username: username,
