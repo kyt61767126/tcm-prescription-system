@@ -369,6 +369,25 @@
 - 纯构建工具层改动（tools/），不影响 exe 产物内容，**无需重打包**；下次任何端构建自动生效。
 - 手工跑法：`node tools/smoke-runtime.cjs --all`（134/134）；final-verify 单测：设 VERIFY_ASAR_PATH/VERIFY_PKG_DIR 环境变量后 `node tools/final-verify.cjs`。
 
+### 2.27 【P3 离线桌面 e2e 变体】Setup 1.0.85（提交 b6bed310）
+
+**用例（按试用标准版行为断言，与云端版互补）**：
+- E1 本地账号登录：明文密码链路（login.js isHash=false 明文比对）+ 主窗口加载 + 改密按钮可见
+- E2 试用期强制降级反向断言：config 写 clinic+admin 也会被 ensureTrialStandardEdition 降级 → 【用户管理】必须隐藏
+- E3 毒数据：CONFIG.users 非数组 → window.UserStore.get() 必须返回兜底数组 → 点改密弹窗仍打开
+- 已接入离线 build.bat 步骤 [9.6/9]，与云端同款红线（FAIL 删 exe）。
+
+**★ 关键坑：E2E 旁路必须打穿三层安全防线（首跑 3 条全超时的真根因）**：
+1. blockRemoteDebugging 拦 `--remote-debugging-port`（Playwright CDP 必传）→ 加 BNZC_E2E+marker 双条件旁路（与云端同款）
+2. **license-manager.js `isDebuggerAttached()` 也拦 CDP 参数** → license 判 invalid → `_isLicensed=false` → 弹"到期提示"窗而非 loginWindow → e2e 等 login.html 永远超时（表面症状毫无线索，必须读启动链路定位）
+3. `registerTrialWithServer()` 联网登记试用：e2e 会消耗构建机真实设备试用次数/被 denied 误杀 → 旁路直接返回 offline 宽限语义
+
+**旁路安全设计**：main.js 双条件校验通过后置 `global.__BNZC_E2E_BYPASS=true`；license 侧只认该标志（标志置位前提=控制环境变量+exe 目录写权限，生产包不携带 marker）。e2e 隔离 userData 内 license.dat/trial.dat 全新生成，试用期照常发放。
+
+**验证**：Setup 1.0.85 首个带 e2e 的离线构建，E2E 3/3 PASS（登录 8s 内完成三用例）；7 铁闸 + 铁闸8c 134/134 照常全过。
+
+**生效**：离线桌面=装 Setup **1.0.85**（此前 1.0.83/84 因红线删包已不可交付，属正确行为）；云端/APP 不涉及。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
