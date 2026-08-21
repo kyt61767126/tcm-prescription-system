@@ -18,6 +18,13 @@ import {
     KV_SYSTEM_CLINICS
 } from '../../_lib/auth.js';
 
+// 将激活 type（personal/pro）映射为云端规范 edition key
+function mapActivationTypeToEdition(type) {
+    const t = String(type || '').toLowerCase();
+    if (t === 'pro' || t === 'institution' || t === 'clinic') return 'cloud_clinic';
+    return 'cloud_personal'; // personal / standard / 未知 → 云端标准版
+}
+
 // 在指定诊所下补充（或不动）clinic_admin 账号
 async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now) {
     const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
@@ -50,19 +57,40 @@ export async function provisionCloudAccount(kv, record) {
     if (!phone || !clinicName) return false;
 
     const now = new Date().toISOString();
+    // ★ 2026-08-22 统一 edition：根据激活 type=pro/personal 生成规范 edition key
+    const targetEdition = mapActivationTypeToEdition(record.type);
     const clinics = (await kv.get(KV_SYSTEM_CLINICS, 'json')) || [];
     let clinic = clinics.find(c => c.name === clinicName);
+    let clinicsDirty = false;
 
-    // 1) 存在同名诊所 → 直接补充账号
+    // 1) 存在同名诊所 → 检查是否需要补 edition（早期遗留诊所无该字段），再补充账号
     if (clinic) {
+        if (!clinic.edition) {
+            clinic.edition = targetEdition;
+            clinic.updatedAt = now;
+            clinicsDirty = true;
+            console.log('[AdminAccount] 历史诊所补 edition:', clinicName, '→', targetEdition);
+        }
+        if (clinicsDirty) {
+            await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
+        }
         await ensureClinicUser(kv, clinic.id, clinicName, phone, record.adminName, now);
         return true;
     }
 
-    // 2) 不存在 → 创建新诊所
+    // 2) 不存在 → 创建新诊所（显式带 edition 字段，统一规范）
     const clinicId = 'clinic_' + Array.from(crypto.getRandomValues(new Uint8Array(10)))
         .map(b => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('');
-    clinic = { id: clinicId, name: clinicName, status: 'active', createdAt: now, updatedAt: now };
+    clinic = {
+        id: clinicId,
+        name: clinicName,
+        status: 'active',
+        createdAt: now,
+        updatedAt: now,
+        edition: targetEdition,          // ★ 新诊所统一写入 edition
+        activationType: record.type || null,
+        source: 'activation'
+    };
     clinics.push(clinic);
     await kv.put(KV_SYSTEM_CLINICS, JSON.stringify(clinics));
 

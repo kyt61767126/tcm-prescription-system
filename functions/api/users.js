@@ -205,11 +205,41 @@ function computeCloudEnabled(user) {
     return user.allowedMode === 'both' || user.allowedMode === 'cloud';
 }
 
+// ★ 2026-08-22 后端 edition 归一化（与前端 permission.js _normalizeEdition 同规则，
+//   确保前后端判定一致；早期遗留用户（无 edition 字段）兜底为 cloud_clinic 机构版）
+function normalizeClinicEdition(rawEdition, clinicStatus) {
+    var s = String(rawEdition || '').trim();
+    // 无 edition 字段 = 早期平台注册用户，全部视为机构版（历史事实：早期不分版本都是机构版）
+    if (!s) {
+        // test 状态的自助注册诊所不给默认机构版，留空由转正流程设置
+        if (clinicStatus === 'test') return '';
+        return 'cloud_clinic';
+    }
+    var x = s.toLowerCase();
+    if (x === 'institution' || x === 'institutional' || x === 'jigou') return 'cloud_clinic';
+    if (x === 'standard') return 'cloud_personal';
+    if (x === 'yj') return 'cloud_clinic';
+    if (x === 'yb') return 'cloud_personal';
+    if (x === 'lj') return 'offline_clinic';
+    if (x === 'lb') return 'offline_personal';
+    if (x.indexOf('云端机构') >= 0) return 'cloud_clinic';
+    if (x.indexOf('云端标准') >= 0) return 'cloud_personal';
+    if (x.indexOf('离线机构') >= 0) return 'offline_clinic';
+    if (x.indexOf('离线标准') >= 0) return 'offline_personal';
+    if (x.indexOf('机构版') >= 0) return 'cloud_clinic';
+    if (x.indexOf('标准版') >= 0) return 'cloud_personal';
+    if (x.indexOf('clinic') >= 0 && x.indexOf('personal') < 0) return 'cloud_clinic';
+    if (x.indexOf('institution') >= 0) return 'cloud_clinic';
+    if (x.indexOf('personal') >= 0) return 'cloud_personal';
+    return s;
+}
+
 // 隐藏密码字段，返回安全的用户对象
-// ★ 优化：添加 clinicStatus 和 userType 字段，区分正式用户和测试用户
-function sanitizeUser(user, clinicId, clinicName, clinicStatus) {
+// ★ 优化：添加 clinicStatus、userType、edition 字段，区分正式用户/测试用户/版本类型
+function sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition) {
     const effectiveStatus = clinicStatus || 'active';
     const isTestUser = effectiveStatus === 'test';
+    const effectiveEdition = normalizeClinicEdition(clinicEdition, effectiveStatus);
     return {
         username: user.username,
         name: user.name || user.username,
@@ -219,6 +249,7 @@ function sanitizeUser(user, clinicId, clinicName, clinicStatus) {
         clinicId: clinicId || user.clinicId || null,
         clinicName: clinicName || null,
         clinicStatus: effectiveStatus,
+        clinicEdition: effectiveEdition,  // ★ 2026-08-22 统一：返回云端 clinic 的版本类型
         userType: isTestUser ? 'test' : 'production',
         allowedMode: user.allowedMode || 'both',
         cloudEnabled: user.cloudEnabled !== undefined ? user.cloudEnabled : computeCloudEnabled(user),
@@ -232,9 +263,10 @@ function sanitizeUser(user, clinicId, clinicName, clinicStatus) {
 // 登录：遍历 platform_admins + 所有诊所用户
 // ★ 支持手机号/用户名双模式登录：username 参数可传手机号或用户名
 // 搜索策略：先匹配 username 字段，再匹配 phone 字段
-// 返回值：{ user, clinicId, clinicName, clinicStatus, error }
+// 返回值：{ user, clinicId, clinicName, clinicStatus, clinicEdition, clinicExpiresAt, error }
 //   - 成功：返回 user 信息（诊所被禁用时 clinicStatus='disabled'，由登录分支在密码验证后再拒绝）
 //   - 失败：返回 { user: null, error: { code: 'USER_NOT_FOUND', message } }
+// ★ 2026-08-22：新增返回 clinicEdition，用于前端统一设置 CONFIG.edition
 async function findUserForLogin(kv, username) {
     if (!username) return { user: null, error: { code: 'USER_NOT_FOUND', message: '用户不存在' } };
     const trimmed = String(username).trim();
@@ -256,7 +288,8 @@ async function findUserForLogin(kv, username) {
             found = platformAdmins.find(u => u.phone === trimmed);
         }
         if (found) {
-            return { user: found, clinicId: null, clinicName: null, clinicStatus: 'active', error: null };
+            // 平台总管理员视为最高权限=机构版（云端机构版）
+            return { user: found, clinicId: null, clinicName: null, clinicStatus: 'active', clinicEdition: 'cloud_clinic', error: null };
         }
     }
 
@@ -289,6 +322,7 @@ async function findUserForLogin(kv, username) {
                     clinicId: clinic.id,
                     clinicName: clinic.name,
                     clinicStatus: clinic.status || 'active',
+                    clinicEdition: clinic.edition || null,  // ★ 2026-08-22 取 clinic.edition
                     clinicExpiresAt: clinic.expiresAt || null
                 };
                 if (clinic.status === 'disabled') {
@@ -311,6 +345,7 @@ async function findUserForLogin(kv, username) {
             clinicId: foundInDisabledClinic.clinicId,
             clinicName: foundInDisabledClinic.clinicName,
             clinicStatus: 'disabled',
+            clinicEdition: foundInDisabledClinic.clinicEdition,
             error: null
         };
     }
@@ -839,7 +874,7 @@ export async function onRequest(context) {
                     found = await findUserForLogin(kv, username);
                 }
             }
-            const { user, clinicId, clinicName, clinicStatus, clinicExpiresAt } = found || {};
+            const { user, clinicId, clinicName, clinicStatus, clinicEdition, clinicExpiresAt } = found || {};
 
             // ★ P1-6 防登录枚举：无论用户是否存在，统一走相同的密码验证流程并返回一致响应，
             //   防止攻击者通过错误码/错误消息/响应时间差异探测有效用户名。
@@ -997,7 +1032,7 @@ export async function onRequest(context) {
             return json({
                 success: true,
                 token,
-                user: sanitizeUser(user, clinicId, clinicName, clinicStatus)
+                user: sanitizeUser(user, clinicId, clinicName, clinicStatus, clinicEdition)
             }, 200, context.request);
         }
 
@@ -1107,7 +1142,7 @@ export async function onRequest(context) {
             }
 
             const body = await context.request.json().catch(() => ({}));
-            const { clinicName, adminUsername, adminPassword, adminName, clinicStatus } = body;
+            const { clinicName, adminUsername, adminPassword, adminName, clinicStatus, edition } = body;
             if (!clinicName || !adminUsername || !adminPassword) {
                 return json({ success: false, error: '请填写诊所名称、管理员账号和密码' }, 400);
             }
@@ -1149,13 +1184,17 @@ export async function onRequest(context) {
             const clinicId = generateId('clinic');
             const now = getNowISO();
             const { passwordHash, salt } = await hashPassword(adminPassword);
+            // ★ 2026-08-22 统一 edition：平台管理员手动创建默认机构版（cloud_clinic），支持传参覆盖
+            const targetEdition = normalizeClinicEdition(edition || 'cloud_clinic', 'active');
 
             const clinic = {
                 id: clinicId,
                 name: clinicName.trim(),
                 status: 'active',
                 createdAt: now,
-                updatedAt: now
+                updatedAt: now,
+                edition: targetEdition,   // ★ 显式写入版本类型
+                source: 'platform-admin'
             };
 
             const adminUser = {
@@ -1201,7 +1240,7 @@ export async function onRequest(context) {
             }
 
             const body = await context.request.json().catch(() => ({}));
-            const { clinicId, status, name, adminUsername, adminName, adminPassword, renewDays } = body;
+            const { clinicId, status, name, adminUsername, adminName, adminPassword, renewDays, edition } = body;
             if (!clinicId) {
                 return json({ success: false, error: '缺少诊所ID' }, 400);
             }
@@ -1260,6 +1299,15 @@ export async function onRequest(context) {
                 changes.push(`status: ${oldClinic.status} → ${status}`);
                 clinics[clinicIdx].status = status;
 
+                // ★ 2026-08-22 统一 edition：test → active 自助注册转正时，必须补 edition
+                //   若管理员传了 edition 参数，用参数；否则默认机构版（早期用户都是机构版）
+                if (status === 'active' && oldClinic.status === 'test' && !clinics[clinicIdx].edition) {
+                    const edVal = edition || 'cloud_clinic';
+                    const edNorm = normalizeClinicEdition(edVal, 'active');
+                    clinics[clinicIdx].edition = edNorm;
+                    changes.push(`edition: → ${edNorm}`);
+                }
+
                 // ★ 2026-08-20 审核通过即收费开通：test → active 首次转正时自动写入 365 天有效期
                 //   （未设置或已过期的有效期才写入，避免"停用→启用"误续期）
                 if (status === 'active') {
@@ -1270,6 +1318,15 @@ export async function onRequest(context) {
                         changes.push(`expiresAt: → ${clinics[clinicIdx].expiresAt.slice(0, 10)}（+${days}天）`);
                         expiresSetByApproval = true;
                     }
+                }
+            }
+
+            // ★ 2026-08-22 支持管理员手动调整 edition（已有 edition 时也允许覆盖，如"标准版升机构版"）
+            if (edition !== undefined && edition !== null) {
+                const edNorm = normalizeClinicEdition(String(edition), clinics[clinicIdx].status || 'active');
+                if (edNorm && edNorm !== clinics[clinicIdx].edition) {
+                    changes.push(`edition: ${clinics[clinicIdx].edition || '(空)'} → ${edNorm}`);
+                    clinics[clinicIdx].edition = edNorm;
                 }
             }
 

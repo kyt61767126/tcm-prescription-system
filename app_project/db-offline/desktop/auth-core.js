@@ -1266,6 +1266,70 @@
         }
     };
 
+    // ★ 2026-08-22 云端登录后 edition 统一同步钩子
+    // 背景：index.html 内嵌登录成功脚本受铁律保护不能改，因此在 auth-core.js 中
+    //   猴子补丁 updateUserDisplay / refreshVersionTags 等登录后必调函数，
+    //   调用前先把后端返回的 user.clinicEdition 同步到 CONFIG.edition / window.EDITION，
+    //   确保前端权限判定（按钮显示/版本标签）与后端 clinic 记录完全一致。
+    (function installEditionSyncHook() {
+        if (typeof document === 'undefined') return;
+        function trySyncEditionFromGlobalUser() {
+            try {
+                var u = global.currentUser;
+                if (!u) return;
+                // 后端返回字段 user.clinicEdition（规范 key：cloud_clinic / cloud_personal）
+                var ed = (u.clinicEdition || u.edition || '') ? String(u.clinicEdition || u.edition || '').trim() : '';
+                if (!ed) return;
+                var changed = false;
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG && String(CONFIG.edition || '') !== ed) {
+                        CONFIG.edition = ed; changed = true;
+                    }
+                } catch (_) {}
+                try {
+                    if (String(global.EDITION || '') !== ed) {
+                        global.EDITION = ed; changed = true;
+                    }
+                } catch (_) {}
+                try {
+                    if (global.Permission && typeof global.Permission.setEdition === 'function') {
+                        global.Permission.setEdition(ed);
+                    }
+                } catch (_) {}
+                if (changed) {
+                    try { console.log('[AuthCore] login-sync edition ->', ed); } catch (_) {}
+                }
+            } catch (_) {}
+        }
+        function patchFunctionByName(name) {
+            try {
+                var orig = global[name];
+                if (typeof orig !== 'function') return;
+                if (orig.__editionSyncPatched) return;
+                var wrapped = function() {
+                    trySyncEditionFromGlobalUser();
+                    return orig.apply(this, arguments);
+                };
+                wrapped.__editionSyncPatched = true;
+                global[name] = wrapped;
+            } catch (_) {}
+        }
+        function installWhenReady() {
+            patchFunctionByName('updateUserDisplay');
+            patchFunctionByName('refreshVersionTags');
+            patchFunctionByName('refreshUserInterface');
+            patchFunctionByName('enforceStandardEditionButtons');
+            setTimeout(trySyncEditionFromGlobalUser, 500);
+            setTimeout(trySyncEditionFromGlobalUser, 1500);
+            setTimeout(trySyncEditionFromGlobalUser, 3000);
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', installWhenReady);
+        } else {
+            installWhenReady();
+        }
+    })();
+
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 
 // ============================================================================
