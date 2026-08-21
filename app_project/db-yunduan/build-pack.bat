@@ -119,6 +119,16 @@ goto :main
 
     echo.
 
+    REM ★ 2026-08-21 手动打包失败闪退修复：NO_PAUSE 未定义（手动双击）时暂停显示结果，
+    REM   一键打包（one-click-pack.ps1 已设置 NO_PAUSE=1 环境变量继承）不暂停
+    if not defined NO_PAUSE (
+
+        set "EXIT_KEY="
+
+        set /p "EXIT_KEY=Press Enter to exit..."
+
+    )
+
     exit /b %EXIT_CODE%
 
 
@@ -219,14 +229,12 @@ goto :main
 
     call :check_file "cloud_desktop\build.bat" "%BUILD_BAT%" || call :finalize 1 "Script not found"
 
-    set "SAVED_NO_PAUSE=%NO_PAUSE%"
-    set "NO_PAUSE=1"
-
+    REM ★ 2026-08-21 手动打包失败闪退修复：不再强制 NO_PAUSE=1，
+    REM   一键打包的 NO_PAUSE=1 由 one-click-pack.ps1 环境变量继承；
+    REM   手动双击时未定义 → 子 build.bat 失败分支会 pause 显示错误（不再闪退）
     call "%BUILD_BAT%"
 
     set "TEMP_RC=%errorlevel%"
-
-    set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
     call :finalize %TEMP_RC% "云端桌面版（统一版）打包完成" "EXE: %~dp0cloud_desktop\dist\惠康中医-云端 Setup *.exe" "EXE: %~dp0cloud_desktop\dist\惠康中医-云端 *.exe (portable)"
 
@@ -256,14 +264,10 @@ goto :main
 
     call :check_file "build-app.bat" "%BUILD_APP%" || call :finalize 1 "Script not found"
 
-    set "SAVED_NO_PAUSE=%NO_PAUSE%"
-    set "NO_PAUSE=1"
-
+    REM ★ 2026-08-21 手动打包失败闪退修复：不再强制 NO_PAUSE=1（同 mode_desktop）
     call "%BUILD_APP%"
 
     set "TEMP_RC=%errorlevel%"
-
-    set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
     call :finalize %TEMP_RC% "云端APP（普通模式）打包完成" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
 
@@ -293,13 +297,9 @@ goto :main
 
     call :check_file "build-app.bat" "%BUILD_APP%" || call :finalize 1 "Script not found"
 
-    set "SAVED_NO_PAUSE=%NO_PAUSE%"
-    set "NO_PAUSE=1"
-
+    REM ★ 2026-08-21 手动打包失败闪退修复：不再强制 NO_PAUSE=1（同 mode_desktop）
     call "%BUILD_APP%" standard
     set "TEMP_RC=%errorlevel%"
-
-    set "NO_PAUSE=%SAVED_NO_PAUSE%"
 
     call :finalize %TEMP_RC% "云端APP（严格模式）打包完成" "Output: %~dp0惠康中医-云端.apk" "APK: 惠康中医-云端.apk"
 

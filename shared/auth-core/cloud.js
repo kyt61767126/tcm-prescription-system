@@ -660,21 +660,74 @@
 
     // ==================== 登录调度层 ====================
 
+    // ★★★ 2026-08-21 设备身份采集（账号级设备授权 + 单设备在线互斥）
+    //   桌面版：electronAPI.activate.getMachineId()（真实机器指纹，计入 2 台授权名额）
+    //   APP 端：持久化随机指纹（Capacitor Preferences / localStorage，计入 2 台授权名额）
+    //   网页版：浏览器持久化指纹（browser-xxx，不计入名额，仅参与在线互斥）
+    async function collectDeviceIdentity() {
+        let clientClass = 'web';
+        let machineId = '';
+        try {
+            if (global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.getMachineId === 'function') {
+                machineId = await global.electronAPI.activate.getMachineId();
+                clientClass = 'desktop';
+            } else if (global.Capacitor) {
+                clientClass = 'app';
+            }
+        } catch (e) { /* 采集失败继续走指纹兜底 */ }
+
+        const mid = String(machineId || '').trim();
+        if (mid && mid.length >= 8 && mid !== 'unknown') {
+            return { machineId: mid, clientClass: clientClass };
+        }
+
+        // 指纹兜底：持久化随机指纹（同一浏览器/设备重复登录指纹不变，不重复占用名额）
+        const FINGERPRINT_KEY = 'auth:deviceMachineId';
+        try {
+            let fp = '';
+            try { fp = await StorageAdapter.getItem(FINGERPRINT_KEY); } catch (e) {}
+            if (!fp || String(fp).length < 8) {
+                const rnd = Array.from(crypto.getRandomValues(new Uint8Array(9)))
+                    .map(b => b.toString(16).padStart(2, '0')).join('');
+                fp = 'browser-' + rnd;
+                await StorageAdapter.setItem(FINGERPRINT_KEY, fp);
+            }
+            return { machineId: fp, clientClass: clientClass };
+        } catch (e) {
+            return {
+                machineId: 'browser-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
+                clientClass: clientClass
+            };
+        }
+    }
+
     // 云端适配器
     const cloudAdapter = {
         async authenticate(username, password) {
             try {
                 const fetchFn = global.cloudFetch || global.fetch;
+                // ★ 2026-08-21 上报设备身份：后端据此做设备绑定（2台上限）+ 单点在线互斥
+                const identity = await collectDeviceIdentity();
                 const response = await fetchFn(`${CLOUD_API_BASE}/users?login=true`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password })
+                    body: JSON.stringify({
+                        username,
+                        password,
+                        machineId: identity.machineId,
+                        clientClass: identity.clientClass
+                    })
                 });
                 // cloudFetch 返回已解析的 JS 对象，原生 fetch 返回 Response 对象
                 const data = (response && typeof response.json === 'function')
                     ? await response.json()
                     : response;
                 if (!data || !data.success || !data.user) {
+                    // ★ 设备数超限：明确提示（403 DEVICE_LIMIT）
+                    if (data && data.code === 'DEVICE_LIMIT') {
+                        return { success: false, error: data.error || '设备数已达上限（最多授权 2 台设备），请先解绑旧设备', code: 'DEVICE_LIMIT' };
+                    }
                     return { success: false, error: (data && data.error) || '手机号/用户名或密码错误' };
                 }
                 // ★ P0 修复：保留 API 返回的 token，附加到 user 对象
@@ -927,6 +980,68 @@
                 await StorageAdapter.setItem('auth:clinicName', user.clinicName);
             }
 
+            // ★★★ 2026-08-21 根治【机构版登入仍显示修改密码】：
+            //   登录成功后必须即时把后端返回的 clinicEdition 同步到 CONFIG.edition + window.EDITION，
+            //   否则 Permission._currentEdition() 继续读取 config.json 默认值 personal →
+            //   isInstitutional()=false → 只显示【修改密码】不显示【用户管理】。
+            //   同时缓存到 localStorage，刷新页面时自动恢复，避免状态丢失。
+            try {
+                const rawCE = user.clinicEdition || user.edition || '';
+                const rawName = user.clinicName || '';
+                let targetEd = '';
+                const CE = String(rawCE);
+                if (['cloud_clinic', 'institution', 'institutional', 'clinic', 'offline', 'clinic_custom', 'offline_clinic', 'cloud'].includes(CE)) {
+                    targetEd = 'cloud_clinic';
+                } else if (['cloud_personal', 'personal', 'standard', 'single'].includes(CE)) {
+                    targetEd = 'cloud_personal';
+                }
+                if (targetEd) {
+                    try {
+                        if (typeof CONFIG !== 'undefined' && CONFIG) {
+                            CONFIG.edition = targetEd;
+                            if (rawName) CONFIG.clinicName = rawName;
+                        }
+                    } catch (_) {}
+                    try { global.EDITION = targetEd; } catch (_) {}
+                    try {
+                        if (rawName && typeof CONFIG !== 'undefined' && CONFIG && !CONFIG.__editionFromLogin) {
+                            CONFIG.__editionFromLogin = true;
+                        }
+                    } catch (_) {}
+                    const productName = (targetEd === 'cloud_clinic') ? '惠康中医-云端机构版' :
+                                        (targetEd === 'cloud_personal') ? '惠康中医-云端标准版' : null;
+                    if (productName) {
+                        try { global.PRODUCT_NAME = productName; } catch (_) {}
+                        try {
+                            if (typeof CONFIG !== 'undefined' && CONFIG) {
+                                CONFIG.productName = productName;
+                                if (typeof document !== 'undefined' && document.title) {
+                                    document.title = productName;
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                    await StorageAdapter.setItem('auth:runtimeEdition', targetEd);
+                    if (rawName) await StorageAdapter.setItem('auth:runtimeClinicName', rawName);
+                    if (productName) await StorageAdapter.setItem('auth:runtimeProductName', productName);
+                    try {
+                        console.log('[AuthCore] login edition-sync step-1 backend:', JSON.stringify({ clinicEdition: rawCE, edition: user.edition, role: user.role, clinicName: rawName }));
+                        console.log('[AuthCore] login edition-sync step-2 UPDATED ->', JSON.stringify({
+                            targetEd,
+                            CONFIG: (typeof CONFIG !== 'undefined') ? { edition: CONFIG.edition, clinicName: CONFIG.clinicName } : null,
+                            windowEDITION: global.EDITION,
+                            title: typeof document !== 'undefined' ? document.title : null
+                        }));
+                    } catch (e) {}
+                } else {
+                    try {
+                        console.warn('[AuthCore] login edition-sync SKIPPED (unrecognized clinicEdition):', JSON.stringify({ clinicEdition: rawCE, userEdition: user.edition, role: user.role }));
+                    } catch (e) {}
+                }
+            } catch (hookErr) {
+                try { console.error('[AuthCore] login edition-sync hook FAILED:', hookErr && hookErr.message || hookErr); } catch (_) {}
+            }
+
             // ★ 2026-08-20 登录成功即视为"软件已激活"，登录框的"软件激活"入口自动隐藏
             //   （登录框通常将随登录成功关闭；此处设置标记确保下次回到登录框时不再显示）
             // ★ 2026-08-19 BUG修复：setCloudActivationDone/hideActivateLoginEntry 定义在 IIFE-B，
@@ -962,12 +1077,24 @@
             // ★ 离线登录缓存：退出时清除（下次需在线登录重新缓存）
             'auth:offlineLoginCache',
             // P3-3: 清除历史遗留的记住密码
-            'auth:savedPassword'
+            'auth:savedPassword',
+            // ★ 2026-08-21 登出时清除 edition/clinic 运行时缓存，避免跨账号残留（机构版/标准版切换错漏）
+            'auth:runtimeEdition',
+            'auth:runtimeClinicName',
+            'auth:runtimeProductName'
         ];
         for (const key of allKeys) {
             await StorageAdapter.removeItem(key);
             StorageAdapter.removeSessionItem(key);
         }
+        // 同步复位 CONFIG.edition 和 window.EDITION（避免登出后UI仍显示上一账号的机构版/标准版）
+        try {
+            if (typeof CONFIG !== 'undefined' && CONFIG) {
+                CONFIG.edition = 'personal';
+                CONFIG.__editionFromLogin = false;
+            }
+        } catch (_) {}
+        try { global.EDITION = 'personal'; } catch (_) {}
     }
 
     // ==================== 离线登录缓存 ====================
@@ -1108,6 +1235,66 @@
     // 自动执行旧key迁移
     migrateOldKeys().catch(e => console.warn('Key迁移失败:', e));
 
+    // ★★★ 2026-08-21 根治【刷新页面机构版回退标准版】：
+    //   页面启动时从 localStorage 的登录缓存恢复 CONFIG.edition / window.EDITION / CONFIG.clinicName /
+    //   PRODUCT_NAME，确保刷新页面后机构版状态不被 config.json 的默认值 personal 打回。
+    //   恢复优先级：1) 缓存的 currentUser.clinicEdition；2) 上次登录写入的 auth:runtimeEdition
+    (async function restoreEditionFromCache() {
+        try {
+            let editionFromCache = '';
+            let clinicFromCache = '';
+            let productFromCache = '';
+            try {
+                const userStr = await StorageAdapter.getItem('auth:currentUser');
+                if (userStr) {
+                    const u = JSON.parse(userStr);
+                    if (u && u.clinicEdition) {
+                        const CE = String(u.clinicEdition);
+                        if (['cloud_clinic', 'institution', 'institutional', 'clinic', 'offline', 'clinic_custom', 'offline_clinic', 'cloud'].includes(CE)) {
+                            editionFromCache = 'cloud_clinic';
+                        } else if (['cloud_personal', 'personal', 'standard', 'single'].includes(CE)) {
+                            editionFromCache = 'cloud_personal';
+                        }
+                    }
+                    if (u && u.clinicName) clinicFromCache = u.clinicName;
+                }
+            } catch (_) {}
+            if (!editionFromCache) editionFromCache = await StorageAdapter.getItem('auth:runtimeEdition') || '';
+            if (!clinicFromCache) clinicFromCache = await StorageAdapter.getItem('auth:runtimeClinicName') || '';
+            productFromCache = await StorageAdapter.getItem('auth:runtimeProductName') || '';
+
+            const normEd = String(editionFromCache).trim();
+            if (normEd === 'cloud_clinic' || normEd === 'cloud_personal') {
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG) {
+                        CONFIG.edition = normEd;
+                        if (clinicFromCache) CONFIG.clinicName = clinicFromCache;
+                        if (productFromCache) CONFIG.productName = productFromCache;
+                    }
+                } catch (_) {}
+                try { global.EDITION = normEd; } catch (_) {}
+                if (productFromCache) {
+                    try { global.PRODUCT_NAME = productFromCache; } catch (_) {}
+                    try {
+                        if (typeof document !== 'undefined' && document.title) document.title = productFromCache;
+                    } catch (_) {}
+                }
+                try {
+                    console.log('[AuthCore] startup edition-restore:', JSON.stringify({
+                        edition: normEd,
+                        clinic: clinicFromCache || '(default)',
+                        product: productFromCache || '(default)',
+                        CONFIG: (typeof CONFIG !== 'undefined') ? { edition: CONFIG.edition, clinicName: CONFIG.clinicName } : null
+                    }));
+                } catch (_) {}
+            } else {
+                try { console.log('[AuthCore] startup edition-restore SKIPPED (no edition cache).'); } catch (_) {}
+            }
+        } catch (e) {
+            try { console.warn('[AuthCore] startup edition-restore failed:', e && e.message || e); } catch (_) {}
+        }
+    })();
+
     // ★ P1-3: 自动从主进程获取 license.masterKey 并注入
     // 用途：让密码哈希盐基于 masterKey 派生（每个安装不同），避免硬编码盐被破解
     // 仅 Electron 桌面版可用（electronAPI.license.getStatus 存在时）
@@ -1220,8 +1407,10 @@
 
         // 诊所自助注册（调用后端 /users?action=register-clinic）
         // ★ 2026-08-20 注册审核制：手机号即登录账号 + 自设密码；注册即时建号，管理员审核通过后才能登录
+        // ★ 2026-08-21 新增 edition 参数：注册时选择的版本意向（personal/institution），
+        //   后端存 clinic.requestedEdition，管理员审核转正时优先采用
         async registerClinic(params) {
-            const { clinicName, phone, password, adminName } = params || {};
+            const { clinicName, phone, password, adminName, edition } = params || {};
             if (!clinicName || !phone || !password) {
                 return { success: false, error: '请填写完整的注册信息' };
             }
@@ -1241,7 +1430,8 @@
                         clinicName: clinicName.trim(),
                         phone: String(phone).trim(),
                         password: password,
-                        adminName: (adminName || '').trim()
+                        adminName: (adminName || '').trim(),
+                        edition: (edition === 'institution') ? 'institution' : 'personal'
                     })
                 });
                 const data = (response && typeof response.json === 'function')
@@ -1715,6 +1905,9 @@
                     // 官网购买按钮
                     '<a href="https://tcm-prescription-system.pages.dev/download" target="_blank" style="display:block;text-align:center;padding:10px;margin-bottom:8px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;text-decoration:none;border-radius:8px;font-size:13px;font-weight:bold;">🌐 前往官网购买激活码</a>' +
                     '<div style="font-size:11px;color:#999;text-align:center;margin-bottom:8px;">官网"购买激活码"Tab 可一键生成订单信息</div>' +
+                    // ★ 规则3：激活工单在线申请入口（管理员在后台工单审批页一键审批发码）
+                    '<button id="ticketApplyBtn" style="display:block;width:100%;padding:10px;margin-bottom:4px;background:linear-gradient(135deg,#07c160 0%,#06ad56 100%);color:white;border:none;border-radius:8px;font-size:13px;font-weight:bold;cursor:pointer;">📩 提交激活工单（在线申请）</button>' +
+                    '<div style="font-size:11px;color:#999;text-align:center;margin-bottom:8px;">提交后管理员审批，激活码将通过电话/微信发送给您</div>' +
                     // 联系客服
                     '<div style="border-top:1px dashed #ffe082;padding-top:8px;">' +
                         '<div style="font-size:12px;color:#555;line-height:1.8;">' +
@@ -1768,6 +1961,14 @@
                 copyMachineIdBtn.textContent = ok ? '✅ 已复制' : '❌ 失败';
                 setTimeout(function() { copyMachineIdBtn.textContent = '复制ID'; }, 1500);
             });
+
+            // ★ 规则3：激活工单入口（叠加层弹窗，不关闭当前激活码输入框，提交成功后回来输码）
+            const ticketApplyBtn = card.querySelector('#ticketApplyBtn');
+            if (ticketApplyBtn) {
+                ticketApplyBtn.addEventListener('click', function() {
+                    showTicketFormModal(machineId, clinicName);
+                });
+            }
 
             // ★ 一键复制全部信息（设备识别码+诊所名，方便客户发给客服）
             const copyAllInfoBtn = card.querySelector('#copyAllInfoBtn');
@@ -2146,6 +2347,20 @@
             // 表单（一页式）
             '<div id="registerForm" style="padding:16px;">' +
                 '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">版本类型 <span style="color:#e53935;">*</span></label>' +
+                    '<div style="display:flex;gap:10px;">' +
+                        '<div id="regEdPersonal" data-edition="personal" style="flex:1;padding:12px;border:2px solid #26a69a;border-radius:10px;text-align:center;cursor:pointer;background:#26a69a;color:#fff;">' +
+                            '<div style="font-size:15px;font-weight:bold;">👤 标准版</div>' +
+                            '<div style="font-size:11px;margin-top:3px;opacity:0.9;">单用户 · 处方开单</div>' +
+                        '</div>' +
+                        '<div id="regEdInstitution" data-edition="institution" style="flex:1;padding:12px;border:2px solid #ddd;border-radius:10px;text-align:center;cursor:pointer;background:#fff;color:#333;">' +
+                            '<div style="font-size:15px;font-weight:bold;">🏥 机构版</div>' +
+                            '<div style="font-size:11px;margin-top:3px;color:#909399;">多用户 · 子账号管理</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 注册时选版本意向，管理员审核时最终确认</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
                     '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
                     '<input type="text" id="regClinicName" placeholder="如：惠康中医诊所" value="' + String(defaultClinicName || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" autocomplete="off" spellcheck="false" maxlength="50" style="' + INPUT_STYLE + '">' +
                     '<div style="font-size:11px;color:#909399;margin-top:4px;">💡 必填，请填写您的诊所名称</div>' +
@@ -2211,6 +2426,29 @@
         const successCloseBtn = document.getElementById('regSuccessCloseBtn');
         if (successCloseBtn) successCloseBtn.addEventListener('click', close);
 
+        // ★ 2026-08-21 版本选择（标准版/机构版意向，提交后端存 requestedEdition）
+        let regEdition = 'personal';
+        ['regEdPersonal', 'regEdInstitution'].forEach(function (id) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('click', function () {
+                regEdition = this.getAttribute('data-edition') || 'personal';
+                const isPersonal = regEdition === 'personal';
+                const p = document.getElementById('regEdPersonal');
+                const i = document.getElementById('regEdInstitution');
+                if (p) {
+                    p.style.borderColor = isPersonal ? '#26a69a' : '#ddd';
+                    p.style.background = isPersonal ? '#26a69a' : '#fff';
+                    p.style.color = isPersonal ? '#fff' : '#333';
+                }
+                if (i) {
+                    i.style.borderColor = isPersonal ? '#ddd' : '#26a69a';
+                    i.style.background = isPersonal ? '#fff' : '#26a69a';
+                    i.style.color = isPersonal ? '#333' : '#fff';
+                }
+            });
+        });
+
         // 提交注册
         const submitBtn = document.getElementById('regSubmitBtn');
         if (submitBtn) {
@@ -2243,13 +2481,13 @@
                     const adapter = (typeof AuthCore !== 'undefined') ? AuthCore : (global.AuthCore || null);
                     let result;
                     if (adapter && typeof adapter.registerClinic === 'function') {
-                        result = await adapter.registerClinic({ clinicName, phone, password, adminName });
+                        result = await adapter.registerClinic({ clinicName, phone, password, adminName, edition: regEdition });
                     } else {
                         const fetchFn = global.cloudFetch || global.fetch;
                         const response = await fetchFn('https://tcm-prescription-system.pages.dev/api/users?action=register-clinic', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ clinicName: clinicName.trim(), phone: phone.trim(), password: password, adminName: adminName.trim() })
+                            body: JSON.stringify({ clinicName: clinicName.trim(), phone: phone.trim(), password: password, adminName: adminName.trim(), edition: regEdition })
                         });
                         result = await response.json();
                     }
@@ -2293,6 +2531,247 @@
     // ============================================================================
     const ADMIN_SUBMIT_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-submit';
     const ADMIN_STATUS_URL = 'https://tcm-prescription-system.pages.dev/api/license/admin-status';
+    // ★ 规则3：激活工单提交 API（客户在线申请激活码，管理员在后台工单审批页一键审批）
+    const ACTIVATION_TICKET_SUBMIT_URL = 'https://tcm-prescription-system.pages.dev/api/license/ticket/submit';
+
+    // ============================================================================
+    // ★ 规则3：激活工单申请弹窗（叠加在激活码弹窗之上，z-index 100000）
+    // 客户填写联系方式 → fetch ticket/submit → 管理员在后台工单审批页一键审批发码
+    // 提交成功后关闭本弹窗，回到底下的激活码输入弹窗继续输码
+    // 不修改 HTML 源码，仅运行时动态注入 DOM，符合界面保护约束
+    // ============================================================================
+    function showTicketFormModal(machineId, clinicName) {
+        // 若已打开则忽略
+        if (document.getElementById('ticketFormOverlay')) return;
+
+        const PHONE_RE = /^1[3-9]\d{9}$/;
+
+        // 版本意向归一化（institution/personal，仅供管理员参考，审批时最终确认）
+        var editionIntent = '';
+        try {
+            var ed = String(CONFIG.edition || '').toLowerCase();
+            if (['institution', 'local_institution', 'cloud_institution', 'cloud_clinic', 'clinic', 'org'].indexOf(ed) >= 0) {
+                editionIntent = 'institution';
+            } else if (['personal', 'local_personal', 'cloud_personal', 'standard', 'local', 'cloud'].indexOf(ed) >= 0) {
+                editionIntent = 'personal';
+            }
+        } catch (e) {}
+
+        const overlay = document.createElement('div');
+        overlay.id = 'ticketFormOverlay';
+        overlay.style.cssText =
+            'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.65);z-index:100000;display:flex;align-items:center;justify-content:center;padding:16px;';
+
+        const card = document.createElement('div');
+        card.style.cssText =
+            'background:white;border-radius:14px;width:100%;max-width:400px;padding:20px;box-shadow:0 10px 30px rgba(0,0,0,0.3);max-height:92vh;overflow-y:auto;';
+
+        card.innerHTML =
+            // 标题（绿色主题，呼应工单按钮）
+            '<div style="background:linear-gradient(135deg,#07c160 0%,#06ad56 100%);margin:-20px -20px 16px -20px;padding:18px;border-radius:14px 14px 0 0;text-align:center;">' +
+                '<div style="font-size:19px;font-weight:bold;color:white;">📩 激活工单申请</div>' +
+                '<div style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;">提交后管理员审批，激活码通过电话/微信发送</div>' +
+            '</div>' +
+
+            // 提示条
+            '<div style="background:#f0faf4;border:1px solid #d4f0e0;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#0a7a43;line-height:1.7;">' +
+                '💡 填写以下信息提交工单，管理员审批后激活码将发送给您；<b>收到激活码后回到上一窗口输入即可激活</b>' +
+            '</div>' +
+
+            // 表单区（容器，成功后整体隐藏）
+            '<div id="ticketFormArea">' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">诊所名称 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="ticketClinicName" placeholder="如：惠康中医诊所" autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">联系人姓名 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="ticketContactName" placeholder="如：王医生" autocomplete="off" spellcheck="false" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">联系电话 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="ticketContactPhone" placeholder="如：13800138000" autocomplete="off" inputmode="numeric" maxlength="11" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                    '<div id="ticketPhoneHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 管理员审批后激活码将发送到此手机号</div>' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">微信号（选填）</label>' +
+                    '<input type="text" id="ticketContactWechat" placeholder="方便客服联系您" autocomplete="off" maxlength="50" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                '</div>' +
+                '<div style="margin-bottom:14px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">备注（选填）</label>' +
+                    '<input type="text" id="ticketRemark" placeholder="如：需要几个账号、发票抬头等" autocomplete="off" maxlength="200" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;">' +
+                '</div>' +
+                // 设备标识提示（自动附带，脱敏展示前12位）
+                '<div style="font-size:11px;color:#909399;margin-bottom:14px;background:#f9f9f9;border-radius:6px;padding:8px 10px;">' +
+                    '🔒 设备标识将自动附带提交：<span style="font-family:monospace;color:#555;">' + (machineId ? String(machineId).substring(0, 12) + '...' : '未获取') + '</span>' +
+                '</div>' +
+            '</div>' +
+
+            // 错误提示（默认隐藏）
+            '<div id="ticketErrorBox" style="display:none;background:#fdecea;border:1px solid #f5c6cb;border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px;color:#c0392b;line-height:1.6;"></div>' +
+
+            // loading（默认隐藏）
+            '<div id="ticketLoadingBox" style="display:none;text-align:center;padding:14px;margin-bottom:12px;">' +
+                '<div style="display:inline-block;width:20px;height:20px;border:2px solid #ddd;border-top-color:#07c160;border-radius:50%;animation:ticketSpin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></div>' +
+                '<span style="font-size:13px;color:#07c160;vertical-align:middle;">正在提交工单，请稍候...</span>' +
+            '</div>' +
+
+            // 成功面板（默认隐藏）
+            '<div id="ticketSuccessBox" style="display:none;text-align:center;padding:10px 0;">' +
+                '<div style="font-size:40px;">📨</div>' +
+                '<div style="font-size:16px;font-weight:bold;color:#0a7a43;margin:8px 0;">工单提交成功！</div>' +
+                '<div style="font-size:12px;color:#666;line-height:1.8;">管理员审批后激活码将通过电话/微信发送给您<br>收到后请回到上一窗口输入激活</div>' +
+                '<div style="background:#f0faf4;border-radius:8px;padding:10px;margin:12px 0;font-size:12px;color:#333;text-align:left;">' +
+                    '<div>📋 工单编号：<b id="ticketNoText" style="font-family:monospace;color:#07c160;">--</b></div>' +
+                    '<div style="margin-top:4px;">🕐 提交时间：<b id="ticketTimeText">--</b></div>' +
+                '</div>' +
+                '<div style="font-size:11px;color:#909399;">⏳ 工作时间内通常 1 小时内处理，请耐心等待</div>' +
+            '</div>' +
+
+            // 按钮区
+            '<div style="display:flex;gap:10px;">' +
+                '<button id="ticketCancelBtn" style="flex:1;padding:12px;font-size:15px;border:1px solid #ddd;border-radius:8px;color:#666;background:white;cursor:pointer;">取消</button>' +
+                '<button id="ticketSubmitBtn" style="flex:1;padding:12px;font-size:15px;border:none;border-radius:8px;color:white;background:linear-gradient(135deg,#07c160 0%,#06ad56 100%);cursor:pointer;font-weight:bold;">📤 提交工单</button>' +
+            '</div>';
+
+        // 注入 spinner 动画（仅一次）
+        if (!document.getElementById('ticketSpinKeyframes')) {
+            const styleEl = document.createElement('style');
+            styleEl.id = 'ticketSpinKeyframes';
+            styleEl.textContent = '@keyframes ticketSpin{to{transform:rotate(360deg);}}';
+            document.head.appendChild(styleEl);
+        }
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        // 预填诊所名
+        if (clinicName) {
+            try { document.getElementById('ticketClinicName').value = clinicName; } catch (e) {}
+        }
+
+        function cleanup() {
+            if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+        }
+
+        function showErr(msg) {
+            const box = document.getElementById('ticketErrorBox');
+            if (box) { box.textContent = '⚠ ' + msg; box.style.display = 'block'; }
+        }
+        function hideErr() {
+            const box = document.getElementById('ticketErrorBox');
+            if (box) { box.style.display = 'none'; }
+        }
+        function markInvalid(id) {
+            const el = document.getElementById(id);
+            if (el) el.style.borderColor = '#e53935';
+        }
+        function resetBorders() {
+            ['ticketClinicName', 'ticketContactName', 'ticketContactPhone'].forEach(function(id) {
+                const el = document.getElementById(id);
+                if (el) el.style.borderColor = '#ddd';
+            });
+        }
+
+        // 手机号实时校验
+        document.getElementById('ticketContactPhone').addEventListener('input', function() {
+            this.value = this.value.replace(/[^\d]/g, '').slice(0, 11);
+            const hint = document.getElementById('ticketPhoneHint');
+            const v = this.value;
+            if (!v) {
+                hint.textContent = '💡 管理员审批后激活码将发送到此手机号';
+                hint.style.color = '#909399';
+            } else if (!PHONE_RE.test(v)) {
+                hint.textContent = '⚠ 请输入正确的11位手机号';
+                hint.style.color = '#e53935';
+            } else {
+                hint.textContent = '✓ 手机号格式正确';
+                hint.style.color = '#07c160';
+            }
+        });
+
+        // 取消
+        document.getElementById('ticketCancelBtn').addEventListener('click', cleanup);
+
+        // 提交
+        let ticketSubmitted = false; // 成功后按钮变为"完成"，点击关闭弹窗
+        document.getElementById('ticketSubmitBtn').addEventListener('click', async function() {
+            if (ticketSubmitted) { cleanup(); return; }
+            hideErr();
+            resetBorders();
+
+            const clinicNameV = document.getElementById('ticketClinicName').value.trim();
+            const contactNameV = document.getElementById('ticketContactName').value.trim();
+            const contactPhoneV = document.getElementById('ticketContactPhone').value.trim();
+            const contactWechatV = document.getElementById('ticketContactWechat').value.trim();
+            const remarkV = document.getElementById('ticketRemark').value.trim();
+
+            // 前端校验（与后端 API 口径一致）
+            if (!clinicNameV) { markInvalid('ticketClinicName'); showErr('请填写诊所名称'); return; }
+            if (!contactNameV) { markInvalid('ticketContactName'); showErr('请填写联系人姓名'); return; }
+            if (!contactPhoneV && !contactWechatV) { markInvalid('ticketContactPhone'); showErr('请至少填写一种联系方式（手机号/微信号）'); return; }
+            if (contactPhoneV && !PHONE_RE.test(contactPhoneV)) { markInvalid('ticketContactPhone'); showErr('请输入正确的11位手机号'); return; }
+            if (!machineId || String(machineId).length < 8 || machineId === 'unknown') {
+                showErr('设备标识无效，请重启应用后重试');
+                return;
+            }
+
+            const btn = document.getElementById('ticketSubmitBtn');
+            const cancelBtn = document.getElementById('ticketCancelBtn');
+            btn.disabled = true;
+            cancelBtn.disabled = true;
+            document.getElementById('ticketLoadingBox').style.display = 'block';
+
+            const payload = {
+                machineId: String(machineId), // 只传哈希串，不传原始硬件
+                edition: editionIntent,
+                clinicName: clinicNameV,
+                contactName: contactNameV,
+                contactPhone: contactPhoneV,
+                contactWechat: contactWechatV,
+                remark: remarkV,
+                submittedAt: new Date().toISOString()
+            };
+
+            try {
+                const controller = new AbortController();
+                const t = setTimeout(function() { try { controller.abort(); } catch (e) {} }, 20000);
+                let res;
+                try {
+                    const r = await fetch(ACTIVATION_TICKET_SUBMIT_URL, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                        signal: controller.signal
+                    });
+                    res = await r.json();
+                } finally { clearTimeout(t); }
+
+                if (res && res.success) {
+                    ticketSubmitted = true;
+                    document.getElementById('ticketFormArea').style.display = 'none';
+                    document.getElementById('ticketLoadingBox').style.display = 'none';
+                    document.getElementById('ticketSuccessBox').style.display = 'block';
+                    document.getElementById('ticketNoText').textContent = res.ticketNo || '--';
+                    document.getElementById('ticketTimeText').textContent = new Date().toLocaleString('zh-CN');
+                    // 成功后：取消按钮隐藏，提交按钮变为"完成"
+                    cancelBtn.style.display = 'none';
+                    btn.disabled = false;
+                    btn.textContent = '✅ 完成，回到激活窗口';
+                } else {
+                    btn.disabled = false;
+                    cancelBtn.disabled = false;
+                    document.getElementById('ticketLoadingBox').style.display = 'none';
+                    showErr((res && res.error) ? res.error : '提交失败，请稍后重试');
+                }
+            } catch (e) {
+                btn.disabled = false;
+                cancelBtn.disabled = false;
+                document.getElementById('ticketLoadingBox').style.display = 'none';
+                showErr('网络错误，提交失败：' + ((e && e.message) ? e.message : '请检查网络连接'));
+            }
+        });
+    }
 
     global.openAdminActivate = async function () {
         try {
