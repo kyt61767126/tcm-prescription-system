@@ -1,0 +1,259 @@
+{
+  "timestamp": "2026-08-21T10:15:12.286Z",
+  "version": "P1-1",
+  "data": {
+    "medicines": [],
+    "formulas": [
+      {
+        "name": "四君子汤",
+        "code": "sjzt",
+        "effect": "健脾益气",
+        "indication": "脾胃气虚证",
+        "composition": [
+          {
+            "name": "人参",
+            "dosage": 10
+          },
+          {
+            "name": "白术",
+            "dosage": 10
+          },
+          {
+            "name": "茯苓",
+            "dosage": 10
+          },
+          {
+            "name": "甘草",
+            "dosage": 5
+          }
+        ]
+      },
+      {
+        "name": "四物汤",
+        "code": "swt",
+        "effect": "补血调经",
+        "indication": "血虚证",
+        "composition": [
+          {
+            "name": "当归",
+            "dosage": 10
+          },
+          {
+            "name": "熟地黄",
+            "dosage": 12
+          },
+          {
+            "name": "白芍",
+            "dosage": 10
+          },
+          {
+            "name": "川芎",
+            "dosage": 8
+          }
+        ]
+      },
+      {
+        "name": "八珍汤",
+        "code": "bzt",
+        "effect": "气血双补",
+        "indication": "气血两虚证",
+        "composition": [
+          {
+            "name": "人参",
+            "dosage": 10
+          },
+          {
+            "name": "白术",
+            "dosage": 10
+          },
+          {
+            "name": "茯苓",
+            "dosage": 10
+          },
+          {
+            "name": "甘草",
+            "dosage": 5
+          },
+          {
+            "name": "当归",
+            "dosage": 10
+          },
+          {
+            "name": "川芎",
+            "dosage": 8
+          },
+          {
+            "name": "白芍",
+            "dosage": 10
+          },
+          {
+            "name": "熟地黄",
+            "dosage": 15
+          }
+        ]
+      },
+      {
+        "name": "六君子汤",
+        "code": "ljzt",
+        "effect": "健脾益气化痰",
+        "indication": "脾胃气虚痰湿证",
+        "composition": [
+          {
+            "name": "人参",
+            "dosage": 10
+          },
+          {
+            "name": "白术",
+            "dosage": 10
+          },
+          {
+            "name": "茯苓",
+            "dosage": 10
+          },
+          {
+            "name": "甘草",
+            "dosage": 5
+          },
+          {
+            "name": "陈皮",
+            "dosage": 5
+          },
+          {
+            "name": "半夏",
+            "dosage": 10
+          }
+        ]
+      },
+      {
+        "name": "参苓白术散",
+        "code": "slbzs",
+        "effect": "健脾益气渗湿",
+        "indication": "脾虚湿盛证",
+        "composition": [
+          {
+            "name": "人参",
+            "dosage": 15
+          },
+          {
+            "name": "茯苓",
+            "dosage": 15
+          },
+          {
+            "name": "白术",
+            "dosage": 15
+          },
+          {
+            "name": "山药",
+            "dosage": 15
+          },
+          {
+            "name": "白扁豆",
+            "dosage": 12
+          },
+          {
+            "name": "莲子",
+            "dosage": 9
+          },
+          {
+            "name": "薏苡仁",
+            "dosage": 9
+          },
+          {
+            "name": "砂仁",
+            "dosage": 6
+          },
+          {
+            "name": "桔梗",
+            "dosage": 6
+          },
+          {
+            "name": "甘草",
+            "dosage": 3
+          }
+        ]
+      },
+      {
+        "name": "补中益气汤",
+        "code": "bzyqt",
+        "effect": "补中益气升阳",
+        "indication": "中气下陷证",
+        "composition": [
+          {
+            "name": "人参",
+            "dosage": 10
+          },
+          {
+            "name": "黄芪",
+            "dosage": 15
+          },
+          {
+            "name": "白术",
+            "dosage": 10
+          },
+          {
+            "name": "甘草",
+            "dosage": 6
+          },
+          {
+            "name": "当归",
+            "dosage": 10
+          },
+          {
+            "name": "陈皮",
+            "dosage": 6
+          },
+          {
+            "name": "升麻",
+            "dosage": 6
+          },
+          {
+            "name": "柴胡",
+            "dosage": 6
+          }
+        ]
+      },
+      {
+        "name": "生脉散",
+        "code": "sms",
+        "effect": "益气养阴敛汗",
+        "indication": "气阴两虚证",
+        "composition": [
+          {
+            "name": "人参",
+            "dosage": 10
+          },
+          {
+            "name": "麦冬",
+            "dosage": 15
+          },
+          {
+            "name": "五味子",
+            "dosage": 6
+          }
+        ]
+      },
+      {
+        "name": "玉屏风散",
+        "code": "ypfs",
+        "effect": "益气固表止汗",
+        "indication": "表虚自汗证",
+        "composition": [
+          {
+            "name": "黄芪",
+            "dosage": 30
+          },
+          {
+            "name": "白术",
+            "dosage": 15
+          },
+          {
+            "name": "防风",
+            "dosage": 6
+          }
+        ]
+      }
+    ],
+    "prescriptionHistory": []
+  },
+  "prescriptionCount": 0
+}

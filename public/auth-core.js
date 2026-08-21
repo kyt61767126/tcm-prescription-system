@@ -2412,15 +2412,15 @@
                 '<div style="font-size:12px;color:rgba(255,255,255,0.9);margin-top:4px;">惠康中医诊所管理系统</div>' +
             '</div>' +
 
-            // 第一步：版本选择
+            // 第一步：版本选择（state 默认 edition='institution' 机构版，UI 需与之一致）
             '<div id="adminStepEdition" style="padding:16px;">' +
                 '<div style="font-size:13px;font-weight:bold;color:#555;margin-bottom:8px;">请选择要激活的版本</div>' +
                 '<div style="display:flex;gap:10px;">' +
-                    '<div id="editionPersonal" data-edition="personal" style="flex:1;padding:14px;border:2px solid #ddd;border-radius:10px;text-align:center;cursor:pointer;background:#26a69a;border-color:#26a69a;color:#fff;">' +
-                        '<div style="font-size:24px;">🏥</div><div style="font-size:14px;font-weight:bold;margin-top:2px;">标准版</div><div style="font-size:11px;opacity:0.85;">个人诊所 · 单用户</div>' +
+                    '<div id="editionPersonal" data-edition="personal" style="flex:1;padding:14px;border:2px solid #ddd;border-radius:10px;text-align:center;cursor:pointer;background:#fff;">' +
+                        '<div style="font-size:24px;">🏥</div><div style="font-size:14px;font-weight:bold;margin-top:2px;color:#333;">标准版</div><div style="font-size:11px;color:#909399;">个人诊所 · 单用户</div>' +
                     '</div>' +
-                    '<div id="editionInstitution" data-edition="institution" style="flex:1;padding:14px;border:2px solid #26a69a;border-radius:10px;text-align:center;cursor:pointer;background:#fff;">' +
-                        '<div style="font-size:24px;">🏨</div><div style="font-size:14px;font-weight:bold;margin-top:2px;color:#333;">机构版</div><div style="font-size:11px;color:#909399;">多人机构 · 多用户管理</div>' +
+                    '<div id="editionInstitution" data-edition="institution" style="flex:1;padding:14px;border:2px solid #26a69a;border-radius:10px;text-align:center;cursor:pointer;background:#26a69a;border-color:#26a69a;color:#fff;">' +
+                        '<div style="font-size:24px;">🏨</div><div style="font-size:14px;font-weight:bold;margin-top:2px;">机构版</div><div style="font-size:11px;opacity:0.85;">多人机构 · 多用户管理</div>' +
                     '</div>' +
                 '</div>' +
             '</div>' +
@@ -2658,12 +2658,33 @@
             btn.disabled = true;
             show('adminSubmitting');
 
+            // ★ 2026-08-22 纯浏览器环境无 electron/android machineId，
+            //   本地生成 browser_xxx 指纹存 localStorage（同一浏览器再次打开一致），
+            //   保证 machineId 长度 ≥8（否则 admin-submit.js 后端直接拒绝）。
+            //   同时后端 admin-submit 还有兜底（短值自动生成 browser-xxx），双保险。
+            let browserMid = '';
+            try {
+                browserMid = localStorage.getItem('browser_machine_id') || '';
+            } catch (e) { browserMid = ''; }
+            if (!browserMid || browserMid.length < 8) {
+                try {
+                    const arr = new Uint8Array(8);
+                    crypto.getRandomValues(arr);
+                    browserMid = 'browser_' + Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+                } catch (e) {
+                    browserMid = 'browser_' + Date.now().toString(16) + Math.random().toString(16).slice(2, 10);
+                }
+                try { localStorage.setItem('browser_machine_id', browserMid); } catch (e) {}
+            }
+            const needNativeMid = machineId && machineId !== 'unknown' && machineId !== '未知' && machineId.length >= 8;
+            const finalMachineId = needNativeMid ? machineId : browserMid;
+
             const payload = {
                 clinicName: state.clinicName,
                 adminName: state.adminName,
                 phone: state.phone,
                 remark: state.remark || '',
-                machineId: machineId || 'unknown',
+                machineId: finalMachineId,
                 productName: '惠康中医' + (state.edition === 'institution' ? '机构版' : '标准版'),
                 edition: state.edition,
                 appMode: 'app',

@@ -151,8 +151,27 @@ export async function onRequest(context) {
         }
 
         const body = await context.request.json().catch(() => ({}));
-        const { clinicName, adminName, phone, remark, machineId, 
+        const { clinicName, adminName, phone, remark, machineId,
                 productName, edition, appMode, versionLabel, env } = body;
+
+        // ★ 2026-08-22 纯网页环境（pages.dev 浏览器）无 electron / android machineId，
+        //   前端传 'unknown' / '未知' / 短值时自动兜底生成 browser-xxx 临时机器ID。
+        //   说明：桌面 / APP 端 "一机一版本绑定" 的强校验针对原生环境，浏览器环境
+        //   用户可在任意终端注册激活，不强求真实 machineId，仅保证长度满足下游逻辑。
+        let finalMachineId = (machineId || '').trim();
+        const NEED_FALLBACK = !finalMachineId ||
+            finalMachineId.length < 8 ||
+            finalMachineId === 'unknown' ||
+            finalMachineId === '未知';
+        if (NEED_FALLBACK) {
+            try {
+                const rand = Array.from(new Uint8Array(9))
+                    .map(b => b.toString(16).padStart(2, '0')).join('');
+                finalMachineId = 'browser-' + rand; // 固定前缀 + 18 位随机 = 26 位
+            } catch (e) {
+                finalMachineId = 'browser-' + Date.now().toString(16) + Math.random().toString(16).slice(2, 10);
+            }
+        }
 
         // 参数校验
         if (!clinicName || typeof clinicName !== 'string' || clinicName.trim().length === 0) {
@@ -173,7 +192,7 @@ export async function onRequest(context) {
         if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
             return json({ success: false, error: '请填写正确的 11 位手机号' }, 400);
         }
-        if (!machineId || typeof machineId !== 'string' || machineId.length < 8) {
+        if (!finalMachineId || typeof finalMachineId !== 'string' || finalMachineId.length < 8) {
             return json({ success: false, error: '机器 ID 无效，请重启软件后重试' }, 400);
         }
         if (remark && (typeof remark !== 'string' || remark.length > 500)) {
@@ -182,8 +201,9 @@ export async function onRequest(context) {
 
         // ★ 设备-版本绑定校验：同一台设备只能提交一个版本
         // 若该设备已绑定另一版本，则拒绝提交该版本的激活请求
+        //   （纯浏览器环境 finalMachineId = 'browser-xxx'，checkDeviceVersion 内部会对 browser- 前缀放行）
         if (edition) {
-            const deviceCheck = await checkDeviceVersion(kv, machineId, edition);
+            const deviceCheck = await checkDeviceVersion(kv, finalMachineId, edition);
             if (!deviceCheck.ok) {
                 return json({ success: false, error: deviceCheck.error }, 403);
             }
@@ -241,7 +261,7 @@ export async function onRequest(context) {
             adminName: adminName.trim(),
             phone: phone.trim(),
             remark: (remark || '').trim(),
-            machineId: machineId,
+            machineId: finalMachineId,
             status: 'pending',  // pending / activated / rejected / cancelled
             submittedAt: new Date().toISOString(),
             submittedIp: ip,
@@ -266,7 +286,7 @@ export async function onRequest(context) {
             console.warn('[AdminSubmit] 手机号索引写入失败:', e.message);
         });
 
-        console.log('[AdminSubmit] 新激活请求:', requestId, 'clinic=', clinicName, 'machineId=', machineId.substring(0, 8) + '...');
+        console.log('[AdminSubmit] 新激活请求:', requestId, 'clinic=', clinicName, 'machineId=', finalMachineId.substring(0, 8) + '...', NEED_FALLBACK ? '(browser fallback)' : '');
 
         return json({
             success: true,

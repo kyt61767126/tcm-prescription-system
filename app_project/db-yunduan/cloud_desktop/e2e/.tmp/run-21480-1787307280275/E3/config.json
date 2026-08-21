@@ -1,0 +1,19 @@
+{
+  "clinicName": "E2E测试诊所",
+  "doctorName": "E2E医师",
+  "edition": "cloud_clinic",
+  "appMode": "cloud",
+  "maxUsers": 5,
+  "productName": "惠康中医-云端",
+  "versionLabel": "云端机构版",
+  "users": [
+    {
+      "username": "e2epoison",
+      "password": "E2ePass123!",
+      "name": "E2E管理员",
+      "role": "admin"
+    }
+  ],
+  "configIssuedAt": "2026-08-21T10:15:08.216Z",
+  "configSignature": "94fb45c6cfc739e12af2e28dfc87f8a10f35a19d3f778cab0de2f7df501d09ad"
+}

@@ -1,0 +1,11 @@
+{
+  "backupAt": "2026-08-21T10:14:46.006Z",
+  "users": [
+    {
+      "username": "e2eadmin",
+      "password": "E2ePass123!",
+      "name": "E2E管理员",
+      "role": "admin"
+    }
+  ]
+}
