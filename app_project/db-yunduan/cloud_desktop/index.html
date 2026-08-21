@@ -1277,14 +1277,19 @@ let currentUser = null;
         }
 
         function getDefaultUsers() {
-            // 优先使用 config.json 中的用户配置
-            if (CONFIG.users && CONFIG.users.length > 0) {
-                return CONFIG.users.map(u => ({
-                    username: u.username,
-                    password: u.password,
-                    name: u.name,
-                    role: u.role || 'user'
-                }));
+            // 优先使用 config.json 中的用户配置（注意：必须是数组，否则可能是云端下发时
+            // 双编码残留的字符串或对象，直接 .map 会抛异常导致"用户管理点击无响应"）
+            if (Array.isArray(CONFIG.users) && CONFIG.users.length > 0) {
+                try {
+                    return CONFIG.users.map(u => ({
+                        username: u.username,
+                        password: u.password,
+                        name: u.name,
+                        role: u.role || 'user'
+                    }));
+                } catch (e) {
+                    console.error('[getDefaultUsers] CONFIG.users map 失败，使用兜底默认管理员:', e);
+                }
             }
             return [
                 {username: 'admin', password: '2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b', name: '管理员', role: 'admin'}
@@ -1391,16 +1396,27 @@ let currentUser = null;
                     const legacyUsernames = ['doctor1', 'doctor2'];
                     const filtered = parsed.filter(u => !legacyUsernames.includes(u.username));
                     if (filtered.length !== parsed.length) {
-                        const result = filtered.length > 0 ? filtered : getDefaultUsers();
-                        saveUsers(result);
+                        const result = filtered.length > 0 ? filtered : (function(){ try { return getDefaultUsers(); } catch(e){ return [{username:'admin',password:'2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b',name:'管理员',role:'admin'}]; } })();
+                        try { saveUsers(result); } catch(_){}
                         return result;
                     }
                     return parsed;
                 } catch (e) {
-                    try { return JSON.parse(saved); } catch(e2) { console.error('解析用户列表失败:', e); }
+                    try {
+                        // 可能是未加密的旧数据（版本升级过渡）
+                        const raw = JSON.parse(saved);
+                        if (Array.isArray(raw)) return raw;
+                    } catch(e2) {
+                        console.error('解析用户列表失败:', e, e2);
+                    }
                 }
             }
-            return getDefaultUsers();
+            try {
+                return getDefaultUsers();
+            } catch (e) {
+                console.error('[getUsers] getDefaultUsers 抛异常，使用兜底:', e);
+                return [{username:'admin',password:'2f1e152dfbccedc7d947d7f9d40e0790be6289309cf6904af728b3cf822c361b',name:'管理员',role:'admin'}];
+            }
         }
         // 启动时自动迁移明文密码为哈希
         (async function ensurePasswordsHashed() {
@@ -1943,34 +1959,58 @@ let currentUser = null;
         }
 
         function showUserManageModal() {
-            if (!currentUser) return;
-            const canManage = (window.Permission && Permission.shouldShowUserManage) ? Permission.shouldShowUserManage(currentUser) : (currentUser.role === 'admin');
-            if (!canManage) {
-                alert('只有管理员可以管理用户');
-                return;
-            }
+            try {
+                if (!currentUser) {
+                    alert('请先登录后再管理用户');
+                    return;
+                }
+                let canManage = false;
+                try {
+                    canManage = (window.Permission && Permission.shouldShowUserManage)
+                        ? !!Permission.shouldShowUserManage(currentUser)
+                        : (currentUser.role === 'admin' || currentUser.role === 'clinic_admin');
+                } catch (permErr) {
+                    console.error('[showUserManageModal] 权限校验抛异常，按admin兜底:', permErr);
+                    canManage = !!(currentUser && (currentUser.role === 'admin' || currentUser.role === 'clinic_admin'));
+                }
+                if (!canManage) {
+                    alert('只有管理员可以管理用户');
+                    return;
+                }
 
-            renderUserList();
-            document.getElementById('newUserUsername').value = '';
-            document.getElementById('newUserPassword').value = '';
-            document.getElementById('newUserName').value = '';
-            document.getElementById('userManageModal').style.display = 'flex';
+                renderUserList();
+                try { document.getElementById('newUserUsername').value = ''; } catch(_){}
+                try { document.getElementById('newUserPassword').value = ''; } catch(_){}
+                try { document.getElementById('newUserName').value = ''; } catch(_){}
+                const modal = document.getElementById('userManageModal');
+                if (!modal) { alert('用户管理模态框DOM未找到'); return; }
+                modal.style.display = 'flex';
+            } catch (e) {
+                console.error('打开用户管理失败:', e);
+                alert('打开用户管理失败: ' + (e && e.message ? e.message : String(e)));
+            }
         }
 
         function renderUserList() {
-            const users = getUsers();
-            const listDiv = document.getElementById('userList');
-            
-            let html = '';
-            users.forEach(user =>{
-                const isTest = user.userType === 'test';
-                const userTypeBadge = isTest 
-                    ? '<span style="color:#f39c12;font-size:11px;margin-left:5px;">[测试]</span>' 
-                    : '<span style="color:#27ae60;font-size:11px;margin-left:5px;">[正式]</span>';
-                html += `<div class="user-item"><div class="user-item-info"><div class="user-item-name">${escapeHtml(user.name)} (${escapeHtml(user.username)})${userTypeBadge}</div><div class="user-item-role">${user.role === 'admin' ? '管理员' : '普通用户'}</div></div><div class="user-item-actions"><button class="user-item-btn btn-primary" onclick="handleViewUserPrescriptions('${escapeJs(user.username)}')">查看处方</button><button class="user-item-btn btn-primary" onclick="handleEditUser('${escapeJs(user.username)}')">编辑</button>${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + escapeJs(user.username) + '\')">删除</button>' : ''}</div></div>`;
-            });
-            
-            listDiv.innerHTML = html || '暂无用户';
+            try {
+                const users = getUsers();
+                const listDiv = document.getElementById('userList');
+                if (!listDiv) { throw new Error('用户列表容器 userList DOM 不存在'); }
+                if (!Array.isArray(users)) { throw new Error('用户数据格式错误（非数组）: ' + typeof users); }
+                let html = '';
+                users.forEach(user =>{
+                    const isTest = user.userType === 'test';
+                    const userTypeBadge = isTest 
+                        ? '<span style="color:#f39c12;font-size:11px;margin-left:5px;">[测试]</span>' 
+                        : '<span style="color:#27ae60;font-size:11px;margin-left:5px;">[正式]</span>';
+                    html += `<div class="user-item"><div class="user-item-info"><div class="user-item-name">${escapeHtml(user.name)} (${escapeHtml(user.username)})${userTypeBadge}</div><div class="user-item-role">${user.role === 'admin' ? '管理员' : '普通用户'}</div></div><div class="user-item-actions"><button class="user-item-btn btn-primary" onclick="handleViewUserPrescriptions('${escapeJs(user.username)}')">查看处方</button><button class="user-item-btn btn-primary" onclick="handleEditUser('${escapeJs(user.username)}')">编辑</button>${user.username !== 'admin' ? '<button class="user-item-btn btn-danger" onclick="handleDeleteUser(\'' + escapeJs(user.username) + '\')">删除</button>' : ''}</div></div>`;
+                });
+
+                listDiv.innerHTML = html || '暂无用户';
+            } catch (e) {
+                console.error('渲染用户列表失败:', e);
+                alert('渲染用户列表失败: ' + (e && e.message ? e.message : String(e)));
+            }
         }
 
         function handleEditUser(username) {
