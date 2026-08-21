@@ -41,7 +41,8 @@
                                 "security-guard.js",
                                 "build/icon.ico",
                                 "button-manager.js",
-                                "edition-lock.js"
+                                "edition-lock.js",
+                                "build-meta.json"
                             ],
                   "win":  {
                               "target":  [

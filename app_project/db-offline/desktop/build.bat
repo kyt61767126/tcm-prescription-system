@@ -160,6 +160,15 @@ if errorlevel 1 (
 echo [OK] Code obfuscation complete
 echo.
 
+REM ★ 铁闸4/5（2026-08-21 同步自云端 B2 推广）：写入 build-meta.json — 登录页/主界面版本自证三元组
+REM   登录页/主界面顶端会显示 Vx.x.xx | Build 时间 | Arch 2.xx，用户一眼能对照真假包
+echo [7.5/9] Iron Gate #4 / #5 — Write build-meta.json (version-triple for login page)...
+node "%~dp0..\..\..\tools\write-build-meta.cjs" "%CD%"
+if errorlevel 1 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] build-meta 生成失败（non-fatal，登录页将不显示三元组）'"
+)
+echo.
+
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[8/9] Running build (two-phase: --dir + final .bnzc embed + --prepackaged)...'"
 set ELECTRON_MIRROR=https://registry.npmmirror.com/-/binary/electron/
 set ELECTRON_BUILDER_BINARIES_MIRROR=https://registry.npmmirror.com/-/binary/electron-builder-binaries/
@@ -237,6 +246,24 @@ if errorlevel 1 (
 echo [OK] .bnzc embedded and verified on final exe
 echo.
 
+REM ★★ 铁闸6-A（B2 2026-08-21 同步自云端根治方案）：asar安全备份
+REM    electron-builder --prepackaged / consolidation 会重建 output/win-unpacked 并搬入假 asar，
+REM    这里立即把 Phase 1+2 产出的真 asar 备份到项目根的 _backup_asar\（不会被任何步骤清理），
+REM    后续 Fixup 和 Final GATE 都从这个备份读取，杜绝被误删或覆盖回旧缓存。
+echo [8.0/9] Save real asar to safe backup (avoid consolidation deleting it)...
+set "BACKUP_ASAR_DIR=%CD%\_backup_asar"
+if exist "%BACKUP_ASAR_DIR%" rmdir /s /q "%BACKUP_ASAR_DIR%" 2>nul
+mkdir "%BACKUP_ASAR_DIR%" 2>nul
+copy /Y "%OUTPUT_DIR%\win-unpacked\resources\app.asar" "%BACKUP_ASAR_DIR%\real_app.asar" >nul
+set "SAFE_BACKED_ASAR=%BACKUP_ASAR_DIR%\real_app.asar"
+if exist "%SAFE_BACKED_ASAR%" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [OK] 真 asar 已备份到: %SAFE_BACKED_ASAR%'"
+) else (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] asar 备份失败（路径不对或尚未生成），将尝试直接用 OUTPUT_DIR 下的 asar'"
+    set "SAFE_BACKED_ASAR=%OUTPUT_DIR%\win-unpacked\resources\app.asar"
+)
+echo.
+
 echo Running electron-builder --prepackaged (nsis + portable)...
 node "node_modules\electron-builder\cli.js" --win --prepackaged "%OUTPUT_DIR%/win-unpacked" --config.directories.output="%OUTPUT_DIR%"
 set "BUILD_RC=%errorlevel%"
@@ -262,6 +289,33 @@ if not "%BUILD_RC%"=="0" (
     if not defined NO_PAUSE pause
     exit /b 1
 )
+
+REM ★ 铁闸6-B（B2 2026-08-21 根治 electron-builder 缓存/重建假 asar）：
+REM   electron-builder --prepackaged 会重建自己的 output 内 win-unpacked/resources/app.asar（假的，未过 Gate），
+REM   这里强制用 SAFE_BACKED_ASAR（真 asar 的安全备份）覆盖 %OUTPUT_DIR%\win-unpacked\resources\app.asar，
+REM   根治 consolidation 阶段把假 asar 搬进 dist/。
+echo.
+echo [8.9/9] Iron Gate Fixup — 强制覆盖 output/win-unpacked asar 为真包...
+if exist "%SAFE_BACKED_ASAR%" (
+    if exist "%OUTPUT_DIR%\win-unpacked\resources\app.asar" (
+        echo   删除 output 下的假 asar: %OUTPUT_DIR%\win-unpacked\resources\app.asar
+        del /f /q "%OUTPUT_DIR%\win-unpacked\resources\app.asar" 2>nul
+        echo %OUTPUT_DIR%\win-unpacked\resources\app.asar
+    )
+    echo   复制真 asar 到 output:
+    echo     源: %SAFE_BACKED_ASAR%
+    echo     目: %OUTPUT_DIR%\win-unpacked\resources\app.asar
+    if not exist "%OUTPUT_DIR%\win-unpacked\resources" mkdir "%OUTPUT_DIR%\win-unpacked\resources" 2>nul
+    copy /Y "%SAFE_BACKED_ASAR%" "%OUTPUT_DIR%\win-unpacked\resources\app.asar" >nul
+    if exist "%OUTPUT_DIR%\win-unpacked\resources\app.asar" (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '  [OK] asar 覆盖成功（根治缓存假包）'"
+    ) else (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] asar 覆盖失败（不致命，final-verify 仍会抓出问题）'"
+    )
+) else (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] 安全备份 asar 不存在：%SAFE_BACKED_ASAR%'"
+)
+echo.
 
 REM TEMP
 set "TEMP=%PREV_TEMP%"
@@ -342,6 +396,30 @@ if /i not "%OUTPUT_DIR%"=="%DEFAULT_OUTPUT%" (
         powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[INFO] Main deliverables: %CD%\%DEFAULT_OUTPUT%\ and fallback %CD%\%OUTPUT_DIR%\ '"
     )
 )
+
+REM ★ 最后一道铁闸7（B2 2026-08-21 推广至离线版）：独立验证真 asar
+REM   使用 SAFE_BACKED_ASAR（项目根 _backup_asar/ 下的安全备份，不会被 consolidation 误删）。
+REM   验证标准：8 个 ARCH_MARKERS + package.json version 精确匹配 + build-meta 三元组。
+REM   失败 → 红线删除所有 exe，杜绝假包交付。
+echo.
+echo [9.5/9] Iron Gate Final — 独立验证真 asar（与云端一致标准：8 markers + version + build-meta 三元组）...
+set "VERIFY_ASAR_PATH=%SAFE_BACKED_ASAR%"
+set "VERIFY_PKG_DIR=%CD%"
+set "VERIFY_OUTPUT_DIR=%OUTPUT_DIR%"
+node "%~dp0..\..\..\tools\final-verify.cjs"
+set "FINAL_VERIFY_RC=%errorlevel%"
+set "VERIFY_ASAR_PATH="
+set "VERIFY_PKG_DIR="
+set "VERIFY_OUTPUT_DIR="
+if not "%FINAL_VERIFY_RC%"=="0" (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] FINAL IRON GATE 验证失败，真 asar 未通过校验。已自动删除所有 exe，杜绝假包'"
+    REM 确保源码还原（失败路径上可能仍处于混淆态）
+    node "%~dp0..\..\..\tools\obfuscate.js" restore --target=dingzhi >nul 2>&1
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+echo [OK] FINAL IRON GATE ALL PASS ✓ — 7 道铁闸全部生效（离线版）
+echo.
 
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Output directory: %CD%\%OUTPUT_DIR%'"
 echo ============================================
