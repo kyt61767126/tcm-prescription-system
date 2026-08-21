@@ -37,6 +37,10 @@
 /*.js
   Cache-Control: public, max-age=0, must-revalidate
 
+# 症状词典（内置词条低频变更；修订时 bump SYMPTOM_DICT.version 破缓存）：1天缓存
+/symptom-dict.js
+  Cache-Control: public, max-age=86400
+
 # 第三方库（几乎不变，体积大）：保留长缓存
 /qrcode.min.js
   Cache-Control: public, max-age=604800

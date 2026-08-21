@@ -43,6 +43,7 @@ $BusinessJsFiles = @(
     'db-adapter.js',
     'debug-logger.js',
     'medicine-dict.js',
+    'symptom-dict.js',
     'patient-archive.js',
     'performance-utils.js',
     'permission.js',

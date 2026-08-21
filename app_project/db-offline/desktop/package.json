@@ -36,6 +36,7 @@
             "debug-logger.js",
             "print-utils.js",
             "medicine-dict.js",
+            "symptom-dict.js",
             "db-adapter.js",
             "performance-utils.js",
             "prescription-core.js",

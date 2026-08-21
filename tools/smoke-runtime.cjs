@@ -371,6 +371,72 @@ function run({ asarPath, htmlPath }) {
     else { fail++; lines.push('[SMOKE][FAIL] ' + nm); }
   }
 
+  // S 区块：症状词典（symptom-dict.js）冒烟 —— 2026-08-21 舌脉快捷录入
+  //   asar 模式取包内文件；html 模式取同目录文件；任一表面缺失即红线。
+  let sdSrc = null;
+  if (asarPath) {
+    try { sdSrc = extractAsarFile(asarPath, 'symptom-dict.js'); } catch (e) { sdSrc = null; }
+  } else if (htmlPath) {
+    const p = path.join(path.dirname(htmlPath), 'symptom-dict.js');
+    if (fs.existsSync(p)) sdSrc = fs.readFileSync(p, 'utf8');
+  }
+
+  // S8 接线：index.html 必须加载词典
+  total++;
+  if (src.includes('symptom-dict.js')) { pass++; lines.push('[SMOKE][PASS] S8 index.html 已加载 symptom-dict.js 标签'); }
+  else { fail++; lines.push('[SMOKE][FAIL] S8 index.html 缺 symptom-dict.js 标签 —— 舌脉快捷录入未接线'); }
+
+  if (!sdSrc) {
+    total++; fail++;
+    lines.push('[SMOKE][FAIL] S1 产物中缺少 symptom-dict.js —— 舌脉词典未随包交付');
+  } else {
+    // 专用沙箱：无 DOM 环境（querySelector/getElementById 均返回 null，组件走安全重试路径）
+    const elStub = () => ({ style: {}, addEventListener() {}, appendChild() {}, innerHTML: '' });
+    const sb2 = Object.assign(makeSandbox(), {
+      document: {
+        readyState: 'complete',
+        addEventListener() {},
+        getElementById() { return elStub(); },
+        querySelector() { return null; },          // 按钮/面板注入走重试分支（setTimeout stub 为 no-op）
+        createElement() { return elStub(); },
+        head: { appendChild() {} },
+        body: { appendChild() {} },
+      },
+      setTimeout() { return 0; },
+      clearTimeout() {},
+      confirm() { return true; },
+      alert() {},
+    });
+    sb2.window = sb2;
+    sb2.globalThis = sb2;
+    // 频次毒数据：JSON 解析失败必须被 try/catch 吞掉（宁漏检不可误报原则）
+    sb2.__storage['symptom_freq_v1'] = 'garbage{not-json';
+
+    let SD = null, DICT = null, loadErr = null;
+    try {
+      vm.createContext(sb2);
+      vm.runInContext(sdSrc, sb2, { filename: 'symptom-dict.js' });
+      SD = sb2.SymptomDict; DICT = sb2.SYMPTOM_DICT;
+    } catch (e) { loadErr = e; }
+
+    const termCount = (DICT && Array.isArray(DICT.categories))
+      ? DICT.categories.reduce((s, c) => s + (c.terms || []).length, 0) : -1;
+    const S_CASES = [
+      ['S1 词典结构：6分类/词条80~130（实际' + termCount + '）', !loadErr && !!DICT && Array.isArray(DICT.categories) && DICT.categories.length === 6 && termCount >= 80 && termCount <= 130],
+      ['S2 简码前缀搜索 mx→脉弦', !loadErr && !!SD && (() => { const r = SD.search('mx'); return Array.isArray(r) && r.some(x => x.text === '脉弦'); })()],
+      ['S3 空搜索→空数组', !loadErr && !!SD && Array.isArray(SD.search('')) && SD.search('').length === 0],
+      ['S4 拼接跨分类用逗号', !loadErr && !!SD && SD.assembleText([{ text: '舌淡红', cat: 'tz' }, { text: '苔薄白', cat: 'tai' }, { text: '脉弦', cat: 'mai' }]) === '舌淡红，苔薄白，脉弦'],
+      ['S5 拼接同分类用顿号', !loadErr && !!SD && SD.assembleText([{ text: '舌红', cat: 'tz' }, { text: '舌有瘀斑', cat: 'tz' }]) === '舌红、舌有瘀斑'],
+      ['S6 模板追加语义+order=0 falsy 排序回归', !loadErr && !!SD && SD.assembleText([{ text: '恶寒发热', cat: 'wd' }, { text: '舌淡红，苔薄白，脉弦', cat: 'zh' }]) === '舌淡红，苔薄白，脉弦，恶寒发热'],
+      ['S7 毒频次数据+无DOM环境下加载不抛错', !loadErr],
+    ];
+    for (const [nm, ok] of S_CASES) {
+      total++;
+      if (ok) { pass++; lines.push('[SMOKE][PASS] ' + nm); }
+      else { fail++; lines.push('[SMOKE][FAIL] ' + nm + (loadErr ? ' → 加载抛错: ' + loadErr.message : '')); }
+    }
+  }
+
   return { total, pass, fail, lines };
 }
 
