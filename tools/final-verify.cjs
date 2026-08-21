@@ -73,6 +73,19 @@ check('铁闸4三元组：build-meta.json 中 archMarker（Arch 2.xx）存在', 
 const hasBuildDate = raw.includes('buildTimeLocal') && /\d{4}\/\d{1,2}\/\d{1,2}/.test(raw);
 check('铁闸4三元组：Build 中文时间戳存在', hasBuildDate);
 
+// ④ 铁闸8：运行时冒烟 —— 从 asar 提取用户管理链路函数，vm 沙箱注入坏数据，断言不抛错
+//    防 1.2.101 "【用户管理】按钮点击无响应"类静默崩溃复发（CONFIG.users 非数组 / localStorage 毒数据）
+let smokeFail = 1, smokePass = 0, smokeTotal = 0;
+try {
+  const smoke = require('./smoke-runtime.cjs');
+  const r = smoke.run({ asarPath });
+  smokeFail = r.fail; smokePass = r.pass; smokeTotal = r.total;
+  for (const l of r.lines) console.log(l);
+} catch (e) {
+  console.log('[SMOKE][FAIL] 冒烟执行器异常: ' + (e && e.message ? e.message : String(e)));
+}
+check('铁闸8 运行时冒烟：坏数据注入 ' + smokePass + '/' + smokeTotal + ' 用例通过', smokeFail === 0);
+
 console.log('');
 
 if (fail > 0) {
