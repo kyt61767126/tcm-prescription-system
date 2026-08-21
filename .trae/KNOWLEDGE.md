@@ -417,6 +417,17 @@
 - 重打产物：`惠康中医-本地 1.0.87.exe` + `Setup 1.0.87.exe`，symbol 三闸门+e2e 3/3+交付核对单全 PASS。
 - 生效：离线桌面版需重装新版；离线APP/云端桌面/云端APP 按各自生效方式重打包或待部署。
 
+### 2.31 【云端注册管理全链路】设备授权2台+单设备在线互斥+安全加固（提交 ee8e80e0，2026-08-21）
+
+- **需求闭环**：云端无试用；注册（标准版/机构版意向）→ 后台激活 → 登录使用；一个云端管理员最多授权 2 台设备（桌面/APP），仅 1 台在线；数据存储安全。
+- **注册版本意向闭环**：auth-core.js 注册表单新增版本选择卡片（regEdPersonal/regEdInstitution），提交带 edition 参数；users.js 注册存储 requestedEdition；管理员审核转正时优先采用意向。早期无 edition 用户兜底 cloud_clinic（2.20 节延续）。
+- **设备授权（KV）**：`user_devices:{username}` 存 `{maxDevices:2, devices:[{machineId, clientClass, boundAt, lastSeenAt}]}`；登录时 bindUserDevice 校验，超限返回 403 `DEVICE_LIMIT`（提示"请先在已绑定设备上解绑，或联系管理员"）。网页版 machineId 为 unknown/短指纹时不计入名额（宽松放行，宁漏检不可误报）。管理端点：`GET /users?action=list-devices`（本人查看）、`POST /users?action=unbind-device`（本人自助解绑）。
+- **单设备在线互斥**：`user_session:{username}` 存当前会话 tokenHash（SHA-256）；每次登录 writeUserSession 覆盖写（新踢旧）；verifyToken 比对 tokenHash 不匹配返回 401 → 前端 cloud-api.js 对任何 401 统一清登录态弹登录框，提示"登录已失效（账号可能在其他设备登录）"。旧设备的下一次 API 调用即被踢，无需心跳。
+- **数据安全清单**：PBKDF2-SHA256 100000轮+salt（兼容旧SHA-256迁移）；HMAC token fail-closed（AUTH_SECRET 缺失即拒绝签发）；token 黑名单+version 撤销（改密全端下线）+session 互斥；登录防枚举（USER_NOT_FOUND 与 WRONG_PASSWORD 同文案计时一致）+失败锁定（login_fail:{username} 计数）+IP 限流；审计日志 writeAuditLog 记录 login_success/login_failed/device_limit。
+- **部署后实测（线上 6/6）**：①设备A登录绑定 ②list-devices 显示 2/2 ③设备C登录 403 DEVICE_LIMIT ④设备A二次登录后旧token 401 被踢/新token 200 ⑤解绑后设备C登录 200 名额释放 ⑥解绑状态 list-devices 正确。
+- **排查坑**：测试账号连续错密码会累积 login_fail 计数（提示"剩余尝试次数 N 次"），剩 2 次时立即停手换已知密码账号（wgj/admin123），勿盲试触发锁定。
+- **生效方式**：云端网页版/APP=推 GitHub 自动生效（已验证）；云端桌面版=需重打 Setup 并重装；离线版=需重打包（不受此云端策略影响）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
