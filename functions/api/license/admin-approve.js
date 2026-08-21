@@ -210,6 +210,13 @@ export async function onRequest(context) {
         //   前端提示"账号已在云端创建，用手机号登录"，但 findUserForLogin 找不到 → 401。
         //   此处为云端机构版/标准版自动开通：诊所（按名称复用，不重复建）+ clinic_admin 账号
         //   （username=激活手机号，密码留空默认 admin，与离线端默认密码一致）。
+        // ★ 2026-08-22 统一 edition：必须以管理员审核时最终选的 type 为准，
+        //   不能用用户注册时自选的 record.type（两者可能不一致→edition 错误）。
+        //   此处临时覆盖，确保下方 provisionCloudAccount 内部 mapActivationTypeToEdition 取对；
+        //   同时在 L263 存 KV 时回写，保证 admin-status / admin-submit / users 登录自愈
+        //   从 KV 再读同一份 record 时，type 也是管理员最终确认的。
+        const finalActivationType = type; // 'pro' 或 'personal'，L139 已做必填+枚举校验
+        record.type = finalActivationType;
         try {
             await provisionCloudAccount(kv, record);
         } catch (e) {
@@ -259,12 +266,19 @@ export async function onRequest(context) {
         const licenseData = await buildLicenseData(licenseRecord, licenseOptions);
         const licenseBase64 = encodeLicenseBase64(licenseData);
 
-        // 3. 更新请求记录 status=activated，存储 licenseBase64
+        // 3. 更新请求记录 status=activated，存储 licenseBase64 + 管理员最终决策
+        //   （type/days/expiresAt/maxDevices 必须以管理员审核时传入的参数为准，
+        //    回写到 KV 后 admin-status 轮询补开 / admin-submit 短路复用 /
+        //    users.js 登录自愈 从同一份 KV 读取时，edition 映射才能完全一致）
         record.status = 'activated';
         record.resolvedAt = new Date().toISOString();
         record.resolvedBy = currentUser.username;
         record.licenseCode = code;
         record.licenseBase64 = licenseBase64;
+        record.type = finalActivationType;          // 管理员最终选的版本（pro=机构版 / personal=标准版）
+        record.days = days || null;                 // 管理员最终给的天数
+        record.expiresAt = recordExpiresAt || null; // 管理员最终给的到期日
+        record.maxDevices = parsedMaxDevices;       // 管理员最终给的设备数上限
         await kv.put(KV_ADMIN_REQ_PREFIX + requestId, JSON.stringify(record));
         // ★ 2026-08-20 更新手机号→激活申请索引为已通过（供登录自愈补开账号）
         await kv.put('admin_phone:' + record.phone, JSON.stringify({ requestId, status: 'activated' })).catch(e => {});
