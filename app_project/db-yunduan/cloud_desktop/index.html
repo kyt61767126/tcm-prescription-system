@@ -817,16 +817,11 @@ let currentUser = null;
 
             // ★ 挂载点1：.version-tag（紫色header内，登录遮罩层显示）
             var tag = document.querySelector('.version-tag');
-            var _loEl = document.getElementById('loginOverlay');
-            var _loginVisible = !!(_loEl && _loEl.style.display !== 'none');
+            // ★ 2026-08-23 登录前也展示真实版本标签（不再"登录后显示版本"占位符）
+            //   权威链：getEditionTag() → CONFIG.versionLabel → CONFIG.edition → Permission._edition → __APP_EDITION__ → EDITION
+            //   确保未登录时也能让用户明确知道当前是机构版还是标准版
             if (tag) {
-                if (!_loginVisible) {
-                    // 登录后（overlay隐藏）：顶栏版本标签正常显示
-                    tag.innerHTML = '【' + label + '】' + metaHtml;
-                } else {
-                    // 登录前（overlay显示）：保持 "云端·登录后显示版本"提示 + 三元组（铁闸4自证真伪，未登录也可见）
-                    tag.innerHTML = '【云端 · 登录后显示版本】' + metaHtml;
-                }
+                tag.innerHTML = '【' + label + '】' + metaHtml;
             }
             // ★ 挂载点2：.login-security 下方（激活后简化登录框必显示，防止 header-section 被隐藏时三元组丢失）
             var security = document.querySelector('.login-security');
@@ -850,7 +845,9 @@ let currentUser = null;
                         '<div style="font-size:9px;line-height:1.25;">' + metaTextLine1 + '</div>' +
                         (metaTextLine2 ? '<div style="font-size:9px;line-height:1.25;color:#aab;">' + metaTextLine2 + '</div>' : '');
                 } else {
-                    bottomTag.textContent = '【开发模式：未找到 build-meta.json】';
+                    // ★ 2026-08-23 无构建时 build-meta.json 是正常情况（如网页端静态托管 / APP WebView）。
+                    //   不显示"开发模式"字样吓用户，静默隐藏。用户版本身份靠上方 .version-tag 展示。
+                    bottomTag.style.display = 'none';
                 }
             }
             var et = document.getElementById('editionTag');
