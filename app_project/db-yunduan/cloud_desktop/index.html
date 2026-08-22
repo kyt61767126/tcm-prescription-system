@@ -7832,7 +7832,11 @@ let currentUser = null;
 
         async function analyzeMonthlyStats() {
             const statsMap = new Map();
-            const allPrescriptions = await getAllUserPrescriptions();
+            // ★ 权限隔离（2026-08-22）：月度统计必须复用权限过滤，与历史列表口径一致。
+            //   修复：此前 getAllUserPrescriptions() 不带参数读取全量数据，同一设备
+            //   多账户登入时（或云端断网回退本地缓存时）统计会串号泄露其他用户处方。
+            //   普通用户仅统计本人（createdBy === username），管理员统计全部。
+            const allPrescriptions = filterPrescriptionsByPermission(await getAllUserPrescriptions());
 
             allPrescriptions.forEach(p => {
                 const date = new Date(p.createdAt || p.date || 0);
