@@ -456,7 +456,7 @@ node "%~dp0..\..\..\shared\calculate-hash.js"
 if errorlevel 1 (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] Hash computation had issues, continuing'"
 ) else (
-    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] SHA-256 hash updated to public/hash-manifest.json'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] SHA-256 computed - read-only, manifest updated only at publish time'"
 )
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Auto-updating download page (%FLAVOR_TARGET%)...'"
 node "%~dp0..\..\..\tools\auto-update-downloads.js" %FLAVOR_TARGET%

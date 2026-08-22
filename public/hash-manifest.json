@@ -1,28 +1,35 @@
 {
     "dingzhi": {
         "apk": {
-            "version": "",
-            "sha256": "0515ce98ca841454a8c080ec65ee5350566c6e091a9e9ef249e1c872e695ea66",
+            "version": "1.0.0",
+            "sha256": "8f08c7f065b8b484bf10153e642ec402e18920fa28c99e643e7bb6d8ce03cc74",
             "url": "/downloads/惠康中医-本地.apk",
-            "size": 2849228,
-            "updateTime": "2026-08-21T22:33:03.518Z",
-            "fileName": "惠康中医-本地.apk"
+            "releaseUrl": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.08.18/huikang-dingzhi.apk",
+            "size": 2786835,
+            "updateTime": "2026-08-18T12:10:33.013Z",
+            "fileName": "惠康中医-本地.apk",
+            "releaseFileName": "huikang-dingzhi.apk",
+            "releaseTag": "v2026.08.18"
         },
         "portable": {
-            "version": "",
-            "sha256": "56a28579b8f51d91430230688c0820947376b9b9ce339509bb8bb7e73483a08d",
+            "version": "1.0.56",
+            "sha256": "cc9fdbe895fe3929c7a5be48c60a85ebbb8af5913cfe51329309420947507caf",
             "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.08.18/huikang-dingzhi-1.0.56.exe",
-            "size": 78622674,
-            "updateTime": "2026-08-21T22:33:03.518Z",
-            "fileName": "惠康中医-本地 1.0.87.exe"
+            "size": 78578409,
+            "updateTime": "2026-08-18T12:10:33.013Z",
+            "fileName": "惠康中医-本地 1.0.56.exe",
+            "releaseFileName": "huikang-dingzhi-1.0.56.exe",
+            "releaseTag": "v2026.08.18"
         },
         "exe": {
-            "version": "",
-            "sha256": "42492eb28f4703de09fc0ecb0194d20eadfa8a04830034bf8ba1972b6aed109d",
+            "version": "1.0.56",
+            "sha256": "659ef9f7cab23f74baf37a44bf39d696fd544a0bc45ec3ba7fe05f1213f7e7cd",
             "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.08.18/huikang-dingzhi-setup-1.0.56.exe",
-            "size": 78894288,
-            "updateTime": "2026-08-21T22:33:03.518Z",
-            "fileName": "惠康中医-本地 Setup 1.0.87.exe"
+            "size": 78859011,
+            "updateTime": "2026-08-18T12:10:33.013Z",
+            "fileName": "惠康中医-本地 Setup 1.0.56.exe",
+            "releaseFileName": "huikang-dingzhi-setup-1.0.56.exe",
+            "releaseTag": "v2026.08.18"
         }
     },
     "cloud": {
@@ -35,20 +42,24 @@
             "fileName": "惠康中医-云端.apk"
         },
         "exe": {
-            "version": "",
-            "sha256": "f6c4d74860afa19e13c38edc7bc635f9440d4402ae75d46b79a8aca7a469fe8f",
+            "version": "1.2.36",
+            "sha256": "3dcf95bfebe38143192594d68dfb3f9defeb5958d56db83bd03eb2cda094c191",
             "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.08.17/huikang-cloud-setup-1.2.36.exe",
-            "size": 81668391,
-            "updateTime": "2026-08-21T22:33:03.518Z",
-            "fileName": "惠康中医-云端 Setup 1.2.121.exe"
+            "size": 81552677,
+            "updateTime": "2026-08-16T23:04:26.824Z",
+            "fileName": "惠康中医-云端 Setup 1.2.36.exe",
+            "releaseFileName": "huikang-cloud-setup-1.2.36.exe",
+            "releaseTag": "v2026.08.17"
         },
         "portable": {
-            "version": "",
-            "sha256": "1a3a7303ee61a7675056b0cae24a49884425c6ddb2cf587e9f2ceaf2d2a14ff7",
+            "version": "1.2.36",
+            "sha256": "1b48d2e618cf3e4927f6de5d955ba8b60c029dc2e10618d49daee390c83a1752",
             "url": "https://github.com/kyt61767126/tcm-prescription-system/releases/download/v2026.08.17/huikang-cloud-1.2.36.exe",
-            "size": 81396834,
-            "updateTime": "2026-08-21T22:33:03.518Z",
-            "fileName": "惠康中医-云端 1.2.121.exe"
+            "size": 81272030,
+            "updateTime": "2026-08-16T23:04:26.824Z",
+            "fileName": "惠康中医-云端 1.2.36.exe",
+            "releaseFileName": "huikang-cloud-1.2.36.exe",
+            "releaseTag": "v2026.08.17"
         }
     },
     "provenance": {

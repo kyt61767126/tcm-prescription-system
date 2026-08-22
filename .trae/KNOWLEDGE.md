@@ -585,6 +585,14 @@
 - **教训**：①"一次性修复"必须升级为"结构性防复发"，修复代码必须放在受害脚本**被解析之前**执行（入口前置防线）；②工作区行尾污染 git 不可见，防行尾问题只能靠运行时自愈，不能指望 git 检查发现；③本次还实锤 dist 旧 `win-unpacked\resources\app.asar` 被 Defender 锁定（无任何僵尸进程占用、taskkill 无对象）→ 构建按 2.46 三铁律 WARN 并把新产物完整留在 fallback 目录，属设计内行为，交付物（安装包）不受影响。
 - **生效方式**：打包脚本修复随 git 生效，用户直接双击 pack-desktop.bat / pack-app.bat / pack-app-strict.bat 即可（即使 AI 再写坏行尾也会当场自动修复）；本次真实产物=离线桌面版 `db-offline\desktop\dist\惠康中医-本地 Setup 1.0.98.exe`（win-unpacked 因旧残留锁定完整留在 `build_output_20260822_192911\`，安装包已正常落 dist，与 1.0.96 功能等价、仅打包链路加固）。
 
+### 2.48 【下载页哈希不一致·根治】calculate-hash.js 构建期改写发布清单 + manifest 恢复为已发布真值（2026-08-23）
+- **表象**：hash-manifest.json 的 sha256/size/fileName 描述的是本地最新构建（如 Setup 1.0.97 / 1.2.131），但 url 仍指向旧 GitHub Release（1.0.56 / 1.2.36）→ 线上下载页"校验值"与用户实际下载的文件**必然对不上**；dingzhi.apk 同病（manifest 记录构建输出 APK 2851502 字节，downloads/ 实际服务 2786835 字节）。此问题自 v2026.08.18 发布起持续存在、每次构建复发。
+- **根因（三环复发链）**：①`shared/calculate-hash.js` 在每次打包后（build-app.bat:455）把本地 dist/apk 输出的哈希写进 `public/hash-manifest.json`，但 url 字段保留旧值（"避免 url 丢失"）——写入的哈希**没有任何 url 指向它**；②`one-click-pack.ps1 -AutoCommit` 把 hash-manifest.json 列入"打包副作用"自动 commit+push 上线（如提交 260dcec6）；③推上 Cloudflare 后下载页 download.html 把 sha256 显示在下载按钮旁。另外 `auto-publish.js` 依赖 manifest 记录"已发布哈希"做变更检测，被构建期改写后 local-vs-local 恒等 → "无需发布"误报，检测静默失效。
+- **修复（数据 + 源头双管齐下，5 文件）**：①**manifest 恢复已发布真值**——dingzhi 三条目恢复自发布提交 415f6ebf（v2026.08.18，APK 哈希与 public/downloads/ 实际文件实测一致 8f08c7f0…/2786835），cloud exe/portable 恢复自 20209bbc（v2026.08.17，1.2.36 真值），并找回 version/releaseTag/releaseFileName 字段；cloud.apk 原本就一致未动；②**源头堵死**——calculate-hash.js 改只读：仍扫描+计算+打印（并新增"与已发布版本对比"提示：一致/本地新构建待人工发布），**绝不写 manifest**；3 副本（shared/ + db-offline/ + APP assets）同步一致；③build-app.bat:459 成功提示文案同步修正（不再宣称"updated to hash-manifest.json"）。
+- **验证**：`node tools/verify-release.js` 6/6 全过（4 个 GitHub Release URL + 2 个 pages.dev downloads URL，200）；只读版 calculate-hash.js 实测运行后 `git diff` 证明 manifest 零触碰；build-app.bat 行尾 CRLF 完好（loneLF=0）。
+- **教训**：①"发布清单"类文件（hash-manifest/latest.json）只能由**发布动作**写入——构建期写入 = 状态必然漂移，因为构建产物 url 不存在；②git 历史里的发布提交是哈希真值的权威来源（publish-release.js 上传时记录的就是所传文件的哈希）；③排查"下载页校验值不对"先跑 verify-release.js（本项目自带 URL+Content-Length 校验）。
+- **生效方式**：云端网页版=推 GitHub 自动部署即时生效（下载页校验值立即恢复正确）；打包脚本变更随 git 生效，**下次任何打包都不再改写 manifest**（构建日志会打印"本地新构建，尚未发布"提示，属正常）；如需发布新产物（离线 1.0.98 / 云端 1.2.131 / 新 APK），人工核验后走 `一键发布.bat`（EXE→GitHub Release + manifest + latest.json）或 `node tools/auto-update-downloads.js <target> --confirm --push`（APK→downloads/）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）

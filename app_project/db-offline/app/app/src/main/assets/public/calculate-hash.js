@@ -1,15 +1,22 @@
 #!/usr/bin/env node
 // ============================================================================
-// calculate-hash.js — 自动计算 APK/exe 的 SHA-256 校验值并更新 hash-manifest.json
+// calculate-hash.js — 打包后计算本地产物 SHA-256（只读打印，绝不改写发布清单）
 //
 // 用法：node calculate-hash.js
 // 运行时机：打包完成后自动运行（集成到 build-app.bat）
 //
+// ★ 2026-08-23 行为变更（KNOWLEDGE 2.48，根治下载页"哈希不一致"）：
+//   旧版把本地构建产物的 sha256/size 写进 public/hash-manifest.json，但 url 仍指向
+//   旧发布产物 → 线上下载页显示的校验值与用户实际下载的文件不一致；且
+//   auto-publish.js 依赖 manifest 记录"已发布哈希"做变更检测，被构建期改写后检测
+//   静默失效；one-click-pack.ps1 -AutoCommit 还会把被改写的 manifest 自动提交上线。
+//   现改为只读：manifest 仅由发布工具（publish-release.js /
+//   auto-update-downloads.js --confirm / 一键发布.bat）在真正发布时写入。
+//
 // 功能：
-//   1. 查找各APP的APK输出文件
-//   2. 计算SHA-256校验值
-//   3. 更新 public/hash-manifest.json
-//   4. 下载页动态读取显示校验值
+//   1. 查找各APP的APK/exe输出文件并计算 SHA-256（打印到构建日志）
+//   2. 与 manifest 已发布哈希对比，提示"一致 / 本地新构建待人工发布"
+//   3. 不修改 public/hash-manifest.json
 // ============================================================================
 
 import { createRequire } from 'module';
@@ -81,37 +88,37 @@ function findExeFile(dir) {
 }
 
 /**
- * 从 build.gradle 读取版本号
+ * 只读加载已发布 manifest（用于对比提示；读取失败不影响打印）
  */
-function readVersionFromGradle(appDir) {
+function loadManifest() {
     try {
-        // Android 工程根目录: app/app/build.gradle
-        const gradlePath = path.join(appDir, 'app', 'app', 'build.gradle');
-        if (!fs.existsSync(gradlePath)) return '';
-        const content = fs.readFileSync(gradlePath, 'utf8');
-        const match = content.match(/versionCode\s+(\d+)/);
-        const nameMatch = content.match(/versionName\s+"([^"]+)"/);
-        if (nameMatch) return nameMatch[1];
-        if (match) return match[1];
-        return '';
+        return JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
     } catch (e) {
-        return '';
+        return {};
     }
 }
 
-function main() {
-    console.log('[hash] 开始计算文件校验值...');
-
-    // 读取现有 manifest
-    let manifest = {};
-    try {
-        manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, 'utf8'));
-    } catch (e) {
-        console.warn('[hash] 读取 manifest 失败，创建新的');
+/**
+ * 对比本地哈希与已发布哈希，返回提示语
+ */
+function comparePublished(label, sha256, manifest) {
+    const appKey = label.split('/')[0];
+    const type = label.split('/')[1];
+    const entry = manifest[appKey] && manifest[appKey][type];
+    if (!entry || !entry.sha256) {
+        return '（manifest 暂无记录）';
     }
+    if (entry.sha256 === sha256) {
+        return '（与已发布版本一致）';
+    }
+    return '（本地新构建，尚未发布——下载页继续提供已发布旧版属正常；人工核验后经 一键发布.bat / auto-update-downloads.js --confirm 发布）';
+}
 
-    const now = new Date().toISOString();
-    let updated = 0;
+function main() {
+    console.log('[hash] 计算本地产物校验值（只读模式，不修改 hash-manifest.json）...');
+
+    const manifest = loadManifest();
+    let count = 0;
 
     // 计算 APK 校验值
     for (const [key, dir] of Object.entries(APK_PATHS)) {
@@ -120,25 +127,12 @@ function main() {
             console.log('  [SKIP] ' + key + ' APK 未找到');
             continue;
         }
-
         const sha256 = calculateSHA256(apkFile);
         const size = getFileSize(apkFile);
-        const version = readVersionFromGradle(path.join(dir, '..', '..', '..', '..'));
-
-        if (!manifest[key]) manifest[key] = {};
-        // 保留现有 url 和 fileName，避免 auto-update-downloads.js 失败时 url 丢失
-        const existingApk = manifest[key].apk || {};
-        manifest[key].apk = {
-            version: version,
-            sha256: sha256,
-            url: existingApk.url || '',
-            size: size,
-            updateTime: now,
-            fileName: existingApk.fileName || path.basename(apkFile)
-        };
-
-        console.log('  [OK] ' + key + ' APK: ' + sha256.substring(0, 16) + '... (' + (size / 1024 / 1024).toFixed(1) + 'MB)');
-        updated++;
+        console.log('  [OK] ' + key + ' APK ' + path.basename(apkFile) + ': '
+            + sha256.substring(0, 16) + '... (' + (size / 1024 / 1024).toFixed(1) + 'MB) '
+            + comparePublished(key + '/apk', sha256, manifest));
+        count++;
     }
 
     // 计算 exe 校验值
@@ -149,45 +143,26 @@ function main() {
             continue;
         }
 
-        if (!manifest[key]) manifest[key] = {};
-        const existingExe = manifest[key].exe || {};
-        const existingPortable = manifest[key].portable || {};
-
         if (exeFiles.setup) {
             const sha256 = calculateSHA256(exeFiles.setup);
             const size = getFileSize(exeFiles.setup);
-            manifest[key].exe = {
-                version: '',
-                sha256: sha256,
-                url: existingExe.url || '',
-                size: size,
-                updateTime: now,
-                fileName: path.basename(exeFiles.setup)
-            };
-            console.log('  [OK] ' + key + ' exe(Setup): ' + sha256.substring(0, 16) + '... (' + (size / 1024 / 1024).toFixed(1) + 'MB)');
-            updated++;
+            console.log('  [OK] ' + key + ' exe(Setup) ' + path.basename(exeFiles.setup) + ': '
+                + sha256.substring(0, 16) + '... (' + (size / 1024 / 1024).toFixed(1) + 'MB) '
+                + comparePublished(key + '/exe', sha256, manifest));
+            count++;
         }
 
         if (exeFiles.portable) {
             const sha256 = calculateSHA256(exeFiles.portable);
             const size = getFileSize(exeFiles.portable);
-            manifest[key].portable = {
-                version: '',
-                sha256: sha256,
-                url: existingPortable.url || '',
-                size: size,
-                updateTime: now,
-                fileName: path.basename(exeFiles.portable)
-            };
-            console.log('  [OK] ' + key + ' exe(Portable): ' + sha256.substring(0, 16) + '... (' + (size / 1024 / 1024).toFixed(1) + 'MB)');
-            updated++;
+            console.log('  [OK] ' + key + ' exe(Portable) ' + path.basename(exeFiles.portable) + ': '
+                + sha256.substring(0, 16) + '... (' + (size / 1024 / 1024).toFixed(1) + 'MB) '
+                + comparePublished(key + '/portable', sha256, manifest));
+            count++;
         }
     }
 
-    // 写入 manifest
-    fs.writeFileSync(MANIFEST_PATH, JSON.stringify(manifest, null, 4), 'utf8');
-    console.log('[hash] 完成: 更新 ' + updated + ' 个文件校验值');
-    console.log('[hash] 输出: ' + MANIFEST_PATH);
+    console.log('[hash] 完成: 已列出 ' + count + ' 个本地产物校验值（未写入 manifest——发布时由发布工具更新，保证下载页哈希与实际下载文件一致）');
 }
 
 main();
