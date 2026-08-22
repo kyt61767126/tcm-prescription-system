@@ -634,12 +634,16 @@
 - **验证**：①未激活态：动态入口显示+静态两按钮 none；②已激活态（auth:activationDone='1'）：入口仍显示（常显生效）；③管理台 /admin/index.html：无 loginOverlay 且不注入；④openCloudRegister 可用；⑤node --check 语法 OK；⑥9 副本字节级一致；⑦check-interface 6/6 OK。
 - **教训**：①"统一"不等于"复制"——桌面模式（单机单诊所双条件隐藏）与 APP 模式（公开分发常显）产品语义不同，需环境感知分流而非一刀切；②auth-core 单文件 9 副本服务多端时，环境分支用运行时检测（electronAPI/路径）而非维护多份差异代码，保住"字节级一致"纪律；③PowerShell 不支持 bash heredoc（`$(cat <<'EOF')` 报 Missing file specification），多行 commit message 改单行。
 - **生效方式**：云端网页版+云端APP=推 GitHub 自动部署即时生效（无需重打 APK）；云端桌面版=需重新 build.bat 打包 exe；管理台（site-admin 本地 Electron）=随各自打包流程生效。
+- **★★ 2026-08-23 追加（用户明确要求）：云端桌面版登录框不需要修改**——三份桌面副本（public/electron/auth-core.js、cloud_desktop/auth-core.js、cloud_desktop/electron/auth-core.js）已用 `git checkout 73f2b870 -- <paths>` 回退至 423e3b9b 状态（原双条件逻辑，字节 187865），提交 d8abf848。**auth-core 副本自此分两组维护，禁止再无脑全量同步**：
+  - **云端组（新版常显逻辑，6 份）**：public/、shared/auth-core.js、shared/auth-core/cloud.js、site-admin/、site-admin/electron/、cloud_app assets —— 以 public/auth-core.js 为权威源；
+  - **桌面组（原版双条件，3 份）**：public/electron/、cloud_desktop/、cloud_desktop/electron/ —— 以 423e3b9b 版本为准，**云端桌面版无需重新打包 exe**。
+  - 以后改登录框入口逻辑时必须先问用户是否涉及云端桌面版；同步脚本按分组执行，勿用旧的全量同步命令。
 
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
 
-- 跨作用域/跨文件调用审计：`node tools/audit-cross-scope.js` 预防 `setCloudActivationDone` 类 "is not defined"。auth-core 9 副本一致；恢复备份（restoreFromBackup）后改用实际存在的 `renderHistoryList(数据)` 刷新，跨脚本函数一律 `typeof fn === 'function' && fn(...)` 防御。
+- 跨作用域/跨文件调用审计：`node tools/audit-cross-scope.js` 预防 `setCloudActivationDone` 类 "is not defined"。auth-core 副本**分两组**（2026-08-23 起，详见 2.55）：云端组 6 份（public 为权威源：常显逻辑）/ 桌面组 3 份（public/electron、cloud_desktop、cloud_desktop/electron：423e3b9b 原版双条件，用户要求云端桌面版登录框不动）；恢复备份（restoreFromBackup）后改用实际存在的 `renderHistoryList(数据)` 刷新，跨脚本函数一律 `typeof fn === 'function' && fn(...)` 防御。
 - 云端静态资源缓存：public/_headers 业务 JS 一律 `max-age=0+must-revalidate`（etag 304）；仅 qrcode.min.js / xlsx.full.min.js 第三方库 7 天长缓存；config.json 单独 no-cache。教训：曾 /*.js max-age=86400 导致云端 APP(LOAD_DEFAULT)最长 24h 不拉新版，auth-core 更新不生效。
 - 云端 APP 的 clinicName 等部署配置来自线上 `public/`（pages_build_output_dir="public"），**根目录 index.html/config.json 是离线/桌面版源码，与线上云端网页版无关**！
 - 线上云端版诊所名：public/config.json(clinicName+doctorName)，public/index.html 同步 XHR 读取覆盖，auth-core syncLoginClinicName 注入登录框。
