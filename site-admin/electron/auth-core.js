@@ -2286,6 +2286,23 @@
         } catch (e) {}
     }
 
+    // ★ 2026-08-23 环境感知（统一激活入口模式）：
+    //   ①云端版无试用：云端网页/APP 登录框"注册开通"入口常显（公开分发的 SaaS，任何设备随时可注册，
+    //     注册入口如同登录页的"注册"链接常驻，换机/清缓存/二手设备均不丢失入口）；
+    //   ②云端桌面程序激活模式（参考对象）：桌面 Electron 环境保持双条件（已注册/已激活即隐藏，
+    //     防止已开通设备注册按钮重现误导用户——见 KNOWLEDGE 2.45/2.51 教训）；
+    //   ③管理台：账号只能由管理员在云端创建，禁止自助注册 → 登录框不显示注册入口。
+    function isAdminConsolePage() {
+        try {
+            var p = (location.pathname || '').toLowerCase();
+            return p.indexOf('/admin/') !== -1 || p.indexOf('site-admin') !== -1;
+        } catch (e) { return false; }
+    }
+
+    function isDesktopElectronEnv() {
+        try { return typeof global.electronAPI !== 'undefined' && !!global.electronAPI; } catch (e) { return false; }
+    }
+
     function injectActivateLinkIntoLogin() {
         try {
             // 登录框诊所名无条件同步（与 App/网页/桌面环境无关）
@@ -2294,18 +2311,23 @@
             if (!overlay) return;
             // ★ 2026-08-22 冗余入口收敛：隐藏静态"注册诊所 / 激活申请"与"管理台登录"按钮（仅保留动态"注册开通"）
             hideStaticActivateEntry();
-            // ★ 2026-08-20 注册完成后自动隐藏：已登录/已注册过则不再显示"注册开通"入口
-            if (isCloudActivationDone()) return;
-            // ★ 2026-08-22 兜底（对齐桌面版 injectAdminActivateEntry 双条件）：
-            //   config 已有管理员账户 = 注册/激活已完成的持久事实，即使 localStorage 标记丢失也不显示注册入口
-            try {
-                if (typeof CONFIG !== 'undefined' && CONFIG && Array.isArray(CONFIG.users)) {
-                    for (let i = 0; i < CONFIG.users.length; i++) {
-                        const u = CONFIG.users[i];
-                        if (u && (u.role === 'admin' || u.role === 'clinic_admin' || u.role === 'platform_admin')) return;
+            // ★ 2026-08-23 管理台：禁止自助注册，登录框不注入"注册开通"入口
+            if (isAdminConsolePage()) return;
+            // ★ 2026-08-23 云端桌面程序激活模式（参考对象）：桌面 Electron 环境保持双条件——
+            //   已注册（localStorage 标记）或 config 已有管理员账户 = 注册/激活已完成的持久事实，
+            //   已激活设备不显示注册入口（防误导）
+            if (isDesktopElectronEnv()) {
+                if (isCloudActivationDone()) return;
+                try {
+                    if (typeof CONFIG !== 'undefined' && CONFIG && Array.isArray(CONFIG.users)) {
+                        for (let i = 0; i < CONFIG.users.length; i++) {
+                            const u = CONFIG.users[i];
+                            if (u && (u.role === 'admin' || u.role === 'clinic_admin' || u.role === 'platform_admin')) return;
+                        }
                     }
-                }
-            } catch (e) {}
+                } catch (e) {}
+            }
+            // ★ 2026-08-23 云端版无试用：云端网页/APP 登录框"注册开通"入口无条件常显（不做激活态判断）
             // 已注入过则跳过，避免重复
             if (document.getElementById('activateLoginEntry')) return;
 
@@ -2341,6 +2363,10 @@
 
     function hideActivateLoginEntry() {
         try {
+            // ★ 2026-08-23 云端版无试用：云端网页/APP 注册入口常显——登录/注册/激活成功后不隐藏，
+            //   登出回到登录框时入口仍在（新设备/换机用户随时可注册）。
+            //   桌面 Electron 环境保持原行为（成功后隐藏，重启按桌面双条件决定是否重现）
+            if (!isDesktopElectronEnv()) return;
             const el = document.getElementById('activateLoginEntry');
             if (el) { el.style.display = 'none'; }
         } catch (e) {}
