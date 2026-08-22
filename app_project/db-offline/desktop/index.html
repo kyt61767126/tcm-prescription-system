@@ -1952,7 +1952,11 @@ let currentUser = null;
 
         function renderUserList() {
             try {
-                const users = getUsers();
+                // ★ 2026-08-22 补同步 KNOWLEDGE 2.36 唯一管理员模式：隐藏内置默认 admin
+                //   （username=admin 且密码=出厂哈希）。激活后激活者=唯一管理员，内置 admin
+                //   已被试用期降级为 user，其姓名"管理员"易与角色标签混淆（实测用户误读
+                //   "2个管理员"）。云端3副本（public/cloud_desktop/cloud_app）已有此过滤。
+                const users = getUsers().filter(u => !isBuiltinDefaultAdmin(u));
                 const listDiv = document.getElementById('userList');
                 if (!listDiv) { throw new Error('用户列表容器 userList DOM 不存在'); }
                 if (!Array.isArray(users)) { throw new Error('用户数据格式错误（非数组）: ' + typeof users); }
