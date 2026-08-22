@@ -537,6 +537,24 @@
 - **验证结果**：13 文件语法+标记唯一性、check-interface 6/6、V1.2.129 E2E 3/3 PASS、用户实测三Tab完整显示 ✓。
 - **生效方式**：云端桌面版=安装 `Setup 1.2.129.exe`（用户已验证 ✓）；云端网页/APP=无桥环境走 DOM 弹窗兜底（行为不变）；离线桌面版=重新 build.bat 打包 exe；离线APP=重新打包 APK（仅副本一致性）。
 
+### 2.42 【手动打包闪退】build-pack.bat 行尾 LF→CRLF + 工单审批 sessionStorage 跨标签页（提交 211d0226/b017afbf，2026-08-22）
+
+- **表象1**：用户双击 pack-desktop.bat 手动打包，窗口一闪而过，无任何新产物（version 停在 1.0.92）。复现：cmd 逐行报 `'Host'/'制' is not recognized`、`| was unexpected`（exit 255）——UTF-8 中文多字节按 LF 断行错位解析。
+- **根因1**：工作区 build-pack.bat 行尾全 LF（315行孤立LF/0 CRLF），违反 ".bat 必须 CRLF" 铁律（.gitattributes 早有 `*.bat text eol=crlf`）。上一小时打包成功时还是 CRLF，某次 git 操作把该文件以 LF 写回工作区。**db-yunduan/build-pack.bat 同为中招**（下次云端手动打包必然同样闪退）。全仓库 41 个 bat 复查仅这 2 个中招。
+- **修复**：两文件字节级 LF→CRLF（内容零变化，git 无 diff——仓库本来就 LF 存储，这是**工作区检出层**的问题）。下次某文件再出现"双击闪退+无产物"，先查行尾再查逻辑。
+- **表象2**：工单审批页永远"未登录：请先在激活码管理页登录平台管理员"，用户反复登录无效。
+- **根因2**：登录 token 按 P2-7 安全口径只写 sessionStorage（不跨标签页），而工单审批入口 `<a target="_blank">` 新开标签页 → 永远读不到 token。修复：链接去 `_blank` 改同标签页跳转（sessionStorage 同标签页导航保留），build-queue 是公共页无需会话保持 `_blank`。site-admin 源 + public 部署副本两处同步。
+- **教训**：sessionStorage 作登录态存储时，站内所有入口链接禁止 `target="_blank"`（新开即丢会话）；排查此类"反复登录仍无效"优先查链接打开方式。
+
+### 2.43 【离线版用户管理显示"2个管理员"】2.36 过滤漏同步离线4副本 + 试用期降级设计链（提交 211d0226，2026-08-22）
+
+- **表象**：离线客户B激活码激活后，用户管理列表显示两行——"管理员(admin)[正式] 普通用户" + "测试医生B(13800138002)[正式] 管理员"，用户误读为"2个管理员"。
+- **真相**：数据层完全正确。第1行"管理员"是**姓名字段**（displayName 恰好叫"管理员"），其角色实为"普通用户"；唯一管理员是激活者。完整设计链：①试用期无 license 强制标准版、全员降 user（main.js:235）②激活码激活时激活者手机号建为 role=admin（license-manager.js:2061）③机构版仅保证≥1管理员、不回提旧 admin（license-manager.js:2166，2026-08-20规范）。
+- **缺口**：2.36 的 renderUserList 过滤 `getUsers().filter(u => !isBuiltinDefaultAdmin(u))` 只同步了云端3副本（public/cloud_desktop/cloud_app），**离线4副本**（db-offline/desktop、根目录、index-app、离线APP assets）全部漏掉 → 内置默认 admin 仍显示，与角色标签撞词引发误读。
+- **修复**：4 副本补齐过滤（脚本 sync-236-offline.cjs，模式唯一命中替换，前置校验 isBuiltinDefaultAdmin 已由 USER-STORE 块提供）。check-interface 6/6 OK。
+- **教训**：跨端同步类修复，完成云端后必须用同款 grep 扫**离线系**副本是否同样适用——"云端先行、离线跟进"的节奏最容易漏离线。
+- **生效方式**：离线桌面版=装 Setup 1.0.93（用户已验证 ✓）；离线APP=重新打包惠康中医-本地.apk；云端3端无变化（已有过滤）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
