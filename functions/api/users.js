@@ -20,6 +20,11 @@ import { provisionCloudAccount } from './license/_lib/admin-account.js';
 // ============================================================================
 const KV_USER_DEVICES_PREFIX = 'user_devices:';
 const MAX_DEVICES_PER_ACCOUNT = 2;
+// 豁免账户的设备配额（99 = 实际不限，避免前端对 -1 显示异常）
+const DEVICE_EXEMPT_MAX = 99;
+// ★ 2026-08-22 特殊账户设备豁免名单：名单内账号不受"每账号 2 台设备"限制（可无限绑定）。
+//   适用：wgj（惠康堂中医诊所早期测试/管理账户，多设备使用）。普通用户仍需遵守 2 台上限。
+const DEVICE_LIMIT_EXEMPT_ACCOUNTS = ['wgj'];
 
 function sanitizeDevices(record) {
     const max = record && record.maxDevices ? record.maxDevices : MAX_DEVICES_PER_ACCOUNT;
@@ -38,12 +43,14 @@ function sanitizeDevices(record) {
 
 // 绑定/更新设备（返回 { ok, record } 或 { ok:false, code:'DEVICE_LIMIT', record }）
 async function bindUserDevice(kv, username, machineId, clientClass, nowIso) {
+    // ★ 2026-08-22 特殊账户豁免：名单内账号不限制设备数量
+    const exempt = DEVICE_LIMIT_EXEMPT_ACCOUNTS.includes(username);
     const record = (await kv.get(KV_USER_DEVICES_PREFIX + username, 'json')) || {
-        maxDevices: MAX_DEVICES_PER_ACCOUNT,
+        maxDevices: exempt ? DEVICE_EXEMPT_MAX : MAX_DEVICES_PER_ACCOUNT,
         devices: []
     };
     if (!Array.isArray(record.devices)) record.devices = [];
-    record.maxDevices = MAX_DEVICES_PER_ACCOUNT;
+    record.maxDevices = exempt ? DEVICE_EXEMPT_MAX : MAX_DEVICES_PER_ACCOUNT;
 
     const mid = String(machineId || '').trim();
     if (!mid || mid.length < 8 || mid === 'unknown') {
@@ -56,7 +63,7 @@ async function bindUserDevice(kv, username, machineId, clientClass, nowIso) {
         existing.lastSeenAt = nowIso;
         if (clientClass) existing.clientClass = clientClass;
     } else {
-        if (record.devices.length >= record.maxDevices) {
+        if (!exempt && record.devices.length >= record.maxDevices) {
             return { ok: false, code: 'DEVICE_LIMIT', record };
         }
         record.devices.push({
