@@ -673,6 +673,75 @@ export async function onRequest(context) {
             });
         }
 
+        // ===== 删除用户 POST /users?action=delete-user =====
+        // ★ 2026-08-23 新增（KNOWLEDGE 2.51）：此前三端用户管理"删除"只删本地表，
+        //   云端账户仍在——被删账户下次云端登录又会落地本地表（"删不干净"架构缺陷）。
+        //   权限：platform_admin（任意诊所用户）或 clinic_admin（仅本诊所用户）。
+        //   保护：禁止删自己 / 禁止删 platform_admin / 该诊所最后一个 clinic_admin
+        //   不允许删（与 update-user 降级保护同口径，防诊所无人可管）。
+        //   动作：移除诊所用户记录 + 撤销其全部 token（立即下线）+ 审计日志。
+        //   注意：云端处方数据保留（数据安全优先，不做级联删除）。
+        if (method === 'POST' && url.searchParams.get('action') === 'delete-user') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !(isPlatformAdmin(authUser) || isClinicAdmin(authUser))) {
+                return json({ success: false, error: '未授权：仅管理员可删除用户' }, 401, context.request);
+            }
+
+            const body = await context.request.json().catch(() => ({}));
+            const targetUsername = (body.username || '').trim();
+            if (!targetUsername) {
+                return json({ success: false, error: '请提供要删除的用户名' }, 400, context.request);
+            }
+            if (targetUsername === authUser.username) {
+                return json({ success: false, error: '无法删除当前登录用户' }, 400, context.request);
+            }
+
+            const found = await findUserForLogin(kv, targetUsername);
+            if (!found || !found.user) {
+                return json({ success: false, error: '用户不存在', errorCode: 'USER_NOT_FOUND' }, 404, context.request);
+            }
+            const target = found.user;
+            if (target.role === ROLE_PLATFORM_ADMIN) {
+                return json({ success: false, error: '平台总管理员不支持删除（防止锁死管理入口）' }, 403, context.request);
+            }
+            if (!found.clinicId) {
+                return json({ success: false, error: '目标用户数据异常（无所属诊所）' }, 500, context.request);
+            }
+            // clinic_admin 只能删本诊所用户
+            if (isClinicAdmin(authUser) && !isPlatformAdmin(authUser) && authUser.clinicId !== found.clinicId) {
+                return json({ success: false, error: '无权删除其他诊所的用户' }, 403, context.request);
+            }
+
+            const clinicUsers = (await kv.get(`clinic:${found.clinicId}:users`, 'json')) || [];
+            const tIdx = clinicUsers.findIndex(u => u.username === target.username);
+            if (tIdx === -1) {
+                return json({ success: false, error: '诊所用户数据异常，未找到该账号' }, 500, context.request);
+            }
+            // 最后一个 clinic_admin 保护：删除后该诊所将无人可管理
+            if (target.role === ROLE_CLINIC_ADMIN) {
+                const adminCount = clinicUsers.filter(u => u.role === ROLE_CLINIC_ADMIN).length;
+                if (adminCount <= 1) {
+                    return json({ success: false, error: '该诊所仅此一名管理员，不允许删除（诊所将无人可管理）' }, 400, context.request);
+                }
+            }
+
+            clinicUsers.splice(tIdx, 1);
+            await kv.put(`clinic:${found.clinicId}:users`, JSON.stringify(clinicUsers));
+
+            // 立即下线：撤销该用户全部已签发 token
+            try { await revokeAllUserTokens(kv, target.username); } catch (e) { console.error('revokeAllUserTokens error:', e); }
+
+            await writeAuditLog(kv, found.clinicId, authUser.username, authUser.role,
+                'delete_user', target.username, context.request,
+                { targetClinicName: found.clinicName || null, targetRole: target.role });
+
+            return json({
+                success: true,
+                message: '用户已删除（云端处方数据保留）',
+                username: target.username
+            });
+        }
+
         // ===== 公开诊断端点 GET /users?diagnose=username&key=xxx =====
         // 用于临时排查账号问题，需要 DIAGNOSE_KEY 环境变量验证
         if (method === 'GET' && url.searchParams.get('diagnose')) {

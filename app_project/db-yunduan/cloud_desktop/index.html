@@ -2356,6 +2356,30 @@ let currentUser = null;
             document.body.appendChild(modal);
         }
 
+        // ★ 2026-08-23 云端同步删除（KNOWLEDGE 2.51）：此前只删本地表，云端账户仍在，
+        //   被删账户下次云端登录又会落地本地表（"删不干净"）。现在先删云端再删本地。
+        //   返回 {skipped}=无token非云端环境 / {ok}=成功(含云端无此账号) /
+        //   {blocked,error}=云端明确拒绝(保护规则) / {failed,error}=网络等异常
+        async function deleteUserOnCloud(username) {
+            try {
+                let token = (currentUser && (currentUser.token || currentUser.cloud_token)) || '';
+                if (!token) { try { const _au = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); token = _au.token || ''; } catch (e) {} }
+                if (!token || typeof window.CLOUD_API_BASE === 'undefined') return { skipped: true };
+                const resp = await fetch(window.CLOUD_API_BASE + '/api/users?action=delete-user', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ username: username })
+                });
+                const data = await resp.json().catch(() => ({}));
+                if (resp.ok && data.success) return { ok: true };
+                if (resp.status === 404) return { ok: true, notFound: true }; // 云端无此账号=本地账户，正常
+                if (resp.status === 400 || resp.status === 403) return { blocked: true, error: (data && data.error) || ('HTTP ' + resp.status) };
+                return { failed: true, error: (data && data.error) || ('HTTP ' + resp.status) };
+            } catch (e) {
+                return { failed: true, error: e && e.message ? e.message : String(e) };
+            }
+        }
+
         async function handleDeleteUser(username) {
             // P1-7 安全修复：内层权限校验，防止 DevTools 绕过
             if (!currentUser || (currentUser.role !== 'admin' && currentUser.role !== 'clinic_admin' && currentUser.role !== 'platform_admin')) {
@@ -2368,6 +2392,16 @@ let currentUser = null;
                 return;
             }
             if (!await confirm('确定删除该用户？删除后该用户的所有处方数据也将被删除！')) return;
+
+            // ★ 云端账户先删云端（云端拒绝则阻断；网络失败询问是否仅删本地）
+            const cloudDel = await deleteUserOnCloud(username);
+            if (cloudDel.blocked) {
+                alert('云端删除被拒绝：' + cloudDel.error + '\n未删除本地记录。');
+                return;
+            }
+            if (cloudDel.failed) {
+                if (!await confirm('云端删除失败（' + cloudDel.error + '）。\n仍要仅删除本地记录吗？该云端账户下次登录可能重新出现。')) return;
+            }
 
             // P7: 从 prescriptions store 批量删除该用户的处方
             const userPrescriptions = await getAllPrescriptionsFromDB();

@@ -15,6 +15,7 @@ import {
     hashPassword,
     verifyPassword,
     ROLE_CLINIC_ADMIN,
+    ROLE_DOCTOR,
     KV_SYSTEM_CLINICS
 } from '../../_lib/auth.js';
 
@@ -25,11 +26,19 @@ function mapActivationTypeToEdition(type) {
     return 'cloud_personal'; // personal / standard / 未知 → 云端标准版
 }
 
-// 在指定诊所下补充（或不动）clinic_admin 账号
+// 在指定诊所下补充（或不动）账号
+// ★ 2026-08-23 唯一管理员加固（KNOWLEDGE 2.51）：该诊所已有 clinic_admin 时，
+//   再次激活审核通过的新手机号开通为 doctor（普通用户），不再追加 clinic_admin。
+//   背景：旧逻辑每次激活通过都无条件补 clinic_admin → 两次激活=两个管理员
+//   （王桂杰+王桂双管理员事故根因）。如需更换管理员手机号，由平台管理员
+//   在后台 update-user 调整角色（clinic_admin ↔ doctor 互转）。
 async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now) {
     const users = (await kv.get(`clinic:${clinicId}:users`, 'json')) || [];
     const exists = users.some(u => u.username === phone || u.phone === phone);
     if (exists) return;
+
+    const hasAdmin = users.some(u => u.role === ROLE_CLINIC_ADMIN);
+    const role = hasAdmin ? ROLE_DOCTOR : ROLE_CLINIC_ADMIN;
 
     // 密码留空默认 admin（与离线端默认密码一致；激活框密码留空时的默认值）
     const { passwordHash, salt } = await hashPassword('admin');
@@ -37,7 +46,7 @@ async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now)
         username: phone,
         phone: phone,
         name: (adminName || phone).trim(),
-        role: ROLE_CLINIC_ADMIN,
+        role: role,
         passwordHash,
         salt,
         allowedMode: 'both',
@@ -47,7 +56,8 @@ async function ensureClinicUser(kv, clinicId, clinicName, phone, adminName, now)
         updatedAt: now
     });
     await kv.put(`clinic:${clinicId}:users`, JSON.stringify(users));
-    console.log('[AdminAccount] 云端账号已开通:', phone, 'clinic=', clinicName);
+    console.log('[AdminAccount] 云端账号已开通:', phone, 'clinic=', clinicName, 'role=', role,
+        hasAdmin ? '(诊所已有管理员，本次开通为普通用户)' : '(首个管理员)');
 }
 
 // 审核通过记录 → 幂等开通云端诊所 + clinic_admin 账号
