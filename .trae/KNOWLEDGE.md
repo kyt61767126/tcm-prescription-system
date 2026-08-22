@@ -566,6 +566,7 @@
 - **根因确认**：button-manager.js `__computePermissions` 的 Arch 2.26 断言：`isInst && _isAdminRole → 用户管理`；`isPersonal → canManage=false, canChangePwd=true`（改密按钮）。permission.js `canManageUsersByRole` 对标准版强制 `return false`、`canChangePassword` 对标准版强制 `return true`。试用期 `ensureTrialStandardEdition` 强制 edition=personal + 全员 role=user → 逻辑上必显示「修改密码」。
 - **验证**：离线 E2E（run-e2e.cjs）E1/E2/E3 3/3 全过——E2 反向注入 role:'admin'+edition:'clinic' 也会被强制降级为「修改密码」可见 +「用户管理」隐藏。
 - **生效方式**：离线桌面版=装/更新到 Setup 1.0.94（含本修复）；离线APP=重新打包惠康中医-本地.apk。
+- **★ 2026-08-23 用户复报复核**：用户再次报告"试用 admin/admin 登录显示用户管理"。经查代码三层守护全部在位（button-manager isPersonal 断言 / permission `_isStandardEditionForced` / main.js ensureTrialStandardEdition），对 dist 真实产物（win-unpacked 1.0.99）重跑 E2E 3/3 全过（E1.1 修改密码显示 + E2.2 用户管理隐藏，含机构版毒数据降级用例）。**结论：代码无 bug，用户运行的是旧安装包**——处置=安装 `db-offline\desktop\dist\惠康中医-本地 Setup 1.0.99.exe` 即可，无需改代码重打包。判别方法：同类"规范行为不符"报告，先对 dist 真实产物跑 E2E，绿则旧包问题、红才是代码回归。
 
 ### 2.46 【手动严格打包闪退·根治】consolidation move 嵌套 + E2E 静默兜底双缺陷（build 1.0.96/1.2.130，2026-08-22）
 - **表象**：手动严格打包"成功"（含 E2E 3/3 绿灯），安装后却闪退/启动异常，同类问题反复出现（1.0.95 实锤）。
