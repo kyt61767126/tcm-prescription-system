@@ -576,6 +576,15 @@
 - **举一反三**：Windows bat 里 `move dir target\dir` 目标存在≠报错而是**移入内部**，所有 move 合并目录的脚本都要"目标不存在才 move"；打包验证链（final-verify/E2E）必须显式指向**真实交付产物路径**并禁止静默降级兜底，否则绿灯=假绿灯。
 - **生效方式**：离线桌面版=安装 `db-offline\desktop\dist\惠康中医-本地 Setup 1.0.96.exe`（锁定残留时产物也可能在 `build_output_*\`，按构建日志 Output directory 行为准）；云端桌面版=安装 `db-yunduan\cloud_desktop\dist\惠康中医-云端 Setup 1.2.130.exe`；打包脚本修复本身随 git 生效，无需额外操作。
 
+### 2.47 【手动打包闪退·复发根治】入口自愈防线：.bat 行尾在解析前自动修复（build 1.0.98，2026-08-22）
+- **表象**：双击 pack-desktop.bat 手动打包桌面程序，窗口一闪而过、无任何输出——与 2.42 完全同症状**再次复发**（用户明确："不是安装闪退，是手动打包桌面程序闪退"）。
+- **根因（为什么 2.42 修完还会复发）**：2.42 只做了**一次性手工修复**（把当时 2 个 LF 文件字节级改回 CRLF），没有堵住源头：①AI/Edit 工具仍会把含中文的 .bat 直接以 LF 行尾写盘；②git 仓库内部本就按 LF 存储（`.gitattributes *.bat text eol=crlf` 只保证检出），工作区被写坏后 **git status 完全不可见**；③既有的行尾自愈逻辑藏在 ensure-build-env.ps1/build.bat **内部**，而闪退发生在 cmd **解析** build-pack.bat/build.bat 的瞬间——受害脚本永远执行不到自己的修复代码。
+- **修复（结构性防复发，7 文件）**：①新增 `tools/fix-bat-crlf.ps1` 自愈卫士：只重写含孤立 LF 的文件（CRLF 文件不碰）、仅动严格 UTF-8 内容（GBK 等非 UTF-8 [SKIP] 跳过绝不写坏）、内容零变化只改行尾、永远 exit 0 不阻塞调用方；②6 个手动打包入口（db-offline / db-yunduan 各自的 pack-desktop.bat、pack-app.bat、pack-app-strict.bat）在 `call` 下游之前先跑自愈，把下游 build-pack.bat / build.bat / build-app.bat 的行尾当场恢复 CRLF；③入口 bat 自身保持纯 ASCII（对行尾问题天然免疫）。桌面链路 `pack-desktop.bat → build-pack.bat → build.bat` 已 grep 确认无其他 .bat 环节，自愈覆盖完整。
+- **验证（双保险实测）**：①污染注入：故意把 build-pack.bat 写成 311 个孤立 LF → 跑入口自愈 → loneLF=0、后续解析正常不再闪退；②端到端真实打包：完整跑通 db-offline 手动桌面打包 4 分 10 秒，E2E 3/3（真实产物 packaged-dir-arg 模式）、铁闸终验 12 PASS、交付 `Setup 1.0.98` + portable 落 dist、无嵌套；云端入口自愈路径同样实测 [OK]。
+- **沙箱跑打包注意**：TRAE 沙箱内收尾会遇 "Input redirection is not supported"（pause 无 stdin）与 Defender 拦截 exe 初始化写系统路径（SogouPY 等）——均出现在 "[OK] 打包完成" 横幅**之后**，属沙箱限制非脚本问题；用户双击不受影响（判定依据：错误位置在全部打包输出完成之后）。
+- **教训**：①"一次性修复"必须升级为"结构性防复发"，修复代码必须放在受害脚本**被解析之前**执行（入口前置防线）；②工作区行尾污染 git 不可见，防行尾问题只能靠运行时自愈，不能指望 git 检查发现；③本次还实锤 dist 旧 `win-unpacked\resources\app.asar` 被 Defender 锁定（无任何僵尸进程占用、taskkill 无对象）→ 构建按 2.46 三铁律 WARN 并把新产物完整留在 fallback 目录，属设计内行为，交付物（安装包）不受影响。
+- **生效方式**：打包脚本修复随 git 生效，用户直接双击 pack-desktop.bat / pack-app.bat / pack-app-strict.bat 即可（即使 AI 再写坏行尾也会当场自动修复）；本次真实产物=离线桌面版 `db-offline\desktop\dist\惠康中医-本地 Setup 1.0.98.exe`（win-unpacked 因旧残留锁定完整留在 `build_output_20260822_192911\`，安装包已正常落 dist，与 1.0.96 功能等价、仅打包链路加固）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
