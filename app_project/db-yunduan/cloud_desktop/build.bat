@@ -4,6 +4,15 @@ setlocal enabledelayedexpansion
 cd /d "%~dp0"
 title Huikang-TCM Build Tool
 
+REM ★ [BUILD-LOCK 2026-08-23] Global build mutex - abort if another build is running
+REM   并发构建会互相冲突（obfuscate 共享源文件/node_modules/git index/构建缓存）
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\build-lock.ps1" acquire -LockPath "%~dp0..\..\..\.build.lock" -Owner "cloud-desktop"
+if errorlevel 2 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 检测到另一个构建正在运行，共享文件会冲突。请等待其结束后重试；若确认无构建在跑，可删除仓库根目录 .build.lock 后重试。' -ForegroundColor Red"
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyy-MM-dd HH:mm:ss'"') do set "BUILD_START_TIME=%%t"
 for /f "delims=" %%t in ('powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Get-Date -Format 'yyyyMMdd_HHmmss'"') do set "BUILD_START_STAMP=%%t"
 
@@ -432,4 +441,6 @@ for /f "delims=" %%e in ('powershell -NoProfile -Command "[Console]::OutputEncod
 powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '============================================' -ForegroundColor Yellow; Write-Host '  打包完成！' -ForegroundColor Yellow; Write-Host '  Started: %BUILD_START_TIME%' -ForegroundColor Yellow; Write-Host '  Finished: %BUILD_END_TIME%' -ForegroundColor Yellow; Write-Host '  Total elapsed: %BUILD_ELAPSED%' -ForegroundColor Yellow; Write-Host '============================================' -ForegroundColor Yellow"
 REM 清理临时 asar 备份
 if exist "%BACKUP_ASAR_DIR%" rmdir /s /q "%BACKUP_ASAR_DIR%" 2>nul
+REM ★ [BUILD-LOCK 2026-08-23] Release global build mutex
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\build-lock.ps1" release -LockPath "%~dp0..\..\..\.build.lock" -Owner "cloud-desktop"
 exit /b 0

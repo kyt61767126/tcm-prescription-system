@@ -1,11 +1,20 @@
 @echo off
+chcp 65001 >nul
 setlocal EnableExtensions
 cd /d "%~dp0"
 
 REM ============================================================
-REM pack-app-strict.bat - Offline APP (Standard Strict)
+REM pack-app-strict.bat - Offline APP (Standard Strict mode)
 REM Delegates to: build-pack.bat app-strict
+REM   Strict = signature hash refresh hard gate (fail = abort, no APK)
+REM   Same standard as one-click pack (pack-app.bat lands here too)
+REM Chain: this entry -> build-pack.bat -> app\build-app.bat -> gradlew
 REM ============================================================
+
+echo ============================================
+echo   Offline APP Builder (Standard Strict)
+echo ============================================
+echo.
 
 echo [pack-app-strict.bat] Offline APP (Standard Strict)...
 REM [SELF-HEAL 2026-08-23] Fix LF line endings in downstream .bat files BEFORE

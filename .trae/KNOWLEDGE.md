@@ -593,6 +593,15 @@
 - **教训**：①"发布清单"类文件（hash-manifest/latest.json）只能由**发布动作**写入——构建期写入 = 状态必然漂移，因为构建产物 url 不存在；②git 历史里的发布提交是哈希真值的权威来源（publish-release.js 上传时记录的就是所传文件的哈希）；③排查"下载页校验值不对"先跑 verify-release.js（本项目自带 URL+Content-Length 校验）。
 - **生效方式**：云端网页版=推 GitHub 自动部署即时生效（下载页校验值立即恢复正确）；打包脚本变更随 git 生效，**下次任何打包都不再改写 manifest**（构建日志会打印"本地新构建，尚未发布"提示，属正常）；如需发布新产物（离线 1.0.98 / 云端 1.2.131 / 新 APK），人工核验后走 `一键发布.bat`（EXE→GitHub Release + manifest + latest.json）或 `node tools/auto-update-downloads.js <target> --confirm --push`（APK→downloads/）。
 
+### 2.49 【云端桌面打包 dist 空】并发构建冲突根治：全局构建互斥锁（build-lock.ps1，2026-08-23）
+- **表象**：用户双击云端手动桌面打包，跑完后 `cloud_desktop\dist` **完全为空**（无 Setup、无 win-unpacked、连 build_output_* fallback 也没有），但 package.json 版本已 bump（1.2.132）——打包启动过但产物消失。
+- **根因（时间线铁证）**：**两个构建并发冲突**。20:02-20:04 AI 沙箱在跑云端 APP 打包（其混淆步骤 20:03:37 正在写 cloud_desktop\debug-logger.js 等共享文件）；20:03 用户双击的云端桌面打包同时启动（version bump + dist 清理重建 20:03:08）。两者争抢同一批源文件（obfuscate 共享目标）/node_modules/git index，桌面构建在 electron-builder 产出前被打断 → dist 只剩空壳。排除项：无进程残留、无 .bak 污染、electron 源码 git status 干净、APP 构建链不碰 dist（仅复制 config.json）。
+- **修复（恢复 + 根治，两层）**：①**恢复产物**：无并发重跑云端桌面打包成功，`dist\惠康中医-云端 Setup 1.2.133.exe` + portable + 交付核对单全部就位（E2E 3/3 PASS）；②**根治：全局构建互斥锁** `tools/build-lock.ps1`——6 个构建脚本全部接入（build-pack.bat ×2 的 :main acquire / :finalize release + build.bat ×2 + build-app.bat ×2 的头尾），任何两个构建（桌面/APP/跨端）并发时后者被清晰拦截并退出，杜绝冲突复发。
+- **锁设计要点（防误报优先）**：①锁记录**调用方 cmd.exe PID**（非 powershell 短命进程），构建崩溃→cmd 退出→PID 死亡→下次自动"陈旧接管"，无需人工清理；②双条件陈旧判定：PID 死亡 **或** 锁龄>45min → 接管；③**可重入**：build-pack.bat → build.bat/build-app.bat 是同一 cmd 链条（call），下游 acquire 检测锁 PID==自身 cmd PID → 放行不覆盖；release 按 owner 校验——下游 release 因 owner 不匹配被 Skip，链条入口（build-pack :finalize）才是真正释放者（所有失败/成功路径都经过 :finalize）；④release 幂等 + 非 owner 不误删他人锁。
+- **验证**：单元测试 6/6（acquire/占用 exit 2/陈旧接管/防误删/释放/幂等）+ 链条模拟 4/4（Acquired→Reentrant→Skip→Released）+ 真实构建两轮端到端（离线 APP：Acquired by offline-app…Released 全日志序列 + 构建结束 .build.lock 不存在；云端 APP：build-pack 层 Acquired by cloud-pack 出现在 node/java 检查之前=前置段也受保护）。期间发现并修复一个关键 bug：重入判断初版放在 BUSY 判断之后导致永远不可达（同 PID 活锁先 exit 2），必须放在 BUSY 判断**之前**。
+- **举一反三**：①"AI 沙箱跑构建期间用户同时双击打包"是真实高频场景，所有会写共享文件的脚本（构建/混淆/同步）都要考虑互斥；②batch 跨进程互斥用"锁文件+记录调用方 PID+存活检测+陈旧接管"模式，不用 flock（Windows batch 无原生支持）；③入口 bat 拦截提示必须告诉用户怎么自救（等待/删除锁文件）。
+- **生效方式**：打包脚本随 git 生效；云端桌面最新安装包=`db-yunduan\cloud_desktop\dist\惠康中医-云端 Setup 1.2.133.exe`（重跑产物，含 2.48 哈希修复+2.47 打包链路加固）；此后同时双击两个打包脚本时，后启动的会显示"检测到另一个构建正在运行"并安全退出，等先前的跑完再双击即可。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）

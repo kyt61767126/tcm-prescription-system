@@ -4,9 +4,11 @@ setlocal EnableExtensions
 cd /d "%~dp0"
 
 REM ============================================================
-REM pack-app-strict.bat - Cloud APP (Standard Strict, 严格模式)
-REM 委托到 build-pack.bat app-strict（前置 node/java 检查 + auth-core 同步）
-REM 严格模式包含签名哈希刷新 + Java 层混淆 + 签名校验
+REM pack-app-strict.bat - Cloud APP (Standard Strict mode)
+REM Delegates to: build-pack.bat app-strict
+REM   Strict = signature hash refresh hard gate (fail = abort, no APK)
+REM   Same standard as one-click pack (pack-app.bat lands here too)
+REM Chain: this entry -> build-pack.bat -> build-app.bat -> gradlew
 REM ============================================================
 
 echo ============================================

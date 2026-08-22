@@ -93,6 +93,9 @@ goto :main
 
     set "EXIT_CODE=%~1"
 
+    REM ★ [BUILD-LOCK 2026-08-23] Release global build mutex (all exit paths pass here)
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\build-lock.ps1" release -LockPath "%~dp0..\..\.build.lock" -Owner "cloud-pack"
+
     echo.
 
     if %EXIT_CODE% neq 0 (
@@ -137,6 +140,16 @@ goto :main
 
 
 :main
+
+    REM ★ [BUILD-LOCK 2026-08-23] Global build mutex - abort if another build is running
+    REM   并发构建会互相冲突（obfuscate 共享源文件/node_modules/git index/构建缓存）
+    REM   可重入：下游 build.bat/build-app.bat 同 cmd 链条重入放行，锁由本入口持有并释放
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\build-lock.ps1" acquire -LockPath "%~dp0..\..\.build.lock" -Owner "cloud-pack"
+    if errorlevel 2 (
+        powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 检测到另一个构建正在运行，共享文件会冲突。请等待其结束后重试；若确认无构建在跑，可删除仓库根目录 .build.lock 后重试。' -ForegroundColor Red"
+        call :finalize 1 "Another build is running - aborted"
+        goto :eof
+    )
 
     call :get_start_time
 

@@ -3,6 +3,15 @@ chcp 65001 >nul
 setlocal EnableExtensions EnableDelayedExpansion
 title Huikang-TCM Build Tool
 
+REM ★ [BUILD-LOCK 2026-08-23] Global build mutex - abort if another build is running
+REM   并发构建会互相冲突（obfuscate 共享源文件/node_modules/git index/构建缓存）
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\build-lock.ps1" acquire -LockPath "%~dp0..\..\..\.build.lock" -Owner "offline-app"
+if errorlevel 2 (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] 检测到另一个构建正在运行，共享文件会冲突。请等待其结束后重试；若确认无构建在跑，可删除仓库根目录 .build.lock 后重试。' -ForegroundColor Red"
+    if not defined NO_PAUSE pause
+    exit /b 1
+)
+
 REM 模式识别：默认 = 严格模式（哈希失败强制中断），standard 参数保留兼容（等价严格）
 REM 两者均启用签名哈希刷新 + Java 层混淆 + 签名校验；严格模式对哈希失败做强校验
 REM ★ 2026-08-21 手动打包统一严格标准：无参（手动双击/脚本直调）不再降级为普通模式，
@@ -483,4 +492,6 @@ if not defined NO_PAUSE (
     set "EXIT_KEY="
     set /p "EXIT_KEY=Press 0 or Enter to exit: "
 )
+REM ★ [BUILD-LOCK 2026-08-23] Release global build mutex
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\..\tools\build-lock.ps1" release -LockPath "%~dp0..\..\..\.build.lock" -Owner "offline-app"
 exit /b 0

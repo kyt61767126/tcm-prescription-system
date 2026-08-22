@@ -22,6 +22,9 @@ build_output/
 build_output_old_*/
 build_new/
 
+# 构建互斥锁（tools/build-lock.ps1，运行时产物）
+.build.lock
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
