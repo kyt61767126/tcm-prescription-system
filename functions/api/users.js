@@ -44,13 +44,16 @@ function sanitizeDevices(record) {
 // 绑定/更新设备（返回 { ok, record } 或 { ok:false, code:'DEVICE_LIMIT', record }）
 async function bindUserDevice(kv, username, machineId, clientClass, nowIso) {
     // ★ 2026-08-22 特殊账户豁免：名单内账号不限制设备数量
+    // ★★ 2026-08-22 配额来源：优先保留 KV 中已有 maxDevices（平台管理员后台可调整）；
+    //    仅当记录无配额字段时，按豁免名单给默认值（豁免=99 实际不限，普通=2）
     const exempt = DEVICE_LIMIT_EXEMPT_ACCOUNTS.includes(username);
     const record = (await kv.get(KV_USER_DEVICES_PREFIX + username, 'json')) || {
-        maxDevices: exempt ? DEVICE_EXEMPT_MAX : MAX_DEVICES_PER_ACCOUNT,
         devices: []
     };
     if (!Array.isArray(record.devices)) record.devices = [];
-    record.maxDevices = exempt ? DEVICE_EXEMPT_MAX : MAX_DEVICES_PER_ACCOUNT;
+    if (typeof record.maxDevices !== 'number' || !Number.isInteger(record.maxDevices) || record.maxDevices <= 0) {
+        record.maxDevices = exempt ? DEVICE_EXEMPT_MAX : MAX_DEVICES_PER_ACCOUNT;
+    }
 
     const mid = String(machineId || '').trim();
     if (!mid || mid.length < 8 || mid === 'unknown') {
@@ -1193,6 +1196,70 @@ export async function onRequest(context) {
                 success: true,
                 message: '设备已解绑',
                 devices: sanitizeDevices(record)
+            }, 200, context.request);
+        }
+
+        // ===== 平台管理员：查询账号设备配额 GET /users?action=admin-get-device-quota =====
+        // 用途：后台【用户管理】→「设备配额」弹窗打开时查询当前配额与已绑定设备数
+        // 权限：仅平台总管理员
+        if (method === 'GET' && url.searchParams.get('action') === 'admin-get-device-quota') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isPlatformAdmin(authUser)) {
+                return json({ success: false, error: '未授权：仅平台总管理员可查询设备配额' }, 401, context.request);
+            }
+            const targetUsername = String(url.searchParams.get('username') || '').trim();
+            if (!targetUsername) {
+                return json({ success: false, error: '请提供要查询的用户名' }, 400, context.request);
+            }
+            const record = (await kv.get(KV_USER_DEVICES_PREFIX + targetUsername, 'json')) || { devices: [] };
+            if (typeof record.maxDevices !== 'number' || !Number.isInteger(record.maxDevices) || record.maxDevices <= 0) {
+                record.maxDevices = DEVICE_LIMIT_EXEMPT_ACCOUNTS.includes(targetUsername)
+                    ? DEVICE_EXEMPT_MAX : MAX_DEVICES_PER_ACCOUNT;
+            }
+            const devices = Array.isArray(record.devices) ? record.devices : [];
+            return json({
+                success: true,
+                username: targetUsername,
+                maxDevices: record.maxDevices,
+                devicesCount: devices.length,
+                isExempt: DEVICE_LIMIT_EXEMPT_ACCOUNTS.includes(targetUsername),
+                devices: sanitizeDevices(record)
+            }, 200, context.request);
+        }
+
+        // ===== 平台管理员：设置账号设备配额 POST /users?action=admin-set-device-quota =====
+        // body: { username, maxDevices }（1~100，99 = 不限；普通账号默认 2，豁免账号默认 99）
+        // 权限：仅平台总管理员；写审计日志
+        if (method === 'POST' && url.searchParams.get('action') === 'admin-set-device-quota') {
+            const authUser = await parseAuthHeader(context.request, context.env);
+            if (!authUser || !isPlatformAdmin(authUser)) {
+                return json({ success: false, error: '未授权：仅平台总管理员可调整设备配额' }, 401, context.request);
+            }
+            const body = await context.request.json().catch(() => ({}));
+            const targetUsername = String(body.username || '').trim();
+            const maxDevices = Number(body.maxDevices);
+            if (!targetUsername) {
+                return json({ success: false, error: '请提供要调整的用户名' }, 400, context.request);
+            }
+            if (!Number.isInteger(maxDevices) || maxDevices < 1 || maxDevices > 100) {
+                return json({ success: false, error: '设备配额须为 1~100 的整数（99 = 不限）' }, 400, context.request);
+            }
+            const record = (await kv.get(KV_USER_DEVICES_PREFIX + targetUsername, 'json')) || { devices: [] };
+            if (!Array.isArray(record.devices)) record.devices = [];
+            record.maxDevices = maxDevices;
+            await kv.put(KV_USER_DEVICES_PREFIX + targetUsername, JSON.stringify(record));
+
+            const found = await findUserForLogin(kv, targetUsername).catch(() => null);
+            await writeAuditLog(kv, (found && found.clinicId) || null, authUser.username, authUser.role,
+                'set_device_quota', targetUsername, context.request,
+                { maxDevices, devicesCount: record.devices.length });
+
+            return json({
+                success: true,
+                message: '设备配额已更新：' + targetUsername + ' → ' + maxDevices + ' 台' + (maxDevices >= 99 ? '（不限）' : ''),
+                username: targetUsername,
+                maxDevices,
+                devicesCount: record.devices.length
             }, 200, context.request);
         }
 

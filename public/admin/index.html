@@ -1171,6 +1171,25 @@ td.code { font-family: "Courier New", monospace; font-weight: 600; color: #2c3e5
     </div>
 </div>
 
+<!-- ★ 2026-08-22 设备配额弹窗：平台管理员调整账号设备数量上限 -->
+<div id="deviceQuotaModal" class="modal-overlay">
+    <div class="modal-box" style="max-width:480px;">
+        <span class="modal-close" onclick="closeDeviceQuotaModal()">&times;</span>
+        <h3>📱 设备配额</h3>
+        <div id="deviceQuotaAlert" class="alert"></div>
+        <div class="fee-summary" id="deviceQuotaSummary"></div>
+        <div class="form-group">
+            <label>设备数量上限（1~100，填 99 = 不限）</label>
+            <input type="number" id="deviceQuotaInput" min="1" max="100" placeholder="如：2（默认） / 99（不限）">
+        </div>
+        <div id="deviceQuotaDevices" style="max-height:180px;overflow-y:auto;margin-top:4px;font-size:12px;color:#606266;line-height:1.8;"></div>
+        <div style="margin-top:12px;text-align:right;">
+            <button class="btn" onclick="closeDeviceQuotaModal()">取消</button>
+            <button class="btn btn-warning" id="deviceQuotaSubmitBtn" onclick="submitDeviceQuota()">保存配额</button>
+        </div>
+    </div>
+</div>
+
 <script src="../qrcode.min.js"></script>
 <script>
 // API 基础路径（与 Pages Functions 路径一致）
@@ -3577,6 +3596,7 @@ function renderUsersTable() {
               '<button class="btn btn-sm" onclick="openUserResetPwdModal(\'' + escapeHtml(u.username) + '\')">🔓/🔑 解锁重置</button>' +
               '<button class="btn btn-sm" onclick="toggleUserStatus(\'' + escapeHtml(u.username) + '\',' + (u.disabled !== true) + ')">' + (u.disabled === true ? '✅ 启用' : '🚫 停用') + '</button>' +
               '<button class="btn btn-sm" onclick="cycleUserRole(\'' + escapeHtml(u.username) + '\')">🔁 角色</button>' +
+              '<button class="btn btn-sm" onclick="openDeviceQuotaModal(\'' + escapeHtml(u.username) + '\')">📱 设备配额</button>' +
               '</div>';
         return '<tr' + (u.disabled === true ? ' style="opacity:0.6;"' : '') + '>' +
             '<td class="code">' + escapeHtml(u.username) + '</td>' +
@@ -3648,6 +3668,78 @@ async function submitUserResetPwd() {
         }
     } catch (e) {
         showAlert('userResetPwdAlert', '网络错误：' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+    }
+}
+
+// ---- 设备配额：查询/调整账号设备数量上限（2026-08-22 平台管理员权限）----
+let _quotaTargetUser = null;
+
+async function openDeviceQuotaModal(username) {
+    const u = _usersCache.find(x => x.username === username) || { username, name: username };
+    _quotaTargetUser = u;
+    document.getElementById('deviceQuotaSummary').innerHTML =
+        '<strong>' + escapeHtml(u.name || u.username) + '</strong>（' + escapeHtml(u.username) + '）' +
+        (u.clinicName ? ' · ' + escapeHtml(u.clinicName) : '');
+    document.getElementById('deviceQuotaAlert').className = 'alert';
+    document.getElementById('deviceQuotaAlert').style.display = 'none';
+    document.getElementById('deviceQuotaInput').value = '';
+    document.getElementById('deviceQuotaDevices').innerHTML = '<span style="color:#909399;">加载中...</span>';
+    document.getElementById('deviceQuotaModal').classList.add('show');
+    try {
+        const res = await fetch(API_BASE + '/users?action=admin-get-device-quota&username=' + encodeURIComponent(username), {
+            headers: { 'Authorization': 'Bearer ' + token }
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.error || '查询失败');
+        document.getElementById('deviceQuotaInput').value = data.maxDevices;
+        const list = (data.devices && data.devices.devices) || [];
+        document.getElementById('deviceQuotaDevices').innerHTML =
+            '<div>当前配额：<strong>' + data.maxDevices + '</strong> 台' + (data.maxDevices >= 99 ? '（不限）' : '') +
+            ' · 已绑定：<strong>' + data.devicesCount + '</strong> 台' + (data.isExempt ? ' · <span style="color:#e67e22;">豁免名单账号</span>' : '') + '</div>' +
+            (list.length === 0
+                ? '<div style="color:#909399;margin-top:4px;">暂无已绑定设备（未在桌面/APP 登录过）</div>'
+                : '<div style="margin-top:4px;">' + list.map(d =>
+                    '· ' + escapeHtml(d.machineId || '?') + '（' + escapeHtml(d.clientClass || '?') + '，' +
+                    (d.boundAt ? new Date(d.boundAt).toLocaleString('zh-CN') : '-') + '）'
+                ).join('<br>') + '</div>');
+    } catch (e) {
+        document.getElementById('deviceQuotaDevices').innerHTML = '<span style="color:#ff4d4f;">查询失败：' + escapeHtml(e.message) + '</span>';
+    }
+}
+
+function closeDeviceQuotaModal() {
+    document.getElementById('deviceQuotaModal').classList.remove('show');
+    _quotaTargetUser = null;
+}
+
+async function submitDeviceQuota() {
+    if (!_quotaTargetUser) return;
+    const val = document.getElementById('deviceQuotaInput').value.trim();
+    const num = Number(val);
+    if (!Number.isInteger(num) || num < 1 || num > 100) {
+        showAlert('deviceQuotaAlert', '设备配额须为 1~100 的整数（99 = 不限）', 'error');
+        return;
+    }
+    const btn = document.getElementById('deviceQuotaSubmitBtn');
+    btn.disabled = true;
+    try {
+        const res = await fetch(API_BASE + '/users?action=admin-set-device-quota', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ username: _quotaTargetUser.username, maxDevices: num })
+        });
+        const data = await res.json();
+        if (data.success) {
+            const name = _quotaTargetUser.username;
+            closeDeviceQuotaModal();
+            showAlert('userAlert', '「' + name + '」' + (data.message || '设备配额已更新'), 'success');
+        } else {
+            showAlert('deviceQuotaAlert', data.error || '操作失败', 'error');
+        }
+    } catch (e) {
+        showAlert('deviceQuotaAlert', '网络错误：' + e.message, 'error');
     } finally {
         btn.disabled = false;
     }
