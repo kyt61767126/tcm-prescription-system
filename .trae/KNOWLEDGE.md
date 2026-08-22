@@ -512,6 +512,19 @@
 - **验证**：V1.2.126 完整构建（pack-desktop.bat 入口，3分49秒）E2E 3/3 PASS；单独复跑 `node e2e\run-e2e.cjs`（packaged-win-unpacked 模式）3/3 PASS + 零残留进程；源码混淆已由构建自动还原（git status 干净）。
 - **生效方式**：云端桌面版=安装 `dist\惠康中医-云端 Setup 1.2.126.exe`（或 portable）；云端网页版=public/index.html 推 GitHub 自动部署（Ctrl+F5 强刷）；云端APP=重新打包 APK；离线桌面/离线APP=各自重新打包（user-store 修复已同步其 index.html/electron 副本）。
 
+### 2.40 【已激活设备登录框"注册开通"按钮重现】三层根因（新客户A全流程实测，提交 787a61b6/d05f84d7，2026-08-22）
+
+- **表象**：新客户A全流程（注册→后台审核→激活申请→后台激活→自动装license→登录成功）全部通过后，退出登录重开程序，登录框又出现"📝 注册开通"绿色按钮，误导已开通用户重复注册。
+- **取证手法（直接读磁盘 leveldb，一锤定音）**：登录窗口/主窗口共 `SESSION_PARTITION='persist:tcm-prescription-dingzhi'`，localStorage 落在 `%APPDATA%\tcm-prescription-cloud\Partitions\tcm-prescription-dingzhi\Local Storage\leveldb`。用 FileStream(Share=ReadWrite) 读 000003.ldb/000004.log 字节流，ASCII+UTF-16 双编码搜关键词：`isLoggedIn`/`rememberedUser` 命中、`activationDone` **缺失** → 标记从未落盘（注意：leveldb 的 key/value 是 UTF-16，纯 ASCII 搜会假阴性）。根目录 `Local Storage\leveldb` 是默认 session 的空库（本项目全部窗口走 partition），别扫错位置。
+- **根因1（代码缺陷，必现）**：auth-core `onAdminActivated` 仅"无本地安装桥"分支（云端APP）调 `setCloudActivationDone()`，**桌面安装分支（installAdminLicense 成功→重启）漏调** → 激活成功的桌面设备标记永缺失。
+- **根因2（强杀丢写入，概率）**：`restartApp()` 用 `app.exit(0)` 立即强杀进程，渲染进程 localStorage（leveldb WAL）最近写入未 flush 即丢失——客户A注册时（第一步）写的标记在激活重启时被杀丢。
+- **根因3（设计缺陷）**：login.js 注册入口注入仅依赖易失 localStorage 标记单点判断，无持久事实兜底。
+- **修复（16 文件，仅 JS 逻辑，check-interface 6/6 OK）**：①`onAdminActivated` 开头统一 `setCloudActivationDone()+hideActivateLoginEntry()`（权威源 cloud.js/offline.js + 12 副本，片段逐字节一致性已脚本验证）；②login.js `injectAdminActivateEntry(config)` 加 `hasAdminUser(config)` 兜底——config 已有管理员即隐藏（双条件任一满足）；③`restartApp` 改 `app.quit()` 优雅退出 + 2 秒 `app.exit` 兜底（本项目无 before-quit/close 拦截，已核实安全）。
+- **同步纪律更新**：auth-core 云端权威源=`shared/auth-core/cloud.js`（8 副本）、离线权威源=`shared/auth-core/offline.js`（3 副本）+根 `shared/auth-core.js`；copy-consistency.cjs **不校验 auth-core**（手工纪律），批量同步用模式脚本（每文件两处 patch 必须各命中1次才写入），改完跑片段一致性校验。
+- **举一反三**：①凡"按状态显隐入口"的功能，必须有非易失持久事实（config/文件）兜底，localStorage 标记只作加速；②Electron 需要重启的路径禁止裸 `app.exit(0)`（强杀丢渲染进程存储写入），统一 `app.relaunch()+app.quit()+延迟 exit 兜底`；③排 localStorage 问题直接读 partition leveldb 字节（UTF-16），比连 CDP 快且不受生产无调试端口限制。
+- **验证**：16 文件语法 OK、12 副本片段一致、check-interface 6/6、V1.2.127 完整构建 E2E 3/3 PASS（3分34秒）。
+- **生效方式**：云端桌面版=安装 `dist\惠康中医-云端 Setup 1.2.127.exe`；云端网页版=推 GitHub 自动部署（Ctrl+F5）；云端APP=线上 public/ 自动生效；离线桌面=重新 build.bat 打包；离线APP=重新打包 APK。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
