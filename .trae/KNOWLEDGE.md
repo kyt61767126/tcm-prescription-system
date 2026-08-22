@@ -567,6 +567,15 @@
 - **验证**：离线 E2E（run-e2e.cjs）E1/E2/E3 3/3 全过——E2 反向注入 role:'admin'+edition:'clinic' 也会被强制降级为「修改密码」可见 +「用户管理」隐藏。
 - **生效方式**：离线桌面版=装/更新到 Setup 1.0.94（含本修复）；离线APP=重新打包惠康中医-本地.apk。
 
+### 2.46 【手动严格打包闪退·根治】consolidation move 嵌套 + E2E 静默兜底双缺陷（build 1.0.96/1.2.130，2026-08-22）
+- **表象**：手动严格打包"成功"（含 E2E 3/3 绿灯），安装后却闪退/启动异常，同类问题反复出现（1.0.95 实锤）。
+- **根因1（嵌套污染）**：dist 被 Defender/句柄锁定时，consolidation 预清空只删掉一半（`dist\win-unpacked\resources\app.asar` 锁定残留空壳），随后 `move /Y build_output_<ts>\win-unpacked dist\win-unpacked`——**Windows move 在目标目录已存在时会把源移入目标内部**，生成 `dist\win-unpacked\win-unpacked\` 嵌套，且 move 返回 0（errorlevel 0）→ 误报 Consolidated 成功。主 exe 藏进二级目录、一级只剩半删除残留。实锤：`dist\win-unpacked\win-unpacked\惠康中医-本地.exe`。
+- **根因2（E2E 假绿灯）**：run-e2e.cjs 硬编码 `dist\win-unpacked`，找不到主 exe 时**静默兜底** dev electron + 备份 asar（mode B），绿灯根本没测真实打包产物；若一级残留旧 exe 则测的是旧包。两种情况都会"绿灯放行坏包"。
+- **修复（4 文件）**：①两端 build.bat consolidation 改防嵌套三铁律——move 前先删目标→删不掉则 rename 让路（`*_old_<BUILD_START_STAMP>`）→ 仍失败则 MOVE_OK=0 产物完整留 fallback，**绝不 move 进已存在目录、绝不 xcopy 合并出新旧混合包**；②两端 run-e2e.cjs 新增 `--dir <path>` 参数（指定后无主 exe 即红线 FAIL，绝不兜底）+ mode B 兜底打醒目 WARN；③两端 build.bat E2E 调用改为 `node "e2e\run-e2e.cjs" --dir "%OUTPUT_DIR%\win-unpacked"`（跟随 fallback 目录），marker 清理同步修正。
+- **验证（真实锁定场景实测）**：离线 1.0.96——dist 锁定触发 fallback，exe 交付物成功 move 进 dist、锁定空壳不强并、无嵌套，E2E 3/3（真实产物 packaged-dir-arg 模式），exe 启动 10s 存活 RUNNING_OK；云端 1.2.130——正常路径，无嵌套，E2E 3/3，启动 RUNNING_OK。
+- **举一反三**：Windows bat 里 `move dir target\dir` 目标存在≠报错而是**移入内部**，所有 move 合并目录的脚本都要"目标不存在才 move"；打包验证链（final-verify/E2E）必须显式指向**真实交付产物路径**并禁止静默降级兜底，否则绿灯=假绿灯。
+- **生效方式**：离线桌面版=安装 `db-offline\desktop\dist\惠康中医-本地 Setup 1.0.96.exe`（锁定残留时产物也可能在 `build_output_*\`，按构建日志 Output directory 行为准）；云端桌面版=安装 `db-yunduan\cloud_desktop\dist\惠康中医-云端 Setup 1.2.130.exe`；打包脚本修复本身随 git 生效，无需额外操作。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）

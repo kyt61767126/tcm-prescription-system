@@ -289,16 +289,21 @@ if /i not "%OUTPUT_DIR%"=="%DEFAULT_OUTPUT%" (
             if exist "%DEFAULT_OUTPUT%\%%E\*" ( rmdir /s /q "%DEFAULT_OUTPUT%\%%E" 2>nul ) else ( del /f /q "%DEFAULT_OUTPUT%\%%E" 2>nul )
         )
     ) else ( mkdir "%DEFAULT_OUTPUT%" )
-    REM Move all files+dirs from OUTPUT_DIR -> DEFAULT_OUTPUT (robocopy-style move)
+    REM ★ 2026-08-23 防嵌套合并：move 目标已存在时，Windows 会把源目录移入目标内部，
+    REM   形成 dist\win-unpacked\win-unpacked 嵌套（Defender 锁定半删除场景已实际发生，主 exe 藏进二级目录）。
+    REM   铁律：① move 前先删目标；② 删不掉则 rename 让路（*_old_<时间戳>）；③ 两者都失败→本项放弃
+    REM   （MOVE_OK=0，产物完整留在 fallback 目录，绝不 move 进半删除目录，绝不 xcopy 合并出新旧混合包）。
     set "MOVE_OK=1"
     for /f "delims=" %%E in ('dir /b "%OUTPUT_DIR%" 2^>nul') do (
-        move /Y "%OUTPUT_DIR%\%%E" "%DEFAULT_OUTPUT%\%%E" >nul 2>nul
-        if errorlevel 1 (
-            REM move failed: try copy + delete fallback for directories
-            if exist "%OUTPUT_DIR%\%%E\*" (
-                xcopy /E /I /Y /Q "%OUTPUT_DIR%\%%E" "%DEFAULT_OUTPUT%\%%E" >nul 2>nul
-                if exist "%DEFAULT_OUTPUT%\%%E" ( rmdir /s /q "%OUTPUT_DIR%\%%E" 2>nul ) else ( set "MOVE_OK=0" )
-            ) else ( set "MOVE_OK=0" )
+        if exist "%DEFAULT_OUTPUT%\%%E" (
+            if exist "%DEFAULT_OUTPUT%\%%E\*" ( rmdir /s /q "%DEFAULT_OUTPUT%\%%E" 2>nul ) else ( del /f /q "%DEFAULT_OUTPUT%\%%E" 2>nul )
+            if exist "%DEFAULT_OUTPUT%\%%E" rename "%DEFAULT_OUTPUT%\%%E" "%%E_old_!BUILD_START_STAMP!" 2>nul
+        )
+        if exist "%DEFAULT_OUTPUT%\%%E" (
+            set "MOVE_OK=0"
+        ) else (
+            move /Y "%OUTPUT_DIR%\%%E" "%DEFAULT_OUTPUT%\%%E" >nul 2>nul
+            if exist "%OUTPUT_DIR%\%%E" set "MOVE_OK=0"
         )
     )
     if "!MOVE_OK!"=="1" (
@@ -398,12 +403,16 @@ if not exist "node_modules\playwright" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] playwright 未安装，自动安装（一次性）...'"
     call npm i -D playwright --no-fund --no-audit
 )
-node "e2e\run-e2e.cjs"
+REM ★ 2026-08-23：--dir 显式传真实产物目录（consolidation 后可能仍是 build_output_* fallback）。
+REM   run-e2e.cjs 在 --dir 模式下找不到主 exe 会红线失败（绝不静默兜底 dev electron），
+REM   杜绝嵌套/半删除场景下"E2E 测旧残留 exe"的假绿灯。
+node "e2e\run-e2e.cjs" --dir "%OUTPUT_DIR%\win-unpacked"
 set "E2E_RC=%errorlevel%"
 if not "%E2E_RC%"=="0" (
     powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[ERROR] E2E 回归失败，红线删除所有 exe，杜绝带病交付'"
     del /q "%OUTPUT_DIR%\*.exe" >nul 2>&1
     del /q "dist\*.exe" >nul 2>&1
+    del /q "%OUTPUT_DIR%\win-unpacked\e2e-enabled.marker" >nul 2>&1
     del /q "dist\win-unpacked\e2e-enabled.marker" >nul 2>&1
     node "%~dp0..\..\..\tools\obfuscate.js" restore --target=cloud >nul 2>&1
     if not defined NO_PAUSE pause

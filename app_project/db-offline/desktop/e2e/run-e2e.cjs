@@ -54,6 +54,19 @@ const keepTmp = args.includes('--keep');
 function resolveTarget() {
     if (argOf('--exe')) return { exePath: argOf('--exe'), launchArgs: [], mode: 'explicit-exe' };
 
+    // ★ 2026-08-23 防假绿灯：--dir <path> 由 build.bat 传入真实产物目录（支持 build_output_* fallback）。
+    //   指定后【绝不兜底】dev electron——目录里没有主 exe 说明产物异常（嵌套/半删除/合并失败），
+    //   必须红线失败让 build.bat 删 exe，杜绝"测旧残留 exe 或 dev 兜底"的假绿灯带病交付。
+    const dirArg = argOf('--dir');
+    if (dirArg) {
+        try {
+            const exe = fs.readdirSync(dirArg).find(f => f.toLowerCase().endsWith('.exe') && !/^elevate\.exe$/i.test(f));
+            if (exe) return { exePath: path.join(dirArg, exe), launchArgs: [], mode: 'packaged-dir-arg' };
+        } catch (_) { /* 目录不存在，落到下方 FAIL */ }
+        console.error(`[E2E][FAIL] --dir 指定目录无主 exe: ${dirArg}（产物异常：嵌套/半删除/未生成，拒绝兜底，红线失败）`);
+        process.exit(1);
+    }
+
     const wu = path.join(ROOT, 'dist', 'win-unpacked');
     try {
         const exe = fs.readdirSync(wu).find(f => f.toLowerCase().endsWith('.exe'));
@@ -63,6 +76,7 @@ function resolveTarget() {
     const devElectron = path.join(ROOT, 'node_modules', 'electron', 'dist', 'electron.exe');
     const realAsar = path.join(ROOT, '_backup_asar', 'real_app.asar');
     if (fs.existsSync(devElectron) && fs.existsSync(realAsar)) {
+        console.warn('[E2E][WARN] dist\\win-unpacked 无主 exe，降级 dev electron+已验证 asar 兜底（未测真实打包 exe，绿灯仅供参考，不应出现在正式打包流程）');
         return { exePath: devElectron, launchArgs: [realAsar], mode: 'electron+verified-asar' };
     }
     console.error(`[E2E][FAIL] 找不到可测目标：dist\\win-unpacked 无 exe，且兜底组件缺失\n  electron: ${devElectron} (${fs.existsSync(devElectron) ? 'OK' : 'MISSING'})\n  asar: ${realAsar} (${fs.existsSync(realAsar) ? 'OK' : 'MISSING'})`);
