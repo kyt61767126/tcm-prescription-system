@@ -315,7 +315,12 @@ function closeActivateWindow() {
 // 重启应用
 function restartApp() {
     app.relaunch();
-    app.exit(0);
+    // ★ 2026-08-22 修复：原 app.exit(0) 立即强杀进程，渲染进程 localStorage（leveldb WAL）
+    //   最近写入未 flush 即丢失——实锤（云端桌面同款）：注册标记 auth:activationDone 丢失后，
+    //   已激活设备登录框"注册开通"按钮重现。改 app.quit() 优雅退出让 Chromium 落盘；
+    //   2 秒兜底强杀防个别窗口关闭流程卡死（本项目无 before-quit/window close 拦截，正常瞬时退出）。
+    app.quit();
+    setTimeout(() => { try { app.exit(0); } catch (_) {} }, 2000);
 }
 
 // ============================================================================

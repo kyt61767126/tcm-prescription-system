@@ -602,7 +602,7 @@
         // ★ 2026-08-19 激活入口收敛：按激活状态显示/隐藏登录框极简提示
         updateLoginActivateHint();
         // ★ 2026-08-19 云端桌面同步：登录框注入"管理员激活"入口
-        injectAdminActivateEntry();
+        injectAdminActivateEntry(config);
 
         // ★ bnzc:// 一键激活：检查是否有待激活数据
         await checkBnzcPendingActivation(config);
@@ -740,13 +740,19 @@
 
     // ★ 2026-08-20 注册审核制：登录框注入"注册开通"入口（云端三端一致），调用 auth-core 的 openCloudRegister
     //   手机号即账号 + 自设密码，注册即时建号，管理员审核通过后即可登录
-    function injectAdminActivateEntry() {
+    function injectAdminActivateEntry(config) {
         try {
             if (!window.openCloudRegister) return; // auth-core(cloud.js) 未提供则跳过
             // ★ 2026-08-20 注册完成后自动隐藏
             try {
                 if (window.localStorage && window.localStorage.getItem('auth:activationDone') === '1') return;
             } catch (e) {}
+            // ★ 2026-08-22 兜底：config 已有管理员账户 = 注册/激活已完成的持久事实。
+            //   不再单点依赖 localStorage 标记（激活重启 app.exit 强杀曾致其丢失，
+            //   已激活设备登录框"注册开通"按钮重现误导用户）。双条件任一满足即隐藏。
+            try {
+                if (typeof hasAdminUser === 'function' && config && hasAdminUser(config)) return;
+            } catch (e2) {}
             if (document.getElementById('activateLoginEntry')) return; // 已注入过则跳过
             const container = document.querySelector('.login-box .login-buttons');
             if (!container) return;

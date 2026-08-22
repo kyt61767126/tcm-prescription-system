@@ -3176,6 +3176,13 @@
         }
 
         async function onAdminActivated(r, requestId) {
+            // ★ 2026-08-22 修复：激活成功即统一设置标记并隐藏登录框注册入口。
+            //   原实现仅"无本地安装桥"分支（云端APP）设置，桌面安装分支（installAdminLicense）
+            //   漏设 → 激活成功的桌面设备重启后，登录框"📝 注册开通"按钮重现，误导已开通用户
+            //   （新客户A实测：注册→审核→激活→登录全通过，退出登录后注册按钮重现，实锤此漏）。
+            //   此调用在 localStorage 写入，配合 restartApp 改 app.quit() 优雅退出确保落盘。
+            setCloudActivationDone();
+            hideActivateLoginEntry();
             const license = r.license || '';
             const phone = state.phone;
             const descEl = document.getElementById('adminSuccessDesc');
@@ -3214,9 +3221,7 @@
                 show('adminSuccess');
                 document.getElementById('adminSuccessBtn').textContent = '✅ 好的';
                 document.getElementById('adminSuccessBtn').onclick = function() { cleanup(); };
-                // ★ 2026-08-20 激活成功：登录框"软件激活"入口自动隐藏
-                setCloudActivationDone();
-                hideActivateLoginEntry();
+                // ★ 2026-08-22 setCloudActivationDone/hideActivateLoginEntry 已移至本函数开头统一执行
             }
         }
 
