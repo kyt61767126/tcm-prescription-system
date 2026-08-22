@@ -615,7 +615,7 @@
 - **根因**：两次"管理员激活"申请均审核通过，`admin-account.js` 的 `ensureClinicUser` 每次都无条件补 clinic_admin（role 固定，无"诊所已有管理员"判断）→ 云端同诊所两个 clinic_admin → 桌面端登录后云端权威 role 落地本地表 → 双管理员。连带缺陷：三端用户管理"删除"只删本地 localStorage 表、云端账户仍在，被删账户下次云端登录又会落地回来（"删不干净"）。
 - **修复（后端2+前端3共5文件）**：①`users.js` 新增 `POST /users?action=delete-user`（platform_admin 任意诊所/clinic_admin 仅本诊所；禁删自己/禁删 platform_admin/最后一个 clinic_admin 不可删；移除记录+revokeAllUserTokens 立即下线+审计日志；云端处方保留）；②`admin-account.js` 唯一管理员加固——诊所已有 clinic_admin 时，再次激活的新手机号开通为 doctor（换管理员手机号走平台后台 update-user 角色互转）；③三端 index.html（cloud_desktop/public/cloud_app assets）`handleDeleteUser` 先删云端再删本地：400/403 云端拒绝则阻断并显示原因、网络失败 confirm 询问是否仅删本地、404=本地账户正常继续、无 token 离线场景跳过云端直删本地。
 - **数据处置（已执行）**：用 wgj/admin123 登录（正确端点=`POST /api/users?login=true`，body 带 clientClass）获取 token → 调 delete-user 删除云端王桂(13398628212) → GET /api/users 验证列表已无该账户、王桂杰(13398628756)/wyx/zsy 完好。
-- **遗留提示**：云端仍有 wgj + 13398628756 两个 clinic_admin（同名王桂杰）——wgj 是测试/运维管理账户（设备豁免名单），不影响用户桌面端显示（桌面端只显示本地表登录过的账户）；如需云端也只留一个管理员，可再调 delete-user 删 wgj 或 update-user 降级（用户决定）。
+- **遗留提示（已处置 2026-08-23）**：应用户要求再删 13398628756、保留 wgj——云端现为唯一管理员 wgj（clinic_admin）+ wyx/zsy 两个 doctor；13398628756 的 token 已全部撤销（立即下线）。若用户桌面端本地表残留 13398628756 条目，在用户管理里手动删除即可（云端已无此账户，不会再同步回来）。
 - **教训**：①"删除/修改"类操作在"本地缓存+云端权威"双数据源架构下必须两端同步，否则状态必然回漂；②开通/注册类接口要考虑"重复执行"的幂等语义边界——同名诊所第二次激活≠需要第二个管理员；③云端 API 正确登录端点是 `/api/users?login=true`（POST，body 含 username/password/machineId/clientClass），不是 /api/auth 或 /api/users?action=login。
 - **生效方式**：云端网页版+云端APP=已推送自动部署即时生效（APP 为 WebView 壳取线上 public/）；云端桌面版=需重新 build.bat 打包 exe（不重装也可用：云端王桂账户已删，用户在当前版本用户管理里删王桂本地条目即可，云端已无此账户不会回来）。
 
