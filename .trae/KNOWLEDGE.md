@@ -628,6 +628,13 @@
 - **教训**：①PS5.1 `Set-Content -Encoding UTF8` 会给文件加 BOM，导致与无 BOM 的 public/auth-core.js 字节不一致——批量同步必须用 `[System.IO.File]::WriteAllText(path, text, New-Object System.Text.UTF8Encoding($false))` 保证无 BOM；②浏览器 evaluate 返回值序列化：简单表达式直接返回原始值，复杂箭头函数+分号体可能返回 undefined，诊断时用拼接字符串/内联循环避开。
 - **生效方式**：云端网页版+云端APP=推 GitHub 自动部署即时生效（APP 为 WebView 壳取线上 public/）；云端桌面版（cloud_desktop auth-core 副本已同步）=需重新 build.bat 打包 exe 生效；管理台（site-admin）副本已同步随部署生效。
 
+### 2.55 【云端版无试用】云端网页/APP登录框注册开通入口无条件常显（环境感知三分流，提交 efd752c3，2026-08-23）
+- **需求**：用户要求"参考云端桌面程序激活模式统一更新云端APP，云端版无试用，登入框显示入口"——云端网页/APP 是公开分发的 SaaS（无试用生命周期），登录框注册入口应如登录页"注册"链接**常驻**（换机/清缓存/二手设备入口不丢失）。
+- **修复（auth-core.js 9 副本同步，新增两个环境检测函数）**：`injectActivateLinkIntoLogin` 三分流——①**云端网页/APP**（非桌面非管理台）：跳过激活态判断，注册开通入口**无条件常显**；②**桌面 Electron 环境**（`isDesktopElectronEnv`=window.electronAPI 存在，覆盖 cloud_desktop/index.html 主界面 loginOverlay 登出再登录场景）：保持桌面激活模式双条件（isCloudActivationDone + CONFIG.users 管理员兜底，已注册即隐藏防误导——2.45/2.51 教训）；③**管理台**（`isAdminConsolePage`=pathname 含 '/admin/' 或 'site-admin'）：禁止自助注册，不注入入口。配套 `hideActivateLoginEntry` 环境感知：仅桌面 Electron 隐藏（登录/注册/激活成功后），云端网页/APP 改 no-op 保证登出回登录框入口仍在。
+- **验证**：①未激活态：动态入口显示+静态两按钮 none；②已激活态（auth:activationDone='1'）：入口仍显示（常显生效）；③管理台 /admin/index.html：无 loginOverlay 且不注入；④openCloudRegister 可用；⑤node --check 语法 OK；⑥9 副本字节级一致；⑦check-interface 6/6 OK。
+- **教训**：①"统一"不等于"复制"——桌面模式（单机单诊所双条件隐藏）与 APP 模式（公开分发常显）产品语义不同，需环境感知分流而非一刀切；②auth-core 单文件 9 副本服务多端时，环境分支用运行时检测（electronAPI/路径）而非维护多份差异代码，保住"字节级一致"纪律；③PowerShell 不支持 bash heredoc（`$(cat <<'EOF')` 报 Missing file specification），多行 commit message 改单行。
+- **生效方式**：云端网页版+云端APP=推 GitHub 自动部署即时生效（无需重打 APK）；云端桌面版=需重新 build.bat 打包 exe；管理台（site-admin 本地 Electron）=随各自打包流程生效。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
