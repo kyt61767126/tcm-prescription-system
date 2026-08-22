@@ -610,6 +610,15 @@
 - **教训**：①`-CollectSideEffectsOnly -DryRun` 是 one-click-pack.ps1 的"不打包冒烟测试"参数，验证编排器改动时优先用它（完整打包一轮 7 分钟太久）；②Edit 编辑带 BOM 的 .ps1 必剥 BOM（本轮 one-click-pack.ps1/release-menu.ps1 双双中招，已用 UTF8Encoding($true) 补回）；③检查脚本含中文路径字面量时，无 BOM 的临时 ps1 会被 PS5.1 按 ANSI 误读报"Illegal characters in path"——临时脚本要么加 BOM 要么用 Get-ChildItem 枚举避开中文字面量。
 - **生效方式**：随 git 生效。用户双击 `一键打包.bat` / `一键发布.bat` 时，即使下游 .bat 行尾被写坏也会当场自动修复（日志显示 [FIX]/all CRLF）；若同时有手动打包在跑，一键打包的对应构建步骤会显示"检测到另一个构建正在运行"并跳过该步（等手动构建结束后重跑一键打包即可）。
 
+### 2.51 【双管理员根因】激活开通无"一诊所一管理员"约束 + 删除用户不同步云端（提交 0d12a778，2026-08-23）
+- **表象**：云端桌面用户管理显示两个管理员：王桂杰(13398628756)[正式] + 王桂(13398628212)[测试]。
+- **根因**：两次"管理员激活"申请均审核通过，`admin-account.js` 的 `ensureClinicUser` 每次都无条件补 clinic_admin（role 固定，无"诊所已有管理员"判断）→ 云端同诊所两个 clinic_admin → 桌面端登录后云端权威 role 落地本地表 → 双管理员。连带缺陷：三端用户管理"删除"只删本地 localStorage 表、云端账户仍在，被删账户下次云端登录又会落地回来（"删不干净"）。
+- **修复（后端2+前端3共5文件）**：①`users.js` 新增 `POST /users?action=delete-user`（platform_admin 任意诊所/clinic_admin 仅本诊所；禁删自己/禁删 platform_admin/最后一个 clinic_admin 不可删；移除记录+revokeAllUserTokens 立即下线+审计日志；云端处方保留）；②`admin-account.js` 唯一管理员加固——诊所已有 clinic_admin 时，再次激活的新手机号开通为 doctor（换管理员手机号走平台后台 update-user 角色互转）；③三端 index.html（cloud_desktop/public/cloud_app assets）`handleDeleteUser` 先删云端再删本地：400/403 云端拒绝则阻断并显示原因、网络失败 confirm 询问是否仅删本地、404=本地账户正常继续、无 token 离线场景跳过云端直删本地。
+- **数据处置（已执行）**：用 wgj/admin123 登录（正确端点=`POST /api/users?login=true`，body 带 clientClass）获取 token → 调 delete-user 删除云端王桂(13398628212) → GET /api/users 验证列表已无该账户、王桂杰(13398628756)/wyx/zsy 完好。
+- **遗留提示**：云端仍有 wgj + 13398628756 两个 clinic_admin（同名王桂杰）——wgj 是测试/运维管理账户（设备豁免名单），不影响用户桌面端显示（桌面端只显示本地表登录过的账户）；如需云端也只留一个管理员，可再调 delete-user 删 wgj 或 update-user 降级（用户决定）。
+- **教训**：①"删除/修改"类操作在"本地缓存+云端权威"双数据源架构下必须两端同步，否则状态必然回漂；②开通/注册类接口要考虑"重复执行"的幂等语义边界——同名诊所第二次激活≠需要第二个管理员；③云端 API 正确登录端点是 `/api/users?login=true`（POST，body 含 username/password/machineId/clientClass），不是 /api/auth 或 /api/users?action=login。
+- **生效方式**：云端网页版+云端APP=已推送自动部署即时生效（APP 为 WebView 壳取线上 public/）；云端桌面版=需重新 build.bat 打包 exe（不重装也可用：云端王桂账户已删，用户在当前版本用户管理里删王桂本地条目即可，云端已无此账户不会回来）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
