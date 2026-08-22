@@ -555,6 +555,18 @@
 - **教训**：跨端同步类修复，完成云端后必须用同款 grep 扫**离线系**副本是否同样适用——"云端先行、离线跟进"的节奏最容易漏离线。
 - **生效方式**：离线桌面版=装 Setup 1.0.93（用户已验证 ✓）；离线APP=重新打包惠康中医-本地.apk；云端3端无变化（已有过滤）。
 
+### 2.44 【平台管理员调整账号设备数量配额】admin-get/set-device-quota 接口 + 后台「设备配额」弹窗（提交 1f07a20e/54957be5，2026-08-22）
+- **需求**：设置平台管理员可增加/修改账号设备数量上限，解决 wgj 等账号被"每账号 2 台设备"限制拦截的问题。
+- **实现**：①`functions/api/users.js` 新增 `GET admin-get-device-quota` / `POST admin-set-device-quota`（仅 `isPlatformAdmin` 可调），`bindUserDevice` 保留 KV 中已有 `maxDevices` 不强制覆盖；特殊豁免名单 `DEVICE_LIMIT_EXEMPT_ACCOUNTS=['wgj']` 默认配额 99（实际不限，避免前端对 -1 显示异常）；②后台 `site-admin/admin/index.html` 用户管理操作列加「📱 设备配额」按钮 + 弹窗（显示当前配额/已绑定设备明细/输入 1~100，99=不限），`public/admin/index.html` 双副本同步。
+- **验证**：`node --check users.js` OK；生产接口未登录调用返回 401「未授权：仅平台总管理员可查询设备配额」→ 证明路由已随 Cloudflare Pages 自动部署且权限守卫生效。完整功能需平台管理员登录后台点「设备配额」实测。
+- **生效方式**：纯后端+云端网页版后台=push GitHub 自动部署即时生效（本次已推送）；桌面/APP 端用户管理后台未改、无影响。
+
+### 2.45 【离线桌面试用（标准版）显示"用户管理"而非"修改密码"】标准版强制守护已锁定改密按钮（build 1.0.94，2026-08-22）
+- **表象**：离线桌面试用（标准版）登入后操作界面显示"用户管理"，规范要求显示"修改密码"。
+- **根因确认**：button-manager.js `__computePermissions` 的 Arch 2.26 断言：`isInst && _isAdminRole → 用户管理`；`isPersonal → canManage=false, canChangePwd=true`（改密按钮）。permission.js `canManageUsersByRole` 对标准版强制 `return false`、`canChangePassword` 对标准版强制 `return true`。试用期 `ensureTrialStandardEdition` 强制 edition=personal + 全员 role=user → 逻辑上必显示「修改密码」。
+- **验证**：离线 E2E（run-e2e.cjs）E1/E2/E3 3/3 全过——E2 反向注入 role:'admin'+edition:'clinic' 也会被强制降级为「修改密码」可见 +「用户管理」隐藏。
+- **生效方式**：离线桌面版=装/更新到 Setup 1.0.94（含本修复）；离线APP=重新打包惠康中医-本地.apk。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
