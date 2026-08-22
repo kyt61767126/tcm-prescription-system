@@ -2269,14 +2269,43 @@
         } catch (e) {}
     }
 
+    // ★ 2026-08-22 冗余入口收敛（对齐云端桌面版登录框）：隐藏登录框静态"注册诊所 / 激活申请"按钮
+    //   与"管理台登录"按钮，仅保留动态注入的"注册开通"入口（云端注册审核制只保留一个注册入口）。
+    //   "管理台登录"可经 admin/index.html 直接访问（平台管理后台独立入口），登录框无需再保留该按钮。
+    function hideStaticActivateEntry() {
+        try {
+            const box = document.querySelector('.login-box');
+            if (!box) return;
+            const btns = box.querySelectorAll('button');
+            for (let i = 0; i < btns.length; i++) {
+                const t = btns[i].textContent || '';
+                if (t.indexOf('注册诊所') !== -1 || t.indexOf('管理台登录') !== -1) {
+                    btns[i].style.display = 'none';
+                }
+            }
+        } catch (e) {}
+    }
+
     function injectActivateLinkIntoLogin() {
         try {
             // 登录框诊所名无条件同步（与 App/网页/桌面环境无关）
             syncLoginClinicName();
             const overlay = document.getElementById('loginOverlay');
             if (!overlay) return;
+            // ★ 2026-08-22 冗余入口收敛：隐藏静态"注册诊所 / 激活申请"与"管理台登录"按钮（仅保留动态"注册开通"）
+            hideStaticActivateEntry();
             // ★ 2026-08-20 注册完成后自动隐藏：已登录/已注册过则不再显示"注册开通"入口
             if (isCloudActivationDone()) return;
+            // ★ 2026-08-22 兜底（对齐桌面版 injectAdminActivateEntry 双条件）：
+            //   config 已有管理员账户 = 注册/激活已完成的持久事实，即使 localStorage 标记丢失也不显示注册入口
+            try {
+                if (typeof CONFIG !== 'undefined' && CONFIG && Array.isArray(CONFIG.users)) {
+                    for (let i = 0; i < CONFIG.users.length; i++) {
+                        const u = CONFIG.users[i];
+                        if (u && (u.role === 'admin' || u.role === 'clinic_admin' || u.role === 'platform_admin')) return;
+                    }
+                }
+            } catch (e) {}
             // 已注入过则跳过，避免重复
             if (document.getElementById('activateLoginEntry')) return;
 
