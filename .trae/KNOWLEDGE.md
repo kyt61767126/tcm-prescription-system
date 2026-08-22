@@ -527,6 +527,18 @@
 
 ---
 
+### 2.41 【基础设置→管理员激活看不到工单Tab】两套激活界面入口分流缺陷 + 桥名写错返工（提交 77e7ca6c/9c509f9c，2026-08-22）
+
+- **表象**：已登录用户从 基础设置→授权状态→「📋 管理员激活」打开的是**无版本选择、无Tab的简化弹窗**（密码提示"固定admin"），永远到不了工单申请/激活码激活Tab。用户实测两轮"问题依旧"。
+- **根因1（入口分流缺陷）**：项目存在**两套激活界面**——①完整版：主进程独立窗口 activate-window.html（版本选择+📋管理员激活/🔑激活码激活/📨工单申请 三Tab，未激活时自动弹出）；②简化版：auth-core.js `openAdminActivate` DOM 弹窗。2026-08-20"双入口合并"决策把基础设置授权区按钮指向了简化版（`openAdminActivate`），并隐藏了指向完整版的静态按钮（`openActivationFromSettings`）→ 已登录用户被锁死在简化版。
+- **根因2（桥名写错，返工一轮）**：第一版修复调用 `electronAPI.license.show()`——但 preload 实际结构是 `electronAPI.activate.show()`（preload.js:132-133，IPC通道名 `license:show-activate` 误导性地带 license 前缀，但挂载对象是 `activate`）→ 条件永远 false → 落回旧弹窗。**教训：引用 electronAPI 桥前必须先 grep 该端 preload.js 确认对象结构，不能凭 IPC 通道名语义猜挂载对象名。**
+- **修复（13 文件：云端离线两权威源 + 11 副本）**：adminBtn 点击处理改为——有 `electronAPI.activate.show` 桥（桌面版）优先打开主进程完整激活窗口（三Tab齐全）；无桥（云端网页/APP）走 auth-core DOM 弹窗兜底。云端/离线桌面 preload 结构一致已验证。
+- **验证方法论升级（关键）**：不能只看源码就宣布修复——**必须从打包产物 asar 提取实际文件实证**（`_diag/extract-asar.cjs dist\win-unpacked\resources\app.asar auth-core.js` → grep 桥名字符串）。本轮产物级验证：正确桥名 `electronAPI.activate.show` 在 asar 内 ✓、旧桥名 `electronAPI.license.show` 已消失 ✓。源码正确但产物陈旧/产物正确但源码未同步，都只有产物实证能抓住。
+- **验证结果**：13 文件语法+标记唯一性、check-interface 6/6、V1.2.129 E2E 3/3 PASS、用户实测三Tab完整显示 ✓。
+- **生效方式**：云端桌面版=安装 `Setup 1.2.129.exe`（用户已验证 ✓）；云端网页/APP=无桥环境走 DOM 弹窗兜底（行为不变）；离线桌面版=重新 build.bat 打包 exe；离线APP=重新打包 APK（仅副本一致性）。
+
+---
+
 ## 3. Hard Constraints（全项目硬约束）
 
 - 跨作用域/跨文件调用审计：`node tools/audit-cross-scope.js` 预防 `setCloudActivationDone` 类 "is not defined"。auth-core 9 副本一致；恢复备份（restoreFromBackup）后改用实际存在的 `renderHistoryList(数据)` 刷新，跨脚本函数一律 `typeof fn === 'function' && fn(...)` 防御。
