@@ -482,6 +482,14 @@
 - **教训（语法校验工具自身 bug 引发误报）**：`_check_js_tmp.cjs` 初版用 `html.indexOf('<script', i)` 找脚本块，会命中 **HTML 注释内的字面 `<script>` 字符串**（如 `<!-- ★ 双重保障：通过 <script> 标签加载... -->`），把大段 HTML 误当 JS 提取导致 "Unexpected token (1:6)" 假报错。修复：扫描循环里取最近的 `<!--` 与 `<script` 位置，注释优先跳过（注意注释前常有换行，`startsWith('<!--')` 会漏判，必须用 `indexOf` 比较位置）。**写 HTML 内联脚本提取工具必须先跳过 HTML 注释，否则注释里含 `<script>` 字样必误报**。
 - **生效方式**：云端网页版=推 GitHub 自动部署即时生效（Ctrl+F5 强刷）；云端桌面版=重新 build.bat 打包 exe 重装；云端APP=重新打包 APK 重装；离线桌面版=重新 build.bat 打包 exe；离线APP=重新打包 惠康中医-本地.apk 重装。
 
+### 2.37 【多账户/多用户同设备数据隔离】月度统计串号泄露 → 复用权限过滤（提交 d0b91310，2026-08-22）
+
+- **表象**：用户"隐隐感觉同一设备多账户登入后历史处方混乱"。摸底结论：**历史处方列表本就隔离安全**（后端按用户过滤 + 前端 `filterPrescriptionsByPermission` 双重隔离），真正漏洞在**统计页的月度统计**。
+- **根因**：`analyzeMonthlyStats()` 用 `getAllUserPrescriptions()` **不带用户名参数**读取全量数据。离线版确定串号（直接读共享本地库全量）；云端版在**云端 GET 失败/断网回退本地缓存**时串号（admin 登录会把全诊所数据写入本地缓存，普通用户断网统计时读取全量）。
+- **修复（7 份副本同步，仅 JS 逻辑）**：`analyzeMonthlyStats` 改为 `filterPrescriptionsByPermission(await getAllUserPrescriptions())`，与历史列表口径 100% 一致（普通用户仅统计 `createdBy===username`，admin/clinic_admin/AuthCore.isAdmin 统计全部，无"回退全量"陷阱）。涉及：根 index.html、public/index.html、cloud_desktop、cloud_app assets、db-offline desktop、db-offline index-app、db-offline app assets。
+- **举一反三（数据隔离审计清单）**：①任何"全量读取"的统计/导出/查阅入口必须套 `filterPrescriptionsByPermission` 或等价过滤；②`filterPrescriptionsByPermission` 是权限过滤唯一权威函数（admin/clinic_admin/AuthCore.isAdmin 看全部，其他只看本人）；③登出/切换账户只清登录态 key，**不清 `all_prescription_list`/IndexedDB 处方缓存** → 断网回退路径必查是否过滤；④site-admin 用 `prescriptionHistory`（已过滤）不在此漏洞范围。
+- **生效方式**：云端网页版 public/index.html=推 GitHub 自动部署（Ctrl+F5 强刷）；云端桌面版=重新 build.bat 打包 exe 重装；云端APP=重新打包 APK 重装；离线桌面版=重新 build.bat 打包 exe；离线APP=重新打包 惠康中医-本地.apk 重装。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
