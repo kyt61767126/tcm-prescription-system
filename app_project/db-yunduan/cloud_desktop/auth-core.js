@@ -2309,8 +2309,9 @@
             // 已注入过则跳过，避免重复
             if (document.getElementById('activateLoginEntry')) return;
 
-            // ★ 2026-08-20 注册审核制：云端网页/APP/桌面三端统一在登录框注入"注册开通"入口
-            //   （云端为 SaaS 登录制，注册即时建号 + 管理员审核后登录，无本地激活码授权）
+            // ★ 2026-08-23 对齐云端桌面管理员激活模式：登录框入口改为"📋 管理员激活"，
+            //   调用 openAdminActivate 多步骤弹窗（版本选择→填写信息→设置密码→提交申请→等待管理员审批），
+            //   与桌面 activate-window.html"管理员激活"流程完全一致（替换原 openCloudRegister 一页式注册开通）
             const container = overlay.querySelector('.login-buttons');
             if (!container) return;
 
@@ -2319,11 +2320,11 @@
             entry.style.cssText =
                 'margin-top:12px;padding:0 4px;';
             entry.innerHTML =
-                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openCloudRegister){window.openCloudRegister();}">📝 注册开通</div>';
+                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
             container.parentNode.insertBefore(entry, container.nextSibling);
-            console.log('[LicenseCheck] 登录界面已注入 注册开通 入口');
+            console.log('[LicenseCheck] 登录界面已注入 管理员激活 入口');
         } catch (e) {
-            console.warn('[LicenseCheck] 注入登录 注册开通 入口失败:', e);
+            console.warn('[LicenseCheck] 注入登录 管理员激活 入口失败:', e);
         }
     }
 
@@ -2898,6 +2899,39 @@
                 '</div>' +
             '</div>' +
 
+            // ★ 2026-08-23 三Tab（对齐桌面 activate-window）：版本选择后显示 Tab 栏
+            '<div id="adminTabBar" style="display:none;border-bottom:1px solid #eee;background:#fafcfb;">' +
+                '<div id="adminTabBtnAdmin" data-tab="admin" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#26a69a;border-bottom:2.5px solid #26a69a;cursor:pointer;-webkit-tap-highlight-color:transparent;">📋 管理员激活</div>' +
+                '<div id="adminTabBtnCode" data-tab="code" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">🔑 激活码激活</div>' +
+                '<div id="adminTabBtnTicket" data-tab="ticket" style="flex:1;text-align:center;padding:12px 2px;font-size:13px;font-weight:bold;color:#909399;border-bottom:2.5px solid transparent;cursor:pointer;-webkit-tap-highlight-color:transparent;">📨 工单申请</div>' +
+            '</div>' +
+
+            // ★ Tab2：激活码激活面板（默认隐藏；对齐桌面 activate-window 的 tab-code）
+            '<div id="adminTabCode" style="display:none;padding:16px;">' +
+                '<div style="background:#f0f7ff;border:1px solid #d6e8ff;border-radius:8px;padding:10px;margin-bottom:14px;font-size:12px;color:#1565c0;line-height:1.7;">' +
+                    '💡 输入客服提供给您的激活码完成激活<br>还没有激活码？切换到「📨 工单申请」提交申请' +
+                '</div>' +
+                '<div style="margin-bottom:12px;">' +
+                    '<label style="display:block;font-size:13px;color:#333;margin-bottom:5px;">激活码 <span style="color:#e53935;">*</span></label>' +
+                    '<input type="text" id="adminCodeInput" placeholder="BNZC-XXXX-XXXX-XXXX-XXXX" autocomplete="new-password" data-lpignore="true" spellcheck="false" maxlength="24" style="width:100%;box-sizing:border-box;padding:12px;font-size:15px;border:2px solid #ddd;border-radius:8px;outline:none;font-family:monospace;letter-spacing:1px;text-transform:uppercase;">' +
+                    '<div id="adminCodeHint" style="font-size:11px;color:#909399;margin-top:4px;">💡 激活码格式：BNZC-XXXX-XXXX-XXXX-XXXX（X 为大写字母或数字，不含 I/O/0/1）</div>' +
+                '</div>' +
+                '<div style="font-size:11px;color:#909399;margin-bottom:14px;background:#f9f9f9;border-radius:6px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between;gap:6px;">' +
+                    '<span style="word-break:break-all;">🔑 机器 ID：<b style="color:#555;">' + (machineId || '未获取') + '</b></span>' +
+                    '<button id="adminCodeCopyMidBtn" style="flex-shrink:0;font-size:11px;padding:4px 10px;border:1px solid #ddd;border-radius:4px;background:#fff;color:#555;cursor:pointer;">复制</button>' +
+                '</div>' +
+                '<div id="adminCodeLoading" style="display:none;text-align:center;padding:10px;margin-bottom:12px;">' +
+                    '<span style="display:inline-block;width:18px;height:18px;border:2px solid #ddd;border-top-color:#26a69a;border-radius:50%;animation:adminActivateSpin 0.8s linear infinite;vertical-align:middle;margin-right:8px;"></span>' +
+                    '<span style="font-size:13px;color:#26a69a;vertical-align:middle;">正在验证激活码，请稍候...</span>' +
+                '</div>' +
+                '<div id="adminCodeSuccess" style="display:none;text-align:center;padding:16px 0;">' +
+                    '<div style="font-size:40px;">🎉</div>' +
+                    '<div style="font-size:16px;font-weight:bold;color:#2e7d32;margin-top:8px;">激活码验证成功！</div>' +
+                    '<div id="adminCodeSuccessDesc" style="font-size:12px;color:#555;margin-top:8px;line-height:1.8;"></div>' +
+                '</div>' +
+                '<button id="adminCodeSubmitBtn" style="width:100%;padding:12px;font-size:15px;border:none;border-radius:8px;color:#fff;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);cursor:pointer;font-weight:bold;">🚀 立即激活</button>' +
+            '</div>' +
+
             // 第一步之一：填写信息（默认隐藏）
             '<div id="adminStepForm" style="display:none;padding:16px;">' +
                 '<div id="adminProgress" style="display:flex;align-items:center;justify-content:center;margin:0 0 14px;gap:6px;">' +
@@ -3017,12 +3051,34 @@
         document.body.appendChild(overlay);
 
         function show(id, isForm) {
-            ['adminStepEdition','adminStepForm','adminStepPwd','adminSubmitting','adminWaiting','adminSuccess','adminRejected'].forEach(function(pid){
+            ['adminStepEdition','adminTabCode','adminStepForm','adminStepPwd','adminSubmitting','adminWaiting','adminSuccess','adminRejected'].forEach(function(pid){
                 const el = document.getElementById(pid);
                 if (el) el.style.display = 'none';
             });
             const t = document.getElementById(id);
             if (t) t.style.display = 'block';
+            // ★ 2026-08-23 三Tab：Tab 栏在"表单类面板"时显示（管理员激活表单/密码步骤/激活码面板），
+            //   版本选择与状态面板（提交中/等待/成功/拒绝）时隐藏（对齐桌面 activate-window 覆盖式状态页）
+            const bar = document.getElementById('adminTabBar');
+            if (bar) {
+                bar.style.display = (id === 'adminStepForm' || id === 'adminStepPwd' || id === 'adminTabCode') ? 'flex' : 'none';
+            }
+        }
+
+        // ★ 2026-08-23 三Tab：Tab 高亮切换
+        function setActiveTab(tab) {
+            var conf = {
+                admin: ['adminTabBtnAdmin', 'adminStepForm'],
+                code:  ['adminTabBtnCode', 'adminTabCode']
+            };
+            ['adminTabBtnAdmin','adminTabBtnCode','adminTabBtnTicket'].forEach(function(bid) {
+                var b = document.getElementById(bid);
+                if (!b) return;
+                var on = (bid === conf[tab][0]);
+                b.style.color = on ? '#26a69a' : '#909399';
+                b.style.borderBottom = on ? '2.5px solid #26a69a' : '2.5px solid transparent';
+                b.style.background = on ? '#fafcfb' : 'transparent';
+            });
         }
 
         function cleanup() {
@@ -3047,7 +3103,124 @@
                 document.getElementById('editionInstitution').style.borderColor = (ed === 'institution' ? '#26a69a' : '#ddd');
                 document.getElementById('editionInstitution').style.background = (ed === 'institution' ? '#26a69a' : '#fff');
                 show('adminStepForm');
+                setActiveTab('admin');
             });
+        });
+
+        // ★ 2026-08-23 三Tab切换（对齐桌面 activate-window：管理员激活/激活码激活/工单申请）
+        document.getElementById('adminTabBtnAdmin').addEventListener('click', function() {
+            show('adminStepForm'); setActiveTab('admin');
+        });
+        document.getElementById('adminTabBtnCode').addEventListener('click', function() {
+            show('adminTabCode'); setActiveTab('code');
+            setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
+        });
+        // 工单申请：复用工单叠加层弹窗（showTicketFormModal，完整表单+提交+成功面板，z-index 更高天然覆盖）
+        document.getElementById('adminTabBtnTicket').addEventListener('click', function() {
+            showTicketFormModal(machineId, state.clinicName || (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) || '');
+        });
+
+        // ★ Tab2 激活码激活：机器ID复制
+        document.getElementById('adminCodeCopyMidBtn').addEventListener('click', async function() {
+            const ok = await copyTextToClipboard(machineId || '');
+            this.textContent = ok ? '✅ 已复制' : '❌ 失败';
+            const btn = this;
+            setTimeout(function() { btn.textContent = '复制'; }, 1500);
+        });
+
+        // ★ Tab2 激活码激活：立即激活
+        document.getElementById('adminCodeSubmitBtn').addEventListener('click', async function() {
+            const btn = this;
+            const codeEl = document.getElementById('adminCodeInput');
+            const hint = document.getElementById('adminCodeHint');
+            const loading = document.getElementById('adminCodeLoading');
+            const successBox = document.getElementById('adminCodeSuccess');
+            const code = String(codeEl.value || '').trim().toUpperCase();
+            // 前端格式校验（与 activateNow 流程同一正则）
+            const codePattern = /^BNZC-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}-[A-HJ-NP-Z2-9]{4}$/;
+            if (!codePattern.test(code)) {
+                hint.textContent = '⚠ 激活码格式不正确：BNZC-XXXX-XXXX-XXXX-XXXX（X 为大写字母或数字，不含 I/O/0/1）';
+                hint.style.color = '#e53935';
+                codeEl.style.borderColor = '#e53935';
+                return;
+            }
+            hint.style.color = '#909399';
+            hint.textContent = '💡 激活码格式：BNZC-XXXX-XXXX-XXXX-XXXX（X 为大写字母或数字，不含 I/O/0/1）';
+            codeEl.style.borderColor = '#ddd';
+            btn.disabled = true;
+            btn.textContent = '⏳ 正在验证...';
+            loading.style.display = 'block';
+            successBox.style.display = 'none';
+            try {
+                let res = null;
+                // 离线 APP（有本地激活桥）：走主进程 submit（validate+安装 license+重启）
+                if (global.electronAPI && global.electronAPI.activate &&
+                    typeof global.electronAPI.activate.submit === 'function') {
+                    let user = '';
+                    try {
+                        user = (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.doctorName) ? CONFIG.doctorName : '';
+                    } catch (e) {}
+                    res = await global.electronAPI.activate.submit(code, user);
+                    if (res && res.success) {
+                        loading.style.display = 'none';
+                        successBox.style.display = 'block';
+                        document.getElementById('adminCodeSuccessDesc').innerHTML =
+                            '授权已安装到本机<br>点击确定后应用将重启，重启后即可使用';
+                        btn.disabled = false;
+                        btn.textContent = '🔄 重启应用';
+                        btn.onclick = async function() {
+                            if (global.electronAPI && global.electronAPI.activate &&
+                                typeof global.electronAPI.activate.restart === 'function') {
+                                try { setCloudActivationDone(); } catch (e2) {}
+                                global.electronAPI.activate.restart();
+                            }
+                        };
+                        return;
+                    }
+                } else {
+                    // 云端 APP（无本地授权桥）：直接调云端 validate 验证激活码
+                    const controller = new AbortController();
+                    const t = setTimeout(function(){ try { controller.abort(); } catch(e){} }, 12000);
+                    try {
+                        const r = await fetch('https://tcm-prescription-system.pages.dev/api/license/validate', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                code: code,
+                                machineId: machineId || 'unknown',
+                                clinicName: state.clinicName || '',
+                                productClass: 'app'
+                            }),
+                            signal: controller.signal
+                        });
+                        res = await r.json();
+                    } finally { clearTimeout(t); }
+                    if (res && res.success) {
+                        loading.style.display = 'none';
+                        successBox.style.display = 'block';
+                        const li = res.licenseInfo || {};
+                        document.getElementById('adminCodeSuccessDesc').innerHTML =
+                            '激活码有效，已绑定本设备' + (li.clinicName ? '（' + li.clinicName + '）' : '') + '<br>' +
+                            '云端账号开通请联系平台管理员确认<br>或使用已开通的手机号直接登录';
+                        btn.disabled = false;
+                        btn.textContent = '✅ 完成';
+                        return;
+                    }
+                }
+                // 失败：错误分类提示（复用 activateNow 的 formatActivateError）
+                loading.style.display = 'none';
+                btn.disabled = false;
+                btn.textContent = '🚀 立即激活';
+                const errMsg = (res && res.error) ? res.error : '激活失败，请稍后重试';
+                hint.textContent = '⚠ ' + formatActivateError(errMsg).replace(/\n+/g, ' ');
+                hint.style.color = '#e53935';
+            } catch (e) {
+                loading.style.display = 'none';
+                btn.disabled = false;
+                btn.textContent = '🚀 立即激活';
+                hint.textContent = '⚠ 网络错误：' + ((e && e.message) ? e.message : '请检查网络连接');
+                hint.style.color = '#e53935';
+            }
         });
 
         // 手机号实时校验
