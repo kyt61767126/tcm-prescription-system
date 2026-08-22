@@ -621,6 +621,13 @@
 - **教训**：①"删除/修改"类操作在"本地缓存+云端权威"双数据源架构下必须两端同步，否则状态必然回漂；②开通/注册类接口要考虑"重复执行"的幂等语义边界——同名诊所第二次激活≠需要第二个管理员；③云端 API 正确登录端点是 `/api/users?login=true`（POST，body 含 username/password/machineId/clientClass），不是 /api/auth 或 /api/users?action=login。
 - **生效方式**：云端网页版+云端APP=已推送自动部署即时生效（APP 为 WebView 壳取线上 public/）；云端桌面版=需重新 build.bat 打包 exe（不重装也可用：云端王桂账户已删，用户在当前版本用户管理里删王桂本地条目即可，云端已无此账户不会回来）。
 
+### 2.54 【云端APP登录框入口收敛】注册激活入口对齐云端桌面版（提交 423e3b9b，2026-08-23）
+- **表象**：云端APP登录框有 3 个入口（动态"注册开通"、静态"注册诊所 / 激活申请"、"管理台登录"），功能重复易混淆；用户要求参考云端桌面版登录框（仅登录字段+极简激活提示）收敛。
+- **修复（auth-core.js 9 份副本全同步）**：`hideStaticActivateEntry()` 由"只隐藏注册诊所按钮"扩展为**同时隐藏"注册诊所 / 激活申请"与"管理台登录"**两个静态按钮（文本匹配 → display:none，运行期隐藏不动 index.html）；登录框最终仅保留动态注入的"注册开通"入口（未激活态）或全洁净（已激活态）。"管理台登录"仍可经 admin/index.html 直接访问，平台后台不受影响。激活态判断双条件（localStorage `auth:activationDone==='1'` + CONFIG.users 含 admin/clinic_admin/platform_admin 兜底）保持。
+- **验证**：①浏览器实测（本地 http server 加载 public/index.html）：未激活态=静态两按钮 none + 动态"注册开通"可见；已激活态（localStorage auth:activationDone='1'）=动态入口隐藏，两静态按钮始终 none；②9 份 auth-core 副本字节级一致（含 shared/auth-core/cloud.js）；③check-interface.bat 6/6 OK（只改逻辑文件，界面零改动）。
+- **教训**：①PS5.1 `Set-Content -Encoding UTF8` 会给文件加 BOM，导致与无 BOM 的 public/auth-core.js 字节不一致——批量同步必须用 `[System.IO.File]::WriteAllText(path, text, New-Object System.Text.UTF8Encoding($false))` 保证无 BOM；②浏览器 evaluate 返回值序列化：简单表达式直接返回原始值，复杂箭头函数+分号体可能返回 undefined，诊断时用拼接字符串/内联循环避开。
+- **生效方式**：云端网页版+云端APP=推 GitHub 自动部署即时生效（APP 为 WebView 壳取线上 public/）；云端桌面版（cloud_desktop auth-core 副本已同步）=需重新 build.bat 打包 exe 生效；管理台（site-admin）副本已同步随部署生效。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
