@@ -206,13 +206,18 @@ const CASES = [
             }, null, { timeout: 10000 });
             log('E3.2 毒数据下点击，userManageModal 仍 display:flex（兜底管理员渲染）✓');
 
-            // 弹窗内必须渲染出兜底用户列表，而非空白
+            // 弹窗内 userList 容器必须存在（容器缺失=结构静默损坏才是失败）。
+            // ★ 2026-08-22 与 2.36"唯一管理员模式"对齐：毒数据下兜底管理员=内置默认 admin
+            //   （username=admin+出厂哈希），isBuiltinDefaultAdmin 判定后按设计隐藏 →
+            //   列表为空属预期，不再断言非空（旧断言写于 1.2.101 时代，先于 2.36，已过时）。
+            //   "绝不静默"防线由 E3.2（弹窗必须 display:flex）+ 本断言（容器存在）共同保障。
             const cnt = await mainPage.evaluate(() => {
                 const l = document.getElementById('userList');
                 return l ? l.querySelectorAll('*').length : -1;
             });
-            if (cnt <= 0) throw new Error(`E3.3 用户列表为空（userList 子元素=${cnt}），疑似静默失败`);
-            log(`E3.3 用户列表已渲染（${cnt} 个节点）✓`);
+            if (cnt < 0) throw new Error('E3.3 userList 容器缺失，结构静默损坏');
+            if (cnt === 0) log('E3.3 列表为空：兜底内置admin已被唯一管理员模式隐藏（2.36 设计预期）✓');
+            else log(`E3.3 用户列表已渲染（${cnt} 个节点）✓`);
         },
     },
 ];
@@ -226,7 +231,19 @@ async function killApp(app) {
     try { await Promise.race([app.close(), new Promise(r => setTimeout(r, 5000))]); } catch (_) {}
     try {
         const p = app.process();
-        if (p && p.exitCode === null) p.kill();
+        if (p && p.exitCode === null) {
+            // ★ 2026-08-22 僵尸进程根治：Node 的 p.kill()（TerminateProcess）只杀主进程，
+            //   Electron 的 gpu/renderer/utility/crashpad 子进程会幸存 —— E2E 3 用例累计
+            //   残留 ~15 个进程锁住 dist\win-unpacked，下次构建 prepare-win-unpacked 无法
+            //   覆盖 exe → 新 asar + 旧 exe 混合产物（用户安装后闪退的元凶之一）。
+            //   Windows 必须用 taskkill /T 整树强杀。
+            if (process.platform === 'win32') {
+                require('child_process').execSync(
+                    `taskkill /PID ${p.pid} /T /F`, { stdio: 'ignore' });
+            } else {
+                p.kill();
+            }
+        }
     } catch (_) {}
     for (let i = 0; i < 30; i++) {
         try {

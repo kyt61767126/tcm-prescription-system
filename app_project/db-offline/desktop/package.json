@@ -45,7 +45,8 @@
             "build/icon.ico",
             "button-manager.js",
             "edition-lock.js",
-            "build-meta.json"
+            "build-meta.json",
+            "!**/*.bak"
         ],
         "win": {
             "target": [

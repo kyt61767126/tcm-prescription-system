@@ -43,6 +43,7 @@ const WRAPPERS = [
     '        function saveUsers(users) { return UserStore.save(users); }',
     '        function simpleEncrypt(text) { return UserStore.simpleEncrypt(text); }',
     '        function simpleDecrypt(stored) { return UserStore.simpleDecrypt(stored); }',
+    '        function isBuiltinDefaultAdmin(user) { return UserStore.isBuiltinDefaultAdmin(user); }',
 ].join('\n');
 
 // 旧散落函数名（整段删除目标；不含 PASSWORD_SALT 常量本身）

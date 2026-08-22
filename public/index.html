@@ -1228,12 +1228,6 @@ let currentUser = null;
         }];
     }
 
-    // ★ 2026-08-22 "唯一管理员"设计：识别内置默认 admin（本地内置账号 admin/管理员，非云端注册账号）。
-    //   云端注册的管理员为 clinic_admin 且带 _cloudRoleSynced=true 标记，不会被误判。
-    function isBuiltinDefaultAdmin(u) {
-        return !!(u && u.username === 'admin' && u.role === 'admin' && !u._cloudRoleSynced);
-    }
-
     function get() {
         var saved = null;
         try { saved = localStorage.getItem('local_systemUsers'); } catch (_) {}
@@ -1243,8 +1237,6 @@ let currentUser = null;
                 var parsed = JSON.parse(decrypted);
                 // 历史遗留账号清理（doctor1/doctor2），过滤后立即落盘
                 var filtered = parsed.filter(function (u) { return LEGACY_USERNAMES.indexOf(u.username) < 0; });
-                // ★ 2026-08-22 "唯一管理员"设计：隐藏并清理内置默认 admin（本地内置账号，非云端注册）
-                filtered = filtered.filter(function (u) { return !isBuiltinDefaultAdmin(u); });
                 if (filtered.length !== parsed.length) {
                     var result = filtered.length > 0 ? filtered : getDefaultUsers();
                     try { save(result); } catch (_) {}
@@ -1282,16 +1274,27 @@ let currentUser = null;
         return kept;
     }
 
+    // ★ 2026-08-22 唯一管理员模式（KNOWLEDGE 2.36）配套：识别"内置默认 admin"。
+    //   判定 = 用户名 admin 且密码仍是出厂默认哈希（未改密）。
+    //   改过密码的 admin 视为实际在用账户，不隐藏；云端注册的同名账户密码非默认哈希，也不隐藏。
+    //   背景：renderUserList 曾直接调用未定义的 isBuiltinDefaultAdmin → ReferenceError
+    //   → catch 内 alert() 在 Electron 下同步阻塞渲染进程（E2E evaluate 永久超时的根因）。
+    function isBuiltinDefaultAdmin(user) {
+        return !!user
+            && user.username === FALLBACK_ADMIN[0].username
+            && user.password === FALLBACK_ADMIN[0].password;
+    }
+
     var UserStore = {
         PASSWORD_SALT: PASSWORD_SALT,
         LEGACY_USERNAMES: LEGACY_USERNAMES,
         simpleEncrypt: simpleEncrypt,
         simpleDecrypt: simpleDecrypt,
         getDefaultUsers: getDefaultUsers,
-        isBuiltinDefaultAdmin: isBuiltinDefaultAdmin,
         get: get,
         save: save,
-        remove: remove
+        remove: remove,
+        isBuiltinDefaultAdmin: isBuiltinDefaultAdmin
     };
 
     global.UserStore = UserStore;
@@ -1303,7 +1306,7 @@ let currentUser = null;
         function saveUsers(users) { return UserStore.save(users); }
         function simpleEncrypt(text) { return UserStore.simpleEncrypt(text); }
         function simpleDecrypt(stored) { return UserStore.simpleDecrypt(stored); }
-        function isBuiltinDefaultAdmin(u) { return UserStore.isBuiltinDefaultAdmin(u); }
+        function isBuiltinDefaultAdmin(user) { return UserStore.isBuiltinDefaultAdmin(user); }
         // <<< USER-STORE-END ===
         // simpleEncrypt/simpleDecrypt 必须为同步函数（saveUsers/getUsers 同步调用）
         // 不能调用 AuthCore.encryptUsers/decryptUsers（async 函数会返回 Promise，导致 localStorage 存入 '[object Promise]'，用户数据丢失）

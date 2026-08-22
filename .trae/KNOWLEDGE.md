@@ -490,6 +490,28 @@
 - **举一反三（数据隔离审计清单）**：①任何"全量读取"的统计/导出/查阅入口必须套 `filterPrescriptionsByPermission` 或等价过滤；②`filterPrescriptionsByPermission` 是权限过滤唯一权威函数（admin/clinic_admin/AuthCore.isAdmin 看全部，其他只看本人）；③登出/切换账户只清登录态 key，**不清 `all_prescription_list`/IndexedDB 处方缓存** → 断网回退路径必查是否过滤；④site-admin 用 `prescriptionHistory`（已过滤）不在此漏洞范围。⑤**决策：登出清缓存不做**（2026-08-22 用户确认）——离线版所有用户共享同一本地库，清空会删他人数据（灾难性）；云端版即使缓存残留也被权限过滤挡住，泄露面为 0，收益小于风险。
 - **生效方式**：云端网页版 public/index.html=推 GitHub 自动部署（Ctrl+F5 强刷）；云端桌面版=重新 build.bat 打包 exe 重装；云端APP=重新打包 APK 重装；离线桌面版=重新 build.bat 打包 exe；离线APP=重新打包 惠康中医-本地.apk 重装。
 
+### 2.38 【E2E 被调试器检测误拦】license-manager 旁路标志（提交 ca5ae735，2026-08-22）
+
+- **表象**：E2E 通过 Playwright 以 `--remote-debugging-port` 启动 exe，被 `license-manager.js` 的 `isDebuggerAttached()` 误判为调试攻击，弹"检测到调试器已连接，软件无法运行"拦截窗口，阻断测试。
+- **修复**：4 处 license-manager.js 副本（离线桌面、离线桌面 license、云端桌面、离线APP 资源）的 `isDebuggerAttached()` 开头消费 `global.__BNZC_E2E_BYPASS` 旁路标志；云端 main.js 补标志置位（离线版已有）。
+- **安全边界**：旁路仅在 E2E 环境变量 + exe 同级 marker 文件**双条件**同时满足时放行（仅本地构建测试场景）；正常用户运行或攻击者 `--inspect` 启动仍被拦截。
+- **生效方式**：重新 build.bat 打包后生效（V1.2.126 已含）。
+
+### 2.39 【云端桌面安装后自动退出】三根因叠加事故链（混淆冲突 + 未定义函数 + 僵尸进程混合产物，2026-08-22）
+
+- **表象**：用户手动 pack-desktop.bat 打包云端桌面 V1.2.125，安装后双击运行一会自动退出；期间 E2E 曾 E1/E3 点击超时失败触发红线删产物。
+- **根因1（混淆脚本全局变量冲突，概率性地雷）**：javascript-obfuscator 的 stringArray 输出在模块顶层生成 `function g(){...}`（字符串数组）与 `function h(a,b){...}`（解码器），浏览器 `<script>` 顶层 function 挂 window——同一页面加载多个混淆脚本（permission/debug-logger/print-utils/medicine-dict/performance-utils/prescription-core/patient-archive/security-guard）时后加载的覆盖先加载的 g/h，运行时用自己的索引查别人的数组 → 解码乱码 → `this[乱码] is not a function` → 概率性闪退（某次构建恰好不撞名则侥幸通过）。
+  修复：`tools/obfuscate.js` 整个混淆产物包一层 IIFE `(function(){...})();`，g/h 成为闭包局部变量（46 文件混淆 OK，E2E 打包产物模式复测通过）。
+- **根因2（isBuiltinDefaultAdmin 未定义 → alert 阻塞渲染进程）**：2.35 的 renderUserList 调用 `isBuiltinDefaultAdmin(u)`，但 UserStore 当时未导出该方法 → ReferenceError → catch 块执行 `alert()`——**Electron 原生 alert 同步阻塞渲染进程**，点击【用户管理】后页面假死、E2E evaluate 永久超时（症状像死循环，实为阻塞弹窗）。
+  修复：`shared/user-store.js` 补 `isBuiltinDefaultAdmin` 实现并入 UserStore 导出；`tools/sync-shared-blocks.cjs` WRAPPERS 加薄包装，同步 7 端 index.html。E3 断言同步对齐 2.35 设计：毒数据兜底 admin=内置默认会被隐藏，列表为空属预期，只断言容器存在。
+- **根因3（E2E 僵尸进程 → 旧 exe + 新 asar 混合产物）**：run-e2e.cjs killApp 的 `p.kill()`（TerminateProcess）**只杀主进程**，Electron 的 gpu/renderer/utility/crashpad 子进程幸存——每轮 E2E 残留 ~15 个（3 用例×5 进程），多轮 diag 排查累计 36 个。这些进程锁住 `dist\win-unpacked`，下次构建 prepare-win-unpacked 无法覆盖被锁文件 → **旧 exe(12:37) + 新 asar(12:43) 混合产物**（asar 版本铁闸只校验 asar 不校验 exe 时间戳，照样 PASS）→ E2E 在混合产物上崩溃、用户安装即闪退。
+  修复：killApp 改 `taskkill /PID <pid> /T /F` 整树强杀（验证：单跑 E2E 3/3 后零残留进程）。
+- **附带修复**：cloud_desktop 与 db-offline desktop 的 package.json `build.files` 加 `"!**/*.bak"`，防混淆备份源码泄露进 asar。
+- **排查工具沉淀（cloud_desktop/_diag/ + tools/）**：`list-asar.cjs`/`extract-asar.cjs` 解析 asarmor 处理后的 asar 并提取指定文件；`e2e/diag4-alert-proof.cjs` 用 Playwright dialog 事件监听拿渲染进程 alert 抛错铁证（区分"死循环"与"阻塞弹窗"的关键手法）。
+- **教训**：①"安装后自动退出"先查产物一致性——`Get-ChildItem dist\win-unpacked` 对比 exe 与 resources\app.asar 时间戳是否同构建周期，再查代码；②Electron 渲染进程 catch 里用 alert() 是调试大忌，同步阻塞让一切 evaluate 超时；③Windows 杀 Electron 必须整树杀（taskkill /T），单杀主进程留下孤儿子进程锁文件；④build.bat 开头的 taskkill 清理只保构建启动时干净，**E2E 收尾不杀进程就会跨构建累积**，清理要两头做。
+- **验证**：V1.2.126 完整构建（pack-desktop.bat 入口，3分49秒）E2E 3/3 PASS；单独复跑 `node e2e\run-e2e.cjs`（packaged-win-unpacked 模式）3/3 PASS + 零残留进程；源码混淆已由构建自动还原（git status 干净）。
+- **生效方式**：云端桌面版=安装 `dist\惠康中医-云端 Setup 1.2.126.exe`（或 portable）；云端网页版=public/index.html 推 GitHub 自动部署（Ctrl+F5 强刷）；云端APP=重新打包 APK；离线桌面/离线APP=各自重新打包（user-store 修复已同步其 index.html/electron 副本）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）

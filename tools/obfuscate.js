@@ -211,7 +211,22 @@ function obfuscateFile(filePath, config) {
 
     try {
         const result = JavaScriptObfuscator.obfuscate(sourceCode, config);
-        fs.writeFileSync(filePath, result.getObfuscatedCode(), 'utf8');
+        // ★★★ 2026-08-22 根治【多脚本全局变量冲突导致运行时解码错乱】：
+        //   javascript-obfuscator 的 stringArray 输出会在模块顶层生成 function g(){...}（字符串
+        //   数组）与 function h(a,b){...}（解码器）等声明。浏览器/WebView 中 <script> 顶层
+        //   function 会挂到 window —— 同一页面加载多个混淆脚本时（index.html 依次加载
+        //   permission/debug-logger/print-utils/medicine-dict/performance-utils/
+        //   prescription-core/patient-archive/security-guard），后加载的会覆盖先加载的
+        //   g/h。permission.js 的方法运行时再调用 h(0x1be) 实际拿到的是别人的解码器，
+        //   用自己的索引查别人的字符串数组 → 解码乱码 → this[乱码] is not a function。
+        //   症状：E2E E1/E3 点击超时、安装包运行一会自动退出（与 mangled 命名随机性
+        //   相关，某次构建恰好不撞名则"侥幸"通过，属概率性地雷）。
+        //   修复：整个混淆产物包一层 IIFE，g/h 等成为闭包局部变量，不再泄漏到 window。
+        //   注意：本仓库 MODULE_FILES 均为渲染进程页面脚本（window.xxx 导出），
+        //   electron/ 副本无主进程 require（已验证），包 IIFE 不影响 module.exports。
+        //   selfDefending 检测的是内部函数自身的 toString，外层包裹不影响其正则自检。
+        const wrapped = '(function(){\n' + result.getObfuscatedCode() + '\n})();';
+        fs.writeFileSync(filePath, wrapped, 'utf8');
         return true;
     } catch (e) {
         console.error(`  [FAIL] ${filePath}: ${e.message}`);

@@ -134,6 +134,17 @@
         return kept;
     }
 
+    // ★ 2026-08-22 唯一管理员模式（KNOWLEDGE 2.36）配套：识别"内置默认 admin"。
+    //   判定 = 用户名 admin 且密码仍是出厂默认哈希（未改密）。
+    //   改过密码的 admin 视为实际在用账户，不隐藏；云端注册的同名账户密码非默认哈希，也不隐藏。
+    //   背景：renderUserList 曾直接调用未定义的 isBuiltinDefaultAdmin → ReferenceError
+    //   → catch 内 alert() 在 Electron 下同步阻塞渲染进程（E2E evaluate 永久超时的根因）。
+    function isBuiltinDefaultAdmin(user) {
+        return !!user
+            && user.username === FALLBACK_ADMIN[0].username
+            && user.password === FALLBACK_ADMIN[0].password;
+    }
+
     var UserStore = {
         PASSWORD_SALT: PASSWORD_SALT,
         LEGACY_USERNAMES: LEGACY_USERNAMES,
@@ -142,7 +153,8 @@
         getDefaultUsers: getDefaultUsers,
         get: get,
         save: save,
-        remove: remove
+        remove: remove,
+        isBuiltinDefaultAdmin: isBuiltinDefaultAdmin
     };
 
     global.UserStore = UserStore;

@@ -1,6 +1,6 @@
 {
     "name": "tcm-prescription-cloud",
-    "version": "1.2.121",
+    "version": "1.2.126",
     "description": "惠康中医-云端",
     "main": "electron/main.js",
     "scripts": {
@@ -33,6 +33,7 @@
         "files": [
             "electron/**/*",
             "index.html",
+            "config.json",
             "xlsx.full.min.js",
             "package.json",
             "**/node_modules/better-sqlite3/**/*",
@@ -55,7 +56,8 @@
             "build/icon.ico",
             "button-manager.js",
             "edition-lock.js",
-            "build-meta.json"
+            "build-meta.json",
+            "!**/*.bak"
         ],
         "win": {
             "target": [
