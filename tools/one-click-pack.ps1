@@ -34,6 +34,25 @@ if ($probe) { $script:RootDir = $probe }
 # Set NO_PAUSE=1 so child build.bat / build-app.bat don't pause at end
 $env:NO_PAUSE = '1'
 
+# ★ [SELF-HEAL 2026-08-23] Fix LF line endings in ALL downstream build .bat files
+# BEFORE invoking them. This script calls build-pack.bat directly (bypassing
+# pack-app-strict.bat entries), so the entry-level self-heal does NOT cover us.
+# LF-corrupted Chinese .bat aborts cmd at parse time (window flash-close).
+$fixTool = Join-Path $PSScriptRoot 'fix-bat-crlf.ps1'
+if (Test-Path $fixTool) {
+    $buildBats = @(
+        'app_project\db-yunduan\pack-desktop.bat',
+        'app_project\db-yunduan\build-pack.bat',
+        'app_project\db-yunduan\build-app.bat',
+        'app_project\db-yunduan\cloud_desktop\build.bat',
+        'app_project\db-offline\pack-desktop.bat',
+        'app_project\db-offline\build-pack.bat',
+        'app_project\db-offline\app\build-app.bat',
+        'app_project\db-offline\desktop\build.bat'
+    ) | ForEach-Object { Join-Path $script:RootDir $_ }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $fixTool @buildBats
+}
+
 # Run external .bat file and return exit code
 function Invoke-BatFile {
     param(

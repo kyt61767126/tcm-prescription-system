@@ -602,6 +602,14 @@
 - **举一反三**：①"AI 沙箱跑构建期间用户同时双击打包"是真实高频场景，所有会写共享文件的脚本（构建/混淆/同步）都要考虑互斥；②batch 跨进程互斥用"锁文件+记录调用方 PID+存活检测+陈旧接管"模式，不用 flock（Windows batch 无原生支持）；③入口 bat 拦截提示必须告诉用户怎么自救（等待/删除锁文件）。
 - **生效方式**：打包脚本随 git 生效；云端桌面最新安装包=`db-yunduan\cloud_desktop\dist\惠康中医-云端 Setup 1.2.133.exe`（重跑产物，含 2.48 哈希修复+2.47 打包链路加固）；此后同时双击两个打包脚本时，后启动的会显示"检测到另一个构建正在运行"并安全退出，等先前的跑完再双击即可。
 
+### 2.50 【一键打包/一键发布同步优化】自愈防线覆盖编排器直调路径（2026-08-23）
+- **缺口**：2.47 的自愈防线只护住了 6 个 pack-*.bat 入口，但两条**绕过入口的直调路径**未被覆盖：①`one-click-pack.ps1` 第 249/341 行直接 `Invoke-BatFile build-pack.bat app-strict`（不经 pack-app-strict.bat）；②`release-menu.ps1` 第 104 行直接 `cmd /c build-app.bat standard`。若这些 .bat 被 AI 写坏 LF 行尾，一键打包/一键发布的对应步骤会解析闪退。
+- **修复（4 文件双层防线）**：①`一键打包.bat` / `一键发布.bat` 入口前置自愈——调用 fix-bat-crlf.ps1 一次性修复全部 8 个下游构建 .bat（两端 pack-desktop/build-pack/build-app/build.bat），入口保持纯 ASCII；②`one-click-pack.ps1` / `release-menu.ps1` 开头各加同款自愈块（protect 直接调用 ps1 的场景，如 release-menu 调 one-click-pack）。入口层 + 编排器层双保险，对 CRLF 文件零开销（no-op）。
+- **并发锁说明（为何编排器不加锁）**：`Invoke-BatFile` 用 `cmd /c` 每次起新 cmd 进程，若 one-click-pack.ps1 层 acquire 锁，其调用的 build-pack.bat 链条 cmd PID ≠ 锁 PID → 可重入检测失败 → **自锁死锁**。故锁保持在 build-pack.bat/build.bat/build-app.bat 层（一键打包的每个构建链条内部各自 acquire/release，串行执行天然安全；与手动打包并发时由链条内锁拦截）。编排器前置阶段（菜单/配置）不写构建共享文件，无需锁。
+- **验证**：①污染注入——把 db-yunduan\build-pack.bat 写坏为 324 loneLF → 跑 `one-click-pack.ps1 -CollectSideEffectsOnly -DryRun`（不打包模式）→ 自愈块当场修复，且 `git diff` 证明修复后与 HEAD 逐字节一致（只改行尾零内容损坏）；②入口实测——`一键打包.bat nosuchmode`（无效模式）：cmd 正确解析 8 参数长命令行、自愈执行（日志两遍 all CRLF=入口+ps1 双保险）、无效模式正确报错 exit 1、无闪退无挂起。
+- **教训**：①`-CollectSideEffectsOnly -DryRun` 是 one-click-pack.ps1 的"不打包冒烟测试"参数，验证编排器改动时优先用它（完整打包一轮 7 分钟太久）；②Edit 编辑带 BOM 的 .ps1 必剥 BOM（本轮 one-click-pack.ps1/release-menu.ps1 双双中招，已用 UTF8Encoding($true) 补回）；③检查脚本含中文路径字面量时，无 BOM 的临时 ps1 会被 PS5.1 按 ANSI 误读报"Illegal characters in path"——临时脚本要么加 BOM 要么用 Get-ChildItem 枚举避开中文字面量。
+- **生效方式**：随 git 生效。用户双击 `一键打包.bat` / `一键发布.bat` 时，即使下游 .bat 行尾被写坏也会当场自动修复（日志显示 [FIX]/all CRLF）；若同时有手动打包在跑，一键打包的对应构建步骤会显示"检测到另一个构建正在运行"并跳过该步（等手动构建结束后重跑一键打包即可）。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
