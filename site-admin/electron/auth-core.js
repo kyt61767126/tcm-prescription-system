@@ -2309,8 +2309,9 @@
             // 已注入过则跳过，避免重复
             if (document.getElementById('activateLoginEntry')) return;
 
-            // ★ 2026-08-20 注册审核制：云端网页/APP/桌面三端统一在登录框注入"注册开通"入口
-            //   （云端为 SaaS 登录制，注册即时建号 + 管理员审核后登录，无本地激活码授权）
+            // ★ 2026-08-23 对齐云端桌面管理员激活模式：登录框入口改为"📋 管理员激活"，
+            //   调用 openAdminActivate 多步骤弹窗（版本选择→填写信息→设置密码→提交申请→等待管理员审批），
+            //   与桌面 activate-window.html"管理员激活"流程完全一致（替换原 openCloudRegister 一页式注册开通）
             const container = overlay.querySelector('.login-buttons');
             if (!container) return;
 
@@ -2319,11 +2320,11 @@
             entry.style.cssText =
                 'margin-top:12px;padding:0 4px;';
             entry.innerHTML =
-                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openCloudRegister){window.openCloudRegister();}">📝 注册开通</div>';
+                '<div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px 0;border-radius:8px;background:linear-gradient(135deg,#26a69a 0%,#00897b 100%);color:#fff;cursor:pointer;font-size:14px;font-weight:bold;text-align:center;-webkit-tap-highlight-color:transparent;" onclick="if(window.openAdminActivate){window.openAdminActivate();}">📋 管理员激活</div>';
             container.parentNode.insertBefore(entry, container.nextSibling);
-            console.log('[LicenseCheck] 登录界面已注入 注册开通 入口');
+            console.log('[LicenseCheck] 登录界面已注入 管理员激活 入口');
         } catch (e) {
-            console.warn('[LicenseCheck] 注入登录 注册开通 入口失败:', e);
+            console.warn('[LicenseCheck] 注入登录 管理员激活 入口失败:', e);
         }
     }
 
