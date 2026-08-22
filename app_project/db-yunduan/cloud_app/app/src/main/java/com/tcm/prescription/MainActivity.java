@@ -253,19 +253,17 @@ public class MainActivity extends BridgeActivity {
 
         WebSettings settings = webView.getSettings();
 
-        // 版本检查：如果 APP 版本更新了，清除 WebView HTTP 缓存强制加载最新页面
-        // ★ 重要：只清 HTTP 缓存，不清 DOM Storage（localStorage）
-        //   原因：localStorage 中保存有 rememberedUsername（记住用户）等关键状态
-        //   清除 DOM Storage 会导致"记住用户"功能失效
-        //   版本不一致问题今后只通过清 HTTP 缓存解决，不再依赖重新打包 APK 同步版本号
-        android.content.SharedPreferences prefs = getSharedPreferences("app_config", MODE_PRIVATE);
-        String lastVersion = prefs.getString("page_version", "");
-        if (!lastVersion.equals(EXPECTED_APP_VERSION)) {
-            Log.d("TCM-Pres", "页面版本变更: " + lastVersion + " -> " + EXPECTED_APP_VERSION + "，仅清除HTTP缓存（保留localStorage）");
-            webView.clearCache(true);
-            // ★ 不再调用 WebStorage.getInstance().deleteAllData() 和 clearFormData()
-            // 避免清除 localStorage 中的 rememberedUsername 等用户状态
-        }
+        // ★★★ 2026-08-23 修复：云端页面更新不生效（用户"问题依旧"根因）
+        // 旧逻辑：仅 EXPECTED_APP_VERSION（编译期常量，2026-08-19-v1）变化才 clearCache——
+        //   但改线上 public/ 不会改变该常量 → APP 永远不主动清 HTTP 缓存；
+        //   再叠加服务端 / 返回 max-age=0（非 no-cache），Android WebView 磁盘缓存
+        //   不重新验证 → 用户手机一直显示旧页面（登录框旧的"开发模式/登录后显示版本"）。
+        // 新逻辑：每次启动无条件 clearCache(true)（仅清 HTTP 磁盘缓存，保留 localStorage
+        //   中的 rememberedUsername 等用户态），配合服务端 /*.js max-age=0 + etag 304，
+        //   未变资源走 304 极快、变更页面强制每次拉最新，彻底杜绝"线上更新不生效"。
+        // ★ 只清 HTTP 缓存，不清 DOM Storage（localStorage），保护记住用户功能。
+        webView.clearCache(true);
+        Log.d("TCM-Pres", "启动清HTTP缓存（保留localStorage），强制加载最新云端页面");
 
         // LOAD_DEFAULT: 优先使用缓存，但会向服务器验证缓存是否过期（304则用缓存，200则加载新页面）
         // 配合版本检查机制：版本变更时onCreate清缓存，确保更新生效

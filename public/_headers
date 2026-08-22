@@ -14,7 +14,11 @@
   X-XSS-Protection: 1; mode=block
 
 # 页面 HTML（含内联脚本）：始终重新校验，避免浏览器/WebView 缓存旧版导致修复不生效
+# ★ 2026-08-23 补充根路径 /：云端APP(WebView)实际加载的是 /（index.html 会被 Pages 308 规范化为 /），
+#   此前只配了 /index.html，根路径走 max-age=0（Android WebView 磁盘缓存不重新验证 → 线上更新不生效）。
 /index.html
+  Cache-Control: no-cache, must-revalidate
+/
   Cache-Control: no-cache, must-revalidate
 /admin/index.html
   Cache-Control: no-cache, must-revalidate
