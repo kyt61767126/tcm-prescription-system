@@ -1375,6 +1375,10 @@ function selfHealConfigFromLicense(license) {
 // ============================================================================
 function isDebuggerAttached() {
     try {
+        // ★ E2E 旁路（与 main.js blockRemoteDebugging 同款双条件：BNZC_E2E=1 + marker）
+        //   置位后跳过调试器检测，避免 e2e 的 --remote-debugging-port 被误判为攻击
+        if (global.__BNZC_E2E_BYPASS === true) return false;
+
         // 仅在打包后启用检测（开发模式下跳过，避免误报）
         if (!app.isPackaged) return false;
 

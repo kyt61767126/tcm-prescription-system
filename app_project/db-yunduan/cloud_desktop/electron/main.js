@@ -78,6 +78,9 @@ app.commandLine.appendSwitch('allow-file-access-from-files');
             const markerPath = path.join(path.dirname(process.execPath), 'e2e-enabled.marker');
             if (fsSync.existsSync(markerPath)) {
                 console.warn('[E2E] 命中 e2e 旁路（BNZC_E2E=1 + marker），放行远程调试');
+                // ★ 全局旁路标志：license 的 debugger 检测据此跳过
+                //   （标志置位前提 = 双条件已校验通过，攻击者需同时控制环境变量+exe 目录写权限）
+                global.__BNZC_E2E_BYPASS = true;
                 // 顺带隔离 userData，避免 e2e 读写污染开发者/用户真实数据目录
                 if (process.env.BNZC_E2E_DATA) {
                     try {
