@@ -2171,6 +2171,14 @@
             if (adminBtn) {
                 adminBtn.addEventListener('click', function () {
                     try { closeModal('settingsModal'); } catch (e) { }
+                    // ★ 2026-08-22 修复入口分流缺陷：桌面版优先打开主进程完整激活窗口
+                    //   （版本选择 + 管理员激活/激活码激活/工单申请 三Tab），否则已登录
+                    //   用户从基础设置永远到不了工单/激活码Tab；无主进程桥（云端网页/APP）
+                    //   走本模块 DOM 弹窗兜底。
+                    if (global.electronAPI && global.electronAPI.license &&
+                        typeof global.electronAPI.license.show === 'function') {
+                        try { global.electronAPI.license.show(); return; } catch (eBridge) { /* 桥接异常，落回DOM弹窗 */ }
+                    }
                     if (typeof global.openAdminActivate === 'function') {
                         global.openAdminActivate();
                     } else if (typeof global.activateNow === 'function') {
