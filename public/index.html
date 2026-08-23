@@ -5977,13 +5977,21 @@ let currentUser = null;
                 throw new Error((data && data.error) || '云端保存失败');
             }
             // 服务端可能重新生成处方编号，回写本地记录保持两端一致
-            if (data && data.savedPrescription && data.savedPrescription.prescriptionNo &&
-                data.savedPrescription.prescriptionNo !== record.prescriptionNo) {
+            // ★ 2026-08-23 溯源标记回写：同步成功即把服务端 updatedAt/userId 写入本地记录——
+            //   getAllUserPrescriptions 合并本地未同步处方时以此区分"从未同步的离线保存"（保留）
+            //   与"曾同步但已从云端列表消失"（其他设备已删除，不合并，防止已删处方"复活"）
+            if (data && data.savedPrescription) {
                 try {
-                    record.prescriptionNo = data.savedPrescription.prescriptionNo;
-                    record.outpatientNo = data.savedPrescription.outpatientNo || data.savedPrescription.prescriptionNo;
-                    await savePrescriptionToDB(record);
-                } catch (e) { console.warn('[云端同步] 编号回写失败:', e); }
+                    let _dirty = false;
+                    if (data.savedPrescription.prescriptionNo && data.savedPrescription.prescriptionNo !== record.prescriptionNo) {
+                        record.prescriptionNo = data.savedPrescription.prescriptionNo;
+                        record.outpatientNo = data.savedPrescription.outpatientNo || data.savedPrescription.prescriptionNo;
+                        _dirty = true;
+                    }
+                    if (data.savedPrescription.updatedAt && !record.updatedAt) { record.updatedAt = data.savedPrescription.updatedAt; _dirty = true; }
+                    if (data.savedPrescription.userId && !record.userId) { record.userId = data.savedPrescription.userId; _dirty = true; }
+                    if (_dirty) await savePrescriptionToDB(record);
+                } catch (e) { console.warn('[云端同步] 回写失败:', e); }
             }
             return data;
         }
@@ -7651,6 +7659,11 @@ let currentUser = null;
                                         // ★安全修复（2026-08-21）：普通用户合并本地未同步处方时，
                                         // 只并入本人（createdBy === filterUsername）的本地数据，禁止带入其他医生的处方。
                                         if (filterUsername && p.createdBy !== filterUsername) return false;
+                                        // ★ 2026-08-23 跨端删除修复：带服务端溯源痕迹（updatedAt/userId，
+                                        //   由云端保存回写或历史云端拉取写入）的本地记录若已不在云端列表
+                                        //   = 已在其他设备删除，禁止合并回来（防止已删处方"复活"）。
+                                        //   无痕迹 = 纯本机离线保存从未同步 → 保留（离线保存保护）。
+                                        if (p.updatedAt || p.userId) return false;
                                         return true;
                                     });
                                     if (localMerged.length > 0) {
