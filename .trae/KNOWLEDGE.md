@@ -722,7 +722,13 @@
 - **流程冗余识别法**：逐字段追每个Tab的payload消费方——版本字段（edition）仅Tab1的admin-submit消费，Tab2输码/Tab3工单均不消费 → 打开弹窗强制先选版本对Tab2/3用户是无意义步骤。**判断标准：表单步骤的字段是否被该路径的API消费，不消费则该步骤可跳过**。
 - **最小优化实现**（auth-core.js 运行时注入，不碰HTML源码）：版本选择页加两条直达链接（已有激活码→Tab2；留言申请→工单叠加层），配 state.editionChosen 标志 + Tab1点击守卫（未选版本切回Tab1时回版本选择页，防止以默认机构版提交非本意申请）。
 - **BOM丢失历史遗留教训**：门禁跑出 3 FAIL（generate-sign-hash/pack/release-menu.ps1 无BOM），git status 干净说明 HEAD 即无BOM——Edit 工具编辑中文 ps1 会丢 BOM 且可能已被提交。**每次 Edit ps1 后必须立刻补 BOM 并重跑 verify-packaging.ps1**；PS5.1 下用 `[System.IO.File]::WriteAllText($p,$c,(New-Object System.Text.UTF8Encoding($true)))` 修复（-AsByteStream 是 PS7 特性不可用）。
-- **生效方式**：云端网页版推送即生效；云端/离线桌面版与离线APP需重新打包；桌面 activate-window.html 属界面保护文件未动（其同构冗余留待用户明确要求时再处理）。
+- **生效方式**：云端网页版推送即生效；云端/离线桌面版与离线APP需重新打包；桌面 activate-window.html 属界面保护文件——**用户明确要求"同步到桌面版 activate-window.html"时才可修改**（见 2.67）。
+
+### 2.67 【界面保护例外：用户明确要求时改 activate-window.html】双端桌面激活窗口直达链接同步（提交 5e169651，2026-08-23）
+- **硬约束例外规则**：activate-window.html 不在 6 个 check-interface.bat 基线文件中（基线是 login.html 与主操作 index.html），但项目惯例仍将其纳入"界面保护类文件"。**修改的唯一条件 = 用户明确要求**；改动必须双端桌面版同构保持一致（离线/云端 activate-window.html 同一处 DOM + 同一处 JS，字节级差异越少越好）。
+- **改动最小化原则**（与 APP 版 2.66 对齐）：仅加 ① 两条直达链接 span（edition-selector 下方）② state.editionChosen 标志（selectEdition 内）③ switchTab('admin') 守卫（未选版本切 Tab1 回版本选择页）④ bindEditionShortcuts 函数 + 立即调用——**不改原有 class，不改 Tab 切换/内容区逻辑**。
+- **验证**：改完后必须跑 check-interface.bat（确认 6 个主界面基线 0 CHANGED）+ verify-packaging.ps1 62 OK。
+- **生效方式**：桌面版 activate-window.html 在 electron/ 子目录，需重新打包 exe 才会进入 asar 生效；不从 URL 加载，不能指望 Cloudflare Pages 推送。
 
 ---
 
