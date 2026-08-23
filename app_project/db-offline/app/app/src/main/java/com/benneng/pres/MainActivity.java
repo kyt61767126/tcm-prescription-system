@@ -113,10 +113,21 @@ public class MainActivity extends BridgeActivity {
         // ★ P1-8 多层校验 Layer 2：Android 原生 License 启动校验
         // 在 WebView 加载前由 Java 层独立校验 license 有效性（试用过期/license 篡改/绑定不符等）
         // 与 JS 层 checkLicenseAndShowActivate 形成双保险
+        // ★ 2026-08-23 修复：license 无效（试用超限/过期）不再只有"退出"死路——
+        //   showLicenseErrorWithActivateChoice 双按钮（前往激活/退出），选"前往激活"放行 WebView，
+        //   JS 层 checkLicenseAndShowActivate 自动弹激活窗口（激活码输入+机器ID+联系客服），
+        //   登录框另有"📋 管理员激活"三Tab入口（管理员激活/激活码/工单申请），形成完整激活闭环
         if (!performNativeStartupLicenseCheck()) {
             return;
         }
 
+        continueStartupAfterLicenseCheck();
+    }
+
+    // ★ 2026-08-23 抽取：License 校验通过（或用户选择"前往激活"放行）后的启动流程
+    //   原 onCreate 中校验之后的步骤（权限申请→WebView 配置→页面加载），
+    //   供 onCreate 和 showLicenseErrorWithActivateChoice 的"前往激活"回调共用
+    private void continueStartupAfterLicenseCheck() {
         // Android 6.0+ 动态申请相机和麦克风权限（录像拍照功能需要）
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
@@ -177,7 +188,9 @@ public class MainActivity extends BridgeActivity {
             String reason = result.optString("type", "unknown");
             String message = result.optString("message", "授权校验失败，应用无法启动");
             Log.e(TAG, "[StartupCheck] 授权校验失败：type=" + reason + " msg=" + message);
-            showFatalLicenseErrorAndExit(message);
+            // ★ 2026-08-23 修复：正常业务拒绝（试用超限/过期/未激活）提供"前往激活"入口，
+            //   不再只有退出死路；代码篡改（下方 verifyJsIntegrity 分支）仍走致命退出不放行
+            showLicenseErrorWithActivateChoice(message);
             return false;
         } catch (Exception e) {
             // ★安全优化：原生校验异常时阻止启动（原为降级到JS层校验，存在安全风险）
@@ -202,6 +215,36 @@ public class MainActivity extends BridgeActivity {
                         .show();
             } catch (Exception e) {
                 Log.e(TAG, "[StartupCheck] 显示错误对话框失败", e);
+                finishAffinity();
+                android.os.Process.killProcess(android.os.Process.myPid());
+            }
+        });
+    }
+
+    // ★ 2026-08-23 新增：license 无效（试用超限/过期/未激活）双按钮选择框
+    //   「前往激活」→ 放行启动流程（WebView 加载后 JS 层自动弹激活窗口 + 登录框三Tab入口）
+    //   「退出」    → 与原 showFatalLicenseErrorAndExit 行为一致（结束进程）
+    //   安全边界：仅正常业务拒绝走此路径；代码篡改/校验异常仍走致命退出（不扩大攻击面）
+    private void showLicenseErrorWithActivateChoice(String message) {
+        mainHandler.post(() -> {
+            try {
+                new androidx.appcompat.app.AlertDialog.Builder(this)
+                        .setTitle("授权提示")
+                        .setMessage((message == null || message.isEmpty() ? "授权校验失败" : message)
+                                + "\n\n您可以选择前往激活：已持有激活码可直接输入；"
+                                + "无激活码可在激活窗口提交申请，管理员在线审批后自动完成激活。")
+                        .setCancelable(false)
+                        .setPositiveButton("前往激活", (d, w) -> {
+                            Log.i(TAG, "[StartupCheck] 用户选择前往激活，放行启动流程");
+                            continueStartupAfterLicenseCheck();
+                        })
+                        .setNegativeButton("退出", (d, w) -> {
+                            finishAffinity();
+                            android.os.Process.killProcess(android.os.Process.myPid());
+                        })
+                        .show();
+            } catch (Exception e) {
+                Log.e(TAG, "[StartupCheck] 显示激活选择对话框失败", e);
                 finishAffinity();
                 android.os.Process.killProcess(android.os.Process.myPid());
             }

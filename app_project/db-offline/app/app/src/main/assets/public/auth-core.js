@@ -2082,9 +2082,17 @@
 
     // APP 端监听 'app:show-activate' 事件（向后兼容，由 activate.show() 触发）
     // 桌面版的 activate.show() 由 main.js 处理（打开 BrowserWindow），不会触发此事件
+    // ★ 2026-08-23 license 失效自动弹窗升级：优先三Tab激活弹窗（版本选择→管理员激活/激活码/工单申请），
+    //   无激活码用户可直接提交申请/工单（配合离线APP Java层"前往激活"放行入口，形成完整激活闭环）；
+    //   openAdminActivate 不可用时回退旧版单码弹窗（机器ID+联系客服+输码）
     if (typeof global.addEventListener === 'function') {
         global.addEventListener('app:show-activate', function () {
-            showActivateDialog();
+            if (typeof global.openAdminActivate === 'function') {
+                global.__licenseActivating = false;
+                global.openAdminActivate();
+            } else {
+                showActivateDialog();
+            }
         });
     }
 
