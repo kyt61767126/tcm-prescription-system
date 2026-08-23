@@ -7208,6 +7208,9 @@ let currentUser = null;
                         // ★ 2026-08-23 云端响应即权威（含空数组）：此前仅 arr.length>0 才采用云端数据，
                         //   云端已删光时回落本地缓存导致旧处方残留；现在空数组同样采用并清空本地缓存
                         {
+                            // ★ 2026-08-23 回归修复：云端数据赋值（上一版本编辑时此行丢失，
+                            //   导致云端20条成功返回却从未写入allPrescriptions→清空本地DB→历史全空）
+                            allPrescriptions = arr;
                             // ★ 修复"保存后刷新消失"：合并而非覆盖——保留本地已保存但云端尚未同步的处方
                             try {
                                 const localList = await getAllPrescriptionsFromDB();
