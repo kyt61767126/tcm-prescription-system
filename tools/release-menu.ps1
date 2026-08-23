@@ -166,17 +166,26 @@ function Invoke-SinglePack {
 
 # ============ 发布 ============
 function Invoke-Publish {
-    param([string]$Target)
+    param(
+        [string]$Target,
+        [string]$Mode = "all"   # desktop / app / all —— 发布范围（透传 --artifact 给 publish-release.js）
+    )
     $publishScript = "$script:RootDir\tools\publish-release.js"
     if (-not (Test-Path $publishScript)) {
         Write-Host "[ERROR] 未找到发布脚本: $publishScript" -ForegroundColor Red
         return 1
     }
 
+    $modeLabel = switch ($Mode) {
+        "desktop" { "桌面 exe" }
+        "app"     { "手机 APP" }
+        default   { "全部产物" }
+    }
+
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  发布到 GitHub Release + 下载页..." -ForegroundColor Cyan
-    Write-Host "  Target: $Target" -ForegroundColor Cyan
+    Write-Host "  Target: $Target  范围: $modeLabel" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  提示: 上传 75MB exe 需要 5-10 分钟，请耐心等待..." -ForegroundColor Yellow
     Write-Host "  提示: 若卡住无输出，可能是在上传大文件，请勿关闭窗口..." -ForegroundColor Yellow
@@ -184,8 +193,13 @@ function Invoke-Publish {
     Write-Host ""
 
     # ★ 必守HARD规则：手动发布 = --confirm（人工确认，内置跑合规门禁）+ --push（手动提交部署）
+    # ★ 2026-08-23 修复：透传产物类型维度（--artifact）。原实现只传版本维度（--target），
+    #   发布菜单选"本地版"时 dist/ 里上次构建的旧桌面 exe 也会被一并扫描上传
+    #   （用户只打包 APP 却发布出旧 exe）。Mode=app → 仅 APK；Mode=desktop → 仅 exe。
     $publishArgs = @('--confirm', '--push')
     if ($Target -ne "all") { $publishArgs += "--target=$Target" }
+    if ($Mode -eq "app")     { $publishArgs += "--artifact=app" }
+    if ($Mode -eq "desktop") { $publishArgs += "--artifact=desktop" }
     return Invoke-NodeScript -ScriptPath $publishScript -Arguments $publishArgs
 }
 
@@ -274,12 +288,14 @@ function Show-VersionMenu {
 }
 
 # ============ 显示打包模式菜单 ============
+# $ScopeTitle: "打包" / "发布" —— 同一菜单复用于打包与发布范围选择（返回值语义一致：desktop/app/all）
 function Show-PackModeMenu {
+    param([string]$ScopeTitle = "打包")
     while ($true) {
         Clear-Host
         Write-Host ""
         Write-Host "========================================" -ForegroundColor Cyan
-        Write-Host "  选择打包范围" -ForegroundColor Cyan
+        Write-Host "  选择$ScopeTitle范围" -ForegroundColor Cyan
         Write-Host "========================================" -ForegroundColor Cyan
         Write-Host "  [1] 桌面 exe"
         Write-Host "  [2] 手机 APP"
@@ -333,7 +349,11 @@ function Invoke-FullFlow {
     Write-Host "========================================" -ForegroundColor Cyan
     Write-Host "  [2/3] 发布 (publish-release.js)" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
-    $rc = Invoke-Publish -Target $Version
+    # ★ 2026-08-23 修复：透传 Mode（产物类型维度）。原只传版本维度，
+    #   用户选"本地版-APP"打包后发布时旧桌面 exe 也被一并上传。
+    #   注意：Version=all 走 one-click-pack 全量打包（含双端），发布保持全部产物。
+    $publishMode = if ($Version -eq "all") { "all" } else { $Mode }
+    $rc = Invoke-Publish -Target $Version -Mode $publishMode
     if ($rc -ne 0) {
         Write-Host ""
         Write-Host "[ERROR] 发布失败，流程中止" -ForegroundColor Red
@@ -389,7 +409,7 @@ while ($true) {
     Write-Host ""
     Write-Host "  说明:" -ForegroundColor DarkGray
     Write-Host "  - [1][2][3] 先选版本(云端/定制/个人/全部)" -ForegroundColor DarkGray
-    Write-Host "  - [1][3] 还需选范围(桌面/APP/全部)" -ForegroundColor DarkGray
+    Write-Host "  - [1][2][3] 还需选范围(桌面/APP/全部)，发布范围决定上传哪些产物" -ForegroundColor DarkGray
     Write-Host "  - 发布使用 publish-release.js 上传到 GitHub Release" -ForegroundColor DarkGray
     Write-Host "  - git push 后 Cloudflare Pages 自动部署下载页" -ForegroundColor DarkGray
     Write-Host "  - ★必守HARD规则: 发布前自动跑合规检查，未通过禁止上传" -ForegroundColor Yellow
@@ -423,8 +443,12 @@ while ($true) {
             # 仅发布 - 单个版本
             $version = Show-VersionMenu -Action "publish"
             if ($version -eq "") { break }
+            # ★ 2026-08-23 修复：发布也需选范围（桌面/APP/全部）。原实现只选版本，
+            #   选"本地版"后该版本 dist/ 里上次构建的旧桌面 exe 也被一并上传。
+            $mode2 = Show-PackModeMenu -ScopeTitle "发布"
+            if ($mode2 -eq "") { break }
             # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
-            $rc2 = Invoke-Publish -Target $version
+            $rc2 = Invoke-Publish -Target $version -Mode $mode2
             if ($rc2 -is [array]) { $rc2 = [int]$rc2[-1] }
             if ($rc2 -ne 0) {
                 Write-Host ""

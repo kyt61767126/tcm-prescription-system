@@ -163,7 +163,11 @@ function cleanupReleaseTmp() {
 }
 
 // 扫描要上传的文件
-function scanFiles(target) {
+function scanFiles(target, artifact) {
+    // artifact: 'all'（默认，APK+exe 全收）| 'app'（仅 APK）| 'desktop'（仅 exe）
+    //   ★ 2026-08-23 修复：原实现只有版本维度（cloud/dingzhi）无产物类型维度，
+    //     发布菜单选"本地版"时 dist/ 里上次构建的旧桌面 exe 也会被一并扫描上传
+    //     （用户只打了 APP 却发布出 75MB 旧 exe）。artifact 由发布菜单的发布范围选择透传。
     const files = [];
     const appKeys = ['all', 'apk', 'exe'].includes(target)
         ? Object.keys(APP_CONFIG)
@@ -174,7 +178,7 @@ function scanFiles(target) {
         if (!config) continue;
 
         // APK（位于 public/downloads/）
-        if (target === 'all' || target === 'apk' || target === key) {
+        if ((target === 'all' || target === 'apk' || target === key) && artifact !== 'desktop') {
             if (config.apkName) {
                 const apkPath = path.join(DOWNLOADS_DIR, config.apkName);
                 if (fs.existsSync(apkPath)) {
@@ -194,7 +198,7 @@ function scanFiles(target) {
         // exe（位于各项目 dist/）
         //   惠康中医-xxx Setup X.X.X.exe  → 安装版（type=exe）
         //   惠康中医-xxx X.X.X.exe        → 便携版（type=portable）
-        if (target === 'all' || target === 'exe' || target === key) {
+        if ((target === 'all' || target === 'exe' || target === key) && artifact !== 'app') {
             if (config.distDir && fs.existsSync(config.distDir)) {
                 const exes = fs.readdirSync(config.distDir).filter(f => f.endsWith('.exe'));
                 for (const exe of exes) {
@@ -443,6 +447,7 @@ function main() {
     const args = process.argv.slice(2);
     let versionTag = '';
     let target = 'all';
+    let artifact = 'all';
     let dryRun = false;
     let doPush = false;
     let confirmed = false;
@@ -451,6 +456,10 @@ function main() {
     for (const arg of args) {
         if (arg.startsWith('--target=')) {
             target = arg.substring('--target='.length);
+        } else if (arg.startsWith('--artifact=')) {
+            // ★ 2026-08-23 新增：产物类型维度（app=仅APK / desktop=仅exe / all=全部）
+            //   与 --target（版本维度 cloud/dingzhi）正交组合
+            artifact = arg.substring('--artifact='.length);
         } else if (arg === '--dry-run') {
             dryRun = true;
         } else if (arg === '--push') {
@@ -467,6 +476,11 @@ function main() {
     const validTargets = ['all', 'apk', 'exe', 'cloud', 'dingzhi'];
     if (!validTargets.includes(target)) {
         console.error(`[ERROR] 未知 target: ${target}，可选: ${validTargets.join('/')}`);
+        process.exit(1);
+    }
+    const validArtifacts = ['all', 'app', 'desktop'];
+    if (!validArtifacts.includes(artifact)) {
+        console.error(`[ERROR] 未知 artifact: ${artifact}，可选: ${validArtifacts.join('/')}`);
         process.exit(1);
     }
 
@@ -500,8 +514,8 @@ function main() {
     console.log();
 
     // 3. 扫描文件
-    console.log('[3/6] 扫描要上传的文件 (target=' + target + ')...');
-    const files = scanFiles(target);
+    console.log('[3/6] 扫描要上传的文件 (target=' + target + ', artifact=' + artifact + ')...');
+    const files = scanFiles(target, artifact);
     if (files.length === 0) {
         console.error('[ERROR] 没有找到可上传的文件');
         console.error('  APK 位置: public/downloads/*.apk');
