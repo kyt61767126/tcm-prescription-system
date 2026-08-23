@@ -733,9 +733,7 @@
                 // ★ P0 修复：保留 API 返回的 token，附加到 user 对象
                 // buildAuthHeader(user) 依赖 user.token 构造 Bearer header
                 // 丢弃 token 会导致后续 API 请求回退到 Basic auth，云端返回 401 触发自动登出
-                // ★ 2026-08-23 clinicExpiresAt：登录响应顶层字段（诊所到期时间），
-                //   供登录hook缓存到 auth:runtimeExpiresAt，F1基础设置-授权状态显示"剩余X天"
-                return { success: true, user: { ...data.user, token: data.token, clinicExpiresAt: data.clinicExpiresAt || null } };
+                return { success: true, user: { ...data.user, token: data.token } };
             } catch (e) {
                 console.error('云端登录失败:', e);
                 // ★ 离线登录缓存：网络错误时尝试离线登录
@@ -1026,14 +1024,6 @@
                     await StorageAdapter.setItem('auth:runtimeEdition', targetEd);
                     if (rawName) await StorageAdapter.setItem('auth:runtimeClinicName', rawName);
                     if (productName) await StorageAdapter.setItem('auth:runtimeProductName', productName);
-                    // ★ 2026-08-23 F1基础设置-授权状态：缓存诊所到期时间（无=永久授权），
-                    //   登录后立即刷新授权状态区为"✅ 已激活（机构版/标准版）剩余X天"
-                    try {
-                        const rawExp = user.clinicExpiresAt || '';
-                        if (rawExp) await StorageAdapter.setItem('auth:runtimeExpiresAt', String(rawExp));
-                        else await StorageAdapter.removeItem('auth:runtimeExpiresAt');
-                    } catch (_) {}
-                    try { global.updateLicenseStatusText && global.updateLicenseStatusText(); } catch (_) {}
                     try {
                         console.log('[AuthCore] login edition-sync step-1 backend:', JSON.stringify({ clinicEdition: rawCE, edition: user.edition, role: user.role, clinicName: rawName }));
                         console.log('[AuthCore] login edition-sync step-2 UPDATED ->', JSON.stringify({
@@ -1483,10 +1473,6 @@
         }
     };
 
-    // ★ 2026-08-23 挂载 StorageAdapter 到 global：
-    //   IIFE-B（LicenseCheck/授权状态）内裸用 StorageAdapter 标识符但未本地定义，
-    //   挂载后 IIFE-B 内引用解析到 global.StorageAdapter（Capacitor/网页双环境兼容）。
-    global.StorageAdapter = StorageAdapter;
 })(typeof window !== 'undefined' ? window : typeof globalThis !== 'undefined' ? globalThis : this);
 
 // ============================================================================
@@ -2223,34 +2209,10 @@
         if (!el) return;
 
         try {
-            // ★ 云端环境（无 electronAPI.license 桥：云端APP/云端网页）：
-            //   已登录（有 auth:runtimeEdition 缓存）→ 对齐云端桌面版样式：
-            //       ✅ 已激活（机构版/标准版）+ 剩余 X 天 / 永久授权 / 已到期
-            //   未登录 → 原提示兜底：🌐 云端版，登录即可使用，无需激活
+            // ★ 云端环境：无 electronAPI.license → 显示云端版提示
             if (!global.electronAPI || !global.electronAPI.license ||
                 typeof global.electronAPI.license.getStatus !== 'function') {
-                let ed = '', exp = '';
-                try { ed = (await StorageAdapter.getItem('auth:runtimeEdition')) || ''; } catch (e) {}
-                try { exp = (await StorageAdapter.getItem('auth:runtimeExpiresAt')) || ''; } catch (e) {}
-                if (ed === 'cloud_clinic' || ed === 'cloud_personal') {
-                    const planLabel = (ed === 'cloud_clinic') ? '机构版' : '标准版';
-                    let days = null;
-                    if (exp) {
-                        const t = new Date(exp).getTime();
-                        if (!isNaN(t)) days = Math.ceil((t - Date.now()) / (24 * 60 * 60 * 1000));
-                    }
-                    let html = '✅ 已激活（' + planLabel + '）';
-                    if (days === null) {
-                        html += '<br><span style="color:#4caf50;font-weight:bold;">永久授权</span>';
-                    } else if (days > 0) {
-                        html += '<br>剩余 <b style="color:#4caf50;">' + days + '</b> 天';
-                    } else {
-                        html += '<br><span style="color:red;font-weight:bold;">已到期，请联系管理员续费</span>';
-                    }
-                    el.innerHTML = html;
-                } else {
-                    el.innerHTML = '🌐 <b style="color:#2196f3;">云端版</b><br><span style="color:#666;">登录即可使用，无需激活</span>';
-                }
+                el.innerHTML = '🌐 <b style="color:#2196f3;">云端版</b><br><span style="color:#666;">登录即可使用，无需激活</span>';
                 return;
             }
             const status = await global.electronAPI.license.getStatus();
@@ -2390,9 +2352,6 @@
     global.isCloudActivationDone = isCloudActivationDone;
     global.setCloudActivationDone = setCloudActivationDone;
     global.hideActivateLoginEntry = hideActivateLoginEntry;
-    // ★ 2026-08-23 授权状态刷新：登录成功（IIFE-A）缓存 runtimeEdition/runtimeExpiresAt 后，
-    //   经 global 调用本函数即时刷新 F1基础设置-授权状态区（"✅ 已激活（版本）剩余X天"）
-    global.updateLicenseStatusText = updateLicenseStatusText;
 
     // ============================================================================
     // ★ 2026-08-20 一页式"注册开通"弹窗（云端注册审核制）

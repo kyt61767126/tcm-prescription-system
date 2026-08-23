@@ -73,7 +73,10 @@ window.cloudFetch = async function(url, options = {}) {
                     fromCloud: true
                 };
             }
-            throw new Error('HTTP error! status: ' + response.status);
+            // ★ 2026-08-23 非401 HTTP错误附带status字段（调用方可按404/400/403分支处理）
+            const httpErr = new Error('HTTP error! status: ' + response.status);
+            httpErr.status = response.status;
+            throw httpErr;
         }
 
         const text = await response.text();
@@ -106,6 +109,6 @@ window.cloudFetch = async function(url, options = {}) {
             window._cloudReachable = false;
             window.updateModeStatus();
         }
-        return { success: false, error: error.message, fromCloud: false };
+        return { success: false, error: error.message, status: error.status, fromCloud: false };
     }
 };

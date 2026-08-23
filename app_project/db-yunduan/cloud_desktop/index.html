@@ -2365,16 +2365,21 @@ let currentUser = null;
                 let token = (currentUser && (currentUser.token || currentUser.cloud_token)) || '';
                 if (!token) { try { const _au = JSON.parse(localStorage.getItem('auth:currentUser') || '{}'); token = _au.token || ''; } catch (e) {} }
                 if (!token || typeof window.CLOUD_API_BASE === 'undefined') return { skipped: true };
-                const resp = await fetch(window.CLOUD_API_BASE + '/api/users?action=delete-user', {
+                // ★ 2026-08-23 修复双重 /api：CLOUD_API_BASE 已含 /api，旧URL拼出 /api/api/users
+                //   导致云端删除恒失败（405/404），被误判为"云端无此账号"，云端账户从未真正删除。
+                //   同时裸fetch改cloudFetch：401（token失效被顶下线）自动弹登录框。
+                const resp = await cloudFetch(window.CLOUD_API_BASE + '/users?action=delete-user', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    headers: { 'Authorization': 'Bearer ' + token },
                     body: JSON.stringify({ username: username })
                 });
-                const data = await resp.json().catch(() => ({}));
-                if (resp.ok && data.success) return { ok: true };
-                if (resp.status === 404) return { ok: true, notFound: true }; // 云端无此账号=本地账户，正常
-                if (resp.status === 400 || resp.status === 403) return { blocked: true, error: (data && data.error) || ('HTTP ' + resp.status) };
-                return { failed: true, error: (data && data.error) || ('HTTP ' + resp.status) };
+                if (resp && resp.requireAuth) {
+                    return { blocked: true, error: '登录已失效（账号可能在其他设备登录），请重新登录后再删除' };
+                }
+                if (resp && resp.success) return { ok: true };
+                if (resp && resp.status === 404) return { ok: true, notFound: true }; // 云端无此账号=本地账户，正常
+                if (resp && (resp.status === 400 || resp.status === 403)) return { blocked: true, error: resp.error || ('HTTP ' + resp.status) };
+                return { failed: true, error: (resp && resp.error) || ('HTTP ' + (resp && resp.status) || '网络异常') };
             } catch (e) {
                 return { failed: true, error: e && e.message ? e.message : String(e) };
             }
@@ -5722,17 +5727,15 @@ let currentUser = null;
             if (!token) return;
             if (typeof window.CLOUD_API_BASE === 'undefined' || !window.CLOUD_API_BASE) return;
 
-            const resp = await fetch(window.CLOUD_API_BASE + '/prescriptions', {
+            // ★ 2026-08-23 裸fetch改cloudFetch：no-cache + 401统一处理（被其他设备顶下线时弹登录框）
+            const data = await cloudFetch(window.CLOUD_API_BASE + '/prescriptions', {
                 method: 'POST',
-                headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prescription: record }),
-                signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ prescription: record })
             });
-            if (!resp.ok) {
-                const errText = await resp.text().catch(function() { return ''; });
-                throw new Error('HTTP ' + resp.status + (errText ? ' ' + errText : ''));
+            if (!data || !data.success) {
+                throw new Error((data && data.error) || '云端保存失败');
             }
-            const data = await resp.json();
             // 服务端可能重新生成处方编号，回写本地记录保持两端一致
             if (data && data.savedPrescription && data.savedPrescription.prescriptionNo &&
                 data.savedPrescription.prescriptionNo !== record.prescriptionNo) {
@@ -5755,12 +5758,12 @@ let currentUser = null;
             if (!token) { try { token = localStorage.getItem('authToken') || ''; } catch(e) {} }
             if (!token) return;
             if (typeof window.CLOUD_API_BASE === 'undefined' || !window.CLOUD_API_BASE) return;
-            const resp = await fetch(window.CLOUD_API_BASE + '/prescriptions?id=' + encodeURIComponent(id), {
+            // ★ 2026-08-23 裸fetch改cloudFetch：no-cache + 401统一处理（被其他设备顶下线时弹登录框）
+            const resp = await cloudFetch(window.CLOUD_API_BASE + '/prescriptions?id=' + encodeURIComponent(id), {
                 method: 'DELETE',
-                headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined
+                headers: { 'Authorization': 'Bearer ' + token }
             });
-            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            if (!resp || !resp.success) throw new Error((resp && resp.error) || '云端删除同步失败');
         }
 
         // ★ 硬性删除标记（tombstone）：保证删除后无论云端同步是否成功、是否被合并/回退缓存恢复，
@@ -7363,18 +7366,26 @@ let currentUser = null;
                 if (token) {
                     // ★ 2026-08-20 诊断：记录读处方 token 是否有值+前缀，用于排查历史不显示
                     try { if (window.electronAPI && window.electronAPI.saveUserData) window.electronAPI.saveUserData('login_debug', JSON.stringify({ time: Date.now(), step: 'getAllUserPrescriptions_token', hasToken: !!token, tokenHead: String(token).slice(0, 24) })); } catch(e) {}
-                    const resp = await fetch('https://tcm-prescription-system.pages.dev/api/prescriptions', {
+                    // ★ 2026-08-23 修复"桌面端历史处方不及时更新"：
+                    //   1. 裸fetch无 cache:'no-cache'，Electron 可能命中 HTTP 缓存返回旧数据；
+                    //   2. 裸fetch遇401（单设备互斥：账号在其他设备登录后本机token被撤销）不处理，
+                    //      静默回落本地 IndexedDB 旧缓存 → 其他端已删除的处方在本机"复活"。
+                    //   统一改用 cloudFetch：带 no-cache；401 时自动清登录态并弹登录框，
+                    //   重新登录后即可拉到云端最新数据。
+                    const resp = await cloudFetch(window.CLOUD_API_BASE + '/prescriptions', {
                         method: 'GET',
-                        headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
-                        signal: AbortSignal.timeout ? AbortSignal.timeout(12000) : undefined
+                        headers: { 'Authorization': 'Bearer ' + token }
                     });
-                    // ★ 2026-08-20 诊断：记录处方拉取状态码
-                    try { if (window.electronAPI && window.electronAPI.saveUserData) window.electronAPI.saveUserData('login_debug', JSON.stringify({ time: Date.now(), step: 'getAllUserPrescriptions_resp', status: resp.status })); } catch(e) {}
-                    if (resp.ok) {
-                        const data = await resp.json();
-                        const arr = Array.isArray(data) ? data : (data.data || data.prescriptions || []);
-                        if (Array.isArray(arr) && arr.length > 0) {
-                            allPrescriptions = arr;
+                    // ★ 2026-08-20 诊断：记录处方拉取结果
+                    try { if (window.electronAPI && window.electronAPI.saveUserData) window.electronAPI.saveUserData('login_debug', JSON.stringify({ time: Date.now(), step: 'getAllUserPrescriptions_resp', success: !!(resp && resp.success), requireAuth: !!(resp && resp.requireAuth), count: (resp && resp.data && resp.data.length) || 0 })); } catch(e) {}
+                    // 401：cloudFetch 已清登录态并弹出登录框，这里直接返回空列表，
+                    // 严禁回落本地旧缓存（否则其他端已删处方在本机"复活"）
+                    if (resp && resp.requireAuth) return [];
+                    if (resp && resp.success && Array.isArray(resp.data)) {
+                        const arr = resp.data;
+                        // ★ 2026-08-23 云端响应即权威（含空数组）：此前仅 arr.length>0 才采用云端数据，
+                        //   云端已删光时回落本地缓存导致旧处方残留；现在空数组同样采用并清空本地缓存
+                        {
                             // ★ 修复"保存后刷新消失"：合并而非覆盖——保留本地已保存但云端尚未同步的处方
                             try {
                                 const localList = await getAllPrescriptionsFromDB();
