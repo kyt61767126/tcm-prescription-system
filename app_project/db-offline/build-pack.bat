@@ -213,6 +213,9 @@ goto :main
 
     echo.
 
+    REM ★ [BUILD-LOCK 2026-08-23] help is also a lock holder and must be released (finalize is not taken, manual release)
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\build-lock.ps1" release -LockPath "%~dp0..\..\.build.lock" -Owner "offline-pack"
+
     if not defined NO_PAUSE (
 
         set "EXIT_KEY="
@@ -229,7 +232,11 @@ goto :main
 
     call :log_title "Offline Desktop Builder (Unified)"
 
-    call :check_node || call :finalize 1 "Node.js check failed"
+    call :check_node
+    if errorlevel 1 (
+        call :finalize 1 "Node.js check failed"
+        goto :eof
+    )
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
 
@@ -243,7 +250,11 @@ goto :main
 
     set "BUILD_BAT=%~dp0desktop\build.bat"
 
-    call :check_file "desktop\build.bat" "%BUILD_BAT%" || call :finalize 1 "Script not found"
+    call :check_file "desktop\build.bat" "%BUILD_BAT%"
+    if errorlevel 1 (
+        call :finalize 1 "Script not found"
+        goto :eof
+    )
 
     REM ★ 2026-08-21 手动打包失败闪退修复：不再强制 NO_PAUSE=1，
     REM   一键打包的 NO_PAUSE=1 由 one-click-pack.ps1 环境变量继承；
@@ -262,9 +273,17 @@ goto :main
 
     call :log_title "Offline APP Builder (Unified Strict)"
 
-    call :check_node || call :finalize 1 "Node.js check failed"
+    call :check_node
+    if errorlevel 1 (
+        call :finalize 1 "Node.js check failed"
+        goto :eof
+    )
 
-    call :check_java || call :finalize 1 "Java check failed"
+    call :check_java
+    if errorlevel 1 (
+        call :finalize 1 "Java check failed"
+        goto :eof
+    )
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
 
@@ -278,7 +297,11 @@ goto :main
 
     set "CAP_DIR=%~dp0app"
 
-    call :check_file "app\build-app.bat" "%CAP_DIR%\build-app.bat" || call :finalize 1 "Script not found"
+    call :check_file "app\build-app.bat" "%CAP_DIR%\build-app.bat"
+    if errorlevel 1 (
+        call :finalize 1 "Script not found"
+        goto :eof
+    )
 
     REM ★ 2026-08-21 手动打包统一严格标准：app 模式显式传 standard（严格），
     REM   与 app-strict 等价，杜绝手动入口哈希刷新失败仍出包
@@ -297,9 +320,17 @@ goto :main
 
     call :log_title "Offline APP Builder (Standard Strict)"
 
-    call :check_node || call :finalize 1 "Node.js check failed"
+    call :check_node
+    if errorlevel 1 (
+        call :finalize 1 "Node.js check failed"
+        goto :eof
+    )
 
-    call :check_java || call :finalize 1 "Java check failed"
+    call :check_java
+    if errorlevel 1 (
+        call :finalize 1 "Java check failed"
+        goto :eof
+    )
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
 
@@ -313,7 +344,11 @@ goto :main
 
     set "CAP_DIR=%~dp0app"
 
-    call :check_file "app\build-app.bat" "%CAP_DIR%\build-app.bat" || call :finalize 1 "Script not found"
+    call :check_file "app\build-app.bat" "%CAP_DIR%\build-app.bat"
+    if errorlevel 1 (
+        call :finalize 1 "Script not found"
+        goto :eof
+    )
 
     REM ★ 2026-08-21 手动打包失败闪退修复：不再强制 NO_PAUSE=1（同 mode_desktop）
     call "%CAP_DIR%\build-app.bat" standard

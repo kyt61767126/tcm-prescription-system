@@ -218,6 +218,17 @@ goto :main
 
     echo.
 
+    REM ★ [BUILD-LOCK 2026-08-23] help is also a lock holder and must be released (finalize is not taken, manual release; at the same time, add pause to align with the offline version, manual double-click no longer flash-closes)
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\build-lock.ps1" release -LockPath "%~dp0..\..\.build.lock" -Owner "cloud-pack"
+
+    if not defined NO_PAUSE (
+
+        set "EXIT_KEY="
+
+        set /p "EXIT_KEY=Press Enter to exit..."
+
+    )
+
     goto :eof
 
 
@@ -226,7 +237,11 @@ goto :main
 
     call :log_title "Cloud Desktop Builder (Unified)"
 
-    call :check_node || call :finalize 1 "Node.js check failed"
+    call :check_node
+    if errorlevel 1 (
+        call :finalize 1 "Node.js check failed"
+        goto :eof
+    )
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
 
@@ -240,7 +255,11 @@ goto :main
 
     set "BUILD_BAT=%~dp0cloud_desktop\build.bat"
 
-    call :check_file "cloud_desktop\build.bat" "%BUILD_BAT%" || call :finalize 1 "Script not found"
+    call :check_file "cloud_desktop\build.bat" "%BUILD_BAT%"
+    if errorlevel 1 (
+        call :finalize 1 "Script not found"
+        goto :eof
+    )
 
     REM ★ 2026-08-21 手动打包失败闪退修复：不再强制 NO_PAUSE=1，
     REM   一键打包的 NO_PAUSE=1 由 one-click-pack.ps1 环境变量继承；
@@ -259,9 +278,17 @@ goto :main
 
     call :log_title "Cloud APP Builder (Unified Strict)"
 
-    call :check_node || call :finalize 1 "Node.js check failed"
+    call :check_node
+    if errorlevel 1 (
+        call :finalize 1 "Node.js check failed"
+        goto :eof
+    )
 
-    call :check_java || call :finalize 1 "Java check failed"
+    call :check_java
+    if errorlevel 1 (
+        call :finalize 1 "Java check failed"
+        goto :eof
+    )
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
 
@@ -275,7 +302,11 @@ goto :main
 
     set "BUILD_APP=%~dp0build-app.bat"
 
-    call :check_file "build-app.bat" "%BUILD_APP%" || call :finalize 1 "Script not found"
+    call :check_file "build-app.bat" "%BUILD_APP%"
+    if errorlevel 1 (
+        call :finalize 1 "Script not found"
+        goto :eof
+    )
 
     REM ★ 2026-08-21 手动打包统一严格标准：app 模式显式传 standard（严格），
     REM   与 app-strict 等价，杜绝手动入口哈希刷新失败仍出包
@@ -294,9 +325,17 @@ goto :main
 
     call :log_title "Cloud APP Builder (Standard Strict)"
 
-    call :check_node || call :finalize 1 "Node.js check failed"
+    call :check_node
+    if errorlevel 1 (
+        call :finalize 1 "Node.js check failed"
+        goto :eof
+    )
 
-    call :check_java || call :finalize 1 "Java check failed"
+    call :check_java
+    if errorlevel 1 (
+        call :finalize 1 "Java check failed"
+        goto :eof
+    )
 
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0..\..\tools\sync-auth-core.ps1"
 
@@ -310,7 +349,11 @@ goto :main
 
     set "BUILD_APP=%~dp0build-app.bat"
 
-    call :check_file "build-app.bat" "%BUILD_APP%" || call :finalize 1 "Script not found"
+    call :check_file "build-app.bat" "%BUILD_APP%"
+    if errorlevel 1 (
+        call :finalize 1 "Script not found"
+        goto :eof
+    )
 
     REM ★ 2026-08-21 手动打包失败闪退修复：不再强制 NO_PAUSE=1（同 mode_desktop）
     call "%BUILD_APP%" standard

@@ -394,7 +394,13 @@ while ($true) {
             if ($version -eq "") { break }
             $mode = Show-PackModeMenu
             if ($mode -eq "") { break }
-            Invoke-SinglePack -Version $version -Mode $mode | Out-Null
+            # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
+            $rc1 = Invoke-SinglePack -Version $version -Mode $mode
+            if ($rc1 -is [array]) { $rc1 = [int]$rc1[-1] }
+            if ($rc1 -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 单版本打包失败，退出码: $rc1（详见上方日志）" -ForegroundColor Red
+            }
             Write-Host ""
             pause
         }
@@ -402,7 +408,13 @@ while ($true) {
             # 仅发布 - 单个版本
             $version = Show-VersionMenu -Action "publish"
             if ($version -eq "") { break }
-            Invoke-Publish -Target $version | Out-Null
+            # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
+            $rc2 = Invoke-Publish -Target $version
+            if ($rc2 -is [array]) { $rc2 = [int]$rc2[-1] }
+            if ($rc2 -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 发布失败，退出码: $rc2（详见上方日志）" -ForegroundColor Red
+            }
             Write-Host ""
             Write-Host "--------------------------------------------"
             Write-Host "  下一步指引:" -ForegroundColor Yellow
@@ -418,7 +430,13 @@ while ($true) {
             if ($version -eq "") { break }
             $mode = Show-PackModeMenu
             if ($mode -eq "") { break }
-            Invoke-FullFlow -Version $version -Mode $mode | Out-Null
+            # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
+            $rc3 = Invoke-FullFlow -Version $version -Mode $mode
+            if ($rc3 -is [array]) { $rc3 = [int]$rc3[-1] }
+            if ($rc3 -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 打包+发布+验证 流程失败，退出码: $rc3（详见上方日志）" -ForegroundColor Red
+            }
             Write-Host ""
             pause
         }
@@ -447,9 +465,20 @@ while ($true) {
                 Write-Host "  智能发布 (auto-publish.js --publish)" -ForegroundColor Cyan
                 Write-Host "  仅发布有变化的端；发布前自动跑合规检查" -ForegroundColor Cyan
                 Write-Host "========================================" -ForegroundColor Cyan
-                Invoke-NodeScript -ScriptPath $autoPublish -Arguments @('--publish') | Out-Null
+                # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
+                $rc5 = Invoke-NodeScript -ScriptPath $autoPublish -Arguments @('--publish')
+                if ($rc5 -is [array]) { $rc5 = [int]$rc5[-1] }
+                if ($rc5 -ne 0) {
+                    Write-Host ""
+                    Write-Host "[ERROR] 智能发布失败，退出码: $rc5（详见上方日志）" -ForegroundColor Red
+                }
             } else {
-                Invoke-Publish -Target "all" | Out-Null
+                $rc5 = Invoke-Publish -Target "all"
+                if ($rc5 -is [array]) { $rc5 = [int]$rc5[-1] }
+                if ($rc5 -ne 0) {
+                    Write-Host ""
+                    Write-Host "[ERROR] 发布全部版本失败，退出码: $rc5（详见上方日志）" -ForegroundColor Red
+                }
             }
             Write-Host ""
             Write-Host "--------------------------------------------"
@@ -462,13 +491,25 @@ while ($true) {
         }
         "6" {
             # 验证
-            Invoke-Verify | Out-Null
+            # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
+            $rc6 = Invoke-Verify
+            if ($rc6 -is [array]) { $rc6 = [int]$rc6[-1] }
+            if ($rc6 -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 验证失败，退出码: $rc6（详见上方日志）" -ForegroundColor Red
+            }
             Write-Host ""
             pause
         }
         "7" {
             # 合规检查
-            Invoke-ComplianceCheck | Out-Null
+            # ★ 2026-08-23 复核修复：原 | Out-Null 丢弃退出码，失败静默无提示
+            $rc7 = Invoke-ComplianceCheck
+            if ($rc7 -is [array]) { $rc7 = [int]$rc7[-1] }
+            if ($rc7 -ne 0) {
+                Write-Host ""
+                Write-Host "[ERROR] 合规检查未通过，退出码: $rc7（详见上方日志）" -ForegroundColor Red
+            }
             Write-Host ""
             pause
         }
