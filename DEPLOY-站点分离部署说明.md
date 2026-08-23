@@ -30,18 +30,26 @@
 
 ## 4. 流水线发布同步
 
-每次 4 版本打包脚本（`pack-app-geren-strict.bat` / `pack-app-strict.bat` / 桌面版 4 个）运行完成后，
-**需要将 APK/EXE 产物复制到 `site-official/releases/`**，并更新：
+> ★ 2026-08-23 更新：8 包已合并为 4 包（云端统一包 + 离线统一包，标准版/机构版由运行时激活码决定），
+> latest.json 收敛为 cloud / dingzhi 两个 key。历史上规划的 cloud_personal / cloud_clinic /
+> personal / clinic 四目录方案已废弃，未曾上线。
 
-1. `site-official/hash-manifest.json` — 下载页读取的 SHA-256 清单
-2. `site-official/updates/cloud_personal/latest.json` — YB 云端标准版
-3. `site-official/updates/cloud_clinic/latest.json`   — YJ 云端机构版
-4. `site-official/updates/personal/latest.json`      — LB 离线标准版
-5. `site-official/updates/clinic/latest.json`        — LJ 离线机构版
+打包完成后由发布工具链自动同步（无需手动复制）：
 
-上述 4 latest.json 在 site-official 目录已作为占位存在，build 时覆盖即可。
-**旧目录 `updates/geren` / `updates/dingzhi` / `updates/cloud` 仍然存在作为向后兼容，
-download.html 已经 rewrite 为优先读取 4 新 key，旧 key 保留兼容。**
+1. `tools/auto-update-downloads.js <target> --confirm --push` — 复制 APK 到
+   `public/downloads/`，计算 SHA-256 并更新 `hash-manifest.json`，推送触发 Pages 部署
+2. `tools/publish-release.js <tag> --confirm [--push]` — 上传 APK/EXE 到 GitHub Release，
+   并自动更新 `public/updates/{key}/latest.json`（url / portableUrl / version / releaseNotes）
+
+需要人工同步的双副本（public/ 与 site-official/ 各一份）：
+
+1. `hash-manifest.json` — 下载页读取的 SHA-256 清单
+2. `updates/cloud/latest.json` — 云端版（桌面 exe 链接 + 版本号，APP 卡片版本号同源）
+3. `updates/dingzhi/latest.json` — 离线版（同上）
+
+> 注意：latest.json 中的 forceUpdate / minVersion / rolloutPercentage 为灰度发布预留字段，
+> 2026-08-17 桌面版自动更新机制移除后（commit 22343bc5）暂无客户端消费，仅版本号/链接/日志
+> 被下载页使用。桌面程序更新方式为官网手动下载覆盖安装（见 download.html「桌面程序更新方案」）。
 
 ## 5. 规则9验收对照
 
