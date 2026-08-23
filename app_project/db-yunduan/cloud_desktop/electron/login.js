@@ -804,10 +804,16 @@
     }
 
     // ★ 2026-08-19 登录框激活入口收敛：仅未激活/试用到期显示极简提示，正式激活登录框洁净
+    // ★ 2026-08-23 进一步：若绿色「📝 注册开通」入口已注入（图片2模式），极简提示永久隐藏，避免两个入口同时出现
     async function updateLoginActivateHint() {
         try {
             const wrap = document.getElementById('activateHintWrap');
             if (!wrap) return;
+            // 如果 绿色注册开通按钮 已在页面上，极简激活提示始终隐藏（防止两个入口同时出现）
+            if (document.getElementById('activateLoginEntry')) {
+                wrap.style.display = 'none';
+                return;
+            }
             let show = false;
             if (window.electronAPI && window.electronAPI.license && window.electronAPI.license.getStatus) {
                 const st = await window.electronAPI.license.getStatus();
@@ -818,42 +824,19 @@
     }
 
     // ===== 首次启动检测与向导 =====
-    // ★ 云端版：激活成功后需要通过注册向导创建本地管理员账户
+    // ★ 2026-08-23 移除"首次使用设置"三步向导（图片1）多余入口，统一收敛到图片2模式激活：
+    //   登录框仅显示一个绿色「📝 注册开通」按钮 → openCloudRegister 弹标准版/机构版卡片 +
+    //   激活码/管理员激活/工单三Tab + 客服微信/官网联系方式。
+    //   不再自动弹 wizardOverlay，不再显示 clinicSetupHint 红色重复提示，避免多个入口。
     function checkFirstRun(config) {
         try {
-            const wizardDone = localStorage.getItem('firstRunWizardDone');
-            const noAdmin = !hasAdminUser(config);
-
-            // ★ 无管理员用户时显示醒目提示（即使向导被跳过也提示）
+            // 确保 clinicSetupHint 不显示多余入口（与注册开通按钮重复）
             const hint = document.getElementById('clinicSetupHint');
-            if (hint) {
-                if (noAdmin) {
-                    hint.innerHTML = '⚠️ <b style="color:#e74c3c;">尚未注册管理员账户 - 点击此处立即注册</b>';
-                    hint.style.display = 'block';
-                    hint.style.fontSize = '13px';
-                    hint.style.marginTop = '6px';
-                    hint.style.padding = '6px 10px';
-                    hint.style.background = '#fff5f5';
-                    hint.style.borderRadius = '4px';
-                    hint.style.border = '1px solid #fecaca';
-                } else {
-                    hint.style.display = 'none';
-                }
-            }
+            if (hint) hint.style.display = 'none';
 
-            // 如果向导未完成 且 没有任何管理员用户 → 弹出注册向导
-            if (wizardDone !== '1' && noAdmin) {
-                console.log('[FirstRun] 未检测到管理员账户，弹出注册向导');
-                // 延迟一点打开向导，确保DOM完全渲染
-                setTimeout(() => {
-                    openFirstRunWizard(config);
-                }, 300);
-                return;
-            }
             if (hasAdminUser(config)) {
-                console.log('[FirstRun] 已有管理员账户，跳过向导，使用手机号+密码登录');
-                // ★ 提示用户用手机号登录
-                const hint = document.getElementById('clinicSetupHint');
+                // 已有管理员 → 显示轻量提示（手机号登录），但避免与其他入口重复堆叠
+                console.log('[FirstRun] 已有管理员账户，使用手机号+密码登录');
                 if (hint) {
                     hint.innerHTML = '💡 请用激活时填写的手机号和密码登录';
                     hint.style.display = 'block';
@@ -866,7 +849,14 @@
                     hint.style.color = '#1e40af';
                     setTimeout(() => { if (hint) hint.style.display = 'none'; }, 8000);
                 }
+                return;
             }
+
+            // ★ 无管理员：完全收敛到图片2模式激活入口（绿色「📝 注册开通」按钮）
+            //   不再自动弹 wizardOverlay 三步向导，也不显示 clinicSetupHint 红色入口
+            const wizardOverlay = document.getElementById('wizardOverlay');
+            if (wizardOverlay) wizardOverlay.classList.remove('show');
+            console.log('[FirstRun] 无管理员账户，收敛到图片2激活入口（绿色注册开通按钮）');
         } catch (e) {
             console.warn('[FirstRun] checkFirstRun 异常:', e);
         }
