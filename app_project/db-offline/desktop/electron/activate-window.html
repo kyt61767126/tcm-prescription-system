@@ -714,6 +714,31 @@ function selectEdition(edition) {
         }
     } catch (e) { console.warn('Theme init failed:', e); }
 })();
+// ★ 2026-08-23 三Tab：切Tab时双向同步已填信息（诊所名/姓名/电话），避免重复填写
+// Tab1 admin: clinicName/adminName/phone / Tab2 code: codeClinicName/codeAdminName/codePhone / Tab3 ticket: ticketClinicName/ticketContactName/ticketContactPhone
+// 同步原则：目标字段为空时才赋值（宁漏填不误覆盖，保护用户各Tab分别填的不同值）
+function syncSharedFieldsFrom(sourceTab) {
+    try {
+        var srcClinic = '', srcName = '', srcPhone = '';
+        if (sourceTab === 'admin') {
+            srcClinic = (document.getElementById('adminClinicName').value || '').trim();
+            srcName = (document.getElementById('adminAdminName').value || '').trim();
+            srcPhone = (document.getElementById('adminPhone').value || '').trim();
+        } else if (sourceTab === 'ticket') {
+            srcClinic = (document.getElementById('ticketClinicName').value || '').trim();
+            srcName = (document.getElementById('ticketContactName').value || '').trim();
+            srcPhone = (document.getElementById('ticketContactPhone').value || '').trim();
+        } else if (sourceTab === 'code') {
+            srcClinic = (document.getElementById('codeClinicName').value || '').trim();
+            srcName = (document.getElementById('codeAdminName').value || '').trim();
+            srcPhone = (document.getElementById('codePhone').value || '').trim();
+        }
+        function fill(id, val) { if (!val) return; try { var el = document.getElementById(id); if (el && !el.value.trim()) el.value = val; } catch (e) {} }
+        if (sourceTab !== 'admin') { fill('adminClinicName', srcClinic); fill('adminAdminName', srcName); fill('adminPhone', srcPhone); }
+        if (sourceTab !== 'ticket') { fill('ticketClinicName', srcClinic); fill('ticketContactName', srcName); fill('ticketContactPhone', srcPhone); }
+        if (sourceTab !== 'code') { fill('codeClinicName', srcClinic); fill('codeAdminName', srcName); fill('codePhone', srcPhone); }
+    } catch (e) {}
+}
 // ============ Tab switching ============
 function switchTab(tab) {
     // ★ 2026-08-23 简化：从直达链接进入（跳过版本选择）时，Tab1 管理员激活申请需要版本信息，
@@ -724,6 +749,8 @@ function switchTab(tab) {
         document.getElementById('pageSubtitle').textContent = '请选择您要激活的版本';
         return;
     }
+    // ★ 2026-08-23 切Tab前同步：从已切出的Tab（即当前 state.mode）收集已填值
+    syncSharedFieldsFrom(state.mode);
     state.mode = tab;
     hideGlobalError();
     // 停止轮询
@@ -731,7 +758,7 @@ function switchTab(tab) {
     // 更新tab样式
     document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
     document.querySelectorAll('.tab-content').forEach(c => c.classList.toggle('active', c.id === 'tab-' + tab));
-    // 重置到步骤1
+    // 重置到步骤1（步骤重置不影响input.value，仅隐藏loading/success状态）
     if (tab === 'admin') {
         resetAdminToStep1();
     } else if (tab === 'ticket') {

@@ -2713,6 +2713,15 @@
         }
 
         function cleanup() {
+            // ★ 2026-08-23 同步：关闭工单弹窗前，把工单中已填的诊所名/姓名/电话灌回 Tab1 管理员激活
+            try {
+                var tC = (document.getElementById('ticketClinicName').value || '').trim();
+                var tN = (document.getElementById('ticketContactName').value || '').trim();
+                var tP = (document.getElementById('ticketContactPhone').value || '').trim();
+                if (tC) { var aC = document.getElementById('adminClinicName'); if (aC && !aC.value.trim()) aC.value = tC; }
+                if (tN) { var aN = document.getElementById('adminAdminName'); if (aN && !aN.value.trim()) aN.value = tN; }
+                if (tP) { var aP = document.getElementById('adminPhone'); if (aP && !aP.value.trim()) aP.value = tP; }
+            } catch (e) {}
             if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
         }
 
@@ -3113,11 +3122,43 @@
             });
         });
 
+        // ★ 2026-08-23 三Tab：切Tab时双向同步已填信息（诊所名/姓名/电话），避免重复填写
+        function syncSharedFieldsFrom(sourceTab) {
+            // 字段映射：Tab1 管理员激活(admin) / Tab3 工单(ticket) 共享 诊所名+姓名+电话
+            try {
+                var srcName = '', srcContact = '', srcPhone = '', srcClinic = '';
+                if (sourceTab === 'admin') {
+                    srcClinic = (document.getElementById('adminClinicName').value || '').trim();
+                    srcName = (document.getElementById('adminAdminName').value || '').trim();
+                    srcPhone = (document.getElementById('adminPhone').value || '').trim();
+                } else if (sourceTab === 'ticket') {
+                    srcClinic = (document.getElementById('ticketClinicName').value || '').trim();
+                    srcName = (document.getElementById('ticketContactName').value || '').trim();
+                    srcPhone = (document.getElementById('ticketContactPhone').value || '').trim();
+                }
+                var targets = [];
+                if (sourceTab !== 'admin') {
+                    try {
+                        var aC = document.getElementById('adminClinicName'); if (aC && srcClinic && !aC.value.trim()) aC.value = srcClinic; targets.push(aC);
+                        var aN = document.getElementById('adminAdminName'); if (aN && srcName && !aN.value.trim()) aN.value = srcName; targets.push(aN);
+                        var aP = document.getElementById('adminPhone'); if (aP && srcPhone && !aP.value.trim()) aP.value = srcPhone; targets.push(aP);
+                    } catch (e) {}
+                }
+                if (sourceTab !== 'ticket') {
+                    try {
+                        var tC = document.getElementById('ticketClinicName'); if (tC && srcClinic && !tC.value.trim()) tC.value = srcClinic; targets.push(tC);
+                        var tN = document.getElementById('ticketContactName'); if (tN && srcName && !tN.value.trim()) tN.value = srcName; targets.push(tN);
+                        var tP = document.getElementById('ticketContactPhone'); if (tP && srcPhone && !tP.value.trim()) tP.value = srcPhone; targets.push(tP);
+                    } catch (e) {}
+                }
+            } catch (e) {}
+        }
         // ★ 2026-08-23 三Tab切换（对齐桌面 activate-window：管理员激活/激活码激活/工单申请）
         document.getElementById('adminTabBtnAdmin').addEventListener('click', function() {
             // ★ 2026-08-23 简化：从直达链接进入（跳过版本选择）时，Tab1 管理激活申请需版本信息，
             //   未选择版本则回到第一步让用户选择（避免以默认机构版提交非本意的申请）
             if (!state.editionChosen) { show('adminStepEdition'); return; }
+            syncSharedFieldsFrom('ticket'); // 工单Tab填过的信息同步到管理员激活
             show('adminStepForm'); setActiveTab('admin');
         });
         // ★ 2026-08-23 简化：版本选择页直达链接（跳过版本选择，复用 Tab 切换逻辑）
@@ -3131,11 +3172,13 @@
             showTicketFormModal(machineId, (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) || '');
         });
         document.getElementById('adminTabBtnCode').addEventListener('click', function() {
+            syncSharedFieldsFrom('admin'); // Tab1 填过的信息同步到工单（切Tab2也刷新一遍，防止工单已打开值陈旧）
             show('adminTabCode'); setActiveTab('code');
             setTimeout(function() { var i = document.getElementById('adminCodeInput'); if (i) i.focus(); }, 200);
         });
         // 工单申请：复用工单叠加层弹窗（showTicketFormModal，完整表单+提交+成功面板，z-index 更高天然覆盖）
         document.getElementById('adminTabBtnTicket').addEventListener('click', function() {
+            syncSharedFieldsFrom('admin'); // Tab1 填过的信息同步到工单
             showTicketFormModal(machineId, state.clinicName || (typeof CONFIG !== 'undefined' && CONFIG && CONFIG.clinicName) || '');
         });
 
