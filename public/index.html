@@ -770,6 +770,75 @@ let currentUser = null;
             } catch(e) {
                 console.warn('[CONFIG] 加载 config.json 失败:', e.message);
             }
+            // ★ 2026-08-23 【根治三屏闪】：config.json 同步加载完毕后立刻在首帧（DOMContentLoaded 之前）
+            //   完成主题色切换+版本号写入+诊所名/用户名回填+静态激活按钮默认隐藏。
+            //   用户看到的第一帧就是最终正确界面，不再出现"紫→蓝→静态按钮消失"的三屏闪。
+            try {
+                var _root = document.documentElement;
+                var _isStd = false;
+                if (typeof window.isStandardEdition === 'function') _isStd = window.isStandardEdition((CONFIG && CONFIG.edition) || '');
+                else _isStd = CONFIG && (CONFIG.versionLabel && CONFIG.versionLabel.indexOf('标准') >= 0 || CONFIG.edition && CONFIG.edition.indexOf('personal') >= 0 || CONFIG.edition === 'standard');
+                if (_isStd && _root) _root.classList.add('edition-standard');
+                // 写版本标签：登录前也直接显示真实版本号
+                var _tag = document.getElementById('loginVersionTag');
+                if (_tag) {
+                    var _lbl = (CONFIG && CONFIG.versionLabel) || (_isStd ? '云端标准版' : '云端机构版');
+                    _tag.textContent = '【' + _lbl + '】';
+                    document.title = '惠康中医-' + _lbl;
+                }
+                // 写诊所名：local_clinicName 优先，次选 CONFIG.clinicName
+                var _cn = document.getElementById('loginClinicName');
+                if (_cn) {
+                    var _lsCN = null;
+                    try { _lsCN = localStorage.getItem('local_clinicName'); } catch(_) {}
+                    _cn.textContent = _lsCN || (CONFIG && CONFIG.clinicName) || '本能堂中医诊所';
+                }
+                // 写处方笺诊所名显示（登出后预览正确）
+                var _cnD = document.getElementById('clinicNameDisplay');
+                if (_cnD) {
+                    var _lsCN2 = null;
+                    try { _lsCN2 = localStorage.getItem('local_clinicName'); } catch(_) {}
+                    _cnD.textContent = _lsCN2 || (CONFIG && CONFIG.clinicName) || '本能堂中医诊所';
+                }
+                // 用户名回填：从localStorage记住的最近账号
+                try {
+                    var _u = document.getElementById('loginUsername');
+                    if (_u) {
+                        var _raw = localStorage.getItem('local_rememberedUsers') || localStorage.getItem('local_rememberedUsername');
+                        if (_raw) {
+                            try {
+                                var _arr = JSON.parse(_raw);
+                                if (Array.isArray(_arr) && _arr.length) _u.value = String(_arr[0]);
+                                else _u.value = _raw;
+                            } catch(_) {
+                                if (typeof _raw === 'string' && _raw.length <= 40) _u.value = _raw;
+                            }
+                        }
+                    }
+                    // 设置页同步 clinicName/doctorName 展示（避免首次打开空框）
+                    if (CONFIG) {
+                        var _cf = document.getElementById('clinicName');
+                        if (_cf && !_cf.value) _cf.value = CONFIG.clinicName || '';
+                        var _df = document.getElementById('defaultDoctor');
+                        if (_df && !_df.value) _df.value = CONFIG.doctorName || '';
+                    }
+                } catch(_) {}
+                // 静态"注册诊所/激活申请"与"管理台登录"按钮首帧隐藏（auth-core 再按需注入动态入口）—— 消除图片1→2→3过程
+                (function() {
+                    var _lb = document.querySelector('.login-box');
+                    if (!_lb) return;
+                    var _bs = _lb.querySelectorAll('button');
+                    for (var _i = 0; _i < _bs.length; _i++) {
+                        var _t = _bs[_i].textContent || '';
+                        if (_t.indexOf('注册诊所') >= 0 || _t.indexOf('管理台登录') >= 0) {
+                            _bs[_i].style.display = 'none';
+                        }
+                    }
+                })();
+            } catch(__e) {
+                // 首帧优化失败不致命，退回到原流程
+                try { console.warn('[首帧优化] 跳过:', __e.message); } catch(_) {}
+            }
         })();
 
         // ★ 2026-08-17 v3：补丁③ 退出语义终极对齐（底部退出图标=单击立即关APP）
