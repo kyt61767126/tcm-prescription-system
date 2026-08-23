@@ -93,6 +93,11 @@ android/local.properties
 # 构建时自动生成的时间戳文件（每次打包都会更新，无需跟踪）
 **/assets/public/build-time.js
 
+# 桌面版打包安全备份 asar（build.bat 每次构建重新生成，仅本地构建产物）
+**/_backup_asar/
+# 桌面版构建元数据（每次打包更新，仅本地构建产物）
+**/build-meta.json
+
 # Gradle 构建产物（覆盖子项目）
 .gradle/
 **/.gradle/
