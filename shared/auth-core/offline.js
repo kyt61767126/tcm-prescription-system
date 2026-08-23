@@ -3490,24 +3490,30 @@
             //   Java/Electron installAdminLicense 只是把手机号账号写入本地 config，WebView 登录页面读不到 → 登录必然失败。
             //   无论是否有本地安装桥、无论是否成功写入本地 license，本同步都必须执行（形成完整闭环）。
             //   对应 KNOWLEDGE §2.1 已有教训：onAdminActivated 必须无条件同步手机号账号。
+            // ★ 2026-08-24 二次修正（客户实测仍登录失败）：
+            //   密码必须用用户在激活弹窗自设的 state.password（空则 admin）！
+            //   离线APP登录是【纯本地校验】（localStorage 明文/PBKDF2 兼容比对），不查后端；
+            //   Java 层 installAdminLicense 也是把 state.password 写进 config.json users。
+            //   上一版固定写 'admin' 导致用户用自设密码（如 admin123）登录必然失败。
+            //   仅"无本地安装桥"（云端APP，登录走云端API，后端归一化密码=admin）才固定 'admin'。
             try {
                 if (typeof window.addLocalActivationUser === 'function') {
                     const uPhone = (state.phone || '').trim();
                     const uName = (state.adminName || '').trim();
-                    // ★ 密码固定传 'admin'：后端 provisionCloudAccount 统一哈希为'admin'，
-                    //   normalizeActivationPassword 还会把所有手机号账号重置成 admin；
-                    //   激活弹窗里的"自定义密码"仅为 UI 选项，不被真正落地（见弹窗提示文案）。
-                    //   这里避免 state.password（用户自设值）写入，导致本地用户表密码与后端不一致 → 登录必然失败。
+                    const hasInstallBridge = !!(global.electronAPI && global.electronAPI.activate &&
+                        typeof global.electronAPI.activate.installAdminLicense === 'function');
+                    const effPwd = hasInstallBridge ? (state.password || 'admin') : 'admin';
                     window.addLocalActivationUser({
                         username: uPhone || uName,
                         phone: uPhone,
-                        password: 'admin',
+                        password: effPwd,
                         name: uName || uPhone || '管理员',
                         role: 'admin',
                         clinicName: (state.clinicName || '').trim()
                     });
                     console.log('[LicenseCheck] onAdminActivated: 账号同步到localStorage用户表',
-                                'username=', uPhone || uName, 'phone=', uPhone, 'password=admin(固定)');
+                                'username=', uPhone || uName, 'phone=', uPhone,
+                                'password=', hasInstallBridge ? (state.password || 'admin') : 'admin(云端固定)');
                 } else {
                     console.warn('[LicenseCheck] onAdminActivated: window.addLocalActivationUser 未定义，手机号账号未同步到前端用户表！可能导致登录失败。');
                 }
@@ -3573,6 +3579,36 @@
 
     // 页面加载完成后延迟 2 秒校验 license（等待 electronAPI 注入完成）
     function startLicenseCheck() {
+        // ★ 2026-08-24 登录自愈：启动时从本地 config（Java installAdminLicense/activateOnline 写入的 users）
+        //   UPSERT 同步到 localStorage.local_systemUsers。解决两类历史问题：
+        //   ① 旧版本 onAdminActivated 未同步账号 → 激活成功却登录"用户名或密码错误"
+        //   ② 历史写入过错误密码的账号 → 现按 config 最新密码纠正（UPSERT 覆盖）
+        //   该桥仅离线APP存在（MainActivity getActivationUsers）；无此桥自动跳过，不影响其他端。
+        try {
+            if (global.electronAPI && global.electronAPI.activate &&
+                typeof global.electronAPI.activate.getActivationUsers === 'function') {
+                global.electronAPI.activate.getActivationUsers().then(function (res) {
+                    if (!res || !res.success || !Array.isArray(res.users)) return;
+                    if (typeof window.addLocalActivationUser !== 'function') return;
+                    res.users.forEach(function (u) {
+                        if (!u || !u.username) return;
+                        try {
+                            window.addLocalActivationUser({
+                                username: String(u.username),
+                                phone: u.phone ? String(u.phone) : '',
+                                password: u.password || 'admin',
+                                name: u.name || u.username,
+                                role: u.role || 'admin'
+                            });
+                        } catch (e) {}
+                    });
+                    console.log('[LicenseCheck] 启动自愈: config.json 激活账号已同步到 localStorage，共', res.users.length, '个');
+                }).catch(function (e) {
+                    console.warn('[LicenseCheck] 启动自愈 getActivationUsers 失败(不影响使用):', e);
+                });
+            }
+        } catch (e) { console.warn('[LicenseCheck] 启动自愈异常(不影响使用):', e); }
+
         // ★ 登录框诊所名：不依赖授权检查异步链路，随授权检查启动时立即同步。
         //   避免 await checkLicenseAndShowActivate 在非 APP/弱网下阻塞或中断，导致登录框一直显示硬编码"本能堂中医诊所"
         syncLoginClinicName();

@@ -3372,6 +3372,24 @@ private static final String EXPECTED_APK_SIGNATURE_SHA256 = "e5b2e4b3aac9de292b7
         }
     }
 
+    // ★ 2026-08-24 登录自愈：读取 config.json 中的激活账号（users 数组）供前端同步到 localStorage
+    //   背景：installAdminLicense/activateOnline 创建的账号写在 filesDir/config.json 的 users 里，
+    //   但前端登录只读 localStorage.local_systemUsers，两侧脱节导致"激活成功却登录失败"。
+    //   前端启动时调用此接口 UPSERT，保证两侧一致（历史错密码账号也能被纠正）。
+    public JSONObject getActivationUsers() {
+        JSONObject r = new JSONObject();
+        try {
+            JSONObject cfg = readConfigJSON();
+            org.json.JSONArray users = cfg.optJSONArray("users");
+            if (users == null) users = new org.json.JSONArray();
+            r.put("success", true);
+            r.put("users", users);
+        } catch (Exception e) {
+            try { r.put("success", false); r.put("error", String.valueOf(e.getMessage())); } catch (Exception ignored) {}
+        }
+        return r;
+    }
+
     // ★ 2026-08-17 激活流程改「用户名(姓名/手机号)+默认密码admin」：
     //   激活成功后自动创建登录账号；已存在同名账号则跳过；密码明文存储，登入时前端自动兼容并升级
     private void syncCreateActivationUser(String username, String phone, String password, String name) {

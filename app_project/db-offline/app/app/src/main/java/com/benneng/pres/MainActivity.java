@@ -689,6 +689,7 @@ public class MainActivity extends BridgeActivity {
             "      submit: function(code, user, password){ return callNativeAsync('activateLicense', {code: code, user: user||'', password: password||'admin'}); }," +
             "      getMachineId: function(){ return callNativeAsync('getMachineId', {}); }," +
             "      installAdminLicense: function(args){ return callNativeAsync('installAdminLicense', {licenseBase64: (args&&args.license)||'', user: (args&&args.adminName)||(args&&args.user)||'', clinicName: (args&&args.clinicName)||'', password: (args&&args.password)||'admin', loginUsername: (args&&args.phone)||'', phone: (args&&args.phone)||''}); }," +
+            "      getActivationUsers: function(){ return callNativeAsync('getActivationUsers', {}); }," +
             "      close: function(){ return Promise.resolve({success:true}); }," +
             "      restart: function(){ return callNativeAsync('appRestart', {}); }" +
             "    }" +
@@ -1077,6 +1078,9 @@ public class MainActivity extends BridgeActivity {
                         return verifyOnline().toString();
                     case "getActivationRecord":
                         return getActivationRecord().toString();
+                    case "getActivationUsers":
+                        // ★ 2026-08-24 登录自愈：前端启动时同步 config.json 激活账号到 localStorage
+                        return getLM().getActivationUsers().toString();
                     case "appRestart":
                         return appRestart().toString();
                     case "setTrialDays":

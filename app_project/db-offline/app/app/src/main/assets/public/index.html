@@ -1411,13 +1411,14 @@ let currentUser = null;
                 const pwd = u.password || 'admin';
                 const name = u.name || uname;
                 const role = u.role || 'admin';
+                // 按 username OR phone 找现有记录：找到则更新（保证密码/姓名永远是最新激活提交的）
                 let idx = list.findIndex(x => x && (x.username === uname || (phone && String(x.phone || '') === phone)));
                 if (idx >= 0) {
                     const old = list[idx] || {};
                     list[idx] = Object.assign({}, old, {
-                        username: uname,
+                        username: uname, // username 以新提交的为准（支持 phone 字段查找命中时合并到新账号）
                         phone: phone || old.phone || '',
-                        password: pwd,
+                        password: pwd,  // 密码必须覆盖成最新激活值
                         name: name || old.name,
                         role: role || old.role
                     });
