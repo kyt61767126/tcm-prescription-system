@@ -335,6 +335,12 @@ h1 { color: #2c3e50; font-size: 18px; margin-bottom: 3px; }
         </div>
     </div>
 
+    <!-- ★ 2026-08-23 简化：版本选择页直达链接——手里已有激活码/想留言申请的用户跳过版本选择 -->
+    <div class="edition-shortcuts" style="display:flex;justify-content:space-between;gap:12px;margin-top:14px;font-size:12px;">
+        <span id="skipToCode" style="color:var(--primary-1);cursor:pointer;user-select:none;text-decoration:none;">已有激活码？直接输入 →</span>
+        <span id="skipToTicket" style="color:var(--success, #07c160);cursor:pointer;user-select:none;text-decoration:none;">留言申请激活码 →</span>
+    </div>
+
     <!-- Tab 切换 + 内容（版本选择后显示） -->
     <div id="tabContainer" style="display:none;">
     <div class="tabs">
@@ -655,6 +661,7 @@ let _restartTimer = null;
 // ============ Edition selection ============
 function selectEdition(edition) {
     state.edition = edition;
+    state.editionChosen = true;
     codeState.edition = edition;
     // Update card styles
     document.querySelectorAll('.edition-card').forEach(card => {
@@ -702,6 +709,14 @@ function selectEdition(edition) {
 
 // ============ Tab switching ============
 function switchTab(tab) {
+    // ★ 2026-08-23 简化：从直达链接进入（跳过版本选择）时，Tab1 管理员激活申请需要版本信息，
+    //   未选择版本则回到第一步让用户选择（避免以默认机构版提交非本意的申请）
+    if (tab === 'admin' && !state.editionChosen) {
+        document.getElementById('editionSelector').style.display = '';
+        document.getElementById('tabContainer').style.display = 'none';
+        document.getElementById('pageSubtitle').textContent = '请选择您要激活的版本';
+        return;
+    }
     state.mode = tab;
     hideGlobalError();
     // 停止轮询
@@ -718,6 +733,24 @@ function switchTab(tab) {
         resetCodeToStep1();
     }
 }
+
+// ============ 直达链接（跳过版本选择，直接进入 Tab2/Tab3） ============
+function bindEditionShortcuts() {
+    var skipCode = document.getElementById('skipToCode');
+    if (skipCode) skipCode.addEventListener('click', function() {
+        document.getElementById('editionSelector').style.display = 'none';
+        document.getElementById('tabContainer').style.display = 'block';
+        switchTab('code');
+        setTimeout(function() { var i = document.getElementById('codeInput'); if (i) i.focus(); }, 150);
+    });
+    var skipTicket = document.getElementById('skipToTicket');
+    if (skipTicket) skipTicket.addEventListener('click', function() {
+        document.getElementById('editionSelector').style.display = 'none';
+        document.getElementById('tabContainer').style.display = 'block';
+        switchTab('ticket');
+    });
+}
+bindEditionShortcuts();
 
 // ============ Global error ============
 function showGlobalError(msg) {
