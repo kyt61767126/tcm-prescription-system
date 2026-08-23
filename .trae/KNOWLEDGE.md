@@ -683,6 +683,14 @@
 - **锁残留判定经验**：desktop build.bat 失败路径 `exit /b 1` 不释放锁 = **设计内自愈**（锁记录 caller cmd PID，进程退出 PID 死亡 → 下次 acquire stale takeover，本轮实测"Stale lock taken over (alive=False)"验证有效；45min 超时是第二保险）。build-pack.bat 链条中锁由入口 acquire + reentrant 同 PID 放行 + :finalize 统一释放。**不要**为 34 处 desktop build.bat 失败路径加 goto build_fail——自愈兜底已够，大改风险 > 收益。
 - **生效方式**：仅打包/发布脚本变更，无运行时代码。已安装各端无需操作；一键打包/一键发布直接双击生效，前置检查失败时立即终止并释放锁，失败红字报错。
 
+### 2.62 【打包链路三轮复核】SKIP_CONFIG 环境变量泄漏 + 菜单副作用收纳一致性（提交 ba2396d5，2026-08-23）
+- **缺陷1（环境变量泄漏，新缺陷类别）**：release-menu.ps1 的 Invoke-SinglePack 对本地版设 `$env:SKIP_CONFIG="1"` 后从不清理。**release-menu 是长驻菜单循环进程**——先打本地版再打云端版时，残留变量导致云端版 build-app.bat 的 `edit-config -AutoConfirm` 配置同步被跳过（该函数对云端不做 Step1 同步，子进程 AutoConfirm 是唯一同步途径）。修复：云端版进入时显式 `Remove-Item Env:\SKIP_CONFIG`。**经验：凡 `$env:` 设置都要问三个问题——谁设置？谁消费？谁清理？长驻进程（菜单循环）里的 env 变量是跨菜单项的全局状态，pack.ps1:963 的 try/finally 清理模式才是正确姿势。**
+- **缺陷2（收纳不一致）**：one-click-pack 菜单 [1][2][3] 打包后调 Invoke-PackSideEffectCollect，但 [5][6]（单独打包 exe/APP）不调——同样产生 versionCode/package.json 副作用却靠人工提交，违背 P1-B 收纳原则。已补齐。
+- **缺陷3（菜单号缺项）**：菜单显示 [1][2][3][0]+[5][6][7] 但提示写 "[0-7]"——历史遗留缺 [4]，改 "[0-3, 5-7]" 消除误导。
+- **审查确认无需修改**：①入口双 bat（一键打包/一键发布）退出码传播+自愈覆盖 8 个下游 bat+ASCII-only 免疫编码，结构正确；②Invoke-PackSideEffectCollect 三分类（auto/manual/other）+ 中文路径因 quotepath 八进制转义落 other 不会误收纳——"宁漏检不误报"落实到位；③one-click-pack 的 Build-Cloud/Build-Offline **均主动设** SKIP_CONFIG=1，交叉方向无冲突（与 release-menu 场景的本质区别：每轮都设置 vs 设置后不清理）；④`powershell -File script.ps1 3` 位置参数正确绑定 $AutoMode。
+- **冒烟测试复用**：`one-click-pack.ps1 -CollectSideEffectsOnly -DryRun` 是零成本全链路冒烟（语法+自愈块+收纳分类+退出码），本轮还顺带验证了"修改中的 ps1 落 other 不自动收纳"的分类正确性。工作区有未提交修改时跑它还能当分类逻辑的活测试用例。
+- **生效方式**：仅脚本变更，各端无需操作。行为变化：a) 发布菜单先本地后云端时云端配置同步不再被跳过；b) 菜单[5][6]单独打包后也收纳副作用。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
