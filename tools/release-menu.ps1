@@ -44,7 +44,8 @@ function Invoke-Pack {
         return 1
     }
     # one-click-pack.ps1 自带交互菜单，直接调用即可
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $packScript
+    # ★ 2026-08-23 修复：接管道显示输出，防止子进程stdout混入函数返回值（返回值污染）
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $packScript | ForEach-Object { Write-Host $_ }
     return $LASTEXITCODE
 }
 
@@ -97,7 +98,10 @@ function Invoke-SinglePack {
         Write-Host "[配置] 同步 $verLabel 版默认配置 (跳过编辑)..." -ForegroundColor Yellow
         Push-Location $verDir
         try {
-            & powershell -NoProfile -ExecutionPolicy Bypass -File "edit-config.ps1" -SkipConfig
+            # ★ 2026-08-23 修复：接管道显示输出。原裸调用时子进程stdout（edit-config的Write-Host行）
+            #   会混入 Invoke-SinglePack 的返回值，导致 return $rc 变成 [字符串数组..., 0]，
+            #   调用方 ($rc -ne 0) 对数组判真 → 打包明明成功却误报"打包失败，流程中止"。
+            & powershell -NoProfile -ExecutionPolicy Bypass -File "edit-config.ps1" -SkipConfig | ForEach-Object { Write-Host $_ }
         } finally {
             Pop-Location
         }
@@ -303,6 +307,9 @@ function Invoke-FullFlow {
         Write-Host "========================================" -ForegroundColor Cyan
         $rc = Invoke-SinglePack -Version $Version -Mode $Mode
     }
+    # ★ 2026-08-23 修复：防御性提取真实退出码。打包函数若被意外污染（子进程输出混入返回值），
+    #   return $rc 总是把退出码追加在数组末尾，取最后一个元素即真实退出码。
+    if ($rc -is [array]) { $rc = [int]$rc[-1] }
     if ($rc -ne 0) {
         Write-Host ""
         Write-Host "[ERROR] 打包失败，流程中止" -ForegroundColor Red
