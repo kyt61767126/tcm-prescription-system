@@ -175,7 +175,9 @@ if ($content -match $signPattern) {
         $updated = $true
         Write-Host "  [OK] $placeholder = $signSha256"
     } else {
-        Write-Host "  [警告] 哈希已与当前值一致，无需更新"
+        # ★ 2026-08-23 优化：哈希已一致属正常幂等（上次已注入，本次校验通过），
+        #   原按[警告]黄色显示，用户误以为打包过程出错。改为[OK]绿色正常提示。
+        Write-Host "  [OK] 哈希已与当前值一致（$placeholder 校验通过，无需更新）" -ForegroundColor Green
     }
 } else {
     Write-Host "  [警告] 未找到 $placeholder 占位符（可能已被修改过格式）"
