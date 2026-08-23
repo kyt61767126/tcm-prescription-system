@@ -648,6 +648,14 @@
 - **遗留（非本次引入）**：check-interface.bat 报 public/index.html 基线过期 WARN（基线 2026-08-21 后有提交未重建 lock），待用户确认是预期改动后重建基线。
 - **生效方式**：官网下载页双副本=推 GitHub 自动部署 1-2 分钟生效；云端/离线桌面版、各端APP=纯文档变更无需重打包。
 
+### 2.58 【方案A轻量更新提示】桌面版登录页静默检查官网版本+横幅引导下载（提交 d0aac807，2026-08-23）
+- **背景**：2.57 摸底确认桌面版自动更新已于 08-17 移除后版本碎片化回归，用户选定方案A（最小闭环：只提示不自动安装）。
+- **实现（两端桌面 main.js 各 +107 行，login.html/index.html 零改动）**：①登录窗 dom-ready 的 show 流程完成后 setTimeout 1.5s 触发 `checkForUpdateAndNotify`（不与首帧直出竞争，防三屏闪回归）；②主进程 `net.fetch` 拉取官网 latest.json（云端 updates/cloud、离线 updates/dingzhi），带 AbortSignal.timeout(8000)；③三段式版本比较 `isNewerRemoteVersion`（远程严格大于本地才提示）；④提示=登录窗 setSize(260,470)+center() 增高40px腾出顶部空间 + executeJavaScript 注入 fixed 顶部黄色横幅「🆕 新版 vX.Y.Z 立即下载」；⑤点击 window.open(下载页) 由新增的 `setWindowOpenHandler` 拦截 → shell.openExternal 系统浏览器打开。
+- **安全设计**：版本号白名单 `/^[0-9A-Za-z.\-+]+$/` 校验后才进 executeJavaScript（防 latest.json 被篡改注入任意代码）；网络失败/超时/HTTP非200/格式异常一律 console.log 静默跳过——离线版完全无感，符合"宁可漏检不可误报"。
+- **验证方法论（可复用）**：临时调低本地 package.json version（1.2.135→1.2.134、1.0.99→1.0.98）模拟旧版用户，dev electron 走**真实线上 latest.json 对比路径**，Playwright `_electron.launch` + BNZC_E2E=1 + marker 旁路 + BNZC_E2E_DATA 隔离 userData（绕单实例锁），断言横幅DOM/窗口260x471/文本内容。双端 PASS 后恢复版本号、删临时脚本和 marker。注意：`app.close()` 可能挂起（进程清理卡住），输出 PASS 后直接 StopCommand+Stop-Process+手动删 marker（命令链里的清理不会执行）。
+- **坑**：①Playwright electron.launch 自带 `--inspect=0` 会触发反调试退出，必须走 E2E 双条件旁路（BNZC_E2E=1 + electron.exe 同级 e2e-enabled.marker，测完必删）；②单实例锁按 userData 判定，不设 BNZC_E2E_DATA 隔离会被已运行实例顶掉（"已有实例运行，新实例退出"）；③登录窗 260x430 小窗口，横幅若直接 fixed 顶部会遮挡居中卡片，必须同步窗口增高+recenter。
+- **生效方式**：两端桌面版需重新 build.bat 打包 exe 并发布后才携带此功能；**当前已发布版本的旧用户只有装上含此功能的新包后才收到后续更新提示**（首版是"自举"问题——本次发布的包用户需手动下载一次，之后的更新才有横幅）。云端网页版/APP 无需任何操作。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
