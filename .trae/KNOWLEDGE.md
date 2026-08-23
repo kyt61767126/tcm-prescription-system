@@ -656,6 +656,16 @@
 - **坑**：①Playwright electron.launch 自带 `--inspect=0` 会触发反调试退出，必须走 E2E 双条件旁路（BNZC_E2E=1 + electron.exe 同级 e2e-enabled.marker，测完必删）；②单实例锁按 userData 判定，不设 BNZC_E2E_DATA 隔离会被已运行实例顶掉（"已有实例运行，新实例退出"）；③登录窗 260x430 小窗口，横幅若直接 fixed 顶部会遮挡居中卡片，必须同步窗口增高+recenter。
 - **生效方式**：两端桌面版需重新 build.bat 打包 exe 并发布后才携带此功能；**当前已发布版本的旧用户只有装上含此功能的新包后才收到后续更新提示**（首版是"自举"问题——本次发布的包用户需手动下载一次，之后的更新才有横幅）。云端网页版/APP 无需任何操作。
 
+### 2.59 【内置中药库整体替换】defaultMedicines 8端同步更新+新增进价字段（提交 25738e17，2026-08-23）
+- **背景**：用户提供 `D:\中医数据\中药库_2026-06-21_单价明细.xlsx` 要求整体替换内置中药库。
+- **数据对比先行（防呆）**：同目录存在更新版 `中药库_2026-8-15.csv`（653 味、格式=软件导出格式、单价与旧内置库完全一致，即软件自身导出的备份）。XLSX 只有 467 味且 457/461 味共同药材单价全不同、少 192 味炭药/炒制类、多 6 味（防己/焦三仙/绿豆衣/芒硝/木蝴蝶/片姜黄）。**列出差异表让用户确认后**才执行"完全按 XLSX 替换"。
+- **内置库位置**：`defaultMedicines` 数组内嵌在 **8 个 index.html**（根 index.html、public/、site-admin/、db-offline 的 index-app.html+desktop/+app assets、db-yunduan 的 cloud_desktop/+cloud_app assets）。⚠️ cloud_app 路径比 db-offline 少一层 `app\`（`cloud_app/app/src/main/assets/public/` vs `db-offline/app/app/src/main/assets/public/`），路径写错会 ENOENT。
+- **替换实现**：Node 临时脚本正则 `(defaultMedicines\s*=\s*\[)(\r?\n)([\s\S]*?)(\r?\n\s*\];)` 整块替换——`let defaultMedicines = [];` 单行声明不会误匹配（`[`后无换行）；用捕获组保留各文件原有换行风格；替换后立即 Grep 计数验证（`{name:'...',code:'...',costPrice:` 应 467×8）。
+- **字段扩展**：旧格式 `{name,code,price,unit,dosage}` → 新格式加 `costPrice`（进价）。编辑弹窗/列表渲染/CSV导出均已支持 costPrice，纯数据变更无需改逻辑代码；stock 字段省略（代码默认 0）。
+- **老用户行为（须告知）**：loadData 优先读 localStorage `local_medicines`，**已保存过药材数据的用户不会自动切换新内置库**，需在软件里清空药材数据后才启用新库；新装用户直接用新库。历史处方存药材快照不受影响。
+- **XLSX 解析坑**：`shared/vendor/xlsx.full.min.js` 是浏览器 UMD 版，Node 直接 `require` 后 `XLSX.readFile` 不存在；正确姿势=fs 读源码 → vm.createContext 跑一遍 → `sandbox.module.exports` 即 XLSX（含 read/readFile），再 `XLSX.read(buffer,{type:'buffer'})`。
+- **生效方式**：云端网页版=推 GitHub 自动部署；云端桌面/离线桌面=重打包 exe；云端 APP=改的是 APK 内 assets 需重打 APK（非线上 public/）；离线 APP=重打 APK。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
