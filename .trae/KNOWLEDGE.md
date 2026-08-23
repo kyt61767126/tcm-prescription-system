@@ -1,4 +1,4 @@
-# 惠康中医项目 · 共享经验知识库（PROJECT KNOWLEDGE）
+﻿# 惠康中医项目 · 共享经验知识库（PROJECT KNOWLEDGE）
 
 > 本项目**跨 work 账户共享的"统一大脑"**。任何账户打开本项目，第一步先 Read 本文件。
 > 最后更新：2026-08-21
@@ -716,6 +716,13 @@
 - **Java 层桥验证**：三Tab激活码面板在离线APP依赖 `electronAPI.activate` 桥（MainActivity.java 644-651行），show/submit/getMachineId/installAdminLicense/restart 全具备；JS 2参 submit(code,user) 与桥 3参签名（password 默认 'admin'）兼容，Java 层零改动。
 - **界面保护合规**：入口收敛（hideStaticActivateEntry 隐藏静态按钮）是运行时 `style.display='none'` 注入，不改 HTML 结构；改后跑 check-interface.bat 验证 6 OK / 0 CHANGED。
 - **生效方式**：离线APP需重新打包APK、离线桌面版需重新打包exe；云端各端无改动无需操作；已激活用户 license.dat 保留激活状态不受影响。
+
+### 2.66 【激活三Tab分析+版本选择直达链接】流程冗余识别与最小优化（提交 ef7198ac，2026-08-23）
+- **三Tab激活选项的不可替代性结论**（用户问"3个选项各有何特殊意义"）：📋 管理员激活=在线实时审批通道（提交→5秒轮询→自动装license+云端开账号+重启，全程不离软件）；🔑 激活码激活=已有码的自助兑现入口（输码→验证→激活，一步到位）；📨 工单申请=异步留言通道（管理员不在线→后台审批发码→电话/微信送达→回Tab2输码）。三者构成"在线实时/异步留言/直接兑现"闭环，**各有不可替代场景，禁止合并**（合并任两个都会损失一条获取授权的通道）。
+- **流程冗余识别法**：逐字段追每个Tab的payload消费方——版本字段（edition）仅Tab1的admin-submit消费，Tab2输码/Tab3工单均不消费 → 打开弹窗强制先选版本对Tab2/3用户是无意义步骤。**判断标准：表单步骤的字段是否被该路径的API消费，不消费则该步骤可跳过**。
+- **最小优化实现**（auth-core.js 运行时注入，不碰HTML源码）：版本选择页加两条直达链接（已有激活码→Tab2；留言申请→工单叠加层），配 state.editionChosen 标志 + Tab1点击守卫（未选版本切回Tab1时回版本选择页，防止以默认机构版提交非本意申请）。
+- **BOM丢失历史遗留教训**：门禁跑出 3 FAIL（generate-sign-hash/pack/release-menu.ps1 无BOM），git status 干净说明 HEAD 即无BOM——Edit 工具编辑中文 ps1 会丢 BOM 且可能已被提交。**每次 Edit ps1 后必须立刻补 BOM 并重跑 verify-packaging.ps1**；PS5.1 下用 `[System.IO.File]::WriteAllText($p,$c,(New-Object System.Text.UTF8Encoding($true)))` 修复（-AsByteStream 是 PS7 特性不可用）。
+- **生效方式**：云端网页版推送即生效；云端/离线桌面版与离线APP需重新打包；桌面 activate-window.html 属界面保护文件未动（其同构冗余留待用户明确要求时再处理）。
 
 ---
 
