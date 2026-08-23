@@ -400,11 +400,20 @@
             }
 
             // ★ 严格版本匹配（安全隔离）：账户版本必须与电脑激活版本一致
+            // ★ 2026-08-23 修复：判定账户版本优先用服务端 clinicEdition（防云端账号 role 误判），
+            //   无 clinicEdition（本地/离线遗留账户）时回退按 role（admin=机构版）判定。
             try {
                 const appCfg = await getAppConfig();
                 const machineEdition = (appCfg && appCfg.edition) || '';
                 const machineIsInstitution = ['clinic_custom', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud', 'institution'].indexOf(machineEdition) >= 0;
-                const accountIsInstitution = (user.role === 'admin');
+                const accountEdition = user.clinicEdition || user.edition || '';
+                let accountIsInstitution;
+                if (accountEdition) {
+                    accountIsInstitution = ['clinic_custom', 'clinic', 'cloud_clinic', 'offline_clinic',
+                        'cloud', 'institution', 'institutional'].indexOf(accountEdition) >= 0;
+                } else {
+                    accountIsInstitution = (user.role === 'admin');
+                }
                 if (machineIsInstitution !== accountIsInstitution) {
                     if (machineIsInstitution) {
                         showError('⚠️ 该账户属于【标准版】，不能登录【机构版】电脑。请使用机构版账户登录，或在标准版电脑上使用该账户。');

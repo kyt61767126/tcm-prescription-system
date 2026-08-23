@@ -407,7 +407,11 @@
                             name: _cloudAuth.name || _cloudAuth.username,
                             role: _cloudAuth.role || 'user',
                             password: _cloudAuth.password || '',
-                            token: _cloudAuth.token || ''
+                            token: _cloudAuth.token || '',
+                            // ★ 2026-08-23 携带服务端权威 clinicEdition，供下方版本匹配逻辑判定账户版本
+                            clinicEdition: _cloudAuth.clinicEdition || '',
+                            edition: _cloudAuth.edition || '',
+                            clinicName: _cloudAuth.clinicName || ''
                         };
                     } else {
                         // ★ 诊断：记录云端认证返回的具体错误，供排查
@@ -439,15 +443,43 @@
             }
 
             // ★ 严格版本匹配（安全隔离）：账户版本必须与电脑激活版本一致
+            // ★ 2026-08-23 修复：判定账户版本改以服务端权威 clinicEdition 为准，
+            //   不再按 role 判定。根因：云端标准版诊所首个管理员 role='clinic_admin'，
+            //   按 role 会被误判为机构版账户 → 标准版电脑登录时报"版本不匹配"。
             try {
                 const appCfg = await getAppConfig();
                 const machineEdition = (appCfg && appCfg.edition) || '';
                 const machineIsInstitution = ['clinic_custom', 'clinic', 'cloud_clinic', 'offline_clinic', 'cloud', 'institution'].indexOf(machineEdition) >= 0;
-                // 机构版账户：本地角色 admin/机构版，或云端角色 clinic_admin/platform_admin
-                const accountIsInstitution =
-                    (user.role === 'admin') ||
-                    (user.role === 'clinic_admin') ||
-                    (user.role === 'platform_admin');
+                const accountEdition = user.clinicEdition || user.edition || '';
+                let accountIsInstitution;
+                if (accountEdition) {
+                    // 优先用服务端返回的诊所版本（权威来源，防止 clinic_admin/doctor 角色误判）
+                    accountIsInstitution = ['clinic_custom', 'clinic', 'cloud_clinic', 'offline_clinic',
+                        'cloud', 'institution', 'institutional'].indexOf(accountEdition) >= 0;
+                } else if ((user.role === 'clinic_admin' || user.role === 'platform_admin') &&
+                           typeof window.AuthCore === 'object' && typeof AuthCore.login === 'function') {
+                    // 本地校验通过但缺 clinicEdition 的云端管理账户：本地密码已核对过，这里仅做
+                    // 轻量云端登录解析权威版本，避免 clinic_admin 被误判为机构版账户（标准版误报的关键）。
+                    let resolvedEdition = '';
+                    try {
+                        const ceRes = await AuthCore.login(username, password);
+                        if (ceRes && ceRes.success && ceRes.user) {
+                            resolvedEdition = ceRes.user.clinicEdition || ceRes.user.edition || '';
+                        }
+                    } catch (_) {}
+                    if (resolvedEdition) {
+                        accountIsInstitution = ['clinic_custom', 'clinic', 'cloud_clinic', 'offline_clinic',
+                            'cloud', 'institution', 'institutional'].indexOf(resolvedEdition) >= 0;
+                    } else {
+                        accountIsInstitution = true; // 云端解析失败 → 保守按机构版处理
+                    }
+                } else {
+                    // 无 clinicEdition 的本地/离线遗留账户 → 回退按角色判定（沿用原逻辑）
+                    accountIsInstitution =
+                        (user.role === 'admin') ||
+                        (user.role === 'clinic_admin') ||
+                        (user.role === 'platform_admin');
+                }
                 if (machineIsInstitution !== accountIsInstitution) {
                     if (machineIsInstitution) {
                         showError('⚠️ 该账户属于【标准版】，不能登录【机构版】电脑。请使用机构版账户登录，或在标准版电脑上使用该账户。');
