@@ -698,6 +698,17 @@
 - **收纳调用跨进程范式**：SideEffectCollect 只依赖 `git status --short` 输出分类，不依赖 one-click-pack 内任何会话状态，子进程 `-CollectSideEffectsOnly` 完全等价调用。此模式可作为"脚本 A 想复用脚本 B 中某函数但不便 Dot-source"的通用安全范式（比 Dot-source + 污染变量 风险低得多）。
 - **生效方式**：仅打包/发布脚本变更，无运行时代码。已安装各端无需操作；一键打包菜单[5][6] 单版本打包失败增加明确红字总结，[5][6] 和发布菜单[1][3] 打包后也列出/收纳副作用。
 
+### 2.64 【打包链路五轮复核】干净轮（2026-08-23）
+- **审查范围（补充前四轮未触达区域）**：release-menu Show-VersionMenu / Show-PackModeMenu 菜单函数、release-menu 顶部 fix-bat-crlf 自愈与 NO_PAUSE 生命周期、one-click-pack RootDir 探测边界与 pause 别名覆盖、Invoke-NodeScript / Invoke-Publish / Invoke-Verify / Invoke-ComplianceCheck 底层调用。
+- **结论**：本轮未发现新增代码缺陷。
+  - Show-VersionMenu 的 "dingzhi" / "all" 返回值在 Invoke-SinglePack 与 Invoke-FullFlow 中已正确映射处理。
+  - Show-PackModeMenu 始终返回字符串（"desktop"/"app"/"all"/""），调用处 `if ($mode -eq "")` 判断类型一致。
+  - release-menu 顶部 fix-bat-crlf 覆盖 8 个 bat 与一键打包入口完全一致；`$env:NO_PAUSE='1'` 仅影响子 bat（当前脚本自身无 PowerShell 层 `pause` 调用），OK。
+  - one-click-pack RootDir 探测能处理脚本被移动/复制场景；AutoMode 下 `pause` 别名/空函数覆盖仅作用于当前 PowerShell 会话，但所有子进程均为 bat（受 NO_PAUSE 控制），设计自洽。
+  - Invoke-NodeScript 用 `Start-Process -PassThru` 返回 `.ExitCode`，菜单层已捕获处理；Invoke-ComplianceCheck 用 `$LASTEXITCODE` 捕获，OK。
+- **验证**：工作区 `git status --porcelain` 无未提交变更；`verify-packaging.ps1` 62 OK / 0 FAIL / 0 WARN。
+- **沉淀原则**：即使本轮无代码变更，也应记录"干净轮"结论，避免未来重复审查同一区域；同时标记 2.62/2.63 的修复已覆盖到此轮边界，无冲突。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
