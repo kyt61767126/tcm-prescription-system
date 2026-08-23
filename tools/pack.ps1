@@ -1364,8 +1364,7 @@ if (-not $Version) {
     Write-Host ""
     Write-Host "  用法:" -ForegroundColor Yellow
     Write-Host "    pack-desktop.bat        打包桌面版 (Electron exe)"
-    Write-Host "    pack-app.bat            打包手机 APP (Android APK)"
-    Write-Host "    pack-app-strict.bat     严格模式 APP (APK+签名哈希+重打包)"
+    Write-Host "    pack-app.bat            打包手机 APP (Android APK, 严格模式)"
     Write-Host ""
     Write-Host "  或直接调用:" -ForegroundColor DarkGray
     Write-Host "    pack.ps1 -Version <dingzhi> -Target <desktop|app|appstrict>"

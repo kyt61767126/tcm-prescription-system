@@ -297,6 +297,43 @@ if errorlevel 1 (
     exit /b 1
 )
 
+REM ★ 2026-08-23 防破解增强：APK 签名终验（对齐离线版）+ 证书哈希一致性校验
+REM   1) apksigner verify：v2/v3 签名方案必须通过（v1-only 易被重打包）
+REM   2) APK 实际证书 SHA-256 必须 == SecurityGuard.java 注入的 EXPECTED_SIGN_HASH
+REM      （防哈希漂移：注入后 keystore 变更/签名配置错误时，运行时签名校验会拒绝启动，
+REM        打包期提前拦截，绝不让"启动即闪退"的 APK 流出）
+echo Verifying APK signature (v2/v3 + cert hash consistency)...
+set "APKSIGNER="
+if exist "%ANDROID_HOME%\build-tools" (
+    for /f "delims=" %%d in ('dir /b /ad "%ANDROID_HOME%\build-tools" ^| sort /r') do (
+        if not defined APKSIGNER if exist "%ANDROID_HOME%\build-tools\%%d\apksigner.bat" set "APKSIGNER=%ANDROID_HOME%\build-tools\%%d\apksigner.bat"
+    )
+)
+if defined APKSIGNER (
+    set "SIGN_OUT=%TEMP%\apksign_verify_%RANDOM%.txt"
+    call "%APKSIGNER%" verify --verbose "%APK_FILE%" > "!SIGN_OUT!" 2>&1
+    if errorlevel 1 (
+        type "!SIGN_OUT!"
+        echo [ERROR] APK signature verification failed!
+        del "!SIGN_OUT!" 2>nul
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+    findstr /i "verified warning error" "!SIGN_OUT!"
+    del "!SIGN_OUT!" 2>nul
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; $out = & '%APKSIGNER%' verify --print-certs '%APK_FILE%' 2>&1 | Out-String; if($out -notmatch 'certificate SHA-256 digest:\s*([0-9a-fA-F:]+)'){ Write-Host '[ERROR] Cannot extract APK cert SHA-256 from apksigner output'; exit 1 }; $apkHash = ($matches[1] -replace ':','').ToLower(); $guard = Get-Content '%CLOUD_DIR%\cloud_app\app\src\main\java\com\tcm\prescription\SecurityGuard.java' -Raw -Encoding UTF8; $injected=''; if($guard -match 'EXPECTED_SIGN_HASH\s*=\s*\x22([0-9a-fA-F]{64})\x22'){ $injected=$matches[1].ToLower() }; if(-not $injected){ Write-Host '[ERROR] EXPECTED_SIGN_HASH not found in SecurityGuard.java'; exit 1 }; if($apkHash -ne $injected){ Write-Host ('[ERROR] Cert hash mismatch! APK='+$apkHash); Write-Host ('       Injected='+$injected); Write-Host '       APK will self-exit at runtime (signature check). Aborting build.'; exit 1 }; Write-Host ('[OK] APK cert SHA-256 == SecurityGuard.EXPECTED_SIGN_HASH ('+$apkHash.Substring(0,16)+'...)')"
+    if errorlevel 1 (
+        echo [ERROR] APK certificate hash consistency check failed!
+        if not defined NO_PAUSE pause
+        exit /b 1
+    )
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[OK] APK signature verification passed (v2/v3 + cert hash)'"
+) else (
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host '[WARN] apksigner not found, skipping signature verification'"
+    powershell -NoProfile -Command "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; Write-Host 'Set ANDROID_HOME to enable signature verification'"
+)
+echo.
+
 echo Reading product name and version...
 set "PRODUCT_NAME=%APK_NAME%"
 

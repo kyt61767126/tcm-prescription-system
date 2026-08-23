@@ -1,4 +1,4 @@
-﻿# ============================================================================
+# ============================================================================
 #  sync-auth-core.ps1 - auth-core.js dual-source sync tool
 #
 #  Purpose:
@@ -50,7 +50,7 @@ $CloudTargets = @(
     'app_project/db-yunduan/cloud_app/app/src/main/assets/public', # cloud APP assets
     'site-admin',                                          # admin console web
     'site-admin/electron',                                 # admin console electron
-    'shared'                                               # shared/auth-core.js root mirror (packaging.ps1 source)
+    'shared'                                               # shared/auth-core.js root mirror (canonical source for cloud variants)
 )
 
 # ============================================================================

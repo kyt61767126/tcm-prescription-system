@@ -43,9 +43,11 @@ function Invoke-Pack {
         Write-Host "[ERROR] 未找到打包脚本: $packScript" -ForegroundColor Red
         return 1
     }
-    # one-click-pack.ps1 自带交互菜单，直接调用即可
+    # ★ 2026-08-23 优化：传 -AutoMode 3 非交互执行"全部版本"打包（云端+本地顺序构建），
+    #   完成后自动返回本菜单。原直接调用会弹出 one-click-pack 的嵌套交互菜单（菜单套菜单），
+    #   用户需在子菜单选完再退出才能回到发布菜单，体验混乱。
     # ★ 2026-08-23 修复：接管道显示输出，防止子进程stdout混入函数返回值（返回值污染）
-    & powershell -NoProfile -ExecutionPolicy Bypass -File $packScript | ForEach-Object { Write-Host $_ }
+    & powershell -NoProfile -ExecutionPolicy Bypass -File $packScript -AutoMode 3 | ForEach-Object { Write-Host $_ }
     return $LASTEXITCODE
 }
 
@@ -371,7 +373,7 @@ while ($true) {
     Write-Host "  [1] 仅打包 - 选择单个版本"
     Write-Host "  [2] 仅发布 - 选择单个版本 (已打包好)"
     Write-Host "  [3] 打包 + 发布 + 验证 - 选择单个版本 (推荐)"
-    Write-Host "  [4] 打包全部版本 (one-click-pack.ps1)"
+    Write-Host "  [4] 打包全部版本 (云端+本地，自动执行)"
     Write-Host "  [5] 发布全部版本 (auto-publish.js 智能检测)"
     Write-Host "  [6] 验证发布结果 (verify-release.js)"
     Write-Host "  [7] 合规检查 (compliance-check，发布前必跑)"

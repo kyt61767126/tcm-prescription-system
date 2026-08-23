@@ -429,13 +429,11 @@ function Show-StandaloneUsage {
     Write-Host ""
     Write-Host "  云端版 (app_project/db-yunduan):" -ForegroundColor Yellow
     Write-Host "    pack-desktop.bat       打包桌面版"
-    Write-Host "    build-app.bat          打包手机APP"
-    Write-Host "    pack-app-strict.bat    严格模式APP"
+    Write-Host "    pack-app.bat           打包手机APP (严格模式)"
     Write-Host ""
     Write-Host "  本地版 (app_project/db-offline):" -ForegroundColor Yellow
     Write-Host "    pack-desktop.bat       打包桌面版"
-    Write-Host "    build-app.bat          打包手机APP"
-    Write-Host "    pack-app-strict.bat    严格模式APP"
+    Write-Host "    pack-app.bat           打包手机APP (严格模式)"
     Write-Host ""
     Write-Host "  提示: 直接双击对应目录下的 bat 文件即可" -ForegroundColor DarkGray
     Write-Host "========================================" -ForegroundColor Cyan
@@ -490,6 +488,7 @@ while ($true) {
     Write-Host "  - 离线版默认使用配置(XXX中医诊所/XXX)直接打包, 不弹配置编辑"
     Write-Host "  - 全部打包全自动顺序执行, 手机APP默认严格模式(签名校验+混淆)"
     Write-Host "  - 耗时统计会在结束时显示"
+    Write-Host "  - ★ 仅打包不上传; 如需发布到下载页/GitHub Release 请运行 一键发布.bat" -ForegroundColor Yellow
     Write-Host "--------------------------------------------"
     $choice = Read-Host "请选择 [0-7]"
     switch ($choice) {

@@ -208,7 +208,7 @@ Write-Host "  签名 SHA-256: $signSha256"
 Write-Host ""
 if (-not $env:NO_PAUSE) {
     Write-Host "  下一步："
-    Write-Host "  1. 重新打包 APK（运行 pack-app.bat 或 pack-app-strict.bat）"
+    Write-Host "  1. 重新打包 APK（运行 pack-app.bat）"
     Write-Host "  2. 新 APK 将启用签名严格模式："
     Write-Host "     - APK 签名必须与上述哈希完全一致"
     Write-Host "     - 任何二次打包、调试器附加、Root 设备都会导致 APP 自动退出"
