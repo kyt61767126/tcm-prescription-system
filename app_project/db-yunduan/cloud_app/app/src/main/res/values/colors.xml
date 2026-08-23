@@ -5,4 +5,6 @@
     <color name="colorAccent">#008000</color>
     <!-- 状态栏背景色：与网页 .top-tabs-left 背景色 #c0c0c0 一致，避免色差 -->
     <color name="statusBarColor">#c0c0c0</color>
+    <!-- ★ 2026-08-23 根治三屏闪：登录页（图片3）期间状态栏色，与渐变顶色 #0EA5E9 融为一体 -->
+    <color name="loginStatusBarColor">#0EA5E9</color>
 </resources>

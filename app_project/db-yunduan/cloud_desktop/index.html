@@ -128,6 +128,9 @@
         .header-section { position: relative; z-index: 1; padding: 20px 18px; display: flex; flex-direction: column; align-items: center; gap: 8px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
         .system-title { font-size: 18px; font-weight: bold; color: white; text-shadow: 0 2px 4px rgba(0,0,0,0.2); letter-spacing: 2px; }
         .version-tag { font-size: 12px; font-weight: bold; color: rgba(255,255,255,0.9); background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 10px; }
+        /* ★ 2026-08-23 简洁统一（与云端APP一致）：登录框不显示版本标签（header胶囊+底部三元组），
+           版本在登录成功后操作界面顶栏显示；仅视觉隐藏，applyEditionTags 写入逻辑不破坏 */
+        .login-overlay .version-tag, .login-overlay #loginVersionTagBottom { display: none; }
         .main-content { position: relative; z-index: 1; padding: 24px 18px; }
         .login-box { background: white; border-radius: 10px; padding: 20px 15px; box-shadow: 0 4px 15px rgba(102, 126, 234, 0.15); border: 1px solid rgba(102, 126, 234, 0.2); }
         .login-field { margin-bottom: 18px; display: flex; flex-direction: row; align-items: center; gap: 6px; }

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2026-08-23 根治三屏闪：与图片3登录页 login-gradient 完全同款渐变
+     linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)
+     用作冷启动 windowBackground + Splash遮罩背景，视觉上"打开APP=图片3背景色" -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="315"
+        android:startColor="#0EA5E9"
+        android:endColor="#06B6D4"
+        android:type="linear" />
+</shape>

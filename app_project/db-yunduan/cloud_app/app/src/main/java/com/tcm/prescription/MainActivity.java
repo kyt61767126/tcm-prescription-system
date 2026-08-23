@@ -82,6 +82,16 @@ public class MainActivity extends BridgeActivity {
     private TextView loadingText;
     private volatile String cachedVideoRecorderScript = null;
     private boolean versionChecked = false;
+    // ★ 2026-08-23 根治登录三屏闪：原生蓝色标准版Splash遮罩层
+    //   揭幕三条件（满足其一即隐藏遮罩）：
+    //   1) onPageCommitVisible 云端URL + 延时 280ms（确保HTML首帧完成绘制）
+    //   2) onPageFinished 云端URL（兜底）
+    //   3) 超时 5000ms（兜底，防止异常时永久遮挡）
+    //   注意：即便splashHidden=true，只要 splashCoverUnlocked=false 仍不揭幕。
+    //   splashCoverUnlocked 仅在 云端URL 满足时解锁，避免本地assets加载完（紫色旧HTML）就揭幕。
+    private boolean splashHidden = false;
+    private boolean splashCoverUnlocked = false;
+    private Runnable splashTimeoutRunnable = null;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -197,58 +207,87 @@ public class MainActivity extends BridgeActivity {
         });
         ViewCompat.requestApplyInsets(webView);
 
-        // 创建加载进度布局（覆盖在 WebView 上方，加载完成后隐藏）
-        // 优化：有缓存时不显示loading，直接让WebView显示缓存内容（与离线APP相同速度）
+        // ★★★ 2026-08-23 根治登录三屏闪（图片1→图片3）★★★
+        // 真相：capacitor.config.json 已配 server.url，APP启动直接加载云端URL（不加载本地assets）。
+        //   图片1的真正来源 = WebView HTTP缓存中的旧HTML（旧APK无clearCache，max-age=0不重新验证
+        //   → 一直用缓存的紫色旧HTML首帧 → 部分资源更新后最终切到图片3）。
+        // 本版三重根治：
+        //   1) clearCache(true) 每次启动清HTTP缓存 → 必然加载线上最新HTML（首帧优化已直出图片3）
+        //   2) windowBackground + 遮罩背景 = 图片3登录页同款蓝渐变(#0EA5E9→#06B6D4)
+        //      → 冷启动第一眼就是图片3的背景色，无白屏/无紫屏
+        //   3) 遮罩只放小spinner（无启动页式大标题/版本胶囊/进度条）
+        //      → 视觉上就是"图片3背景→图片3登录框浮现"，等效打开APP直接图片3
+        // 揭幕条件：云端URL onPageCommitVisible+延时280ms｜onPageFinished云端URL｜5秒超时兜底
+        splashHidden = false;
+        splashCoverUnlocked = false;
+        // 超时时钟5秒兜底揭幕（防止永久遮罩）
+        if (splashTimeoutRunnable != null) mainHandler.removeCallbacks(splashTimeoutRunnable);
+        splashTimeoutRunnable = () -> unlockSplashCover("timeout");
+        mainHandler.postDelayed(splashTimeoutRunnable, 5000);
+
+        // 创建加载遮罩（覆盖在 WebView 上方，云端HTML首帧完成后揭幕）
+        // ★ 全场景显示（不再"有缓存秒开"——缓存可能就是图片1旧HTML，必须遮）
         if (loadingLayout == null) {
             loadingLayout = new RelativeLayout(this);
             loadingLayout.setLayoutParams(new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
             ));
-            loadingLayout.setBackgroundColor(0xFFFFFFFF);
+            // 图片3登录页同款渐变：linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%)
+            android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable(
+                android.graphics.drawable.GradientDrawable.Orientation.TL_BR,
+                new int[]{0xFF0EA5E9, 0xFF06B6D4}
+            );
+            loadingLayout.setBackground(bg);
 
-            ProgressBar progressBar = new ProgressBar(this);
-            RelativeLayout.LayoutParams pbParams = new RelativeLayout.LayoutParams(
+            // 居中容器：小spinner + 下方小字（垂直排列，作为整体居中）
+            android.widget.LinearLayout centerBox = new android.widget.LinearLayout(this);
+            centerBox.setOrientation(android.widget.LinearLayout.VERTICAL);
+            centerBox.setGravity(android.view.Gravity.CENTER);
+            RelativeLayout.LayoutParams boxParams = new RelativeLayout.LayoutParams(
                 RelativeLayout.LayoutParams.WRAP_CONTENT,
                 RelativeLayout.LayoutParams.WRAP_CONTENT
             );
-            pbParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
-            pbParams.topMargin = dpToPx(180);
-            loadingLayout.addView(progressBar, pbParams);
+            boxParams.addRule(RelativeLayout.CENTER_IN_PARENT);
+            loadingLayout.addView(centerBox, boxParams);
 
+            // 白色小spinner（唯一的加载指示，低调不喧宾夺主）
+            ProgressBar spinner = new ProgressBar(this);
+            spinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(0xFFFFFFFF));
+            android.widget.LinearLayout.LayoutParams spParams = new android.widget.LinearLayout.LayoutParams(
+                dpToPx(40), dpToPx(40)
+            );
+            spParams.gravity = android.view.Gravity.CENTER_HORIZONTAL;
+            centerBox.addView(spinner, spParams);
+
+            // spinner下方小字（浅白，小号）
             loadingText = new TextView(this);
-            loadingText.setText("正在加载云端处方系统...");
-            loadingText.setTextSize(15);
-            loadingText.setTextColor(0xFF666666);
-            RelativeLayout.LayoutParams tvParams = new RelativeLayout.LayoutParams(
-                RelativeLayout.LayoutParams.WRAP_CONTENT,
-                RelativeLayout.LayoutParams.WRAP_CONTENT
+            loadingText.setText("正在连接云端...");
+            loadingText.setTextSize(13);
+            loadingText.setTextColor(0xB3FFFFFF);
+            android.widget.LinearLayout.LayoutParams tvParams = new android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+                android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
             );
-            tvParams.addRule(RelativeLayout.CENTER_HORIZONTAL);
-            tvParams.topMargin = dpToPx(240);
-            loadingLayout.addView(loadingText, tvParams);
+            tvParams.gravity = android.view.Gravity.CENTER_HORIZONTAL;
+            tvParams.topMargin = dpToPx(14);
+            centerBox.addView(loadingText, tvParams);
 
-            // 将加载布局添加到 WebView 的父视图
+            // 将遮罩添加到 WebView 的父视图（最上层盖在WebView之上）
             ViewGroup rootView = (ViewGroup) webView.getParent();
             if (rootView != null) {
                 rootView.addView(loadingLayout);
             }
 
-            // 关键优化：检查是否有缓存
-            // 有缓存（版本匹配）→ 不显示loading，WebView直接显示缓存内容（秒开）
-            // 无缓存（首次启动/版本更新）→ 显示loading等待网络加载
-            android.content.SharedPreferences cachePrefs = getSharedPreferences("app_config", MODE_PRIVATE);
-            String cachedVersion = cachePrefs.getString("page_version", "");
-            boolean hasCache = cachedVersion.equals(EXPECTED_APP_VERSION);
-            if (hasCache) {
-                // 有缓存：直接隐藏loading，让WebView秒开
-                loadingLayout.setVisibility(View.GONE);
-                Log.d("TCM-Pres", "有缓存（版本:" + cachedVersion + "），跳过loading直接显示页面");
-            } else {
-                // 无缓存：显示loading等待加载
-                loadingLayout.setVisibility(View.VISIBLE);
-                Log.d("TCM-Pres", "无缓存（首次启动或版本更新），显示loading");
-            }
+            loadingLayout.setVisibility(View.VISIBLE);
+            Log.d("TCM-Pres", "启动显示图片3同款蓝渐变遮罩（根治三屏闪）");
+        } else {
+            // View已存在（二次配置）→ 重置显示遮罩
+            loadingLayout.setVisibility(View.VISIBLE);
+            if (loadingLayout.getAlpha() < 1f) loadingLayout.setAlpha(1f);
+            splashHidden = false;
+            splashCoverUnlocked = false;
+            Log.d("TCM-Pres", "复用遮罩：重置显示蓝渐变遮罩");
         }
 
         WebSettings settings = webView.getSettings();
@@ -378,15 +417,15 @@ public class MainActivity extends BridgeActivity {
                 return true;
             }
 
-            // 加载进度回调：实时更新loading文字显示百分比，让用户感知加载进度
+            // 加载进度回调：低调更新遮罩小字百分比（极简样式，不喧宾夺主）
             @Override
             public void onProgressChanged(WebView view, int newProgress) {
                 super.onProgressChanged(view, newProgress);
                 if (loadingText != null && loadingLayout != null && loadingLayout.getVisibility() == View.VISIBLE) {
                     if (newProgress < 100) {
-                        loadingText.setText("正在加载云端处方系统 " + newProgress + "%");
+                        loadingText.setText("正在连接云端 " + newProgress + "%");
                     } else {
-                        loadingText.setText("正在加载云端处方系统...");
+                        loadingText.setText("正在连接云端...");
                     }
                 }
             }
@@ -426,15 +465,10 @@ public class MainActivity extends BridgeActivity {
                 super.onPageStarted(view, url, favicon);
                 // 提前注入 anti-autofill（虽然 DOM 可能未加载完，但 evaluateJavascript 会排队执行）
                 injectAutocompleteOff(view);
-                // 优化：有缓存时不显示loading（避免缓存加载时闪烁）
-                // 只有首次启动/版本更新（无缓存）时才显示loading
-                if (loadingLayout != null && loadingLayout.getVisibility() != View.GONE) {
-                    // 检查是否已有缓存
-                    android.content.SharedPreferences cachePrefs = getSharedPreferences("app_config", MODE_PRIVATE);
-                    String cachedVersion = cachePrefs.getString("page_version", "");
-                    if (!cachedVersion.equals(EXPECTED_APP_VERSION)) {
-                        loadingLayout.setVisibility(View.VISIBLE);
-                    }
+                // ★ 2026-08-23 根治三屏闪：仅在冷启动未揭幕阶段保持遮罩显示；
+                //   揭幕后的页面内导航（登录后跳转/重新加载）不再拉起遮罩，避免使用中闪蓝屏。
+                if (!splashHidden && loadingLayout != null && loadingLayout.getVisibility() != View.VISIBLE) {
+                    loadingLayout.setVisibility(View.VISIBLE);
                 }
                 if (!urlChecked && url != null && !isCloudUrl(url)) {
                     urlChecked = true;
@@ -444,15 +478,17 @@ public class MainActivity extends BridgeActivity {
             }
 
             // API 23+：页面内容首次可见时调用，比 onPageFinished 更早
-            // 此时页面已渲染出基本内容，提前隐藏loading让用户立即看到页面
+            // 此时页面已渲染出基本内容
+            // ★ 2026-08-23 根治三屏闪 v2（关键揭幕点1）：不再"固定延时280ms揭幕"——
+            //   首帧渲染时config.json同步XHR（网络）可能还没返回，页面还是默认样式，280ms揭幕会露出中间帧。
+            //   改为轮询页面就绪信号 window.__firstFrameReady__（首帧优化脚本完成：主题/诊所名/用户名/
+            //   激活入口全部就绪后才置true）→ 信号就绪才揭幕，揭幕瞬间必是登录框最终态。
             @Override
             public void onPageCommitVisible(WebView view, String url) {
                 super.onPageCommitVisible(view, url);
-                mainHandler.post(() -> {
-                    if (loadingLayout != null) {
-                        loadingLayout.setVisibility(View.GONE);
-                    }
-                });
+                if (isCloudUrl(url)) {
+                    startFirstFrameReadyPolling(view);
+                }
             }
 
             @Override
@@ -481,12 +517,11 @@ public class MainActivity extends BridgeActivity {
                     });
                 }
 
-                // 先隐藏loading，让用户立即看到页面
-                mainHandler.post(() -> {
-                    if (loadingLayout != null) {
-                        loadingLayout.setVisibility(View.GONE);
-                    }
-                });
+                // ★ 2026-08-23 根治三屏闪 v2（关键揭幕点2）：onPageFinished云端URL兜底启动就绪信号轮询
+                //   （部分机型onPageCommitVisible不触发；轮询有防重入保护，双起点无害）
+                if (isCloudUrl(url)) {
+                    mainHandler.post(() -> startFirstFrameReadyPolling(view));
+                }
 
                 // 布局修复脚本立即注入（体积小，影响UI布局）
                 mainHandler.post(() -> injectLayoutFixScript(view));
@@ -533,8 +568,10 @@ public class MainActivity extends BridgeActivity {
 
     /**
      * T3: 显示本地错误页（网络异常时避免白屏）
+     * ★ 2026-08-23：显示错误页前先揭幕遮罩，否则"网络异常"提示被蓝渐变遮罩挡住
      */
     private void showErrorPage(WebView webView) {
+        unlockSplashCover("error-page");
         String errorHtml = "<!DOCTYPE html><html><head><meta charset='UTF-8'>" +
             "<meta name='viewport' content='width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no'>" +
             "<style>" +
@@ -886,6 +923,72 @@ public class MainActivity extends BridgeActivity {
         }
         webView.evaluateJavascript(script, null);
         Log.d("TCM-Pres", "录像拍照脚本注入成功");
+    }
+
+    // ========================================================================
+    // ★ 2026-08-23 根治三屏闪 v2：首帧就绪信号轮询
+    //   页面内联首帧优化脚本（config.json同步加载后）完成 主题/诊所名/用户名/激活入口 设置后
+    //   置 window.__firstFrameReady__ = true。原生侧每150ms轮询一次，信号就绪才揭幕遮罩。
+    //   揭幕瞬间必是登录框最终态（新客户=带激活入口 / 已激活=无入口，主题/回填全就绪）。
+    //   轮询上限6秒 + 全局5秒超时兜底（unlockSplashCover 幂等，谁先到谁揭幕）。
+    // ========================================================================
+    private boolean firstFramePolling = false;
+
+    private void startFirstFrameReadyPolling(final WebView view) {
+        if (firstFramePolling || splashHidden) return; // 防重入 / 已揭幕
+        firstFramePolling = true;
+        final int[] ticks = {0};
+        final Runnable poll = new Runnable() {
+            @Override
+            public void run() {
+                if (splashHidden) { firstFramePolling = false; return; }
+                if (ticks[0]++ > 40) { firstFramePolling = false; unlockSplashCover("poll-timeout"); return; }
+                try {
+                    view.evaluateJavascript("(window.__firstFrameReady__ === true)", value -> {
+                        if ("true".equals(String.valueOf(value))) {
+                            firstFramePolling = false;
+                            unlockSplashCover("first-frame-ready");
+                        } else {
+                            mainHandler.postDelayed(this, 150);
+                        }
+                    });
+                } catch (Throwable t) {
+                    firstFramePolling = false;
+                    unlockSplashCover("poll-error");
+                }
+            }
+        };
+        mainHandler.postDelayed(poll, 120);
+    }
+
+    // ========================================================================
+    // ★ 2026-08-23 根治登录三屏闪：Splash 揭幕门锁
+    //   三个揭幕触发源（onPageCommitVisible｜onPageFinished｜5秒超时）调用同一个 unlockSplashCover，
+    //   用 splashCoverUnlocked + splashHidden 双状态保证只揭幕一次，且仅云端URL才能解锁。
+    // ========================================================================
+    private void unlockSplashCover(String reason) {
+        try {
+            splashCoverUnlocked = true;
+            if (splashHidden) return; // 已揭幕不重复执行
+            splashHidden = true;
+            // 取消超时兜底定时器
+            if (splashTimeoutRunnable != null) {
+                mainHandler.removeCallbacks(splashTimeoutRunnable);
+                splashTimeoutRunnable = null;
+            }
+            if (loadingLayout != null) {
+                // 带180ms渐隐，揭幕更平滑（生硬GONE有跳变感）
+                loadingLayout.animate().alpha(0f).setDuration(180).withEndAction(() -> {
+                    if (loadingLayout != null) loadingLayout.setVisibility(View.GONE);
+                }).start();
+            }
+            Log.d("TCM-Pres", "Splash遮罩揭幕（原因:" + reason + "）→ 现在显示WebView最终帧");
+        } catch (Throwable t) {
+            // 任何异常兜底：强制GONE，防止永久遮罩
+            try {
+                if (loadingLayout != null) loadingLayout.setVisibility(View.GONE);
+            } catch (Throwable ignored) {}
+        }
     }
 
     private boolean hasDoneFirstResume = false;

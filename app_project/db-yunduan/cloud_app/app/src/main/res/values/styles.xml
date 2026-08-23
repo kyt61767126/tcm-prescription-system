@@ -16,13 +16,17 @@
     </style>
 
     <!-- 启动主题：解决顶部按钮被状态栏遮挡的3个根源问题 -->
+    <!-- ★ 2026-08-23 根治三屏闪：启动背景改为图片3登录页同款蓝色渐变
+         （原 @drawable/splash 白底图与登录页色差大，冷启动白屏→蓝渐变有跳变感；
+           改为同款渐变后 冷启动→WebView首帧(图片3) 全程蓝色连续，无任何中间帧） -->
     <style name="AppTheme.NoActionBarLaunch" parent="AppTheme.NoActionBar">
-        <item name="android:background">@drawable/splash</item>
+        <item name="android:background">@drawable/login_bg_gradient</item>
+        <item name="android:windowBackground">@drawable/login_bg_gradient</item>
         <!-- 根源1: 不使用全屏，状态栏正常显示，不遮挡网页顶部 -->
         <item name="android:windowFullscreen">false</item>
-        <!-- 根源2: 状态栏不透明，有背景色（与网页顶部 #c0c0c0 一致），WebView内容从状态栏下方开始 -->
+        <!-- 根源2: 状态栏不透明，有背景色（与登录页渐变顶色一致），WebView内容从状态栏下方开始 -->
         <item name="android:windowTranslucentStatus">false</item>
-        <item name="android:statusBarColor">@color/statusBarColor</item>
+        <item name="android:statusBarColor">@color/loginStatusBarColor</item>
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
         <!-- 根源3: 刘海屏适配 - 不延伸到刘海区域，避免顶部被吞掉 -->
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
