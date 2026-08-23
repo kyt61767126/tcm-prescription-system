@@ -1,4 +1,4 @@
-﻿# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
+# release-menu.ps1 - 交互式发布菜单（支持选择单个版本发布）
 # 用 PowerShell 替代 release-all.bat，避免 .bat 中文 GBK 编码问题
 # 支持选择单个版本（云端/定制/个人 × 桌面/APP/全部）进行发布
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -59,7 +59,7 @@ function Invoke-SinglePack {
     )
     $verLabel = switch ($Version) {
         "cloud"    { "云端" }
-        "dingzhi"  { "离线定制" }
+        "dingzhi"  { "本地" }
         default    { $Version }
     }
     $modeLabel = switch ($Mode) {

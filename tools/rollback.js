@@ -31,9 +31,9 @@ const CHANNELS = {
         name: '云端桌面版'
     },
     dingzhi: {
-        latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'dingzhi', 'latest.json'),
+        latestJsonPath: path.join(PROJECT_ROOT, 'public', 'updates', 'local', 'latest.json'),
         assetPattern: /huikang-dingzhi.*\.exe$/i,
-        name: '机构版桌面版'
+        name: '本地桌面版'
     },
 };
 

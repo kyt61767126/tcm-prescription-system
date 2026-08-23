@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // auth-core.js — 登录认证共享核心模块
 // 统一密码加密、存储抽象、登录调度、记住用户名、会话管理、权限解析
 // 消除 14+ 文件中的登录逻辑重复
@@ -1008,8 +1008,7 @@
                             CONFIG.__editionFromLogin = true;
                         }
                     } catch (_) {}
-                    const productName = (targetEd === 'cloud_clinic') ? '惠康中医-云端机构版' :
-                                        (targetEd === 'cloud_personal') ? '惠康中医-云端标准版' : null;
+                    const productName = '惠康中医-云端';
                     if (productName) {
                         try { global.PRODUCT_NAME = productName; } catch (_) {}
                         try {

@@ -1,5 +1,5 @@
 // ============================================================================
-//  惠康中医-机构  Electron 主进程
+//  惠康中医-本地  Electron 主进程
 //  安全配置：contextIsolation=true / nodeIntegration=false
 //  注：未启用 sandbox，以保留原生 window.prompt/confirm/alert（业务大量使用）
 //      contextIsolation 仍确保渲染进程无法直接访问 Node API
@@ -968,7 +968,7 @@ async function injectVideoRecorder(win) {
 //  - 提示方式：登录窗增高 40px + 顶部黄色横幅，点击跳官网下载页手动覆盖安装
 //  - 无自动下载/自动安装；网络失败/解析失败/格式异常一律静默跳过（离线版无感）
 // ============================================================================
-const UPDATE_CHECK_URL = 'https://tcm-prescription-system.pages.dev/updates/dingzhi/latest.json';
+const UPDATE_CHECK_URL = 'https://tcm-prescription-system.pages.dev/updates/local/latest.json';
 const UPDATE_DOWNLOAD_URL = 'https://tcm-prescription-system.pages.dev/download';
 const UPDATE_BANNER_EXTRA_HEIGHT = 40;
 

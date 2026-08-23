@@ -1,4 +1,4 @@
-﻿# generate-sign-hash.ps1 - Unified APK signature hash extraction and injection tool
+# generate-sign-hash.ps1 - Unified APK signature hash extraction and injection tool
 # Extracts SHA-256 from APK and injects into LicenseManager.java (offline) or SecurityGuard.java (cloud)
 # Enables strict signature mode: APP rejects any repackaged APK with mismatched signature
 
@@ -16,7 +16,7 @@ $rootDir = $PSScriptRoot | Split-Path -Parent  # project root: d:\trae_projects\
 # Decide project directory, target file, and placeholder based on Version
 $verLabel = switch ($Version) {
     'cloud'       { '云端' }
-    'dingzhi'     { '定制' }
+    'dingzhi'     { '本地' }
     default       { $Version }
 }
 

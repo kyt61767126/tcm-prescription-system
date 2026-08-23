@@ -1,5 +1,5 @@
 // ============================================================================
-//  惠康中医-机构  Electron 主进程
+//  惠康中医-云端  Electron 主进程
 //  安全配置：contextIsolation=true / nodeIntegration=false
 //  注：未启用 sandbox，以保留原生 window.prompt/confirm/alert（业务大量使用）
 //      contextIsolation 仍确保渲染进程无法直接访问 Node API

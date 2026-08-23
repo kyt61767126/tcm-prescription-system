@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     Unified Packaging Module for TCM Prescription System
 .DESCRIPTION
@@ -977,7 +977,7 @@ function Show-Menu {
     param([string]$Ver)
     Clear-Host
     $versionLabel = switch ($Ver) {
-        'dingzhi' { '定制版 (dingzhi)' }
+        'dingzhi' { '本地版 (local)' }
     }
     Write-Host ""
     Write-Host "========================================" -ForegroundColor Cyan
