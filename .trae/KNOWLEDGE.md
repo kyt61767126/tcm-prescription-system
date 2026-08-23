@@ -666,6 +666,15 @@
 - **XLSX 解析坑**：`shared/vendor/xlsx.full.min.js` 是浏览器 UMD 版，Node 直接 `require` 后 `XLSX.readFile` 不存在；正确姿势=fs 读源码 → vm.createContext 跑一遍 → `sandbox.module.exports` 即 XLSX（含 read/readFile），再 `XLSX.read(buffer,{type:'buffer'})`。
 - **生效方式**：云端网页版=推 GitHub 自动部署；云端桌面/离线桌面=重打包 exe；云端 APP=改的是 APK 内 assets 需重打 APK（非线上 public/）；离线 APP=重打 APK。
 
+### 2.60 【打包链路复核】退出码传播三处断链 + apksigner 发现链死代码（提交 560e7100，2026-08-23）
+- **表象**：打包失败时一键打包/一键发布显示"完成"，无任何失败提示（退出码在三层被吞）。
+- **根因（三层断链）**：①`one-click-pack.ps1` 的 Build-Cloud/Build-Offline 成功路径无 return（函数返回值被内部 Write-Host 输出污染成数组，AutoMode 分支恒 exit 0）；②`release-menu.ps1` 菜单[4]用 `| Out-Null` 丢弃 Invoke-Pack 退出码；③双端 build-app.bat 的 apksigner 仅从 ANDROID_HOME 发现（本机未设置该变量）→ 签名终验被静默跳过 → 防破解校验成死代码。
+- **修复**：①失败路径 `return $rc`、成功路径显式 `return 0`，Build-All 聚合双版本退出码，AutoMode `exit $rc`，调用处防御性 `if ($rc -is [array]) { $rc = [int]$rc[-1] }`；②菜单[4]改 `$rc4 = Invoke-Pack` 捕获并红字报错；③apksigner 四级发现链 ANDROID_HOME → ANDROID_SDK_ROOT → local.properties(sdk.dir, `%%s` 提取后 `%SDK_RAW:\\=\%` 反转义) → C:\Android\Sdk 兜底；嵌套错误路径一律 `goto build_fail` 顶层统一释放构建锁 + exit /b 1（cmd 双层嵌套块内 `exit /b` 被 `cmd /c` 直调时退出码会丢失，goto 是唯一可靠姿势）。
+- **端到端实测法（可复用）**：不跑完整打包（7 分钟太久），用锚点正则（`^echo Verifying APK signature` 到 `^echo\.$`）从双端 build-app.bat **逐字节提取真实验证块**，拼上变量头部 + `:build_fail` 尾部生成 4 个测试 bat（双端 × 成功/失败）。成功路径验证：发现链走通 → v2/v3 通过 → 证书 SHA-256 == 注入哈希（e5b2e4b3...）→ exit 0；失败路径（APK 指向不存在文件）：apksigner errorlevel 1 → type 错误 → goto build_fail → exit 1。cmd 转义（嵌套括号/`^|`/`2^>nul`/延迟展开 `!SIGN_OUT!`）全部真实执行验证。
+- **行尾判定经验**：git 警告 "LF will be replaced by CRLF" ≠ 回归。判定方法：`git diff --numstat` 若只显示内容行数（58/17）而非全文件行数 → 无行尾污染；`git show HEAD:file` 验证 blob 原本就是 LF 存储（本仓库 ps1/bat 全部 LF 存储，工作区 bat 被自愈防线转 CRLF 属正常）。ps1 对 LF 完全兼容无需修，bat 必须 CRLF。
+- **已知无害瑕疵**：延迟展开模式下 if 块内 echo 的孤立 `!`（如 `failed!`）会被 cmd 吃掉显示为 `failed`——仅影响错误提示少个感叹号，逻辑无损，不值得为它冒 bat 转义风险。
+- **生效方式**：仅打包/发布脚本变更，无运行时代码。已安装的网页/桌面/APP 各端均无需操作；下次打包自动使用新逻辑（签名终验链生效 + 失败正确报错），一键打包/一键发布直接双击即生效。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
