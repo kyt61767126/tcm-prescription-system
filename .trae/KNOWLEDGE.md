@@ -691,6 +691,13 @@
 - **冒烟测试复用**：`one-click-pack.ps1 -CollectSideEffectsOnly -DryRun` 是零成本全链路冒烟（语法+自愈块+收纳分类+退出码），本轮还顺带验证了"修改中的 ps1 落 other 不自动收纳"的分类正确性。工作区有未提交修改时跑它还能当分类逻辑的活测试用例。
 - **生效方式**：仅脚本变更，各端无需操作。行为变化：a) 发布菜单先本地后云端时云端配置同步不再被跳过；b) 菜单[5][6]单独打包后也收纳副作用。
 
+### 2.63 【打包链路四轮复核】Show-PickVersionMenu $null=双缺陷 + release-menu 直链子 bat 缺收纳（提交 b28a70e7，2026-08-23）
+- **缺陷1（$null= 双缺陷）**：one-click-pack Show-PickVersionMenu 中用 `$null = Build-Cloud -Target $Mode`，同时造成两个问题：①退出码被吸收→打包失败时菜单层**无失败提示**（Build-* 内的失败提示 + pause 滚屏退出后用户可能看不到）；②完全不调 SideEffectCollect→单版本打包的 versionCode/version 副作用不被收纳。**经验：凡是 `$null = <可能失败的函数调用>` 都要问两个问题——失败时调用方能感知吗？该函数返回后本应继续执行的后续步骤（副作用收纳、日志记录、状态更新）是否被跳过？** 修复=取消 `$null=`，显式捕获退出码 + 防御性数组末元素 + 失败红字报错 + pause + 收纳调用。
+- **缺陷2（直链子 bat 绕过收纳）**：release-menu [1]（打包单版本）和 [3]（打包+发布+验证单版本）走 `Invoke-SinglePack` 直链 pack-desktop/build-app.bat，绕过 one-click-pack 收纳层（[4] 经 AutoMode 3 自带收纳，行为不一致）。修复= [1][3] 打包后均子进程方式调 `one-click-pack.ps1 -CollectSideEffectsOnly -AutoCommit`（跨脚本安全无副作用耦合）。
+- **APP 参数链路再确认（再次消除疑虑）**：one-click-pack Build-Cloud `build-pack.bat ... "app-strict"` → 云端 build-pack `:mode_app_strict` → `call build-app.bat standard` → build-app.bat `if /i "%~1"=="normal"` 之外的所有值（包括 standard/无参）都进 STRICT_MODE=1（2026-08-21 统一规则：standard 保留兼容等价严格）。实际严格模式路径正确，无需改。
+- **收纳调用跨进程范式**：SideEffectCollect 只依赖 `git status --short` 输出分类，不依赖 one-click-pack 内任何会话状态，子进程 `-CollectSideEffectsOnly` 完全等价调用。此模式可作为"脚本 A 想复用脚本 B 中某函数但不便 Dot-source"的通用安全范式（比 Dot-source + 污染变量 风险低得多）。
+- **生效方式**：仅打包/发布脚本变更，无运行时代码。已安装各端无需操作；一键打包菜单[5][6] 单版本打包失败增加明确红字总结，[5][6] 和发布菜单[1][3] 打包后也列出/收纳副作用。
+
 ---
 
 ## 3. Hard Constraints（全项目硬约束）
